@@ -1,5 +1,9 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // tsconfig.base.json is extended by every workspace but is not in any task's
+  // default input set — without this, editing it returns cache hits and skips
+  // every typecheck.
+  "globalDependencies": ["tsconfig.base.json"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

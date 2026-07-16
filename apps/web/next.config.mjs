@@ -1,8 +1,12 @@
+// Must default identically to apps/web/lib/mode.ts — the two consumers of this
+// flag disagreeing is what makes a build claim one mode while emitting another.
+const mode = process.env.NEXT_PUBLIC_MODE ?? 'standalone';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Static export only in standalone mode (RFC-001 §5). The `next export`
   // CLI was removed in Next 14 — `output: 'export'` is the only mechanism.
-  output: process.env.NEXT_PUBLIC_MODE === 'standalone' ? 'export' : undefined,
+  output: mode === 'standalone' ? 'export' : undefined,
   // @gol/* packages export TS source directly (just-in-time packages).
   transpilePackages: [
     '@gol/domain',

@@ -2,12 +2,19 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
+    // `build` is mode-sensitive: turbo's Next.js framework inference puts
+    // NEXT_PUBLIC_MODE in the hash, and with unset defaulting to standalone
+    // this task emits out/ as well as .next/. Both must be declared or a warm
+    // cache restores .next and silently never recreates out/.
     "build": {
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "out/**"],
+      // .env* is gitignored, so it is absent from the default input set — but
+      // Next loads it before evaluating next.config.mjs, so it changes the build.
+      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"]
     },
+    // env + outputs are inherited from the root config; only inputs differ.
     "build:standalone": {
-      "env": ["NEXT_PUBLIC_MODE"],
-      "outputs": ["out/**"]
+      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"]
     }
   }
 }
