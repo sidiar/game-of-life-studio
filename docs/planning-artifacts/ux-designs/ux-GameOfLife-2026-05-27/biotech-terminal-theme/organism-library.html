@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Organism Library - Game of Life Studio</title>
+<style>
+/* Color Palette:
+   --bg-primary: #000000 | Main background - pure black
+   --bg-secondary: #0a0f0a | Card backgrounds - dark green tint
+   --bg-tertiary: #0f1f0f | Elevated surfaces
+   --border: #1a3a1a | Terminal green borders
+   --accent-primary: #00ff41 | Matrix green
+   --accent-secondary: #00ffff | Cyan accent
+   --text-primary: #00ff41 | Headers - terminal green
+   --text-secondary: #33ff77 | Secondary text - lighter green
+   --text-tertiary: #00cc88 | Tertiary text
+   --grid-line: #0a2a0a | Grid pattern
+   --warning: #ff6600 | Warning/delete color
+*/
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Courier New', 'Courier', monospace;
+  background: #000000;
+  color: #00ff41;
+  padding: 30px;
+  letter-spacing: 0.5px;
+  overflow-x: hidden;
+}
+
+.mockup-frame {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 25px 0;
+  border-bottom: 2px solid #1a3a1a;
+  margin-bottom: 35px;
+  position: relative;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 200px;
+  height: 2px;
+  background: linear-gradient(90deg, #00ff41 0%, transparent 100%);
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% { left: 0; }
+  100% { left: 100%; }
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #00ff41;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.logo::before {
+  content: '>';
+  color: #00ffff;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.nav {
+  display: flex;
+  gap: 30px;
+}
+
+.nav-item {
+  color: #33ff77;
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  padding: 4px 8px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.nav-item.active {
+  color: #00ff41;
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid #1a3a1a;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.nav-item:not(.active):hover {
+  color: #00ff41;
+}
+
+.section-header {
+  margin-bottom: 30px;
+  border-left: 3px solid #00ff41;
+  padding-left: 15px;
+}
+
+.section-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #00ff41;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: #33ff77;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.toolbar-left {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex: 1;
+}
+
+.create-button {
+  background: transparent;
+  color: #00ff41;
+  border: 2px solid #00ff41;
+  padding: 12px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+  white-space: nowrap;
+}
+
+.create-button:hover {
+  background: rgba(0, 255, 65, 0.15);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+}
+
+/* Search Input */
+.search-container {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+}
+
+.search-input {
+  width: 100%;
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 10px 40px 10px 15px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+  transition: all 0.3s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.search-input::placeholder {
+  color: #00cc88;
+  opacity: 0.5;
+}
+
+.search-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #00cc88;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* Organism Count */
+.organism-count {
+  font-size: 11px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  padding: 10px 15px;
+}
+
+.organism-count::before {
+  content: '[';
+  color: #1a3a1a;
+  margin-right: 4px;
+}
+
+.organism-count::after {
+  content: ']';
+  color: #1a3a1a;
+  margin-left: 4px;
+}
+
+/* Organism Grid */
+.organism-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.organism-card {
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  padding: 18px;
+  transition: all 0.3s;
+  position: relative;
+}
+
+.organism-card:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+}
+
+.organism-card.preloaded {
+  border-color: #00ffff;
+}
+
+.organism-card.preloaded::before {
+  content: 'SYSTEM';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 9px;
+  color: #00ffff;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  padding: 2px 6px;
+  letter-spacing: 1px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1a3a1a;
+}
+
+.organism-color {
+  width: 40px;
+  height: 40px;
+  border: 2px solid currentColor;
+  box-shadow: 0 0 10px currentColor, inset 0 0 10px currentColor;
+  flex-shrink: 0;
+}
+
+.organism-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.organism-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.organism-usage {
+  font-size: 10px;
+  color: #00cc88;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.card-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.stat-item {
+  background: #000000;
+  border: 1px solid #1a3a1a;
+  padding: 8px;
+}
+
+.stat-label {
+  font-size: 9px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 4px 0;
+}
+
+.stat-value {
+  font-size: 14px;
+  color: #00ff41;
+  font-weight: 700;
+  margin: 0;
+}
+
+.stat-item.aging-yes .stat-value {
+  color: #00ffff;
+}
+
+.rules-preview {
+  font-size: 11px;
+  color: #00cc88;
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.rules-preview::before {
+  content: 'RULES: ';
+  color: #1a3a1a;
+  margin-right: 4px;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  flex: 1;
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+  background: rgba(0, 255, 65, 0.1);
+}
+
+.action-btn.delete {
+  color: #ff6600;
+}
+
+.action-btn.delete:hover {
+  border-color: #ff6600;
+  box-shadow: 0 0 10px rgba(255, 102, 0, 0.3);
+  background: rgba(255, 102, 0, 0.1);
+}
+
+.action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.action-btn:disabled:hover {
+  border-color: #1a3a1a;
+  box-shadow: none;
+  background: #0a0f0a;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  background: #0a0f0a;
+  border: 2px dashed #1a3a1a;
+  margin: 40px 0;
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  color: #1a3a1a;
+  margin-bottom: 20px;
+}
+
+.empty-state-title {
+  font-size: 20px;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0 0 10px 0;
+}
+
+.empty-state-text {
+  font-size: 13px;
+  color: #00cc88;
+  margin: 0 0 25px 0;
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<div class="mockup-frame">
+  <div class="header">
+    <div class="logo">Game of Life Studio</div>
+    <div class="nav">
+      <a href="battle-gallery.html" class="nav-item">Battles</a>
+      <a href="organism-library.html" class="nav-item active">Organisms</a>
+      <a href="settings.html" class="nav-item">Settings</a>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <h1 class="section-title">Organism Library</h1>
+    <p class="section-subtitle">Create and manage your life forms</p>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <button class="create-button">+ Create New Organism</button>
+
+      <div class="search-container">
+        <input type="text" class="search-input" placeholder="Search organisms...">
+        <span class="search-icon">🔍</span>
+      </div>
+    </div>
+
+    <div class="organism-count">8 Organisms</div>
+  </div>
+
+  <!-- Organism Grid -->
+  <div class="organism-grid">
+    <!-- Conway's Classic (Pre-loaded) -->
+    <div class="organism-card preloaded">
+      <div class="card-header">
+        <div class="organism-color" style="background: #00ff41; color: #00ff41;"></div>
+        <div class="organism-info">
+          <h3 class="organism-name">Conway's Classic</h3>
+          <p class="organism-usage">Used in 2 battles</p>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-label">Dominance</div>
+          <div class="stat-value">50</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Aging</div>
+          <div class="stat-value">No</div>
+        </div>
+      </div>
+      <div class="rules-preview">Born: 3 neighbors | Survive: 2-3 neighbors</div>
+      <div class="card-actions">
+        <button class="action-btn">Edit</button>
+        <button class="action-btn">Clone</button>
+        <button class="action-btn delete" disabled>Delete</button>
+      </div>
+    </div>
+
+    <!-- Crimson Crawler -->
+    <div class="organism-card">
+      <div class="card-header">
+        <div class="organism-color" style="background: #ff0055; color: #ff0055;"></div>
+        <div class="organism-info">
+          <h3 class="organism-name">Crimson Crawler</h3>
+          <p class="organism-usage">Used in 3 battles</p>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-label">Dominance</div>
+          <div class="stat-value">85</div>
+        </div>
+        <div class="stat-item aging-yes">
+          <div class="stat-label">Aging</div>
+          <div class="stat-value">Yes</div>
+        </div>
+      </div>
+      <div class="rules-preview">Born: 3 neighbors | Survive: 2-3 neighbors | 4 rules total</div>
+      <div class="card-actions">
+        <button class="action-btn">Edit</button>
+        <button class="action-btn">Clone</button>
+        <button class="action-btn delete">Delete</button>
+      </div>
+    </div>
+
+    <!-- Azure Swarm -->
+    <div class="organism-card">
+      <div class="card-header">
+        <div class="organism-color" style="background: #00aaff; color: #00aaff;"></div>
+        <div class="organism-info">
+          <h3 class="organism-name">Azure Swarm</h3>
+          <p class="organism-usage">Used in 2 battles</p>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-label">Dominance</div>
+          <div class="stat-value">45</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Aging</div>
+          <div class="stat-value">No</div>
+        </div>
+      </div>
+      <div class="rules-preview">Born: 3-4 neighbors | Survive: 3-5 neighbors | 3 rules total</div>
+      <div class="card-actions">
+        <button class="action-btn">Edit</button>
+        <button class="action-btn">Clone</button>
+        <button class="action-btn delete">Delete</button>
+      </div>
+    </div>
+
+    <!-- Neon Spreader -->
+    <div class="organism-card">
+      <div class="card-header">
+        <div class="organism-color" style="background: #00ff41; color: #00ff41;"></div>
+        <div class="organism-info">
+          <h3 class="organism-name">Neon Spreader</h3>
+          <p class="organism-usage">Used in 2 battles</p>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-label">Dominance</div>
+          <div class="stat-value">30</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Aging</div>
+          <div class="stat-value">No</div>
+        </div>
+      </div>
+      <div class="rules-preview">Born: 2-3 neighbors | Survive: 1-4 neighbors | 5 rules total</div>
+      <div class="card-actions">
+        <button class="action-btn">Edit</button>
+        <button class="action-btn">Clone</button>
+        <button class="action-btn delete">Delete</button>
+      </div>
+    </div>
+
+    <!-- Violet Chaos -->
+    <div class="organism-card">
+      <div class="card-header">
+        <div class="organism-color" style="background: #cc00ff; color: #cc00ff;"></div>
+        <div class="organism-info">
+          <h3 class="organism-name">Violet Chaos</h3>
+          <p class="organism-usage">Used in 1 battle</p>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-label">Dominance</div>
+          <div class="stat-value">25</div>
+        </div>
+        <div class="stat-item aging-yes">
+          <div class="stat-label">Aging</div>
+          <div class="stat-value">Yes</div>
+        </div>
+      </div>
+      <div class="rules-preview">Born: 2 neighbors | Survive: 1-3 neighbors | 3 rules total</div>
+      <div class="card-actions">
+        <button class="action-btn">Edit</button>
+        <button class="action-btn">Clone</button>
+        <button class="action-btn delete">Delete</button>
+      </div>
+    </div>
+
+    <!-- Amber Colony -->
+    <div class="organism-card">
+      <div class="card-header">
+        <div class="organism-color" style="background: #ff9900; color: #ff9900;"></div>
+        <div class="organism-info">
+          <h3 class="organism-name">Amber Colony</h3>
+          <p class="organism-usage">Used in 1 battle</p>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-label">Dominance</div>
+          <div class="stat-value">70</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Aging</div>
+          <div class="stat-value">No</div>
+        </div>
+      </div>
+      <div class="rules-preview">Born: 3 neighbors | Survive: 2-4 neighbors | 2 rules total</div>
+      <div class="card-actions">
+        <button class="action-btn">Edit</button>
+        <button class="action-btn">Clone</button>
+        <button class="action-btn delete">Delete</button>
+      </div>
+    </div>
+
+    <!-- Aqua Architect -->
+    <div class="organism-card">
+      <div class="card-header">
+        <div class="organism-color" style="background: #00ffff; color: #00ffff;"></div>
+        <div class="organism-info">
+          <h3 class="organism-name">Aqua Architect</h3>
+          <p class="organism-usage">Used in 1 battle</p>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-label">Dominance</div>
+          <div class="stat-value">60</div>
+        </div>
+        <div class="stat-item aging-yes">
+          <div class="stat-label">Aging</div>
+          <div class="stat-value">Yes</div>
+        </div>
+      </div>
+      <div class="rules-preview">Born: 3 neighbors | Survive: 2-3 neighbors | 2 rules total</div>
+      <div class="card-actions">
+        <button class="action-btn">Edit</button>
+        <button class="action-btn">Clone</button>
+        <button class="action-btn delete">Delete</button>
+      </div>
+    </div>
+
+    <!-- Copper Catalyst -->
+    <div class="organism-card">
+      <div class="card-header">
+        <div class="organism-color" style="background: #ff6600; color: #ff6600;"></div>
+        <div class="organism-info">
+          <h3 class="organism-name">Copper Catalyst</h3>
+          <p class="organism-usage">Unused</p>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat-item">
+          <div class="stat-label">Dominance</div>
+          <div class="stat-value">40</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Aging</div>
+          <div class="stat-value">No</div>
+        </div>
+      </div>
+      <div class="rules-preview">Born: 3-4 neighbors | Survive: 2-5 neighbors | 3 rules total</div>
+      <div class="card-actions">
+        <button class="action-btn">Edit</button>
+        <button class="action-btn">Clone</button>
+        <button class="action-btn delete">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Edit button
+document.querySelectorAll('.action-btn').forEach(btn => {
+  if (btn.textContent === 'Edit') {
+    btn.addEventListener('click', function() {
+      window.location.href = 'organism-editor.html';
+    });
+  }
+
+  if (btn.textContent === 'Clone') {
+    btn.addEventListener('click', function() {
+      const name = this.closest('.organism-card').querySelector('.organism-name').textContent;
+      alert(`Cloning "${name}" as "${name} (Copy)" (demo only)`);
+    });
+  }
+
+  // Delete is a whole-workspace HARD BLOCK (FR-1.4 / arch M7): an organism
+  // used in any battle cannot be deleted — the click surfaces a blocking
+  // error naming the usage and the remedies, never a "confirm to proceed".
+  if (btn.textContent === 'Delete' && !btn.disabled) {
+    const card = btn.closest('.organism-card');
+    const usage = card.querySelector('.organism-usage').textContent.trim();
+    const inUse = /^Used in/i.test(usage);
+    if (inUse) {
+      btn.title = `${usage} — remove it from those battles first`;
+    }
+    btn.addEventListener('click', function() {
+      const name = card.querySelector('.organism-name').textContent;
+      if (inUse) {
+        alert(`Cannot delete "${name}" — it is ${usage.toLowerCase()}.\n\nRemove it from those battles, or delete the battles, then try again.`);
+        return;
+      }
+      if (confirm(`Are you sure you want to delete "${name}"?`)) {
+        alert(`"${name}" deleted (demo only)`);
+      }
+    });
+  }
+});
+
+// Create button
+document.querySelector('.create-button').addEventListener('click', function() {
+  window.location.href = 'organism-editor.html';
+});
+</script>
+
+</body>
+</html>

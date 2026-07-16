@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Petri Dish - Option A: Side Panel</title>
+<style>
+/* Biotech Terminal Color Palette */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  margin: 0;
+  font-family: 'Courier New', 'Courier', monospace;
+  background: #000000;
+  color: #00ff41;
+  overflow: hidden;
+  letter-spacing: 0.5px;
+}
+
+.rationale {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  background: #0a0f0a;
+  border: 2px solid #1a3a1a;
+  border-left: 4px solid #00ff41;
+  padding: 15px;
+  color: #33ff77;
+  font-size: 12px;
+  line-height: 1.6;
+  z-index: 1000;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
+}
+
+.rationale strong { color: #00ff41; }
+
+.app-container {
+  display: flex;
+  height: 100vh;
+  padding-top: 100px;
+}
+
+/* Header */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 2px solid #1a3a1a;
+  background: #000000;
+  z-index: 999;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 200px;
+  height: 2px;
+  background: linear-gradient(90deg, #00ff41 0%, transparent 100%);
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% { left: 0; }
+  100% { left: 100%; }
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #00ff41;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.logo::before {
+  content: '>';
+  color: #00ffff;
+  margin-right: 8px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.header-actions {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.mode-indicator {
+  font-size: 11px;
+  color: #00ffff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: rgba(0, 255, 255, 0.1);
+  padding: 4px 10px;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+}
+
+.btn {
+  background: transparent;
+  border: 2px solid #00ff41;
+  color: #00ff41;
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+}
+
+.btn:hover {
+  background: rgba(0, 255, 65, 0.15);
+  box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+}
+
+/* Sidebar */
+.sidebar {
+  width: 320px;
+  background: #0a0f0a;
+  border-right: 2px solid #1a3a1a;
+  padding: 25px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.sidebar-section {
+  border: 1px solid #1a3a1a;
+  padding: 15px;
+  background: #000000;
+}
+
+.sidebar-section-title {
+  font-size: 13px;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #1a3a1a;
+  font-weight: 700;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.control-label {
+  font-size: 11px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.control-value {
+  font-size: 13px;
+  color: #00ff41;
+  font-weight: 700;
+}
+
+/* Playback Controls */
+.playback-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.control-btn {
+  flex: 1;
+  background: #0f1f0f;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 10px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: monospace;
+}
+
+.control-btn:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.control-btn.primary {
+  background: rgba(0, 255, 65, 0.1);
+  border-color: #00ff41;
+}
+
+/* Speed Slider */
+.speed-slider {
+  width: 100%;
+  height: 4px;
+  background: #1a3a1a;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.speed-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #00ff41;
+  cursor: pointer;
+  box-shadow: 0 0 5px rgba(0, 255, 65, 0.5);
+}
+
+/* Organism List */
+.organism-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.organism-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  background: #0f1f0f;
+  border: 1px solid #1a3a1a;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.organism-item:hover {
+  border-color: #00ff41;
+  background: rgba(0, 255, 65, 0.05);
+}
+
+.organism-item.selected {
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.organism-color {
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  box-shadow: 0 0 5px currentColor;
+}
+
+.organism-name {
+  flex: 1;
+  font-size: 11px;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Main Content Area */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #000000;
+  position: relative;
+}
+
+.grid-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  position: relative;
+}
+
+.petri-dish-grid {
+  width: 100%;
+  max-width: 1000px;
+  aspect-ratio: 5/3;
+  background: #000000;
+  border: 2px solid #00ff41;
+  position: relative;
+  box-shadow:
+    0 0 20px rgba(0, 255, 65, 0.3),
+    inset 0 0 50px rgba(0, 255, 65, 0.05);
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, #0a2a0a 1px, transparent 1px),
+    linear-gradient(to bottom, #0a2a0a 1px, transparent 1px);
+  background-size: 10px 10px;
+  opacity: 0.5;
+}
+
+.grid-cells {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(50, 1fr);
+  grid-template-rows: repeat(30, 1fr);
+  gap: 1px;
+}
+
+.cell {
+  background: transparent;
+  transition: all 0.2s;
+  cursor: crosshair;
+}
+
+.cell:hover {
+  background: rgba(0, 255, 65, 0.2);
+}
+
+.cell.alive {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Grid Info Overlay */
+.grid-info {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #1a3a1a;
+  padding: 10px 15px;
+  font-size: 10px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.grid-info span {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.grid-info span:last-child {
+  margin-bottom: 0;
+}
+
+/* Statistics Panel */
+.stats-panel {
+  background: #0a0f0a;
+  border-top: 2px solid #1a3a1a;
+  padding: 15px 25px;
+  display: flex;
+  gap: 30px;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 9px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stat-value {
+  font-size: 16px;
+  color: #00ff41;
+  font-weight: 700;
+}
+</style>
+</head>
+<body>
+
+<div class="rationale">
+  <strong>Option A: Side Panel Layout</strong> - Controls and organism selection in left sidebar, grid takes center stage. Clean separation between tools and workspace. Edit mode shows organism palette, Play mode shows playback controls and statistics.
+</div>
+
+<div class="header">
+  <div class="logo">Triple Threat</div>
+  <div class="header-actions">
+    <div class="mode-indicator">EDIT MODE</div>
+    <button class="btn">SWITCH TO PLAY</button>
+    <button class="btn">SAVE</button>
+  </div>
+</div>
+
+<div class="app-container">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <!-- Mode: Edit Mode -->
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Organisms</h3>
+      <div class="organism-list">
+        <div class="organism-item selected">
+          <div class="organism-color" style="background: #ff0055; color: #ff0055;"></div>
+          <div class="organism-name">Crimson Crawler</div>
+        </div>
+        <div class="organism-item">
+          <div class="organism-color" style="background: #00aaff; color: #00aaff;"></div>
+          <div class="organism-name">Azure Swarm</div>
+        </div>
+        <div class="organism-item">
+          <div class="organism-color" style="background: #00ff41; color: #00ff41;"></div>
+          <div class="organism-name">Neon Spreader</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Grid Info</h3>
+      <div class="control-group">
+        <div class="control-item">
+          <span class="control-label">Grid Size</span>
+          <span class="control-value">100 × 60</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Total Cells</span>
+          <span class="control-value">6,000</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Living Cells</span>
+          <span class="control-value">127</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Tools</h3>
+      <button class="btn" style="width: 100%; margin-bottom: 8px;">CLEAR GRID</button>
+      <button class="btn" style="width: 100%; margin-bottom: 8px;">RANDOMIZE</button>
+      <button class="btn" style="width: 100%;">IMPORT PATTERN</button>
+    </div>
+
+    <!-- Mode: Play Mode (commented for demo - switch by uncommenting) -->
+    <!--
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Playback</h3>
+      <div class="control-group">
+        <div class="control-item">
+          <span class="control-label">Generation</span>
+          <span class="control-value">47</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Speed</span>
+          <span class="control-value">10 gen/s</span>
+        </div>
+      </div>
+      <div class="playback-controls">
+        <button class="control-btn">⏮</button>
+        <button class="control-btn">⏪</button>
+        <button class="control-btn primary">▶</button>
+        <button class="control-btn">⏩</button>
+        <button class="control-btn">⏭</button>
+      </div>
+      <input type="range" class="speed-slider" min="1" max="60" value="10" />
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Statistics</h3>
+      <div class="control-group">
+        <div class="control-item">
+          <span class="control-label">Crimson Crawler</span>
+          <span class="control-value">45 (35%)</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Azure Swarm</span>
+          <span class="control-value">38 (30%)</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Neon Spreader</span>
+          <span class="control-value">44 (35%)</span>
+        </div>
+      </div>
+    </div>
+    -->
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="grid-container">
+      <div class="petri-dish-grid">
+        <div class="grid-pattern"></div>
+        <div class="grid-cells">
+          <!-- Sample cells - in real app, these would be generated dynamically -->
+          <div class="cell"></div>
+          <div class="cell"></div>
+          <div class="cell alive" style="background: #ff0055; box-shadow: 0 0 4px #ff0055;"></div>
+          <!-- ... more cells ... -->
+        </div>
+        <div class="grid-info">
+          <span>CURSOR: [X:42, Y:18]</span>
+          <span>SELECTED: CRIMSON CRAWLER</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-panel">
+      <div class="stat-item">
+        <span class="stat-label">Generation</span>
+        <span class="stat-value">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Living Cells</span>
+        <span class="stat-value">127</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Population</span>
+        <span class="stat-value">
+          <span style="color: #ff0055;">45</span> /
+          <span style="color: #00aaff;">38</span> /
+          <span style="color: #00ff41;">44</span>
+        </span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Status</span>
+        <span class="stat-value" style="font-size: 13px; color: #00ffff;">READY</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

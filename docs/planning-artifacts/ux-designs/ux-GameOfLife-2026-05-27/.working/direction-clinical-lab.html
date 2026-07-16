@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Direction: Clinical Lab</title>
+<style>
+/* Color Palette:
+   --bg-primary: #0a0a0a | Main background - deep black
+   --bg-secondary: #1a1a1a | Card backgrounds
+   --border: #333333 | Dividers and borders
+   --accent: #00d4ff | Primary interactive elements
+   --text-primary: #ffffff | Headers and primary text
+   --text-secondary: #999999 | Secondary text and labels
+   --grid-cell: #222222 | Grid cell background
+   --organism-red: #ff3366 | Sample organism color
+   --organism-blue: #3366ff | Sample organism color
+   --organism-green: #00ff88 | Sample organism color
+*/
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #0a0a0a;
+  color: #ffffff;
+  padding: 40px;
+}
+
+.rationale {
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-left: 3px solid #00d4ff;
+  padding: 20px;
+  margin-bottom: 40px;
+  color: #999999;
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 800px;
+}
+
+.mockup-frame {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30px 0;
+  border-bottom: 2px solid #333333;
+  margin-bottom: 40px;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: #ffffff;
+}
+
+.logo-accent {
+  color: #00d4ff;
+  font-weight: 300;
+}
+
+.nav {
+  display: flex;
+  gap: 40px;
+}
+
+.nav-item {
+  color: #999999;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.nav-item.active {
+  color: #00d4ff;
+}
+
+.section-header {
+  margin-bottom: 30px;
+}
+
+.section-title {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+}
+
+.section-subtitle {
+  font-size: 14px;
+  color: #999999;
+  margin: 0;
+}
+
+.create-button {
+  background: #00d4ff;
+  color: #0a0a0a;
+  border: none;
+  padding: 16px 32px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  margin-bottom: 40px;
+  display: inline-block;
+}
+
+.battle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.battle-tile {
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  padding: 20px;
+  transition: border-color 0.2s;
+  cursor: pointer;
+}
+
+.battle-tile:hover {
+  border-color: #00d4ff;
+}
+
+.tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tile-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.tile-stats {
+  font-size: 12px;
+  color: #999999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.petri-dish {
+  width: 100%;
+  aspect-ratio: 5/3;
+  background: #0a0a0a;
+  border: 1px solid #222222;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, #1a1a1a 1px, transparent 1px),
+    linear-gradient(to bottom, #1a1a1a 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+.organisms {
+  position: absolute;
+  inset: 0;
+}
+
+.organism-cluster {
+  position: absolute;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+
+.cell {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+}
+
+.tile-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #666666;
+}
+
+.tile-date {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tile-participants {
+  display: flex;
+  gap: 8px;
+}
+
+.participant-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid #333333;
+}
+</style>
+</head>
+<body>
+
+<div class="rationale">
+  <strong>Clinical Lab:</strong> Inspired by high-precision laboratory equipment and periodic table design systems. Sharp contrast, clean geometry, and methodical spacing create a professional research environment. Cyan accent provides scientific credibility while maintaining visual energy for younger users.
+</div>
+
+<div class="mockup-frame">
+  <div class="header">
+    <div class="logo">
+      <span class="logo-accent">◉</span> Game of Life Studio
+    </div>
+    <div class="nav">
+      <div class="nav-item">Organisms</div>
+      <div class="nav-item active">Battles</div>
+      <div class="nav-item">Lab</div>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <h1 class="section-title">Battle Gallery</h1>
+    <p class="section-subtitle">Your saved cellular competitions</p>
+  </div>
+
+  <button class="create-button">+ Create New Battle</button>
+
+  <div class="battle-grid">
+    <!-- Battle 1: Triple Threat -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <h3 class="tile-title">Triple Threat</h3>
+        <span class="tile-stats">Gen 47</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <!-- Red cluster top-left -->
+          <div class="organism-cluster" style="top: 20%; left: 15%;">
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+          </div>
+          <!-- Blue cluster center -->
+          <div class="organism-cluster" style="top: 40%; left: 45%;">
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+          </div>
+          <!-- Green cluster bottom-right -->
+          <div class="organism-cluster" style="top: 65%; left: 70%;">
+            <div class="cell" style="background: #00ff88;"></div>
+            <div class="cell" style="background: #00ff88;"></div>
+            <div class="cell" style="background: #00ff88;"></div>
+            <div class="cell" style="background: #00ff88;"></div>
+            <div class="cell" style="background: #00ff88;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 24, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-dot" style="background: #ff3366;"></div>
+          <div class="participant-dot" style="background: #3366ff;"></div>
+          <div class="participant-dot" style="background: #00ff88;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 2: Chaos vs Order -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <h3 class="tile-title">Chaos vs Order</h3>
+        <span class="tile-stats">Gen 82</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <!-- Purple scattered -->
+          <div class="organism-cluster" style="top: 15%; left: 25%;">
+            <div class="cell" style="background: #9933ff;"></div>
+            <div class="cell" style="background: #9933ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 50%; left: 15%;">
+            <div class="cell" style="background: #9933ff;"></div>
+            <div class="cell" style="background: #9933ff;"></div>
+            <div class="cell" style="background: #9933ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 70%; left: 35%;">
+            <div class="cell" style="background: #9933ff;"></div>
+          </div>
+          <!-- Orange structured -->
+          <div class="organism-cluster" style="top: 30%; left: 60%;">
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 23, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-dot" style="background: #9933ff;"></div>
+          <div class="participant-dot" style="background: #ff9933;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 3: Rapid Evolution -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <h3 class="tile-title">Rapid Evolution</h3>
+        <span class="tile-stats">Gen 123</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 35%; left: 20%;">
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 25%; left: 55%;">
+            <div class="cell" style="background: #00ffcc;"></div>
+            <div class="cell" style="background: #00ffcc;"></div>
+            <div class="cell" style="background: #00ffcc;"></div>
+            <div class="cell" style="background: #00ffcc;"></div>
+            <div class="cell" style="background: #00ffcc;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 60%; left: 65%;">
+            <div class="cell" style="background: #ffcc00;"></div>
+            <div class="cell" style="background: #ffcc00;"></div>
+            <div class="cell" style="background: #ffcc00;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 22, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-dot" style="background: #ff0066;"></div>
+          <div class="participant-dot" style="background: #00ffcc;"></div>
+          <div class="participant-dot" style="background: #ffcc00;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 4: Symbiosis Test -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <h3 class="tile-title">Symbiosis Test</h3>
+        <span class="tile-stats">Gen 64</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 40%; left: 35%;">
+            <div class="cell" style="background: #00d4ff;"></div>
+            <div class="cell" style="background: #00d4ff;"></div>
+            <div class="cell" style="background: #00d4ff;"></div>
+            <div class="cell" style="background: #00d4ff;"></div>
+            <div class="cell" style="background: #ff00ff;"></div>
+            <div class="cell" style="background: #ff00ff;"></div>
+            <div class="cell" style="background: #00d4ff;"></div>
+            <div class="cell" style="background: #00d4ff;"></div>
+            <div class="cell" style="background: #ff00ff;"></div>
+            <div class="cell" style="background: #ff00ff;"></div>
+            <div class="cell" style="background: #00d4ff;"></div>
+            <div class="cell" style="background: #00d4ff;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 21, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-dot" style="background: #00d4ff;"></div>
+          <div class="participant-dot" style="background: #ff00ff;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 5: Survival of Fittest -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <h3 class="tile-title">Survival of Fittest</h3>
+        <span class="tile-stats">Gen 156</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 50%; left: 45%;">
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 20%; left: 15%;">
+            <div class="cell" style="background: #ff6600;"></div>
+            <div class="cell" style="background: #ff6600;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 20, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-dot" style="background: #00ff00;"></div>
+          <div class="participant-dot" style="background: #ff6600;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 6: The Dominance War -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <h3 class="tile-title">The Dominance War</h3>
+        <span class="tile-stats">Gen 91</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 30%; left: 25%;">
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+            <div class="cell" style="background: #ff3366;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 30%; left: 60%;">
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 19, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-dot" style="background: #ff3366;"></div>
+          <div class="participant-dot" style="background: #3366ff;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

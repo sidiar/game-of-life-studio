@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Petri Dish - Play Mode (Fullscreen)</title>
+<style>
+/* Biotech Terminal Color Palette */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  margin: 0;
+  font-family: 'Courier New', 'Courier', monospace;
+  background: #000000;
+  color: #00ff41;
+  overflow: hidden;
+  height: 100vh;
+  letter-spacing: 0.5px;
+}
+
+/* Immersive stage */
+.fs-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Top overlay (fades in from the top edge) */
+.fs-top {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  z-index: 10;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+
+.fs-top > * { pointer-events: auto; }
+
+.fs-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #00ff41;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fs-mode-badge {
+  color: #00ffff;
+  border: 1px solid #00ffff;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+.fs-exit {
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid #00ffff;
+  color: #00ffff;
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+}
+
+.fs-exit:hover {
+  background: rgba(0, 255, 255, 0.15);
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+}
+
+/* Grid fills the available space, keeping the 5:3 ratio */
+.petri-dish-grid {
+  width: min(94vw, 138vh);
+  aspect-ratio: 5/3;
+  background: #000000;
+  border: 2px solid #00ffff;
+  position: relative;
+  box-shadow:
+    0 0 30px rgba(0, 255, 255, 0.4),
+    inset 0 0 60px rgba(0, 255, 255, 0.08);
+  animation: grid-pulse 3s infinite;
+}
+
+@keyframes grid-pulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), inset 0 0 60px rgba(0, 255, 255, 0.08); }
+  50% { box-shadow: 0 0 40px rgba(0, 255, 255, 0.55), inset 0 0 70px rgba(0, 255, 255, 0.12); }
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, #0a2a2a 1px, transparent 1px),
+    linear-gradient(to bottom, #0a2a2a 1px, transparent 1px);
+  background-size: 2%, 3.333%;
+  opacity: 0.6;
+}
+
+.grid-cells {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(50, 1fr);
+  grid-template-rows: repeat(30, 1fr);
+  gap: 1px;
+}
+
+.cell {
+  background: transparent;
+}
+
+.cell.alive {
+  animation: cell-glow 2s infinite;
+}
+
+@keyframes cell-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.3); }
+}
+
+/* Bottom HUD (floating, blurred) */
+.fs-hud {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: rgba(10, 15, 10, 0.82);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid #1a3a1a;
+  padding: 12px 20px;
+  z-index: 10;
+  max-width: 94vw;
+  flex-wrap: wrap;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.12);
+}
+
+.hud-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-label {
+  font-size: 10px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.hud-cycle-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #00ffff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  text-shadow: 0 0 12px rgba(0, 255, 255, 0.6);
+}
+
+.hud-speed-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #00ff41;
+}
+
+.hud-divider {
+  width: 1px;
+  height: 28px;
+  background: #1a3a1a;
+}
+
+.hud-pop {
+  gap: 14px;
+}
+
+.hud-pop-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-pop-dot {
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+  box-shadow: 0 0 5px currentColor;
+  flex-shrink: 0;
+}
+
+.hud-pop-pill.extinct { opacity: 0.4; }
+.hud-pop-pill.extinct .hud-pop-dot { box-shadow: none; }
+
+/* Transport controls */
+.control-buttons-horizontal {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.control-btn {
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.control-btn-play {
+  background: rgba(0, 255, 65, 0.1);
+  border-color: #00ff41;
+  color: #00ff41;
+  box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
+}
+
+.control-btn-play:hover {
+  background: rgba(0, 255, 65, 0.2);
+  box-shadow: 0 0 25px rgba(0, 255, 65, 0.5);
+}
+
+.control-btn-next {
+  background: rgba(255, 170, 0, 0.05);
+  border-color: #ffaa00;
+  color: #ffaa00;
+}
+
+.control-btn-next:hover { background: rgba(255, 170, 0, 0.15); box-shadow: 0 0 15px rgba(255, 170, 0, 0.4); }
+
+.control-btn-stop {
+  background: rgba(255, 0, 85, 0.05);
+  border-color: #ff0055;
+  color: #ff0055;
+}
+
+.control-btn-stop:hover { background: rgba(255, 0, 85, 0.15); box-shadow: 0 0 15px rgba(255, 0, 85, 0.4); }
+
+.control-btn-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Keyboard hint */
+.fs-hint {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 9;
+}
+
+.fs-hint span {
+  color: #00ff41;
+  font-weight: 700;
+  margin: 0 2px;
+}
+</style>
+</head>
+<body>
+
+<div class="fs-stage">
+  <!-- Top overlay -->
+  <div class="fs-top">
+    <div class="fs-title">Triple Threat <span class="fs-mode-badge">RUN</span></div>
+    <button class="fs-exit" onclick="window.location.href='petri-dish-play-mode.html'">⛶ Exit Fullscreen</button>
+  </div>
+
+  <!-- Grid -->
+  <div class="petri-dish-grid">
+    <div class="grid-pattern"></div>
+    <div class="grid-cells">
+      <!-- Crimson Crawler -->
+      <div class="cell alive" style="grid-column: 8; grid-row: 5; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+      <div class="cell alive" style="grid-column: 9; grid-row: 6; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+      <div class="cell alive" style="grid-column: 7; grid-row: 7; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+      <div class="cell alive" style="grid-column: 8; grid-row: 7; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+      <div class="cell alive" style="grid-column: 9; grid-row: 7; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+      <div class="cell alive" style="grid-column: 12; grid-row: 24; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+      <div class="cell alive" style="grid-column: 13; grid-row: 24; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+      <div class="cell alive" style="grid-column: 12; grid-row: 25; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+      <div class="cell alive" style="grid-column: 13; grid-row: 25; background: #ff0055; box-shadow: 0 0 6px #ff0055;"></div>
+
+      <!-- Azure Swarm -->
+      <div class="cell alive" style="grid-column: 24; grid-row: 12; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 25; grid-row: 12; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 24; grid-row: 13; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 27; grid-row: 14; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 26; grid-row: 15; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 27; grid-row: 15; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 42; grid-row: 8; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 43; grid-row: 8; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 44; grid-row: 8; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+      <div class="cell alive" style="grid-column: 43; grid-row: 9; background: #00aaff; box-shadow: 0 0 6px #00aaff;"></div>
+
+      <!-- Neon Spreader -->
+      <div class="cell alive" style="grid-column: 38; grid-row: 18; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+      <div class="cell alive" style="grid-column: 39; grid-row: 18; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+      <div class="cell alive" style="grid-column: 40; grid-row: 18; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+      <div class="cell alive" style="grid-column: 37; grid-row: 19; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+      <div class="cell alive" style="grid-column: 38; grid-row: 19; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+      <div class="cell alive" style="grid-column: 39; grid-row: 19; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+      <div class="cell alive" style="grid-column: 25; grid-row: 22; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+      <div class="cell alive" style="grid-column: 26; grid-row: 22; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+      <div class="cell alive" style="grid-column: 27; grid-row: 22; background: #00ff41; box-shadow: 0 0 6px #00ff41;"></div>
+    </div>
+  </div>
+
+  <!-- Bottom HUD -->
+  <div class="fs-hud">
+    <div class="hud-group hud-cycle">
+      <span class="hud-label">Cycle</span>
+      <span class="hud-cycle-value">0042</span>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-group hud-pop">
+      <span class="hud-pop-pill" style="color: #ff0055;"><span class="hud-pop-dot" style="background: #ff0055;"></span>127</span>
+      <span class="hud-pop-pill" style="color: #00aaff;"><span class="hud-pop-dot" style="background: #00aaff;"></span>89</span>
+      <span class="hud-pop-pill" style="color: #00ff41;"><span class="hud-pop-dot" style="background: #00ff41;"></span>57</span>
+      <span class="hud-pop-pill extinct" style="color: #ffaa00;"><span class="hud-pop-dot" style="background: transparent;"></span>☠ 0</span>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="hud-group hud-speed">
+      <span class="hud-label">Speed</span>
+      <span class="hud-speed-value">10 gen/s</span>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="control-buttons-horizontal">
+      <button class="control-btn control-btn-play">
+        <span class="control-btn-icon">▶</span>
+        <span>Play</span>
+      </button>
+      <button class="control-btn control-btn-next">
+        <span class="control-btn-icon">⏭</span>
+        <span>Next</span>
+      </button>
+      <button class="control-btn control-btn-stop">
+        <span class="control-btn-icon">⏹</span>
+        <span>Stop</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="fs-hint">Press <span>F</span> to exit fullscreen • <span>SPACE</span> Play/Pause • <span>→</span> Next</div>
+</div>
+
+<script>
+// Play/Pause toggle
+document.querySelector('.control-btn-play').addEventListener('click', function() {
+  const icon = this.querySelector('.control-btn-icon');
+  const text = this.querySelector('span:last-child');
+  if (icon.textContent === '▶') {
+    icon.textContent = '⏸';
+    text.textContent = 'Pause';
+  } else {
+    icon.textContent = '▶';
+    text.textContent = 'Play';
+  }
+});
+
+// Exit fullscreen with F or ESC
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'f' || e.key === 'F' || e.key === 'Escape') {
+    window.location.href = 'petri-dish-play-mode.html';
+  }
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Biotech Terminal - Radial Gradient Hover</title>
+<style>
+/* Biotech Terminal Base Styles */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  margin: 0;
+  font-family: 'Courier New', Courier, monospace;
+  background: #0a0e0a; /* Near-black biotech background */
+  color: #00ff88; /* Phosphor green */
+  padding: 40px;
+  line-height: 1.6;
+}
+
+.explanation {
+  max-width: 900px;
+  margin: 0 auto 40px;
+  padding: 20px;
+  border: 1px solid #00ff88;
+  background: rgba(0, 255, 136, 0.05);
+}
+
+.explanation h2 {
+  color: #00ff88;
+  font-size: 24px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.explanation p {
+  color: #00cc66;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.gallery {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 30px;
+  padding: 20px;
+}
+
+.battle-tile {
+  border: 2px solid #00ff88; /* Terminal green border */
+  background: #0d1210; /* Slightly lighter than background */
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+/* OPTION A: Radial Gradient - Specimen Under Microscope */
+.battle-tile:hover {
+  border-color: #00ff88;
+  background: radial-gradient(
+    circle at center,
+    #00ff88 0%,      /* Bright cyan-green center */
+    #00dd77 25%,     /* Mid-bright green */
+    #008855 50%,     /* Mid emerald */
+    #004433 75%,     /* Darker emerald */
+    #003322 100%     /* Dark emerald edges */
+  );
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+  transform: scale(1.02);
+}
+
+.battle-tile h3 {
+  color: #00ff88;
+  font-size: 18px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.battle-meta {
+  color: #00cc66;
+  font-size: 12px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 16px;
+}
+
+.grid-viz {
+  width: 100%;
+  height: 180px;
+  background: #000000;
+  border: 1px solid #00ff88;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  gap: 1px;
+  margin-bottom: 12px;
+}
+
+.cell {
+  background: #0a0e0a;
+}
+
+.cell.alive-green { background: #00ff88; }
+.cell.alive-cyan { background: #00ffff; }
+.cell.alive-yellow { background: #ffff00; }
+.cell.alive-magenta { background: #ff00ff; }
+
+.battle-stats {
+  font-size: 11px;
+  color: #00aa55;
+  display: flex;
+  justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<div class="explanation">
+  <h2>Option A: Radial Gradient</h2>
+  <p>
+    Hovering triggers a radial gradient emanating from the center of the tile, creating a "specimen under microscope" effect.
+    The bright cyan-green center (#00ff88) fades smoothly to darker emerald edges (#003322), simulating a focused biotech examination light.
+    This effect maintains the terminal aesthetic while adding depth and scientific precision to the interaction.
+  </p>
+</div>
+
+<div class="gallery">
+
+  <!-- Battle Tile 1 -->
+  <div class="battle-tile">
+    <h3>Triple Threat</h3>
+    <div class="battle-meta">
+      <span>3 Organisms</span>
+      <span>Gen 47</span>
+      <span>Stable</span>
+    </div>
+    <div class="grid-viz">
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell alive-cyan"></div><div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="battle-stats">
+      <span>Survival: 94%</span>
+      <span>Dominance: Balanced</span>
+    </div>
+  </div>
+
+  <!-- Battle Tile 2 -->
+  <div class="battle-tile">
+    <h3>Chaos vs Order</h3>
+    <div class="battle-meta">
+      <span>2 Organisms</span>
+      <span>Gen 89</span>
+      <span>Volatile</span>
+    </div>
+    <div class="grid-viz">
+      <div class="cell alive-magenta"></div><div class="cell"></div><div class="cell alive-magenta"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell alive-green"></div>
+      <div class="cell"></div><div class="cell alive-magenta"></div><div class="cell alive-magenta"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-green"></div>
+      <div class="cell alive-magenta"></div><div class="cell alive-magenta"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-green"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell alive-magenta"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell alive-green"></div>
+      <div class="cell"></div><div class="cell alive-magenta"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell alive-magenta"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="battle-stats">
+      <span>Survival: 76%</span>
+      <span>Dominance: Magenta +12%</span>
+    </div>
+  </div>
+
+  <!-- Battle Tile 3 -->
+  <div class="battle-tile">
+    <h3>Symbiosis Test</h3>
+    <div class="battle-meta">
+      <span>2 Organisms</span>
+      <span>Gen 124</span>
+      <span>Cooperative</span>
+    </div>
+    <div class="grid-viz">
+      <div class="cell"></div><div class="cell alive-cyan"></div><div class="cell alive-cyan"></div><div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell alive-cyan"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell alive-cyan"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="battle-stats">
+      <span>Survival: 99%</span>
+      <span>Dominance: Balanced</span>
+    </div>
+  </div>
+
+  <!-- Battle Tile 4 -->
+  <div class="battle-tile">
+    <h3>Extinction Event</h3>
+    <div class="battle-meta">
+      <span>4 Organisms</span>
+      <span>Gen 203</span>
+      <span>Critical</span>
+    </div>
+    <div class="grid-viz">
+      <div class="cell"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell alive-magenta"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-yellow"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell alive-magenta"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell alive-green"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="battle-stats">
+      <span>Survival: 23%</span>
+      <span>Dominance: Yellow +8%</span>
+    </div>
+  </div>
+
+  <!-- Battle Tile 5 -->
+  <div class="battle-tile">
+    <h3>Colony Wars</h3>
+    <div class="battle-meta">
+      <span>2 Organisms</span>
+      <span>Gen 156</span>
+      <span>Aggressive</span>
+    </div>
+    <div class="grid-viz">
+      <div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell alive-cyan"></div><div class="cell alive-cyan"></div><div class="cell"></div>
+      <div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div>
+      <div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell alive-cyan"></div><div class="cell alive-cyan"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell"></div>
+      <div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell alive-green"></div><div class="cell"></div><div class="cell alive-cyan"></div><div class="cell alive-cyan"></div><div class="cell alive-cyan"></div><div class="cell"></div>
+    </div>
+    <div class="battle-stats">
+      <span>Survival: 88%</span>
+      <span>Dominance: Green +4%</span>
+    </div>
+  </div>
+
+  <!-- Battle Tile 6 -->
+  <div class="battle-tile">
+    <h3>Perfect Balance</h3>
+    <div class="battle-meta">
+      <span>2 Organisms</span>
+      <span>Gen 301</span>
+      <span>Stable</span>
+    </div>
+    <div class="grid-viz">
+      <div class="cell"></div><div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-magenta"></div><div class="cell alive-magenta"></div><div class="cell"></div>
+      <div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell alive-magenta"></div><div class="cell alive-magenta"></div><div class="cell alive-magenta"></div><div class="cell alive-magenta"></div>
+      <div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell alive-magenta"></div><div class="cell"></div><div class="cell alive-magenta"></div><div class="cell alive-magenta"></div>
+      <div class="cell alive-yellow"></div><div class="cell"></div><div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell alive-magenta"></div><div class="cell alive-magenta"></div><div class="cell"></div><div class="cell alive-magenta"></div>
+      <div class="cell"></div><div class="cell alive-yellow"></div><div class="cell alive-yellow"></div><div class="cell"></div><div class="cell"></div><div class="cell alive-magenta"></div><div class="cell alive-magenta"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="battle-stats">
+      <span>Survival: 100%</span>
+      <span>Dominance: Balanced</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(bmad-product-brief)",
+      "Bash(python3:*)",
+      "Bash(mkdir:*)",
+      "Skill(bmad-prd)",
+      "Skill(bmad-ux)",
+      "Bash(open:*)",
+      "Skill(bmad-help)",
+      "Skill(bmad-create-architecture)",
+      "Skill(bmad-advanced-elicitation)",
+      "Skill(claude-api)",
+      "Read(//Users/sidiar/projects/NewJob/KnowledgeBase/**)",
+      "Read(//Users/sidiar/projects/Neo/src/application/modules/middleware/cli/**)",
+      "Read(//Users/sidiar/projects/NewJob/**)",
+      "Read(//Users/arielsidi/projects/**)",
+      "Bash([ -f \"$f\" ])",
+      "Bash(python3.11 --version)",
+      "Read(//opt/homebrew/**)",
+      "Read(//usr/local/**)",
+      "Bash(grep -n \"^## \\\\|^\\\\*\\\\*.*\\\\*\\\\*$\\\\|Glossary\\\\|^### \" prd.md)",
+      "WebSearch",
+      "WebFetch(domain:mui.com)",
+      "Bash(grep -vE '^\\\\s*$')",
+      "Bash(grep -cE \"^  [0-9]+-[0-9]+-.*: backlog$\" docs/implementation-artifacts/sprint-status.yaml)",
+      "Bash(grep -cE \"^  epic-[0-9]+: backlog$\" docs/implementation-artifacts/sprint-status.yaml)",
+      "Bash(grep -cE \"retrospective: optional$\" docs/implementation-artifacts/sprint-status.yaml)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

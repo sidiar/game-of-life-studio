@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Petri Dish - Option C: Floating Controls</title>
+<style>
+/* Biotech Terminal Color Palette */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  margin: 0;
+  font-family: 'Courier New', 'Courier', monospace;
+  background: #000000;
+  color: #00ff41;
+  overflow: hidden;
+  letter-spacing: 0.5px;
+}
+
+.rationale {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  background: #0a0f0a;
+  border: 2px solid #1a3a1a;
+  border-left: 4px solid #00ff41;
+  padding: 15px;
+  color: #33ff77;
+  font-size: 12px;
+  line-height: 1.6;
+  z-index: 1000;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
+}
+
+.rationale strong { color: #00ff41; }
+
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+/* Fullscreen Grid */
+.grid-area {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  padding-top: 110px;
+  background: #000000;
+}
+
+.petri-dish-grid {
+  width: 100%;
+  height: 100%;
+  background: #000000;
+  border: 2px solid #00ff41;
+  position: relative;
+  box-shadow:
+    0 0 40px rgba(0, 255, 65, 0.4),
+    inset 0 0 80px rgba(0, 255, 65, 0.08);
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, #0a2a0a 1px, transparent 1px),
+    linear-gradient(to bottom, #0a2a0a 1px, transparent 1px);
+  background-size: 10px 10px;
+  opacity: 0.4;
+}
+
+.grid-cells {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(50, 1fr);
+  grid-template-rows: repeat(30, 1fr);
+  gap: 1px;
+}
+
+.cell {
+  background: transparent;
+  transition: all 0.2s;
+  cursor: crosshair;
+}
+
+.cell:hover {
+  background: rgba(0, 255, 65, 0.2);
+}
+
+.cell.alive {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Floating Header */
+.floating-header {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  padding: 15px 25px;
+  background: rgba(0, 0, 0, 0.95);
+  border: 2px solid #1a3a1a;
+  box-shadow: 0 0 30px rgba(0, 255, 65, 0.2);
+  z-index: 900;
+  margin-top: 80px;
+}
+
+.logo {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #00ff41;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+  padding-right: 15px;
+  border-right: 1px solid #1a3a1a;
+}
+
+.logo::before {
+  content: '>';
+  color: #00ffff;
+  margin-right: 8px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.mode-badge {
+  font-size: 10px;
+  color: #00ffff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: rgba(0, 255, 255, 0.15);
+  padding: 4px 10px;
+  border: 1px solid rgba(0, 255, 255, 0.4);
+}
+
+.header-btn {
+  background: transparent;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+}
+
+.header-btn:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 12px rgba(0, 255, 65, 0.3);
+}
+
+/* Floating Control Panel - Left */
+.floating-panel-left {
+  position: fixed;
+  top: 180px;
+  left: 20px;
+  width: 280px;
+  background: rgba(0, 0, 0, 0.95);
+  border: 2px solid #1a3a1a;
+  box-shadow: 0 0 25px rgba(0, 255, 65, 0.2);
+  z-index: 800;
+}
+
+.panel-header {
+  padding: 12px 15px;
+  border-bottom: 1px solid #1a3a1a;
+  background: #0a0f0a;
+  font-size: 11px;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+}
+
+.panel-content {
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Organism Pills */
+.organism-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.organism-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #0f1f0f;
+  border: 1px solid #1a3a1a;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #00cc88;
+}
+
+.organism-pill:hover {
+  border-color: #00ff41;
+  background: rgba(0, 255, 65, 0.05);
+}
+
+.organism-pill.selected {
+  border-color: #00ff41;
+  background: rgba(0, 255, 65, 0.1);
+  box-shadow: 0 0 12px rgba(0, 255, 65, 0.2);
+  color: #00ff41;
+}
+
+.organism-color {
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  box-shadow: 0 0 4px currentColor;
+  flex-shrink: 0;
+}
+
+/* Tool Panel */
+.tool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tool-btn {
+  background: #0f1f0f;
+  border: 1px solid #1a3a1a;
+  color: #00cc88;
+  padding: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.2s;
+}
+
+.tool-btn:hover {
+  border-color: #00ff41;
+  color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+/* Floating Control Panel - Right (Play Mode) */
+.floating-panel-right {
+  position: fixed;
+  top: 180px;
+  right: 20px;
+  width: 300px;
+  background: rgba(0, 0, 0, 0.95);
+  border: 2px solid #1a3a1a;
+  box-shadow: 0 0 25px rgba(0, 255, 65, 0.2);
+  z-index: 800;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 9px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stat-value {
+  font-size: 18px;
+  color: #00ff41;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+/* Floating Playback Controls - Bottom Center */
+.floating-playback {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.95);
+  border: 2px solid #1a3a1a;
+  box-shadow: 0 0 30px rgba(0, 255, 65, 0.25);
+  z-index: 900;
+}
+
+.generation-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0 20px;
+  border-right: 1px solid #1a3a1a;
+}
+
+.generation-label {
+  font-size: 8px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.generation-value {
+  font-size: 24px;
+  color: #00ff41;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.playback-controls {
+  display: flex;
+  gap: 6px;
+  padding: 0 20px;
+  border-right: 1px solid #1a3a1a;
+}
+
+.control-btn {
+  background: #0f1f0f;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: monospace;
+  min-width: 38px;
+}
+
+.control-btn:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 12px rgba(0, 255, 65, 0.3);
+}
+
+.control-btn.primary {
+  background: rgba(0, 255, 65, 0.2);
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.25);
+}
+
+.speed-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 20px;
+  min-width: 180px;
+}
+
+.speed-label {
+  font-size: 9px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.speed-slider {
+  width: 100%;
+  height: 4px;
+  background: #1a3a1a;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.speed-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #00ff41;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(0, 255, 65, 0.6);
+}
+
+/* Cursor Info Tooltip */
+.cursor-info {
+  position: fixed;
+  bottom: 30px;
+  left: 30px;
+  background: rgba(0, 0, 0, 0.95);
+  border: 1px solid #1a3a1a;
+  padding: 10px 15px;
+  font-size: 10px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.6;
+  z-index: 800;
+}
+</style>
+</head>
+<body>
+
+<div class="rationale">
+  <strong>Option C: Floating Controls</strong> - Minimal UI, maximum immersion. Controls float over the grid in compact panels that can be moved or hidden. Header at top-center, organism selector at left, stats at right, playback controls at bottom-center. Perfect for full-screen, distraction-free work.
+</div>
+
+<div class="app-container">
+  <!-- Fullscreen Grid -->
+  <div class="grid-area">
+    <div class="petri-dish-grid">
+      <div class="grid-pattern"></div>
+      <div class="grid-cells">
+        <!-- Sample cells -->
+        <div class="cell"></div>
+        <div class="cell"></div>
+        <div class="cell alive" style="background: #ff0055; box-shadow: 0 0 4px #ff0055;"></div>
+        <!-- ... more cells ... -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Header -->
+  <div class="floating-header">
+    <div class="logo">Triple Threat</div>
+    <div class="mode-badge">EDIT MODE</div>
+    <button class="header-btn">SWITCH TO PLAY</button>
+    <button class="header-btn">SAVE</button>
+  </div>
+
+  <!-- Floating Panel - Left (Edit Mode: Organisms) -->
+  <div class="floating-panel-left">
+    <div class="panel-header">Organisms</div>
+    <div class="panel-content">
+      <div class="organism-list">
+        <div class="organism-pill selected">
+          <div class="organism-color" style="background: #ff0055; color: #ff0055;"></div>
+          <span>Crimson Crawler</span>
+        </div>
+        <div class="organism-pill">
+          <div class="organism-color" style="background: #00aaff; color: #00aaff;"></div>
+          <span>Azure Swarm</span>
+        </div>
+        <div class="organism-pill">
+          <div class="organism-color" style="background: #00ff41; color: #00ff41;"></div>
+          <span>Neon Spreader</span>
+        </div>
+      </div>
+    </div>
+    <div class="panel-header">Tools</div>
+    <div class="panel-content">
+      <div class="tool-grid">
+        <button class="tool-btn">CLEAR</button>
+        <button class="tool-btn">RANDOM</button>
+        <button class="tool-btn">IMPORT</button>
+        <button class="tool-btn">EXPORT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Panel - Right (Play Mode: Stats) - Commented for Edit Mode -->
+  <!--
+  <div class="floating-panel-right">
+    <div class="panel-header">Statistics</div>
+    <div class="panel-content">
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">Total Cells</span>
+          <span class="stat-value">6,000</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Living</span>
+          <span class="stat-value">127</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Dead</span>
+          <span class="stat-value">5,873</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Changed</span>
+          <span class="stat-value">23</span>
+        </div>
+      </div>
+    </div>
+    <div class="panel-header">Population</div>
+    <div class="panel-content">
+      <div class="organism-list">
+        <div class="organism-pill">
+          <div class="organism-color" style="background: #ff0055; color: #ff0055;"></div>
+          <span>45 (35%)</span>
+        </div>
+        <div class="organism-pill">
+          <div class="organism-color" style="background: #00aaff; color: #00aaff;"></div>
+          <span>38 (30%)</span>
+        </div>
+        <div class="organism-pill">
+          <div class="organism-color" style="background: #00ff41; color: #00ff41;"></div>
+          <span>44 (35%)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  -->
+
+  <!-- Floating Playback Controls - Bottom (Play Mode only) -->
+  <!--
+  <div class="floating-playback">
+    <div class="generation-display">
+      <span class="generation-label">Generation</span>
+      <span class="generation-value">047</span>
+    </div>
+    <div class="playback-controls">
+      <button class="control-btn">⏮</button>
+      <button class="control-btn">⏪</button>
+      <button class="control-btn primary">▶</button>
+      <button class="control-btn">⏩</button>
+      <button class="control-btn">⏭</button>
+    </div>
+    <div class="speed-control">
+      <span class="speed-label">Speed: 10 gen/s</span>
+      <input type="range" class="speed-slider" min="1" max="60" value="10" />
+    </div>
+  </div>
+  -->
+
+  <!-- Cursor Info -->
+  <div class="cursor-info">
+    CURSOR: [X:42, Y:18]<br/>
+    SELECTED: CRIMSON CRAWLER<br/>
+    GRID: 100 × 60
+  </div>
+</div>
+
+</body>
+</html>

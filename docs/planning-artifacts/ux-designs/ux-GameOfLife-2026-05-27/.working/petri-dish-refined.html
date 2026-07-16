@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Petri Dish - Refined Layout</title>
+<style>
+/* Biotech Terminal Color Palette */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  margin: 0;
+  font-family: 'Courier New', 'Courier', monospace;
+  background: #000000;
+  color: #00ff41;
+  overflow: hidden;
+  letter-spacing: 0.5px;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+/* Header */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 2px solid #1a3a1a;
+  background: #000000;
+  z-index: 999;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 200px;
+  height: 2px;
+  background: linear-gradient(90deg, #00ff41 0%, transparent 100%);
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% { left: 0; }
+  100% { left: 100%; }
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #00ff41;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.logo::before {
+  content: '>';
+  color: #00ffff;
+  margin-right: 8px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.header-actions {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+/* Mode Toggle Button Group */
+.mode-toggle {
+  display: flex;
+  border: 2px solid #1a3a1a;
+  background: #0f1f0f;
+}
+
+.mode-btn {
+  background: transparent;
+  border: none;
+  color: #00cc88;
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.mode-btn:first-child {
+  border-right: 1px solid #1a3a1a;
+}
+
+.mode-btn.active {
+  background: rgba(0, 255, 65, 0.15);
+  color: #00ff41;
+  box-shadow: inset 0 0 15px rgba(0, 255, 65, 0.2);
+}
+
+.mode-btn:not(.active):hover {
+  background: rgba(0, 255, 65, 0.05);
+  color: #00ff41;
+}
+
+.btn {
+  background: transparent;
+  border: 2px solid #00ff41;
+  color: #00ff41;
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+}
+
+.btn:hover {
+  background: rgba(0, 255, 65, 0.15);
+  box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+}
+
+/* Sidebar */
+.sidebar {
+  width: 320px;
+  background: #0a0f0a;
+  border-right: 2px solid #1a3a1a;
+  padding: 25px;
+  padding-bottom: 0;
+  margin-top: 64px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-y: hidden;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  padding-bottom: 20px;
+}
+
+.sidebar-footer {
+  position: sticky;
+  bottom: 0;
+  background: #0a0f0a;
+  border-top: 2px solid #1a3a1a;
+  padding: 12px 0;
+  margin-top: auto;
+}
+
+.back-btn {
+  width: 100%;
+  background: transparent;
+  border: 2px solid #00ff41;
+  color: #00ff41;
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.back-btn:hover {
+  background: rgba(0, 255, 65, 0.15);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+}
+
+.sidebar-section {
+  border: 1px solid #1a3a1a;
+  padding: 15px;
+  background: #000000;
+}
+
+.sidebar-section-title {
+  font-size: 13px;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #1a3a1a;
+  font-weight: 700;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.control-label {
+  font-size: 11px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.control-value {
+  font-size: 13px;
+  color: #00ff41;
+  font-weight: 700;
+}
+
+/* Used Organisms List (Fixed, No Scroll) */
+.used-organisms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.organism-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border-bottom: 1px solid #1a3a1a;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.organism-item:last-child {
+  border-bottom: none;
+}
+
+.organism-item:hover {
+  background: rgba(0, 255, 65, 0.05);
+}
+
+.organism-item.selected {
+  background: rgba(0, 255, 65, 0.1);
+  box-shadow: inset 0 0 15px rgba(0, 255, 65, 0.15);
+}
+
+.organism-color {
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  box-shadow: 0 0 5px currentColor;
+  flex-shrink: 0;
+}
+
+.organism-name {
+  flex: 1;
+  font-size: 11px;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Add Organism Controls */
+.add-organism-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #1a3a1a;
+}
+
+.organism-search {
+  background: #0f1f0f;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+.organism-search::placeholder {
+  color: #00cc88;
+  opacity: 0.6;
+}
+
+.organism-search:focus {
+  outline: none;
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.organism-dropdown {
+  background: #0f1f0f;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 10px 30px 10px 12px;
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300ff41' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.organism-dropdown:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.organism-dropdown:focus {
+  outline: none;
+  border-color: #00ff41;
+}
+
+/* Fixed Eraser at Bottom */
+.organism-eraser {
+  background: #0a0f0a;
+  border-top: 2px solid #1a3a1a;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 15px;
+}
+
+.organism-eraser:hover {
+  background: rgba(255, 102, 0, 0.1);
+}
+
+.organism-eraser.selected {
+  background: rgba(255, 102, 0, 0.15);
+  box-shadow: inset 0 0 15px rgba(255, 102, 0, 0.2);
+}
+
+.eraser-icon {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #ff6600;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #ff6600;
+  flex-shrink: 0;
+}
+
+.eraser-name {
+  flex: 1;
+  font-size: 11px;
+  color: #ff6600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+/* Tool Buttons */
+.tool-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid #1a3a1a;
+  color: #00cc88;
+  padding: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.2s;
+  margin-bottom: 8px;
+}
+
+.tool-btn:last-child {
+  margin-bottom: 0;
+}
+
+.tool-btn:hover {
+  border-color: #00ff41;
+  color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+/* Main Content Area */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #000000;
+  position: relative;
+  margin-top: 64px;
+}
+
+.grid-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  position: relative;
+}
+
+.petri-dish-grid {
+  width: 100%;
+  max-width: 1000px;
+  aspect-ratio: 5/3;
+  background: #000000;
+  border: 2px solid #00ff41;
+  position: relative;
+  box-shadow:
+    0 0 20px rgba(0, 255, 65, 0.3),
+    inset 0 0 50px rgba(0, 255, 65, 0.05);
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, #0a2a0a 1px, transparent 1px),
+    linear-gradient(to bottom, #0a2a0a 1px, transparent 1px);
+  background-size: 10px 10px;
+  opacity: 0.5;
+}
+
+.grid-cells {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(50, 1fr);
+  grid-template-rows: repeat(30, 1fr);
+  gap: 1px;
+}
+
+.cell {
+  background: transparent;
+  transition: all 0.2s;
+  cursor: crosshair;
+}
+
+.cell:hover {
+  background: rgba(0, 255, 65, 0.2);
+}
+
+.cell.alive {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Grid Info Overlay */
+.grid-info {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid #1a3a1a;
+  padding: 10px 15px;
+  font-size: 10px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.6;
+}
+
+/* Bottom Statistics Bar */
+.stats-bar {
+  background: #0a0f0a;
+  border-top: 2px solid #1a3a1a;
+  padding: 12px 25px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stats-left {
+  display: flex;
+  gap: 25px;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 9px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stat-value {
+  font-size: 14px;
+  color: #00ff41;
+  font-weight: 700;
+}
+
+/* Zoom Slider */
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zoom-label {
+  font-size: 9px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.zoom-slider {
+  width: 120px;
+  height: 4px;
+  background: #1a3a1a;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #00ff41;
+  cursor: pointer;
+  box-shadow: 0 0 5px rgba(0, 255, 65, 0.5);
+}
+
+.zoom-value {
+  font-size: 11px;
+  color: #00ff41;
+  font-weight: 700;
+  min-width: 35px;
+}
+
+/* Save Button */
+.save-btn {
+  background: transparent;
+  border: 2px solid #00ff41;
+  color: #00ff41;
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.save-btn:hover {
+  background: rgba(0, 255, 65, 0.15);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+}
+
+/* Rationale at Bottom */
+.rationale {
+  background: #0a0f0a;
+  border: 2px solid #1a3a1a;
+  border-left: 4px solid #00ff41;
+  padding: 20px;
+  margin: 100px 30px 30px 30px;
+  color: #33ff77;
+  font-size: 13px;
+  line-height: 1.8;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
+}
+
+.rationale strong {
+  color: #00ff41;
+}
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <div class="header">
+    <div class="logo">Triple Threat</div>
+    <div class="header-actions">
+      <div class="mode-toggle">
+        <button class="mode-btn active">LAB</button>
+        <button class="mode-btn">RUN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-content">
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Organisms</h3>
+
+      <!-- Used Organisms (Fixed List) -->
+      <div class="used-organisms-list">
+        <div class="organism-item selected">
+          <div class="organism-color" style="background: #ff0055; color: #ff0055;"></div>
+          <div class="organism-name">Crimson Crawler</div>
+        </div>
+        <div class="organism-item">
+          <div class="organism-color" style="background: #00aaff; color: #00aaff;"></div>
+          <div class="organism-name">Azure Swarm</div>
+        </div>
+        <div class="organism-item">
+          <div class="organism-color" style="background: #00ff41; color: #00ff41;"></div>
+          <div class="organism-name">Neon Spreader</div>
+        </div>
+      </div>
+
+      <!-- Add More Organisms (Dropdown + Search) -->
+      <div class="add-organism-container">
+        <input type="text" class="organism-search" placeholder="SEARCH ORGANISMS..." />
+        <select class="organism-dropdown">
+          <option value="">+ ADD ORGANISM</option>
+          <option value="gold-glider">Gold Glider</option>
+          <option value="magenta-mutant">Magenta Mutant</option>
+          <option value="aqua-architect">Aqua Architect</option>
+          <option value="copper-catalyst">Copper Catalyst</option>
+          <option value="violet-chaos">Violet Chaos</option>
+        </select>
+      </div>
+
+      <!-- Eraser (Fixed at Bottom) -->
+      <div class="organism-eraser">
+        <div class="eraser-icon">✕</div>
+        <div class="eraser-name">Eraser</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Grid Info</h3>
+      <div class="control-group">
+        <div class="control-item">
+          <span class="control-label">Grid Size</span>
+          <span class="control-value">100 × 60</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Total Cells</span>
+          <span class="control-value">6,000</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Living Cells</span>
+          <span class="control-value">127</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Tools</h3>
+      <button class="tool-btn">CLEAR PETRI DISH</button>
+      <button class="tool-btn">RANDOMIZE</button>
+      <button class="tool-btn">IMPORT PATTERN</button>
+    </div>
+    </div>
+
+    <!-- Sidebar Footer with Back Button -->
+    <div class="sidebar-footer">
+      <a href="battle-gallery.html" style="text-decoration: none;">
+        <button class="back-btn">← BACK TO BATTLES</button>
+      </a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="grid-container">
+      <div class="petri-dish-grid">
+        <div class="grid-pattern"></div>
+        <div class="grid-cells">
+          <!-- Sample cells -->
+          <div class="cell"></div>
+          <div class="cell"></div>
+          <div class="cell alive" style="background: #ff0055; box-shadow: 0 0 4px #ff0055;"></div>
+          <!-- ... more cells ... -->
+        </div>
+        <div class="grid-info">
+          CURSOR: [X:42, Y:18]<br/>
+          SELECTED: CRIMSON CRAWLER
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stats-left">
+        <div class="stat-item">
+          <span class="stat-label">Generation</span>
+          <span class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Living Cells</span>
+          <span class="stat-value">127</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Population</span>
+          <span class="stat-value">
+            <span style="color: #ff0055;">45</span> /
+            <span style="color: #00aaff;">38</span> /
+            <span style="color: #00ff41;">44</span>
+          </span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 20px; align-items: center;">
+        <div class="zoom-control">
+          <span class="zoom-label">Grid Zoom:</span>
+          <input type="range" class="zoom-slider" min="50" max="200" value="100" />
+          <span class="zoom-value">100%</span>
+        </div>
+        <button class="btn" style="padding: 8px 16px; font-size: 11px;">UNDO</button>
+        <button class="save-btn">SAVE</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="rationale">
+  <strong>Refined Petri Dish Layout:</strong> Side panel with collapsible option featuring dynamic organism selection - used organisms appear in a fixed list at top, with search + dropdown for adding more. LAB/RUN toggle for mode switching (both 3 letters for visual balance). Bottom bar includes statistics, grid zoom slider, Undo button, and Save button. Maximum grid visibility while maintaining organized controls with intelligent organism management.
+</div>
+
+</body>
+</html>

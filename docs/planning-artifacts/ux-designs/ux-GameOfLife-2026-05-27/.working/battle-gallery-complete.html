@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Battle Gallery - Complete</title>
+<style>
+/* Color Palette:
+   --bg-primary: #000000 | Main background - pure black
+   --bg-secondary: #0a0f0a | Card backgrounds - dark green tint
+   --bg-tertiary: #0f1f0f | Elevated surfaces
+   --border: #1a3a1a | Terminal green borders
+   --accent-primary: #00ff41 | Matrix green
+   --accent-secondary: #00ffff | Cyan accent
+   --text-primary: #00ff41 | Headers - terminal green
+   --text-secondary: #33ff77 | Secondary text - lighter green
+   --text-tertiary: #00cc88 | Tertiary text
+   --grid-line: #0a2a0a | Grid pattern
+   --warning: #ff6600 | Warning/delete color
+*/
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Courier New', 'Courier', monospace;
+  background: #000000;
+  color: #00ff41;
+  padding: 30px;
+  letter-spacing: 0.5px;
+  overflow-x: hidden;
+}
+
+.rationale {
+  background: #0a0f0a;
+  border: 2px solid #1a3a1a;
+  border-left: 4px solid #00ff41;
+  padding: 20px;
+  margin-bottom: 35px;
+  color: #33ff77;
+  font-size: 13px;
+  line-height: 1.8;
+  max-width: 1500px;
+  font-family: 'Courier New', monospace;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
+}
+
+.rationale strong {
+  color: #00ff41;
+}
+
+.mockup-frame {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 25px 0;
+  border-bottom: 2px solid #1a3a1a;
+  margin-bottom: 35px;
+  position: relative;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 200px;
+  height: 2px;
+  background: linear-gradient(90deg, #00ff41 0%, transparent 100%);
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% { left: 0; }
+  100% { left: 100%; }
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #00ff41;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.logo::before {
+  content: '>';
+  color: #00ffff;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.nav {
+  display: flex;
+  gap: 30px;
+}
+
+.nav-item {
+  color: #33ff77;
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  padding: 4px 8px;
+}
+
+.nav-item.active {
+  color: #00ff41;
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid #1a3a1a;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.nav-item:not(.active):hover {
+  color: #00ff41;
+}
+
+.section-header {
+  margin-bottom: 30px;
+  border-left: 3px solid #00ff41;
+  padding-left: 15px;
+}
+
+.section-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #00ff41;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: #33ff77;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Toolbar with Search and Sort */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.toolbar-left {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex: 1;
+}
+
+.create-button {
+  background: transparent;
+  color: #00ff41;
+  border: 2px solid #00ff41;
+  padding: 12px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+  white-space: nowrap;
+}
+
+.create-button:hover {
+  background: rgba(0, 255, 65, 0.15);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+}
+
+/* Search Input */
+.search-container {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+}
+
+.search-input {
+  width: 100%;
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 10px 40px 10px 15px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+  transition: all 0.3s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.search-input::placeholder {
+  color: #00cc88;
+  opacity: 0.5;
+}
+
+.search-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #00cc88;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* Sort Dropdown */
+.sort-container {
+  position: relative;
+}
+
+.sort-label {
+  font-size: 11px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-right: 8px;
+}
+
+.sort-select {
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  padding: 10px 35px 10px 15px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.3s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300ff41' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.sort-select:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.sort-select:focus {
+  outline: none;
+  border-color: #00ff41;
+}
+
+/* Battle Count */
+.battle-count {
+  font-size: 11px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  padding: 10px 15px;
+}
+
+.battle-count::before {
+  content: '[';
+  color: #1a3a1a;
+  margin-right: 4px;
+}
+
+.battle-count::after {
+  content: ']';
+  color: #1a3a1a;
+  margin-left: 4px;
+}
+
+.battle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
+}
+
+.battle-tile {
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  padding: 18px;
+  transition: all 0.3s;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.battle-tile::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #00ff0040 20%,
+    #00ffff80 50%,
+    #00ff0040 80%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: none;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.battle-tile:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.2), inset 0 0 20px rgba(0, 255, 65, 0.05);
+}
+
+.battle-tile:hover::before {
+  opacity: 1;
+  animation: scan-sweep 8s ease-in-out infinite;
+}
+
+.battle-tile:hover .tile-actions {
+  opacity: 1;
+}
+
+@keyframes scan-sweep {
+  0% { left: -100%; }
+  37.5% { left: -100%; }
+  68.75% { left: 100%; }
+  100% { left: 100%; }
+}
+
+.battle-tile > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Tile Actions (visible on hover) */
+.tile-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 3;
+  background: #000000;
+  border: 1px solid #1a3a1a;
+  padding: 4px;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+}
+
+.tile-action-btn {
+  min-width: 50px;
+  height: 32px;
+  background: #0a0f0a;
+  border: 1px solid #1a3a1a;
+  color: #00ff41;
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  padding: 0 10px;
+}
+
+.tile-action-btn:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+  background: rgba(0, 255, 65, 0.1);
+}
+
+.tile-action-btn.delete {
+  color: #ff6600;
+}
+
+.tile-action-btn.delete:hover {
+  border-color: #ff6600;
+  box-shadow: 0 0 10px rgba(255, 102, 0, 0.3);
+  background: rgba(255, 102, 0, 0.1);
+}
+
+.tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1a3a1a;
+}
+
+.tile-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.tile-stats {
+  font-size: 11px;
+  color: #00ffff;
+  font-weight: 400;
+  letter-spacing: 1px;
+  background: rgba(0, 255, 255, 0.1);
+  padding: 2px 6px;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+}
+
+.petri-dish {
+  width: 100%;
+  aspect-ratio: 5/3;
+  background: #000000;
+  border: 1px solid #1a3a1a;
+  margin-bottom: 14px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 30px rgba(0, 255, 65, 0.05);
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, #0a2a0a 1px, transparent 1px),
+    linear-gradient(to bottom, #0a2a0a 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+.organisms {
+  position: absolute;
+  inset: 0;
+}
+
+.organism-cluster {
+  position: absolute;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+
+.cell {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  box-shadow: 0 0 3px currentColor;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.tile-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #00cc88;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: relative;
+  overflow: visible;
+}
+
+.tile-date::before {
+  content: '[';
+  color: #1a3a1a;
+  margin-right: 2px;
+}
+
+.tile-date::after {
+  content: ']';
+  color: #1a3a1a;
+  margin-left: 2px;
+}
+
+.tile-participants {
+  display: flex;
+  gap: 4px;
+  position: relative;
+  overflow: visible;
+}
+
+.participant-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 1px;
+  border: 1px solid currentColor;
+  box-shadow: 0 0 5px currentColor;
+  position: relative;
+  cursor: pointer;
+}
+
+/* Organism Name Tooltip */
+.participant-dot::before {
+  content: attr(data-organism);
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  transform: translateY(-8px);
+  background: #000000;
+  border: 1px solid #00ff41;
+  color: #00ff41;
+  padding: 4px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 100;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.participant-dot::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  right: 4px;
+  transform: translateY(-2px);
+  border: 4px solid transparent;
+  border-top-color: #00ff41;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 100;
+}
+
+.participant-dot:hover::before {
+  opacity: 1;
+  transform: translateY(-10px);
+}
+
+.participant-dot:hover::after {
+  opacity: 1;
+  transform: translateY(-4px);
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  background: #0a0f0a;
+  border: 2px dashed #1a3a1a;
+  margin: 40px 0;
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  color: #1a3a1a;
+  margin-bottom: 20px;
+}
+
+.empty-state-title {
+  font-size: 20px;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0 0 10px 0;
+}
+
+.empty-state-text {
+  font-size: 13px;
+  color: #00cc88;
+  margin: 0 0 25px 0;
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<div class="rationale">
+  <strong>Complete Battle Gallery with Full Functionality:</strong> This version includes all PRD features: search by name (F1.6), sort by date/name/participant count (F1.5), delete battles (F1.7), and empty state handling. Tile actions appear on hover for quick access to duplicate and delete. The biotech terminal aesthetic is maintained throughout all new UI elements.
+</div>
+
+<div class="mockup-frame">
+  <div class="header">
+    <div class="logo">Game of Life Studio</div>
+    <div class="nav">
+      <div class="nav-item">Organisms</div>
+      <div class="nav-item active">Battles</div>
+      <div class="nav-item">Settings</div>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <h1 class="section-title">Battle Gallery</h1>
+    <p class="section-subtitle">Your saved cellular competitions</p>
+  </div>
+
+  <!-- Toolbar with Search and Controls -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <button class="create-button">+ Create New Battle</button>
+
+      <div class="search-container">
+        <input
+          type="text"
+          class="search-input"
+          placeholder="Search battles..."
+          value=""
+        />
+        <span class="search-icon">🔍</span>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 15px; align-items: center;">
+      <div class="sort-container">
+        <span class="sort-label">Sort:</span>
+        <select class="sort-select">
+          <option value="date">Date (Newest)</option>
+          <option value="date-old">Date (Oldest)</option>
+          <option value="name">Name (A-Z)</option>
+          <option value="name-desc">Name (Z-A)</option>
+          <option value="participants">Participants</option>
+          <option value="generation">Generation</option>
+        </select>
+      </div>
+
+      <div class="battle-count">6 Battles</div>
+    </div>
+  </div>
+
+  <div class="battle-grid">
+    <!-- Battle 1 -->
+    <div class="battle-tile">
+      <div class="tile-actions">
+        <button class="tile-action-btn" title="Duplicate this battle">COPY</button>
+        <button class="tile-action-btn delete" title="Delete this battle">DEL</button>
+      </div>
+      <div class="tile-header">
+        <h3 class="tile-title">Triple Threat</h3>
+        <span class="tile-stats">GEN_047</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 20%; left: 15%;">
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 40%; left: 45%;">
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 65%; left: 70%;">
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">2026-05-24</span>
+        <div class="tile-participants">
+          <div class="participant-dot" data-organism="Crimson Crawler" style="background: #ff0055; color: #ff0055;"></div>
+          <div class="participant-dot" data-organism="Azure Swarm" style="background: #00aaff; color: #00aaff;"></div>
+          <div class="participant-dot" data-organism="Neon Spreader" style="background: #00ff41; color: #00ff41;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 2 -->
+    <div class="battle-tile">
+      <div class="tile-actions">
+        <button class="tile-action-btn" title="Duplicate this battle">COPY</button>
+        <button class="tile-action-btn delete" title="Delete this battle">DEL</button>
+      </div>
+      <div class="tile-header">
+        <h3 class="tile-title">Chaos vs Order</h3>
+        <span class="tile-stats">GEN_082</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 15%; left: 25%;">
+            <div class="cell" style="background: #cc00ff; color: #cc00ff;"></div>
+            <div class="cell" style="background: #cc00ff; color: #cc00ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 50%; left: 15%;">
+            <div class="cell" style="background: #cc00ff; color: #cc00ff;"></div>
+            <div class="cell" style="background: #cc00ff; color: #cc00ff;"></div>
+            <div class="cell" style="background: #cc00ff; color: #cc00ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 70%; left: 35%;">
+            <div class="cell" style="background: #cc00ff; color: #cc00ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 30%; left: 60%;">
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+            <div class="cell" style="background: #ff9900; color: #ff9900;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">2026-05-23</span>
+        <div class="tile-participants">
+          <div class="participant-dot" data-organism="Violet Chaos" style="background: #cc00ff; color: #cc00ff;"></div>
+          <div class="participant-dot" data-organism="Amber Colony" style="background: #ff9900; color: #ff9900;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 3 -->
+    <div class="battle-tile">
+      <div class="tile-actions">
+        <button class="tile-action-btn" title="Duplicate this battle">COPY</button>
+        <button class="tile-action-btn delete" title="Delete this battle">DEL</button>
+      </div>
+      <div class="tile-header">
+        <h3 class="tile-title">Rapid Evolution</h3>
+        <span class="tile-stats">GEN_123</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 35%; left: 20%;">
+            <div class="cell" style="background: #ff1166; color: #ff1166;"></div>
+            <div class="cell" style="background: #ff1166; color: #ff1166;"></div>
+            <div class="cell" style="background: #ff1166; color: #ff1166;"></div>
+            <div class="cell" style="background: #ff1166; color: #ff1166;"></div>
+            <div class="cell" style="background: #ff1166; color: #ff1166;"></div>
+            <div class="cell" style="background: #ff1166; color: #ff1166;"></div>
+            <div class="cell" style="background: #ff1166; color: #ff1166;"></div>
+            <div class="cell" style="background: #ff1166; color: #ff1166;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 25%; left: 55%;">
+            <div class="cell" style="background: #00ffdd; color: #00ffdd;"></div>
+            <div class="cell" style="background: #00ffdd; color: #00ffdd;"></div>
+            <div class="cell" style="background: #00ffdd; color: #00ffdd;"></div>
+            <div class="cell" style="background: #00ffdd; color: #00ffdd;"></div>
+            <div class="cell" style="background: #00ffdd; color: #00ffdd;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 60%; left: 65%;">
+            <div class="cell" style="background: #ffdd00; color: #ffdd00;"></div>
+            <div class="cell" style="background: #ffdd00; color: #ffdd00;"></div>
+            <div class="cell" style="background: #ffdd00; color: #ffdd00;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">2026-05-22</span>
+        <div class="tile-participants">
+          <div class="participant-dot" data-organism="Ruby Replicator" style="background: #ff1166; color: #ff1166;"></div>
+          <div class="participant-dot" data-organism="Cyan Cluster" style="background: #00ffdd; color: #00ffdd;"></div>
+          <div class="participant-dot" data-organism="Gold Glider" style="background: #ffdd00; color: #ffdd00;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 4 -->
+    <div class="battle-tile">
+      <div class="tile-actions">
+        <button class="tile-action-btn" title="Duplicate this battle">COPY</button>
+        <button class="tile-action-btn delete" title="Delete this battle">DEL</button>
+      </div>
+      <div class="tile-header">
+        <h3 class="tile-title">Symbiosis Test</h3>
+        <span class="tile-stats">GEN_064</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 40%; left: 35%;">
+            <div class="cell" style="background: #00ffff; color: #00ffff;"></div>
+            <div class="cell" style="background: #00ffff; color: #00ffff;"></div>
+            <div class="cell" style="background: #00ffff; color: #00ffff;"></div>
+            <div class="cell" style="background: #00ffff; color: #00ffff;"></div>
+            <div class="cell" style="background: #ff00ff; color: #ff00ff;"></div>
+            <div class="cell" style="background: #ff00ff; color: #ff00ff;"></div>
+            <div class="cell" style="background: #00ffff; color: #00ffff;"></div>
+            <div class="cell" style="background: #00ffff; color: #00ffff;"></div>
+            <div class="cell" style="background: #ff00ff; color: #ff00ff;"></div>
+            <div class="cell" style="background: #ff00ff; color: #ff00ff;"></div>
+            <div class="cell" style="background: #00ffff; color: #00ffff;"></div>
+            <div class="cell" style="background: #00ffff; color: #00ffff;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">2026-05-21</span>
+        <div class="tile-participants">
+          <div class="participant-dot" data-organism="Aqua Architect" style="background: #00ffff; color: #00ffff;"></div>
+          <div class="participant-dot" data-organism="Magenta Mutant" style="background: #ff00ff; color: #ff00ff;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 5 -->
+    <div class="battle-tile">
+      <div class="tile-actions">
+        <button class="tile-action-btn" title="Duplicate this battle">COPY</button>
+        <button class="tile-action-btn delete" title="Delete this battle">DEL</button>
+      </div>
+      <div class="tile-header">
+        <h3 class="tile-title">Survival of Fittest</h3>
+        <span class="tile-stats">GEN_156</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 50%; left: 45%;">
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+            <div class="cell" style="background: #00ff41; color: #00ff41;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 20%; left: 15%;">
+            <div class="cell" style="background: #ff6600; color: #ff6600;"></div>
+            <div class="cell" style="background: #ff6600; color: #ff6600;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">2026-05-20</span>
+        <div class="tile-participants">
+          <div class="participant-dot" data-organism="Neon Spreader" style="background: #00ff41; color: #00ff41;"></div>
+          <div class="participant-dot" data-organism="Copper Catalyst" style="background: #ff6600; color: #ff6600;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 6 -->
+    <div class="battle-tile">
+      <div class="tile-actions">
+        <button class="tile-action-btn" title="Duplicate this battle">COPY</button>
+        <button class="tile-action-btn delete" title="Delete this battle">DEL</button>
+      </div>
+      <div class="tile-header">
+        <h3 class="tile-title">The Dominance War</h3>
+        <span class="tile-stats">GEN_091</span>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 30%; left: 25%;">
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+            <div class="cell" style="background: #ff0055; color: #ff0055;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 30%; left: 60%;">
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+            <div class="cell" style="background: #00aaff; color: #00aaff;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">2026-05-19</span>
+        <div class="tile-participants">
+          <div class="participant-dot" data-organism="Crimson Crawler" style="background: #ff0055; color: #ff0055;"></div>
+          <div class="participant-dot" data-organism="Azure Swarm" style="background: #00aaff; color: #00aaff;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMPTY STATE (shown when no battles exist) - Commented out for demo -->
+  <!--
+  <div class="empty-state">
+    <div class="empty-state-icon">∅</div>
+    <h2 class="empty-state-title">No Battles Yet</h2>
+    <p class="empty-state-text">Create your first cellular battle to begin experimenting<br/>with multi-organism Game of Life simulations</p>
+    <button class="create-button">+ Create New Battle</button>
+  </div>
+  -->
+
+</div>
+
+</body>
+</html>

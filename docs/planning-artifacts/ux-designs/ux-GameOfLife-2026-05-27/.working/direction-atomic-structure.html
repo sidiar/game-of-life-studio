@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Direction: Atomic Structure</title>
+<style>
+/* Color Palette:
+   --bg-primary: #0f0f0f | Main background - near black
+   --bg-secondary: #1a1a1a | Card backgrounds
+   --bg-tertiary: #252525 | Elevated elements
+   --border-light: #2a2a2a | Light borders
+   --border-medium: #3a3a3a | Medium borders
+   --accent-primary: #ff6b35 | Atomic orange
+   --accent-secondary: #4ecdc4 | Teal science
+   --text-primary: #f5f5f5 | Headers - off white
+   --text-secondary: #a0a0a0 | Secondary text
+   --text-tertiary: #707070 | Tertiary text and labels
+   --grid-bg: #151515 | Grid background
+   --grid-line: #232323 | Grid lines
+*/
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #0f0f0f;
+  color: #f5f5f5;
+  padding: 45px;
+}
+
+.rationale {
+  background: linear-gradient(135deg, #1a1a1a 0%, #252525 100%);
+  border: 1px solid #3a3a3a;
+  padding: 22px 26px;
+  margin-bottom: 45px;
+  color: #a0a0a0;
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 850px;
+  position: relative;
+}
+
+.rationale::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #ff6b35 0%, #4ecdc4 100%);
+}
+
+.rationale strong {
+  color: #f5f5f5;
+}
+
+.mockup-frame {
+  max-width: 1450px;
+  margin: 0 auto;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 40px;
+  padding: 32px 0;
+  border-bottom: 1px solid #2a2a2a;
+  margin-bottom: 45px;
+  position: relative;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 80px;
+  height: 3px;
+  background: linear-gradient(90deg, #ff6b35 0%, #4ecdc4 100%);
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: #f5f5f5;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo-symbol {
+  width: 38px;
+  height: 38px;
+  background: #1a1a1a;
+  border: 2px solid #3a3a3a;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 1px;
+  padding: 4px;
+}
+
+.logo-cell {
+  background: #2a2a2a;
+}
+
+.logo-cell:nth-child(1),
+.logo-cell:nth-child(5),
+.logo-cell:nth-child(9) {
+  background: #ff6b35;
+}
+
+.nav {
+  display: flex;
+  gap: 36px;
+  justify-content: flex-end;
+}
+
+.nav-item {
+  color: #707070;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+  position: relative;
+  padding-bottom: 2px;
+}
+
+.nav-item.active {
+  color: #ff6b35;
+}
+
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: #ff6b35;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 38px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.section-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section-title {
+  font-size: 34px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.5px;
+  color: #f5f5f5;
+}
+
+.section-subtitle {
+  font-size: 14px;
+  color: #707070;
+  margin: 0;
+  font-weight: 400;
+}
+
+.section-stats {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #f5f5f5;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #707070;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.create-button {
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8555 100%);
+  color: #ffffff;
+  border: none;
+  padding: 15px 32px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 40px;
+  display: inline-block;
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+  transition: all 0.3s;
+}
+
+.create-button:hover {
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.5);
+  transform: translateY(-1px);
+}
+
+.battle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.battle-tile {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  padding: 22px;
+  transition: all 0.3s;
+  cursor: pointer;
+  position: relative;
+}
+
+.battle-tile::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
+  background: linear-gradient(135deg, #ff6b35 0%, #4ecdc4 100%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 0;
+}
+
+.battle-tile:hover {
+  border-color: transparent;
+}
+
+.battle-tile:hover::before {
+  opacity: 1;
+}
+
+.battle-tile > * {
+  position: relative;
+  z-index: 1;
+}
+
+.tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.tile-title-group {
+  flex: 1;
+}
+
+.tile-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: #f5f5f5;
+}
+
+.tile-id {
+  font-size: 11px;
+  color: #707070;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 500;
+}
+
+.tile-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.tile-gen {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4ecdc4;
+  line-height: 1;
+}
+
+.tile-gen-label {
+  font-size: 10px;
+  color: #707070;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.petri-dish {
+  width: 100%;
+  aspect-ratio: 5/3;
+  background: #151515;
+  border: 1px solid #252525;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, #232323 1px, transparent 1px),
+    linear-gradient(to bottom, #232323 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+.organisms {
+  position: absolute;
+  inset: 0;
+}
+
+.organism-cluster {
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(4, 9px);
+  gap: 1px;
+}
+
+.cell {
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tile-meta {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  font-size: 12px;
+  padding-top: 14px;
+  border-top: 1px solid #252525;
+}
+
+.tile-date {
+  color: #707070;
+  font-weight: 400;
+}
+
+.tile-participants {
+  display: flex;
+  gap: 6px;
+}
+
+.participant-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #252525;
+  border: 1px solid #2a2a2a;
+  font-size: 10px;
+  color: #a0a0a0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.participant-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+}
+</style>
+</head>
+<body>
+
+<div class="rationale">
+  <strong>Atomic Structure:</strong> Draws from molecular diagrams and periodic table design systems with structured grid layouts and geometric precision. Orange and teal accents reference scientific visualization while maintaining warmth. The systematic organization and clear hierarchy create a professional research tool feel that balances sophistication with accessibility.
+</div>
+
+<div class="mockup-frame">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-symbol">
+        <div class="logo-cell"></div>
+        <div class="logo-cell"></div>
+        <div class="logo-cell"></div>
+        <div class="logo-cell"></div>
+        <div class="logo-cell"></div>
+        <div class="logo-cell"></div>
+        <div class="logo-cell"></div>
+        <div class="logo-cell"></div>
+        <div class="logo-cell"></div>
+      </div>
+      <span>Game of Life Studio</span>
+    </div>
+    <div></div>
+    <div class="nav">
+      <div class="nav-item">Organisms</div>
+      <div class="nav-item active">Battles</div>
+      <div class="nav-item">Lab</div>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title-group">
+      <h1 class="section-title">Battle Gallery</h1>
+      <p class="section-subtitle">Your saved cellular competitions</p>
+    </div>
+    <div class="section-stats">
+      <div class="stat-item">
+        <div class="stat-value">6</div>
+        <div class="stat-label">Battles</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">12</div>
+        <div class="stat-label">Organisms</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="create-button">+ Create New Battle</button>
+
+  <div class="battle-grid">
+    <!-- Battle 1 -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <div class="tile-title-group">
+          <h3 class="tile-title">Triple Threat</h3>
+          <div class="tile-id">Battle-001</div>
+        </div>
+        <div class="tile-stats">
+          <div class="tile-gen">47</div>
+          <div class="tile-gen-label">Gen</div>
+        </div>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 20%; left: 15%; grid-template-columns: repeat(3, 9px);">
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 40%; left: 48%; grid-template-columns: repeat(3, 9px);">
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 65%; left: 72%; grid-template-columns: repeat(2, 9px);">
+            <div class="cell" style="background: #00ff88;"></div>
+            <div class="cell" style="background: #00ff88;"></div>
+            <div class="cell" style="background: #00ff88;"></div>
+            <div class="cell" style="background: #00ff88;"></div>
+            <div class="cell" style="background: #00ff88;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 24, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #ff3355;"></div>
+            A
+          </div>
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #3366ff;"></div>
+            B
+          </div>
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #00ff88;"></div>
+            C
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 2 -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <div class="tile-title-group">
+          <h3 class="tile-title">Chaos vs Order</h3>
+          <div class="tile-id">Battle-002</div>
+        </div>
+        <div class="tile-stats">
+          <div class="tile-gen">82</div>
+          <div class="tile-gen-label">Gen</div>
+        </div>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 15%; left: 25%; grid-template-columns: repeat(1, 9px);">
+            <div class="cell" style="background: #9933ff;"></div>
+            <div class="cell" style="background: #9933ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 50%; left: 15%; grid-template-columns: repeat(2, 9px);">
+            <div class="cell" style="background: #9933ff;"></div>
+            <div class="cell" style="background: #9933ff;"></div>
+            <div class="cell" style="background: #9933ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 70%; left: 35%; grid-template-columns: repeat(1, 9px);">
+            <div class="cell" style="background: #9933ff;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 30%; left: 62%; grid-template-columns: repeat(4, 9px);">
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+            <div class="cell" style="background: #ff9933;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 23, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #9933ff;"></div>
+            X
+          </div>
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #ff9933;"></div>
+            Y
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 3 -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <div class="tile-title-group">
+          <h3 class="tile-title">Rapid Evolution</h3>
+          <div class="tile-id">Battle-003</div>
+        </div>
+        <div class="tile-stats">
+          <div class="tile-gen">123</div>
+          <div class="tile-gen-label">Gen</div>
+        </div>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 35%; left: 20%; grid-template-columns: repeat(3, 9px);">
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+            <div class="cell" style="background: #ff0066;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 25%; left: 58%; grid-template-columns: repeat(2, 9px);">
+            <div class="cell" style="background: #00ffcc;"></div>
+            <div class="cell" style="background: #00ffcc;"></div>
+            <div class="cell" style="background: #00ffcc;"></div>
+            <div class="cell" style="background: #00ffcc;"></div>
+            <div class="cell" style="background: #00ffcc;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 60%; left: 68%; grid-template-columns: repeat(2, 9px);">
+            <div class="cell" style="background: #ffcc00;"></div>
+            <div class="cell" style="background: #ffcc00;"></div>
+            <div class="cell" style="background: #ffcc00;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 22, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #ff0066;"></div>
+            1
+          </div>
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #00ffcc;"></div>
+            2
+          </div>
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #ffcc00;"></div>
+            3
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 4 -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <div class="tile-title-group">
+          <h3 class="tile-title">Symbiosis Test</h3>
+          <div class="tile-id">Battle-004</div>
+        </div>
+        <div class="tile-stats">
+          <div class="tile-gen">64</div>
+          <div class="tile-gen-label">Gen</div>
+        </div>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 40%; left: 38%; grid-template-columns: repeat(4, 9px);">
+            <div class="cell" style="background: #4ecdc4;"></div>
+            <div class="cell" style="background: #4ecdc4;"></div>
+            <div class="cell" style="background: #4ecdc4;"></div>
+            <div class="cell" style="background: #4ecdc4;"></div>
+            <div class="cell" style="background: #ff00ff;"></div>
+            <div class="cell" style="background: #ff00ff;"></div>
+            <div class="cell" style="background: #4ecdc4;"></div>
+            <div class="cell" style="background: #4ecdc4;"></div>
+            <div class="cell" style="background: #ff00ff;"></div>
+            <div class="cell" style="background: #ff00ff;"></div>
+            <div class="cell" style="background: #4ecdc4;"></div>
+            <div class="cell" style="background: #4ecdc4;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 21, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #4ecdc4;"></div>
+            α
+          </div>
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #ff00ff;"></div>
+            β
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 5 -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <div class="tile-title-group">
+          <h3 class="tile-title">Survival of Fittest</h3>
+          <div class="tile-id">Battle-005</div>
+        </div>
+        <div class="tile-stats">
+          <div class="tile-gen">156</div>
+          <div class="tile-gen-label">Gen</div>
+        </div>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 50%; left: 45%; grid-template-columns: repeat(4, 9px);">
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+            <div class="cell" style="background: #00ff00;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 20%; left: 15%; grid-template-columns: repeat(1, 9px);">
+            <div class="cell" style="background: #ff6600;"></div>
+            <div class="cell" style="background: #ff6600;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 20, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #00ff00;"></div>
+            G
+          </div>
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #ff6600;"></div>
+            O
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Battle 6 -->
+    <div class="battle-tile">
+      <div class="tile-header">
+        <div class="tile-title-group">
+          <h3 class="tile-title">The Dominance War</h3>
+          <div class="tile-id">Battle-006</div>
+        </div>
+        <div class="tile-stats">
+          <div class="tile-gen">91</div>
+          <div class="tile-gen-label">Gen</div>
+        </div>
+      </div>
+      <div class="petri-dish">
+        <div class="grid-pattern"></div>
+        <div class="organisms">
+          <div class="organism-cluster" style="top: 30%; left: 25%; grid-template-columns: repeat(3, 9px);">
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+            <div class="cell" style="background: #ff3355;"></div>
+          </div>
+          <div class="organism-cluster" style="top: 30%; left: 62%; grid-template-columns: repeat(3, 9px);">
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+            <div class="cell" style="background: #3366ff;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile-meta">
+        <span class="tile-date">May 19, 2026</span>
+        <div class="tile-participants">
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #ff3355;"></div>
+            R
+          </div>
+          <div class="participant-badge">
+            <div class="participant-dot" style="background: #3366ff;"></div>
+            B
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

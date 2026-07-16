@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Petri Dish - Lab Mode - Clinical Lab Style</title>
+<style>
+/* Clinical Lab Design System */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a1a1a;
+  --bg-hover: #222222;
+  --border: #333333;
+  --accent: #00d4ff;
+  --text-primary: #ffffff;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  letter-spacing: 0px;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+/* Header */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+  z-index: 999;
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.header-actions {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+/* Mode Toggle Button Group */
+.mode-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.mode-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.mode-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+
+.mode-btn.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.mode-btn:not(.active):hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Sidebar */
+.sidebar {
+  width: 320px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 25px;
+  padding-bottom: 0;
+  margin-top: 64px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-y: hidden;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  padding-bottom: 20px;
+}
+
+.sidebar-footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+  margin-top: auto;
+}
+
+.back-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-secondary);
+}
+
+.sidebar-section {
+  border: 1px solid var(--border);
+  padding: 15px;
+  background: var(--bg-primary);
+}
+
+.sidebar-section-title {
+  font-size: 13px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.control-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.control-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Used Organisms List */
+.used-organisms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.organism-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.organism-item:last-child {
+  border-bottom: none;
+}
+
+.organism-item:hover {
+  background: var(--bg-hover);
+}
+
+.organism-item.selected {
+  background: var(--bg-hover);
+}
+
+.organism-color {
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  flex-shrink: 0;
+}
+
+.organism-name {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Per-organism Edit (pencil) Button */
+.organism-edit-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.organism-edit-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Create New Organism Button */
+.create-organism-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px dashed var(--accent);
+  color: var(--accent);
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+
+.create-organism-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* Add Organism Controls */
+.add-organism-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 15px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border);
+}
+
+.organism-search {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+.organism-search::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.organism-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.organism-dropdown {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 30px 10px 12px;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.organism-dropdown:hover {
+  border-color: var(--text-secondary);
+}
+
+.organism-dropdown:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Eraser */
+.organism-eraser {
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 15px;
+}
+
+.organism-eraser:hover {
+  background: var(--bg-hover);
+}
+
+.organism-eraser.selected {
+  background: var(--bg-hover);
+}
+
+.eraser-icon {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #ff6600;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #ff6600;
+  flex-shrink: 0;
+}
+
+.eraser-name {
+  flex: 1;
+  font-size: 11px;
+  color: #ff6600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+/* Battle Name Input */
+.battle-name-input {
+  width: 100%;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s;
+  margin-bottom: 4px;
+}
+
+.battle-name-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.char-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: right;
+  margin-top: 4px;
+}
+
+/* Tool Buttons */
+.tool-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  margin-bottom: 8px;
+}
+
+.tool-btn:last-child {
+  margin-bottom: 0;
+}
+
+.tool-btn:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Main Content Area */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  position: relative;
+  margin-top: 64px;
+}
+
+.grid-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 30px 80px 30px;
+  position: relative;
+}
+
+.petri-dish-grid {
+  width: 100%;
+  max-width: 1000px;
+  aspect-ratio: 5/3;
+  background: var(--bg-primary);
+  border: 2px solid var(--border);
+  position: relative;
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 10px 10px;
+  opacity: 0.3;
+}
+
+.grid-cells {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(50, 1fr);
+  grid-template-rows: repeat(30, 1fr);
+  gap: 1px;
+}
+
+.cell {
+  background: transparent;
+  transition: all 0.2s;
+  cursor: crosshair;
+}
+
+.cell:hover {
+  background: rgba(0, 212, 255, 0.15);
+}
+
+.cell.alive {
+  opacity: 1;
+}
+
+/* Grid Info Overlay */
+.grid-info {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: rgba(26, 26, 26, 0.95);
+  border: 1px solid var(--border);
+  padding: 10px 15px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.6;
+}
+
+/* Bottom Statistics Bar */
+.stats-bar {
+  position: fixed;
+  bottom: 0;
+  left: 320px;
+  right: 0;
+  z-index: 998;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 12px 25px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stats-left {
+  display: flex;
+  gap: 25px;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Zoom Slider */
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zoom-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.zoom-slider {
+  width: 120px;
+  height: 4px;
+  background: var(--border);
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.zoom-value {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-weight: 600;
+  min-width: 35px;
+}
+
+/* Buttons */
+.btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-secondary);
+}
+
+.save-btn {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--bg-primary);
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.save-btn:hover {
+  background: #00b8e0;
+  border-color: #00b8e0;
+}
+
+/* Rationale at Bottom */
+.rationale {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  padding: 20px;
+  margin: 100px 30px 30px 30px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.rationale strong {
+  color: var(--text-primary);
+}
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <div class="header">
+    <div class="logo">Triple Threat</div>
+    <div class="header-actions">
+      <div class="mode-toggle">
+        <button class="mode-btn active">LAB</button>
+        <button class="mode-btn">RUN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-content">
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Organisms</h3>
+
+      <!-- Used Organisms (Fixed List) -->
+      <div class="used-organisms-list">
+        <div class="organism-item selected">
+          <div class="organism-color" style="background: #ff0055; color: #ff0055;"></div>
+          <div class="organism-name">Crimson Crawler</div>
+          <button class="organism-edit-btn" title="Edit organism" onclick="event.stopPropagation(); window.location.href='organism-editor.html?from=battle'">✎</button>
+        </div>
+        <div class="organism-item">
+          <div class="organism-color" style="background: #00aaff; color: #00aaff;"></div>
+          <div class="organism-name">Azure Swarm</div>
+          <button class="organism-edit-btn" title="Edit organism" onclick="event.stopPropagation(); window.location.href='organism-editor.html?from=battle'">✎</button>
+        </div>
+        <div class="organism-item">
+          <div class="organism-color" style="background: #00ff41; color: #00ff41;"></div>
+          <div class="organism-name">Neon Spreader</div>
+          <button class="organism-edit-btn" title="Edit organism" onclick="event.stopPropagation(); window.location.href='organism-editor.html?from=battle'">✎</button>
+        </div>
+      </div>
+
+      <!-- Add More Organisms (Dropdown + Search) -->
+      <div class="add-organism-container">
+        <input type="text" class="organism-search" placeholder="SEARCH ORGANISMS..." />
+        <select class="organism-dropdown">
+          <option value="">+ ADD ORGANISM</option>
+          <option value="gold-glider">Gold Glider</option>
+          <option value="magenta-mutant">Magenta Mutant</option>
+          <option value="aqua-architect">Aqua Architect</option>
+          <option value="copper-catalyst">Copper Catalyst</option>
+          <option value="violet-chaos">Violet Chaos</option>
+        </select>
+        <button class="create-organism-btn" onclick="window.location.href='organism-editor.html?from=battle'">+ CREATE NEW ORGANISM</button>
+      </div>
+
+      <!-- Eraser (Fixed at Bottom) -->
+      <div class="organism-eraser">
+        <div class="eraser-icon">✕</div>
+        <div class="eraser-name">Eraser</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Battle Name</h3>
+      <input type="text" class="battle-name-input" placeholder="Untitled Battle" maxlength="50" value="Triple Threat">
+      <div class="char-count">13 / 50</div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Grid Info</h3>
+      <div class="control-group">
+        <div class="control-item">
+          <span class="control-label">Grid Size</span>
+          <span class="control-value">100 × 60</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Total Cells</span>
+          <span class="control-value">6,000</span>
+        </div>
+        <div class="control-item">
+          <span class="control-label">Living Cells</span>
+          <span class="control-value">127</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-section-title">Tools</h3>
+      <button class="tool-btn">CLEAR PETRI DISH</button>
+      <button class="tool-btn">RESET TO SAVED</button>
+      <button class="tool-btn">RANDOMIZE</button>
+      <button class="tool-btn">EXPORT BATTLE</button>
+    </div>
+    </div>
+
+    <!-- Sidebar Footer with Back Button -->
+    <div class="sidebar-footer">
+      <a href="battle-gallery.html" style="text-decoration: none;">
+        <button class="back-btn">← BACK TO BATTLES</button>
+      </a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="grid-container">
+      <div class="petri-dish-grid">
+        <div class="grid-pattern"></div>
+        <div class="grid-cells">
+          <!-- Crimson Crawler - Glider pattern (top-left area) -->
+          <div class="cell alive" style="grid-column: 8; grid-row: 5; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 9; grid-row: 6; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 7; grid-row: 7; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 8; grid-row: 7; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 9; grid-row: 7; background: #ff0055;"></div>
+
+          <!-- Azure Swarm - Beacon oscillator (middle area) -->
+          <div class="cell alive" style="grid-column: 24; grid-row: 12; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 25; grid-row: 12; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 24; grid-row: 13; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 27; grid-row: 14; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 26; grid-row: 15; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 27; grid-row: 15; background: #00aaff;"></div>
+
+          <!-- Neon Spreader - Toad oscillator (right area) -->
+          <div class="cell alive" style="grid-column: 38; grid-row: 18; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 39; grid-row: 18; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 40; grid-row: 18; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 37; grid-row: 19; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 38; grid-row: 19; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 39; grid-row: 19; background: #00ff41;"></div>
+
+          <!-- Additional Crimson Crawler - Small cluster (bottom-left) -->
+          <div class="cell alive" style="grid-column: 12; grid-row: 24; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 13; grid-row: 24; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 12; grid-row: 25; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 13; grid-row: 25; background: #ff0055;"></div>
+
+          <!-- Azure Swarm - Another pattern cluster (top-right) -->
+          <div class="cell alive" style="grid-column: 42; grid-row: 8; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 43; grid-row: 8; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 44; grid-row: 8; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 43; grid-row: 9; background: #00aaff;"></div>
+
+          <!-- Neon Spreader - Blinker (center-bottom) -->
+          <div class="cell alive" style="grid-column: 25; grid-row: 22; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 26; grid-row: 22; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 27; grid-row: 22; background: #00ff41;"></div>
+        </div>
+        <div class="grid-info">
+          CURSOR: [X:42, Y:18]<br/>
+          SELECTED: CRIMSON CRAWLER
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stats-left">
+        <div class="stat-item">
+          <span class="stat-label">Generation</span>
+          <span class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Living Cells</span>
+          <span class="stat-value">127</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Population</span>
+          <span class="stat-value">
+            <span style="color: #ff0055;">45</span> /
+            <span style="color: #00aaff;">38</span> /
+            <span style="color: #00ff41;">44</span>
+          </span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 20px; align-items: center;">
+        <div class="zoom-control">
+          <span class="zoom-label">Grid Zoom:</span>
+          <input type="range" class="zoom-slider" min="50" max="200" value="100" />
+          <span class="zoom-value">100%</span>
+        </div>
+        <button class="btn" style="padding: 8px 16px; font-size: 11px;">UNDO</button>
+        <button class="save-btn">SAVE</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="rationale">
+  <strong>Clinical Lab Theme - Lab Mode:</strong> This design transforms the biotech terminal aesthetic into a clean, professional laboratory equipment interface. The design uses a sans-serif font family for modern readability, sharp borders without glows or shadows for precision, and tight letter-spacing on titles for a clinical feel. The cyan accent color (#00d4ff) is reserved for interactive elements and highlights. The layout maintains all functionality from the biotech terminal version: organism selection with search and dropdown, eraser tool, grid manipulation tools, real-time statistics, and zoom controls. The primary action (SAVE) uses a solid cyan background to clearly indicate importance. The minimalist approach eliminates decorative effects like scan lines and terminal animations, focusing user attention on the scientific task of organism placement and observation. All organism colors are preserved from the original design. Navigation between lab/play modes and back to battle gallery is fully functional.
+</div>
+
+<script>
+// Mode toggle navigation
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    if (this.textContent === 'RUN') {
+      window.location.href = 'petri-dish-play-mode.html';
+    }
+  });
+});
+</script>
+
+</body>
+</html>

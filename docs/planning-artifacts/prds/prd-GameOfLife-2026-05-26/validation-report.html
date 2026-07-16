@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PRD Validation: Game of Life Studio</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --text: #1c1917;
+    --muted: #78716c;
+
+    --verdict-strong: #16a34a;
+    --verdict-adequate: #65a30d;
+    --verdict-thin: #d97706;
+    --verdict-broken: #dc2626;
+
+    --sev-low: #64748b;
+    --sev-medium: #ca8a04;
+    --sev-high: #ea580c;
+    --sev-critical: #dc2626;
+
+    --grade-exc: #16a34a;
+    --grade-good: #65a30d;
+    --grade-fair: #d97706;
+    --grade-poor: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  header.report-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .title h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .title .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .grade {
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+    color: white;
+    font-size: 15px;
+    white-space: nowrap;
+  }
+  .grade-excellent { background: var(--grade-exc); }
+  .grade-good { background: var(--grade-good); }
+  .grade-fair { background: var(--grade-fair); }
+  .grade-poor { background: var(--grade-poor); }
+
+  .synthesis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    font-size: 15.5px;
+  }
+  .synthesis p { margin: 0 0 10px; }
+  .synthesis p:last-child { margin-bottom: 0; }
+
+  .dimension-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .dim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .dim-card .dim-name { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .dim-card .dim-verdict { font-size: 14px; font-weight: 600; }
+
+  section.dimension, section.reviewer-section { margin-bottom: 14px; }
+  section.dimension details, section.reviewer-section details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  section summary {
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  section summary::-webkit-details-marker { display: none; }
+  section summary::before {
+    content: "▸";
+    display: inline-block;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  section details[open] summary::before { transform: rotate(90deg); }
+  section summary h2 {
+    display: inline;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    flex: 1;
+  }
+  .verdict-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: white;
+  }
+  .verdict-strong { background: var(--verdict-strong); }
+  .verdict-adequate { background: var(--verdict-adequate); }
+  .verdict-thin { background: var(--verdict-thin); }
+  .verdict-broken { background: var(--verdict-broken); }
+
+  .dim-body { padding: 4px 20px 18px; }
+  .dim-judgment { color: var(--text); font-size: 14.5px; }
+  .dim-judgment p { margin: 0 0 10px; }
+
+  .findings-list { padding: 0 20px 4px; }
+  article.finding {
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+  }
+  article.finding:first-child { border-top: none; }
+  article.finding header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .badge {
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+  .badge-sev-low { background: rgba(100, 116, 139, 0.12); color: var(--sev-low); }
+  .badge-sev-medium { background: rgba(202, 138, 4, 0.14); color: var(--sev-medium); }
+  .badge-sev-high { background: rgba(234, 88, 12, 0.14); color: var(--sev-high); }
+  .badge-sev-critical { background: rgba(220, 38, 38, 0.14); color: var(--sev-critical); }
+  .finding-title { margin: 0; font-size: 15px; font-weight: 500; flex: 1; min-width: 200px; }
+  .finding-location { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--muted); }
+  .finding-note, .finding-fix { margin-top: 6px; font-size: 14px; }
+  .finding-fix strong { color: var(--muted); font-weight: 500; }
+
+  .reviewer-source {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  .mechanical {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 24px;
+    font-size: 14px;
+  }
+  .mechanical h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .mechanical ul { margin: 0; padding-left: 20px; }
+  .mechanical li { margin-bottom: 4px; color: var(--text); }
+
+  footer.report-footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  footer .meta { display: flex; gap: 24px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <div class="container">
+
+    <header class="report-header">
+      <div class="title">
+        <h1>Game of Life Studio — Validation Report</h1>
+        <div class="subtitle">docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md</div>
+      </div>
+      <div class="grade grade-good">Good</div>
+    </header>
+
+    <div class="synthesis">
+      <p>The PRD is strong and build-ready. Both reviewers verified — against the current FR text — that the prior Medium (usage dedup / dangling-reference) and all four reworked Lows are genuinely closed: the <strong>usage-as-union</strong> definition now closes the delete/dangling-reference gap outright (FR-1.4, FR-1.7, and FR-1.4's integrity guarantee are mutually consistent, and RFC-005's FR-1.4/FR-1.7 lines match), and the FR-8.4/FR-3.1/FR-7.2/FR-2.4/Metric-1 nits all landed. The rubric walker rates the PRD <strong>Excellent</strong> — all seven dimensions strong/adequate, its only Low a no-action note (Metric 3 is manual-observation, acceptable under the offline/no-telemetry constraint).</p>
+      <p>The consolidated grade is held to <strong>Good</strong> by one new <strong>Medium the adversarial RFC cross-check surfaced — and it is in RFC-005, not the PRD</strong>: the union reached RFC-005's FR-1.4 and FR-1.7 lines but not its FR-1.3 line (309), which still computes the edit-warning count from the saved index alone. In the FR-3.12 flow (editing an organism from an unsaved "Current Battle"), that returns 0 and the warning under-counts — a spec-vs-spec lag, the same pattern the C-2 round previously corrected for the delete check. The PRD itself is internally consistent; only RFC-005 lags. Two Lows accompany it (FR-1.4 remedy message doesn't mention "save to persist an unsaved erase"; FR-8.4 "unmodified default" enumerates only rules/color/name, omitting Dominance + aging toggle). All three are cheap, no-trade-off fixes.</p>
+    </div>
+
+    <div class="dimension-summary">
+      <div class="dim-card"><div class="dim-name">Decision-readiness</div><div class="dim-verdict" style="color: var(--verdict-strong)">strong</div></div>
+      <div class="dim-card"><div class="dim-name">Substance over theater</div><div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div></div>
+      <div class="dim-card"><div class="dim-name">Strategic coherence</div><div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div></div>
+      <div class="dim-card"><div class="dim-name">Done-ness clarity</div><div class="dim-verdict" style="color: var(--verdict-strong)">strong</div></div>
+      <div class="dim-card"><div class="dim-name">Scope honesty</div><div class="dim-verdict" style="color: var(--verdict-strong)">strong</div></div>
+      <div class="dim-card"><div class="dim-name">Downstream usability</div><div class="dim-verdict" style="color: var(--verdict-strong)">strong</div></div>
+      <div class="dim-card"><div class="dim-name">Shape fit</div><div class="dim-verdict" style="color: var(--verdict-strong)">strong</div></div>
+    </div>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>Decision-readiness</h2><span class="verdict-pill verdict-strong">strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>Decisions are stated as decisions with the trade-off named. FR-8.4 keeps import a destructive whole-workspace replace and says so plainly, paired with the mandatory-when-there's-data warning + export-first mitigation and a Non-Goals pointer to the deferred merge path. FR-5.4 chooses "aggressive competition" ("a <strong>Born claim can evict a surviving incumbent</strong>") over incumbent protection, honestly leaning into the Dominance thesis, and the relative-cell-state gating note pre-empts the "then how does Blue hold its corner?" objection inline. Both Open Questions carry explicit Resolved dispositions. No finding.</p>
+        </div></div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>Substance over theater</h2><span class="verdict-pill verdict-adequate">adequate</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>No persona theater — David (13) drives real decisions (theme-accessibility default, no-tutorial NFR, 1024px device floor). NFRs carry product-specific thresholds (60 FPS at 100×60 with a named degradation order, &lt;10ms p95 localStorage, 30%→100% saturation by age 7). The soft spot: the self-aware "portfolio SDD showcase" framing means some rigor is present for its own sake, and NFR-5.2's pattern list — though defended item-by-item — still reads partly as showcase furniture. Adequate, not strong.</p>
+        </div></div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>Strategic coherence</h2><span class="verdict-pill verdict-adequate">adequate</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>The thesis — competition resolved by Dominance — is real and the core features serve it (FR-5.4 eviction, FR-2.2 Dominance, Metric 3), with counter-metrics on every metric. The residual drag is the Settings cluster (FR-8.7–8.12): each now carries a one-line rationale (a real improvement over the prior "feature creep" finding), but they remain preference toggles adjacent to — not derived from — the competition thesis. Acceptable for a hobby studio; why the dimension is adequate rather than strong.</p>
+        </div></div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details open>
+        <summary><h2>Done-ness clarity</h2><span class="verdict-pill verdict-strong">strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>The dimension the rework most improved. The usage-as-union accounting is now unambiguous and testable: FR-1.4 defines the collapsed saved+live entry as a union that never lets a live erase override a saved reference; FR-1.7 states the same merge/dedup-by-Battle-id rule from the visibility side ("no saved-side reference is ever dropped"); FR-1.4's integrity guarantee is a direct consequence — an engineer can write the "unsaved erase does not unblock delete" test straight from the text. Simulation mechanics fully pinned (Die-before-Survive, explicit-vs-implicit death, Dominance eviction). FR-2.4's aging toggle now has concrete ACs tied to FR-5.7/FR-5.6.</p>
+        </div></div>
+        <div class="findings-list">
+          <article class="finding">
+            <header><span class="badge badge-sev-low">low</span><h3 class="finding-title">Metric 3 measured by manual observation (no action required)</h3><span class="finding-location">§ Success Metrics, Metric 3</span></header>
+            <div class="finding-note">The 80%-of-Battles target is measured by "Manual observation (portfolio project context)" with proxy signals — testable in spirit but not instrumented. Acceptable given the offline / no-telemetry constraint (NFR-6.1), which the metric acknowledges.</div>
+            <div class="finding-fix"><strong>Fix:</strong> none required; noted for downstream expectation-setting only.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>Scope honesty</h2><span class="verdict-pill verdict-strong">strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>Omissions are explicit and worked. Non-Goals carries nine capability-level deferrals each with a reason and cross-refs, echoed at their point of use (FR-8.4, FR-5.1). De-scoping is open: merged/moved/removed FRs are tombstoned in place with "see FR-X" pointers rather than silently renumbered. Assumptions round-trip to the index. Low, appropriate open-items density (4 assumptions, 2 resolved OQs, no dangling notes). No finding.</p>
+        </div></div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>Downstream usability</h2><span class="verdict-pill verdict-strong">strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>Feeds UX / architecture / stories cleanly. Glossary includes "Lab Mode" pinned as a synonym of canonical "Edit Mode." Domain nouns used consistently; IDs contiguous with tombstones preserving continuity; cross-refs resolve. The union logic is deliberately restated in both FR-1.4 and FR-1.7 so each is extractable without "see above." The only nit is the deferred Settings-prose casing drift.</p>
+        </div></div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>Shape fit</h2><span class="verdict-pill verdict-strong">strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>Correctly shaped as a consumer / hobby product with meaningful UX: one load-bearing named-protagonist UJ, rigor calibrated up to Launch level without over-formalizing (exactly one UJ, not a manufactured spread). NFRs are user-facing where the product is, operational where appropriate. The portfolio / SDD framing is disclosed up front, so the extra rigor reads as intentional. No finding.</p>
+        </div></div>
+      </details>
+    </section>
+
+    <section class="reviewer-section">
+      <details open>
+        <summary><h2>Adversarial review</h2><span class="reviewer-source">review-adversarial-general.md</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>Cynical stance, each fix verified against current PRD + RFC text. Verdict: <strong>Good (held)</strong>. The prior Medium (dangling-reference/dedup) and all four reworked Lows are substantively closed and the union is mutually consistent across FR-1.4, FR-1.7, the integrity guarantee, and RFC-005 lines 310–311 — but the instructed RFC-005 cross-check surfaces one new Medium the union round left behind, plus two Lows. Counts: 0 Critical, 0 High, 1 Medium, 2 Low.</p>
+        </div></div>
+        <div class="findings-list">
+          <article class="finding">
+            <header><span class="badge badge-sev-medium">medium</span><h3 class="finding-title">RFC-005 computes the FR-1.3 warning count from the saved index only — contradicts the PRD union rule</h3><span class="finding-location">§ RFC-005:309 vs prd FR-3.12 / FR-1.7</span></header>
+            <div class="finding-note">The union reached RFC-005's FR-1.4 block (:310, "OR current initialGrid") and FR-1.7 list (:311, union), but its FR-1.3 line (:309) still reads <code>usage.get(id)?.length ?? 0</code> — saved index only. PRD FR-3.12 requires the open Battle to count toward FR-1.3's "[N] Battle(s)", and FR-1.7 applies the union at "the FR-1.3 edit warning" surface. In the FR-3.12 flow (editing an organism from an unsaved "Current Battle" that places it), <code>battles.list()</code> lacks the unsaved battle, so the count returns 0 and the warning under-counts / fails to fire. Spec-vs-spec lag; the PRD is internally consistent — only RFC-005 lags (same pattern the C-2 round fixed for the delete check).</div>
+            <div class="finding-fix"><strong>Fix:</strong> make RFC-005:309 read the same union as :310/:311 (saved index ∪ live initialGrid, deduped by battle id). Optionally tighten the PRD FR-1.7:159 "backing FR-1.3 and FR-1.4" phrasing that likely seeded the drift.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-sev-low">low</span><h3 class="finding-title">FR-1.4 remedy message doesn't cover the union edge it protects</h3><span class="finding-location">§ FR-1.4 lines 133–134</span></header>
+            <div class="finding-note">When a saved open Battle's organism is live-erased (unsaved) but still blocked by the saved index, neither remedy fits: "erase from the current grid" doesn't apply (already erased), and "remove from those Battles / delete the Battles" points at a Battle already erased from. The only real remedy — <strong>save the Battle to persist the removal</strong> — is unstated. Soft dead-end (deleting the Battle also unblocks).</div>
+            <div class="finding-fix"><strong>Fix:</strong> add a remedy branch: when the sole blocking usage is the open, already-saved Battle whose live grid no longer references the organism, instruct "save this Battle to persist the removal, then try again."</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-sev-low">low</span><h3 class="finding-title">FR-8.4 "unmodified default" predicate under-specifies which fields count</h3><span class="finding-location">§ FR-8.4 line 510 (+ FR-1.5)</span></header>
+            <div class="finding-note">The suppression enumerates modification as edits to "rules, color, or name," omitting the Dominance value (FR-2.2) and aging toggle (FR-2.4). Read literally, editing only Conway's Dominance or aging would still count as "unmodified" → warning suppressed → that edit silently discarded on import. Compounding: FR-1.5 never pins Conway's Dominance, so the baseline for that field is undefined.</div>
+            <div class="finding-fix"><strong>Fix:</strong> state the comparison covers <em>all</em> editable fields (name, color, Dominance, aging toggle, rules) — a deep-equality against the seeded default — and pin Conway's default Dominance in FR-1.5 so the baseline exists.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <div class="mechanical">
+      <h3>Mechanical notes</h3>
+      <ul>
+        <li><strong>Prior findings closure (verified against current text):</strong> the usage-union Medium and all four reworked Lows (FR-8.4 present-and-unmodified, FR-3.1 either-preset, FR-7.2 tile note, FR-2.4 ACs, Metric 1 design-intent) confirmed landed by both reviewers.</li>
+        <li><strong>Where the new Medium lives:</strong> RFC-005 Decision 8 (line 309), not the PRD. The PRD's FR-1.3 correctly defers its count to FR-1.7's union; the RFC's three usage computations (FR-1.3 / FR-1.4 / FR-1.7) simply need to agree.</li>
+        <li><strong>Casing drift (deferred, deliberate):</strong> FR-8.2–8.12 lowercase "battles"/"organisms" vs the capitalized Glossary terms. Pervasive PRD-wide prose usage; mechanical only.</li>
+        <li><strong>ID continuity / Assumptions roundtrip:</strong> contiguous with tombstones (FR-6.2, 7.11, 7.12, 7.14, 8.9); all four <code>[ASSUMPTION]</code> tags (A-1–A-4) roundtrip; cross-refs resolve.</li>
+        <li><strong>Grade rationale:</strong> rubric = Excellent (all dimensions strong/adequate, 0 medium/high/critical, 1 no-action Low). Consolidated grade held to Good by the single adversarial Medium — which is an RFC-005 internal lag, not a PRD defect; its fix (extend the union to RFC-005:309) plus the two Lows are cheap and no-trade-off.</li>
+      </ul>
+    </div>
+
+    <footer class="report-footer">
+      <div class="meta">
+        <span>Rubric: .claude/skills/bmad-prd/assets/prd-validation-checklist.md</span>
+        <span>Generated: 2026-07-08T10:05:00Z</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

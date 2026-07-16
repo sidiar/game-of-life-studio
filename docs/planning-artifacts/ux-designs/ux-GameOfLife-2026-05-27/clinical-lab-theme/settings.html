@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Settings - Clinical Lab Style</title>
+<style>
+/* Clinical Lab Design System */
+
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a1a1a;
+  --bg-hover: #222222;
+  --border: #333333;
+  --accent: #00d4ff;
+  --text-primary: #ffffff;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --warning: #ff3366;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 30px;
+  overflow-x: hidden;
+}
+
+.mockup-frame {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30px 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 40px;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-accent {
+  color: var(--accent);
+  font-weight: 300;
+}
+
+.nav {
+  display: flex;
+  gap: 40px;
+}
+
+.nav-item {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: color 0.2s;
+  text-decoration: none;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+}
+
+.nav-item.active {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--bg-secondary);
+}
+
+.nav-item:not(.active):hover {
+  color: var(--text-primary);
+}
+
+/* Section Header */
+.section-header {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+}
+
+.section-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Settings Container */
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.settings-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 30px;
+  transition: all 0.3s;
+}
+
+.settings-section:hover {
+  border-color: var(--accent);
+}
+
+.settings-section-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 25px 0;
+  line-height: 1.6;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--bg-hover);
+}
+
+.settings-item:last-child {
+  border-bottom: none;
+}
+
+.settings-item-info {
+  flex: 1;
+}
+
+.settings-item-label {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  font-weight: 500;
+}
+
+.settings-item-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.settings-item-control {
+  flex-shrink: 0;
+}
+
+/* Buttons */
+.btn {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  padding: 12px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.btn:hover {
+  background: #00e5ff;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.btn-warning {
+  background: var(--warning);
+  color: var(--text-primary);
+}
+
+.btn-warning:hover {
+  background: #ff4477;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  position: relative;
+  width: 50px;
+  height: 26px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.3s;
+  border-radius: 13px;
+}
+
+.toggle-switch::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: var(--text-tertiary);
+  top: 2px;
+  left: 2px;
+  transition: all 0.3s;
+  border-radius: 50%;
+}
+
+.toggle-switch.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-switch.active::before {
+  left: 26px;
+  background: var(--text-primary);
+}
+
+/* Select Dropdown */
+.select-input {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 35px 10px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300d4ff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  min-width: 180px;
+}
+
+.select-input:hover {
+  border-color: var(--accent);
+}
+
+.select-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Workspace Stats */
+.workspace-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 25px;
+}
+
+.stat-item {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.stat-item:hover {
+  border-color: var(--accent);
+}
+
+.stat-value {
+  font-size: 32px;
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+/* File Input */
+.file-input-wrapper {
+  position: relative;
+  overflow: hidden;
+  display: inline-block;
+}
+
+.file-input-wrapper input[type="file"] {
+  position: absolute;
+  left: -9999px;
+}
+
+/* Rationale */
+.rationale {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  padding: 20px;
+  margin-top: 60px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.rationale strong {
+  color: var(--text-primary);
+}
+</style>
+</head>
+<body>
+
+<div class="mockup-frame">
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <span class="logo-accent">◉</span> Game of Life Studio
+    </div>
+    <div class="nav">
+      <a href="battle-gallery.html" class="nav-item">Battles</a>
+      <a href="organism-library.html" class="nav-item">Organisms</a>
+      <a href="settings.html" class="nav-item active">Settings</a>
+    </div>
+  </div>
+
+  <!-- Section Header -->
+  <div class="section-header">
+    <h1 class="section-title">Settings</h1>
+    <p class="section-subtitle">Configure workspace and preferences</p>
+  </div>
+
+  <!-- Settings Container -->
+  <div class="settings-container">
+
+    <!-- Workspace Management Section -->
+    <div class="settings-section">
+      <h2 class="settings-section-title">Workspace Management</h2>
+      <p class="settings-section-description">
+        Export, import, and manage your complete workspace including all battles and organisms
+      </p>
+
+      <!-- Workspace Stats -->
+      <div class="workspace-stats">
+        <div class="stat-item">
+          <div class="stat-value">6</div>
+          <div class="stat-label">Saved Battles</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">12</div>
+          <div class="stat-label">Organisms</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">2.4 KB</div>
+          <div class="stat-label">Storage Used</div>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Export Workspace</h3>
+            <p class="settings-item-description">
+              Download a JSON file containing all your battles and organisms for backup or transfer
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <button class="btn">Export</button>
+          </div>
+        </div>
+
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Import</h3>
+            <p class="settings-item-description">
+              Replaces your entire workspace (all battles &amp; organisms) with the imported file — same for a full workspace export or a single-battle export. You are always warned first and offered to export your current workspace before it is replaced.
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <div class="file-input-wrapper">
+              <button class="btn btn-secondary" id="import-btn">Import</button>
+              <input type="file" accept=".json" />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Auto-Save</h3>
+            <p class="settings-item-description">
+              Automatically save Edit Mode changes to the current battle (does not run during simulation)
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <div class="toggle-switch"></div>
+          </div>
+        </div>
+
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Clear All Data</h3>
+            <p class="settings-item-description">
+              Delete all battles and organisms from local storage (cannot be undone)
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <button class="btn btn-warning">Clear Data</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Display Preferences Section -->
+    <div class="settings-section">
+      <h2 class="settings-section-title">Display Preferences</h2>
+      <p class="settings-section-description">
+        Customize the visual appearance of the application
+      </p>
+
+      <div class="settings-group">
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Theme Selection</h3>
+            <p class="settings-item-description">
+              Choose between available visual themes: Clinical Lab (clean, modern, cyan accents) or Biotech Terminal (matrix-inspired, monospace, green accents)
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <select class="select-input" id="theme-selector">
+              <option value="clinical-lab" selected>Clinical Lab</option>
+              <option value="biotech-terminal">Biotech Terminal</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Show Grid Lines</h3>
+            <p class="settings-item-description">
+              Display grid pattern overlay in battle visualizations
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <div class="toggle-switch active"></div>
+          </div>
+        </div>
+
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Cell Animation</h3>
+            <p class="settings-item-description">
+              Enable pulsing animation effect on living cells
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <div class="toggle-switch active"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Simulation Settings Section -->
+    <div class="settings-section">
+      <h2 class="settings-section-title">Simulation Settings</h2>
+      <p class="settings-section-description">
+        Configure default values for new battle creation
+      </p>
+
+      <div class="settings-group">
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Default Grid Size</h3>
+            <p class="settings-item-description">
+              Initial grid dimensions when creating a new battle
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <select class="select-input">
+              <option value="50x30">50 × 30</option>
+              <option value="100x60" selected>100 × 60</option>
+              <option value="150x90">150 × 90</option>
+              <option value="200x120">200 × 120</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <h3 class="settings-item-label">Simulation Speed</h3>
+            <p class="settings-item-description">
+              Default playback speed for battle simulations (generations per second)
+            </p>
+          </div>
+          <div class="settings-item-control">
+            <select class="select-input">
+              <option value="1">1 gen/sec</option>
+              <option value="2">2 gen/sec</option>
+              <option value="5">5 gen/sec</option>
+              <option value="10" selected>10 gen/sec</option>
+              <option value="20">20 gen/sec</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- <div class="rationale">
+  <strong>Clinical Lab Design - Settings:</strong> Matches the Biotech Terminal settings layout and content — three sections (Workspace Management with workspace stats + Export/Import/Auto-Save/Clear, Display Preferences, Simulation Settings) — rendered in the Clinical Lab theme (sans-serif, cyan accent, flat borders, no glows). Toggle switches use a rounded pill shape; primary actions use solid cyan fills, secondary actions an outlined style, and destructive actions the warning red.
+</div> -->
+
+<script>
+// Toggle switches
+document.querySelectorAll('.toggle-switch').forEach(toggle => {
+  toggle.addEventListener('click', function() {
+    this.classList.toggle('active');
+  });
+});
+
+// Clear data confirmation
+document.querySelector('.btn-warning').addEventListener('click', function() {
+  if (confirm('Are you sure you want to delete all data? This cannot be undone.')) {
+    alert('All data cleared (demo only)');
+  }
+});
+
+// Import — mandatory destructive-replace warning + export-first (FR-8.4 / arch M8).
+// Applies equally to a workspace file or a single-battle file (both replace everything).
+document.getElementById('import-btn').addEventListener('click', function() {
+  const exportFirst = confirm(
+    'Importing this file will REPLACE your entire current workspace — all current battles and organisms will be lost.\n\n' +
+    'Export your current workspace first?\n\n' +
+    'OK = Export now, then continue   ·   Cancel = skip export'
+  );
+  if (exportFirst) {
+    alert('Current workspace exported (demo only). Now continuing to import…');
+  }
+  if (confirm('Import now and replace your entire workspace?')) {
+    alert('Workspace replaced with imported file (demo only)');
+  } else {
+    alert('Import cancelled — your workspace is unchanged');
+  }
+});
+
+// Theme selection - redirect to simulate theme switching
+document.getElementById('theme-selector').addEventListener('change', function() {
+  const selectedTheme = this.value;
+  if (selectedTheme === 'biotech-terminal') {
+    // Redirect to biotech-terminal-theme settings page
+    window.location.href = '../biotech-terminal-theme/settings.html';
+  }
+  // If clinical-lab is selected, stay on current page (already on clinical-lab)
+});
+</script>
+
+</body>
+</html>

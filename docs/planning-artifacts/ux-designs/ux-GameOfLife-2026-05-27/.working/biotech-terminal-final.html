@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Game of Life Studio - Biotech Terminal (Final)</title>
+<style>
+/* Color Palette:
+   --bg-primary: #000000 | Main background - pure black
+   --bg-secondary: #0a0f0a | Card backgrounds - dark green tint
+   --bg-tertiary: #0f1f0f | Elevated surfaces
+   --border: #1a3a1a | Terminal green borders
+   --accent-primary: #00ff41 | Matrix green
+   --accent-secondary: #00ffff | Cyan accent
+   --text-primary: #00ff41 | Headers - terminal green
+   --text-secondary: #33ff77 | Secondary text - lighter green
+   --text-tertiary: #00cc88 | Tertiary text
+   --grid-line: #0a2a0a | Grid pattern
+*/
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Courier New', 'Courier', monospace;
+  background: #000000;
+  color: #00ff41;
+  padding: 30px;
+  letter-spacing: 0.5px;
+}
+
+.rationale {
+  background: #0a0f0a;
+  border: 2px solid #1a3a1a;
+  border-left: 4px solid #00ff41;
+  padding: 20px;
+  margin-bottom: 35px;
+  color: #33ff77;
+  font-size: 13px;
+  line-height: 1.8;
+  max-width: 900px;
+  font-family: 'Courier New', monospace;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
+}
+
+.rationale strong {
+  color: #00ff41;
+}
+
+.mockup-frame {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 25px 0;
+  border-bottom: 2px solid #1a3a1a;
+  margin-bottom: 35px;
+  position: relative;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 200px;
+  height: 2px;
+  background: linear-gradient(90deg, #00ff41 0%, transparent 100%);
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% { left: 0; }
+  100% { left: 100%; }
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #00ff41;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.logo::before {
+  content: '>';
+  color: #00ffff;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.nav {
+  display: flex;
+  gap: 30px;
+}
+
+.nav-item {
+  color: #33ff77;
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  padding: 4px 8px;
+}
+
+.nav-item.active {
+  color: #00ff41;
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid #1a3a1a;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+.nav-item:not(.active):hover {
+  color: #00ff41;
+}
+
+.section-header {
+  margin-bottom: 30px;
+  border-left: 3px solid #00ff41;
+  padding-left: 15px;
+}
+
+.section-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #00ff41;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: #33ff77;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+.battle-tile {
+  background: #0a0f0a;
+  border: 2px solid #1a3a1a;
+  padding: 18px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Data Scan Sweep Animation - Starts 3s after hover, repeats every 8s */
+.battle-tile::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #00ff0040 20%,
+    #00ffff80 50%,
+    #00ff0040 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.battle-tile:hover::before {
+  animation: data-scan 2s ease-in-out 3s infinite;
+  animation-iteration-count: infinite;
+}
+
+@keyframes data-scan {
+  0% { left: -100%; }
+  12.5% { left: 100%; }  /* Sweep takes 1s (12.5% of 8s) */
+  100% { left: 100%; }   /* Wait 7s before next sweep */
+}
+
+.battle-tile:hover {
+  border-color: #00ff41;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+  transform: translateY(-3px);
+}
+
+.battle-tile > * {
+  position: relative;
+  z-index: 2;
+}
+
+.tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1a3a1a;
+}
+
+.tile-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #00ff41;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+}
+
+.tile-status {
+  font-size: 10px;
+  padding: 3px 8px;
+  border: 1px solid #1a3a1a;
+  background: #0f1f0f;
+  color: #33ff77;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tile-meta {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: #00cc88;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meta-label {
+  color: #33ff77;
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+.grid-preview {
+  width: 100%;
+  height: 180px;
+  background: #000000;
+  border: 1px solid #1a3a1a;
+  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  gap: 1px;
+  padding: 2px;
+}
+
+.cell {
+  background: #0a0f0a;
+  transition: all 0.3s;
+}
+
+.cell.org-1 { background: #00ff41; box-shadow: 0 0 3px #00ff41; }
+.cell.org-2 { background: #00ffff; box-shadow: 0 0 3px #00ffff; }
+.cell.org-3 { background: #ff00ff; box-shadow: 0 0 3px #ff00ff; }
+.cell.org-4 { background: #ffff00; box-shadow: 0 0 3px #ffff00; }
+
+.tile-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: #33ff77;
+}
+
+.organisms-badge {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.org-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 4px currentColor;
+}
+
+.org-dot.c1 { background: #00ff41; color: #00ff41; }
+.org-dot.c2 { background: #00ffff; color: #00ffff; }
+.org-dot.c3 { background: #ff00ff; color: #ff00ff; }
+.org-dot.c4 { background: #ffff00; color: #ffff00; }
+
+.timestamp {
+  color: #00aa55;
+  letter-spacing: 0.5px;
+}
+
+.create-new {
+  background: transparent;
+  border: 2px dashed #1a3a1a;
+  padding: 18px;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  gap: 12px;
+}
+
+.create-new:hover {
+  border-color: #00ff41;
+  background: rgba(0, 255, 65, 0.05);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.15);
+}
+
+.create-icon {
+  font-size: 48px;
+  color: #1a3a1a;
+  transition: all 0.3s;
+}
+
+.create-new:hover .create-icon {
+  color: #00ff41;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.create-text {
+  font-size: 14px;
+  color: #33ff77;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+</style>
+</head>
+<body>
+
+<div class="rationale">
+  <strong>BIOTECH TERMINAL</strong> — Matrix-inspired interface with green phosphor terminal aesthetics, monospace typography, and command-line precision. Features animated scanning effects and technical density for a sophisticated laboratory computing experience. <strong>Data Scan Sweep</strong> activates 3 seconds after hover and repeats every 8 seconds.
+</div>
+
+<div class="mockup-frame">
+
+<div class="header">
+  <div class="logo">Game of Life Studio</div>
+  <div class="nav">
+    <div class="nav-item active">Battle Gallery</div>
+    <div class="nav-item">Organism Library</div>
+    <div class="nav-item">Settings</div>
+  </div>
+</div>
+
+<div class="section-header">
+  <h1 class="section-title">Battle Gallery</h1>
+  <p class="section-subtitle">Saved Experiments · 6 Battles</p>
+</div>
+
+<div class="gallery">
+
+  <!-- Battle 1 -->
+  <div class="battle-tile">
+    <div class="tile-header">
+      <h3 class="tile-title">Triple Threat</h3>
+      <div class="tile-status">Stable</div>
+    </div>
+    <div class="tile-meta">
+      <div class="meta-item">
+        <span class="meta-label">Organisms</span>
+        <span>3</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Generation</span>
+        <span>47</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Survival</span>
+        <span>94%</span>
+      </div>
+    </div>
+    <div class="grid-preview">
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell org-1"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="tile-footer">
+      <div class="organisms-badge">
+        <div class="org-dot c1"></div>
+        <div class="org-dot c2"></div>
+        <div class="org-dot c3"></div>
+      </div>
+      <div class="timestamp">2 days ago</div>
+    </div>
+  </div>
+
+  <!-- Battle 2 -->
+  <div class="battle-tile">
+    <div class="tile-header">
+      <h3 class="tile-title">Chaos vs Order</h3>
+      <div class="tile-status">Volatile</div>
+    </div>
+    <div class="tile-meta">
+      <div class="meta-item">
+        <span class="meta-label">Organisms</span>
+        <span>2</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Generation</span>
+        <span>89</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Survival</span>
+        <span>76%</span>
+      </div>
+    </div>
+    <div class="grid-preview">
+      <div class="cell org-3"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell org-1"></div><div class="cell org-1"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-3"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell org-1"></div><div class="cell org-1"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="tile-footer">
+      <div class="organisms-badge">
+        <div class="org-dot c3"></div>
+        <div class="org-dot c1"></div>
+      </div>
+      <div class="timestamp">5 days ago</div>
+    </div>
+  </div>
+
+  <!-- Battle 3 -->
+  <div class="battle-tile">
+    <div class="tile-header">
+      <h3 class="tile-title">Symbiosis Test</h3>
+      <div class="tile-status">Cooperative</div>
+    </div>
+    <div class="tile-meta">
+      <div class="meta-item">
+        <span class="meta-label">Organisms</span>
+        <span>2</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Generation</span>
+        <span>124</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Survival</span>
+        <span>99%</span>
+      </div>
+    </div>
+    <div class="grid-preview">
+      <div class="cell"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell org-4"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="tile-footer">
+      <div class="organisms-badge">
+        <div class="org-dot c2"></div>
+        <div class="org-dot c4"></div>
+      </div>
+      <div class="timestamp">1 week ago</div>
+    </div>
+  </div>
+
+  <!-- Battle 4 -->
+  <div class="battle-tile">
+    <div class="tile-header">
+      <h3 class="tile-title">Extinction Event</h3>
+      <div class="tile-status">Critical</div>
+    </div>
+    <div class="tile-meta">
+      <div class="meta-item">
+        <span class="meta-label">Organisms</span>
+        <span>4</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Generation</span>
+        <span>203</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Survival</span>
+        <span>23%</span>
+      </div>
+    </div>
+    <div class="grid-preview">
+      <div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-1"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="tile-footer">
+      <div class="organisms-badge">
+        <div class="org-dot c1"></div>
+        <div class="org-dot c2"></div>
+        <div class="org-dot c3"></div>
+        <div class="org-dot c4"></div>
+      </div>
+      <div class="timestamp">2 weeks ago</div>
+    </div>
+  </div>
+
+  <!-- Battle 5 -->
+  <div class="battle-tile">
+    <div class="tile-header">
+      <h3 class="tile-title">Colony Wars</h3>
+      <div class="tile-status">Aggressive</div>
+    </div>
+    <div class="tile-meta">
+      <div class="meta-item">
+        <span class="meta-label">Organisms</span>
+        <span>2</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Generation</span>
+        <span>156</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Survival</span>
+        <span>88%</span>
+      </div>
+    </div>
+    <div class="grid-preview">
+      <div class="cell org-1"></div><div class="cell org-1"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-1"></div><div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-1"></div><div class="cell org-1"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-1"></div><div class="cell"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-1"></div><div class="cell org-1"></div><div class="cell org-1"></div><div class="cell"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell org-2"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="tile-footer">
+      <div class="organisms-badge">
+        <div class="org-dot c1"></div>
+        <div class="org-dot c2"></div>
+      </div>
+      <div class="timestamp">3 weeks ago</div>
+    </div>
+  </div>
+
+  <!-- Battle 6 -->
+  <div class="battle-tile">
+    <div class="tile-header">
+      <h3 class="tile-title">Perfect Balance</h3>
+      <div class="tile-status">Stable</div>
+    </div>
+    <div class="tile-meta">
+      <div class="meta-item">
+        <span class="meta-label">Organisms</span>
+        <span>2</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Generation</span>
+        <span>301</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Survival</span>
+        <span>100%</span>
+      </div>
+    </div>
+    <div class="grid-preview">
+      <div class="cell"></div><div class="cell org-4"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-4"></div><div class="cell org-4"></div><div class="cell org-4"></div><div class="cell org-4"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-4"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell org-4"></div><div class="cell"></div><div class="cell org-4"></div><div class="cell org-4"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell org-4"></div><div class="cell org-4"></div><div class="cell"></div><div class="cell"></div><div class="cell org-3"></div><div class="cell org-3"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    </div>
+    <div class="tile-footer">
+      <div class="organisms-badge">
+        <div class="org-dot c4"></div>
+        <div class="org-dot c3"></div>
+      </div>
+      <div class="timestamp">1 month ago</div>
+    </div>
+  </div>
+
+  <!-- Create New Battle Button -->
+  <div class="create-new">
+    <div class="create-icon">+</div>
+    <div class="create-text">Create New Battle</div>
+  </div>
+
+</div>
+
+</div>
+
+</body>
+</html>

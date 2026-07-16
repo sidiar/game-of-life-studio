@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Organism Editor - Clinical Lab Style</title>
+<style>
+/* Clinical Lab Design System */
+
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a1a1a;
+  --bg-hover: #222222;
+  --border: #333333;
+  --accent: #00d4ff;
+  --text-primary: #ffffff;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --warning: #ff3366;
+  --action-born: #00ff41;
+  --action-survive: #00d4ff;
+  --action-die: #ff3366;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+/* Editor Overlay */
+.editor-overlay {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-primary);
+}
+
+/* Header */
+.editor-header {
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 30px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.organism-name-header {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+/* Editor Body */
+.editor-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Left Sidebar */
+.left-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 25px;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-y: hidden;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  padding-bottom: 20px;
+}
+
+.sidebar-footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+  margin-top: auto;
+}
+
+/* Main Content */
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+/* Content Area */
+.content-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Rules Column */
+.rules-column {
+  flex: 1;
+  max-width: 800px;
+  overflow-y: auto;
+  padding: 30px;
+  margin: 0 auto;
+}
+
+/* Preview Column */
+.preview-column {
+  width: 400px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 30px;
+  margin-left: auto;
+}
+
+/* Section */
+.section {
+  margin-bottom: 30px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+  margin: 0 0 6px 0;
+}
+
+.section-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 20px 0;
+  line-height: 1.6;
+}
+
+/* Form Field */
+.form-field {
+  margin-bottom: 20px;
+}
+
+.field-label {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+  margin: 20px 0 8px 0;
+  display: block;
+}
+
+.field-description {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin: 4px 0 0 0;
+  line-height: 1.4;
+}
+
+/* Action Field Specific Styling */
+.form-field:has(.action-selector) {
+  padding-top: 0;
+}
+
+.action-description {
+  font-size: 14px;
+  line-height: 1.6;
+  padding-top: 8px;
+}
+
+/* Text Input */
+.text-input {
+  width: 100%;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.text-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.char-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: right;
+  margin-top: 4px;
+}
+
+/* Color Picker */
+.color-selected {
+  width: 44px;
+  height: 44px;
+  border: 3px solid;
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+
+.color-selected-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.color-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.color-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.color-palette {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+}
+
+.color-palette.collapsed {
+  display: none;
+}
+
+.color-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.color-swatch:hover {
+  border-color: var(--accent);
+  transform: scale(1.05);
+}
+
+.color-swatch.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.4);
+}
+
+/* Colors are REUSABLE (FR-2.3 / arch M6): in-use swatches stay fully
+   selectable — flagged with a small dot, never disabled. */
+.color-swatch.in-use::after {
+  content: '•';
+  position: absolute;
+  top: -1px;
+  right: 3px;
+  font-size: 13px;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+
+.color-reuse-warning {
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--warning);
+  background: rgba(255, 51, 102, 0.08);
+  border-left: 2px solid var(--warning);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Rules Description (free text) */
+.rules-description-field {
+  margin-bottom: 18px;
+}
+
+.rules-description-input {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  margin-top: 6px;
+  transition: all 0.2s;
+}
+
+.rules-description-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Footer "used in N battles" note — click-through to a read-only
+   list of battle names (FR-1.7 / arch M7) */
+.footer-usage-note {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+}
+
+.footer-usage-note:hover strong {
+  text-decoration: underline;
+}
+
+.footer-usage-note strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.usage-popover {
+  display: none;
+  position: absolute;
+  bottom: 150%;
+  left: 0;
+  min-width: 200px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  z-index: 30;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.usage-popover.open {
+  display: block;
+}
+
+.usage-popover-title {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.usage-popover ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.usage-popover li {
+  font-size: 12px;
+  color: var(--text-primary);
+  padding: 4px 0;
+}
+
+.usage-popover li::before {
+  content: '⚔ ';
+  color: var(--accent);
+}
+
+/* Dominance Control */
+.dominance-container {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.dominance-slider {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.dominance-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: var(--accent);
+  border: 2px solid var(--bg-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+}
+
+.dominance-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: var(--accent);
+  border: 2px solid var(--bg-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+}
+
+.dominance-value {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font-size: 16px;
+  font-family: inherit;
+  font-weight: 600;
+  width: 60px;
+  text-align: center;
+}
+
+.dominance-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+/* Toggle Switch */
+.toggle-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.toggle-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 50px;
+  height: 26px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.3s;
+  border-radius: 13px;
+}
+
+.toggle-switch::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: var(--text-tertiary);
+  top: 2px;
+  left: 2px;
+  transition: all 0.3s;
+  border-radius: 50%;
+}
+
+.toggle-switch.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-switch.active::before {
+  left: 26px;
+  background: var(--text-primary);
+}
+
+/* Rules Section */
+.rules-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.rules-header-info {
+  flex: 1;
+}
+
+.btn-add-rule {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  padding: 10px 18px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-add-rule:hover {
+  background: #00e5ff;
+  transform: translateY(-1px);
+}
+
+/* Rule Card - Collapsed */
+.rule-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  transition: all 0.3s;
+}
+
+.rule-card:hover {
+  border-color: var(--accent);
+}
+
+.rule-card.expanded {
+  box-shadow: 0 2px 8px rgba(0, 212, 255, 0.1);
+}
+
+.rule-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 18px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rule-header:hover {
+  background: var(--bg-hover);
+}
+
+.drag-handle {
+  color: var(--text-tertiary);
+  font-size: 16px;
+  cursor: move;
+  user-select: none;
+}
+
+.drag-handle:hover {
+  color: var(--accent);
+}
+
+.rule-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-badge {
+  border: 1px solid;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.action-badge.born {
+  border-color: var(--action-born);
+  color: var(--action-born);
+  background: rgba(0, 255, 65, 0.05);
+}
+
+.action-badge.survive {
+  border-color: var(--action-survive);
+  color: var(--action-survive);
+  background: rgba(0, 212, 255, 0.05);
+}
+
+.action-badge.die {
+  border-color: var(--action-die);
+  color: var(--action-die);
+  background: rgba(255, 51, 102, 0.05);
+}
+
+.expand-caret {
+  color: var(--text-tertiary);
+  font-size: 16px;
+  transition: transform 0.3s;
+  flex-shrink: 0;
+}
+
+.rule-card.expanded .expand-caret {
+  transform: rotate(90deg);
+}
+
+/* Rule Body - Hidden when collapsed */
+.rule-body {
+  display: none;
+  padding: 0 18px 18px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.rule-card.expanded .rule-body {
+  display: block;
+}
+
+/* Condition Row */
+.condition-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr auto;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.select-input {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.select-input:hover {
+  border-color: var(--accent);
+}
+
+.select-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.number-input {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.number-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btn-delete-condition {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  padding: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-delete-condition:hover {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.rule-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.btn-add-condition {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 10px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-add-condition:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.btn-delete-rule {
+  background: transparent;
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  padding: 10px 18px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-delete-rule:hover {
+  background: rgba(255, 51, 102, 0.1);
+}
+
+/* Preview Grid */
+.preview-canvas {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+
+.drawing-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.btn-tool {
+  flex: 1;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 10px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-tool.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.btn-tool:hover:not(.active) {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+/* Simulation Controls */
+.sim-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-sim {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 12px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-sim:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.cycle-counter {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.cycle-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+.cycle-value {
+  font-size: 36px;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: -1px;
+}
+
+/* Footer (only in main content area, not under sidebar) */
+.editor-footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 15px 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+}
+
+.back-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 20px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-secondary);
+}
+
+.btn-save {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: 1px solid var(--accent);
+  padding: 8px 20px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-save:hover {
+  background: #00b8e0;
+  border-color: #00b8e0;
+}
+
+/* Scrollbar */
+.left-sidebar::-webkit-scrollbar,
+.rules-column::-webkit-scrollbar,
+.preview-column::-webkit-scrollbar {
+  width: 10px;
+}
+
+.left-sidebar::-webkit-scrollbar-track,
+.rules-column::-webkit-scrollbar-track,
+.preview-column::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.left-sidebar::-webkit-scrollbar-thumb,
+.rules-column::-webkit-scrollbar-thumb,
+.preview-column::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+}
+
+.left-sidebar::-webkit-scrollbar-thumb:hover,
+.rules-column::-webkit-scrollbar-thumb:hover,
+.preview-column::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+</style>
+</head>
+<body>
+
+<div class="editor-overlay">
+  <!-- Header -->
+  <div class="editor-header">
+    <div class="organism-name-header">Aggressive Colonizer</div>
+  </div>
+
+  <!-- Editor Body -->
+  <div class="editor-body">
+    <!-- Left Sidebar -->
+    <div class="left-sidebar">
+      <div class="sidebar-content">
+        <div class="section">
+          <h3 class="section-title">Basic Information</h3>
+          <p class="section-description">Define organism properties and appearance</p>
+
+        <!-- Name -->
+        <div class="form-field">
+          <label class="field-label">Organism Name</label>
+          <input type="text" class="text-input" placeholder="e.g., Aggressive Colonizer" maxlength="50" value="Aggressive Colonizer">
+          <div class="char-count">21 / 50</div>
+        </div>
+
+        <!-- Color -->
+        <div class="form-field">
+          <label class="field-label">Organism Color</label>
+          <p class="field-description">Pick any color — colors are reusable. If another organism already uses your pick, a non-blocking warning appears (they'll share a color on the grid).</p>
+          <div class="color-selected-row">
+            <div class="color-selected" style="background: #FF6B5E; border-color: #FF6B5E; box-shadow: 0 0 15px rgba(255, 107, 94, 0.3);"></div>
+            <button class="color-toggle">Change Color ▾</button>
+          </div>
+          <!-- Curated CVD-safe palette (RFC-007, currently 20 tokens), in distinguishability order. Every swatch is selectable; "in-use" swatches are flagged, not disabled (colors are reusable, arch M6). -->
+          <div class="color-palette collapsed">
+            <div class="color-swatch in-use" style="background: #56B4E9;" title="Sky Blue — in use by another organism (still selectable)"></div>
+            <div class="color-swatch" style="background: #D55E00;" title="Vermillion"></div>
+            <div class="color-swatch" style="background: #009E73;" title="Bluish Green"></div>
+            <div class="color-swatch" style="background: #E69F00;" title="Amber"></div>
+            <div class="color-swatch" style="background: #CC79A7;" title="Reddish Purple"></div>
+            <div class="color-swatch" style="background: #F0E442;" title="Yellow"></div>
+            <div class="color-swatch" style="background: #3B82F6;" title="Azure"></div>
+            <div class="color-swatch selected" style="background: #FF6B5E;" title="Coral Red"></div>
+
+            <div class="color-swatch in-use" style="background: #2DD4BF;" title="Teal — in use by another organism (still selectable)"></div>
+            <div class="color-swatch" style="background: #B388FF;" title="Violet"></div>
+            <div class="color-swatch" style="background: #A3E635;" title="Lime"></div>
+            <div class="color-swatch" style="background: #F25CC1;" title="Magenta"></div>
+            <div class="color-swatch" style="background: #67E8F9;" title="Cyan"></div>
+            <div class="color-swatch" style="background: #FB923C;" title="Tangerine"></div>
+            <div class="color-swatch" style="background: #818CF8;" title="Indigo"></div>
+            <div class="color-swatch" style="background: #6EE7B7;" title="Mint"></div>
+
+            <div class="color-swatch" style="background: #FB7185;" title="Rose"></div>
+            <div class="color-swatch" style="background: #D9F99D;" title="Chartreuse"></div>
+            <div class="color-swatch" style="background: #C4B5FD;" title="Lavender"></div>
+            <div class="color-swatch" style="background: #93C5FD;" title="Periwinkle"></div>
+          </div>
+        </div>
+
+        <!-- Dominance -->
+        <div class="form-field">
+          <label class="field-label">Dominance</label>
+          <p class="field-description">Priority in conflict resolution (1-100, higher wins)</p>
+          <div class="dominance-container">
+            <input type="range" class="dominance-slider" min="1" max="100" value="8">
+            <input type="number" class="dominance-value" value="8" min="1" max="100">
+          </div>
+          <div class="dominance-labels">
+            <span>1</span>
+            <span>100</span>
+          </div>
+        </div>
+
+        <!-- Aging -->
+        <div class="form-field">
+          <label class="field-label">Aging Degradation</label>
+          <p class="field-description">Cells increase saturation as they age</p>
+          <div class="toggle-container">
+            <span class="toggle-label">Off</span>
+            <div class="toggle-switch"></div>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="back-btn">← BACK TO LIBRARY</button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="content-area">
+        <!-- Rules Column -->
+        <div class="rules-column">
+        <div class="section">
+          <div class="rules-header">
+            <div class="rules-header-info">
+              <h3 class="section-title">Survival Rules</h3>
+              <p class="section-description">Define when cells are born, survive, or die</p>
+            </div>
+            <button class="btn-add-rule">+ Add Rule</button>
+          </div>
+
+          <!-- Description (free text) -->
+          <div class="rules-description-field">
+            <label class="field-label">Description</label>
+            <textarea class="rules-description-input" placeholder="Describe this organism's behavior or strategy..."></textarea>
+          </div>
+
+          <!-- Rule Card 1 - Expanded -->
+          <div class="rule-card expanded">
+            <div class="rule-header">
+              <span class="drag-handle">⋮⋮</span>
+              <span class="rule-name">Fast reproduction</span>
+              <span class="action-badge born">Born</span>
+              <span class="expand-caret">▸</span>
+            </div>
+            <div class="rule-body">
+              <!-- Rule Description -->
+              <div class="form-field">
+                <label class="field-label">Rule description</label>
+                <input type="text" class="text-input" placeholder="e.g., Birth by reproduction" value="Fast reproduction">
+              </div>
+
+              <!-- Action Selector -->
+              <div class="form-field">
+                <label class="field-label">Action</label>
+                <select class="select-input action-selector">
+                  <option value="born" selected>Born</option>
+                  <option value="survive">Survive</option>
+                  <option value="die">Die</option>
+                </select>
+                <p class="field-description action-description">The following rules apply to cells that are empty or occupied by another organism. Successful birth will depend on organism dominance rules.</p>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label">Conditions (all must match)</label>
+
+                <div class="condition-row">
+                  <select class="select-input">
+                    <option>Organism Type</option>
+                    <option>Age of Cell</option>
+                    <option selected>Neighbor Count</option>
+                    <option>Occupant Neighbor Count</option>
+                  </select>
+                  <select class="select-input">
+                    <option selected>=</option>
+                    <option>></option>
+                    <option><</option>
+                    <option>>=</option>
+                    <option><=</option>
+                    <option>Range</option>
+                  </select>
+                  <input type="number" class="number-input" value="3" min="0" max="8">
+                  <button class="btn-delete-condition">✕</button>
+                </div>
+
+                <div class="rule-actions">
+                  <button class="btn-add-condition">+ Add Condition</button>
+                  <button class="btn-delete-rule">Delete Rule</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rule Card 2 - Collapsed -->
+          <div class="rule-card">
+            <div class="rule-header">
+              <span class="drag-handle">⋮⋮</span>
+              <span class="rule-name">Maintain colony</span>
+              <span class="action-badge survive">Survive</span>
+              <span class="expand-caret">▸</span>
+            </div>
+            <div class="rule-body">
+              <!-- Rule Description -->
+              <div class="form-field">
+                <label class="field-label">Rule description</label>
+                <input type="text" class="text-input" placeholder="e.g., Stable configuration" value="Maintain colony">
+              </div>
+
+              <!-- Action Selector -->
+              <div class="form-field">
+                <label class="field-label">Action</label>
+                <select class="select-input action-selector">
+                  <option value="born">Born</option>
+                  <option value="survive" selected>Survive</option>
+                  <option value="die">Die</option>
+                </select>
+                <p class="field-description action-description">The following rules apply to cells that are alive and belong to the same organism.</p>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label">Conditions (all must match)</label>
+
+                <div class="condition-row">
+                  <select class="select-input">
+                    <option>Organism Type</option>
+                    <option>Age of Cell</option>
+                    <option selected>Neighbor Count</option>
+                    <option>Occupant Neighbor Count</option>
+                  </select>
+                  <select class="select-input">
+                    <option>></option>
+                    <option><</option>
+                    <option selected>>=</option>
+                    <option><=</option>
+                    <option>Range</option>
+                  </select>
+                  <input type="number" class="number-input" value="2" min="0" max="8">
+                  <button class="btn-delete-condition">✕</button>
+                </div>
+
+                <div class="condition-row">
+                  <select class="select-input">
+                    <option>Organism Type</option>
+                    <option>Age of Cell</option>
+                    <option selected>Neighbor Count</option>
+                    <option>Occupant Neighbor Count</option>
+                  </select>
+                  <select class="select-input">
+                    <option>=</option>
+                    <option>></option>
+                    <option><</option>
+                    <option>>=</option>
+                    <option selected><=</option>
+                    <option>Range</option>
+                  </select>
+                  <input type="number" class="number-input" value="3" min="0" max="8">
+                  <button class="btn-delete-condition">✕</button>
+                </div>
+
+                <div class="rule-actions">
+                  <button class="btn-add-condition">+ Add Condition</button>
+                  <button class="btn-delete-rule">Delete Rule</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rule Card 3 - Collapsed -->
+          <div class="rule-card">
+            <div class="rule-header">
+              <span class="drag-handle">⋮⋮</span>
+              <span class="rule-name">Death by overpopulation</span>
+              <span class="action-badge die">Die</span>
+              <span class="expand-caret">▸</span>
+            </div>
+            <div class="rule-body">
+              <!-- Rule Description -->
+              <div class="form-field">
+                <label class="field-label">Rule description</label>
+                <input type="text" class="text-input" placeholder="e.g., Death by isolation" value="Death by overpopulation">
+              </div>
+
+              <!-- Action Selector -->
+              <div class="form-field">
+                <label class="field-label">Action</label>
+                <select class="select-input action-selector">
+                  <option value="born">Born</option>
+                  <option value="survive">Survive</option>
+                  <option value="die" selected>Die</option>
+                </select>
+                <p class="field-description action-description">The following rules apply to cells that are alive and belong to the same organism.</p>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label">Conditions (all must match)</label>
+
+                <div class="condition-row">
+                  <select class="select-input">
+                    <option>Organism Type</option>
+                    <option>Age of Cell</option>
+                    <option selected>Neighbor Count</option>
+                    <option>Occupant Neighbor Count</option>
+                  </select>
+                  <select class="select-input">
+                    <option>=</option>
+                    <option selected>></option>
+                    <option><</option>
+                    <option>>=</option>
+                    <option><=</option>
+                    <option>Range</option>
+                  </select>
+                  <input type="number" class="number-input" value="3" min="0" max="8">
+                  <button class="btn-delete-condition">✕</button>
+                </div>
+
+                <div class="rule-actions">
+                  <button class="btn-add-condition">+ Add Condition</button>
+                  <button class="btn-delete-rule">Delete Rule</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview Column -->
+      <div class="preview-column">
+        <div class="section">
+          <h3 class="section-title">Preview & Test</h3>
+          <p class="section-description">Test organism behavior in isolation</p>
+
+          <canvas class="preview-canvas" width="300" height="200"></canvas>
+
+          <div class="drawing-controls">
+            <button class="btn-tool active">Draw</button>
+            <button class="btn-tool">Erase</button>
+            <button class="btn-tool">Clear</button>
+          </div>
+
+          <div class="sim-controls">
+            <button class="btn-sim">▶ Play</button>
+            <button class="btn-sim">▸ Step</button>
+            <button class="btn-sim">■ Stop</button>
+          </div>
+
+          <div class="cycle-counter">
+            <div class="cycle-label">Cycle</div>
+            <div class="cycle-value">0</div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="editor-footer">
+        <div class="footer-usage-note" title="Click to see which battles">Currently used in <strong>3</strong> battles ▾
+          <div class="usage-popover">
+            <div class="usage-popover-title">Used in these battles</div>
+            <ul>
+              <li>Triple Threat v2</li>
+              <li>Corner Standoff</li>
+              <li>Glider Wars</li>
+            </ul>
+          </div>
+        </div>
+        <button class="btn-save">SAVE</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Usage indicator → read-only popover of battle names (FR-1.7)
+const usageNote = document.querySelector('.footer-usage-note');
+if (usageNote) {
+  const pop = usageNote.querySelector('.usage-popover');
+  usageNote.addEventListener('click', (e) => { e.stopPropagation(); pop.classList.toggle('open'); });
+  document.addEventListener('click', () => pop.classList.remove('open'));
+}
+
+// Toggle switches
+document.querySelectorAll('.toggle-switch').forEach(toggle => {
+  toggle.addEventListener('click', function() {
+    this.classList.toggle('active');
+    const label = this.previousElementSibling;
+    if (this.classList.contains('active')) {
+      label.textContent = 'On';
+      label.style.color = 'var(--accent)';
+    } else {
+      label.textContent = 'Off';
+      label.style.color = 'var(--text-secondary)';
+    }
+  });
+});
+
+// Collapsible color palette
+const colorToggle = document.querySelector('.color-toggle');
+const colorPalette = document.querySelector('.color-palette');
+colorToggle.addEventListener('click', function() {
+  const collapsed = colorPalette.classList.toggle('collapsed');
+  this.textContent = collapsed ? 'Change Color ▾' : 'Change Color ▴';
+});
+
+// Color swatches
+document.querySelectorAll('.color-swatch:not(.disabled)').forEach(swatch => {
+  swatch.addEventListener('click', function() {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    this.classList.add('selected');
+    const color = this.style.background;
+    document.querySelector('.color-selected').style.background = color;
+    document.querySelector('.color-selected').style.borderColor = color;
+    document.querySelector('.color-selected').style.boxShadow = `0 0 15px ${color}`;
+    // Collapse the palette after picking, reflecting the new selection
+    colorPalette.classList.add('collapsed');
+    colorToggle.textContent = 'Change Color ▾';
+  });
+});
+
+// Dominance slider sync
+const dominanceSlider = document.querySelector('.dominance-slider');
+const dominanceValue = document.querySelector('.dominance-value');
+dominanceSlider.addEventListener('input', function() {
+  dominanceValue.value = this.value;
+});
+dominanceValue.addEventListener('input', function() {
+  dominanceSlider.value = this.value;
+});
+
+// Drawing tools
+document.querySelectorAll('.btn-tool').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.btn-tool').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+// Rule card collapse/expand
+document.querySelectorAll('.rule-header').forEach(header => {
+  header.addEventListener('click', function(e) {
+    // Don't toggle if clicking drag handle
+    if (e.target.classList.contains('drag-handle')) return;
+
+    const card = this.closest('.rule-card');
+    const wasExpanded = card.classList.contains('expanded');
+
+    // Collapse all other rules (accordion behavior)
+    document.querySelectorAll('.rule-card').forEach(c => c.classList.remove('expanded'));
+
+    // Toggle this rule
+    if (!wasExpanded) {
+      card.classList.add('expanded');
+    }
+  });
+});
+
+// Action selector change handler
+document.querySelectorAll('.action-selector').forEach(selector => {
+  selector.addEventListener('change', function() {
+    const ruleCard = this.closest('.rule-card');
+    const actionBadge = ruleCard.querySelector('.action-badge');
+    const actionDescription = ruleCard.querySelector('.action-description');
+    const selectedAction = this.value;
+
+    // Update badge text and class
+    actionBadge.textContent = selectedAction.charAt(0).toUpperCase() + selectedAction.slice(1);
+    actionBadge.className = 'action-badge ' + selectedAction;
+
+    // Update description text based on action
+    const descriptions = {
+      born: 'The following rules apply to cells that are empty or occupied by another organism. Successful birth will depend on organism dominance rules.',
+      survive: 'The following rules apply to cells that are alive and belong to the same organism.',
+      die: 'The following rules apply to cells that are alive and belong to the same organism.'
+    };
+    actionDescription.textContent = descriptions[selectedAction];
+  });
+});
+
+// Context-aware navigation: the editor can be opened from the Organism Library
+// or directly from a Battle (FR-3.12). Back/Save follow the entry context.
+const editorParams = new URLSearchParams(window.location.search);
+const fromBattle = editorParams.get('from') === 'battle';
+const returnHref = fromBattle ? 'petri-dish-lab-mode.html' : 'organism-library.html';
+
+// Back button — "Back to Battle" when opened from a Battle, else "Back to Library"
+const backBtn = document.querySelector('.back-btn');
+if (fromBattle) backBtn.textContent = '← BACK TO BATTLE';
+backBtn.addEventListener('click', function() {
+  window.location.href = returnHref;
+});
+
+// Save button — returns to the entry context (battle or library)
+document.querySelector('.btn-save').addEventListener('click', function() {
+  window.location.href = returnHref;
+});
+</script>
+
+</body>
+</html>

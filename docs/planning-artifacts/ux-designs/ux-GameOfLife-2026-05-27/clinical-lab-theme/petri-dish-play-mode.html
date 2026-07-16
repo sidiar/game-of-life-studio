@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Petri Dish - Play Mode - Clinical Lab Style</title>
+<style>
+/* Clinical Lab Design System */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a1a1a;
+  --bg-hover: #222222;
+  --border: #333333;
+  --accent: #00d4ff;
+  --text-primary: #ffffff;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  letter-spacing: 0px;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+/* Header */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+  z-index: 999;
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.header-actions {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+/* Mode Toggle Button Group */
+.mode-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.mode-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.mode-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+
+.mode-btn.active {
+  background: rgba(0, 212, 255, 0.1);
+  color: var(--accent);
+}
+
+.mode-btn:not(.active):hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Fullscreen Button */
+.btn-fullscreen {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.btn-fullscreen:hover {
+  background: rgba(0, 212, 255, 0.1);
+}
+
+/* Sidebar - Simulation Controls */
+.sidebar {
+  width: 350px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 25px;
+  padding-bottom: 0;
+  margin-top: 64px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-y: hidden;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  padding-bottom: 20px;
+}
+
+.sidebar-footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+  margin-top: auto;
+}
+
+.back-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-secondary);
+}
+
+.sidebar-section {
+  border: 1px solid var(--border);
+  padding: 15px;
+  background: var(--bg-primary);
+}
+
+.sidebar-section-title {
+  font-size: 13px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+/* Simulation Control Buttons */
+.control-btn {
+  padding: 11px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+}
+
+.control-btn-play {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-primary);
+}
+
+.control-btn-play:hover {
+  background: #00b8e0;
+  border-color: #00b8e0;
+}
+
+.control-btn-next {
+  background: transparent;
+  border-color: #ffaa00;
+  color: #ffaa00;
+}
+
+.control-btn-next:hover {
+  background: rgba(255, 170, 0, 0.1);
+}
+
+.control-btn-stop {
+  background: transparent;
+  border-color: #ff0055;
+  color: #ff0055;
+}
+
+.control-btn-stop:hover {
+  background: rgba(255, 0, 85, 0.1);
+}
+
+.control-btn-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* Horizontal control cluster in the bottom bar */
+.control-buttons-horizontal {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Speed + Grid Size Control */
+.speed-control {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.speed-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.speed-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.speed-value {
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.speed-slider {
+  width: 100%;
+  height: 6px;
+  background: var(--border);
+  outline: none;
+  -webkit-appearance: none;
+  border-radius: 3px;
+  position: relative;
+}
+
+.speed-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.speed-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  cursor: pointer;
+  border-radius: 50%;
+  border: none;
+}
+
+.speed-presets {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  margin-top: -5px;
+}
+
+.control-note {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 10px;
+}
+
+/* Cycle Counter */
+.cycle-counter {
+  background: var(--bg-primary);
+  border: 2px solid var(--accent);
+  padding: 20px;
+  text-align: center;
+}
+
+.cycle-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.cycle-value {
+  font-size: 32px;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Population Statistics */
+.population-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pop-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.pop-name {
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pop-color-indicator {
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+}
+
+.pop-count {
+  font-size: 11px;
+}
+
+.pop-bar-container {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.pop-bar {
+  height: 100%;
+  transition: width 0.3s ease-out;
+}
+
+.pop-item.extinct {
+  opacity: 0.4;
+}
+
+.pop-extinct-indicator {
+  font-size: 14px;
+  margin-left: 5px;
+}
+
+.total-living {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.total-living-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Main Content Area */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  position: relative;
+  margin-top: 64px;
+}
+
+.grid-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 30px 100px 30px;
+  position: relative;
+}
+
+.petri-dish-grid {
+  width: 100%;
+  max-width: 1000px;
+  aspect-ratio: 5/3;
+  background: var(--bg-primary);
+  border: 2px solid var(--accent);
+  position: relative;
+}
+
+.grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 10px 10px;
+  opacity: 0.4;
+}
+
+.grid-cells {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(50, 1fr);
+  grid-template-rows: repeat(30, 1fr);
+  gap: 1px;
+}
+
+.cell {
+  background: transparent;
+  transition: all 0.15s;
+}
+
+.cell.alive {
+  opacity: 1;
+}
+
+/* Bottom Control Bar - simulation controls live here, right-aligned */
+.stats-bar {
+  position: fixed;
+  bottom: 0;
+  left: 350px;
+  right: 0;
+  z-index: 998;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 12px 25px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stats-left {
+  display: flex;
+  gap: 25px;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Keyboard Shortcuts Hint */
+.keyboard-hint {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.keyboard-hint span {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin: 0 3px;
+}
+
+/* Rationale at Bottom */
+.rationale {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  padding: 20px;
+  margin: 100px 30px 30px 30px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.rationale strong {
+  color: var(--text-primary);
+}
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <div class="header">
+    <div class="logo">Triple Threat</div>
+    <div class="header-actions">
+      <button class="btn-fullscreen" onclick="window.location.href='petri-dish-play-mode-fullscreen.html'">⛶ FULLSCREEN</button>
+      <div class="mode-toggle">
+        <button class="mode-btn">LAB</button>
+        <button class="mode-btn active">RUN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar - Analysis & Settings (simulation controls live in the bottom bar) -->
+  <div class="sidebar">
+    <div class="sidebar-content">
+      <!-- 1. Population Statistics -->
+      <div class="sidebar-section">
+        <h3 class="sidebar-section-title">Population Analysis</h3>
+
+        <div class="population-stats">
+          <!-- Crimson Crawler - Most populated -->
+          <div class="pop-item">
+            <div class="pop-header">
+              <div class="pop-name" style="color: #ff0055;">
+                <div class="pop-color-indicator" style="background: #ff0055; border-color: #ff0055;"></div>
+                <span>Crimson Crawler</span>
+              </div>
+              <div class="pop-count" style="color: #ff0055;">127 (45%)</div>
+            </div>
+            <div class="pop-bar-container">
+              <div class="pop-bar" style="width: 45%; background: #ff0055;"></div>
+            </div>
+          </div>
+
+          <!-- Azure Swarm -->
+          <div class="pop-item">
+            <div class="pop-header">
+              <div class="pop-name" style="color: #00aaff;">
+                <div class="pop-color-indicator" style="background: #00aaff; border-color: #00aaff;"></div>
+                <span>Azure Swarm</span>
+              </div>
+              <div class="pop-count" style="color: #00aaff;">89 (31%)</div>
+            </div>
+            <div class="pop-bar-container">
+              <div class="pop-bar" style="width: 31%; background: #00aaff;"></div>
+            </div>
+          </div>
+
+          <!-- Neon Spreader -->
+          <div class="pop-item">
+            <div class="pop-header">
+              <div class="pop-name" style="color: #00ff41;">
+                <div class="pop-color-indicator" style="background: #00ff41; border-color: #00ff41;"></div>
+                <span>Neon Spreader</span>
+              </div>
+              <div class="pop-count" style="color: #00ff41;">57 (20%)</div>
+            </div>
+            <div class="pop-bar-container">
+              <div class="pop-bar" style="width: 20%; background: #00ff41;"></div>
+            </div>
+          </div>
+
+          <!-- Gold Glider - Extinct -->
+          <div class="pop-item extinct">
+            <div class="pop-header">
+              <div class="pop-name" style="color: #ffaa00;">
+                <div class="pop-color-indicator" style="background: transparent; border-color: #ffaa00;"></div>
+                <span>Gold Glider</span>
+                <span class="pop-extinct-indicator">☠</span>
+              </div>
+              <div class="pop-count" style="color: #ffaa00;">0 (0%)</div>
+            </div>
+            <div class="pop-bar-container">
+              <div class="pop-bar" style="width: 0%; background: #ffaa00;"></div>
+            </div>
+          </div>
+
+          <div class="total-living">
+            <span>Total Living Cells</span>
+            <span class="total-living-value">273</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Cycle Counter -->
+      <div class="sidebar-section">
+        <div class="cycle-counter">
+          <div class="cycle-label">Cycle Count</div>
+          <div class="cycle-value">0042</div>
+        </div>
+      </div>
+
+      <!-- 3. Speed Multiplier (gen/sec ladder: 1, 2, 5, 10, 20 — default 10) -->
+      <div class="sidebar-section">
+        <h3 class="sidebar-section-title">Speed Multiplier</h3>
+
+        <div class="speed-control">
+          <div class="speed-label-row">
+            <span class="speed-label">Generations / sec</span>
+            <span class="speed-value">10 gen/s</span>
+          </div>
+          <input type="range" class="speed-slider" min="0" max="4" value="3" step="1" />
+          <div class="speed-presets">
+            <span>1</span>
+            <span>2</span>
+            <span>5</span>
+            <span>10</span>
+            <span>20</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Grid Size (presets: 50×30, 100×60, 150×90, 200×120 — default 100×60) -->
+      <div class="sidebar-section">
+        <h3 class="sidebar-section-title">Grid Size</h3>
+
+        <div class="speed-control">
+          <div class="speed-label-row">
+            <span class="speed-label">Dimensions</span>
+            <span class="speed-value grid-size-value">100 × 60</span>
+          </div>
+          <input type="range" class="speed-slider grid-size-slider" min="0" max="3" value="1" step="1" />
+          <div class="speed-presets">
+            <span>50</span>
+            <span>100</span>
+            <span>150</span>
+            <span>200</span>
+          </div>
+          <div class="control-note">⚠ Adjustable while paused</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Footer with Back Button -->
+    <div class="sidebar-footer">
+      <a href="battle-gallery.html" style="text-decoration: none;">
+        <button class="back-btn">← BACK TO BATTLES</button>
+      </a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="grid-container">
+      <div class="petri-dish-grid">
+        <div class="grid-pattern"></div>
+        <div class="grid-cells">
+          <!-- Crimson Crawler - Animated glider pattern (top-left area) -->
+          <div class="cell alive" style="grid-column: 8; grid-row: 5; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 9; grid-row: 6; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 7; grid-row: 7; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 8; grid-row: 7; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 9; grid-row: 7; background: #ff0055;"></div>
+
+          <!-- Azure Swarm - Beacon oscillator (middle area) -->
+          <div class="cell alive" style="grid-column: 24; grid-row: 12; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 25; grid-row: 12; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 24; grid-row: 13; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 27; grid-row: 14; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 26; grid-row: 15; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 27; grid-row: 15; background: #00aaff;"></div>
+
+          <!-- Neon Spreader - Toad oscillator (right area) -->
+          <div class="cell alive" style="grid-column: 38; grid-row: 18; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 39; grid-row: 18; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 40; grid-row: 18; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 37; grid-row: 19; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 38; grid-row: 19; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 39; grid-row: 19; background: #00ff41;"></div>
+
+          <!-- Additional Crimson Crawler clusters -->
+          <div class="cell alive" style="grid-column: 12; grid-row: 24; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 13; grid-row: 24; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 12; grid-row: 25; background: #ff0055;"></div>
+          <div class="cell alive" style="grid-column: 13; grid-row: 25; background: #ff0055;"></div>
+
+          <!-- Azure Swarm - Another pattern cluster (top-right) -->
+          <div class="cell alive" style="grid-column: 42; grid-row: 8; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 43; grid-row: 8; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 44; grid-row: 8; background: #00aaff;"></div>
+          <div class="cell alive" style="grid-column: 43; grid-row: 9; background: #00aaff;"></div>
+
+          <!-- Neon Spreader - Blinker (center-bottom) -->
+          <div class="cell alive" style="grid-column: 25; grid-row: 22; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 26; grid-row: 22; background: #00ff41;"></div>
+          <div class="cell alive" style="grid-column: 27; grid-row: 22; background: #00ff41;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Control Bar: simulation controls aligned to the right -->
+    <div class="stats-bar">
+      <div class="stats-left">
+        <div class="keyboard-hint">
+          Shortcuts: <span>SPACE</span> Play/Pause • <span>→</span> Next • <span>ESC</span> Stop
+        </div>
+      </div>
+
+      <div class="control-buttons-horizontal">
+        <button class="control-btn control-btn-play">
+          <span class="control-btn-icon">▶</span>
+          <span>Play</span>
+        </button>
+        <button class="control-btn control-btn-next">
+          <span class="control-btn-icon">⏭</span>
+          <span>Next Cycle</span>
+        </button>
+        <button class="control-btn control-btn-stop">
+          <span class="control-btn-icon">⏹</span>
+          <span>Stop &amp; Reset</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="rationale">
+  <strong>Clinical Lab Style - Play Mode:</strong> The simulation transport controls (Play/Pause, Next Cycle, Stop &amp; Reset) live in the fixed bottom bar, right-aligned, leaving the left panel for analysis and settings in reading order: <strong>Population Analysis</strong>, <strong>Cycle Count</strong>, <strong>Speed Multiplier</strong>, then <strong>Grid Size</strong>. The Speed Multiplier now uses the canonical generations-per-second ladder (1, 2, 5, 10, 20 gen/sec; default 10) per Architecture Decision D, rather than an abstract 0.5x–3x multiplier. A Grid Size slider exposes the FR-8.10 presets (50×30, 100×60, 150×90, 200×120); per FR-4.9 it is adjustable only while the simulation is paused. All organism colors, the cyan active-simulation border, and mode/back navigation are preserved.
+</div>
+
+<script>
+// Play/Pause toggle
+document.querySelector('.control-btn-play').addEventListener('click', function() {
+  const icon = this.querySelector('.control-btn-icon');
+  const text = this.querySelector('span:last-child');
+
+  if (icon.textContent === '▶') {
+    icon.textContent = '⏸';
+    text.textContent = 'Pause';
+  } else {
+    icon.textContent = '▶';
+    text.textContent = 'Play';
+  }
+});
+
+// Speed slider -> generations/second (canonical ladder)
+const genPerSec = [1, 2, 5, 10, 20];
+document.querySelector('.speed-slider:not(.grid-size-slider)').addEventListener('input', function() {
+  document.querySelector('.speed-value:not(.grid-size-value)').textContent = genPerSec[this.value] + ' gen/s';
+});
+
+// Grid size slider -> dimension presets (FR-8.10)
+const gridSizes = ['50 × 30', '100 × 60', '150 × 90', '200 × 120'];
+document.querySelector('.grid-size-slider').addEventListener('input', function() {
+  document.querySelector('.grid-size-value').textContent = gridSizes[this.value];
+});
+
+// Mode toggle
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    if (this.textContent === 'LAB') {
+      window.location.href = 'petri-dish-lab-mode.html';
+    }
+  });
+});
+</script>
+
+</body>
+</html>
