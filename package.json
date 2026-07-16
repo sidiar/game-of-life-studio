@@ -1,0 +1,24 @@
+{
+  "name": "game-of-life-studio",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "npm@11.13.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:standalone": "turbo run dev:standalone",
+    "build": "turbo run build",
+    "build:standalone": "turbo run build:standalone",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.5",
+    "typescript": "^5.9.3"
+  }
+}

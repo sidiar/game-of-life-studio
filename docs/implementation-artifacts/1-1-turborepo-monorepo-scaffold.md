@@ -1,6 +1,10 @@
+---
+baseline_commit: 6a19409e0d593f1dcc6c7dfaa80fba344e27c262
+---
+
 # Story 1.1: Turborepo Monorepo Scaffold
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -19,33 +23,33 @@ So that every subsequent story has a consistent, buildable home with enforced bo
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Initialize repo root (AC: 1)
-  - [ ] `git init` at the project root — the repo is NOT yet a git repository; husky (Story 1.2) requires it
-  - [ ] Scaffold IN PLACE at `/Users/sidiar/projects/NewJob/GameOfLife` — `docs/`, `_bmad/`, `.claude/` already live here; do NOT create a nested project folder and do NOT use `create-turbo`/`create-next-app` interactive scaffolds that require an empty directory (generate files manually or into a temp dir and merge)
-  - [ ] Root `package.json`: `"name": "game-of-life-studio"`, `"private": true`, `"workspaces": ["apps/*", "packages/*"]`, `"packageManager"` pinned (npm — RFC-001 uses npm-style workspaces), scripts `dev` / `build` / `build:standalone` / `test` delegating to `turbo run …`
-  - [ ] `turbo.json` using Turborepo 2.x `"tasks"` key (NOT the 1.x `"pipeline"` key): `build` with `"dependsOn": ["^build"]`; `build:standalone` with `"env": ["NEXT_PUBLIC_MODE"]`, `"outputs": ["apps/web/out/**"]`
-  - [ ] `.gitignore` (node_modules, .next, out, .turbo, coverage), `.nvmrc` / `engines` pinning current Node LTS
-  - [ ] Root `tsconfig.base.json` with `"strict": true` extended by every package and the app
-- [ ] Task 2: Scaffold the four packages (AC: 1)
-  - [ ] `packages/domain` → `@gol/domain`; `packages/simulation` → `@gol/simulation`; `packages/persistence` → `@gol/persistence`; `packages/test-utils` → `@gol/test-utils`
-  - [ ] Each: `package.json` (name, `"private": true`, `"exports"` pointing at TS source — see just-in-time convention in Dev Notes), `tsconfig.json` extending the strict base, one placeholder export in `src/index.ts` so the package graph compiles
-  - [ ] Internal deps declared now so `^build` ordering is real from day one: `@gol/persistence` and `@gol/simulation` depend on `@gol/domain`; `@gol/test-utils` depends on `@gol/domain` and `@gol/persistence` (it will provide fake repos implementing 1.4 interfaces); `apps/web` depends on all four
-  - [ ] NO business code — Zod schemas land in 1.3, repositories in 1.4, engine in Epic 3. Placeholders only.
-- [ ] Task 3: Scaffold `apps/web` (AC: 2, 3)
-  - [ ] Next.js (current stable 16.2.x LTS as of 2026-07) + React, App Router: `app/layout.tsx` + `app/page.tsx` placeholder home route (static text — real Gallery arrives in 1.10; theming/shell in 1.9 — do NOT install MUI now)
-  - [ ] `tsconfig.json` extends the strict base; build must pass `tsc` strict
-  - [ ] `next.config.mjs`: `output: process.env.NEXT_PUBLIC_MODE === 'standalone' ? 'export' : undefined` — static export is configured HERE; the removed `next export` CLI command must NOT appear in any script (RFC-001 §5)
-  - [ ] App scripts: `dev:standalone` = `NEXT_PUBLIC_MODE=standalone next dev`, `build:standalone` = `NEXT_PUBLIC_MODE=standalone next build` (use `cross-env` only if Windows support is wanted; macOS/CI don't need it)
-  - [ ] Placeholder page makes zero fetch/API calls and imports nothing that would break static export
-- [ ] Task 4: Plumb `NEXT_PUBLIC_MODE` (AC: 4)
-  - [ ] Add `apps/web/lib/mode.ts` (or equivalent): `export const APP_MODE = process.env.NEXT_PUBLIC_MODE ?? 'standalone'` — the single read-point the Story 1.4 repository factory will consume; nothing else reads the env var directly
-  - [ ] PITFALL: `NEXT_PUBLIC_*` vars are string-inlined at build time — only direct `process.env.NEXT_PUBLIC_MODE` property access is replaced; dynamic access (`process.env[name]`, destructuring) yields `undefined` in the browser bundle
-  - [ ] `NEXT_PUBLIC_MODE` is declared in `turbo.json` `env` for the standalone build task so Turborepo cache keys include it
-- [ ] Task 5: Verify end-to-end (AC: 1–3)
-  - [ ] Fresh `npm install` + `npm run build:standalone` from the root builds all 4 packages + web via the turbo graph
-  - [ ] `apps/web/out/` contains the static export; serve it with any static file server (`npx serve apps/web/out`) and confirm the home route renders with zero network calls to any backend (check devtools/network — only static assets)
-  - [ ] `npx tsc --noEmit` passes strict in every workspace
-  - [ ] Commit the scaffold as the initial commit
+- [x] Task 1: Initialize repo root (AC: 1)
+  - [x] `git init` at the project root — the repo is NOT yet a git repository; husky (Story 1.2) requires it *(already satisfied: repo existed with initial commit `6a19409` before dev started; baseline captured in frontmatter)*
+  - [x] Scaffold IN PLACE at `/Users/sidiar/projects/NewJob/GameOfLife` — `docs/`, `_bmad/`, `.claude/` already live here; do NOT create a nested project folder and do NOT use `create-turbo`/`create-next-app` interactive scaffolds that require an empty directory (generate files manually or into a temp dir and merge)
+  - [x] Root `package.json`: `"name": "game-of-life-studio"`, `"private": true`, `"workspaces": ["apps/*", "packages/*"]`, `"packageManager"` pinned (npm — RFC-001 uses npm-style workspaces), scripts `dev` / `build` / `build:standalone` / `test` delegating to `turbo run …`
+  - [x] `turbo.json` using Turborepo 2.x `"tasks"` key (NOT the 1.x `"pipeline"` key): `build` with `"dependsOn": ["^build"]`; `build:standalone` with `"env": ["NEXT_PUBLIC_MODE"]`, `"outputs": ["apps/web/out/**"]` *(implemented as workspace-relative `"out/**"` in an `apps/web/turbo.json` override — Turborepo 2.x resolves output globs relative to each package directory; see Completion Notes)*
+  - [x] `.gitignore` (node_modules, .next, out, .turbo, coverage), `.nvmrc` / `engines` pinning current Node LTS
+  - [x] Root `tsconfig.base.json` with `"strict": true` extended by every package and the app
+- [x] Task 2: Scaffold the four packages (AC: 1)
+  - [x] `packages/domain` → `@gol/domain`; `packages/simulation` → `@gol/simulation`; `packages/persistence` → `@gol/persistence`; `packages/test-utils` → `@gol/test-utils`
+  - [x] Each: `package.json` (name, `"private": true`, `"exports"` pointing at TS source — see just-in-time convention in Dev Notes), `tsconfig.json` extending the strict base, one placeholder export in `src/index.ts` so the package graph compiles
+  - [x] Internal deps declared now so `^build` ordering is real from day one: `@gol/persistence` and `@gol/simulation` depend on `@gol/domain`; `@gol/test-utils` depends on `@gol/domain` and `@gol/persistence` (it will provide fake repos implementing 1.4 interfaces); `apps/web` depends on all four
+  - [x] NO business code — Zod schemas land in 1.3, repositories in 1.4, engine in Epic 3. Placeholders only.
+- [x] Task 3: Scaffold `apps/web` (AC: 2, 3)
+  - [x] Next.js (current stable 16.2.x LTS as of 2026-07) + React, App Router: `app/layout.tsx` + `app/page.tsx` placeholder home route (static text — real Gallery arrives in 1.10; theming/shell in 1.9 — do NOT install MUI now)
+  - [x] `tsconfig.json` extends the strict base; build must pass `tsc` strict
+  - [x] `next.config.mjs`: `output: process.env.NEXT_PUBLIC_MODE === 'standalone' ? 'export' : undefined` — static export is configured HERE; the removed `next export` CLI command must NOT appear in any script (RFC-001 §5)
+  - [x] App scripts: `dev:standalone` = `NEXT_PUBLIC_MODE=standalone next dev`, `build:standalone` = `NEXT_PUBLIC_MODE=standalone next build` (use `cross-env` only if Windows support is wanted; macOS/CI don't need it)
+  - [x] Placeholder page makes zero fetch/API calls and imports nothing that would break static export
+- [x] Task 4: Plumb `NEXT_PUBLIC_MODE` (AC: 4)
+  - [x] Add `apps/web/lib/mode.ts` (or equivalent): `export const APP_MODE = process.env.NEXT_PUBLIC_MODE ?? 'standalone'` — the single read-point the Story 1.4 repository factory will consume; nothing else reads the env var directly
+  - [x] PITFALL: `NEXT_PUBLIC_*` vars are string-inlined at build time — only direct `process.env.NEXT_PUBLIC_MODE` property access is replaced; dynamic access (`process.env[name]`, destructuring) yields `undefined` in the browser bundle
+  - [x] `NEXT_PUBLIC_MODE` is declared in `turbo.json` `env` for the standalone build task so Turborepo cache keys include it
+- [x] Task 5: Verify end-to-end (AC: 1–3)
+  - [x] Fresh `npm install` + `npm run build:standalone` from the root builds all 4 packages + web via the turbo graph
+  - [x] `apps/web/out/` contains the static export; serve it with any static file server (`npx serve apps/web/out`) and confirm the home route renders with zero network calls to any backend (check devtools/network — only static assets)
+  - [x] `npx tsc --noEmit` passes strict in every workspace
+  - [x] Commit the scaffold as the initial commit *(scaffold verified and ready; commit performed manually by Sidiar after review, on top of the pre-existing planning-artifacts initial commit)*
 
 ## Dev Notes
 
@@ -115,10 +119,63 @@ No test framework lands yet (Vitest + gates are Story 1.2 / coverage flip is 3.7
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Fable 5 (claude-fable-5) via Claude Code
 
 ### Debug Log References
 
+Verification run (2026-07-16), all from repo root:
+
+- `npm install` — clean install, 41 packages audited, no errors (Node v24.16.0, npm 11.13.0)
+- `npm run build:standalone` — turbo graph built all 5 workspaces (4 × `tsc --noEmit` package builds ordered by `^build`, then `web#build:standalone`); Next.js 16.2.10 compiled, strict TypeScript pass, static export emitted to `apps/web/out/`; repeat run = `FULL TURBO` cache hit
+- Static serve check — served `apps/web/out/` with `python3 -m http.server 4173`; `GET /` → 200 and every referenced `/_next/static/**` asset → 200; prerendered HTML contains `mode: <!-- -->standalone` (env inlined at build time) and `@gol/domain` placeholder text (transpilePackages wiring proven); zero backend/API references in the export
+- `npx tsc --noEmit` in all 5 workspaces (`packages/domain`, `packages/simulation`, `packages/persistence`, `packages/test-utils`, `apps/web`) — all pass under strict
+- `npm test` (`turbo run test`) — exits 0 as a no-op (task registered, no workspace implements it yet; Vitest lands in Story 1.2), so CI is not pre-broken
+
 ### Completion Notes List
 
+- **Versions installed:** Next.js ^16.2.10 (registry `latest`, matches the story's 16.2.x LTS), React ^19.2.7, Turborepo ^2.10.5 (story cited 2.9 as of 2026-03; 2.10 is the same config shape), TypeScript ^5.9.3.
+- **Decision — TypeScript 5.9.x, not 7.x:** registry `latest` is now typescript 7.0.2 (the new native-compiler major, weeks old). Pinned ^5.9.3 instead: Next 16 tooling is guaranteed-compatible with 5.x and the story's stated goal is a reproducible fresh-clone build, not chasing latest. Revisit in a later story once TS7 support matures.
+- **Deviation — turbo outputs glob:** story text specified `"outputs": ["apps/web/out/**"]`, but Turborepo 2.x resolves output globs relative to each package directory, so that literal path would match nothing. Implemented as `"out/**"` in a package-level `apps/web/turbo.json` (`"extends": ["//"]`), which also scopes `.next/**` build outputs to the web app only — the four `@gol/*` packages use typecheck-as-build (`tsc --noEmit`) and declare no outputs, eliminating turbo "no output files found" warnings.
+- **`git init` subtask:** repo was already initialized (initial commit `6a19409` with planning artifacts) before dev began, so no re-init; baseline commit recorded in story frontmatter.
+- **Package graph is real, not just declared:** each placeholder `src/index.ts` imports from its declared internal deps (`@gol/simulation`/`@gol/persistence` import `@gol/domain`; `@gol/test-utils` imports both), and `apps/web/app/page.tsx` renders the `@gol/domain` placeholder — so `^build` ordering, the JIT source-exports convention, and `transpilePackages` are all exercised by the build from the first commit. `@gol/test-utils` sits in `apps/web` devDependencies (test-only by nature; still links the workspace and participates in the turbo graph).
+- **Mode plumbing (AC 4):** `apps/web/lib/mode.ts` exports `APP_MODE` (defaults to `'standalone'`) as the single env read-point for the Story 1.4 repository factory; `NEXT_PUBLIC_MODE` is in the `build:standalone` task `env` so turbo cache keys include it (verified: the standalone build cache-missed when the env changed context, hit when identical).
+- **Housekeeping:** added `*.tsbuildinfo` to `.gitignore` (`apps/web` typecheck uses `incremental`; the stray file was also destabilizing turbo's input hash). `next-env.d.ts` is committed per Next.js convention.
+- Scope discipline held: no ESLint/Prettier/husky/Vitest (1.2), no Zod (1.3), no repositories (1.4), no MUI (1.9), no `apps/api`, no `deploy/`.
+
 ### File List
+
+New:
+- package.json
+- package-lock.json
+- turbo.json
+- tsconfig.base.json
+- .nvmrc
+- apps/web/package.json
+- apps/web/turbo.json
+- apps/web/next.config.mjs
+- apps/web/tsconfig.json
+- apps/web/next-env.d.ts (generated by Next.js, committed per convention)
+- apps/web/app/layout.tsx
+- apps/web/app/page.tsx
+- apps/web/lib/mode.ts
+- packages/domain/package.json
+- packages/domain/tsconfig.json
+- packages/domain/src/index.ts
+- packages/simulation/package.json
+- packages/simulation/tsconfig.json
+- packages/simulation/src/index.ts
+- packages/persistence/package.json
+- packages/persistence/tsconfig.json
+- packages/persistence/src/index.ts
+- packages/test-utils/package.json
+- packages/test-utils/tsconfig.json
+- packages/test-utils/src/index.ts
+
+Modified:
+- .gitignore (added `*.tsbuildinfo`)
+- docs/implementation-artifacts/1-1-turborepo-monorepo-scaffold.md (story tracking)
+- docs/implementation-artifacts/sprint-status.yaml (status transitions)
+
+## Change Log
+
+- 2026-07-16: Story 1.1 implemented — Turborepo monorepo scaffold: root workspace config (turbo 2.x `tasks`, strict shared tsconfig, Node 24 pin), four `@gol/*` JIT packages with real internal dep graph, `apps/web` on Next.js 16.2 App Router with conditional `output: 'export'`, `NEXT_PUBLIC_MODE` plumbed through `lib/mode.ts` + turbo `env`. Verified: full turbo build, static export serves with zero backend calls, strict `tsc --noEmit` green in all 5 workspaces. Status → review.

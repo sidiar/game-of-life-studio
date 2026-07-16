@@ -1,0 +1,27 @@
+{
+  "name": "web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:standalone": "NEXT_PUBLIC_MODE=standalone next dev",
+    "build": "next build",
+    "build:standalone": "NEXT_PUBLIC_MODE=standalone next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@gol/domain": "*",
+    "@gol/persistence": "*",
+    "@gol/simulation": "*",
+    "next": "^16.2.10",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@gol/test-utils": "*",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.3"
+  }
+}
