@@ -41,8 +41,8 @@ by running the gate yourself:
   first failure. Run it before you consider a change done — the pre-commit hook does **not**
   cover the whole gate.
 - **The husky pre-commit hook is the fast subset only** (`lint-staged`: ESLint + Prettier on
-  changed files). It deliberately skips tests, e2e, and the bundle check so commits stay quick.
-  Running the heavy stages is on you until CI exists.
+  changed files, then a project-wide `npm run typecheck`). It deliberately skips tests, e2e, and
+  the bundle check so commits stay quick. Running the heavy stages is on you until CI exists.
 - **Clean-room dry run (do this at epic boundaries).** A warm local tree hides "works on my
   machine" bugs — stale `node_modules`, uncommitted files, env drift — that a clean CI checkout
   would catch. Reproduce a clean checkout and run the gate:

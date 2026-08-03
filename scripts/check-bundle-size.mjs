@@ -29,6 +29,15 @@ const html = readFileSync(HOME_HTML, 'utf8');
 // /_next/static and is part of first load.
 const assetPaths = new Set(html.match(/\/_next\/static\/[^"']+?\.js/g) ?? []);
 
+if (assetPaths.size === 0) {
+  console.error(
+    `✖ bundle-size: no JS assets found in ${HOME_HTML}. This almost certainly means the ` +
+      `markup format changed and the gate is no longer scraping real asset paths — ` +
+      `treat as a failure, not an empty (and vacuously passing) budget.`,
+  );
+  process.exit(1);
+}
+
 let rawBytes = 0;
 let gzipBytes = 0;
 const missing = [];

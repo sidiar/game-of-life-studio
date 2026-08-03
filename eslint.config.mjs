@@ -14,11 +14,21 @@ const nextScopedToWeb = next.map((config) =>
   config.files ? { ...config, files: ['apps/web/**/*.{js,jsx,mjs,ts,tsx}'] } : config,
 );
 
-// A hex/HSL colour literal, e.g. "#0a0a0a" / "#fff" / "#00d4ffcc". Raw colours
-// belong only in the token layer (themes.css — a CSS file, outside this .ts/.tsx
-// lint scope) and the palette registry (RFC-007, lands Story 1.7). AR-46 / NFR-8.1:
-// keeping components token-only is what makes the Epic 6 second theme a one-file change.
-const HEX_COLOUR_SELECTOR = 'Literal[value=/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]';
+// A hex/HSL colour literal, e.g. "#0a0a0a" / "#fff" / "#00d4ffcc", also inside a
+// template literal (Emotion's `css\`color: #fff\`` pattern), plus rgb()/rgba()/
+// hsl()/hsla() functional notation. Raw colours belong only in the token layer
+// (themes.css — a CSS file, outside this .ts/.tsx lint scope) and the palette
+// registry (RFC-007, lands Story 1.7). AR-46 / NFR-8.1: keeping components
+// token-only is what makes the Epic 6 second theme a one-file change.
+// Named CSS colours ("red") are deliberately NOT matched — too high a
+// false-positive risk against unrelated strings; stays with the 1.7 whitelist work.
+const HEX_PATTERN = '#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})';
+const FUNCTIONAL_COLOUR_PATTERN = '(rgb|rgba|hsl|hsla)\\([^)]*\\)';
+const COLOUR_SELECTOR_GROUP = [
+  `Literal[value=/^${HEX_PATTERN}$/]`,
+  `Literal[value=/^${FUNCTIONAL_COLOUR_PATTERN}$/i]`,
+  `TemplateElement[value.raw=/${HEX_PATTERN}|${FUNCTIONAL_COLOUR_PATTERN}/i]`,
+].join(', ');
 
 export default tseslint.config(
   {
@@ -55,13 +65,16 @@ export default tseslint.config(
 
   // AR-46: no raw colour literals in component code. The palette registry file
   // (Story 1.7) must be added to this block's `ignores` when it lands — TODO(1.7).
+  // Test/spec/e2e files are exempt (mirrors the import-boundary block below) —
+  // a test asserting a literal colour value is not a component-styling violation.
   {
     files: ['apps/web/**/*.{ts,tsx}'],
+    ignores: ['apps/web/**/*.test.{ts,tsx}', 'apps/web/**/*.spec.{ts,tsx}', 'apps/web/e2e/**'],
     rules: {
       'no-restricted-syntax': [
         'error',
         {
-          selector: HEX_COLOUR_SELECTOR,
+          selector: COLOUR_SELECTOR_GROUP,
           message:
             'Raw hex/colour literals are banned in components (AR-46 / NFR-8.1). ' +
             'Use a --gol-* token (themes.css) or a palette-registry token (RFC-007).',

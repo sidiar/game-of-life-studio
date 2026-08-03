@@ -22,12 +22,21 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only cancel in-flight PR runs. Cancelling an in-flight `main` push would
+  # silently mask an unfinished run on the only branch that matters — there's
+  # no PR flow yet, so every push IS main.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Explicit least-privilege default; jobs here only read the repo and upload
+# artifacts, never write to it.
+permissions:
+  contents: read
 
 jobs:
   # PR gates (RFC-008): typecheck, lint, unit/integration + coverage, build.
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -71,6 +80,7 @@ jobs:
   e2e:
     needs: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -78,6 +88,18 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+
+      # Turborepo local cache keyed by lockfile + task-relevant source. Without
+      # this the webServer's `build:standalone` rebuilds cold every run instead
+      # of hitting the cache the `quality` job just warmed.
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            turbo-${{ runner.os }}-
 
       - run: npm ci
 
@@ -90,6 +112,7 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
       - name: E2E + axe (Chromium/Firefox/WebKit/tablet)

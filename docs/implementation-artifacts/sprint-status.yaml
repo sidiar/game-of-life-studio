@@ -45,7 +45,7 @@ development_status:
   # Epic 1: Project Foundation & Battle Gallery
   epic-1: in-progress
   1-1-turborepo-monorepo-scaffold: done
-  1-2-ci-pipeline-quality-gates: review
+  1-2-ci-pipeline-quality-gates: done
   1-3-domain-entities-zod-schemas: backlog
   1-4-repository-interfaces-localstorage-implementations: backlog
   1-5-default-workspace-seeding: backlog

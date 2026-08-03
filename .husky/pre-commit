@@ -2,5 +2,9 @@
 # then a project-wide typecheck (Turborepo-cached, so ~instant on a warm cache).
 # The heavy stages (tests, e2e, bundle budget) run via `npm run ci`, not here —
 # keeping commits quick. See README "Local validation (no remote)".
+#
+# set -e: without it, a failing lint-staged still lets the hook exit 0 off
+# npm run typecheck's status, silently letting a bad commit through.
+set -e
 npx lint-staged
 npm run typecheck
