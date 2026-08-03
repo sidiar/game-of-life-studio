@@ -16,10 +16,10 @@ describe('HomePage', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Battle Gallery coming soon.')).toBeInTheDocument();
 
-    // The '@gol/domain' text is derived from the real OrganismSchema export
-    // (Story 1.3) — its presence proves the workspace package resolves to its
-    // TS source under Vitest.
-    expect(container.textContent).toContain('wired to @gol/domain');
+    // The field count is read off the real OrganismSchema (Story 1.3), so matching a
+    // number here proves the workspace package resolved to its TS source under Vitest.
+    // Asserting only the literal text would pass even if the import were dead.
+    expect(container.textContent).toMatch(/wired to @gol\/domain \(\d+ organism fields\)/);
   });
 
   it('has no axe accessibility violations', async () => {

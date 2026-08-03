@@ -14,6 +14,12 @@ const NumericCondition = z
   })
   .refine((c) => (c.operator === 'range') === Array.isArray(c.pattern), {
     message: '`range` requires a [min,max] tuple; other operators require a scalar',
+  })
+  // An inverted tuple is satisfiable by no value at all, so the rule never fires and the
+  // author gets no signal — the engine just evaluates a dead condition on every cell, every
+  // cycle. Cheap to reject here; undetectable once it reaches the grid.
+  .refine((c) => !Array.isArray(c.pattern) || c.pattern[0] <= c.pattern[1], {
+    message: 'a `range` pattern must be [min,max] with min <= max',
   });
 
 const CellStateCondition = z.object({
@@ -27,8 +33,9 @@ const OrganismTypeCondition = z.object({
   property: z.literal('organismType'),
   operator: z.literal('eq'),
   // Target organism's stable LIBRARY ID (Decision E) — never a numeric ref; compiled to an
-  // OrganismRef at simulation start (RFC-004 §3.5).
-  pattern: z.string(),
+  // OrganismRef at simulation start (RFC-004 §3.5). Non-empty: an empty id matches no
+  // library entry, so the condition could never be satisfied.
+  pattern: z.string().min(1),
 });
 
 export const ConditionSchema = z.discriminatedUnion('property', [
@@ -45,9 +52,11 @@ const SurvivalPayloadSchema = z.object({
 // Generic Rule shape (RFC-004 §1.1 `Rule<Payload>`) composed with the GoL condition union +
 // payload. `id`/`contentHash` are validated as opaque strings only — generation happens where
 // organisms are authored (Epic 4) or the engine needs a cache key (Epic 3), not here.
+// Both are non-empty: the Decision E.4 evaluator cache is keyed on contentHash, so an empty
+// hash would collide across every rule in the workspace and return the wrong compiled closure.
 export const SurvivalRuleSchema = z.object({
-  id: z.string(),
-  contentHash: z.string(),
+  id: z.string().min(1),
+  contentHash: z.string().min(1),
   conditions: z.array(ConditionSchema).min(1),
   payload: SurvivalPayloadSchema,
 });

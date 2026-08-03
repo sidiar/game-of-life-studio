@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConditionSchema, SurvivalRuleSchema } from './survivalRuleSchema';
+import { ConditionSchema, SurvivalRuleSchema, SurvivalRulesSchema } from './survivalRuleSchema';
 
 const validPayload = {
   summary: 'Born on an empty cell with exactly 3 neighbors',
@@ -46,6 +46,40 @@ describe('ConditionSchema', () => {
       pattern: [2, 3],
     });
     expect(result.success).toBe(true);
+  });
+
+  // AC2 requires all six operands; eq/gte/range are covered above.
+  it.each(['gt', 'lt', 'lte'])('accepts the `%s` scalar operator', (operator) => {
+    const result = ConditionSchema.safeParse({ property: 'age', operator, pattern: 4 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a degenerate single-value range', () => {
+    const result = ConditionSchema.safeParse({
+      property: 'neighborCount',
+      operator: 'range',
+      pattern: [3, 3],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  // An inverted tuple is satisfiable by no value, so the rule silently never fires.
+  it('rejects a range whose min exceeds its max', () => {
+    const result = ConditionSchema.safeParse({
+      property: 'age',
+      operator: 'range',
+      pattern: [3, 2],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty organismType pattern', () => {
+    const result = ConditionSchema.safeParse({
+      property: 'organismType',
+      operator: 'eq',
+      pattern: '',
+    });
+    expect(result.success).toBe(false);
   });
 
   it('rejects an age literal above 65534', () => {
@@ -118,5 +152,64 @@ describe('SurvivalRuleSchema', () => {
       payload: validPayload,
     });
     expect(result.success).toBe(false);
+  });
+
+  // The Decision E.4 evaluator cache is keyed on contentHash — an empty one collides across
+  // every rule in the workspace and returns the wrong compiled closure.
+  it.each(['id', 'contentHash'])('rejects an empty %s', (field) => {
+    const result = SurvivalRuleSchema.safeParse({
+      id: 'test-rule-1',
+      contentHash: 'test-hash-1',
+      [field]: '',
+      conditions: [{ property: 'cellState', operator: 'eq', pattern: 'empty' }],
+      payload: validPayload,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a payload summary over 120 characters', () => {
+    const result = SurvivalRuleSchema.safeParse({
+      id: 'test-rule-1',
+      contentHash: 'test-hash-1',
+      conditions: [{ property: 'cellState', operator: 'eq', pattern: 'empty' }],
+      payload: { summary: 'x'.repeat(121), action: 'born' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an unknown payload action', () => {
+    const result = SurvivalRuleSchema.safeParse({
+      id: 'test-rule-1',
+      contentHash: 'test-hash-1',
+      conditions: [{ property: 'cellState', operator: 'eq', pattern: 'empty' }],
+      payload: { summary: 'Reproduces', action: 'multiply' },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('SurvivalRulesSchema', () => {
+  const validRule = {
+    id: 'test-rule-1',
+    contentHash: 'test-hash-1',
+    conditions: [{ property: 'cellState', operator: 'eq', pattern: 'empty' }],
+    payload: validPayload,
+  };
+
+  it('accepts an array of valid rules', () => {
+    expect(
+      SurvivalRulesSchema.safeParse([validRule, { ...validRule, id: 'test-rule-2' }]).success,
+    ).toBe(true);
+  });
+
+  it('accepts an empty rule set (an organism mid-authoring, Story 4.10)', () => {
+    expect(SurvivalRulesSchema.safeParse([]).success).toBe(true);
+  });
+
+  it('rejects an array containing one invalid rule', () => {
+    const result = SurvivalRulesSchema.safeParse([validRule, { ...validRule, contentHash: '' }]);
+    expect(result.success).toBe(false);
+    const paths = result.success ? [] : result.error.issues.map((i) => i.path.join('.'));
+    expect(paths).toContain('1.contentHash');
   });
 });
