@@ -9,6 +9,12 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# Test / e2e artefacts (Story 1.2)
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
 # Environment files (never commit secrets)
 .env
 .env.*

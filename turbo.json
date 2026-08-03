@@ -22,8 +22,19 @@
       "cache": false,
       "persistent": true
     },
-    "test": {
-      "dependsOn": ["^build"]
+    // tsc --noEmit per workspace. No ^build: @gol/* export TS source directly
+    // (just-in-time packages), so nothing needs building before a typecheck.
+    "typecheck": {},
+    // Vitest reads workspace source directly — no ^build dependency (repoints the
+    // Story 1.1 test task, which rode ^build and ran zero real tests).
+    "test": {},
+    "test:coverage": {
+      "outputs": ["coverage/**"]
+    },
+    // e2e builds+serves the export itself and depends on browser binaries and a
+    // free port — environment-specific, so never cached.
+    "e2e": {
+      "cache": false
     }
   }
 }

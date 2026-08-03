@@ -1,0 +1,104 @@
+# Quality gate for Game of Life Studio (AR-3 / RFC-008 Decision 9).
+#
+# NOTE: this repository is local-only — there is NO GitHub remote yet, so this
+# workflow has never executed on GitHub Actions. It is authored and validated by
+# running its stages locally via `npm run ci`. Keep the stage order here in
+# LOCKSTEP with the root `ci` script (package.json): if they drift, a local-green
+# tree can still fail on the first real push.
+#
+# Stage order (both here and in `npm run ci`):
+#   typecheck -> lint -> format:check -> test:coverage -> build:standalone -> bundle:check -> e2e (+axe)
+#
+# Deployment is intentionally NOT part of this workflow: there is no remote/host
+# yet ($0 static deploy lands when one exists).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # PR gates (RFC-008): typecheck, lint, unit/integration + coverage, build.
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Turborepo local cache keyed by lockfile + task-relevant source.
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            turbo-${{ runner.os }}-
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Unit/component tests + coverage
+        run: npm run test:coverage
+
+      - name: Build (static export)
+        run: npm run build:standalone
+
+      - name: Bundle-size budget
+        run: npm run bundle:check
+
+  # E2E + a11y (Playwright, 3 browsers + tablet, axe on key screens). Runs after
+  # the cheaper gates pass.
+  e2e:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Cache the browser binaries; reinstall (with OS deps) only on a cache miss.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: E2E + axe (Chromium/Firefox/WebKit/tablet)
+        run: npm run e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

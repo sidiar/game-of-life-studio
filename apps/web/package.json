@@ -7,7 +7,12 @@
     "dev:standalone": "NEXT_PUBLIC_MODE=standalone next dev",
     "build": "next build",
     "build:standalone": "NEXT_PUBLIC_MODE=standalone next build",
-    "start": "npx --yes serve out"
+    "start": "npx --yes serve out",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "e2e": "playwright test",
+    "analyze": "ANALYZE=true NEXT_PUBLIC_MODE=standalone next build"
   },
   "dependencies": {
     "@gol/domain": "*",
@@ -18,10 +23,20 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@gol/test-utils": "*",
+    "@next/bundle-analyzer": "^16.2.12",
+    "@playwright/test": "^1.62.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.9.3"
+    "@vitejs/plugin-react": "^6.0.5",
+    "eslint-config-next": "^16.2.12",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.3",
+    "vitest-axe": "^0.1.0"
   }
 }

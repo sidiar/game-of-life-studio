@@ -1,0 +1,6 @@
+# Fast pre-commit gate only (RFC-008 Decision 9): format + lint changed files,
+# then a project-wide typecheck (Turborepo-cached, so ~instant on a warm cache).
+# The heavy stages (tests, e2e, bundle budget) run via `npm run ci`, not here —
+# keeping commits quick. See README "Local validation (no remote)".
+npx lint-staged
+npm run typecheck

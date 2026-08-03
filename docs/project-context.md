@@ -39,9 +39,10 @@ are the architecture's floor; confirm the current stable at install time.
 | Tech | Purpose | Lands in |
 |---|---|---|
 | Zod | shared schemas | Story 1.3 |
-| Vitest + React Testing Library | unit / component | Story 1.2 |
 | MUI v6 + Emotion | all UI chrome | Epic 2 |
-| Playwright · fast-check · axe-core | e2e · property · a11y | RFC-008 |
+
+The test/lint toolchain (Vitest + RTL, Playwright, fast-check, axe-core, ESLint 9, Prettier)
+is **installed** as of Story 1.2 — see Testing / Code Quality rules below.
 
 **`build` means `tsc --noEmit`.** The `@gol/*` packages are just-in-time: they export
 TS source directly (`"exports": "./src/index.ts"`) and `apps/web` compiles them via
@@ -133,13 +134,13 @@ build, not latest. Do not bump versions opportunistically.
 
 ### Testing Rules
 
-**Current state:** no test runner is installed. Vitest lands in Story 1.2; the coverage
-gate flips on in Story 3.7.
+**Current state:** Vitest (+ v8 coverage), RTL, and Playwright are installed (Story 1.2).
+The coverage gate flips on in **Story 3.7** — the v8 provider and per-package configs exist,
+but no ≥90% threshold is enforced yet and `passWithNoTests: true` keeps empty packages green.
 
-- ⚠️ `npm test` today runs `turbo run test`, which reports **"4 successful" while executing
-  zero tests** — no workspace defines a `test` script, so they resolve to `<NONEXISTENT>`
-  and are skipped. A green `npm test` is **not** evidence that tests pass until Story 1.2.
-  Never cite it as such.
+- `npm test` runs real Vitest (`turbo run test`). Empty packages pass via `passWithNoTests`;
+  `apps/web` carries the wiring-proof home-page test. A green `npm test` now means the runner
+  actually executed — the pre-1.2 "vacuously green" caveat no longer applies.
 
 **Coverage is a floor on the core, not a target everywhere**
 
@@ -181,9 +182,10 @@ gate flips on in Story 3.7.
 
 ### Code Quality & Style Rules
 
-**Tooling state:** ESLint, Prettier, and husky/lint-staged are **not installed yet** — they
-land in Story 1.2 (CI Pipeline & Quality Gates). Until then there is no automated formatter;
-match surrounding style by hand.
+**Tooling state:** ESLint 9 (flat config), Prettier 3, and husky + lint-staged are installed
+(Story 1.2). `npm run lint` / `npm run format` run repo-wide; the pre-commit hook formats and
+lints staged files. The **AR-46 no-raw-hex rule** and a `@gol/test-utils` import-boundary rule
+are active on `apps/web`. ESLint is pinned to **v9** — v10 breaks `eslint-config-next@16`.
 
 **Comments explain WHY, not what** — the established convention across the scaffold.
 
@@ -214,9 +216,11 @@ match surrounding style by hand.
 
 ### Development Workflow Rules
 
-**Repo state:** local-only, no remote, single `main` branch. No PR flow exists. GitHub Actions
-CI lands in Story 1.2. (Branch naming is deliberately unspecified — add it when a remote exists,
-rather than inventing a convention now.)
+**Repo state:** local-only, no remote, single `main` branch. No PR flow exists. The GitHub
+Actions workflow is authored (`.github/workflows/ci.yml`, Story 1.2) but **cannot run until a
+remote exists**; **`npm run ci`** is the local mirror of the gate (keep the two in lockstep).
+Run the full gate before calling a change done — the pre-commit hook is the fast subset only.
+(Branch naming is deliberately unspecified — add it when a remote exists.)
 
 **🛑 Commit gate — never commit or stage without Sidiar's explicit go-ahead.**
 
@@ -241,7 +245,8 @@ rather than inventing a convention now.)
 
 - "Tested" means the story's own verification checklist actually ran — not that typecheck passed.
   Report failures with their output; never state a step ran when it didn't.
-- Until Story 1.2, `npm test` proves nothing (see Testing Rules).
+- `npm run ci` runs the full local gate (typecheck → lint → coverage → build → bundle → e2e);
+  it is the closest local proxy for CI until a remote exists. Report its actual result.
 
 ### Critical Don't-Miss Rules
 

@@ -1,0 +1,18 @@
+# Generated / build artefacts — never formatted.
+node_modules
+.next
+out
+.turbo
+coverage
+playwright-report
+test-results
+apps/web/next-env.d.ts
+package-lock.json
+
+# Vendored tooling and hand-authored specs — not ours to reformat.
+# _bmad and .claude are the installed BMad/Claude skill libraries; docs holds
+# planning/implementation markdown where Prettier would mangle spec formatting.
+_bmad
+.claude
+docs
+CLAUDE.md

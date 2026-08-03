@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
   title: 'Game of Life Studio',
-  description: 'Multi-organism Game of Life battle simulator'
+  description: 'Multi-organism Game of Life battle simulator',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
