@@ -44,7 +44,20 @@
       "Bash(rm -rf .next)",
       "Bash(rm -f tsconfig.tsbuildinfo)",
       "Bash(rm -rf /tmp/gol-clean)",
-      "Bash(mkdir -p /tmp/gol-clean)"
+      "Bash(mkdir -p /tmp/gol-clean)",
+      "Bash(gh auth *)",
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com)",
+      "Bash(echo \"helper: $?\")",
+      "Read(//Users/sidiar/**)",
+      "Bash(command -v brew)",
+      "Bash(git push *)",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(git ls-tree *)",
+      "Bash(node -e ' *)",
+      "Bash(node /private/tmp/claude-501/-Users-sidiar-projects-NewJob-GameOfLife/958b086d-90ad-4774-9ca4-cc490c143aca/scratchpad/zodcheck.mjs)",
+      "Bash(cp /private/tmp/claude-501/-Users-sidiar-projects-NewJob-GameOfLife/958b086d-90ad-4774-9ca4-cc490c143aca/scratchpad/zodcheck.mjs /Users/sidiar/projects/NewJob/GameOfLife/packages/domain/zodcheck.mjs)",
+      "Bash(node zodcheck.mjs)",
+      "Bash(rm /Users/sidiar/projects/NewJob/GameOfLife/packages/domain/zodcheck.mjs)"
     ],
     "deny": [],
     "ask": []
