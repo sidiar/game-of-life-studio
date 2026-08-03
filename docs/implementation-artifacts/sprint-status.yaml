@@ -46,7 +46,7 @@ development_status:
   epic-1: in-progress
   1-1-turborepo-monorepo-scaffold: done
   1-2-ci-pipeline-quality-gates: done
-  1-3-domain-entities-zod-schemas: backlog
+  1-3-domain-entities-zod-schemas: review
   1-4-repository-interfaces-localstorage-implementations: backlog
   1-5-default-workspace-seeding: backlog
   1-6-test-utilities-dev-fixture-workspace: backlog

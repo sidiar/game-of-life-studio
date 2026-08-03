@@ -16,8 +16,9 @@ describe('HomePage', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Battle Gallery coming soon.')).toBeInTheDocument();
 
-    // The '@gol/domain' text is GOL_DOMAIN — its presence proves the workspace
-    // package resolves to its TS source under Vitest.
+    // The '@gol/domain' text is derived from the real OrganismSchema export
+    // (Story 1.3) — its presence proves the workspace package resolves to its
+    // TS source under Vitest.
     expect(container.textContent).toContain('wired to @gol/domain');
   });
 

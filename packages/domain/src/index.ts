@@ -1,2 +1,8 @@
-// Placeholder export — domain entities and Zod schemas land in Story 1.3.
-export const GOL_DOMAIN = '@gol/domain' as const;
+export { ConditionSchema, SurvivalRuleSchema, SurvivalRulesSchema } from './survivalRuleSchema';
+export type { Condition, SurvivalRule, SurvivalRules } from './survivalRuleSchema';
+
+export { OrganismSchema, EditableGridPresetSchema } from './organismSchema';
+export type { Organism, EditableGridPreset } from './organismSchema';
+
+export { BattleSchema } from './battleSchema';
+export type { Battle } from './battleSchema';
