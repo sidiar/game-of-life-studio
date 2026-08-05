@@ -4,7 +4,7 @@ baseline_commit: 38ad91c
 
 # Story 1.5: Default Workspace Seeding
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -263,3 +263,4 @@ Claude Sonnet 5 (claude-sonnet-5), via the bmad-dev-story skill.
 
 - 2026-08-05: Story created (context engine run against epics 1.5, architecture M1/M9/M10 + Decisions F/I, RFC-001 §3, RFC-004 §2.4, RFC-006 Decisions 5/7, RFC-007 Decision 2, PRD FR-1.5/FR-8.4, and the shipped Story 1.3/1.4 code). Status → ready-for-dev.
 - 2026-08-05: Implemented all 7 tasks (domain constant, ensureDefaultOrganism, isFreshWorkspace, seedDefaultWorkspace, page-boundary wiring, full test suite, verification). `npm run ci` green end-to-end. Status → review.
+- 2026-08-05: Code review — 1 correctness defect, 1 missing story deliverable, 1 deferred. `useWorkspaceSeed` never left `'seeding'` under StrictMode: the `hasRun` ref and the per-invocation `let cancelled` closure flag have different lifetimes and defeated each other, so the setup that owned the in-flight promise had already been cancelled by its own cleanup and the resolved `setStatus('ready')` was discarded — `npm run dev` sat on "workspace: seeding" forever (App Router enables StrictMode by default). Data was never at risk; `status` is the signal Story 1.6 extends. Fixed by moving liveness to a `mounted` ref re-armed before the `hasRun` check, with the cleanup now returned unconditionally. No gate rendered strictly (unit tests mount bare, e2e runs the production export), so `npm run ci` was green while dev was broken — added a `<StrictMode>` regression test, verified non-vacuous against the pre-patch hook. Forced decision 2's required `deferred-work.md` entry was missing despite the Completion Notes claiming no deviations, and the `contentHash` canonicalization was unnamed; the scheme is now pinned in `defaultWorkspace.ts` (verified to reproduce both literals byte-for-byte) with a deferred-work entry naming Epic 4 / Story 3.4 as owners. 1 item deferred (the seed error object is discarded — Story 1.10 / 5.11). 1 new test (176 total, was 175). Verified: `npm run ci` exit 0 (typecheck 5/5, lint, format, test, build:standalone, bundle 246.7KB/300KB unchanged, e2e 12/12). Status → done.
