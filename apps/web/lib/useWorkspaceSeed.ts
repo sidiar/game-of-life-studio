@@ -18,6 +18,19 @@ export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
  * Story 1.6 layers the AR-45 dev-only fixture seed on top of this exact call site (dev build
  * seeds mocks; production seeds DEFAULT_WORKSPACE only) — keeping the call in the hook, not
  * inline in JSX, is what gives that story somewhere to extend.
+ *
+ * The dev-fixture branch below reads `isFreshWorkspace()` BEFORE `seedDefaultWorkspace()` runs
+ * (Story 1.6 Task 4): the default seed's organism write stamps `gol:schema`, so reading freshness
+ * afterwards would always see `false` and the fixtures would never seed. `process.env.NODE_ENV`
+ * is read INSIDE the effect, not at module scope, so `vi.stubEnv` in a test can still take effect
+ * before this reads it — a module-scope `const IS_DEV = …` would be evaluated at import time and
+ * make the dev-path test pass vacuously. The comparison is `=== 'development'`, not
+ * `!== 'production'`: Vitest runs with `NODE_ENV === 'test'`, and the `!==` form would seed mock
+ * data into every apps/web unit test. `@gol/test-utils` is a devDependency — the import MUST stay
+ * dynamic (`await import(...)`) because the Story 1.2 ESLint import-boundary rule bans a static
+ * import of it from non-test app code, and because Next's build-time NODE_ENV inlining is what
+ * makes this whole branch — including the import — dead-code-eliminated from the production
+ * bundle (AC3's "mock data is unreachable in production").
  */
 export function useWorkspaceSeed(repos: AppRepositories): { status: WorkspaceSeedStatus } {
   const [status, setStatus] = useState<WorkspaceSeedStatus>('seeding');
@@ -36,7 +49,20 @@ export function useWorkspaceSeed(repos: AppRepositories): { status: WorkspaceSee
 
     if (!hasRun.current) {
       hasRun.current = true;
-      seedDefaultWorkspace(repos)
+      // Read BEFORE seeding — seedDefaultWorkspace()'s organism write stamps gol:schema, so
+      // isFreshWorkspace() would already be false by the time it resolves (see the doc comment
+      // above; this is the exact silent-failure trap Story 1.6 Task 4 calls out).
+      repos
+        .isFreshWorkspace()
+        .then((fresh) => seedDefaultWorkspace(repos).then(() => fresh))
+        .then((fresh) => {
+          if (fresh && process.env.NODE_ENV === 'development') {
+            // Dynamic import only — see the doc comment above for why a static import is banned
+            // here and why this is what makes the branch dead-code-eliminate from production.
+            return import('@gol/test-utils').then(({ seedDevFixtures }) => seedDevFixtures(repos));
+          }
+          return undefined;
+        })
         .then(() => {
           if (mounted.current) setStatus('ready');
         })

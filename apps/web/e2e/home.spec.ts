@@ -32,7 +32,12 @@ test.describe('home route', () => {
 
   // Story 1.5 AC1: the only place "when the app loads" is verified end-to-end through a real
   // static export — a fresh Playwright context has no localStorage, mirroring a first run.
-  test('seeds gol:organisms with conways-classic on first load, no duplicate on reload', async ({
+  //
+  // Story 1.6 AC3, production half: this runs against the PRODUCTION static export
+  // (build:standalone, served from out/), so it is the one gate that proves the AR-45 dev
+  // fixtures are truly unreachable end-to-end — not just absent from a passing unit test. There is
+  // deliberately no e2e for the dev-seeded path; this config never serves `next dev`.
+  test('seeds gol:organisms with conways-classic on first load, no duplicate on reload, and no AR-45 mock fixtures', async ({
     page,
   }) => {
     await page.goto('/');
@@ -43,6 +48,10 @@ test.describe('home route', () => {
       STORAGE_KEYS.organisms,
     );
     expect(afterFirstLoad).toHaveProperty(CONWAYS_CLASSIC_ID);
+    expect(Object.keys(afterFirstLoad)).toEqual([CONWAYS_CLASSIC_ID]);
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEYS.battles),
+    ).toBeNull();
 
     await page.reload();
     await expect(page.getByText('workspace: ready')).toBeVisible();
@@ -52,5 +61,8 @@ test.describe('home route', () => {
       STORAGE_KEYS.organisms,
     );
     expect(Object.keys(afterReload)).toEqual([CONWAYS_CLASSIC_ID]);
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEYS.battles),
+    ).toBeNull();
   });
 });

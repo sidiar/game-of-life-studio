@@ -1,13 +1,21 @@
-// Placeholder export — grid builders, fixed seeds, canonical organisms, and the in-memory fake
-// repositories implementing the Story 1.4 interfaces all land in Story 1.6.
-//
-// Both value imports are Story 1.1's workspace-graph proof: the build fails if either declared
-// workspace edge stops resolving to that package's TS source. Story 1.3 moved the domain import
-// off the removed GOL_DOMAIN placeholder onto OrganismSchema; Story 1.4 moved the persistence one
-// off its GOL_PERSISTENCE placeholder onto STORAGE_KEYS. Repointed rather than dropped — deleting
-// the import would leave the dependency declared in package.json but never compiled.
-import { OrganismSchema } from '@gol/domain';
-import { STORAGE_KEYS } from '@gol/persistence';
+// Shared test fixtures (RFC-008 Decision 4/9): grid builders, in-memory fake repositories, the
+// AR-45 mock organisms/battles, dev-only fixture seeding, and a fixed-seed RNG. Consumed by every
+// package's tests plus apps/web's dev-only seed path (dynamic import — see useWorkspaceSeed.ts).
 
-export const GOL_TEST_UTILS = '@gol/test-utils' as const;
-export const TEST_UTILS_DEPENDS_ON = [OrganismSchema, STORAGE_KEYS] as const;
+export { emptyGrid, gridFromPattern, placePattern } from './gridBuilders';
+
+export { createFakeRepositories } from './fakeRepositories';
+export type { FakeSeed } from './fakeRepositories';
+
+export {
+  createMockBattles,
+  createMockOrganisms,
+  createMockWorkspace,
+  MOCK_BATTLE_IDS,
+  MOCK_ORGANISM_IDS,
+} from './mockWorkspace';
+
+export { seedDevFixtures } from './seedDevFixtures';
+
+export { createSeededRng, FIXED_SEED } from './seededRng';
+export type { Rng } from './seededRng';

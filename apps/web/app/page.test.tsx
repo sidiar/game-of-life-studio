@@ -1,9 +1,10 @@
 import { StrictMode } from 'react';
-import { afterEach, describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
+import { MOCK_BATTLE_IDS, MOCK_ORGANISM_IDS } from '@gol/test-utils';
 import HomePage from './page';
 
 // Wiring proof for the toolchain, not a feature test: rendering the Story 1.1
@@ -13,6 +14,7 @@ import HomePage from './page';
 describe('HomePage', () => {
   afterEach(() => {
     localStorage.clear();
+    vi.unstubAllEnvs();
   });
 
   it('renders the placeholder gallery copy wired through @gol/domain', () => {
@@ -92,5 +94,55 @@ describe('HomePage', () => {
       unknown
     >;
     expect(Object.keys(stored)).toEqual([CONWAYS_CLASSIC_ID]);
+  });
+
+  // Story 1.6 AC3, positive half: a dev build auto-seeds the AR-45 mock fixtures alongside
+  // Conway's Classic. vi.stubEnv is applied before render — reading NODE_ENV inside the effect
+  // (not at module scope) is what lets this take effect at all (Task 4 silent-failure trap).
+  it('seeds the AR-45 mock fixtures under NODE_ENV=development', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+
+    render(<HomePage />);
+
+    await waitFor(() => {
+      const battles = JSON.parse(localStorage.getItem(STORAGE_KEYS.battles) ?? '{}') as Record<
+        string,
+        unknown
+      >;
+      expect(Object.keys(battles).sort()).toEqual(
+        [MOCK_BATTLE_IDS.battleA, MOCK_BATTLE_IDS.battleB].sort(),
+      );
+    });
+
+    const organisms = JSON.parse(localStorage.getItem(STORAGE_KEYS.organisms) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(organisms).sort()).toEqual(
+      [
+        CONWAYS_CLASSIC_ID,
+        MOCK_ORGANISM_IDS.aggressiveColonizer,
+        MOCK_ORGANISM_IDS.patientDefender,
+        MOCK_ORGANISM_IDS.chaoticSpreader,
+      ].sort(),
+    );
+  });
+
+  // Story 1.6 AC3, negative half: the default NODE_ENV under Vitest is 'test', not 'development'
+  // — the `=== 'development'` guard (not `!== 'production'`) must leave gol:battles untouched and
+  // gol:organisms holding only Conway's Classic.
+  it('seeds no mock fixtures without the development stub (NODE_ENV=test)', async () => {
+    render(<HomePage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/workspace: ready/)).toBeInTheDocument();
+    });
+
+    expect(localStorage.getItem(STORAGE_KEYS.battles)).toBeNull();
+    const organisms = JSON.parse(localStorage.getItem(STORAGE_KEYS.organisms) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(organisms)).toEqual([CONWAYS_CLASSIC_ID]);
   });
 });
