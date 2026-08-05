@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { afterEach, describe, it, expect } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
@@ -68,5 +69,28 @@ describe('HomePage', () => {
       >;
       expect(Object.keys(stored)).toEqual([CONWAYS_CLASSIC_ID]);
     });
+  });
+
+  // Regression, review 2026-08-05. Nothing else in the pipeline renders strictly: these tests
+  // mount bare and the e2e runs against the production export, where React does not double-invoke
+  // effects — so `npm run ci` was fully green while `npm run dev` sat on "workspace: seeding"
+  // forever. App Router turns StrictMode on by default (reactStrictMode unset => enabled), so dev
+  // is the strict environment and this test is the only place that reproduces it.
+  it('reaches "ready" under StrictMode, and still seeds exactly once', async () => {
+    render(
+      <StrictMode>
+        <HomePage />
+      </StrictMode>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/workspace: ready/)).toBeInTheDocument();
+    });
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.organisms) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(stored)).toEqual([CONWAYS_CLASSIC_ID]);
   });
 });

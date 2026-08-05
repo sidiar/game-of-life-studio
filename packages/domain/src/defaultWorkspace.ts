@@ -24,9 +24,20 @@ export const CONWAYS_CLASSIC_ID = 'conways-classic' as const;
 
 // Frozen literal `id` / `contentHash` (forced decision 2 — see story 1.5 Dev Notes): the real
 // generator/hasher is authored where organisms are authored (Epic 4) and consumed by the
-// evaluator cache (Story 3.4); neither exists yet. Generated once via crypto.randomUUID() /
-// sha256-over-canonicalized-{conditions,payload} and pasted — regenerating either literal forks
-// rule identity across every installed workspace. Not semantic ids (RFC-004 rejects those).
+// evaluator cache (Story 3.4); neither exists yet. Generated once and pasted — regenerating
+// either literal forks rule identity across every installed workspace. Not semantic ids (RFC-004
+// rejects those).
+//
+// `id` is a one-off crypto.randomUUID(). `contentHash` is, EXACTLY (review 2026-08-05 — the
+// canonicalization was undocumented, which is what would let Epic 4's hasher silently disagree):
+//
+//   sha256hex(JSON.stringify(sortKeysDeep({ conditions, payload })))
+//
+// where sortKeysDeep rebuilds every plain object with its own keys in Array#sort order and maps
+// arrays element-wise, preserving array ORDER (rule order is priority, FR-2.6). Hashed over
+// {conditions, payload} only — never over `id`, which would make the hash self-referential.
+// Reproduce with `node -e` before changing anything here; Epic 4's hasher must match this scheme
+// or every installed workspace's rule identity forks. Tracked in deferred-work.md.
 const BORN_RULE: SurvivalRule = {
   id: '1fcc1002-5f8a-4cf0-9fab-2c0c20492d51',
   contentHash: 'd9b3d443a42e63c10526023503302a87b0676110bf7e5c146625a5237026d93d',
