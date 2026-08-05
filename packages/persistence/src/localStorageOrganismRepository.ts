@@ -1,6 +1,7 @@
 import { OrganismSchema, type Organism } from '@gol/domain';
 import type { OrganismRepository } from './repositories';
 import {
+  assertSafeCollectionId,
   CorruptDataError,
   describeIssues,
   readCollection,
@@ -14,6 +15,7 @@ import {
  */
 export class LocalStorageOrganismRepository implements OrganismRepository {
   async save(organism: Organism): Promise<void> {
+    assertSafeCollectionId(organism.id);
     const collection = readCollection(STORAGE_KEYS.organisms);
     collection[organism.id] = organism;
     writeDataKey(STORAGE_KEYS.organisms, collection);
@@ -35,16 +37,14 @@ export class LocalStorageOrganismRepository implements OrganismRepository {
 
   async list(): Promise<Organism[]> {
     const collection = readCollection(STORAGE_KEYS.organisms);
-    return Object.entries(collection).map(([id, record]) => {
+    const organisms: Organism[] = [];
+    for (const record of Object.values(collection)) {
+      // Skipped, not thrown (Review 2026-08-05): one corrupt organism must not blank the whole
+      // library. load() is still where a caller learns a specific organism is unreadable.
       const parsed = OrganismSchema.safeParse(record);
-      if (!parsed.success) {
-        throw new CorruptDataError(
-          STORAGE_KEYS.organisms,
-          `organism "${id}" — ${describeIssues(parsed.error.issues)}`,
-        );
-      }
-      return parsed.data;
-    });
+      if (parsed.success) organisms.push(parsed.data);
+    }
+    return organisms;
   }
 
   /**
@@ -64,7 +64,10 @@ export class LocalStorageOrganismRepository implements OrganismRepository {
 
   async replaceAll(organisms: Organism[]): Promise<void> {
     const collection: Record<string, Organism> = {};
-    for (const organism of organisms) collection[organism.id] = organism;
+    for (const organism of organisms) {
+      assertSafeCollectionId(organism.id);
+      collection[organism.id] = organism;
+    }
     writeDataKey(STORAGE_KEYS.organisms, collection);
   }
 }

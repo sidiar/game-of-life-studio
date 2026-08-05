@@ -98,10 +98,38 @@ describe('quota handling (AC3)', () => {
     writeDataKey(STORAGE_KEYS.battles, { 'battle-1': { name: 'Original' } });
     const before = localStorage.getItem(STORAGE_KEYS.battles);
 
+    // jsdom 30.0.1 enforces a ~5-10MB per-origin quota (undocumented exact figure, verified
+    // empirically); 6MB reliably clears it without depending on the precise ceiling.
     expect(() => writeDataKey(STORAGE_KEYS.battles, { huge: 'x'.repeat(6_000_000) })).toThrow(
       QuotaExceededError,
     );
     expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe(before);
+  });
+
+  it('does not fail the caller when only the trailing stamp write hits quota', () => {
+    // The data write (call 1) must succeed while the schema-stamp write (call 2) fails — the
+    // narrow window where a save genuinely persisted but the accompanying stamp did not.
+    const originalSetItem = Storage.prototype.setItem;
+    let calls = 0;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      calls += 1;
+      if (calls === 2) {
+        const error = new Error('mock quota failure') as Error & { name: string };
+        error.name = 'QuotaExceededError';
+        throw error;
+      }
+      originalSetItem.call(this, key, value);
+    });
+
+    expect(() => writeDataKey(STORAGE_KEYS.battles, { a: 1 })).not.toThrow();
+    // The data write went through; the stamp write failed and was swallowed rather than reported
+    // as a failed save. The next successful writeDataKey call re-attempts the stamp.
+    expect(readStoredValue(STORAGE_KEYS.battles)).toEqual({ a: 1 });
+    expect(localStorage.getItem(STORAGE_KEYS.schema)).toBeNull();
   });
 });
 

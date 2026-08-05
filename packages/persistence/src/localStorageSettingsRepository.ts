@@ -17,8 +17,11 @@ export class LocalStorageSettingsRepository implements SettingsRepository {
     const stored = readStoredValue(STORAGE_KEYS.settings);
     // A fresh install has no record at all — not an error, and not null: callers expect a usable
     // Settings (RFC-006 Decision 7). Parsing `{}` also backfills a record written by a build that
-    // predated a field, via the per-field defaults on SettingsSchema.
-    const parsed = SettingsSchema.safeParse(stored ?? {});
+    // predated a field, via the per-field defaults on SettingsSchema. An ABSENT key (undefined) is
+    // the only thing that falls back to `{}` — a PRESENT literal `null` is a value that fails to be
+    // a settings object and must fall through to the corrupt branch below, consistent with
+    // readCollection()'s explicit null handling for battles/organisms.
+    const parsed = SettingsSchema.safeParse(stored === undefined ? {} : stored);
     if (!parsed.success) {
       // Present-but-invalid is distinct from absent, consistent with the other repositories.
       // Boot does not depend on this path: the FOUC script reads the theme with its own defensive

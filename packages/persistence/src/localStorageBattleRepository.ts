@@ -44,25 +44,24 @@ export class LocalStorageBattleRepository implements BattleRepository {
 
   async list(): Promise<BattleSummary[]> {
     const collection = readCollection(STORAGE_KEYS.battles);
-    return Object.entries(collection).map(([id, record]) => {
+    const summaries: BattleSummary[] = [];
+    for (const record of Object.values(collection)) {
+      // A record too corrupt even for the lightweight projection is SKIPPED, not thrown (Review
+      // 2026-08-05): one bad battle must not blank the entire Gallery listing. load() is still the
+      // place a caller learns a specific battle is unreadable.
       const parsed = BattleSummarySchema.safeParse(record);
-      if (!parsed.success) {
-        throw new CorruptDataError(
-          STORAGE_KEYS.battles,
-          `battle "${id}" summary — ${describeIssues(parsed.error.issues)}`,
-        );
-      }
-      return parsed.data;
-    });
+      if (parsed.success) summaries.push(parsed.data);
+    }
+    return summaries;
   }
 
   async listFull(): Promise<Battle[]> {
-    const ids = Object.keys(readCollection(STORAGE_KEYS.battles));
+    const collection = readCollection(STORAGE_KEYS.battles);
     const battles: Battle[] = [];
-    for (const id of ids) {
-      const battle = await this.load(id);
-      // load() returns null only for an absent id, which cannot happen for a key we just read.
-      if (battle !== null) battles.push(battle);
+    for (const record of Object.values(collection)) {
+      // Same fault-isolation stance as list(): one corrupt battle must not fail the whole export.
+      const parsed = BattleSchema.safeParse(record);
+      if (parsed.success) battles.push(parsed.data);
     }
     return battles;
   }

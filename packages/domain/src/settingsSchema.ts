@@ -20,8 +20,11 @@ export const SettingsSchema = z.object({
   theme: z.enum(['clinical-lab', 'biotech-terminal']).default('clinical-lab'), // FR-8.6
   gridLines: z.boolean().default(true), // FR-8.7
   cellAnimation: z.boolean().default(true), // FR-8.8
-  // Applies to NEW battles only; an existing battle keeps its own gridSize (FR-8.10).
-  defaultGridSize: EditableGridPresetSchema.default({ cols: 100, rows: 60 }),
+  // Applies to NEW battles only; an existing battle keeps its own gridSize (FR-8.10). A factory,
+  // not a literal: Zod hands back the SAME object reference on every `.default()` application, so
+  // a literal here would let one consumer's in-place mutation corrupt every other defaulted
+  // Settings — including the DEFAULT_SETTINGS singleton below.
+  defaultGridSize: EditableGridPresetSchema.default(() => ({ cols: 100, rows: 60 }) as const),
   autoSave: z.boolean().default(false), // FR-8.11 — explicitly default-Disabled
   // The FR-4.2 gen/sec ladder, shared with the transport speed control (AR-34). Modelled as
   // literals rather than a numeric range: 15 gen/sec is not a selectable speed anywhere.
@@ -34,5 +37,6 @@ export type Settings = z.infer<typeof SettingsSchema>;
 
 // Derived from the schema rather than written out again — a hand-maintained copy is free to drift
 // from the .default() calls above, and the repository's absent-key fallback would then disagree
-// with what a partial record backfills to.
-export const DEFAULT_SETTINGS: Settings = SettingsSchema.parse({});
+// with what a partial record backfills to. Frozen: this is a shared module-level singleton, and an
+// accidental in-place mutation by any consumer must not corrupt every other reader of it.
+export const DEFAULT_SETTINGS: Settings = Object.freeze(SettingsSchema.parse({}));

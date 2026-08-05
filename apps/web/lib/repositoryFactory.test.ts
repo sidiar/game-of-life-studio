@@ -9,6 +9,7 @@ import { createRepositories } from './repositoryFactory';
 afterEach(() => {
   vi.doUnmock('./mode');
   vi.resetModules();
+  vi.restoreAllMocks();
 });
 
 describe('createRepositories', () => {

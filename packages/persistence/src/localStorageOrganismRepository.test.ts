@@ -80,6 +80,18 @@ describe('list', () => {
   it('returns an empty array when nothing has been stored', async () => {
     expect(await repo().list()).toEqual([]);
   });
+
+  it('skips a corrupt organism rather than failing the whole list', async () => {
+    await repo().save(makeOrganism('first'));
+    const existing = JSON.parse(localStorage.getItem(STORAGE_KEYS.organisms) ?? '{}');
+    localStorage.setItem(
+      STORAGE_KEYS.organisms,
+      JSON.stringify({ ...existing, broken: { nothing: true } }),
+    );
+
+    // One bad organism must not blank the whole library — the good one still lists.
+    expect((await repo().list()).map((o) => o.id)).toEqual(['first']);
+  });
 });
 
 describe('exists / delete', () => {
@@ -122,5 +134,18 @@ describe('replaceAll', () => {
     await repo().replaceAll([makeOrganism('first')]);
 
     expect(localStorage.getItem(STORAGE_KEYS.settings)).toBe('{"theme":"biotech-terminal"}');
+  });
+});
+
+describe('reserved id', () => {
+  // OrganismSchema.id is a bare non-empty string (deliberately, for well-known ids like
+  // 'conways-classic'), unlike Battle.id's z.uuid(). '__proto__' would otherwise silently vanish
+  // from the plain-object collection instead of being stored.
+  it('rejects "__proto__" on save rather than silently losing the record', async () => {
+    await expect(repo().save(makeOrganism('__proto__'))).rejects.toThrow();
+  });
+
+  it('rejects "__proto__" within replaceAll', async () => {
+    await expect(repo().replaceAll([makeOrganism('__proto__')])).rejects.toThrow();
   });
 });

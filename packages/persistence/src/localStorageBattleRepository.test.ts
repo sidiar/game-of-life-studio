@@ -122,10 +122,18 @@ describe('list (AC1 — lightweight projection)', () => {
     await expect(repo().load(ID_A)).rejects.toThrow(CorruptDataError);
   });
 
-  it('throws CorruptDataError when a record is unusable even as a summary', async () => {
-    localStorage.setItem(STORAGE_KEYS.battles, JSON.stringify({ [ID_A]: { nothing: true } }));
+  it('skips a record unusable even as a summary rather than failing the whole list', async () => {
+    await repo().save(makeBattle(ID_A));
+    const existing = JSON.parse(localStorage.getItem(STORAGE_KEYS.battles) ?? '{}');
+    localStorage.setItem(
+      STORAGE_KEYS.battles,
+      JSON.stringify({ ...existing, [ID_B]: { nothing: true } }),
+    );
 
-    await expect(repo().list()).rejects.toThrow(CorruptDataError);
+    const summaries = await repo().list();
+
+    // One bad battle must not blank the whole Gallery — the good one still lists.
+    expect(summaries.map((s) => s.id)).toEqual([ID_A]);
   });
 });
 
@@ -137,6 +145,19 @@ describe('listFull', () => {
 
     expect(full.gridState).toHaveLength(PRESET.rows);
     expect(full.createdAt).toBeInstanceOf(Date);
+  });
+
+  it('skips a corrupt battle rather than failing the whole export', async () => {
+    await repo().save(makeBattle(ID_A));
+    const existing = JSON.parse(localStorage.getItem(STORAGE_KEYS.battles) ?? '{}');
+    localStorage.setItem(
+      STORAGE_KEYS.battles,
+      JSON.stringify({ ...existing, [ID_B]: { nothing: true } }),
+    );
+
+    const battles = await repo().listFull();
+
+    expect(battles.map((b) => b.id)).toEqual([ID_A]);
   });
 });
 

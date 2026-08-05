@@ -22,6 +22,7 @@ export interface BattleRepository {
   /** Fully parsed battles — the WorkspaceSerializer export path (Story 5.5). */
   listFull(): Promise<Battle[]>;
   delete(id: string): Promise<void>;
+  /** Presence only — a present-but-corrupt record still reports `true` even though `load()` throws. */
   exists(id: string): Promise<boolean>;
   /** Bulk replace of the whole collection — the atomic import path (Story 5.8). */
   replaceAll(battles: Battle[]): Promise<void>;
@@ -39,6 +40,7 @@ export interface OrganismRepository {
    * gate does not reach it.
    */
   delete(id: string): Promise<void>;
+  /** Presence only — a present-but-corrupt record still reports `true` even though `load()` throws. */
   exists(id: string): Promise<boolean>;
   replaceAll(organisms: Organism[]): Promise<void>;
 }

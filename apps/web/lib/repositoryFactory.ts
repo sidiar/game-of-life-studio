@@ -1,6 +1,6 @@
 import { createLocalStorageRepositories, type AppRepositories } from '@gol/persistence';
 
-import { APP_MODE } from './mode';
+import { APP_MODE } from '@/lib/mode';
 
 /**
  * Build-time mode selection (AR-2). This lives in apps/web rather than in @gol/persistence

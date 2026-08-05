@@ -33,6 +33,14 @@ describe('load', () => {
 
     await expect(repo().load()).rejects.toThrow(CorruptDataError);
   });
+
+  it('treats a literal null at rest as corrupt, not as an absent key', async () => {
+    // Consistent with readCollection()'s explicit null handling for battles/organisms — a PRESENT
+    // null is a value that fails to be a settings object, not the same as no key at all.
+    localStorage.setItem(STORAGE_KEYS.settings, 'null');
+
+    await expect(repo().load()).rejects.toThrow(CorruptDataError);
+  });
 });
 
 describe('save', () => {

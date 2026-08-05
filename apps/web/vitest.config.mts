@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
@@ -6,6 +7,13 @@ import react from '@vitejs/plugin-react';
 // (Next's own SWC transform doesn't apply under Vitest).
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // Mirrors tsconfig.json's "@/*": ["./*"]. Next's webpack/SWC build resolves that alias on its
+    // own; raw Vite (what Vitest runs on) has no idea tsconfig `paths` exist unless told directly.
+    alias: {
+      '@': fileURLToPath(new URL('.', import.meta.url)),
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],

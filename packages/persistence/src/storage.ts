@@ -123,7 +123,14 @@ function stampSchemaVersion(): void {
 /** The write path for workspace DATA (battles, organisms): write, then stamp (AC2). */
 export function writeDataKey(key: StorageKey, value: unknown): void {
   writeKey(key, value);
-  stampSchemaVersion();
+  try {
+    stampSchemaVersion();
+  } catch {
+    // The data write above already succeeded — that IS what this function promises its caller.
+    // A failure here is exactly the "data-then-stamp, stamp fails" order from the comment above,
+    // which is fully recoverable: the next successful writeDataKey call re-attempts the stamp.
+    // Letting it propagate would turn a genuinely successful save into a reported failure.
+  }
 }
 
 /**
@@ -139,4 +146,20 @@ export function writeSettingsKey(key: StorageKey, value: unknown): void {
 /** Clears workspace data only. Settings and the format stamp are unreachable from here (AC5). */
 export function removeDataKeys(): void {
   for (const key of DATA_KEYS) localStorage.removeItem(key);
+}
+
+/**
+ * Rejects the one id an id-keyed plain-object collection cannot safely hold. `collection[id] =
+ * record` for `id === '__proto__'` does not create an own property — it rebinds the object's
+ * internal prototype instead, so the record silently vanishes from `Object.entries`/`list()` and
+ * is never serialised by the next `JSON.stringify`. `BattleSchema.id` is a `z.uuid()` so this
+ * cannot reach the battle collection; `OrganismSchema.id` is a bare non-empty string (deliberately,
+ * to allow well-known ids like 'conways-classic'), so organism ids need the explicit guard.
+ */
+export function assertSafeCollectionId(id: string): void {
+  if (id === '__proto__') {
+    throw new Error(
+      `"${id}" cannot be used as an id — it collides with the storage collection's own prototype slot.`,
+    );
+  }
 }
