@@ -103,3 +103,26 @@ describe('clearAll (AC5)', () => {
     expect(await repos.organisms.list()).toEqual([]);
   });
 });
+
+describe('isFreshWorkspace (Story 1.5 AC1)', () => {
+  it('is true with no gol:schema record', async () => {
+    const repos = createLocalStorageRepositories();
+
+    expect(await repos.isFreshWorkspace()).toBe(true);
+  });
+
+  it('is false once the workspace has been stamped by a data write', async () => {
+    const repos = createLocalStorageRepositories();
+    await repos.organisms.save(organism());
+
+    expect(await repos.isFreshWorkspace()).toBe(false);
+  });
+
+  it('stays false after clearAll — the stamp survives Clear All by design (Story 5.10 re-seeds)', async () => {
+    const repos = createLocalStorageRepositories();
+    await repos.organisms.save(organism());
+    await repos.clearAll();
+
+    expect(await repos.isFreshWorkspace()).toBe(false);
+  });
+});

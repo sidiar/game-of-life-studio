@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CURRENT_FORMAT_VERSION } from '@gol/domain';
 import {
   CorruptDataError,
+  hasSchemaStamp,
   QuotaExceededError,
   readCollection,
   readStoredValue,
@@ -172,6 +173,25 @@ describe('gol:schema stamp (AC2)', () => {
 
     expect(localStorage.getItem(STORAGE_KEYS.settings)).not.toBeNull();
     expect(localStorage.getItem(STORAGE_KEYS.schema)).toBeNull();
+  });
+});
+
+describe('hasSchemaStamp (Story 1.5 AC1)', () => {
+  it('is false with no gol:schema record — the RFC-006 Decision 7 first-run trigger', () => {
+    expect(hasSchemaStamp()).toBe(false);
+  });
+
+  it('is true once a data write has stamped the schema', () => {
+    writeDataKey(STORAGE_KEYS.battles, {});
+
+    expect(hasSchemaStamp()).toBe(true);
+  });
+
+  it('stays true after removeDataKeys — Clear All does not un-stamp the store', () => {
+    writeDataKey(STORAGE_KEYS.battles, {});
+    removeDataKeys();
+
+    expect(hasSchemaStamp()).toBe(true);
   });
 });
 

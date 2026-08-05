@@ -2,7 +2,7 @@ import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
 import type { AppRepositories } from './repositories';
-import { removeDataKeys } from './storage';
+import { hasSchemaStamp, removeDataKeys } from './storage';
 
 /**
  * The Standalone-mode repository set. Mode selection itself lives in the app's factory
@@ -25,6 +25,16 @@ export function createLocalStorageRepositories(): AppRepositories {
      */
     async clearAll(): Promise<void> {
       removeDataKeys();
+    },
+
+    /**
+     * Fresh ⇔ `gol:schema` has never been written (RFC-006 Decision 7). Story 1.5's
+     * seedDefaultWorkspace() gates on this, never on "the organism library is empty" — that
+     * would make every load a self-heal, which M9 rules out, and would fight Story 5.10's
+     * post-Clear-All re-seed (gol:schema stays stamped through clearAll() on purpose).
+     */
+    async isFreshWorkspace(): Promise<boolean> {
+      return !hasSchemaStamp();
     },
   };
 }

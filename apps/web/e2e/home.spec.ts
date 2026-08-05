@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { CONWAYS_CLASSIC_ID } from '@gol/domain';
+import { STORAGE_KEYS } from '@gol/persistence';
 
 // Thin e2e (RFC-008 Decision 2): only the home route exists this story. Gallery,
 // Editor, Play, Settings arrive later and get their own specs.
@@ -26,5 +28,29 @@ test.describe('home route', () => {
     await page.goto('/');
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
+  });
+
+  // Story 1.5 AC1: the only place "when the app loads" is verified end-to-end through a real
+  // static export — a fresh Playwright context has no localStorage, mirroring a first run.
+  test('seeds gol:organisms with conways-classic on first load, no duplicate on reload', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.getByText('workspace: ready')).toBeVisible();
+
+    const afterFirstLoad = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}'),
+      STORAGE_KEYS.organisms,
+    );
+    expect(afterFirstLoad).toHaveProperty(CONWAYS_CLASSIC_ID);
+
+    await page.reload();
+    await expect(page.getByText('workspace: ready')).toBeVisible();
+
+    const afterReload = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}'),
+      STORAGE_KEYS.organisms,
+    );
+    expect(Object.keys(afterReload)).toEqual([CONWAYS_CLASSIC_ID]);
   });
 });

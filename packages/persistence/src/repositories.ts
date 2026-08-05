@@ -61,4 +61,13 @@ export interface AppRepositories {
    * rejects per-repository bulk operations for exactly that reason.
    */
   clearAll(): Promise<void>;
+  /**
+   * "Has this workspace ever been initialized?" — mode-agnostic question, storage-specific answer
+   * (Story 1.5 forced decision 1). A free `isFreshInstall()` function reading localStorage
+   * directly would be exactly as welded to localStorage as importing `LocalStorageOrganismRepository`
+   * (AR-2/27): it compiles, tests green, and breaks the seam. `true` only when the workspace has
+   * never been stamped (RFC-006 Decision 7) — NOT when the organism library happens to be empty,
+   * which would turn every load into an M9-forbidden self-heal.
+   */
+  isFreshWorkspace(): Promise<boolean>;
 }

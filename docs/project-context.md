@@ -227,6 +227,13 @@ Run the full gate before calling a change done — the pre-commit hook is the fa
 - A standing instruction, not a per-task preference. Present the file list and a suggested
   commit message, then **wait**. Approval for one commit never carries to the next.
 
+**📓 Technical glossary trigger.** When Sidiar says "add this term to the technical glossary" (or
+similar), append a short entry to
+`/Users/sidiar/projects/NewJob/KnowledgeBase/glossary/implementation-glossary.md` — brief
+definition + one-line context, separated from other entries by a long dashed divider (see the
+file's existing entries for the format). That path is **outside this repo** (shared across
+projects under `NewJob/`), so it never shows up in this repo's `git status`.
+
 **Commit message format** (observed):
 
 - Story work: `Story 1.1: Turborepo monorepo scaffold`

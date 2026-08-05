@@ -120,6 +120,16 @@ function stampSchemaVersion(): void {
   writeKey(STORAGE_KEYS.schema, { formatVersion: CURRENT_FORMAT_VERSION });
 }
 
+/**
+ * Fresh ⇔ no `gol:schema` record exists (RFC-006 Decision 7) — this is the storage-specific
+ * ANSWER to the mode-agnostic "has this workspace ever been initialized?" question that
+ * AppRepositories.isFreshWorkspace() asks. Presence-only check (not the stamp's value — Decision
+ * I asserts stamps, never branches on them).
+ */
+export function hasSchemaStamp(): boolean {
+  return localStorage.getItem(STORAGE_KEYS.schema) !== null;
+}
+
 /** The write path for workspace DATA (battles, organisms): write, then stamp (AC2). */
 export function writeDataKey(key: StorageKey, value: unknown): void {
   writeKey(key, value);

@@ -11,6 +11,9 @@ export type {
 
 export { createLocalStorageRepositories } from './createLocalStorageRepositories';
 
+export { ensureDefaultOrganism } from './ensureDefaultOrganism';
+export { seedDefaultWorkspace } from './seedDefaultWorkspace';
+
 export { LocalStorageBattleRepository } from './localStorageBattleRepository';
 export { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 export { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
