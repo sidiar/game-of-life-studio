@@ -70,3 +70,21 @@ export const BattleSchema = z
 // Output type — timestamps are hydrated Dates. The *input* (wire/JSON) shape carries ISO
 // strings; use `z.input<typeof BattleSchema>` where the serialized form is meant.
 export type Battle = z.infer<typeof BattleSchema>;
+
+// Lightweight Gallery/index projection (Decision H.4) — every Battle field except the heavy
+// gridState. organismIds is the placed set (Decision H.1), so the AR-15 organism-usage index and
+// the Gallery build from `battles.list()` without a single grid being validated or converted.
+//
+// Zod's default strip IS the projection mechanism: a full stored battle record parses straight
+// through and comes back as the summary. It also means a battle whose gridState is corrupt still
+// lists — the Gallery stays readable and the failure surfaces from load(), where the grid is
+// actually needed. Widening this schema to re-validate gridState would silently undo that.
+export const BattleSummarySchema = z.object({
+  id: z.uuid(),
+  name: z.string().max(100),
+  gridSize: EditableGridPresetSchema,
+  organismIds: z.array(z.string().min(1)).max(255),
+  updatedAt: IsoTimestamp,
+});
+
+export type BattleSummary = z.infer<typeof BattleSummarySchema>;

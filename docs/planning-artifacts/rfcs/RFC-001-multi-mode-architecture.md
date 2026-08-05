@@ -229,14 +229,23 @@ export const EditableGridPresetSchema = z.union([
   z.object({ cols: z.literal(100), rows: z.literal(60) }),
 ])
 
+// A battle is JSON at rest (localStorage) and on the wire (the RFC-006 envelope), so timestamps
+// arrive as ISO strings and are hydrated here. This is NOT `z.date()`: JSON.stringify turns a
+// Date into a string, and a Zod transform runs *after* validation, so `z.date()` rejects the raw
+// string before any transform could rescue it. RFC-006 already spells these two fields as ISO
+// strings, so this is also what lets the two schemas share one value.
+// (Corrected in Story 1.4 — the previous `z.date()` + `.transform().parse()` pair below was
+// unimplementable as written.)
+const IsoTimestamp = z.iso.datetime().transform((s) => new Date(s))
+
 export const BattleSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string().max(100),
   organismIds: z.array(z.string()).max(255),   // references into the shared Organism Library (FR-7.15); ≤255 = the dense-encoding / Uint8 occupant cap (arch Decision G.3) — the library itself stays uncapped (M6)
   gridSize: EditableGridPresetSchema,          // per-battle dimensions (Decision A / H-9, schema-enforced — Decision G.1)
   gridState: z.array(z.array(z.number().int().min(0).max(255))),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: IsoTimestamp,
+  updatedAt: IsoTimestamp,
 }).superRefine((b, ctx) => {
   // Structural invariants the architecture already commits to (arch Decision G.2):
   if (b.gridState.length !== b.gridSize.rows || b.gridState.some(r => r.length !== b.gridSize.cols))
@@ -248,28 +257,32 @@ export const BattleSchema = z.object({
     ctx.addIssue({ code: 'custom', message: 'organismIds must be exactly the placed set — no unplaced roster members at rest (arch Decision H.1)' })
 })
 
-// Type inference
+// Type inference. The OUTPUT type carries hydrated Dates; the parse INPUT is the JSON shape with
+// ISO strings, reachable as `z.input<typeof BattleSchema>`.
 export type Battle = z.infer<typeof BattleSchema>
 export type Organism = z.infer<typeof OrganismSchema>
 
-// Validation at repository boundaries
+// Validation at repository boundaries (as implemented in Story 1.4)
 class LocalStorageBattleRepository implements BattleRepository {
   async save(battle: Battle): Promise<void> {
-    // Validate before saving
-    const validated = BattleSchema.parse(battle)
-    // ... save logic
+    // The whole collection lives under ONE key (RFC-006 Decision 7), not `battle-${id}`.
+    // JSON.stringify renders the Date fields as exactly the ISO form IsoTimestamp accepts back.
+    const collection = readCollection('gol:battles')
+    collection[battle.id] = battle
+    writeDataKey('gol:battles', collection)   // candidate-string-then-setItem (AR-14)
   }
 
   async load(id: string): Promise<Battle | null> {
-    const raw = localStorage.getItem(`battle-${id}`)
-    if (!raw) return null
+    const record = readCollection('gol:battles')[id]
+    if (record === undefined) return null            // absent
 
-    // Parse and validate, with date transformation
-    return BattleSchema.transform((data) => ({
-      ...data,
-      createdAt: new Date(data.createdAt),
-      updatedAt: new Date(data.updatedAt),
-    })).parse(JSON.parse(raw))
+    const parsed = BattleSchema.safeParse(record)    // IsoTimestamp hydrates both timestamps
+    if (!parsed.success) {
+      // Present-but-invalid is NOT absent: returning null here would read as "no such battle",
+      // and the next save would overwrite a record that was merely unparseable.
+      throw new CorruptDataError('gol:battles', `battle "${id}"`)
+    }
+    return parsed.data
   }
 }
 ```
@@ -278,7 +291,7 @@ class LocalStorageBattleRepository implements BattleRepository {
 - Single source of truth for data shapes
 - Runtime validation catches corruption/version mismatches
 - Zod provides TypeScript types AND validation
-- Transform capabilities handle format differences (dates, casing)
+- Transforms hydrate *after* validation, so the schema must accept the stored (JSON) shape — the wire format drives the field types, not the in-memory one
 
 #### 4. Python API Architecture (Connected Mode)
 

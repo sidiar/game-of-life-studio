@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BattleSchema } from './battleSchema';
+import { BattleSchema, BattleSummarySchema } from './battleSchema';
 
 const PRESET = { cols: 50, rows: 30 } as const;
 
@@ -164,5 +164,51 @@ describe('BattleSchema', () => {
   it('rejects a Date object where the wire format expects an ISO string', () => {
     const found = issues({ ...validBattle(), createdAt: new Date(CREATED_AT) });
     expect(found.some((i) => i.path[0] === 'createdAt')).toBe(true);
+  });
+});
+
+describe('BattleSummarySchema', () => {
+  it('projects a stored battle record down to exactly the Decision H.4 fields', () => {
+    const summary = BattleSummarySchema.parse(validBattle());
+
+    expect(Object.keys(summary).sort()).toEqual([
+      'gridSize',
+      'id',
+      'name',
+      'organismIds',
+      'updatedAt',
+    ]);
+  });
+
+  it('drops gridState — that omission is what keeps the Gallery off the heavy field', () => {
+    expect('gridState' in BattleSummarySchema.parse(validBattle())).toBe(false);
+    expect('createdAt' in BattleSummarySchema.parse(validBattle())).toBe(false);
+  });
+
+  it('hydrates updatedAt into a Date so the Gallery can sort on it', () => {
+    const summary = BattleSummarySchema.parse(validBattle());
+
+    expect(summary.updatedAt).toBeInstanceOf(Date);
+    expect(summary.updatedAt.toISOString()).toBe(UPDATED_AT);
+  });
+
+  it('carries the placed roster, so the AR-15 usage index needs no grid', () => {
+    expect(BattleSummarySchema.parse(validBattle()).organismIds).toEqual(['conways-classic']);
+  });
+
+  // The load-bearing property: the projection must genuinely not read gridState, not merely
+  // delete it after a full parse. A record BattleSchema rejects on grid grounds still lists.
+  it('accepts a record whose gridState would fail BattleSchema', () => {
+    const corruptGrid = { ...validBattle(), gridState: 'not-a-grid' };
+
+    expect(BattleSummarySchema.safeParse(corruptGrid).success).toBe(true);
+    expect(BattleSchema.safeParse(corruptGrid).success).toBe(false);
+  });
+
+  it('still rejects a record missing a summary field', () => {
+    const withoutName: Record<string, unknown> = { ...validBattle() };
+    delete withoutName.name;
+
+    expect(BattleSummarySchema.safeParse(withoutName).success).toBe(false);
   });
 });

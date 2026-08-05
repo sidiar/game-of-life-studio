@@ -1,7 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    // This is the ONE package allowed DOM types: localStorage is its whole reason to exist
+    // (project-context). It is declared here rather than in tsconfig.base.json so the absence of
+    // DOM in domain/simulation stays compiler-enforced — "the engine is pure" is a build error
+    // there, not a convention. `lib` REPLACES the inherited value, so ES2022 must be repeated or
+    // every ES2022 method disappears from this package.
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src"]
 }
