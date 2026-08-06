@@ -1,0 +1,59 @@
+/**
+ * Auto-fit layout math — pure, no canvas (Story 1.8 Task 3, AC2/AR-22). `computeGridLayout`
+ * decides how a grid of `cols x rows` cells fits inside a `canvas.width x canvas.height`
+ * backing-store rectangle: cell size, centring origin, and whether grid lines are legible at that
+ * size. Nothing here touches a CanvasRenderingContext2D — GridRenderer (Task 5) is the only
+ * caller that draws.
+ */
+
+// At cellSize 1-3, a 1px grid line consumes 25-100% of every cell and the tile becomes a grey
+// rectangle — FR-8.7's toggle has nothing legible to draw below this threshold, which is not the
+// toggle being ignored (see gridRenderer.ts's setGridLines doc comment).
+const MIN_GRID_LINE_CELL_SIZE = 4;
+
+export interface GridLayout {
+  readonly cellSize: number; // device px, integer, >= 1
+  readonly originX: number; // device px — leftover space split, grid centred
+  readonly originY: number;
+  readonly drawWidth: number; // cellSize * cols
+  readonly drawHeight: number;
+  readonly gridLinesVisible: boolean;
+}
+
+export function computeGridLayout(
+  canvas: { width: number; height: number },
+  size: { cols: number; rows: number },
+  showGridLines: boolean,
+): GridLayout {
+  const { cols, rows } = size;
+
+  // A.5's formula taken on BOTH axes, keeping the smaller ratio, so the whole grid stays visible
+  // (FR-3.2). Taking only one axis is the literal reading of `floor(canvasPx / dimension)` and it
+  // clips the other dimension off-canvas the moment the aspect ratios disagree.
+  const rawCellSize =
+    cols > 0 && rows > 0 ? Math.min(canvas.width / cols, canvas.height / rows) : 1;
+
+  // max(1, ...) is load-bearing, not defensive garnish: at Gallery-tile sizes (~200px wide) a
+  // 100x60 grid is `floor(200/200) = 1` — one tile size smaller and the floor hits 0, and
+  // `fillRect(x, y, 0, 0)` paints nothing with no error anywhere. Clamping accepts that the grid
+  // overflows and gets clipped by the canvas edge instead, which is the graceful outcome.
+  const cellSize = Math.max(1, Math.floor(rawCellSize));
+
+  const drawWidth = cellSize * cols;
+  const drawHeight = cellSize * rows;
+
+  // floor on integer inputs keeps the origin integral — a fractional origin re-introduces the
+  // seams the integer cellSize exists to remove. Without centring, the leftover space becomes a
+  // dead bar on one side and the dish looks mis-mounted.
+  const originX = Math.floor((canvas.width - drawWidth) / 2);
+  const originY = Math.floor((canvas.height - drawHeight) / 2);
+
+  return {
+    cellSize,
+    originX,
+    originY,
+    drawWidth,
+    drawHeight,
+    gridLinesVisible: showGridLines && cellSize >= MIN_GRID_LINE_CELL_SIZE,
+  };
+}
