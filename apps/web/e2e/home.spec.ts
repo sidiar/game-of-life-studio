@@ -34,9 +34,13 @@ test.describe('home route', () => {
   // static export — a fresh Playwright context has no localStorage, mirroring a first run.
   //
   // Story 1.6 AC3, production half: this runs against the PRODUCTION static export
-  // (build:standalone, served from out/), so it is the one gate that proves the AR-45 dev
-  // fixtures are truly unreachable end-to-end — not just absent from a passing unit test. There is
-  // deliberately no e2e for the dev-seeded path; this config never serves `next dev`.
+  // (build:standalone, served from out/), so it proves the AR-45 dev fixtures are never SEEDED by
+  // a production build — a stronger gate than a unit test, which mounts under NODE_ENV=test rather
+  // than against the real artifact. It does not prove they are absent from the bundle: these
+  // assertions hold equally if the fixture module ships and is merely never invoked. That claim is
+  // the dead-code-elimination one, and its evidence is the `grep -r "Aggressive Colonizer"
+  // apps/web/out` check recorded in the story's Dev Agent Record. There is deliberately no e2e for
+  // the dev-seeded path; this config never serves `next dev`.
   test('seeds gol:organisms with conways-classic on first load, no duplicate on reload, and no AR-45 mock fixtures', async ({
     page,
   }) => {

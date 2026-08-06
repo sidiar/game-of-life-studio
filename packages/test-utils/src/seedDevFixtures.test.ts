@@ -32,22 +32,39 @@ describe('seedDevFixtures', () => {
     expect(battleIds).toEqual([MOCK_BATTLE_IDS.battleA, MOCK_BATTLE_IDS.battleB].sort());
   });
 
-  // The referential-integrity assertion: this is the test that would catch Battle B referencing
-  // Conway's Classic when Conway has not been seeded into the same repos.
+  // The referential-integrity assertion, run against the real call order in useWorkspaceSeed.ts:
+  // seedDefaultWorkspace() (Conway) before seedDevFixtures(). The length assertions are load-
+  // bearing — without them the loops below pass vacuously against zero battles or an empty roster,
+  // which is the exact break they exist to catch.
   it("every battle's organismIds resolves against the organism store after seeding + Conway", async () => {
     const repos = createFakeRepositories();
-    // Mirrors the real call order in useWorkspaceSeed.ts: seedDefaultWorkspace() (Conway) runs
-    // before seedDevFixtures().
     await repos.organisms.save(CONWAYS_CLASSIC);
 
     await seedDevFixtures(repos);
 
     const battles = await repos.battles.listFull();
+    expect(battles).toHaveLength(2);
     for (const battle of battles) {
+      expect(battle.organismIds.length).toBeGreaterThan(0);
       for (const organismId of battle.organismIds) {
         expect(await repos.organisms.exists(organismId)).toBe(true);
       }
     }
+  });
+
+  // The negative half, and the case the assertion above cannot reach: seedDevFixtures() documents
+  // that it does not seed Conway itself, so Battle B's roster dangles whenever the caller
+  // skipped seedDefaultWorkspace(). Pinning it here is what makes the ordering requirement in
+  // useWorkspaceSeed.ts a tested contract rather than a comment.
+  it("Battle B's Conway reference dangles when seeded without seedDefaultWorkspace() first", async () => {
+    const repos = createFakeRepositories();
+
+    await seedDevFixtures(repos);
+
+    const battles = await repos.battles.listFull();
+    const battleB = battles.find((b) => b.id === MOCK_BATTLE_IDS.battleB);
+    expect(battleB?.organismIds).toContain(CONWAYS_CLASSIC.id);
+    expect(await repos.organisms.exists(CONWAYS_CLASSIC.id)).toBe(false);
   });
 
   it('stamps the workspace as no longer fresh', async () => {

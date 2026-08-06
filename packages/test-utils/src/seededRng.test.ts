@@ -37,4 +37,44 @@ describe('createSeededRng', () => {
     const values = Array.from({ length: 10 }, () => rng.int(1_000_000));
     expect(new Set(values).size).toBeGreaterThan(1);
   });
+
+  // A bare `% maxExclusive` answered int(0) with NaN, which a caller uses as an array index and
+  // reads back `undefined` — the failure then surfaces somewhere else entirely.
+  it('rejects a maxExclusive that is not a positive integer', () => {
+    const rng = createSeededRng(FIXED_SEED);
+    expect(() => rng.int(0)).toThrow(/positive integer/);
+    expect(() => rng.int(-1)).toThrow(/positive integer/);
+    expect(() => rng.int(2.5)).toThrow(/positive integer/);
+    expect(() => rng.int(Number.NaN)).toThrow(/positive integer/);
+  });
+
+  // `seed >>> 0` collapsed 1.5 to 1 and NaN to 0, so two nominally different seeds could produce
+  // an identical sequence and a divergence test would pass vacuously.
+  it('rejects a non-integer seed rather than silently coercing it', () => {
+    expect(() => createSeededRng(1.5)).toThrow(/must be an integer/);
+    expect(() => createSeededRng(Number.NaN)).toThrow(/must be an integer/);
+  });
+
+  it('accepts a negative integer seed and stays deterministic', () => {
+    const sequenceFrom = (seed: number) => {
+      const rng = createSeededRng(seed);
+      return Array.from({ length: 10 }, () => rng.int(1000));
+    };
+
+    expect(sequenceFrom(-7)).toEqual(sequenceFrom(-7));
+  });
+
+  // int() promises uniformity, and 2^32 is not divisible by most bounds — plain modulo favours the
+  // low values. Rejection sampling is what makes the FR-5.4 dominance tie-break unskewed.
+  it('is close to uniform for a bound that does not divide 2^32', () => {
+    const rng = createSeededRng(FIXED_SEED);
+    const buckets = new Array<number>(7).fill(0);
+    const samples = 70_000;
+    for (let i = 0; i < samples; i += 1) buckets[rng.int(7)] += 1;
+
+    const expected = samples / 7;
+    for (const count of buckets) {
+      expect(Math.abs(count - expected) / expected).toBeLessThan(0.05);
+    }
+  });
 });

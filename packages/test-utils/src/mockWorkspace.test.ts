@@ -107,12 +107,42 @@ describe('factories, not frozen singletons', () => {
     expect(first).toEqual(second);
   });
 
-  it('createMockBattles() returns non-identical objects on each call', () => {
+  // Freshness must reach the RULES, not stop at the organism (review 2026-08-05). The assertions
+  // above passed while every SurvivalRule, its conditions and its payload were shared module-level
+  // constants, so one test mutating a rule changed what the next call returned. Each level below
+  // is checked explicitly because that is exactly the level the shallow version got away with.
+  it('createMockOrganisms() returns deeply fresh rules, not shared singletons', () => {
+    const first = createMockOrganisms();
+    const second = createMockOrganisms();
+
+    for (const [index, organism] of first.entries()) {
+      for (const [ruleIndex, rule] of organism.survivalRules.entries()) {
+        const counterpart = second[index].survivalRules[ruleIndex];
+        expect(rule).not.toBe(counterpart);
+        expect(rule.conditions).not.toBe(counterpart.conditions);
+        expect(rule.conditions[0]).not.toBe(counterpart.conditions[0]);
+        expect(rule.payload).not.toBe(counterpart.payload);
+      }
+    }
+  });
+
+  it('mutating a returned rule does not leak into the next call', () => {
+    const mutated = createMockOrganisms();
+    mutated[0].survivalRules[0].payload.summary = 'mutated by a test';
+
+    expect(createMockOrganisms()[0].survivalRules[0].payload.summary).not.toBe('mutated by a test');
+  });
+
+  it('createMockBattles() returns non-identical but equal objects on each call', () => {
     const first = createMockBattles();
     const second = createMockBattles();
 
     expect(first).not.toBe(second);
     expect(first[0]).not.toBe(second[0]);
+    expect(first[0].gridState).not.toBe(second[0].gridState);
+    // The determinism half its organism counterpart has: battles carry the fixed literal
+    // timestamps and the generated gridState, which are the values a regression would actually hit.
+    expect(first).toEqual(second);
   });
 });
 
@@ -170,11 +200,15 @@ describe('the two mock battles', () => {
     expect(battleA.updatedAt.getTime()).not.toBe(battleB.updatedAt.getTime());
   });
 
-  it('timestamps are fixed literals, not the current time', () => {
-    const now = Date.now();
-    for (const battle of createMockBattles()) {
-      expect(battle.createdAt.getTime()).toBeLessThan(now - 1000 * 60 * 60 * 24);
-      expect(battle.updatedAt.getTime()).toBeLessThan(now - 1000 * 60 * 60 * 24);
-    }
+  // Pinned to the exact literals, not merely "older than a day": the relative form passed for a
+  // `new Date(Date.now() - 2 days)` too, which is precisely the per-run timestamp Task 3 forbids
+  // because it makes the Story 1.10 sort order non-reproducible across dev sessions.
+  it('timestamps are the fixed literals, not computed from the current time', () => {
+    const [battleA, battleB] = createMockBattles();
+
+    expect(battleA.createdAt.toISOString()).toBe('2026-07-20T09:00:00.000Z');
+    expect(battleA.updatedAt.toISOString()).toBe('2026-07-20T09:00:00.000Z');
+    expect(battleB.createdAt.toISOString()).toBe('2026-07-22T14:30:00.000Z');
+    expect(battleB.updatedAt.toISOString()).toBe('2026-07-25T18:15:00.000Z');
   });
 });

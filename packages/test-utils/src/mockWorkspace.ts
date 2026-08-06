@@ -138,11 +138,29 @@ const CHAOTIC_SURVIVE: SurvivalRule = {
 };
 
 /**
+ * DEEP copy of a rule (review 2026-08-05). The rules above are module-level constants so their
+ * frozen id/contentHash literals sit next to the conditions they were generated from — but handing
+ * the same object out of every createMockOrganisms() call made the factory shallow: only the
+ * organism and its survivalRules ARRAY were fresh, while every rule, its conditions and its payload
+ * stayed shared and unfrozen process-wide. One test writing to `organisms[0].survivalRules[0]`
+ * then changed what the NEXT call returned, which is precisely the cross-test contamination the
+ * factory-over-singleton decision exists to prevent.
+ *
+ * JSON round-trip, not structuredClone: packages/* compile with lib: ["ES2022"] and no @types/node,
+ * so structuredClone does not typecheck (same constraint as fakeRepositories.ts). A SurvivalRule is
+ * plain JSON — strings, numbers and a [min,max] tuple — so the round-trip is lossless here; the
+ * cast restores the tuple type JSON.parse widens to number[].
+ */
+function cloneRule(rule: SurvivalRule): SurvivalRule {
+  return JSON.parse(JSON.stringify(rule)) as SurvivalRule;
+}
+
+/**
  * Fresh objects on every call — deliberately NOT a frozen singleton like CONWAYS_CLASSIC (forced
  * decision 3, Dev Notes). Conway is a persisted baseline that must be referentially identical
  * everywhere, so freezing protects it; these are test INPUTS that tests will mutate, and a fresh
  * copy per call gives the same protection without needing the deepFreeze helper @gol/domain does
- * not export.
+ * not export. "Fresh" must reach the rules, not stop at the organism — see cloneRule above.
  */
 export function createMockOrganisms(): Organism[] {
   return [
@@ -157,7 +175,7 @@ export function createMockOrganisms(): Organism[] {
       // (AR-45) and from Conway's 50, with no tie-break RNG needed in a fixture.
       dominance: 80,
       agingEnabled: false,
-      survivalRules: [AGGRESSIVE_BORN, AGGRESSIVE_SURVIVE, AGGRESSIVE_DIE],
+      survivalRules: [AGGRESSIVE_BORN, AGGRESSIVE_SURVIVE, AGGRESSIVE_DIE].map(cloneRule),
     },
     {
       schemaVersion: 1,
@@ -167,7 +185,7 @@ export function createMockOrganisms(): Organism[] {
       dominance: 45,
       // AR-45's >=1 aging-enabled organism, and it matches the PRD's "cells fade in" intent.
       agingEnabled: true,
-      survivalRules: [PATIENT_BORN, PATIENT_SURVIVE, PATIENT_DIE],
+      survivalRules: [PATIENT_BORN, PATIENT_SURVIVE, PATIENT_DIE].map(cloneRule),
     },
     {
       schemaVersion: 1,
@@ -176,7 +194,7 @@ export function createMockOrganisms(): Organism[] {
       colorToken: 'bluish-green', // RFC-007 Decision 2 token #3
       dominance: 20,
       agingEnabled: false,
-      survivalRules: [CHAOTIC_BORN, CHAOTIC_SURVIVE],
+      survivalRules: [CHAOTIC_BORN, CHAOTIC_SURVIVE].map(cloneRule),
     },
   ];
 }
@@ -191,13 +209,26 @@ function placeMockRoster(
   includeConway: boolean,
 ): number[][] {
   let grid = emptyGrid(cols, rows);
-  // Roster index + 1 = cell value (Decision 2). organismIds order here MUST match the placement
-  // order below, or a cell's value would resolve to the wrong organism.
-  const aggressiveIndex = organismIds.indexOf(MOCK_ORGANISM_IDS.aggressiveColonizer) + 1;
-  const patientIndex = organismIds.indexOf(MOCK_ORGANISM_IDS.patientDefender) + 1;
-  const chaoticIndex = organismIds.indexOf(MOCK_ORGANISM_IDS.chaoticSpreader) + 1;
 
-  // A small 3x3 block per organism, spaced apart so nothing collides on a 50x30 grid.
+  // Roster index + 1 = cell value (RFC-006 Decision 2). Looked up by id rather than assumed
+  // positionally, so `organismIds` order is deliberately NOT coupled to the placement order below
+  // — reordering the roster stays correct. The lookup throws on a miss because bare `indexOf(...)
+  // + 1` returns 0 for an absent id, which is the reserved EMPTY-cell value: the organism would
+  // simply not be placed, and the failure would surface as a Decision H.1 superRefine error about
+  // a roster member with no cells, pointing at the schema rather than at the roster mismatch.
+  const cellValueFor = (organismId: string): number => {
+    const index = organismIds.indexOf(organismId);
+    if (index === -1) {
+      throw new Error(`placeMockRoster: "${organismId}" is not in the roster [${organismIds}]`);
+    }
+    return index + 1;
+  };
+
+  const aggressiveIndex = cellValueFor(MOCK_ORGANISM_IDS.aggressiveColonizer);
+  const patientIndex = cellValueFor(MOCK_ORGANISM_IDS.patientDefender);
+  const chaoticIndex = cellValueFor(MOCK_ORGANISM_IDS.chaoticSpreader);
+
+  // A 2x2 block per organism, spaced apart so nothing collides on a 50x30 grid.
   grid = placePattern(
     grid,
     [
@@ -227,7 +258,7 @@ function placeMockRoster(
   );
 
   if (includeConway) {
-    const conwayIndex = organismIds.indexOf(CONWAYS_CLASSIC_ID) + 1;
+    const conwayIndex = cellValueFor(CONWAYS_CLASSIC_ID);
     // Classic glider, offset well clear of the roster above.
     grid = placePattern(
       grid,

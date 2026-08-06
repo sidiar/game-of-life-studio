@@ -1,7 +1,6 @@
 import {
   BattleSchema,
   BattleSummarySchema,
-  DEFAULT_SETTINGS,
   OrganismSchema,
   SettingsSchema,
   type Battle,
@@ -10,6 +9,7 @@ import {
   type Settings,
 } from '@gol/domain';
 import {
+  assertSafeCollectionId,
   CorruptDataError,
   STORAGE_KEYS,
   type AppRepositories,
@@ -46,6 +46,27 @@ function roundTrip(value: unknown): unknown {
 }
 
 /**
+ * Seed-time validation for the non-`raw` paths (review 2026-08-05). The FakeSeed doc comment
+ * promises these "validate on the way in" while `raw` bypasses it, but the compile-time `Battle`/
+ * `Organism` annotation is not validation: a fixture cast through `as Battle` behaved exactly like
+ * `raw` with no signal, which made the two paths indistinguishable and the promise false.
+ */
+function parseSeed(
+  schema: { safeParse(value: unknown): { success: boolean } },
+  label: string,
+  value: unknown,
+): unknown {
+  const stored = roundTrip(value);
+  if (!schema.safeParse(stored).success) {
+    throw new Error(
+      `createFakeRepositories: seeded ${label} is not valid — use the \`raw\` escape hatch to ` +
+        `store a deliberately corrupt record.`,
+    );
+  }
+  return stored;
+}
+
+/**
  * In-memory implementation of the Story 1.4 `AppRepositories` interfaces (`packages/persistence/
  * src/repositories.ts`), built for tests that must not touch `localStorage`/jsdom. Every method
  * reproduces the documented contract of its localStorage counterpart — see the comments on each
@@ -64,19 +85,28 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
   let stamped = false;
 
   if (seed?.battles) {
-    for (const battle of seed.battles) battleStore.set(battle.id, roundTrip(battle));
+    for (const battle of seed.battles) {
+      battleStore.set(battle.id, parseSeed(BattleSchema, 'battle', battle));
+    }
     if (seed.battles.length > 0) stamped = true;
   }
   if (seed?.organisms) {
-    for (const organism of seed.organisms) organismStore.set(organism.id, roundTrip(organism));
+    for (const organism of seed.organisms) {
+      assertSafeCollectionId(organism.id);
+      organismStore.set(organism.id, parseSeed(OrganismSchema, 'organism', organism));
+    }
     if (seed.organisms.length > 0) stamped = true;
   }
-  if (seed?.settings) settingsStore = roundTrip(seed.settings);
-  if (seed?.raw?.battles) {
+  if (seed?.settings) settingsStore = parseSeed(SettingsSchema, 'settings', seed.settings);
+  // The `length > 0` guard matches the validated paths above: seeding an EMPTY collection stores
+  // nothing, so it must not stamp either. Without it `{ raw: { battles: {} } }` reported an
+  // already-initialized workspace holding zero records, and the two seeding paths disagreed about
+  // the one flag the whole M9 self-heal protection rests on.
+  if (seed?.raw?.battles && Object.keys(seed.raw.battles).length > 0) {
     for (const [id, record] of Object.entries(seed.raw.battles)) battleStore.set(id, record);
     stamped = true;
   }
-  if (seed?.raw?.organisms) {
+  if (seed?.raw?.organisms && Object.keys(seed.raw.organisms).length > 0) {
     for (const [id, record] of Object.entries(seed.raw.organisms)) organismStore.set(id, record);
     stamped = true;
   }
@@ -146,6 +176,12 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
 
   const organisms: OrganismRepository = {
     async save(organism) {
+      // The same guard LocalStorageOrganismRepository.save() opens with. OrganismSchema.id is a
+      // bare non-empty string (so 'conways-classic' is legal), which lets '__proto__' through to a
+      // plain-object collection where it rebinds the prototype instead of storing a record. A Map
+      // would survive it — but then a test asserting the rejection would pass here and fail
+      // against the real store, which is the one thing this fake exists not to do.
+      assertSafeCollectionId(organism.id);
       organismStore.set(organism.id, roundTrip(organism));
       stamped = true;
     },
@@ -182,6 +218,9 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
     },
 
     async replaceAll(newOrganisms) {
+      // Guarded before the clear, matching LocalStorageOrganismRepository.replaceAll(): a rejected
+      // id must not have already emptied the collection.
+      for (const organism of newOrganisms) assertSafeCollectionId(organism.id);
       organismStore.clear();
       for (const organism of newOrganisms) organismStore.set(organism.id, roundTrip(organism));
       stamped = true;
@@ -190,8 +229,13 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
 
   const settings: SettingsRepository = {
     async load() {
-      // Never null — an absent record resolves to DEFAULT_SETTINGS (RFC-006 Decision 7).
-      if (settingsStore === undefined) return DEFAULT_SETTINGS;
+      // Never null — an absent record resolves to the defaults (RFC-006 Decision 7). Parsed fresh
+      // rather than returning the DEFAULT_SETTINGS singleton, because that constant is
+      // Object.freeze'd while LocalStorageSettingsRepository.load() returns a new
+      // SettingsSchema.parse({}) each call: handing back the frozen object made a caller that
+      // mutates loaded settings throw against the fake and succeed against the real store — the
+      // reference-vs-copy divergence roundTrip() prevents everywhere else in this file, inverted.
+      if (settingsStore === undefined) return SettingsSchema.parse({});
       const parsed = SettingsSchema.safeParse(settingsStore);
       if (!parsed.success) {
         throw new CorruptDataError(STORAGE_KEYS.settings, 'settings record is not valid', {

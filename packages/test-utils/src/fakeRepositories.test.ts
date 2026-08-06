@@ -192,6 +192,66 @@ describe('settings', () => {
   });
 });
 
+describe('contract fidelity with the localStorage repositories', () => {
+  // LocalStorageOrganismRepository.save()/replaceAll() open with this guard: OrganismSchema.id is a
+  // bare non-empty string, so '__proto__' reaches a plain-object collection and rebinds its
+  // prototype instead of storing a record. A Map-backed fake survives it — which is exactly why it
+  // has to reject the id explicitly, or a test asserting the rejection goes green here and fails
+  // against the real store.
+  it('organisms.save() rejects the __proto__ id, matching the real repository', async () => {
+    const repos = createFakeRepositories();
+    const organism = { ...makeOrganism('placeholder'), id: '__proto__' };
+
+    await expect(repos.organisms.save(organism)).rejects.toThrow(/__proto__/);
+  });
+
+  it('organisms.replaceAll() rejects __proto__ before clearing the collection', async () => {
+    const repos = createFakeRepositories({ organisms: [makeOrganism('keeper')] });
+    const organism = { ...makeOrganism('placeholder'), id: '__proto__' };
+
+    await expect(repos.organisms.replaceAll([organism])).rejects.toThrow(/__proto__/);
+    // The real replaceAll builds its collection before writing, so a rejected id leaves the
+    // existing records in place.
+    expect((await repos.organisms.list()).map((o) => o.id)).toEqual(['keeper']);
+  });
+
+  // The real load() returns a fresh SettingsSchema.parse({}) each call, while DEFAULT_SETTINGS is
+  // Object.freeze'd — returning the singleton made a caller that mutates loaded settings throw
+  // here and succeed against localStorage.
+  it('settings.load() returns a fresh, mutable object for an absent record', async () => {
+    const repos = createFakeRepositories();
+
+    const first = await repos.settings.load();
+    const second = await repos.settings.load();
+
+    expect(first).toEqual(DEFAULT_SETTINGS);
+    expect(first).not.toBe(second);
+    expect(Object.isFrozen(first)).toBe(false);
+  });
+
+  // The FakeSeed contract is that `raw` bypasses validation and everything else does not. The
+  // compile-time annotation is not validation: a fixture cast `as Battle` behaved exactly like
+  // `raw`, leaving the two paths indistinguishable.
+  it('a seeded record that fails its schema is rejected unless it goes through raw', () => {
+    const notABattle = { id: ID_A, name: 'broken' } as unknown as Battle;
+
+    expect(() => createFakeRepositories({ battles: [notABattle] })).toThrow(/not valid/);
+    expect(() =>
+      createFakeRepositories({ raw: { battles: { [ID_A]: { junk: true } } } }),
+    ).not.toThrow();
+  });
+
+  it('an empty raw collection does not stamp the workspace', async () => {
+    // Seeding nothing stores nothing, so both seed paths must agree that the workspace is still
+    // fresh — the flag the whole M9 self-heal protection rests on.
+    const raw = createFakeRepositories({ raw: { battles: {} } });
+    const validated = createFakeRepositories({ battles: [] });
+
+    expect(await raw.isFreshWorkspace()).toBe(true);
+    expect(await validated.isFreshWorkspace()).toBe(true);
+  });
+});
+
 describe('clearAll (Decision F / AR-12)', () => {
   it('clears battles and organisms but leaves settings untouched', async () => {
     const repos = createFakeRepositories();
