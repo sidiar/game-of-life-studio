@@ -63,13 +63,19 @@ export default tseslint.config(
     settings: { next: { rootDir: 'apps/web' } },
   },
 
-  // AR-46: no raw colour literals in component code. The palette registry file
-  // (Story 1.7) must be added to this block's `ignores` when it lands — TODO(1.7).
-  // Test/spec/e2e files are exempt (mirrors the import-boundary block below) —
-  // a test asserting a literal colour value is not a component-styling violation.
+  // AR-46: no raw colour literals in component code. Organism-colour hexes live in the palette
+  // registry (RFC-007) and nowhere else in apps/web outside the --gol-* token layer (themes.css,
+  // a CSS file this .ts/.tsx rule never reaches) — `paletteRegistry.ts` is that registry (Story
+  // 1.7) and is whitelisted below. Test/spec/e2e files are exempt (mirrors the import-boundary
+  // block below) — a test asserting a literal colour value is not a component-styling violation.
   {
     files: ['apps/web/**/*.{ts,tsx}'],
-    ignores: ['apps/web/**/*.test.{ts,tsx}', 'apps/web/**/*.spec.{ts,tsx}', 'apps/web/e2e/**'],
+    ignores: [
+      'apps/web/**/*.test.{ts,tsx}',
+      'apps/web/**/*.spec.{ts,tsx}',
+      'apps/web/e2e/**',
+      'apps/web/lib/paletteRegistry.ts',
+    ],
     rules: {
       'no-restricted-syntax': [
         'error',

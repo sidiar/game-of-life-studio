@@ -14,7 +14,11 @@ export const OrganismSchema = z.object({
   name: z.string().max(50),
   // Stable palette token (RFC-007); resolved to hex at render time — NOT a raw hex. The `#`
   // guard is the enforceable half of AR-46 outside apps/web, where the no-raw-hex lint rule
-  // does not reach; validation against the real palette registry lands in Story 1.7.
+  // does not reach. Resolution against the real palette registry (apps/web/lib/paletteRegistry.ts,
+  // Story 1.7) happens at render time, with a default + warn fallback for an unknown token
+  // (Decision I.4) — deliberately NOT a stricter schema check here. A `z.enum` of known ids would
+  // reject exactly the records that fallback exists to load, and would put this DOM-free,
+  // app-agnostic package in the position of depending on an apps/web module.
   colorToken: z
     .string()
     .min(1)
