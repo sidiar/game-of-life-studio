@@ -50,7 +50,7 @@ development_status:
   1-4-repository-interfaces-localstorage-implementations: done
   1-5-default-workspace-seeding: done
   1-6-test-utilities-dev-fixture-workspace: done
-  1-7-palette-token-registry-display-color-lut: review
+  1-7-palette-token-registry-display-color-lut: done
   1-8-gridrenderer-static-core: backlog
   1-9-clinical-lab-theme-tokens-app-shell: backlog
   1-10-battle-gallery-tiles-sorting: backlog

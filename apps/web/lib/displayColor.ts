@@ -30,7 +30,11 @@ function clampAgeShade(shade: number): number {
  */
 export function ageShadeFor(age: number, agingEnabled: boolean): number {
   if (!agingEnabled) return MAX_AGE_SHADE;
-  return clampAgeShade(Math.min(age, MAX_AGE_SHADE));
+  // Floor, not round: an age band is the shade a cell has REACHED. Rounding would let age 6.5
+  // render identically to age 99 (both landing on the cap) and would make shade 0 unreachable for
+  // any age below 0.5. Engine ages are integers today, so this only matters for a caller that
+  // interpolates — but round is the one direction that lets a sub-cap age reach the cap shade.
+  return clampAgeShade(Math.floor(Math.min(age, MAX_AGE_SHADE)));
 }
 
 // Precompute the whole table at module init: 20 tokens x 8 age shades = 160 short strings.

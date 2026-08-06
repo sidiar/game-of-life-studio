@@ -74,6 +74,11 @@ describe('primitives', () => {
 // G1 — visibility. Every token, at the age-cap shade, has contrast ratio >= 3.0 against both
 // #0a0a0a (Clinical Lab) and #000000 (Biotech Terminal). Measured worst: 5.12 (vermillion) — see
 // docs/implementation-artifacts/palette-cvd-validation.md.
+//
+// The #000000 assertion is mathematically implied by the #0a0a0a one and cannot fail
+// independently: contrast is (L + 0.05) / (Lbg + 0.05), and L(#000000) = 0 < L(#0a0a0a), so the
+// black ratio is always the larger. It is kept as executable documentation that both shipped
+// themes were considered — the binding constraint is #0a0a0a.
 describe('G1 — visibility at the age cap', () => {
   it.each(PALETTE)('$id: contrast >= 3.0 against both dark backgrounds', (color) => {
     const hex = pixelHexAt(color.id, MAX_AGE_SHADE);

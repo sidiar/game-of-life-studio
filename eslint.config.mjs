@@ -18,10 +18,11 @@ const nextScopedToWeb = next.map((config) =>
 // template literal (Emotion's `css\`color: #fff\`` pattern), plus rgb()/rgba()/
 // hsl()/hsla() functional notation. Raw colours belong only in the token layer
 // (themes.css — a CSS file, outside this .ts/.tsx lint scope) and the palette
-// registry (RFC-007, lands Story 1.7). AR-46 / NFR-8.1: keeping components
-// token-only is what makes the Epic 6 second theme a one-file change.
+// registry (RFC-007 — apps/web/lib/paletteRegistry.ts, whitelisted below).
+// AR-46 / NFR-8.1: keeping components token-only is what makes the Epic 6
+// second theme a one-file change.
 // Named CSS colours ("red") are deliberately NOT matched — too high a
-// false-positive risk against unrelated strings; stays with the 1.7 whitelist work.
+// false-positive risk against unrelated strings.
 const HEX_PATTERN = '#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})';
 const FUNCTIONAL_COLOUR_PATTERN = '(rgb|rgba|hsl|hsla)\\([^)]*\\)';
 const COLOUR_SELECTOR_GROUP = [
@@ -66,8 +67,12 @@ export default tseslint.config(
   // AR-46: no raw colour literals in component code. Organism-colour hexes live in the palette
   // registry (RFC-007) and nowhere else in apps/web outside the --gol-* token layer (themes.css,
   // a CSS file this .ts/.tsx rule never reaches) — `paletteRegistry.ts` is that registry (Story
-  // 1.7) and is whitelisted below. Test/spec/e2e files are exempt (mirrors the import-boundary
-  // block below) — a test asserting a literal colour value is not a component-styling violation.
+  // 1.7) and is whitelisted below. Test/spec/e2e files are exempt — a test asserting a literal
+  // colour value is not a component-styling violation.
+  //
+  // ⚠️ This `ignores` list is NOT interchangeable with the import-boundary block's below, which is
+  // otherwise near-identical: `paletteRegistry.ts` belongs here and MUST NOT be copied there, or
+  // the registry silently loses the @gol/test-utils import boundary. Two blocks, two lists.
   {
     files: ['apps/web/**/*.{ts,tsx}'],
     ignores: [

@@ -64,6 +64,24 @@ export const DEFAULT_COLOR_TOKEN = 'sky-blue'; // token #1, and Conway's Classic
 
 const paletteIndexById = new Map(PALETTE.map((color, index) => [color.id, index] as const));
 
+// Verified once at module init, not per lookup. Both invariants used to be checked (or not) on
+// the render path: a missing default token would have thrown INSIDE paletteIndexOf's unknown-token
+// branch — turning Decision I.4's degrade-and-warn case into a hard crash mid-frame, in the one
+// function documented never to throw — and a duplicate id would not have been caught at all,
+// silently making the earlier entry unreachable and rendering it as its later namesake.
+const DEFAULT_COLOR_INDEX: number = (() => {
+  if (paletteIndexById.size !== PALETTE.length) {
+    throw new Error('paletteRegistry: PALETTE contains duplicate ids');
+  }
+  const index = paletteIndexById.get(DEFAULT_COLOR_TOKEN);
+  if (index === undefined) {
+    throw new Error(
+      `paletteRegistry: DEFAULT_COLOR_TOKEN "${DEFAULT_COLOR_TOKEN}" is not in PALETTE`,
+    );
+  }
+  return index;
+})();
+
 // Dedupe unknown-token warnings: resolution happens inside the render path (per cell, per
 // frame), so an un-deduped console.warn would drown the console at 60 FPS. The existing e2e
 // suite asserts a clean console on the happy path — no known token may ever warn.
@@ -87,13 +105,7 @@ export function paletteIndexOf(token: string): number {
   if (index !== undefined) return index;
 
   warnUnknownTokenOnce(token);
-  const fallbackIndex = paletteIndexById.get(DEFAULT_COLOR_TOKEN);
-  if (fallbackIndex === undefined) {
-    // Unreachable in practice — DEFAULT_COLOR_TOKEN is always in PALETTE_SOURCE — but this keeps
-    // the lookup honestly typed instead of reaching for a non-null assertion (project rule).
-    throw new Error('paletteRegistry: DEFAULT_COLOR_TOKEN is missing from PALETTE');
-  }
-  return fallbackIndex;
+  return DEFAULT_COLOR_INDEX;
 }
 
 export function resolvePaletteColor(token: string): PaletteColor {

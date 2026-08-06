@@ -2,6 +2,14 @@
  * Pure, dependency-free colour-space conversions (Story 1.7 Task 2). No DOM, no colour-science
  * library — four small conversions plus a formatter are all the registry and display-colour LUT
  * need (see "What NOT to build": a chroma-js/culori dependency is deliberately out of scope).
+ *
+ * Two deliberate error policies, split by which direction the data flows:
+ *   - INGEST (`hexToRgb`, `rgbToHsl`) throws on malformed input. These run at module init, where
+ *     a loud failure is a build/boot error someone fixes, not a rendering artefact.
+ *   - OUTPUT (`hslToRgb`, `rgbToHex`, `formatHsl`) never throws and never emits an unparseable
+ *     string. These are on the render path, where an invalid `ctx.fillStyle` assignment is a
+ *     silent no-op that repaints the PREVIOUS group's colour — a wrong-colour bug with no stack
+ *     trace. Non-finite input is normalised to a valid colour rather than propagated as NaN.
  */
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -35,6 +43,13 @@ export function hexToRgb(hex: string): Rgb {
 }
 
 export function rgbToHsl(r: number, g: number, b: number): Hsl {
+  // NaN would evade the achromatic short-circuit below (`NaN === NaN` is false) and every
+  // `max === rn` comparison, falling through to the blue sector and returning an all-NaN Hsl that
+  // only surfaces later as an unparseable hsl() string. Reject at the ingest boundary instead.
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
+    throw new Error(`rgbToHsl: expected finite channels, got (${r}, ${g}, ${b})`);
+  }
+
   const rn = r / 255;
   const gn = g / 255;
   const bn = b / 255;
@@ -62,10 +77,18 @@ export function rgbToHsl(r: number, g: number, b: number): Hsl {
 }
 
 export function hslToRgb(h: number, s: number, l: number): Rgb {
-  // Achromatic short-circuit mirrors rgbToHsl's — avoids the hue-to-rgb helper dividing by an s
-  // that is exactly 0.
-  if (s === 0) {
-    const v = Math.round(l * 255);
+  // Output path: normalise rather than throw (see the file header). A non-finite hue would make
+  // every comparison inside hueToChannel false and fall through to `return p` on all three
+  // channels — a plausible mid-grey with no NaN left to trace back to its cause.
+  const hSafe = Number.isFinite(h) ? h : 0;
+  const sSafe = Number.isFinite(s) ? Math.min(1, Math.max(0, s)) : 0;
+  const lSafe = Number.isFinite(l) ? Math.min(1, Math.max(0, l)) : 0;
+
+  // Achromatic fast path. It is behaviourally identical to the general path below (at s = 0,
+  // q = l and p = 2l - l = l, so every hueToChannel branch returns l) — it exists to skip the
+  // hue arithmetic for greys, not to avoid a division that hueToChannel never performs.
+  if (sSafe === 0) {
+    const v = Math.round(lSafe * 255);
     return { r: v, g: v, b: v };
   }
 
@@ -79,9 +102,9 @@ export function hslToRgb(h: number, s: number, l: number): Rgb {
     return p;
   };
 
-  const hn = (((h % 360) + 360) % 360) / 360; // normalise hue into [0, 1) — handles negative input
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-  const p = 2 * l - q;
+  const hn = (((hSafe % 360) + 360) % 360) / 360; // into [0, 1) — handles negative input
+  const q = lSafe < 0.5 ? lSafe * (1 + sSafe) : lSafe + sSafe - lSafe * sSafe;
+  const p = 2 * lSafe - q;
 
   return {
     r: Math.round(hueToChannel(p, q, hn + 1 / 3) * 255),
@@ -91,6 +114,10 @@ export function hslToRgb(h: number, s: number, l: number): Rgb {
 }
 
 function toHexByte(n: number): string {
+  // NaN survives the clamp untouched (Math.round/min/max all return NaN), and `NaN.toString(16)`
+  // is the 3-character string "NaN" that padStart leaves alone — yielding "#NaN0000", which reads
+  // as almost-valid and assigns to fillStyle as a no-op.
+  if (!Number.isFinite(n)) return '00';
   const clamped = Math.max(0, Math.min(255, Math.round(n)));
   return clamped.toString(16).padStart(2, '0');
 }
@@ -104,10 +131,14 @@ export function hexToHsl(hex: string): Hsl {
   return rgbToHsl(r, g, b);
 }
 
-// Rounds to 1 decimal place and normalises -0 to 0 — a rounded value near zero that comes out
-// negative (e.g. Math.round(-0.04 * 10) / 10) must not carry that sign into arithmetic done on
-// the return value elsewhere, even though template interpolation alone would already print "0".
+// Rounds to 1 decimal place, and normalises two values that would otherwise reach the template
+// below: -0, which interpolates as "0" today but would carry its sign into any arithmetic a
+// caller does on a parsed value; and non-finite input, which would emit "hsl(NaN, NaN%, NaN%)" —
+// an unparseable fillStyle that silently keeps the previous fill colour. Normalising here rather
+// than returning a literal fallback string keeps formatHsl's output on the template path, which
+// is what exempts this file from AR-46 (see formatHsl's doc comment).
 function round1(n: number): number {
+  if (!Number.isFinite(n)) return 0;
   const r = Math.round(n * 10) / 10;
   return r === 0 ? 0 : r;
 }

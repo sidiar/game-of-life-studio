@@ -1,21 +1,38 @@
 # Palette CVD + Dark-Background Validation
 
 **Story:** 1.7 — Palette Token Registry & Display-Color LUT (AC1, Task 4)
-**Reproduces with:** `npx vitest run apps/web/lib/paletteCvd.test.ts` (from `apps/web/`, or
-`turbo run test --filter=web` for the full suite) — the four gates below are exactly what that
-file enforces in CI. The worst-pair table further down was captured with a throwaway
-`tsx` script during development (not checked in); rerun it by looping `contrastRatio`/`deltaE76`
-over `displayColor` outputs across all pairs/shades/modes as described in Method below.
-**Date:** 2026-08-06
+**Reproduces with** (both from `apps/web/`):
+
+```bash
+npx vitest run lib/paletteCvd.test.ts                              # the four hard gates
+npx vitest run --config vitest.sweep.config.mts --disable-console-intercept   # the tables below
+```
+
+The first enforces the gates (also covered by `turbo run test --filter=web` and `npm run ci`).
+The second is `scripts/paletteCvdSweep.test.ts`, which regenerates every number in this document
+by driving the same `displayColor` / `paletteCvd` modules the gates use — so the tables cannot
+drift from the implementation. It is excluded from `npm test` and asserts nothing.
+
+⚠️ Note the path is relative to `apps/web`, not the repo root. `npx vitest run
+apps/web/lib/paletteCvd.test.ts` from inside `apps/web` matches nothing and **exits 0** —
+a green run that asserted nothing.
+
+**Date:** 2026-08-06 (revised after code review, same day)
 
 ## What is being validated
 
 Every check below runs against **what a user actually sees** — the `displayColor(token,
 ageShade)` output at every one of the 8 age shades — not the raw registry hexes. The hexes
 (`PaletteColor.hex`) are an authoring input; under the Story 1.7 forced-decision-1 relative
-saturation ramp, `displayColor(token, 7)` reproduces `entry.hex` exactly, so the age-cap shade
-is where the registry's curated values and the rendered pixel coincide. All seven younger shades
-render a less-saturated relative of that same hue/lightness.
+saturation ramp, `displayColor(token, 7)` reproduces `entry.hex` — to within ≤1/255 per channel,
+which for all 20 tokens is currently zero drift — so the age-cap shade is where the registry's
+curated values and the rendered pixel coincide. All seven younger shades render a less-saturated
+relative of that same hue/lightness.
+
+⚠️ That equality is on **channel values, not on the string.** `PALETTE_SOURCE` stores uppercase
+hexes (`#56B4E9`) while `rgbToHex` emits lowercase, and neither side canonicalises, so a check
+written literally as `pixelHexAt(id, 7) === entry.hex` fails on all 20 tokens for a reason that
+has nothing to do with colour. Compare case-folded, or compare RGB channels.
 
 ## Method
 
@@ -31,6 +48,26 @@ render a less-saturated relative of that same hue/lightness.
 4. Every step above operates on **linearised** sRGB. Running any of this on gamma-encoded 0-255
    values produces plausible-looking but wrong numbers — there is no test that would catch that
    mistake other than comparing against the worst-pair table below.
+
+⚠️ **Known limitation — the CVD matrices push colours out of gamut, and the clamp is load-bearing.**
+Measured over the 20 registry hexes × 3 CVD types, **19 of 180 channel evaluations land outside
+`[0,1]`, with excursions up to 0.224** in linear light (the tritan matrix's `1.255528` red-row
+coefficient dominates). `simulateCvd` clamps each channel to `[0,1]`, so for those tokens ΔE76 is
+measured against a gamut-wall projection rather than the unclamped simulation. Two colours that
+clamp to the same wall are pushed artificially *closer* (conservative — the gate gets stricter),
+but a pair where only one member clamps can be pushed artificially *apart*, so a G4 pass can rest
+partly on a clamping artefact. This is inherent to applying Machado matrices in a bounded sRGB
+space and is not corrected here; it is recorded so a future re-tune does not mistake a clamp
+artefact for real separation.
+
+⚠️ **Contrast (G1/G2) is measured under normal vision only.** `contrastRatio` takes a hex string
+and re-linearises internally, while `simulateCvd` returns linear RGB and the module has no
+de-linearising function — so there is no call path that produces a contrast number for a simulated
+colour. Measured manually, the worst-case contrast vs `#0a0a0a` across all 20 tokens × 8 shades is
+normal 3.06, protan 3.23, **deutan 2.96**, tritan 3.06. Deutan dips just below the normal-vision
+floor recorded below but still clears the 2.5 G2 threshold, so this is an ungated path rather than
+a live failure. Closing it needs a `luminanceOfLinear(LinearRgb)` split — tracked in
+`deferred-work.md` for Stories 4.9 / 6.11.
 
 All math lives in `apps/web/lib/paletteCvd.ts`, imported only by its own test and by the Story
 4.9 / 6.11 re-confirmations — never by component code.
@@ -77,18 +114,38 @@ Minimum pairwise ΔE76 over `displayColor` outputs, and minimum contrast vs. `#0
 | 7 | deutan | 17.04 (amber/yellow) | 1.32 (lavender/periwinkle) | 5.12 |
 | 7 | tritan | 9.00 (vermillion/coral-red) | 5.73 (teal/mint) | 5.12 |
 
-Worst case across **all eight shades** — what G4 actually gates on: core-8 protan **4.77**,
-tritan **6.65**, deutan **9.24**, normal **13.55**; all-20 (recorded, not gated) deutan **1.21**,
-protan **1.88**.
+Worst case across **all eight shades** — what G4 actually gates on: core-8 protan **4.77**
+(`bluish-green`/`coral-red`, shade 5), tritan **6.65**, deutan **9.24**, normal **13.55**;
+all-20 (recorded, not gated) deutan **1.21** (`reddish-purple`/`teal`, shade 3), protan **1.53**
+(`teal`/`rose`, shade 2), tritan **4.02**, normal **6.29**.
 
-These numbers land within ~0.1–0.4 of the values RFC-007's context engine run measured against
-the same hexes before this story's code existed (recorded in the story file's Task 4), with one
-exception: the low-saturation shade-0 "worst pair" identity shifts slightly (the story's context
-run found `sky-blue`/`azure` at 13.17 normal-core-shade-0; this implementation finds
-`reddish-purple`/`coral-red` at 13.55). At low saturation several pairs sit within a fraction of
-a ΔE unit of each other, so which one is nominally "worst" is sensitive to sub-percent rounding
-choices; the important property — that every number here is comfortably on the same side of its
-gate as the story's own reproduction table predicted — holds throughout.
+⚠️ **The three sampled rows above understate the all-shade minima — read them together with this
+line, not instead of it.** Several pairs dip between shades 0, 3 and 7: the all-20 protan worst is
+`teal`/`rose` at shade 2 (**1.53**), a pair that appears in none of the sampled rows, and the
+core-8 protan worst is at shade 5 (**4.77**), below all three of its sampled values. G4 gates on
+every shade, so the gate is unaffected — but a reader who eyeballs only the table will read the
+protan floor as 1.88 rather than 1.53. Run the sweep for the full per-shade picture.
+
+These numbers land within ~0.1–0.45 of the values RFC-007's context engine run measured against
+the same hexes before this story's code existed (recorded in the story file's Task 4), and the
+nominal "worst pair" identity shifts in several cells, not just one:
+
+| cell | story's run | this implementation |
+|---|---|---|
+| 0 / normal, core-8 | 13.17 (`sky-blue`/`azure`) | 13.55 (`reddish-purple`/`coral-red`) |
+| 0 / deutan, core-8 | 9.69 (`sky-blue`/`reddish-purple`) | 9.24 (same pair — Δ 0.45) |
+| 0 / tritan, all-20 | 4.07 (`coral-red`/`rose`) | 4.02 (`cyan`/`mint`) |
+| 3 / tritan, all-20 | 6.72 (`coral-red`/`rose`) | 6.51 (`tangerine`/`rose`) |
+
+**Why, and why it is benign:** this pipeline measures the pixel a user actually gets, so it
+quantizes twice on the way to Lab — through `formatHsl`'s 1-decimal-place HSL string, then to an
+8-bit hex — where the story's pre-implementation run worked in continuous floats. At low
+saturation several pairs sit within a fraction of a ΔE unit of one another, so which is nominally
+"worst" flips easily; the 0.45 deutan delta is the same pair, just measured after quantization.
+The property that matters — every number is comfortably on the same side of its gate as the
+story's table predicted — holds throughout. The story's own "±0.1 is fine" tolerance was written
+before the relative-ramp resolution and is too tight for the shade-0 end; treat ±0.5 at low
+saturation as expected, and a *gate* failure (not a table wobble) as the real signal.
 
 ## Known-indistinguishable pairs under CVD (informational — not gated)
 
@@ -97,10 +154,25 @@ reliably distinguishable at one or more shades. Product's mitigation is the FR-3
 warning at organism creation/edit time (Stories 4.8/4.9), not a palette change — RFC-007 Decision
 2 already accepts this residue as the cost of a 20-colour set.
 
-- **Deutan:** `lavender` / `periwinkle` (age-cap shade, ΔE76 1.32); `violet` / `indigo`
-  (mid-ramp, ΔE76 1.21)
-- **Protan:** `violet` / `indigo` (age-cap shade, ΔE76 1.88; also the worst pair at shade 0 and 3)
-- **Tritan:** `teal` / `mint` (age-cap shade, ΔE76 5.73); `cyan` / `mint` (shade 0, ΔE76 4.02)
+The list is **measured**, not curated: it is every all-20 pair whose ΔE76 drops below the 4.0 G4
+threshold at *any* shade under *any* simulation, emitted directly by the sweep. Each entry gives
+the pair's minimum and the shade it occurs at.
+
+- **Protan:** `teal`/`rose` **1.53** (shade 2) · `violet`/`indigo` **1.88** (shade 7) ·
+  `lavender`/`periwinkle` **2.79** (shade 3) · `yellow`/`lime` **3.37** (shade 7)
+- **Deutan:** `reddish-purple`/`teal` **1.21** (shade 3) · `lavender`/`periwinkle` **1.32**
+  (shade 7) · `mint`/`rose` **2.85** (shade 0) · `violet`/`indigo` **3.43** (shade 0)
+- **Tritan:** none below 4.0. Closest are `cyan`/`mint` **4.02** (shade 0) and `teal`/`mint`
+  **5.73** (shade 7) — recorded because they are the tritan floor, not because they breach it.
+
+⚠️ **This supersedes the shorter list prescribed in the story file** (`1-7-…md`, Task 4), which
+named `protan: yellow/lime, violet/indigo` and `deutan: lavender/periwinkle, violet/indigo`. That
+list was written against the *absolute*-saturation ramp, before Sidiar's 2026-08-06 resolution
+made the ramp relative to each token's own saturation, and it does not survive re-measurement: it
+omits the actual worst pair in both modes (`teal`/`rose` under protan, `reddish-purple`/`teal`
+under deutan) and attributes ΔE76 1.21 to deutan `violet`/`indigo`, which in fact measures 3.43.
+Resolved in favour of the measurement (code review 2026-08-06). `yellow`/`lime` is retained — it
+does breach 4.0, at 3.37.
 
 ## For Stories 4.9 and 6.11
 

@@ -21,7 +21,10 @@ export default defineConfig({
     // Unit/component tests only. Playwright e2e specs live in e2e/ and must NOT
     // be picked up by Vitest (they import @playwright/test, a different runner).
     include: ['**/*.test.{ts,tsx}'],
-    exclude: ['e2e/**', 'node_modules/**', 'out/**', '.next/**'],
+    // scripts/ holds the palette CVD sweep — a reporting run that prints a table and asserts
+    // nothing. It shares the *.test.ts suffix so Vitest can resolve the lib imports, and is run
+    // deliberately via vitest.sweep.config.mts, never as part of `npm test`.
+    exclude: ['e2e/**', 'node_modules/**', 'out/**', '.next/**', 'scripts/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

@@ -68,6 +68,14 @@ describe('PALETTE shape', () => {
 });
 
 describe('resolvePaletteColor fallback (Decision I.4)', () => {
+  // Pinned to the literal, not to DEFAULT_COLOR_TOKEN: which token is the default is load-bearing
+  // (Conway's Classic persists it, and FR-2.3's default-assignment order starts there), so
+  // repointing it must fail a test rather than silently re-flow every assertion below.
+  it('defaults to sky-blue, the first token and Conway’s Classic’s', () => {
+    expect(DEFAULT_COLOR_TOKEN).toBe('sky-blue');
+    expect(PALETTE[0].id).toBe('sky-blue');
+  });
+
   it('resolves an unknown token to the default and warns exactly once across repeated calls', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 

@@ -29,7 +29,11 @@ describe('the saturation ramp', () => {
       for (let shade = 0; shade <= MAX_AGE_SHADE; shade++) {
         const { s } = parseHsl(displayColor(color.id, shade));
         const expectedPercent = color.s * (30 + 10 * shade);
-        expect(s).toBeCloseTo(expectedPercent, 1);
+        // Asserted against formatHsl's own rounding step rather than toBeCloseTo(_, 1): that
+        // matcher passes only while |diff| < 0.05, and round1's maximum error is exactly 0.05, so
+        // a re-tuned hex whose s*rampPercent landed on a .X5 boundary would fail this test for a
+        // rounding decision the code makes deliberately. The hexes are designated re-tunable.
+        expect(s).toBe(Math.round(expectedPercent * 10) / 10);
       }
     }
   });
@@ -63,6 +67,12 @@ describe('ageShadeFor', () => {
   it('aging organisms use their raw age, capped at 7', () => {
     expect(ageShadeFor(0, true)).toBe(0);
     expect(ageShadeFor(99, true)).toBe(7);
+  });
+
+  it('floors a fractional age rather than rounding it to the next band', () => {
+    expect(ageShadeFor(0.5, true)).toBe(0);
+    expect(ageShadeFor(6.5, true)).toBe(6); // rounding would land on the cap, same as age 99
+    expect(ageShadeFor(6.99, true)).toBe(6);
   });
 
   it('clamps out-of-range and NaN ages', () => {
