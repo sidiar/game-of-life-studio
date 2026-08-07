@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
@@ -25,12 +27,16 @@ describe('golTheme', () => {
     expect(golTheme.palette.mode).toBe('dark');
   });
 
-  it('every palette.background / primary / secondary / text leaf, plus divider, is a --gol-* var()', () => {
+  it('every palette.background / primary / secondary / text / action leaf, plus divider, is a --gol-* var()', () => {
     assertAllVarGol({
       background: golTheme.palette.background,
       primary: golTheme.palette.primary,
       secondary: golTheme.palette.secondary,
       text: golTheme.palette.text,
+      // action joined the walk in code review 2026-08-07, when it was pinned to tokens. Its
+      // *Opacity members are numbers and are skipped by the walk's typeof check — MUI multiplies
+      // them, so they must stay numeric.
+      action: golTheme.palette.action,
     });
     expect(golTheme.palette.divider).toMatch(/^var\(--gol-/);
   });
@@ -39,12 +45,28 @@ describe('golTheme', () => {
     expect(golTheme.typography.fontFamily).toBe('var(--gol-font)');
   });
 
-  // Decision J invariant: ThemeProvider must never receive a new theme identity. A future
-  // refactor to createTheme()-inside-a-function would break this silently — every other
-  // assertion in this file still passes.
-  it('is referentially identical across two imports', async () => {
-    const reimported = await import('./theme');
-    expect(reimported.default).toBe(golTheme);
+  // Decision J invariant: ThemeProvider must never receive a new theme identity.
+  //
+  // The obvious test — `await import('./theme')` twice and compare — cannot fail: ESM returns the
+  // cached module namespace, so the two references are identical no matter what the module
+  // contains, including `export default function makeTheme() { … }` (same function reference).
+  // It was doing nothing, and was replaced in code review 2026-08-07. These two assertions can
+  // fail: the export must be a theme object rather than a factory, and the source must contain
+  // exactly one createTheme() call — the structural-read pattern established in Story 1.8.
+  it('exports a theme object, not a factory', () => {
+    expect(typeof golTheme).toBe('object');
+    expect(golTheme).toHaveProperty('palette');
+  });
+
+  it('theme.ts calls createTheme exactly once', () => {
+    // __dirname, not cwd — Turbo runs `test` inside apps/web today, but the path should not
+    // depend on that. (import.meta.url is not a file: URL under this transform.)
+    const source = readFileSync(join(__dirname, 'theme.ts'), 'utf8');
+    // Comments are stripped first — theme.ts's own doc comment says "no second createTheme()
+    // call anywhere", and counting that sentence would make this test fail on prose.
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const calls = code.match(/\bcreateTheme\s*\(/g) ?? [];
+    expect(calls).toHaveLength(1);
   });
 
   // Regression test for silent-failure trap 1 (Story 1.9 Dev Notes): without cssVariables: true,

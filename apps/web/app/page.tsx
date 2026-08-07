@@ -25,7 +25,8 @@ export default function HomePage() {
   // No <main> here — AppShell (Story 1.9) owns the single <main> landmark; this page renders only
   // its own content into it. The <h1> moved from "Game of Life Studio" (now the shell's wordmark,
   // a styled <div>, not a heading) to "Battle Gallery" (the mockup's .section-title) so the
-  // document keeps exactly one <h1>.
+  // document keeps exactly one <h1>. That invariant is enforced by AppShell.test.tsx, not by axe
+  // — axe-core has no duplicate-h1 rule (corrected in code review 2026-08-07).
   return (
     <>
       <h1>Battle Gallery</h1>

@@ -23,11 +23,18 @@ const nextScopedToWeb = next.map((config) =>
 // second theme a one-file change.
 // Named CSS colours ("red") are deliberately NOT matched — too high a
 // false-positive risk against unrelated strings.
-const HEX_PATTERN = '#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})';
+// ⚠️ The Literal selectors are UNANCHORED (code review 2026-08-07). They were `^…$`, which
+// matched a bare literal only — so `borderBottom: '2px solid #333333'`, the plain-string CSS
+// shorthand form these style objects actually use, sailed through AC3's gate with a raw hex in
+// a component. The TemplateElement selector was already unanchored, which is why the template
+// form of the same declaration WAS caught; the two now behave alike. Longest alternative first
+// so `#00d4ff` matches as 6 digits rather than backtracking from 3, and a trailing \b so a URL
+// fragment like '/docs#abcd-ef' does not read as a colour.
+const HEX_PATTERN = '#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\\b';
 const FUNCTIONAL_COLOUR_PATTERN = '(rgb|rgba|hsl|hsla)\\([^)]*\\)';
 const COLOUR_SELECTOR_GROUP = [
-  `Literal[value=/^${HEX_PATTERN}$/]`,
-  `Literal[value=/^${FUNCTIONAL_COLOUR_PATTERN}$/i]`,
+  `Literal[value=/${HEX_PATTERN}/]`,
+  `Literal[value=/${FUNCTIONAL_COLOUR_PATTERN}/i]`,
   `TemplateElement[value.raw=/${HEX_PATTERN}|${FUNCTIONAL_COLOUR_PATTERN}/i]`,
 ].join(', ');
 

@@ -1,8 +1,21 @@
 /* Clinical Lab — the accessible default (NFR-8.3, assumption A-4). Values trace to
    ux-design-complete.md#Clinical Lab Theme and clinical-lab-theme/battle-gallery.html,
    with three WCAG/RFC-conflict-driven departures flagged inline (Story 1.9 Dev Notes
-   "Spec conflicts surfaced"). Biotech Terminal's block is Story 6.1 — do not stub it here. */
-:root[data-theme='clinical-lab'] {
+   "Spec conflicts surfaced"). Biotech Terminal's block is Story 6.1 — do not stub it here.
+
+   These live on bare :root, NOT under [data-theme='clinical-lab'] (code review 2026-08-07).
+   Scoping them to the attribute meant any document root that does not carry it — Next's
+   built-in GlobalError renders its own <html>, and Story 6.5 can restore an unrecognised
+   theme name from gol:settings — resolved every var(--gol-*) to invalid-at-computed-value-time:
+   transparent background, CanvasText colour, UA default font. The AA-guaranteed default must be
+   unconditional. Story 6.1 adds Biotech Terminal as a :root[data-theme='biotech-terminal']
+   OVERRIDE block; the attribute stays stamped and stays the switch (NFR-8.2). */
+:root {
+  /* Tells the UA the page is dark so scrollbars and native form controls (checkbox, radio,
+     select, date) render dark too — without it they paint light against #0a0a0a. Set here
+     rather than via CssBaseline's enableColorScheme so it survives any root without MUI. */
+  color-scheme: dark;
+
   /* Surfaces */
   --gol-bg-primary: #0a0a0a;
   --gol-bg-secondary: #1a1a1a;
@@ -39,14 +52,37 @@
   --gol-letter-spacing-body: 0;
   /* 0, per every Clinical Lab mockup (departure #3) — RFC-003 Decision 2's illustrative snippet
      says 4px, but ux-design-complete.md states "Border radius: 0 (sharp corners)" and no
-     clinical-lab-theme/*.html element sets a radius. Mockups are the visual authority here. */
+     clinical-lab-theme/*.html element sets a radius. Mockups are the visual authority here.
+     Backs theme.shape.borderRadius: 0 as well as the two styleOverrides — see lib/theme.ts. */
   --gol-radius: 0px;
+
+  /* Interaction state layers (added in code review 2026-08-07). Left unset, MUI fills palette
+     .action.* with its own dark-mode defaults — raw rgba() literals that appear in no source
+     file, so AR-46 cannot see them, and that a data-theme flip would never change. Every
+     component already on screen reads these, so they are pinned now; the status set
+     (error/warning/info/success) has no consumer until Story 1.13 and is deferred there.
+     Composed from --gol-text-primary-channel so the overlay colour has one source of truth. */
+  --gol-action-active: var(--gol-text-primary);
+  --gol-action-hover: rgb(var(--gol-text-primary-channel) / 0.08);
+  --gol-action-selected: rgb(var(--gol-text-primary-channel) / 0.16);
+  --gol-action-focus: rgb(var(--gol-text-primary-channel) / 0.12);
+  --gol-action-disabled: rgb(var(--gol-text-primary-channel) / 0.3);
+  --gol-action-disabled-bg: rgb(var(--gol-text-primary-channel) / 0.12);
 
   /* Channel tokens — space-separated sRGB (NOT hex, NOT rgb()) for the SAME colours above. MUI's
      cssVariables layer composes its hover/focus/selected state layers as
-     rgba(var(--…-channel) / <alpha>); omitting one is a silent-failure trap (Story 1.9 Dev
-     Notes): construction only warns, and that state layer renders fully transparent. Exactly the
-     seven consumed by lib/theme.ts — do not add one per colour. */
+     rgba(var(--…-channel) / <alpha>); omitting one is a SILENT failure — corrected in code review
+     2026-08-07, the earlier comment here claimed construction warns. It does not: for
+     primary/secondary, createThemeWithVars calls private_safeColorChannel with no warning
+     argument, so MUI emits `--mui-palette-primary-mainChannel: var(--gol-accent)` — a hex where a
+     triplet belongs — and every state layer resolves to an invalid rgba() and renders fully
+     transparent, with nothing logged anywhere. themeTokens.test.ts now asserts each triplet
+     against its own hex, in both directions; that test is the guard, not the console.
+
+     These seven are the ones lib/theme.ts passes explicitly. MUI additionally auto-derives six
+     more (primary/secondary × light/dark/contrastText Channel) which hold hex-valued var()s and
+     are therefore malformed; no @mui/material 9.3.1 core component reads them, so they are
+     latent, but do not compose rgba(var(--mui-palette-primary-lightChannel) / …) against one. */
   --gol-bg-primary-channel: 10 10 10;
   --gol-bg-secondary-channel: 26 26 26;
   --gol-accent-channel: 0 212 255;

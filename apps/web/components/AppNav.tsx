@@ -32,6 +32,16 @@ const NavItem = styled(Link, {
   '&:hover': {
     color: active ? 'var(--gol-accent)' : 'var(--gol-text-primary)',
   },
+  // Keyboard parity with the hover rule above (code review 2026-08-07). textDecoration: 'none'
+  // plus a custom background left the UA default outline as the only focus signal — a colour
+  // never chosen against #0a0a0a and different in every engine, so mouse users got a state
+  // change keyboard users did not. --gol-accent is already gated at >= 3:1 against all three
+  // backgrounds in themeTokens.test.ts under the label "focus ring"; this is the ring it meant.
+  // axe does not evaluate focus visibility, so neither axe run would have caught its absence.
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
 }));
 
 export default function AppNav() {

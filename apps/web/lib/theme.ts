@@ -60,6 +60,26 @@ const paletteConfig = {
     // explicitly so every rendered colour still traces to themes.css.
     icon: 'var(--gol-text-secondary)',
   },
+  // Pinned in code review 2026-08-07. Left unset, MUI fills every one of these with a raw
+  // rgba(255,255,255,α) dark-mode default — invisible to AR-46 (it appears in no source file)
+  // and frozen across a data-theme flip. Every component already on screen reads action.*, so
+  // unlike the status colours (error/warning/info/success, deferred to Story 1.13) it cannot
+  // wait. The *Opacity numbers stay numeric: MUI multiplies them, so a var() string breaks them.
+  action: {
+    active: 'var(--gol-action-active)',
+    activeChannel: 'var(--gol-text-primary-channel)',
+    hover: 'var(--gol-action-hover)',
+    hoverOpacity: 0.08,
+    selected: 'var(--gol-action-selected)',
+    selectedChannel: 'var(--gol-text-primary-channel)',
+    selectedOpacity: 0.16,
+    focus: 'var(--gol-action-focus)',
+    focusOpacity: 0.12,
+    disabled: 'var(--gol-action-disabled)',
+    disabledBackground: 'var(--gol-action-disabled-bg)',
+    disabledOpacity: 0.38,
+    activatedOpacity: 0.24,
+  },
   divider: 'var(--gol-border)',
   dividerChannel: 'var(--gol-border-channel)',
 };
@@ -67,15 +87,33 @@ const paletteConfig = {
 const golTheme = createTheme({
   // NOT a deviation from Decision J — the thing that makes Decision J implementable. With this
   // on, MUI emits `--mui-palette-*: var(--gol-*)` once at :root and every component reads
-  // `var(--mui-…, var(--gol-…))`, so a data-theme flip still propagates through both layers by
-  // pure CSS recomputation — zero JS colour math, zero React re-render. Without it, <Button>
-  // throws on render (alpha() in its variant styles) even though CssBaseline, Paper, Typography,
-  // TextField, Dialog etc. all render fine — a shell that looks complete and detonates the first
-  // time Story 1.13 renders a button. This is NOT MUI's `colorSchemes` light/dark mode API, which
-  // Decision J.1 rejects; cssVariables here backs a single, constant, dark palette.
+  // `var(--mui-…, var(--gol-…))`, so a data-theme flip propagates through both layers by pure
+  // CSS recomputation — no React re-render. Without it, <Button> throws on render (alpha() in
+  // its variant styles) even though CssBaseline, Paper, Typography, TextField, Dialog etc. all
+  // render fine — a shell that looks complete and detonates the first time Story 1.13 renders a
+  // button. This is NOT MUI's `colorSchemes` light/dark mode API, which Decision J.1 rejects;
+  // cssVariables here backs a single, constant, dark palette.
+  //
+  // ⚠️ It does NOT eliminate all JS colour math (corrected in code review 2026-08-07 — the
+  // earlier claim of "zero JS colour math" is not what the build produces). createThemeWithVars
+  // still derives some component tokens through lighten()/darken(), which return their input
+  // unchanged on a var() string rather than throwing, so the shipped stylesheet carries
+  // `--mui-palette-Slider-primaryTrack: var(--gol-accent)` — identical to the active track — and
+  // the same for LinearProgress-primaryBg, Switch-primaryDisabledColor and SnackbarContent-bg.
+  // Nothing renders those components yet; each is deferred to the story that first does
+  // (deferred-work.md, code review of 1-9). Any component reading a derived token needs an
+  // authored --gol-* shade plus a styleOverride, exactly as --gol-accent-active already does.
   cssVariables: true,
   palette: paletteConfig,
   typography: { fontFamily: 'var(--gol-font)' },
+  // A plain 0, not var(--gol-radius): MUI does arithmetic on this value (e.g. `borderRadius / 2`
+  // for a sub-component), which a var() string cannot support. The two styleOverrides below are
+  // not enough on their own — everything that reads shape.borderRadius directly rather than
+  // inheriting Paper (OutlinedInput/TextField, Chip, Alert, Tooltip, Snackbar, ToggleButton,
+  // Slider) shipped 4px rounded corners against a theme whose departure #3 is sharp corners
+  // (code review 2026-08-07; Story 1.10's search input was the first case). Safe at 0 because
+  // 0/2 === 0, and 0 is the same in both themes, so this is not a token the theme flip needs.
+  shape: { borderRadius: 0 },
   components: {
     // Radius goes through styleOverrides, not shape.borderRadius: MUI does arithmetic on the
     // numeric shape value (e.g. `shape.borderRadius / 2` for a sub-component), which a var()

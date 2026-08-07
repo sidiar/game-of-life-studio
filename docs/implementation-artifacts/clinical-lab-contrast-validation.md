@@ -81,7 +81,7 @@ Clinical Lab mockup for no accessibility gain, so the boundary role was **split 
 token** instead (`themeTokens.test.ts` documents this exclusion inline so a future reviewer does
 not "fix" it by asserting 3:1 on `--gol-border`).
 
-## The two departures from the UX spec, and why
+## The three departures from the UX spec, and why
 
 `ux-design-complete.md#Clinical Lab Theme` and `clinical-lab-theme/battle-gallery.html` specify
 `--text-tertiary: #666666` and a single `--border: #333333`. Measured against this
@@ -98,8 +98,23 @@ implementation's `contrastRatio`, both fail AC5:
   this story) carries the boundary of inputs and outlined controls, where SC 1.4.11 does apply
   (3.88 / 3.41 / 3.12 — passes all three).
 
-Both departures are commented inline in `apps/web/app/themes.css`. Story 1.10's search input and
-metadata rows are the first consumers of `--gol-border-control`; they would fail their own axe
+The third departure is not a contrast matter but belongs with the other two, since all three are
+places this implementation knowingly diverges from a written spec (added in code review
+2026-08-07 — Task 6 asked for three and this doc shipped two):
+
+- **`--gol-radius: 0px` against RFC-003 Decision 2's `4px`** — not a WCAG issue; a conflict
+  between two specs. RFC-003 Decision 2's illustrative theme snippet says `4px`, but
+  `ux-design-complete.md` states "Border radius: 0 (sharp corners)" and no
+  `clinical-lab-theme/*.html` element sets a radius anywhere. **Resolution:** `0px`, because for a
+  purely visual property the mockups are the authority and the RFC snippet is illustrative — the
+  same class of stale-snippet override `project-context.md` already records for
+  `repositoryFactory.ts` naming and the factory's `APP_MODE` read. Knock-on: `theme.shape
+  .borderRadius` is also set to a plain `0` (code review 2026-08-07) — the two `styleOverrides`
+  alone left every component that reads `shape.borderRadius` directly, rather than inheriting
+  Paper, rendering at MUI's default `4px`.
+
+All three departures are commented inline in `apps/web/app/themes.css`. Story 1.10's search input
+and metadata rows are the first consumers of `--gol-border-control`; they would fail their own axe
 check if this were deferred.
 
 ## For future stories

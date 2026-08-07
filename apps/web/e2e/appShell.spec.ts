@@ -25,9 +25,36 @@ test.describe('app shell (Story 1.9)', () => {
     // AC4's no-dead-affordance rule, proven in a real browser: exactly one nav link.
     await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(1);
 
+    // ⚠️ Wait for hydration BEFORE asserting on errors (code review 2026-08-07). page.goto
+    // defaults to waitUntil: 'load', and every assertion above resolves against server-rendered
+    // HTML on its first poll — the markup is all there pre-hydration. A hydration-mismatch
+    // console.error lands a few ms later, i.e. after the assertion below had already run, so the
+    // one check this comment claims exists nowhere else was passing by racing it.
+    //
+    // "workspace: ready" is the hydration signal: the text is "workspace: seeding" in the
+    // server-rendered HTML and only reaches "ready" once useWorkspaceSeed's client effect has
+    // run (Story 1.5), which cannot happen before React has hydrated this tree.
+    await expect(page.getByText('workspace: ready')).toBeVisible();
+
     // Emotion hydration mismatches (missing AppRouterCacheProvider) surface only here, against
     // the served static export — not in `next dev`, and not in jsdom.
     expect(errors).toEqual([]);
+  });
+
+  // Guards AppRouterCacheProvider itself (code review 2026-08-07). Every other assertion in this
+  // file reads the DOM *after* client-side Emotion has inserted its styles, so deleting the
+  // provider — reintroducing the NFR-8.5 unstyled flash on the static host — left the whole suite
+  // green. This reads the raw served HTML instead, where the server-inserted <style> tags either
+  // are or are not present.
+  test('ships server-inserted Emotion styles in the static HTML', async ({ request }) => {
+    const html = await (await request.get('/')).text();
+
+    expect(html).toContain('data-emotion');
+    // options={{ key: 'gol' }} in AppProviders — a changed or dropped key means the collected
+    // cache is not the one the tree rendered with.
+    expect(html).toMatch(/data-emotion="gol/);
+    // The token layer must be in the served document too, not only fetched afterwards.
+    expect(html).toContain('data-theme="clinical-lab"');
   });
 
   test('has no axe accessibility violations', async ({ page }) => {

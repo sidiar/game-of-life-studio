@@ -18,7 +18,12 @@ const Header = styled('header')({
 });
 
 // Wordmark, not a document heading — the page's own <h1> ("Battle Gallery") is the sole h1
-// (Story 1.9 Dev Notes, forced decision 5). Two <h1>s on one document trips axe.
+// (Story 1.9 Dev Notes, forced decision 5). A second <h1> here would give every page two
+// competing document titles for screen-reader heading navigation, and the shell's brand mark is
+// not a heading for the page's content. ⚠️ Nothing automated enforces this: axe-core has no
+// duplicate-h1 rule — `page-has-heading-one` requires at LEAST one and `heading-order` only
+// checks that levels do not skip (the earlier "trips axe" comment here was wrong, corrected in
+// code review 2026-08-07). AppShell.test.tsx's h1-count assertion is the actual guard.
 const Logo = styled('div')({
   fontSize: '24px',
   fontWeight: 600,
