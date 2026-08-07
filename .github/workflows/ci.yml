@@ -103,7 +103,9 @@ jobs:
 
       - run: npm ci
 
-      # Cache the browser binaries; reinstall (with OS deps) only on a cache miss.
+      # Cache the browser BINARIES only. ~/.cache/ms-playwright holds the downloaded
+      # browsers; it does not hold the apt system libraries WebKit links against,
+      # which `--with-deps` installs into the runner OS and which no cache restores.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4
@@ -111,9 +113,20 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      # ⚠️ Unconditional, and NOT merged into the step below. These two steps were one
+      # `npx playwright install --with-deps` gated on the cache miss, which meant a cache
+      # HIT skipped the OS libraries too — so `e2e` was green exactly once per
+      # package-lock change and then failed until the next one. WebKit and `tablet`
+      # (also WebKit) died with "browserType.launch: Target page, context or browser has
+      # been closed" while Chromium and Firefox passed, because WebKit is the engine
+      # that needs the system libs. Observed red on Stories 1.7 and 1.8, green only on
+      # 1.9 where MUI changed the lockfile and forced a miss.
+      - name: Install Playwright system dependencies
+        run: npx playwright install-deps
+
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps
+        run: npx playwright install
 
       - name: E2E + axe (Chromium/Firefox/WebKit/tablet)
         run: npm run e2e
