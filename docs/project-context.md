@@ -33,16 +33,20 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 **Workspaces:** `apps/web` + `@gol/{domain,simulation,persistence,test-utils}`
 
-**Planned, NOT yet installed** — do not import these until their story lands. Versions
-are the architecture's floor; confirm the current stable at install time.
-
-| Tech | Purpose | Lands in |
-|---|---|---|
-| Zod | shared schemas | Story 1.3 |
-| MUI v6 + Emotion | all UI chrome | Epic 2 |
-
 The test/lint toolchain (Vitest + RTL, Playwright, fast-check, axe-core, ESLint 9, Prettier)
-is **installed** as of Story 1.2 — see Testing / Code Quality rules below.
+is **installed** as of Story 1.2 — see Testing / Code Quality rules below. Zod is installed
+as of Story 1.3.
+
+**MUI v9.3.1 + Emotion is installed as of Story 1.9** — not v6. The architecture's v6 line
+is not installable on this repo: `@mui/material-nextjs@6.5.0`'s `next` peer caps at `^15`,
+and this repo is on Next 16.2.10. v9.3.1 is current stable and declares `next: ^16`
+(fallback, if it ever misbehaves: 7.3.11, also `^16`). AR-35's substance — MUI core only,
+no `@mui/x-*`, per-component imports — is unchanged; only the major version moved.
+`apps/web/lib/theme.ts`'s single `createTheme()` **requires `cssVariables: true`** — without
+it, `<Button>`/`<IconButton>` throw at render (`alpha()` in their variant styles), even
+though `CssBaseline`/`Paper`/`Typography`/`TextField`/`Dialog` all render fine either way.
+Do not repeat RFC-003 Decision 2's illustrative theme snippet verbatim; see Story 1.9's Dev
+Notes for the two independent throws it reproduces.
 
 **`build` means `tsc --noEmit`.** The `@gol/*` packages are just-in-time: they export
 TS source directly (`"exports": "./src/index.ts"`) and `apps/web` compiles them via

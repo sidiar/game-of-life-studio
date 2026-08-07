@@ -22,14 +22,18 @@ export default function HomePage() {
   const repositories = useMemo(() => createRepositories(), []);
   const { status } = useWorkspaceSeed(repositories);
 
+  // No <main> here — AppShell (Story 1.9) owns the single <main> landmark; this page renders only
+  // its own content into it. The <h1> moved from "Game of Life Studio" (now the shell's wordmark,
+  // a styled <div>, not a heading) to "Battle Gallery" (the mockup's .section-title) so the
+  // document keeps exactly one <h1>.
   return (
-    <main>
-      <h1>Game of Life Studio</h1>
+    <>
+      <h1>Battle Gallery</h1>
       <p>Battle Gallery coming soon.</p>
       <p>
         mode: {APP_MODE} · wired to @gol/domain ({DOMAIN_ORGANISM_FIELDS} organism fields)
       </p>
       <p>workspace: {status}</p>
-    </main>
+    </>
   );
 }

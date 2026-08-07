@@ -20,9 +20,9 @@ describe('HomePage', () => {
   it('renders the placeholder gallery copy wired through @gol/domain', () => {
     const { container } = render(<HomePage />);
 
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Game of Life Studio' }),
-    ).toBeInTheDocument();
+    // Story 1.9: the h1 moved here from the shell's wordmark ("Game of Life Studio", now a
+    // styled <div> in AppShell, not a heading) — this page owns the document's only <h1>.
+    expect(screen.getByRole('heading', { level: 1, name: 'Battle Gallery' })).toBeInTheDocument();
     expect(screen.getByText('Battle Gallery coming soon.')).toBeInTheDocument();
 
     // The field count is read off the real OrganismSchema (Story 1.3), so matching a

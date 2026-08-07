@@ -15,9 +15,14 @@
     "analyze": "ANALYZE=true NEXT_PUBLIC_MODE=standalone next build"
   },
   "dependencies": {
+    "@emotion/cache": "^11.14.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@gol/domain": "*",
     "@gol/persistence": "*",
     "@gol/simulation": "*",
+    "@mui/material": "^9.3.1",
+    "@mui/material-nextjs": "^9.3.0",
     "next": "^16.2.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

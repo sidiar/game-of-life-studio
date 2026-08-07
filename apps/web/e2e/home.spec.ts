@@ -15,9 +15,9 @@ test.describe('home route', () => {
 
     await page.goto('/');
 
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Game of Life Studio' }),
-    ).toBeVisible();
+    // Story 1.9: the h1 moved to the page's own "Battle Gallery" heading — "Game of Life
+    // Studio" is now the shell's wordmark (AppShell), not a document heading.
+    await expect(page.getByRole('heading', { level: 1, name: 'Battle Gallery' })).toBeVisible();
     await expect(page.getByText('Battle Gallery coming soon.')).toBeVisible();
     expect(errors).toEqual([]);
   });

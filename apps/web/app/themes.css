@@ -1,0 +1,57 @@
+/* Clinical Lab — the accessible default (NFR-8.3, assumption A-4). Values trace to
+   ux-design-complete.md#Clinical Lab Theme and clinical-lab-theme/battle-gallery.html,
+   with three WCAG/RFC-conflict-driven departures flagged inline (Story 1.9 Dev Notes
+   "Spec conflicts surfaced"). Biotech Terminal's block is Story 6.1 — do not stub it here. */
+:root[data-theme='clinical-lab'] {
+  /* Surfaces */
+  --gol-bg-primary: #0a0a0a;
+  --gol-bg-secondary: #1a1a1a;
+  --gol-bg-hover: #222222;
+
+  /* Lines. Two tokens, not one: --gol-border stays decorative (dividers, card edges) at the
+     mockup's #333333 (1.57:1 — fine, SC 1.4.11 does not cover decorative boundaries).
+     --gol-border-control (#6e6e6e, new — departure #2) carries control/input boundaries, which
+     SC 1.4.11 DOES cover at 3:1; #333333 measures only 1.57:1 there. Do not repaint --gol-border
+     to "fix" this — see Task 6's excluded-pair comment. */
+  --gol-border: #333333;
+  --gol-border-control: #6e6e6e;
+
+  /* Accent */
+  --gol-accent: #00d4ff;
+  --gol-accent-hover: #00e5ff;
+  /* Authored shade, not computed (J.2 forbids JS colour math on theme values) — backs
+     palette.primary.dark, which MUI's contained-button hover fill reads. */
+  --gol-accent-active: #00a8cc;
+  --gol-on-accent: #0a0a0a;
+  --gol-accent-2: #00d4ff;
+
+  /* Text. --gol-text-tertiary raised #666666 -> #8a8a8a (departure #1): the UX spec value
+     measures 3.45:1 / 3.03:1 against bg-primary/bg-hover, below the 4.5:1 AC5 requires for body
+     text; #8a8a8a clears all three backgrounds (floor is #828282 — see Task 6 table). */
+  --gol-text-primary: #ffffff;
+  --gol-text-secondary: #999999;
+  --gol-text-tertiary: #8a8a8a;
+
+  /* Type & shape */
+  --gol-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --gol-letter-spacing-title: -0.5px;
+  --gol-letter-spacing-body: 0;
+  /* 0, per every Clinical Lab mockup (departure #3) — RFC-003 Decision 2's illustrative snippet
+     says 4px, but ux-design-complete.md states "Border radius: 0 (sharp corners)" and no
+     clinical-lab-theme/*.html element sets a radius. Mockups are the visual authority here. */
+  --gol-radius: 0px;
+
+  /* Channel tokens — space-separated sRGB (NOT hex, NOT rgb()) for the SAME colours above. MUI's
+     cssVariables layer composes its hover/focus/selected state layers as
+     rgba(var(--…-channel) / <alpha>); omitting one is a silent-failure trap (Story 1.9 Dev
+     Notes): construction only warns, and that state layer renders fully transparent. Exactly the
+     seven consumed by lib/theme.ts — do not add one per colour. */
+  --gol-bg-primary-channel: 10 10 10;
+  --gol-bg-secondary-channel: 26 26 26;
+  --gol-accent-channel: 0 212 255;
+  --gol-accent-2-channel: 0 212 255;
+  --gol-text-primary-channel: 255 255 255;
+  --gol-text-secondary-channel: 153 153 153;
+  --gol-border-channel: 51 51 51;
+}
