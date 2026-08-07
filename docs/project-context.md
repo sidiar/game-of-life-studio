@@ -136,6 +136,25 @@ build, not latest. Do not bump versions opportunistically.
   in typography and radius, not just palette.
 - **The Canvas grid is drawn outside MUI.** Never wrap cells in MUI components.
 
+**Token layer shape — the DEFAULT theme is not in a `[data-theme]` block** *(deliberate override
+of RFC-003 Decision 2, Story 1.9 review 2026-08-07)*
+
+- RFC-003 Decision 2 says the `--gol-*` tokens are "defined per `[data-theme='…']` block", and its
+  worked example shows `:root[data-theme='clinical-lab']` and `:root[data-theme='biotech-terminal']`
+  as two full blocks. **`themes.css` does not do that, on purpose:** Clinical Lab's values sit on
+  bare `:root`, and additional themes are `:root[data-theme='…']` blocks holding **overrides only**.
+- **Why:** scoping the *default* theme to the attribute means any document root that doesn't carry
+  it renders unthemed — every `var(--gol-*)` hits invalid-at-computed-value-time, giving a
+  transparent (white) background, `CanvasText` text and the UA default font. Two roots reach this:
+  Next's built-in `GlobalError` renders its own `<html>` (there is no `app/global-error.tsx`), and
+  from Story 6.5 an unrecognised theme name restored from `gol:settings` does the same. The theme
+  NFR-8.3 designates as the AA-guaranteed default has to be unconditional.
+- **What is unchanged:** the dedicated-file requirement (NFR-8.4), and NFR-8.2's "applied via data
+  attribute on root element" — the attribute is still stamped on `<html>` and is still the switch.
+- ⚠️ **Story 6.1 (Biotech Terminal) must add an override block, not a second complete token set.**
+  Its AC in `epics.md` still says "a complete second `[data-theme]` token set covers every `--gol-*`
+  property"; written literally that reinstates the duplication this structure removes.
+
 ### Testing Rules
 
 **Current state:** Vitest (+ v8 coverage), RTL, and Playwright are installed (Story 1.2).
@@ -345,7 +364,8 @@ Following instinct here produces code that compiles, passes tests, and violates 
 - Follow all rules exactly as documented. When in doubt, prefer the more restrictive option.
 - **Where this file and an RFC disagree, say so — don't silently pick one.** Several rules here
   deliberately override stale RFC snippets (`repositoryFactory.ts` naming, the factory's
-  `APP_MODE` read). New conflicts are signal, not noise.
+  `APP_MODE` read, RFC-003 Decision 2's per-`[data-theme]` token structure and its illustrative
+  theme snippet). New conflicts are signal, not noise.
 - Spec authority order: **Architecture Cross-Cutting Decisions** (A–J, M1–M10) → owning **RFC**
   → companion specs. Within one area the RFC wins; for anything cross-cutting the Decision wins.
 

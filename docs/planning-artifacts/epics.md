@@ -460,7 +460,7 @@ So that the studio feels like a designed product from the first screen.
 
 **Acceptance Criteria:**
 
-**Given** the token layer, **When** defined, **Then** all `--gol-*` custom properties live in a dedicated CSS file under a `[data-theme]` block, covering the Clinical Lab spec (sans-serif, cyan accent, gray layers) (AR-36, UX-DR1 subset)
+**Given** the token layer, **When** defined, **Then** all `--gol-*` custom properties live in a dedicated CSS file — the default theme (Clinical Lab) on bare `:root`, so it applies to any document root, and every additional theme as a `:root[data-theme='…']` override block — covering the Clinical Lab spec (sans-serif, cyan accent, gray layers) (AR-36, UX-DR1 subset) _(amended 2026-08-07 from "under a `[data-theme]` block" — see Story 1.9's Review Findings; scoping the DEFAULT theme to the attribute left any root without it, e.g. Next's `GlobalError`, entirely unthemed)_
 **Given** the MUI theme, **When** created, **Then** one immutable `createTheme()` references only `var(--gol-*)` tokens; MUI v6 core only, per-component imports (AR-35/36)
 **Given** the AR-46 lint rule, **When** the shell builds, **Then** zero raw color literals exist outside the token file and palette registry
 **And** the `/` route renders the app chrome with navigation only to surfaces that exist (no dead links)
@@ -1455,7 +1455,7 @@ So that I can work in a terminal-hacker aesthetic instead of the clinical one.
 
 **Acceptance Criteria:**
 
-**Given** the token CSS file, **When** the Biotech Terminal block is added, **Then** a complete second `[data-theme]` token set covers every `--gol-*` property: monospace type, matrix-green `#00ff41` accent, outlined button treatments, square corners, dense spacing (UX-DR1)
+**Given** the token CSS file, **When** the Biotech Terminal block is added, **Then** a `:root[data-theme='biotech-terminal']` **override block** restyles every `--gol-*` property that differs from the `:root` default: monospace type, matrix-green `#00ff41` accent, outlined button treatments, square corners, dense spacing (UX-DR1) _(amended 2026-08-07 from "a complete second `[data-theme]` token set covers every `--gol-*` property" — Story 1.9 put the DEFAULT theme's values on bare `:root` so an unstamped root is still themed, so a literal "complete second set" would reinstate the duplication that structure removes; see `project-context.md#Token layer shape`. Any token Biotech does **not** override must be a deliberate inherit, not an oversight — verify against the `:root` list.)_
 **And** buttons, toggles, cards, inputs, and badges all restyle correctly in both themes (UX-DR1)
 **And** zero component files change — the theme lands entirely in the token file, proving NFR-8.4; the AR-46 lint rule still passes
 **And** the palette registry's organism colors are identical across themes (FR-2.3)

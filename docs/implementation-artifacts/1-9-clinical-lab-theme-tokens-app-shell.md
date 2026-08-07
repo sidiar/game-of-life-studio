@@ -16,7 +16,9 @@ so that the studio feels like a designed product from the first screen.
 
 ## Acceptance Criteria
 
-1. **Given** the token layer, **When** defined, **Then** all `--gol-*` custom properties live in a dedicated CSS file under a `[data-theme]` block, covering the Clinical Lab spec (sans-serif, cyan accent, gray layers) (AR-36, UX-DR1 subset)
+1. **Given** the token layer, **When** defined, **Then** all `--gol-*` custom properties live in a dedicated CSS file — the default theme (Clinical Lab) on bare `:root`, so it applies to any document root, and every additional theme as a `:root[data-theme='…']` override block — covering the Clinical Lab spec (sans-serif, cyan accent, gray layers) (AR-36, UX-DR1 subset)
+
+   > _Amended 2026-08-07 (code review). Originally: "…live in a dedicated CSS file **under a `[data-theme]` block**". Scoping the default theme's values to the attribute meant any root that did not carry it — Next's built-in `GlobalError` renders its own `<html>`, and Story 6.5 can restore an unrecognised theme name from `gol:settings` — resolved every `var(--gol-*)` to invalid-at-computed-value-time: transparent background, `CanvasText` colour, UA default font. The AA-guaranteed default must be unconditional. The dedicated-file requirement is unchanged, and NFR-8.2 ("applied via data attribute on root element") still holds: the attribute is still stamped on `<html>` and is still the switch. ⚠️ The same wording is in `epics.md:463` (amended with this) and remains unamended in **`epics.md:207` (AR-36)**, **`epics.md:1458` (Story 6.1's AC)** and **`RFC-003 §Decision 2` (lines 12, 90, 97-108)** — RFC-003 owns this area and therefore wins on a straight conflict, so those need Sidiar's call before Story 6.1 is written._
 2. **Given** the MUI theme, **When** created, **Then** one immutable `createTheme()` references only `var(--gol-*)` tokens; MUI core only, per-component imports (AR-35/36)
 3. **Given** the AR-46 lint rule, **When** the shell builds, **Then** zero raw color literals exist outside the token file and palette registry
 4. **And** the `/` route renders the app chrome with navigation only to surfaces that exist (no dead links)
