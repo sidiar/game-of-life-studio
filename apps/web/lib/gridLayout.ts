@@ -27,11 +27,17 @@ export function computeGridLayout(
 ): GridLayout {
   const { cols, rows } = size;
 
+  // Normalise non-finite dimensions to 0 up front. Math.max(1, Math.floor(NaN)) is NaN, not 1, so
+  // a NaN canvas box would otherwise propagate through cellSize into every rect the renderer
+  // draws — a blank canvas with no error anywhere, which is the failure mode the max(1, ...)
+  // clamp below exists to rule out.
+  const canvasWidth = Number.isFinite(canvas.width) ? canvas.width : 0;
+  const canvasHeight = Number.isFinite(canvas.height) ? canvas.height : 0;
+
   // A.5's formula taken on BOTH axes, keeping the smaller ratio, so the whole grid stays visible
   // (FR-3.2). Taking only one axis is the literal reading of `floor(canvasPx / dimension)` and it
   // clips the other dimension off-canvas the moment the aspect ratios disagree.
-  const rawCellSize =
-    cols > 0 && rows > 0 ? Math.min(canvas.width / cols, canvas.height / rows) : 1;
+  const rawCellSize = cols > 0 && rows > 0 ? Math.min(canvasWidth / cols, canvasHeight / rows) : 1;
 
   // max(1, ...) is load-bearing, not defensive garnish: at Gallery-tile sizes (~200px wide) a
   // 100x60 grid is `floor(200/200) = 1` — one tile size smaller and the floor hits 0, and
@@ -45,8 +51,8 @@ export function computeGridLayout(
   // floor on integer inputs keeps the origin integral — a fractional origin re-introduces the
   // seams the integer cellSize exists to remove. Without centring, the leftover space becomes a
   // dead bar on one side and the dish looks mis-mounted.
-  const originX = Math.floor((canvas.width - drawWidth) / 2);
-  const originY = Math.floor((canvas.height - drawHeight) / 2);
+  const originX = Math.floor((canvasWidth - drawWidth) / 2);
+  const originY = Math.floor((canvasHeight - drawHeight) / 2);
 
   return {
     cellSize,

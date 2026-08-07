@@ -49,6 +49,17 @@ export class GridRendererContextError extends Error {
   }
 }
 
+/**
+ * `window.devicePixelRatio ?? 1` is not enough: `??` catches only null/undefined, so a 0 or NaN
+ * ratio (a stubbed value, a headless or virtualised display) survives it and collapses the
+ * backing store to 0x0 — nothing renders and nothing throws. Require a finite positive number.
+ */
+function resolveDevicePixelRatio(): number {
+  if (typeof window === 'undefined') return 1;
+  const raw = window.devicePixelRatio;
+  return Number.isFinite(raw) && raw > 0 ? raw : 1;
+}
+
 export class GridRendererDimensionMismatchError extends Error {
   constructor(expected: { cols: number; rows: number }, actual: { width: number; height: number }) {
     super(
@@ -82,8 +93,16 @@ export class GridRenderer {
 
   // A borrow, not ownership: kept only so resize()/setGridLines() can repaint the last grid they
   // were shown. The renderer never mutates it and never assumes it stays valid after the caller's
-  // next mutation of the same buffer.
+  // next mutation of the same buffer. Dropped the moment a resize() makes it the wrong shape —
+  // see resize().
   private lastGrid: RenderableGrid | null = null;
+
+  // The CSS-pixel box the backing store was last computed from, and the backing store this class
+  // last wrote. Both exist to keep applyDevicePixelSizing idempotent — see the comment there.
+  private cssWidth = 0;
+  private cssHeight = 0;
+  private backingWidth = -1;
+  private backingHeight = -1;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -103,7 +122,7 @@ export class GridRenderer {
     const ctx = canvas.getContext('2d', {
       alpha: false,
       desynchronized: this.desynchronized,
-    }) as Canvas2D | null;
+    });
     // A silently context-less renderer produces a blank Gallery with a clean console — throw
     // named, don't degrade.
     if (ctx === null) throw new GridRendererContextError();
@@ -125,11 +144,34 @@ export class GridRenderer {
    * height attributes rather than producing a 0x0 backing store.
    */
   private applyDevicePixelSizing(): void {
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
-    const cssWidth = this.canvas.clientWidth || this.canvas.width;
-    const cssHeight = this.canvas.clientHeight || this.canvas.height;
-    this.canvas.width = Math.round(cssWidth * dpr);
-    this.canvas.height = Math.round(cssHeight * dpr);
+    const dpr = resolveDevicePixelRatio();
+    // The fallback must not read back a canvas.width THIS CLASS wrote: that value is already
+    // `cssPx * dpr`, so feeding it through the `* dpr` below multiplies the backing store by dpr
+    // again on every call — 2x, 4x, 8x across repeated resize()s at DPR 2, whenever clientWidth
+    // reads 0 (detached, pre-layout, display:none). A canvas.width we did NOT write is a caller
+    // sizing the surface directly, which is still a CSS-pixel instruction and the documented
+    // pre-layout path — so distinguish the two rather than dropping the fallback entirely.
+    const authoredWidth =
+      this.canvas.width === this.backingWidth ? this.cssWidth : this.canvas.width;
+    const authoredHeight =
+      this.canvas.height === this.backingHeight ? this.cssHeight : this.canvas.height;
+
+    this.cssWidth = this.canvas.clientWidth || authoredWidth;
+    this.cssHeight = this.canvas.clientHeight || authoredHeight;
+
+    const nextWidth = Math.round(this.cssWidth * dpr);
+    const nextHeight = Math.round(this.cssHeight * dpr);
+    this.backingWidth = nextWidth;
+    this.backingHeight = nextHeight;
+    // Assigning canvas.width/height resets the bitmap AND the context state even when the value
+    // is unchanged, and under alpha: false a cleared bitmap composites as opaque black. A resize()
+    // that then skips its repaint would leave a black rectangle where the dish was, so only
+    // assign on a real change — and re-assert the identity transform when we do, since the reset
+    // wipes it (the constructor's setTransform is not "held for the lifetime" on its own).
+    if (this.canvas.width === nextWidth && this.canvas.height === nextHeight) return;
+    this.canvas.width = nextWidth;
+    this.canvas.height = nextHeight;
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   private assertGridMatchesSize(grid: RenderableGrid): void {
@@ -189,7 +231,7 @@ export class GridRenderer {
     const overlay = document.createElement('canvas');
     overlay.width = this.canvas.width;
     overlay.height = this.canvas.height;
-    const overlayCtx = overlay.getContext('2d') as Canvas2D | null;
+    const overlayCtx = overlay.getContext('2d');
     if (overlayCtx === null) return; // jsdom: fall back to direct drawing, see paintGridLines.
 
     this.drawGridLinesInto(overlayCtx);
@@ -205,13 +247,20 @@ export class GridRenderer {
    * fix breaks again the moment DPR changes.
    */
   private drawGridLinesInto(target: Canvas2D): void {
-    target.fillStyle = this.colors.gridLine;
     const { originX, originY, drawWidth, drawHeight, cellSize } = this.layout;
+    if (drawWidth <= 0 || drawHeight <= 0) return;
+
+    target.fillStyle = this.colors.gridLine;
+    // The closing bar of each axis is the grid's right/bottom border. Drawn at its natural
+    // offset it lands one pixel PAST the rectangle, and when the grid fits the canvas exactly
+    // (originX === 0, drawWidth === canvas.width) fillRect clips it away entirely — a dish with a
+    // left and top border and no right or bottom one. Pull the closing bar back inside the
+    // rectangle so "confined to the grid rectangle" is true of the drawing, not just the comment.
     for (let col = 0; col <= this.size.cols; col++) {
-      target.fillRect(originX + col * cellSize, originY, 1, drawHeight);
+      target.fillRect(originX + Math.min(col * cellSize, drawWidth - 1), originY, 1, drawHeight);
     }
     for (let row = 0; row <= this.size.rows; row++) {
-      target.fillRect(originX, originY + row * cellSize, drawWidth, 1);
+      target.fillRect(originX, originY + Math.min(row * cellSize, drawHeight - 1), drawWidth, 1);
     }
   }
 
@@ -267,20 +316,24 @@ export class GridRenderer {
    * drawn grid still matches and gets repainted at the new pixel dimensions. A grid-dimension
    * change (Story 2.14) passes a NEW `size` the old `lastGrid` no longer matches — repainting it
    * anyway would either throw mid-resize or paint stale content at the wrong dimensions, so this
-   * skips the repaint and waits for the caller's next `drawFull` with a correctly-sized grid.
+   * skips the repaint, DROPS the now-invalid grid, and waits for the caller's next `drawFull`
+   * with a correctly-sized one.
    */
   resize(size: { cols: number; rows: number }): void {
     this.size = size;
     this.applyDevicePixelSizing();
     this.layout = computeGridLayout(this.canvas, this.size, this.showGridLines);
     this.rebuildGridLineOverlay();
-    if (
-      this.lastGrid !== null &&
-      this.lastGrid.width === this.size.cols &&
-      this.lastGrid.height === this.size.rows
-    ) {
+    if (this.lastGrid === null) return;
+
+    if (this.lastGrid.width === this.size.cols && this.lastGrid.height === this.size.rows) {
       this.paint(this.lastGrid);
+      return;
     }
+    // Dropping the reference is what keeps setGridLines() safe: it repaints lastGrid whenever
+    // there is one, so a grid left behind at the wrong shape turns the FR-8.7 toggle into a
+    // GridRendererDimensionMismatchError thrown out of a UI event handler (review 2026-08-06).
+    this.lastGrid = null;
   }
 
   /** No-op-repaint when the value is unchanged; otherwise stores, invalidates the overlay cache,

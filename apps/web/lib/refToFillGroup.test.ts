@@ -1,7 +1,7 @@
 import { createMockOrganisms, MOCK_ORGANISM_IDS } from '@gol/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { paletteIndexOf } from './paletteRegistry';
-import { buildRefToFillGroup, fillGroupOf } from './refToFillGroup';
+import { buildRefToFillGroup, fillGroupOf, resetRefToFillGroupWarnings } from './refToFillGroup';
 
 const ORGANISM_IDS = [
   MOCK_ORGANISM_IDS.aggressiveColonizer, // ref 1, vermillion, non-aging
@@ -16,6 +16,10 @@ function buildLut() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // The warn-once registry is a module singleton that restoreAllMocks does not touch. Without
+  // this, "warns once" passes only while it happens to be the first test in the file to touch
+  // that id, and any test added above it flips the assertion to zero calls.
+  resetRefToFillGroupWarnings();
 });
 
 describe('buildRefToFillGroup', () => {
@@ -44,6 +48,20 @@ describe('buildRefToFillGroup', () => {
   it('throws with the actual length on a roster over the 255-organism cap', () => {
     const oversized = Array.from({ length: 256 }, (_, i) => `organism-${i}`);
     expect(() => buildRefToFillGroup(oversized, new Map())).toThrow(/256/);
+  });
+
+  it('accepts a roster of exactly 255 — ref 255 is addressable, not off the end', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // The boundary the cap defends, tested from the legal side: size is 256, so ref 255 (the
+    // largest value a Uint8Array occupant can carry) is the last valid slot rather than one past
+    // it. Testing only the 256-throw leaves this off-by-one unguarded.
+    const atCap = Array.from({ length: 255 }, (_, i) => `organism-${i}`);
+    const lut = buildRefToFillGroup(atCap, new Map());
+
+    expect(lut.size).toBe(256);
+    expect(lut.tokenIndex).toHaveLength(256);
+    expect(255).toBeLessThan(lut.size);
+    expect(fillGroupOf(lut, 255, 0)).toBeLessThan(160);
   });
 });
 

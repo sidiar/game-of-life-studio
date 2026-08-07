@@ -37,7 +37,19 @@ export function toRenderableGrid(gridState: readonly (readonly number[])[]): Ren
       );
     }
     for (let col = 0; col < width; col++) {
-      occupant[row * width + col] = line[col];
+      // Range-check before the assignment: a Uint8Array coerces silently, so 256 lands as 0 (the
+      // cell vanishes as empty), -1 lands as 255 (a phantom organism at a ref no roster covers),
+      // and 1.9 truncates to 1. Each of those is exactly the "plausible-looking but wrong dish"
+      // this function's eager validation exists to prevent, and groupByColourState's
+      // out-of-range guard cannot help once the value has already wrapped into range.
+      const value = line[col];
+      if (!Number.isInteger(value) || value < 0 || value > 255) {
+        throw new Error(
+          `toRenderableGrid: row ${row}, col ${col} has value ${value}, expected an integer ` +
+            `in 0..255 (0 = empty, 1..255 = OrganismRef)`,
+        );
+      }
+      occupant[row * width + col] = value;
     }
   }
 

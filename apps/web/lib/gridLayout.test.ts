@@ -24,6 +24,28 @@ describe('computeGridLayout — cellSize', () => {
     expect(layout.cellSize).toBe(5);
   });
 
+  it('is constrained by HEIGHT when height is the smaller ratio — a wide, short canvas', () => {
+    // The mirror of the case above, and the one that was missing: without it, deleting
+    // `canvasHeight / rows` from the Math.min leaves every other test in this file green while
+    // the grid overflows the canvas vertically (review 2026-08-06).
+    const layout = computeGridLayout({ width: 4000, height: 120 }, { cols: 100, rows: 60 }, true);
+    expect(layout.cellSize).toBe(2); // min(4000/100 = 40, 120/60 = 2)
+    expect(layout.drawHeight).toBeLessThanOrEqual(120);
+  });
+
+  it('never lets the drawn grid exceed the canvas on EITHER axis, across mixed aspect ratios', () => {
+    for (const canvas of [
+      { width: 4000, height: 120 }, // height-bound
+      { width: 120, height: 4000 }, // width-bound
+      { width: 800, height: 400 }, // height-bound at 100x60
+      { width: 400, height: 800 }, // width-bound at 100x60
+    ]) {
+      const layout = computeGridLayout(canvas, { cols: 100, rows: 60 }, true);
+      expect(layout.drawWidth).toBeLessThanOrEqual(canvas.width);
+      expect(layout.drawHeight).toBeLessThanOrEqual(canvas.height);
+    }
+  });
+
   it('never reaches 0 across a sweep of canvas widths 1..300 for every editable preset', () => {
     for (const size of [
       { cols: 50, rows: 30 },
@@ -33,6 +55,37 @@ describe('computeGridLayout — cellSize', () => {
         const layout = computeGridLayout({ width, height: width }, size, true);
         expect(layout.cellSize).toBeGreaterThanOrEqual(1);
       }
+    }
+  });
+});
+
+describe('computeGridLayout — degenerate input', () => {
+  it('handles a zero-dimension grid without dividing by zero', () => {
+    // The `cols > 0 && rows > 0` guard, exercised on the GRID rather than the canvas — the 0x0
+    // case below uses a zero-sized canvas, which never reaches this branch.
+    for (const size of [
+      { cols: 0, rows: 60 },
+      { cols: 100, rows: 0 },
+      { cols: 0, rows: 0 },
+    ]) {
+      const layout = computeGridLayout({ width: 500, height: 300 }, size, true);
+      expect(Number.isInteger(layout.cellSize)).toBe(true);
+      expect(layout.cellSize).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('never produces NaN from a non-finite canvas box', () => {
+    // Math.max(1, Math.floor(NaN)) is NaN, not 1 — so an unguarded NaN would reach every rect the
+    // renderer draws and blank the canvas with no error anywhere.
+    for (const canvas of [
+      { width: Number.NaN, height: 300 },
+      { width: 500, height: Number.NaN },
+      { width: Number.POSITIVE_INFINITY, height: 300 },
+    ]) {
+      const layout = computeGridLayout(canvas, { cols: 100, rows: 60 }, true);
+      expect(Number.isFinite(layout.cellSize)).toBe(true);
+      expect(Number.isFinite(layout.originX)).toBe(true);
+      expect(Number.isFinite(layout.originY)).toBe(true);
     }
   });
 });
@@ -95,7 +148,17 @@ describe('computeGridLayout — property: cellSize is always a positive integer 
           const layout = computeGridLayout({ width, height }, { cols, rows }, true);
           expect(Number.isInteger(layout.cellSize)).toBe(true);
           expect(layout.cellSize).toBeGreaterThan(0);
-          expect(layout.cellSize * cols <= width || layout.cellSize === 1).toBe(true);
+          // BOTH axes. Constraining only width leaves the Math.min's second term unprotected,
+          // and the `|| cellSize === 1` escape makes the property vacuous in exactly the
+          // overflow case it describes — so pin the clamped case explicitly instead.
+          if (layout.cellSize > 1) {
+            expect(layout.drawWidth).toBeLessThanOrEqual(width);
+            expect(layout.drawHeight).toBeLessThanOrEqual(height);
+          } else {
+            // cellSize 1 is the max(1, ...) clamp: the grid is allowed to overflow and be
+            // clipped by the canvas edge, which is the graceful outcome (A.5).
+            expect(layout.cellSize).toBe(1);
+          }
         },
       ),
     );

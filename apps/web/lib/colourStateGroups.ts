@@ -17,6 +17,17 @@ export interface FillGroup {
 
 const warnedOutOfRangeRefs = new Set<number>();
 
+/**
+ * Clears the out-of-range-ref warn-once registry. Exported because the registry is a module
+ * singleton that `vi.restoreAllMocks()` does not touch, which silently makes every "warns once"
+ * assertion depend on being the first in its file to touch that ref. Call it from `afterEach`.
+ * A ref is battle-relative, so this key is also wrong across battles — see deferred-work.md
+ * (Story 1.11), which owns the re-keying.
+ */
+export function resetColourStateWarnings(): void {
+  warnedOutOfRangeRefs.clear();
+}
+
 function warnOutOfRangeRefOnce(ref: number): void {
   if (warnedOutOfRangeRefs.has(ref)) return;
   warnedOutOfRangeRefs.add(ref);
@@ -32,7 +43,20 @@ export function groupByColourState(grid: RenderableGrid, lut: RefToFillGroup): F
   // re-sorted by groupId below regardless.
   const groups = new Map<number, { tokenIndex: number; ageShade: number; cells: number[] }>();
 
-  for (let index = 0; index < grid.occupant.length; index++) {
+  // Bound the sweep by the DECLARED dimensions, not by occupant.length. As a public function this
+  // is reachable without GridRenderer's assertGridMatchesSize, and an over-long occupant would
+  // otherwise emit phantom cells at row >= height that the renderer paints outside the grid
+  // rectangle. A short age buffer is just as silent: age[index] is undefined, which becomes NaN
+  // and clamps to shade 0, painting those cells at the newborn colour.
+  const cellCount = grid.width * grid.height;
+  if (grid.occupant.length < cellCount || grid.age.length < cellCount) {
+    throw new Error(
+      `groupByColourState: grid ${grid.width}x${grid.height} needs ${cellCount} cells, but ` +
+        `occupant has ${grid.occupant.length} and age has ${grid.age.length}`,
+    );
+  }
+
+  for (let index = 0; index < cellCount; index++) {
     const ref = grid.occupant[index];
     if (ref === 0) continue; // Empty is the majority of most grids; the background fill covers it.
 

@@ -24,6 +24,16 @@ const MAX_ROSTER_SIZE = 255;
 
 const warnedMissingOrganismIds = new Set<string>();
 
+/**
+ * Clears the dangling-roster-id warn-once registry. Exported because the registry is a module
+ * singleton that `vi.restoreAllMocks()` does not touch, which silently makes every "warns once"
+ * assertion depend on being the first in its file to touch that id. Call it from `afterEach`.
+ * The registry's *keying* is a separate open question — see deferred-work.md (Story 1.11).
+ */
+export function resetRefToFillGroupWarnings(): void {
+  warnedMissingOrganismIds.clear();
+}
+
 function warnMissingOrganismOnce(organismId: string): void {
   if (warnedMissingOrganismIds.has(organismId)) return;
   warnedMissingOrganismIds.add(organismId);

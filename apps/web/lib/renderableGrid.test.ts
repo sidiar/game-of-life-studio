@@ -41,6 +41,22 @@ describe('toRenderableGrid', () => {
     expect(() => toRenderableGrid(ragged)).toThrow(/row 1/);
   });
 
+  it('throws on a cell value a Uint8Array would silently wrap', () => {
+    // Each of these coerces silently on assignment rather than failing: 256 lands as 0 (the cell
+    // vanishes as empty), -1 lands as 255 (a phantom organism at a ref no roster covers), and 1.9
+    // truncates to 1. All three produce the "plausible-looking but wrong dish" the eager
+    // validation exists to prevent (review 2026-08-06).
+    expect(() => toRenderableGrid([[0, 256]])).toThrow(/row 0, col 1/);
+    expect(() => toRenderableGrid([[0, -1]])).toThrow(/0\.\.255/);
+    expect(() => toRenderableGrid([[1.9]])).toThrow(/row 0, col 0/);
+    expect(() => toRenderableGrid([[Number.NaN]])).toThrow(/0\.\.255/);
+  });
+
+  it('accepts the full legal cell range, 0 and 255 included', () => {
+    const { occupant } = toRenderableGrid([[0, 255]]);
+    expect(Array.from(occupant)).toEqual([0, 255]);
+  });
+
   it('a 0x0 grid produces empty buffers without throwing', () => {
     const renderable = toRenderableGrid([]);
     expect(renderable.width).toBe(0);

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { groupByColourState } from './colourStateGroups';
+import { groupByColourState, resetColourStateWarnings } from './colourStateGroups';
+import { ageShadeFor } from './displayColor';
 import type { RefToFillGroup } from './refToFillGroup';
 import type { RenderableGrid } from './renderableGrid';
 
@@ -22,6 +23,10 @@ function lut(tokenIndex: number[], aging: number[]): RefToFillGroup {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // The warn-once registry is a module singleton that restoreAllMocks does not touch. Without
+  // this, "warns exactly once" passes only while it happens to be the first test in the file to
+  // touch that ref, and any test added above it flips the assertion to zero calls.
+  resetColourStateWarnings();
 });
 
 describe('groupByColourState', () => {
@@ -32,7 +37,9 @@ describe('groupByColourState', () => {
 
     const groups = groupByColourState(g, table);
     expect(groups).toHaveLength(1);
-    expect(groups[0].cells.sort()).toEqual([0, 1]);
+    // Numeric comparator: the default one sorts lexicographically, which is right for [0, 1] and
+    // wrong the moment a group holds a cell index >= 10.
+    expect([...groups[0].cells].sort((a, b) => a - b)).toEqual([0, 1]);
   });
 
   it('an aging organism at ages 0..9 produces exactly 8 groups (ages >= 7 fold)', () => {
@@ -65,10 +72,24 @@ describe('groupByColourState', () => {
   });
 
   it('every returned groupId equals tokenIndex * 8 + ageShade', () => {
-    const g = grid(3, 1, [1, 2, 3], [0, 3, 9]);
-    const table = lut([0, 2, 5, 9], [0, 1, 1, 0]);
+    const occupant = [1, 2, 3];
+    const ages = [0, 3, 9];
+    const tokenIndex = [0, 2, 5, 9];
+    const aging = [0, 1, 1, 0];
+    const g = grid(3, 1, occupant, ages);
+    const table = lut(tokenIndex, aging);
 
-    for (const group of groupByColourState(g, table)) {
+    // Derived from the INPUTS, not from the returned group's own fields. Asserting
+    // `groupId === group.tokenIndex * 8 + group.ageShade` is a tautology: the implementation
+    // builds ageShade as `groupId - tokenIndex * 8`, so it holds for any groupId whatsoever,
+    // including a broken one (review 2026-08-06).
+    const expected = occupant
+      .map((ref, i) => tokenIndex[ref] * 8 + ageShadeFor(ages[i], aging[ref] === 1))
+      .sort((a, b) => a - b);
+
+    const groups = groupByColourState(g, table);
+    expect(groups.map((group) => group.groupId)).toEqual(expected);
+    for (const group of groups) {
       expect(group.groupId).toBe(group.tokenIndex * 8 + group.ageShade);
     }
   });
@@ -79,7 +100,7 @@ describe('groupByColourState', () => {
     expect(groupByColourState(g, table)).toEqual([]);
   });
 
-  it('a 20-token x 8-shade worst-case grid returns at most 160 groups', () => {
+  it('a 20-token x 8-shade worst-case grid returns exactly 160 groups — the Decision B.2 bound', () => {
     // 20 aging organisms, one per token index 0..19; every age 0..7 present.
     const tokenIndex = Array.from({ length: 21 }, (_, i) => (i === 0 ? 0 : i - 1));
     const aging = Array.from({ length: 21 }, (_, i) => (i === 0 ? 0 : 1));
@@ -96,7 +117,9 @@ describe('groupByColourState', () => {
     const g = grid(occupant.length, 1, occupant, age);
 
     const groups = groupByColourState(g, table);
-    expect(groups.length).toBeLessThanOrEqual(160);
+    // Exactly 160, not "at most": this fixture saturates every token x shade cell, so a <= bound
+    // would also pass for an implementation returning fewer groups — or none at all.
+    expect(groups).toHaveLength(160);
   });
 
   it('cell indices are exhaustive and disjoint across groups', () => {
@@ -110,6 +133,40 @@ describe('groupByColourState', () => {
 
     expect(allCells.sort((a, b) => a - b)).toEqual(expectedNonEmpty.sort((a, b) => a - b));
     expect(new Set(allCells).size).toBe(allCells.length); // disjoint — no cell in two groups
+  });
+
+  it('throws when a buffer is shorter than the declared dimensions', () => {
+    // Reachable without GridRenderer's assertion, since this is a public function. An over-long
+    // occupant would emit phantom cells past the grid rectangle; a short age buffer reads
+    // undefined, becomes NaN, and clamps to shade 0 — cells silently painted the newborn colour.
+    const table = lut([0, 2], [0, 0]);
+    const shortOccupant: RenderableGrid = {
+      width: 2,
+      height: 2,
+      occupant: Uint8Array.from([1, 1, 1]),
+      age: new Uint16Array(4),
+    };
+    const shortAge: RenderableGrid = {
+      width: 2,
+      height: 2,
+      occupant: new Uint8Array(4),
+      age: new Uint16Array(3),
+    };
+
+    expect(() => groupByColourState(shortOccupant, table)).toThrow(/needs 4 cells/);
+    expect(() => groupByColourState(shortAge, table)).toThrow(/needs 4 cells/);
+  });
+
+  it('ignores occupant entries past width * height rather than emitting phantom cells', () => {
+    const table = lut([0, 2], [0, 0]);
+    const overLong: RenderableGrid = {
+      width: 2,
+      height: 1,
+      occupant: Uint8Array.from([1, 1, 1, 1]), // 4 entries for a 2-cell grid
+      age: new Uint16Array(4),
+    };
+
+    expect(groupByColourState(overLong, table).flatMap((g) => g.cells)).toEqual([0, 1]);
   });
 
   it('skips an out-of-range ref and warns exactly once', () => {
