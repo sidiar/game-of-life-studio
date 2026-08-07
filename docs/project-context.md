@@ -142,9 +142,8 @@ build, not latest. Do not bump versions opportunistically.
 The coverage gate flips on in **Story 3.7** — the v8 provider and per-package configs exist,
 but no ≥90% threshold is enforced yet and `passWithNoTests: true` keeps empty packages green.
 
-- `npm test` runs real Vitest (`turbo run test`). Empty packages pass via `passWithNoTests`;
-  `apps/web` carries the wiring-proof home-page test. A green `npm test` now means the runner
-  actually executed — the pre-1.2 "vacuously green" caveat no longer applies.
+- `npm test` runs real Vitest (`turbo run test`). Empty packages pass via `passWithNoTests`, so
+  a green run still does not mean a given package has tests — check the per-package count.
 
 **Coverage is a floor on the core, not a target everywhere**
 
@@ -220,11 +219,26 @@ are active on `apps/web`. ESLint is pinned to **v9** — v10 breaks `eslint-conf
 
 ### Development Workflow Rules
 
-**Repo state:** local-only, no remote, single `main` branch. No PR flow exists. The GitHub
-Actions workflow is authored (`.github/workflows/ci.yml`, Story 1.2) but **cannot run until a
-remote exists**; **`npm run ci`** is the local mirror of the gate (keep the two in lockstep).
-Run the full gate before calling a change done — the pre-commit hook is the fast subset only.
-(Branch naming is deliberately unspecified — add it when a remote exists.)
+**Repo state:** remote is **live** — `https://github.com/sidiar/game-of-life-studio.git`, single
+`main` branch, commits pushed straight to it. **No PR flow exists**, so branch naming is still
+deliberately unspecified; don't invent one. GitHub Actions **runs on every push** to `main`
+(`.github/workflows/ci.yml`, Story 1.2): a `quality` job (typecheck → lint → format:check →
+coverage → build → bundle) and an `e2e` job gated on it. **`npm run ci` is the local mirror of
+that gate — keep the two in lockstep.** Run the full gate before calling a change done; the
+pre-commit hook (lint-staged + typecheck) is the fast subset only.
+
+- ⚠️ **A local green `npm run ci` is not proof CI is green.** The e2e job runs on Linux against
+  a cached Playwright install; local runs use your own browsers. Check the actual run
+  (`gh run list`) after pushing rather than inferring it. Between Stories 1.7 and 1.9 the `e2e`
+  job was red on every push whose `package-lock.json` was unchanged, while `npm run e2e` passed
+  locally throughout: a browser-cache hit skipped `playwright install --with-deps`, so WebKit's
+  **apt system libraries** — which live in the runner OS, not in `~/.cache/ms-playwright` — were
+  never installed. Fixed 2026-08-07 by splitting the step (unconditional `playwright
+  install-deps` + cached `playwright install`). Cache a build artefact, install OS deps every
+  time.
+- ⚠️ **Pipe-swallowed exit codes.** `npm run ci | tail` reports *tail's* status, not the gate's.
+  This masked a real `format:check` failure during the Story 1.9 review. Redirect to a file and
+  echo `$?`, or don't pipe.
 
 **🛑 Commit gate — never commit or stage without Sidiar's explicit go-ahead.**
 
@@ -339,7 +353,8 @@ Following instinct here produces code that compiles, passes tests, and violates 
 
 - Keep this lean and focused on what agents get *wrong* — not a project overview.
 - Update when the stack changes or a story lands one of the "not yet installed" tools.
-- **Delete rules as they stop being unobvious.** The Story 1.2 tooling notes and the `npm test`
-  warning should disappear once CI is real.
+- **Delete rules as they stop being unobvious.** The Story 1.2 tooling notes can go once the
+  toolchain stops being news; the `npm test` "vacuously green" warning was retired 2026-08-07,
+  when the remote went live and CI started running for real.
 
-Last updated: 2026-07-16
+Last updated: 2026-08-07
