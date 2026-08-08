@@ -9,10 +9,26 @@ import { createMockWorkspace } from '@gol/test-utils';
 //
 // The e2e serves the PRODUCTION static export (playwright.config.ts), so the AR-45 dev fixtures
 // are NOT seeded and the Gallery is empty by default. Seed localStorage before load instead.
-function buildSeedPayload() {
+// The mock workspace holds only 3 organisms, so no seeded battle can exceed MAX_VISIBLE_DOTS on
+// its own. `crowded` adds one battle whose organismIds run past the cap using ids with no roster
+// entry — they resolve to the dangling-id fallback dot, which is enough to render the "+n"
+// indicator. That matters because the +n indicator is 10px --gol-text-tertiary on
+// --gol-bg-secondary, the smallest text in the tile, and only a real browser can check its
+// contrast: jsdom has no layout, so axe skips colour-contrast there entirely.
+function buildSeedPayload(options: { crowded?: boolean } = {}) {
   const { battles, organisms } = createMockWorkspace();
-  const battlesRecord = Object.fromEntries(battles.map((b) => [b.id, b]));
+  const battlesRecord: Record<string, unknown> = Object.fromEntries(battles.map((b) => [b.id, b]));
   const organismsRecord = Object.fromEntries(organisms.map((o) => [o.id, o]));
+
+  if (options.crowded) {
+    const crowded = {
+      ...battles[0],
+      id: 'c5b3e4f6-7d8a-4b9c-8e0f-2a3b4c5d6e7f',
+      name: 'Crowded Roster',
+      organismIds: Array.from({ length: 9 }, (_, i) => `absent-organism-${i}`),
+    };
+    battlesRecord[crowded.id] = crowded;
+  }
 
   // addInitScript structured-clones its argument: Battle.createdAt/updatedAt are Date objects,
   // and the at-rest form is ISO strings, so JSON round-trip the payload first. A Date surviving
@@ -24,8 +40,8 @@ function buildSeedPayload() {
   };
 }
 
-async function seedWorkspace(page: Page) {
-  const payload = buildSeedPayload();
+async function seedWorkspace(page: Page, options: { crowded?: boolean } = {}) {
+  const payload = buildSeedPayload(options);
 
   await page.addInitScript(
     ([keys, formatVersion, data]) => {
@@ -74,7 +90,7 @@ test.describe('battle gallery (Story 1.10)', () => {
     expect(errors).toEqual([]);
   });
 
-  test('each organism dot has its own accessible name and reveals a tooltip on keyboard focus (WCAG 1.4.13)', async ({
+  test('each organism dot has its own accessible name and reveals a tooltip on hover and on keyboard focus (WCAG 1.4.13)', async ({
     page,
   }) => {
     await seedWorkspace(page);
@@ -86,7 +102,9 @@ test.describe('battle gallery (Story 1.10)', () => {
     const tile = page.locator('article', {
       has: page.getByRole('heading', { name: 'Three-Way Skirmish' }),
     });
-    const dot = tile.getByRole('button', { name: 'Aggressive Colonizer' });
+    // role="img", not button — the dot has no activation behaviour, so a button role would
+    // announce an action that does not exist.
+    const dot = tile.getByRole('img', { name: 'Aggressive Colonizer' });
     // The dot itself carries no visible text (aria-label only) — the tooltip is the visible
     // span with the same name, matched separately here.
     const tooltip = tile.getByText('Aggressive Colonizer', { exact: true });
@@ -99,24 +117,39 @@ test.describe('battle gallery (Story 1.10)', () => {
     await dot.focus();
     await expect(tooltip).toHaveCSS('opacity', '1');
 
-    // Dismissible (SC 1.4.13): Escape blurs the trigger, which drops :focus-within.
+    // Dismissible (SC 1.4.13): Escape hides the tooltip WITHOUT moving focus. An earlier
+    // implementation blurred the trigger, which dropped the user at <body> and restarted the
+    // tab order at the top of the document.
     await page.keyboard.press('Escape');
-    await expect(dot).not.toBeFocused();
     await expect(tooltip).toHaveCSS('opacity', '0');
+    await expect(dot).toBeFocused();
+
+    // Hoverable (SC 1.4.13): the tooltip must survive the pointer travelling onto it. This is
+    // what `pointer-events: auto` + the ::after gap bridge buy — with neither, the tooltip
+    // vanishes mid-traverse and this assertion fails.
+    await dot.hover();
+    await expect(tooltip).toHaveCSS('opacity', '1');
+    await tooltip.hover();
+    await expect(tooltip).toHaveCSS('opacity', '1');
 
     // Every organism is reachable this way, not just the first.
-    await expect(tile.getByRole('button', { name: 'Patient Defender' })).toBeVisible();
-    await expect(tile.getByRole('button', { name: 'Chaotic Spreader' })).toBeVisible();
+    await expect(tile.getByRole('img', { name: 'Patient Defender' })).toBeVisible();
+    await expect(tile.getByRole('img', { name: 'Chaotic Spreader' })).toBeVisible();
   });
 
-  test('has no axe accessibility violations with tiles on screen', async ({ page }) => {
-    await seedWorkspace(page);
+  test('has no axe accessibility violations with tiles on screen, including the "+n" overflow indicator', async ({
+    page,
+  }) => {
+    await seedWorkspace(page, { crowded: true });
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { level: 2 })).toHaveCount(2);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveCount(3);
 
-    // The real-browser run is what actually checks rendered colour contrast —
-    // text-tertiary on bg-secondary at 12px is the pair at risk.
+    // The +n indicator must actually be on screen for this run to mean anything: it is the
+    // smallest text in the tile (10px --gol-text-tertiary on --gol-bg-secondary) and therefore
+    // the contrast pair most at risk, and a real browser is the only place axe can check it.
+    await expect(page.getByRole('img', { name: /3 more organisms:/ })).toBeVisible();
+
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
   });

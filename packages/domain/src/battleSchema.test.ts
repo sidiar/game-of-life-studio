@@ -180,10 +180,8 @@ describe('BattleSummarySchema', () => {
     ]);
   });
 
-  // Story 1.10 briefly carried an optional createdAt here (to back a two-date disclosure panel),
-  // then reverted it (2026-08-08) once the Gallery tile settled on showing a single date —
-  // `updatedAt` alone, which already equals `createdAt` until a battle is first edited. This
-  // negative assertion is the pinned invariant again: createdAt is not part of the projection.
+  // Pinned invariant: the projection carries neither the heavy grid nor a second date. FR-7.3's
+  // "Date created / last modified" is one value, and `updatedAt` already is it.
   it('drops gridState AND createdAt — the summary omits every heavy or unneeded field', () => {
     const summary = BattleSummarySchema.parse(validBattle());
     expect('gridState' in summary).toBe(false);

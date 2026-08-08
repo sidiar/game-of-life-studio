@@ -78,10 +78,8 @@ interface BattleSummary {
   gridSize: { cols: number; rows: number }
   organismIds: string[]
   updatedAt: Date
-  // NO createdAt: added 2026-08-07 (Story 1.10) to back a two-date disclosure panel, reverted
-  // 2026-08-08 in the same story once the tile settled on ONE date (FR-7.3's "Date created / last
-  // modified" read as a single field) — updatedAt alone, already equal to createdAt until a
-  // battle's first edit.
+  // No createdAt: FR-7.3's "Date created / last modified" is ONE value, and updatedAt already is
+  // it — equal to createdAt until a battle's first edit, tracking the edit thereafter.
 }
 
 // Repository interfaces (abstract persistence)

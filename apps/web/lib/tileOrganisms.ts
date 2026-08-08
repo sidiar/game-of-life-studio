@@ -15,6 +15,13 @@ export interface TileOrganism {
 // known token rather than an unknown one.
 const FALLBACK_NAME = 'Unknown organism';
 
+// OrganismSchema.name is `z.string().max(50)` with no lower bound, so "" parses and list() returns
+// it. An empty string reaching aria-label leaves the dot with NO accessible name (axe
+// `button-name`/`aria-prohibited-attr` territory, WCAG 4.1.2), which would fail the gallery e2e's
+// zero-violations assertion for the entire page over one bad record. The schema floor is the real
+// fix and is deferred to Stories 5.7/5.8 — this is the presentation-layer guard.
+const UNNAMED_ORGANISM = 'Unnamed organism';
+
 /**
  * Resolves a battle's organismIds (Decision H.1: exactly the placed set) against the current
  * roster for display. Colour is `displayColor(colorToken, MAX_AGE_SHADE)` — the identity shade
@@ -30,11 +37,28 @@ export function resolveTileOrganisms(
 ): TileOrganism[] {
   const byId = new Map(roster.map((o) => [o.id, o] as const));
 
-  return organismIds.map((id) => {
-    const organism = byId.get(id);
-    if (organism === undefined) {
-      return { id, name: FALLBACK_NAME, color: displayColor(DEFAULT_COLOR_TOKEN, MAX_AGE_SHADE) };
-    }
-    return { id, name: organism.name, color: displayColor(organism.colorToken, MAX_AGE_SHADE) };
-  });
+  // De-duplicated because the caller keys React elements on the id. BattleSchema rejects duplicate
+  // organismIds via a superRefine, but BattleSummarySchema — which is what list() parses — is a
+  // bare z.object without it, so an imported or hand-edited record reaches here with repeats. Two
+  // children with the same key is a React console error, and the gallery e2e asserts a clean
+  // console. First occurrence wins; order is otherwise preserved.
+  const seen = new Set<string>();
+
+  return organismIds
+    .filter((id) => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
+    .map((id) => {
+      const organism = byId.get(id);
+      if (organism === undefined) {
+        return { id, name: FALLBACK_NAME, color: displayColor(DEFAULT_COLOR_TOKEN, MAX_AGE_SHADE) };
+      }
+      return {
+        id,
+        name: organism.name.trim() === '' ? UNNAMED_ORGANISM : organism.name,
+        color: displayColor(organism.colorToken, MAX_AGE_SHADE),
+      };
+    });
 }

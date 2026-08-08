@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import type { BattleSummary, Organism } from '@gol/domain';
 import type { BattleRepository, OrganismRepository } from '@gol/persistence';
@@ -74,13 +74,23 @@ export default function BattleGallery({ battles, organisms, seedStatus }: Battle
 
     let live = true;
 
-    // Named, not inlined, even though nothing calls it yet — Story 1.13's delete flow is
-    // `await battles.delete(id); refresh();`. One function, no abstraction (no useAsyncResource;
-    // this is its only call site until then).
+    // Named rather than inlined so the shape Story 1.13's delete flow needs
+    // (`await battles.delete(id); …`) is already written; it will have to be lifted out of this
+    // effect callback to be callable from a handler, which is that story's change, not this one's.
+    // No useAsyncResource — one call site until then.
     function refresh() {
       // One Promise.all, not two sequential awaits: a tile cannot render a name without both, and
       // two round-trips would double the localStorage latency budget (NFR-1.4) for no gain.
-      Promise.all([battles.list(), organisms.list()])
+      Promise.all([
+        battles.list(),
+        // A corrupt gol:organisms must not blank a Gallery whose battles are all readable —
+        // readCollection throws CorruptDataError for the whole key, and resolveTileOrganisms
+        // already degrades an unresolved id to a neutral fallback dot. Without this catch the
+        // Promise.all couples the two and discards the persistence layer's deliberate "one bad
+        // record must not blank the view" stance (Story 1.4 review). Only battles.list() rejecting
+        // is a real error state.
+        organisms.list().catch(() => [] as Organism[]),
+      ])
         .then(([summaries, roster]) => {
           if (live) setLoadState({ kind: 'ready', summaries, roster });
         })
@@ -109,6 +119,30 @@ export default function BattleGallery({ battles, organisms, seedStatus }: Battle
         ? { kind: 'loading' }
         : loadState;
 
+  // Memoised because resolveTileOrganisms builds a Map over the whole roster per tile: done in the
+  // render body it is O(tiles x roster) on every render, and it mints a fresh array identity per
+  // tile, which would defeat any later memo() on BattleTile.
+  const tiles = useMemo(() => {
+    if (state.kind !== 'ready') return [];
+    const { summaries, roster } = state;
+
+    // De-duplicated by id: list() reads Object.values() and returns each record's own `id` field,
+    // never the collection key, so two entries can carry the same id in an imported or hand-edited
+    // workspace. That would collide React keys (a console error the gallery e2e asserts against)
+    // and leave the sort comparator with no tie-break left to apply.
+    const seen = new Set<string>();
+    return sortByLastModified(summaries)
+      .filter((summary) => {
+        if (seen.has(summary.id)) return false;
+        seen.add(summary.id);
+        return true;
+      })
+      .map((summary) => ({
+        summary,
+        organisms: resolveTileOrganisms(summary.organismIds, roster),
+      }));
+  }, [state]);
+
   return (
     <section aria-labelledby={HEADING_ID} aria-busy={state.kind === 'loading'}>
       <SectionHeader>
@@ -127,13 +161,13 @@ export default function BattleGallery({ battles, organisms, seedStatus }: Battle
       )}
       {state.kind === 'ready' && state.summaries.length > 0 && (
         <TileGrid>
-          {sortByLastModified(state.summaries).map((summary) => (
+          {tiles.map(({ summary, organisms: tileOrganisms }) => (
             <BattleTile
               key={summary.id}
               name={summary.name}
               gridSize={summary.gridSize}
               updatedAt={summary.updatedAt}
-              organisms={resolveTileOrganisms(summary.organismIds, state.roster)}
+              organisms={tileOrganisms}
             />
           ))}
         </TileGrid>

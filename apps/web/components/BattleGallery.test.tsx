@@ -65,14 +65,16 @@ describe('BattleGallery', () => {
 
   it('renders the loading body and calls neither repository while seedStatus is "seeding" (trap 1)', () => {
     const repos = createFakeRepositories({ battles: createMockBattles() });
-    const listSpy = vi.spyOn(repos.battles, 'list');
+    const battleListSpy = vi.spyOn(repos.battles, 'list');
+    const organismListSpy = vi.spyOn(repos.organisms, 'list');
 
     render(
       <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="seeding" />,
     );
 
     expect(screen.getByText('Loading battles…')).toBeInTheDocument();
-    expect(listSpy).not.toHaveBeenCalled();
+    expect(battleListSpy).not.toHaveBeenCalled();
+    expect(organismListSpy).not.toHaveBeenCalled();
   });
 
   it('renders the alert body when seedStatus is "error"', () => {
@@ -150,10 +152,58 @@ describe('BattleGallery', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: "Conway's Classic" })).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: "Conway's Classic" })).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Aggressive Colonizer' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Patient Defender' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Chaotic Spreader' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Aggressive Colonizer' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Patient Defender' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Chaotic Spreader' })).toBeInTheDocument();
+  });
+
+  // A corrupt gol:organisms throws CorruptDataError for the whole key. Battles that parse fine
+  // must still list — the dots degrade to the dangling-id fallback rather than the page going to
+  // the error body (Story 1.4's "one bad record must not blank the view").
+  it('still renders tiles when organisms.list() rejects, degrading the dots', async () => {
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      organisms: createMockOrganisms(),
+    });
+    vi.spyOn(repos.organisms, 'list').mockRejectedValue(new Error('corrupt'));
+
+    render(
+      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('img', { name: 'Unknown organism' }).length).toBeGreaterThan(0);
+  });
+
+  // list() reads Object.values() and returns each record's own `id`, never the collection key, so
+  // two entries can carry the same id — which would collide React keys and log a console error.
+  it('renders one tile per distinct battle id when a record id is duplicated', async () => {
+    const [first] = createMockBattles();
+    // Seeded through `raw` because the validated path keys the store by `battle.id` and would
+    // silently collapse the duplicate — the defect only exists because list() returns the record's
+    // own `id` rather than the collection key, so the two must disagree here.
+    const serialize = (battle: unknown) => JSON.parse(JSON.stringify(battle)) as unknown;
+    const repos = createFakeRepositories({
+      organisms: createMockOrganisms(),
+      raw: {
+        battles: {
+          'collection-key-a': serialize(first),
+          'collection-key-b': serialize({ ...first, name: 'Duplicate id, different name' }),
+        },
+      },
+    });
+
+    render(
+      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    });
   });
 });

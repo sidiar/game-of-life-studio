@@ -71,24 +71,19 @@ export const BattleSchema = z
 // strings; use `z.input<typeof BattleSchema>` where the serialized form is meant.
 export type Battle = z.infer<typeof BattleSchema>;
 
-// Lightweight Gallery/index projection (Decision H.4) — every Battle field except the heavy
-// gridState. organismIds is the placed set (Decision H.1), so the AR-15 organism-usage index and
-// the Gallery build from `battles.list()` without a single grid being validated or converted.
+// Lightweight Gallery/index projection (Decision H.4). organismIds is the placed set
+// (Decision H.1), so the AR-15 organism-usage index and the Gallery build from `battles.list()`
+// without a single grid being validated or converted.
 //
 // Zod's default strip IS the projection mechanism: a full stored battle record parses straight
 // through and comes back as the summary. It also means a battle whose gridState is corrupt still
 // lists — the Gallery stays readable and the failure surfaces from load(), where the grid is
 // actually needed. Widening this schema to re-validate gridState would silently undo that.
 //
-// NO createdAt (2026-08-08, Story 1.10 follow-up — added, then removed, in the same week): FR-7.3
-// reads "Date created / last modified", which is ambiguous between "both dates, always" and "one
-// date, whichever is more relevant" — a single field that reads as the creation date until the
-// battle is first edited, then as the edit date. Sidiar chose the latter reading (it is also what
-// the Gallery mockup renders — one date per tile, never two), which `updatedAt` alone already
-// satisfies: every battle's `updatedAt` starts equal to its `createdAt` and only diverges once
-// saved again. `createdAt` was briefly added here to back a two-date disclosure panel; once that
-// UI was dropped, the field had zero remaining consumers, so it is reverted rather than kept
-// unused with a rationale that no longer applies.
+// The field list omits `createdAt` as well as `gridState`: FR-7.3's "Date created / last modified"
+// is ONE value, not two — the creation date until a battle is first edited, then the edit date —
+// and `updatedAt` alone already is that, since it starts equal to `createdAt` and only diverges on
+// a later save. The Gallery mockup renders exactly one date per tile for the same reason.
 export const BattleSummarySchema = z.object({
   id: z.uuid(),
   name: z.string().max(100),

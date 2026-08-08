@@ -98,4 +98,11 @@
      rgba() literal in the component itself, and no existing --gol-* token already expressed this
      composite. */
   --gol-shadow-tile-hover: 0 4px 12px rgb(var(--gol-accent-channel) / 0.15);
+
+  /* Organism-dot tooltip drop shadow (Story 1.10). Mockup: .participant-dot::before,
+     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8) (battle-gallery.html:366). Authored here for the
+     same two reasons as the token above — AR-46 bans the rgba() literal in the component, and the
+     shadow is a composite no existing token expressed. Black has no --gol-*-channel triplet to
+     compose from (it is not a palette colour), so the channels are literal. */
+  --gol-shadow-tooltip: 0 4px 12px rgb(0 0 0 / 0.8);
 }

@@ -4,7 +4,7 @@ baseline_commit: b62b403
 
 # Story 1.10: Battle Gallery Tiles & Sorting
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -48,7 +48,14 @@ so that I can find and pick up my work instantly.
 
 ## Tasks / Subtasks
 
-- [x] **Task 1: Put `createdAt` on the Gallery projection** (AC: 1, 3)
+> ⚠️ **Checkbox semantics:** `[x]` means shipped and present in the code today. `[~]` means the
+> subtask was implemented as written and then **superseded** — do not read it as a description of
+> what ships. Tasks 1 and parts of 3/6 were reverted by the 2026-08-08 supersession (conflict 1a)
+> and are kept below for history, not as a completion record.
+
+- [~] **Task 1: Put `createdAt` on the Gallery projection** (AC: 1, 3) — ⚠️ **SUPERSEDED 2026-08-08
+      (conflict 1a): implemented 2026-08-07, then reverted in full. `BattleSummarySchema` ships
+      WITHOUT `createdAt`; the docs below were amended to state the exclusion instead.**
   - [x] `packages/domain/src/battleSchema.ts` — add `createdAt` to `BattleSummarySchema`, **optional**:
 
     ```ts
@@ -171,7 +178,11 @@ so that I can find and pick up my work instantly.
 
     - The tile heading is `<h2>`: the page's only `<h1>` is "Battle Gallery" (Story 1.9 moved it
       there). A tile `<h3>` would skip a level and **that** axe does check (`heading-order`).
-  - [x] **FR-7.3 metadata = an expandable disclosure, not a CSS tooltip.** The mockup's
+  - [~] ⚠️ **SUPERSEDED 2026-08-08 (conflict 1a) — no disclosure panel ships.** Replaced by the
+        per-organism tooltip described in conflict 1a; there is no `aria-expanded`, no
+        `aria-controls`, no `useId()` panel, and no visible "N organisms" trigger text in
+        `BattleTile.tsx`. Kept for history. Originally:
+        **FR-7.3 metadata = an expandable disclosure, not a CSS tooltip.** The mockup's
         `.participant-dot::before` hover tooltip is mouse-only and unreachable by keyboard or AT;
         FR-7.3 explicitly permits "tooltip **or** expandable section", so take the section:
 
@@ -229,12 +240,14 @@ so that I can find and pick up my work instantly.
       not until Story 2.2. A pointer cursor promises a click that does nothing.
     - Add `:focus-within` alongside `:hover` so the keyboard path gets the same tile-level state
       change the mouse path does — the exact parity gap the Story 1.9 review found on `AppNav`.
-  - [x] Tests (`apps/web/components/BattleTile.test.tsx`): name renders as `heading level 2`; the
-        grid-size stat renders; the disclosure starts collapsed (`aria-expanded="false"`, panel
-        absent), expands on click **and on `{Enter}`/`{Space}` via `userEvent.keyboard`**, and the
-        panel then contains both dates and every organism name; a 10-organism roster renders 6 dots
-        + "+4 more" but 10 names in the panel; a dangling id renders the fallback without throwing;
-        `axe(container)` returns zero violations both collapsed and expanded.
+  - [~] Tests (`apps/web/components/BattleTile.test.tsx`) — ⚠️ **the disclosure half is SUPERSEDED**
+        (no panel ships, so there is no collapsed/expanded state and no Enter/Space activation to
+        test). What ships instead: name renders as `heading level 2`; the grid-size stat renders;
+        each dot is a focusable `role="img"` with its own accessible name and **no** `button` role;
+        the tooltip reveals on focus and on hover and dismisses on `Escape` **without moving
+        focus**; a 10-organism roster renders 6 dots + a `+4` control whose accessible name lists
+        all four remaining names; a dangling id renders the fallback without throwing;
+        `axe(container)` returns zero violations for the default, overflowing and empty-name cases.
 
 - [x] **Task 4: Gallery layout, states, and the new token** (AC: 1, 3, 5)
   - [x] `BattleGallery.tsx` renders, in order: the section header
@@ -352,9 +365,11 @@ so that I can find and pick up my work instantly.
       `isFreshWorkspace()` is `true`, `seedDefaultWorkspace()` runs, and Conway's Classic is appended
       to the roster mid-test — harmless but it makes the organism-name assertions depend on seeding
       order.
-  - [x] Assertions: two tiles in **descending** order (`page.getByRole('heading', { level: 2 })`
+  - [~] Assertions — ⚠️ **the disclosure clause is SUPERSEDED** (no panel; the spec asserts the
+        tooltip's hover/focus reveal and `Escape` dismissal instead): two tiles in **descending**
+        order (`page.getByRole('heading', { level: 2 })`
         `allTextContents()`, compared as a list — an order assertion, not two `toBeVisible()` calls);
-        the disclosure expands on `Enter` and reveals both dates and every organism name; `AxeBuilder`
+        `AxeBuilder`
         reports zero violations with tiles on screen (the real-browser run is what actually checks
         rendered colour contrast — `text-tertiary` on `bg-secondary` at 12px is the pair at risk);
         zero console errors, asserted **after** a hydration signal, not after `page.goto`
@@ -397,6 +412,76 @@ so that I can find and pick up my work instantly.
   - [x] `docs/project-context.md` needs **no** change unless something in it turns out stale — the
         Gallery introduces no new tool, version, or convention. Say so explicitly rather than leaving
         it ambiguous.
+
+### Review Findings
+
+_Code review 2026-08-08 (three parallel layers: Blind Hunter, Edge Case Hunter, Acceptance Auditor).
+Independently verified: `npm run ci` exit 0 — 85/82/75 package tests, 256 `apps/web` tests, domain
+100% coverage, bundle 284.7 KB / 300 KB, 36/36 e2e. AC1, AC2 and AC4 audited clean._
+
+- [x] [Review][Decision] **WCAG SC 1.4.13 is claimed but not met — "hoverable" and pointer-path
+      "dismissible" both fail** — All three layers converged. `Tooltip` is `pointerEvents: 'none'`
+      (`BattleTile.tsx:143`) and sits outside the wrapper's box (`bottom: 100%` + `translateY(-10px)`),
+      so a pointer user can never move onto it — it fades the moment the pointer leaves the 12×12 dot.
+      `DotWrapper`'s comment (`:91-93`) asserts the exact opposite ("covers the tooltip's rendered
+      area too"), making it a wrong-WHY comment on a criterion the story's conflict-1a rationale leans
+      on. `dismissOnEscape` is `onKeyDown` on the `<button>` only (`:166-168`), so the hover-triggered
+      tooltip has **no** dismissal path for a mouse user; and on the keyboard path it dismisses *by*
+      `blur()`ing to `<body>` — 1.4.13 requires dismissal *without* moving focus, and the next Tab
+      restarts from the top of the document. Options: (a) make it genuinely conformant —
+      `pointer-events: auto` on reveal, bridge the gap, and dismiss via state rather than blur;
+      (b) keep the current behaviour and correct the three comments + the story's 1.4.13 claim to
+      what actually ships; (c) revisit the tooltip mechanism.
+      **→ Resolved (Sidiar, 2026-08-08): option (a) — make it genuinely conformant.** The tooltip
+      becomes pointer-reachable (`pointer-events: auto` once revealed, and the trigger→tooltip gap
+      bridged so `:hover` survives the traverse), and dismissal moves to component state rather than
+      `blur()`, so focus stays on the trigger. Reclassified as a patch.
+- [x] [Review][Decision] **Organism dots are `<button>`s with no activation behaviour** — All three
+      layers converged. `Dot` has `type="button"`, `cursor: 'pointer'` and only `onKeyDown`
+      (`BattleTile.tsx:104-115`, `:188-194`) — no `onClick`. AT announces "…, button", Enter/Space do
+      nothing, and the tooltip is revealed by `:focus-within`, not by activation. Three consequences:
+      a false affordance the story's own rule forbids (`Tile`'s comment at `:21-24` bans
+      `cursor: pointer` for precisely this reason, then `Dot` uses it); ~7 dead tab stops per tile,
+      ~350 at NFR-7.2's 50 battles; and 12×12px targets 6px apart (18px pitch) fail **WCAG 2.2
+      SC 2.5.8** — confirmed invisible to the gate, axe-core 4.12.1 ships `target-size` disabled.
+      This reopens the design ratified in conflict 1a, so it is Sidiar's call. Options: (a) keep the
+      mockup visual but swap the primitive to `tabIndex={0}` + `aria-describedby` (no activation
+      promise); (b) enlarge targets / spacing to 24px; (c) accept and record as a known gap.
+      **→ Resolved (Sidiar, 2026-08-08): option (a) — drop the `<button>` primitive.** Each dot
+      becomes a focusable non-button element carrying an accessible name plus `aria-describedby`
+      pointing at its tooltip, so nothing promises an activation that does not exist and
+      `cursor: pointer` goes with it. Note the knock-on scope: the tooltip stops being
+      `aria-hidden` and needs a `useId()` id, the `button + span` sibling selector must be
+      retargeted, and `BattleTile.test.tsx` / `gallery.spec.ts` must stop querying
+      `getByRole('button', …)`. SC 2.5.8 target size is **not** addressed by this option — the
+      12×12px / 6px-gap geometry stands, and remains a known gap. Reclassified as a patch.
+
+- [x] [Review][Patch] Dev Agent Record's Completion Notes still describe the reverted disclosure design as shipped — "disclosure button + panel", "collapsed/expanded/keyboard-activated", "absent-createdAt", "propagated to … RFC-005"; Debug Log figures stale (88/257/284.8 KB vs the actual 85/256/284.7 KB) [1-10-battle-gallery-tiles-sorting.md:796-841]
+- [x] [Review][Patch] Every Task checkbox is `[x]`, including subtasks deliberately not shipped after the 2026-08-08 supersession; the AC block and forced decisions 3–4 got `SUPERSEDED` markers, the Tasks section did not [1-10-battle-gallery-tiles-sorting.md:51-84, 174-196, 232-237]
+- [x] [Review][Patch] File List names `RFC-005-application-state-modes-undo.md` under **Modified**, but `9fe64f5` added the line and `a6afbfb` reverted it byte-for-byte — net zero change, file absent from the diff [1-10-battle-gallery-tiles-sorting.md:868]
+- [x] [Review][Patch] `refresh()`'s comment says "nothing calls it yet" one line above `refresh();`, and it is declared inside the effect callback so Story 1.13's delete flow cannot reach it [apps/web/components/BattleGallery.tsx:76-99]
+- [x] [Review][Patch] `formatBattleDate` pins the locale but leaves `timeZone` unset; its test asserts `'Jul 20, 2026'` for a `09:00Z` instant, which renders `Jul 19` at UTC−10 or west — the exact environment-dependence the comment claims to have eliminated [apps/web/lib/formatBattleDate.ts:1-8, formatBattleDate.test.ts]
+- [x] [Review][Patch] Duplicate ids produce React duplicate-key console errors — `BattleSummarySchema` omits `BattleSchema`'s dedupe `superRefine`, and `list()` returns the record's own `id` rather than the map key, so both a duplicated `organismIds` entry and two records sharing an `id` reach `key=` unguarded; the gallery e2e's zero-console-errors assertion is what this breaks [apps/web/lib/tileOrganisms.ts:33-39, components/BattleTile.tsx:187, components/BattleGallery.tsx:132]
+- [x] [Review][Patch] An empty organism name passes the dangling-id fallback (which only covers *absent*) straight to `aria-label=""` — a button with no accessible name (axe `button-name`); an empty battle name renders an empty `<h2>` (axe `empty-heading`) [apps/web/lib/tileOrganisms.ts:35-38, components/BattleTile.tsx:177, 190]
+- [x] [Review][Patch] `Promise.all` couples a rejecting `organisms.list()` to a total gallery blank even when every battle is readable — `resolveTileOrganisms` already degrades an empty roster gracefully, so this is the one point discarding the persistence layer's "one corrupt X must not blank the whole Y" stance [apps/web/components/BattleGallery.tsx:83-89]
+- [x] [Review][Patch] A long unbroken battle name overflows the tile and the grid track — `TileTitle` is a flex item with default `min-width: auto` and no `overflow-wrap`, against a `minmax(320px, 1fr)` track [apps/web/components/BattleTile.tsx:48-53, 177]
+- [x] [Review][Patch] The `+n` tooltip is `whiteSpace: 'nowrap'` with no `max-width`, anchored `right: 0` — at the Decision G.3 bound it is one unwrappable line of 249 names extending left off-screen, and left-side overflow is not scrollable in LTR [apps/web/components/BattleTile.tsx:131-149, 206]
+- [x] [Review][Patch] `battleSchema.ts`'s projection comment contradicts itself eight lines later — "every Battle field except the heavy gridState" vs the new "NO createdAt", while `BattleSchema` does carry `createdAt` [packages/domain/src/battleSchema.ts:74, 83]
+- [x] [Review][Patch] Change-history narration left in code and in a normative interface, against project-context's "never leave review artefacts in code" — `battleSchema.ts` ("added, then removed, in the same week", plus who decided what), `battleSchema.test.ts`, `formatBattleDate.ts`, `e2e/appShell.spec.ts`, and a `// NO createdAt: added 2026-08-07 … reverted 2026-08-08` comment inside RFC-001's interface while RFC-005 carries none [multiple]
+- [x] [Review][Patch] `deferred-work.md` marks the `useWorkspaceSeed` error-object entry `✅ Closed` while the entry's own body concedes the error object is still discarded — strikethrough removes a live defect from any scan of open debt [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] The AC5 zero-organism gap (a battle with no placed organisms has no focusable element) is acknowledged in forced decision 4 but was never recorded in `deferred-work.md`, which Task 7 requires [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] `sortByLastModified` and `resolveTileOrganisms` run in the render body — the latter rebuilds a `Map` over the whole roster for every tile on every render, and mints a new array identity per tile, so `memo()` can never help [apps/web/components/BattleGallery.tsx:130-134]
+- [x] [Review][Patch] The test named "calls neither repository" spies only `battles.list`; `organisms.list` is never spied, so half the guarded behaviour is unverified [apps/web/components/BattleGallery.test.tsx]
+- [x] [Review][Patch] No `prefers-reduced-motion` guard on the tile lift or the tooltip slide, and `transition: 'all 0.3s'` will animate every property added to the rule later [apps/web/components/BattleTile.tsx:25-36, 131-149]
+- [x] [Review][Patch] `Tooltip` omits the mockup's `box-shadow: 0 4px 12px rgba(0,0,0,0.8)` while its comment claims "same visual" — plausibly an AR-46 consequence (no black-shadow token), but undeclared [apps/web/components/BattleTile.tsx:128-149]
+- [x] [Review][Patch] `MoreIndicator`'s 10px `--gol-text-tertiary` on `--gol-bg-secondary` is checked by no test in either environment — jsdom cannot compute contrast, and the browser e2e seeds from `createMockWorkspace()` whose battles hold ≤4 organisms, so a `+n` indicator never renders there [apps/web/components/BattleTile.tsx:117-126, e2e/gallery.spec.ts]
+
+- [x] [Review][Defer] `name` fields lack a `.min(1)` floor — `OrganismSchema.name` and `BattleSummarySchema.name` are `z.string().max(N)`, which is the root cause behind the empty-name findings above [packages/domain/src/organismSchema.ts, battleSchema.ts] — deferred, pre-existing; schema strictness is Stories 5.7/5.8's scope
+
+**Dismissed as noise (2):** the Blind Hunter's claim that `--gol-shadow-tile-hover` may sit in a
+theme-scoped rather than base block (verified false — `themes.css` has exactly one `:root` block,
+per the documented token-layer override); and that `APP_MODE`'s removal from the page is
+unexplained (Task 5 specifies it explicitly, with the `createRepositories()` throw as rationale).
 
 ## Dev Notes
 
@@ -780,18 +865,28 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` workflow.
   212, 255, 0.15)'` form by temporarily writing it into `BattleTile.tsx` and re-running
   `npx eslint` (failed as expected, `no-restricted-syntax`), then reverted (Task 7).
 - `npm run ci` (full pipeline, redirected to a file, exit code checked explicitly per Task 7's
-  warning — never piped): **exit 0** on the first full run after the format fix above.
-  - `@gol/domain`: 5 files / 88 tests, coverage 100% stmts/branch/funcs/lines (≥90% gate).
+  warning — never piped). ⚠️ The figures below are the **post-review run of 2026-08-08**, which
+  supersedes the 2026-08-07 implementation run (88 domain / 257 web / 284.8 KB) and the interim
+  2026-08-08 design-review run (85 / 256 / 15.3 KB headroom): **exit 0**.
+  - `@gol/domain`: 5 files / 85 tests, coverage 100% stmts/branch/funcs/lines (≥90% gate).
   - `@gol/persistence`: 7 files / 82 tests.
   - `@gol/test-utils`: 5 files / 75 tests.
   - `@gol/simulation`: no test files (unchanged by this story, expected).
-  - `web` (apps/web, no coverage gate by design): 21 files / 257 tests.
-  - `bundle:check`: **284.8 KB gzip / 300 KB budget — 15.2 KB headroom** (Story 1.9 baseline was
-    281.4 KB / 18.6 KB headroom; this story's rise is 3.4 KB for two new components + four new
-    `lib` helpers, zero new dependencies and zero new MUI component imports — confirmed by
-    grepping both new components for `@mui` imports, which resolve to `styled` only).
+  - `web` (apps/web, no coverage gate by design): 21 files / 265 tests.
+  - `bundle:check`: **285.1 KB gzip / 300 KB budget — 14.9 KB headroom** (Story 1.9 baseline was
+    281.4 KB / 18.6 KB headroom; the review patches added 0.4 KB over the 284.7 KB pre-review
+    figure, for the tooltip's state hook and the second shadow token — still zero new dependencies
+    and zero new MUI component imports).
   - `e2e`: 36 passed across chromium/firefox/webkit/tablet (9 tests × 4 projects: 3 `appShell`
-    + 3 `gallery` (new) + 3 `home`), 0 failed.
+    + 3 `gallery` + 3 `home`), 0 failed.
+- ⚠️ **A pipe/cwd trap hit during the review run and is worth recording:** an `npm run ci` issued
+  from `apps/web` (the shell's cwd persisted from an earlier command) died on
+  `Missing script: "ci"` and exited 1, but the trailing `echo "CI_EXIT=$?"` in the same command
+  line reported success to the caller. Same failure shape as the 1.9 review's `| tail` incident —
+  check the log body, not just the wrapper's status.
+- AR-46 negative check re-run after the tooltip gained `--gol-shadow-tooltip`: writing the mockup's
+  `boxShadow: '0 4px 12px rgba(0, 0, 0, 0.8)'` literal into `BattleTile.tsx` fails
+  `no-restricted-syntax` at the exact line; clean again after reverting to the token.
 
 ### Completion Notes List
 
@@ -802,21 +897,27 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` workflow.
   (`updatedAt` → `name` → `id`) in isolation; `BattleGallery.test.tsx` and `gallery.spec.ts` both
   assert on the *rendered heading sequence* for out-of-order seeds, not on the sort helper's
   return value.
-- **AC3** (name, created/modified dates, organism names via expandable disclosure, hover
-  affordances): `BattleTile.tsx`'s disclosure button + panel, `BattleTile.test.tsx` covers
-  collapsed/expanded/keyboard-activated/10-organism-cap/dangling-id/absent-createdAt states, and
-  `gallery.spec.ts` proves the real-browser keyboard path. The `createdAt` resolution (Task 1,
-  ratified by Sidiar 2026-08-07) is propagated to `battleSchema.ts`, both pinned test assertions,
-  and all three named docs (architecture.md Decision H.4, RFC-001, RFC-005), each with a dated
-  note.
+- **AC3** as amended 2026-08-08 (name, **one** date, organism names via per-dot tooltip, hover
+  affordances): `BattleTile.tsx` renders a single `updatedAt` date and a row of individually-named
+  focusable markers, each with a tooltip that reveals on hover **and** focus and dismisses on
+  `Escape` without moving focus. `BattleTile.test.tsx` covers the hover/focus/dismiss paths, the
+  10-organism cap and its `+n` control, a dangling id, and an empty battle name;
+  `gallery.spec.ts` proves the real-browser hover, focus and dismissal paths. There is **no**
+  disclosure panel and no `createdAt` on the projection — Task 1 shipped on 2026-08-07 and was
+  reverted in full on 2026-08-08 (conflict 1a). `architecture.md` Decision H.4 and RFC-001 now
+  state the exclusion and its reason; RFC-005 needed no net change.
 - **AC4** (AR-45 dev fixtures appear): `page.test.tsx`'s retargeted `NODE_ENV=development` test now
   asserts both fixture tiles render, in the frozen-timestamp order (Grand Colony War before
   Three-Way Skirmish) — one test covering AC4 and AC2's real-data half, as the Dev Notes specified.
-- **AC5** (keyboard-focusable, axe-clean): tiles are focusable through the disclosure button, never
-  `tabIndex` on the `<article>` (forced decision 4) — `BattleTile.test.tsx` proves Enter and Space
-  both toggle it. `axe(container)` is asserted clean collapsed *and* expanded in
-  `BattleTile.test.tsx` and `BattleGallery.test.tsx` (populated/empty/error bodies), plus a
-  real-browser `AxeBuilder` run in `gallery.spec.ts`.
+- **AC5** (keyboard-focusable, axe-clean): tiles are focusable through the organism markers, never
+  `tabIndex` on the `<article>` (forced decision 4). Each marker is `role="img"` + `tabIndex={0}`,
+  **not** a `<button>` — it has no activation behaviour, and a button that does nothing on
+  Enter/Space is a dead affordance (2026-08-08 review, decision 2). `axe(container)` is asserted
+  clean in `BattleTile.test.tsx` (default, overflowing, empty-name) and `BattleGallery.test.tsx`
+  (populated/empty/error bodies), plus a real-browser `AxeBuilder` run in `gallery.spec.ts` that
+  now also has the `+n` indicator on screen. ⚠️ Known gap: the 12×12px markers are below WCAG 2.2
+  SC 2.5.8's 24px target minimum, retained to match the mockup and recorded in `deferred-work.md`;
+  axe cannot see it (`target-size` ships disabled).
 - **Task 5's three replaced assertions**, stated explicitly per the Dev Notes' "say this in the Dev
   Agent Record" instruction: the `/wired to @gol\/domain \(\d+ organism fields\)/` regex and the
   `mode: {APP_MODE}` line are both gone from `page.tsx` and from `page.test.tsx`'s assertions — a
@@ -830,9 +931,11 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` workflow.
 - **Both deferred-work.md entries Task 4 named are updated**, not just Task 1's docs propagation:
   `--gol-bg-hover` is re-pointed to Story 1.13's `.action-menu-btn` (the tile hover changes border
   + shadow only, confirmed by reading `BattleTile.tsx`'s own hover rule); the `useWorkspaceSeed`
-  error-path entry is marked closed to the extent this story owns it — `BattleGallery` now renders
-  the `role="alert"` body for both a seed-status error and a rejecting `list()`, with the
-  underlying error object still undiagnosed (Story 5.11's scope, noted explicitly).
+  error-path entry records that `BattleGallery` now renders the `role="alert"` body for both a
+  seed-status error and a rejecting `battles.list()`. ⚠️ That entry was marked `✅ Closed` on
+  2026-08-07 and **reopened in the 2026-08-08 review** — the user-facing surface landed, but the
+  defect it is named for (the error object itself is discarded) is still live, and the
+  strikethrough had removed it from every scan of open debt.
 - **No change to `docs/project-context.md`** — checked explicitly (Task 7); the injected-repository
   and page-boundary description there already matches this story's `page.tsx`/`BattleGallery.tsx`
   split, and the Gallery introduces no new tool, version, or convention.
@@ -865,7 +968,11 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` workflow.
 - `apps/web/e2e/appShell.spec.ts` — hydration signal retargeted
 - `docs/planning-artifacts/architecture.md` — Decision H.4 field list amended with a dated note
 - `docs/planning-artifacts/rfcs/RFC-001-multi-mode-architecture.md` — `BattleSummary` interface amended
-- `docs/planning-artifacts/rfcs/RFC-005-application-state-modes-undo.md` — usage-index note amended
+  to state the `createdAt` exclusion and its reason
+- ~~`docs/planning-artifacts/rfcs/RFC-005-application-state-modes-undo.md`~~ — **net zero change.**
+  `9fe64f5` added a `createdAt` clause to the usage-index note and `a6afbfb` reverted it
+  byte-for-byte, so the file is untouched relative to the baseline and its existing text is already
+  correct. Listed here only to correct the earlier claim that it was modified.
 - `docs/implementation-artifacts/deferred-work.md` — two entries resolved/re-pointed
 - `docs/implementation-artifacts/sprint-status.yaml` — status transitions (this workflow)
 
@@ -908,3 +1015,29 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` workflow.
   plain structural sibling selector (`button + span`) instead. Full `npm run ci` green again:
   85+82+75 package tests, 256 `apps/web` tests, bundle 15.3 KB headroom, 36/36 e2e. Status stays
   → review.
+- 2026-08-08: **Code review** (three parallel layers: Blind Hunter, Edge Case Hunter, Acceptance
+  Auditor). AC1, AC2 and AC4 audited clean, scope boundaries clean, gate independently verified.
+  2 decisions + 19 patches raised, 1 deferred, 2 dismissed as noise. Both decisions resolved by
+  Sidiar in favour of fixing rather than re-documenting: (1) WCAG SC 1.4.13 is now genuinely met —
+  the tooltip becomes pointer-reachable (`pointer-events: auto` on reveal plus an `::after` bridge
+  across the reveal-transform gap) and dismissal moved from `blur()` to component state, so Escape
+  no longer strands the user at `<body>`; (2) the organism dots stopped being `<button>`s with no
+  activation and became `role="img"` + `tabIndex={0}` markers, dropping ~7 dead tab stops per tile
+  and the false `cursor: pointer`. `role="img"` specifically because `aria-label` on an implicit
+  `generic` role is prohibited and axe's `aria-prohibited-attr` (enabled) would flag it. All 19
+  patches applied. Behavioural fixes: duplicate organism ids and duplicate battle record ids no
+  longer collide React keys; empty organism/battle names get placeholders rather than producing an
+  unnamed control or an empty `<h2>`; a rejecting `organisms.list()` degrades the dots instead of
+  blanking the Gallery; `formatBattleDate` pins `timeZone: 'UTC'` (it was host-zone dependent, so
+  a 09:00Z instant rendered a day early west of UTC-10); the tile title and the `+n` tooltip no
+  longer overflow; sort + roster resolution are memoised. `aria-describedby` was NOT used for the
+  tooltip despite being named in the decision text — the tooltip text is identical to the marker's
+  accessible name, so it would double-announce every organism; the tooltip stays `aria-hidden`.
+  ⚠️ Deliberately NOT fixed: the 12×12px / 6px-gap markers remain below WCAG 2.2 SC 2.5.8, a
+  consequence of choosing option (a) on decision 2 — recorded in `deferred-work.md`. Two
+  deferred-work entries corrected: the `useWorkspaceSeed` error-object item was **reopened**
+  (marked closed while its headline defect was conceded still present), and the zero-organism
+  focusability gap was recorded for the first time. Full `npm run ci` green: 85+82+75 package
+  tests, 265 `apps/web` tests, domain 100% coverage, bundle 285.1 KB / 300 KB (14.9 KB headroom),
+  36/36 e2e. Status → done. ⚠️ The changes are **uncommitted** — the commit gate stands, so the
+  file list and a suggested message go to Sidiar for approval separately.

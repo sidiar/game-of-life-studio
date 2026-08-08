@@ -25,7 +25,7 @@ test.describe('app shell (Story 1.9)', () => {
     // AC4's no-dead-affordance rule, proven in a real browser: exactly one nav link.
     await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(1);
 
-    // ⚠️ Wait for hydration BEFORE asserting on errors (code review 2026-08-07). page.goto
+    // ⚠️ Wait for hydration BEFORE asserting on errors. page.goto
     // defaults to waitUntil: 'load', and every assertion above resolves against server-rendered
     // HTML on its first poll — the markup is all there pre-hydration. A hydration-mismatch
     // console.error lands a few ms later, i.e. after the assertion below had already run, so the
@@ -36,7 +36,7 @@ test.describe('app shell (Story 1.9)', () => {
     // "Loading battles…" in the server-rendered HTML and only reaches the empty-Gallery copy once
     // both useWorkspaceSeed's and BattleGallery's client effects have run, which cannot happen
     // before React has hydrated this tree. Do NOT "fix" this by dropping the wait — it exists
-    // because the console-error assertion below was racing hydration (code review 2026-08-07).
+    // because the console-error assertion below was racing hydration.
     await expect(page.getByText('No battles yet.')).toBeVisible();
 
     // Emotion hydration mismatches (missing AppRouterCacheProvider) surface only here, against
@@ -44,7 +44,7 @@ test.describe('app shell (Story 1.9)', () => {
     expect(errors).toEqual([]);
   });
 
-  // Guards AppRouterCacheProvider itself (code review 2026-08-07). Every other assertion in this
+  // Guards AppRouterCacheProvider itself. Every other assertion in this
   // file reads the DOM *after* client-side Emotion has inserted its styles, so deleting the
   // provider — reintroducing the NFR-8.5 unstyled flash on the static host — left the whole suite
   // green. This reads the raw served HTML instead, where the server-inserted <style> tags either
