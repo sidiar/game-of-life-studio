@@ -7,12 +7,10 @@ const FORMATTER = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
 });
 
-// Story 1.10 AC3: createdAt is optional on BattleSummary (Task 1) — a stored battle written
-// before this story shipped simply has none. Never format `undefined` through Intl (it throws),
-// and never render "Invalid Date": a stable placeholder keeps the tile's metadata panel readable.
-const UNKNOWN_DATE_PLACEHOLDER = 'Unknown';
-
-export function formatBattleDate(date: Date | undefined): string {
-  if (date === undefined) return UNKNOWN_DATE_PLACEHOLDER;
+// `updatedAt` is a required BattleSummary field (never optional) — this is FR-7.3's single
+// "Date created / last modified" value: it equals a battle's creation time until the battle is
+// first edited, then tracks the edit. No undefined-date placeholder branch exists because there
+// is no longer a caller that can pass one (2026-08-08, Story 1.10 follow-up).
+export function formatBattleDate(date: Date): string {
   return FORMATTER.format(date);
 }

@@ -74,7 +74,7 @@ test.describe('battle gallery (Story 1.10)', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the disclosure expands on Enter and reveals both dates and every organism name', async ({
+  test('each organism dot has its own accessible name and reveals a tooltip on keyboard focus (WCAG 1.4.13)', async ({
     page,
   }) => {
     await seedWorkspace(page);
@@ -86,22 +86,27 @@ test.describe('battle gallery (Story 1.10)', () => {
     const tile = page.locator('article', {
       has: page.getByRole('heading', { name: 'Three-Way Skirmish' }),
     });
-    const disclosure = tile.getByRole('button');
-    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    const dot = tile.getByRole('button', { name: 'Aggressive Colonizer' });
+    // The dot itself carries no visible text (aria-label only) — the tooltip is the visible
+    // span with the same name, matched separately here.
+    const tooltip = tile.getByText('Aggressive Colonizer', { exact: true });
 
-    await disclosure.focus();
-    await page.keyboard.press('Enter');
-    await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    await expect(dot).toBeVisible();
+    await expect(tooltip).toHaveCSS('opacity', '0');
 
-    // Do not assert a literal formatted date string — Intl output can differ by browser ICU
-    // build. Assert the panel contains a 4-digit year instead.
-    await expect(tile.getByText('Created')).toBeVisible();
-    await expect(tile.getByText('Modified')).toBeVisible();
-    await expect(tile.getByText(/\d{4}/).first()).toBeVisible();
+    // Content-on-hover must also appear on focus (SC 1.4.13) — the real assertion a mouse-only
+    // CSS ::before tooltip (the mockup's original pattern) could never pass.
+    await dot.focus();
+    await expect(tooltip).toHaveCSS('opacity', '1');
 
-    await expect(tile.getByText('Aggressive Colonizer')).toBeVisible();
-    await expect(tile.getByText('Patient Defender')).toBeVisible();
-    await expect(tile.getByText('Chaotic Spreader')).toBeVisible();
+    // Dismissible (SC 1.4.13): Escape blurs the trigger, which drops :focus-within.
+    await page.keyboard.press('Escape');
+    await expect(dot).not.toBeFocused();
+    await expect(tooltip).toHaveCSS('opacity', '0');
+
+    // Every organism is reachable this way, not just the first.
+    await expect(tile.getByRole('button', { name: 'Patient Defender' })).toBeVisible();
+    await expect(tile.getByRole('button', { name: 'Chaotic Spreader' })).toBeVisible();
   });
 
   test('has no axe accessibility violations with tiles on screen', async ({ page }) => {

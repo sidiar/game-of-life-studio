@@ -30,6 +30,21 @@ so that I can find and pick up my work instantly.
 > projection as `IsoTimestamp.optional()`** (Task 1), and propagate the field list to Decision H.4,
 > RFC-001 and RFC-005 in the same change. Rationale and the two rejected alternatives are in Dev
 > Notes "Spec conflicts surfaced", conflict 1.
+>
+> **→ Superseded (Sidiar, 2026-08-08), after implementation review against the mockup:**
+> "created/modified dates" is read as FR-7.3's literal text — "Date created / last modified" — **one
+> field**, not two: the creation date until a battle is first edited, then the edit date. This is
+> what `updatedAt` alone already is (`updatedAt` starts equal to `createdAt` and only diverges after
+> a save), so the `createdAt` projection field from the first resolution above is **reverted**
+> (no remaining consumer) and the tile shows a single date, exactly matching the mockup's
+> `.tile-date`. AC3's "organism names via tooltip or expandable metadata" is *also* superseded: the
+> disclosure-panel reading is dropped in favour of the mockup's literal per-dot tooltip — each dot is
+> now a real, individually-named `<button>` (never a bare `<div>`) whose tooltip shows on **both**
+> `:hover` and keyboard `:focus-within` (WCAG SC 1.4.13 — the mockup's CSS-only `::before` tooltip
+> could not clear this and was rejected on exactly that ground the first time around; making the
+> trigger itself focusable-and-named is what lets the literal visual return without reintroducing
+> that failure). Full rationale in Dev Notes, "Spec conflicts surfaced", conflict 1a (below the
+> original conflict 1, left intact for history).
 
 ## Tasks / Subtasks
 
@@ -399,15 +414,26 @@ so that I can find and pick up my work instantly.
    `.tile-stats` slot instead shows `{cols} × {rows}` — already in `BattleSummary`, genuinely useful
    (the two editable presets look very different), and honest. Flag as a deliberate mockup deviation.
 
-3. **⚠️ FR-7.3's metadata is an expandable disclosure, not the mockup's CSS hover tooltip.** The
-   `.participant-dot::before` pattern is mouse-only: unreachable by keyboard, invisible to AT, and it
-   cannot carry both dates. FR-7.3 permits either form; only one of them can satisfy AC5 in the same
-   story. The dot row stays visually, as the disclosure's trigger content.
+3. **⚠️ SUPERSEDED 2026-08-08 (see conflict 1a). Originally: FR-7.3's metadata is an expandable
+   disclosure, not the mockup's CSS hover tooltip.** The `.participant-dot::before` pattern is
+   mouse-only: unreachable by keyboard, invisible to AT, and it cannot carry both dates. FR-7.3
+   permits either form; only one of them can satisfy AC5 in the same story. The dot row stays
+   visually, as the disclosure's trigger content. — **Current:** the mockup's literal per-dot
+   tooltip is restored, but each dot is now a real focusable `<button aria-label>` and the tooltip
+   triggers on `:focus-within` as well as `:hover` (WCAG SC 1.4.13), so the accessibility problem
+   that ruled this out the first time is solved at the trigger rather than by replacing the
+   interaction. There is also only one date to carry now (conflict 1a), so "cannot carry both
+   dates" no longer applies.
 
-4. **⚠️ Tiles are focusable *through their disclosure button*, not by `tabIndex` on the tile.** AC5
-   asks for keyboard-focusable tiles; the no-dead-affordance rule forbids a focus stop with no
-   behaviour. A real control inside the tile satisfies both, and Story 2.2 converts the tile itself
-   into the link/button when there is finally somewhere to go.
+4. **⚠️ SUPERSEDED 2026-08-08. Originally: tiles are focusable *through their disclosure button*,
+   not by `tabIndex` on the tile.** AC5 asks for keyboard-focusable tiles; the no-dead-affordance
+   rule forbids a focus stop with no behaviour. A real control inside the tile satisfies both, and
+   Story 2.2 converts the tile itself into the link/button when there is finally somewhere to go.
+   — **Current:** the same no-dead-affordance logic now lands on the per-organism dots instead of a
+   single disclosure button — each is real (reveals its own tooltip), so AC5 is satisfied by
+   whichever dot a keyboard user reaches first. A battle with zero placed organisms has no
+   focusable element in its tile under this design; noted as a known gap, not addressed here (no
+   current fixture or flow produces a zero-organism battle).
 
 5. **⚠️ The page loses its `workspace: {status}` and `mode: …` debug lines, and six assertions plus
    two e2e specs read them.** Enumerated in Tasks 5 and 6. `appShell.spec.ts` uses
@@ -437,6 +463,32 @@ so that I can find and pick up my work instantly.
    modified date only, leaving AC3/FR-7.3's "date created" unmet with no path to it that respects
    AC1). Authority order makes this a **Decision-level** edit — cross-cutting beats RFC — which is why
    it was ratified rather than decided at dev time. Propagation targets are listed in Task 1.
+
+1a. **⚠️ Superseded (Sidiar, 2026-08-08) — "Date created / last modified" is ambiguous between one
+    field and two, and the mockup + the simpler reading both point the same way.** Raised during
+    post-implementation design review against
+    `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/battle-gallery.html`: the mockup's
+    `.tile-date` renders exactly **one** date per tile, never two, and FR-7.3's own text — "Date
+    created / last modified" — reads at least as naturally as "the creation date, or the last-modified
+    date once there is one" as it does "both, always". `updatedAt` alone already **is** that value:
+    every battle's `updatedAt` starts equal to its `createdAt` at creation and only diverges after a
+    save. **→ Resolved: revert the `createdAt` projection field entirely** (conflict 1's addition had
+    no remaining consumer once this landed) and show only `updatedAt` in the tile footer. The same
+    review revisited the disclosure-panel reading of "organism names via tooltip or expandable
+    metadata": Sidiar asked to restore the mockup's literal per-organism hover tooltip instead of the
+    click-to-expand panel, on the grounds that organism names/count are not essential navigation
+    information. Literal mouse-only CSS tooltips (the mockup's `.participant-dot::before`) were
+    rejected again, for the same reason as the first time — no accessible name, no keyboard
+    equivalent, a direct WCAG **SC 1.4.13** (Content on Hover or Focus) violation invisible to our
+    automated axe gate (axe cannot detect "hover reveals content with no focus equivalent" on a
+    non-interactive `<div>`). **Resolved instead:** each dot is a real `<button aria-label="{name}">`
+    — an accessible name independent of the tooltip — whose CSS tooltip triggers on **both**
+    `:hover` and `:focus-within`, dismissible via `Escape` (blurs the trigger). This gets the exact
+    mockup visual (no visible organism-count text, per-organism tooltip, no expand panel) without
+    reintroducing the failure AC5 forced conflict 1's disclosure design to solve. Organisms beyond the
+    `MAX_VISIBLE_DOTS = 6` cap fold into a `+n` control with the same hover/focus tooltip listing
+    every remaining name, preserving the "the name list must not be capped" invariant
+    (`packages/domain` Decision G.3) without a full-tile expand affordance.
 
 2. **⚠️ RFC-005 calls the component `<BattleCard>`; everything else says "tile".** FR-7.2 ("Battle
    Tile Display"), Story 1.10/1.11's titles, UX-DR18 and the mockup's `.battle-tile` class all say
@@ -803,8 +855,9 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` workflow.
 - `apps/web/e2e/gallery.spec.ts`
 
 **Modified:**
-- `packages/domain/src/battleSchema.ts` — `createdAt` on `BattleSummarySchema`, optional
-- `packages/domain/src/battleSchema.test.ts` — pinned assertions updated, two new tests added
+- `packages/domain/src/battleSchema.ts` — `createdAt` added to `BattleSummarySchema` 2026-08-07,
+  reverted 2026-08-08 (conflict 1a)
+- `packages/domain/src/battleSchema.test.ts` — assertions updated for the add, then for the revert
 - `apps/web/app/page.tsx` — rewritten to the page-boundary shape (repos + seedStatus → `<BattleGallery>`)
 - `apps/web/app/page.test.tsx` — retargeted assertions (Task 5), new AC4 tile-order test
 - `apps/web/app/themes.css` — `--gol-shadow-tile-hover` token added
@@ -839,3 +892,19 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` workflow.
   specified), only the internal state shape differs. Full `npm run ci` green: 88+82+75 package
   tests, 257 `apps/web` tests, `packages/domain` at 100% coverage (≥90% gate), bundle 284.8 KB / 300
   KB (15.2 KB headroom), 36/36 e2e across chromium/firefox/webkit/tablet. Status → review.
+- 2026-08-08: Post-implementation design review against the mockup (Sidiar) reopened conflict 1 —
+  see conflict 1a and the superseded notes on forced decisions 3–4. `BattleSummary.createdAt`
+  reverted (no remaining consumer); the tile now shows one date (`updatedAt`), matching the
+  mockup exactly. The disclosure panel is removed; organism dots are restored to the mockup's
+  literal per-dot hover tooltip, but each dot is now a real `<button aria-label>` whose tooltip
+  also triggers on keyboard `:focus-within` and dismisses on `Escape` (WCAG SC 1.4.13) — the
+  accessible-name/keyboard-equivalent problem that ruled the mockup's CSS-only `::before` tooltip
+  out the first time is solved at the trigger, not by avoiding the mockup's interaction. The
+  visible "N organisms" trigger text is removed entirely. One implementation bug caught by
+  the real-browser e2e run (not by jsdom/vitest, which cannot compute `:focus-within`): an
+  Emotion component-selector interpolation (`` `&:focus-within ${Tooltip}` ``) does not resolve
+  through MUI's `styled()` outside Emotion's own `css` tag — it literalizes to the string
+  `"no_component_selector"` in the emitted CSS, so the rule silently never matched. Fixed with a
+  plain structural sibling selector (`button + span`) instead. Full `npm run ci` green again:
+  85+82+75 package tests, 256 `apps/web` tests, bundle 15.3 KB headroom, 36/36 e2e. Status stays
+  → review.

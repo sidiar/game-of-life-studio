@@ -12,7 +12,6 @@ function organism(overrides: Partial<TileOrganism> & { id: string }): TileOrgani
 const BASE_PROPS = {
   name: 'Three-Way Skirmish',
   gridSize: { cols: 50, rows: 30 },
-  createdAt: new Date('2026-07-20T09:00:00.000Z'),
   updatedAt: new Date('2026-07-25T18:15:00.000Z'),
   organisms: [
     organism({ id: 'a', name: 'Aggressive Colonizer' }),
@@ -34,93 +33,82 @@ describe('BattleTile', () => {
     expect(screen.getByText('50 × 30')).toBeInTheDocument();
   });
 
-  it('starts with the disclosure collapsed', () => {
+  it('renders the single last-modified date, with no visible organism-count text', () => {
     render(<BattleTile {...BASE_PROPS} />);
-    const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('Created')).not.toBeInTheDocument();
+    expect(screen.getByText('Jul 25, 2026')).toBeInTheDocument();
+    expect(screen.queryByText(/organisms?$/)).not.toBeInTheDocument();
   });
 
-  it('expands on click, revealing both dates and every organism name', async () => {
-    const user = userEvent.setup();
+  // Each dot is a real, individually-labelled control — the accessible-name check that a mouse-
+  // only CSS tooltip (the mockup's ::before pattern) could never pass.
+  it('gives each organism dot its own accessible name via a real button', () => {
     render(<BattleTile {...BASE_PROPS} />);
 
-    await user.click(screen.getByRole('button'));
-
-    expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('Created')).toBeInTheDocument();
-    expect(screen.getByText('Modified')).toBeInTheDocument();
-    // Both dates appear in the panel's <dl>; "Jul 25, 2026" also appears in the tile footer
-    // (the always-visible updatedAt), so two occurrences total is the correct count here.
-    expect(screen.getAllByText('Jul 20, 2026')).toHaveLength(1);
-    expect(screen.getAllByText('Jul 25, 2026')).toHaveLength(2);
-    expect(screen.getByText('Aggressive Colonizer')).toBeInTheDocument();
-    expect(screen.getByText('Patient Defender')).toBeInTheDocument();
-    expect(screen.getByText('Chaotic Spreader')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aggressive Colonizer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Patient Defender' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chaotic Spreader' })).toBeInTheDocument();
   });
 
-  it('expands on Enter and on Space via the keyboard (AC5)', async () => {
+  it('is keyboard-focusable through the dots (AC5)', async () => {
     const user = userEvent.setup();
     render(<BattleTile {...BASE_PROPS} />);
 
     await user.tab();
-    expect(screen.getByRole('button')).toHaveFocus();
-
-    await user.keyboard('{Enter}');
-    expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
-
-    await user.keyboard('{Enter}');
-    expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'false');
-
-    await user.keyboard(' ');
-    expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Aggressive Colonizer' })).toHaveFocus();
   });
 
-  it('caps the visible dots at 6 and shows "+n more", but the panel lists every organism', async () => {
+  it('dismisses on Escape (WCAG 1.4.13 dismissible) by blurring the focused dot', async () => {
     const user = userEvent.setup();
+    render(<BattleTile {...BASE_PROPS} />);
+
+    const dot = screen.getByRole('button', { name: 'Aggressive Colonizer' });
+    await user.tab();
+    expect(dot).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(dot).not.toHaveFocus();
+  });
+
+  it('caps the visible dots at 6 and folds the rest into a "+n" control whose accessible name lists every remaining organism', () => {
     const tenOrganisms = Array.from({ length: 10 }, (_, i) =>
       organism({ id: `id-${i}`, name: `Organism ${i}` }),
     );
     render(<BattleTile {...BASE_PROPS} organisms={tenOrganisms} />);
 
-    expect(screen.getByText('+4 more')).toBeInTheDocument();
-    expect(screen.getByText('10 organisms')).toBeInTheDocument();
+    for (let i = 0; i < 6; i++) {
+      expect(screen.getByRole('button', { name: `Organism ${i}` })).toBeInTheDocument();
+    }
+    for (let i = 6; i < 10; i++) {
+      expect(screen.queryByRole('button', { name: `Organism ${i}` })).not.toBeInTheDocument();
+    }
 
-    await user.click(screen.getByRole('button'));
-    tenOrganisms.forEach((o) => {
-      expect(screen.getByText(o.name)).toBeInTheDocument();
+    const more = screen.getByRole('button', {
+      name: /4 more organisms: Organism 6, Organism 7, Organism 8, Organism 9/,
     });
+    expect(more).toHaveTextContent('+4');
   });
 
-  it('renders the fallback organism without throwing (dangling id)', () => {
+  it('renders the fallback organism dot without throwing (dangling id)', () => {
     render(
       <BattleTile
         {...BASE_PROPS}
         organisms={[organism({ id: 'ghost', name: 'Unknown organism' })]}
       />,
     );
-    expect(screen.getByText('1 organism')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unknown organism' })).toBeInTheDocument();
   });
 
-  it('formats an absent createdAt as the stable placeholder in the panel', async () => {
-    const user = userEvent.setup();
-    render(<BattleTile {...BASE_PROPS} createdAt={undefined} />);
-
-    await user.click(screen.getByRole('button'));
-    expect(screen.getAllByText('Unknown')).toHaveLength(1);
-  });
-
-  it('has no axe violations, collapsed', async () => {
+  it('has no axe violations', async () => {
     const { container } = render(<BattleTile {...BASE_PROPS} />);
     const results = await axe(container);
     expect(results.violations).toEqual([]);
   });
 
-  it('has no axe violations, expanded', async () => {
-    const user = userEvent.setup();
-    const { container } = render(<BattleTile {...BASE_PROPS} />);
-    await user.click(screen.getByRole('button'));
-
+  it('has no axe violations with an overflowing roster', async () => {
+    const tenOrganisms = Array.from({ length: 10 }, (_, i) =>
+      organism({ id: `id-${i}`, name: `Organism ${i}` }),
+    );
+    const { container } = render(<BattleTile {...BASE_PROPS} organisms={tenOrganisms} />);
     const results = await axe(container);
     expect(results.violations).toEqual([]);
   });

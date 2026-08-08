@@ -79,19 +79,21 @@ export type Battle = z.infer<typeof BattleSchema>;
 // through and comes back as the summary. It also means a battle whose gridState is corrupt still
 // lists — the Gallery stays readable and the failure surfaces from load(), where the grid is
 // actually needed. Widening this schema to re-validate gridState would silently undo that.
+//
+// NO createdAt (2026-08-08, Story 1.10 follow-up — added, then removed, in the same week): FR-7.3
+// reads "Date created / last modified", which is ambiguous between "both dates, always" and "one
+// date, whichever is more relevant" — a single field that reads as the creation date until the
+// battle is first edited, then as the edit date. Sidiar chose the latter reading (it is also what
+// the Gallery mockup renders — one date per tile, never two), which `updatedAt` alone already
+// satisfies: every battle's `updatedAt` starts equal to its `createdAt` and only diverges once
+// saved again. `createdAt` was briefly added here to back a two-date disclosure panel; once that
+// UI was dropped, the field had zero remaining consumers, so it is reverted rather than kept
+// unused with a rationale that no longer applies.
 export const BattleSummarySchema = z.object({
   id: z.uuid(),
   name: z.string().max(100),
   gridSize: EditableGridPresetSchema,
   organismIds: z.array(z.string().min(1)).max(255),
-  // Decision H.4's field list omits createdAt; FR-7.3 / Story 1.10 AC3 require the created date
-  // on the tile, and AR-15/AC1 forbid load()-per-tile to get it. It is a scalar already present
-  // in every stored record, so carrying it costs zero grid work — the projection's whole point.
-  // OPTIONAL, deliberately: list() SKIPS a record the summary schema rejects (Story 1.4 review:
-  // "one bad battle must not blank the entire Gallery"), so making it required would silently
-  // remove externally-tampered battles from the Gallery instead of showing them with one field
-  // missing. Widen what lists, never narrow it.
-  createdAt: IsoTimestamp.optional(),
   updatedAt: IsoTimestamp,
 });
 

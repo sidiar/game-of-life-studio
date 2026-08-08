@@ -77,9 +77,11 @@ interface BattleSummary {
   name: string
   gridSize: { cols: number; rows: number }
   organismIds: string[]
-  createdAt?: Date  // added 2026-08-07, Story 1.10 — FR-7.3's "date created" on the Gallery tile;
-                     // optional because list() skips records the schema rejects (Story 1.4 review)
   updatedAt: Date
+  // NO createdAt: added 2026-08-07 (Story 1.10) to back a two-date disclosure panel, reverted
+  // 2026-08-08 in the same story once the tile settled on ONE date (FR-7.3's "Date created / last
+  // modified" read as a single field) — updatedAt alone, already equal to createdAt until a
+  // battle's first edit.
 }
 
 // Repository interfaces (abstract persistence)

@@ -1,19 +1,19 @@
 'use client';
 
-import { useId, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { styled } from '@mui/material/styles';
 import { formatBattleDate } from '@/lib/formatBattleDate';
 import type { TileOrganism } from '@/lib/tileOrganisms';
 
 // A battle may legally place 255 organisms (Decision G.3) — the mockup's 2-3 dots is not the
-// bound, and an uncapped row reflows the whole tile. The full list always renders inside the
-// disclosure panel.
+// bound, and an uncapped row reflows the whole tile. Organisms beyond the cap fold into the "+n"
+// indicator, whose own tooltip lists their names — nothing is ever unreachable (silent-failure
+// trap: "the dot row must be capped; the name list must not be").
 const MAX_VISIBLE_DOTS = 6;
 
 export interface BattleTileProps {
   name: string;
   gridSize: { cols: number; rows: number };
-  createdAt: Date | undefined;
   updatedAt: Date;
   organisms: readonly TileOrganism[];
 }
@@ -83,23 +83,30 @@ const TileDate = styled('span')({
   letterSpacing: '0.5px',
 });
 
-// The FR-7.3 metadata trigger. FR-7.3 permits a tooltip OR an expandable section; the mockup's
-// `.participant-dot::before` hover tooltip is mouse-only — unreachable by keyboard or AT, and it
-// cannot carry both dates in one place — so this is a real disclosure button, not CSS-only. It is
-// also what makes AC5's "keyboard-focusable" honest: a real control with a real effect, not
-// `tabIndex` on the tile itself.
-const DisclosureButton = styled('button')({
+const DotRow = styled('span')({
   display: 'flex',
-  alignItems: 'center',
   gap: '6px',
-  background: 'transparent',
-  border: 'none',
+});
+
+// Groups a dot (or the "+n" indicator) with its own tooltip so :hover/:focus-within on the
+// wrapper covers the tooltip's rendered area too, not just the dot — WCAG 1.4.13's "hoverable"
+// requirement (a sighted pointer user must be able to move onto the tooltip without it vanishing).
+const DotWrapper = styled('span')({
+  position: 'relative',
+  display: 'inline-flex',
+});
+
+// Mockup: .participant-dot (battle-gallery.html:338-345), but a real <button> with a real
+// accessible name — not a bare <div>. The mockup's ::before hover tooltip is CSS-only: no
+// accessible name, unreachable by keyboard (WCAG 1.4.13 requires focus to reveal the same content
+// hover does). aria-label carries the name directly to assistive tech; the visual Tooltip below
+// is aria-hidden to avoid double-announcing it.
+const Dot = styled('button')({
+  width: '12px',
+  height: '12px',
+  borderRadius: '2px',
+  border: '1px solid var(--gol-border)',
   padding: 0,
-  color: 'inherit',
-  font: 'inherit',
-  fontSize: '12px',
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
   cursor: 'pointer',
   '&:focus-visible': {
     outline: '2px solid var(--gol-accent)',
@@ -107,69 +114,62 @@ const DisclosureButton = styled('button')({
   },
 });
 
-const DotRow = styled('span')({
-  display: 'flex',
-  gap: '4px',
-});
-
-const Dot = styled('span')({
-  width: '12px',
-  height: '12px',
-  borderRadius: '2px',
-  border: '1px solid var(--gol-border)',
-  display: 'inline-block',
-});
-
-const MoreCount = styled('span')({
+const MoreIndicator = styled(Dot)({
+  width: 'auto',
+  minWidth: '20px',
+  height: '16px',
+  padding: '0 4px',
+  fontSize: '10px',
+  lineHeight: '14px',
   color: 'var(--gol-text-tertiary)',
+  background: 'transparent',
 });
 
-const Panel = styled('div')({
-  marginTop: '12px',
-  paddingTop: '12px',
-  borderTop: '1px solid var(--gol-border)',
+// Mockup: .participant-dot::before (battle-gallery.html:347-368) — same visual, now a real
+// element toggled by :hover/:focus-within on the wrapper rather than a CSS-only pseudo-element,
+// so keyboard focus reveals it exactly like a mouse hover does.
+const Tooltip = styled('span')({
+  position: 'absolute',
+  bottom: '100%',
+  right: 0,
+  transform: 'translateY(-8px)',
+  background: 'var(--gol-bg-primary)',
+  border: '1px solid var(--gol-accent)',
+  color: 'var(--gol-accent)',
+  padding: '6px 10px',
+  fontSize: '11px',
+  whiteSpace: 'nowrap',
+  opacity: 0,
+  pointerEvents: 'none',
+  transition: 'opacity 0.2s, transform 0.2s',
+  zIndex: 100,
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  fontWeight: 500,
 });
 
-const DateList = styled('dl')({
-  display: 'grid',
-  gridTemplateColumns: 'auto 1fr',
-  gap: '4px 8px',
-  margin: '0 0 12px',
-  fontSize: '12px',
-  color: 'var(--gol-text-secondary)',
+// A structural sibling selector (`button + span`), not an Emotion component-selector
+// interpolation (`${Tooltip}`) — MUI's `styled()` does not resolve that trick outside Emotion's
+// own `css` tag (confirmed by inspecting the emitted CSS: it literalizes to the string
+// "no_component_selector" instead of a class selector, so the rule silently never matches).
+// Tooltip is always the single <span> immediately after the trigger <button> here, so the plain
+// combinator is exact and has no such fragility.
+const DotWrapperWithTooltip = styled(DotWrapper)({
+  '&:hover button + span, &:focus-within button + span': {
+    opacity: 1,
+    transform: 'translateY(-10px)',
+  },
 });
 
-const OrganismList = styled('ul')({
-  listStyle: 'none',
-  margin: 0,
-  padding: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '6px',
-});
+// WCAG 1.4.13 "dismissible": Escape moves focus off the trigger, which drops :focus-within and
+// hides the tooltip — without this, a keyboard user has no way to close it short of tabbing away.
+function dismissOnEscape(event: KeyboardEvent<HTMLButtonElement>) {
+  if (event.key === 'Escape') event.currentTarget.blur();
+}
 
-const OrganismListItem = styled('li')({
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  fontSize: '12px',
-  color: 'var(--gol-text-primary)',
-});
-
-export default function BattleTile({
-  name,
-  gridSize,
-  createdAt,
-  updatedAt,
-  organisms,
-}: BattleTileProps) {
-  const [open, setOpen] = useState(false);
-  // A hardcoded id breaks the moment two tiles render — aria-controls would silently point at the
-  // wrong panel rather than failing.
-  const panelId = useId();
-
+export default function BattleTile({ name, gridSize, updatedAt, organisms }: BattleTileProps) {
   const visibleDots = organisms.slice(0, MAX_VISIBLE_DOTS);
-  const hiddenCount = organisms.length - visibleDots.length;
+  const overflow = organisms.slice(MAX_VISIBLE_DOTS);
 
   return (
     <Tile>
@@ -182,39 +182,32 @@ export default function BattleTile({
       <PetriDish aria-hidden="true" />
       <TileFooter>
         <TileDate>{formatBattleDate(updatedAt)}</TileDate>
-        <DisclosureButton
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => setOpen((prev) => !prev)}
-        >
-          <DotRow aria-hidden="true">
-            {visibleDots.map((organism) => (
-              <Dot key={organism.id} style={{ backgroundColor: organism.color }} />
-            ))}
-            {hiddenCount > 0 && <MoreCount>+{hiddenCount} more</MoreCount>}
-          </DotRow>
-          {organisms.length} organism{organisms.length === 1 ? '' : 's'}
-        </DisclosureButton>
+        <DotRow>
+          {visibleDots.map((organism) => (
+            <DotWrapperWithTooltip key={organism.id}>
+              <Dot
+                type="button"
+                aria-label={organism.name}
+                style={{ backgroundColor: organism.color }}
+                onKeyDown={dismissOnEscape}
+              />
+              <Tooltip aria-hidden="true">{organism.name}</Tooltip>
+            </DotWrapperWithTooltip>
+          ))}
+          {overflow.length > 0 && (
+            <DotWrapperWithTooltip>
+              <MoreIndicator
+                type="button"
+                aria-label={`${overflow.length} more organism${overflow.length === 1 ? '' : 's'}: ${overflow.map((o) => o.name).join(', ')}`}
+                onKeyDown={dismissOnEscape}
+              >
+                +{overflow.length}
+              </MoreIndicator>
+              <Tooltip aria-hidden="true">{overflow.map((o) => o.name).join(', ')}</Tooltip>
+            </DotWrapperWithTooltip>
+          )}
+        </DotRow>
       </TileFooter>
-      {open && (
-        <Panel id={panelId}>
-          <DateList>
-            <dt>Created</dt>
-            <dd>{formatBattleDate(createdAt)}</dd>
-            <dt>Modified</dt>
-            <dd>{formatBattleDate(updatedAt)}</dd>
-          </DateList>
-          <OrganismList>
-            {organisms.map((organism) => (
-              <OrganismListItem key={organism.id}>
-                <Dot aria-hidden="true" style={{ backgroundColor: organism.color }} />
-                {organism.name}
-              </OrganismListItem>
-            ))}
-          </OrganismList>
-        </Panel>
-      )}
     </Tile>
   );
 }

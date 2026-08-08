@@ -168,11 +168,10 @@ describe('BattleSchema', () => {
 });
 
 describe('BattleSummarySchema', () => {
-  it('projects a stored battle record down to exactly the Decision H.4 fields (+ createdAt, Story 1.10 AC3)', () => {
+  it('projects a stored battle record down to exactly the Decision H.4 fields', () => {
     const summary = BattleSummarySchema.parse(validBattle());
 
     expect(Object.keys(summary).sort()).toEqual([
-      'createdAt',
       'gridSize',
       'id',
       'name',
@@ -181,21 +180,14 @@ describe('BattleSummarySchema', () => {
     ]);
   });
 
-  it('drops gridState — that omission is what keeps the Gallery off the heavy field', () => {
-    expect('gridState' in BattleSummarySchema.parse(validBattle())).toBe(false);
-  });
-
-  it('carries createdAt when the stored record has one (Story 1.10 AC3, FR-7.3)', () => {
-    expect('createdAt' in BattleSummarySchema.parse(validBattle())).toBe(true);
-  });
-
-  it('still projects a record with no createdAt — the field is optional, not required', () => {
-    const withoutCreatedAt: Record<string, unknown> = { ...validBattle() };
-    delete withoutCreatedAt.createdAt;
-
-    const result = BattleSummarySchema.safeParse(withoutCreatedAt);
-    expect(result.success).toBe(true);
-    expect(result.success && 'createdAt' in result.data).toBe(false);
+  // Story 1.10 briefly carried an optional createdAt here (to back a two-date disclosure panel),
+  // then reverted it (2026-08-08) once the Gallery tile settled on showing a single date —
+  // `updatedAt` alone, which already equals `createdAt` until a battle is first edited. This
+  // negative assertion is the pinned invariant again: createdAt is not part of the projection.
+  it('drops gridState AND createdAt — the summary omits every heavy or unneeded field', () => {
+    const summary = BattleSummarySchema.parse(validBattle());
+    expect('gridState' in summary).toBe(false);
+    expect('createdAt' in summary).toBe(false);
   });
 
   it('hydrates updatedAt into a Date so the Gallery can sort on it', () => {
@@ -203,13 +195,6 @@ describe('BattleSummarySchema', () => {
 
     expect(summary.updatedAt).toBeInstanceOf(Date);
     expect(summary.updatedAt.toISOString()).toBe(UPDATED_AT);
-  });
-
-  it('hydrates createdAt into a Date when present (mirrors updatedAt)', () => {
-    const summary = BattleSummarySchema.parse(validBattle());
-
-    expect(summary.createdAt).toBeInstanceOf(Date);
-    expect(summary.createdAt?.toISOString()).toBe(CREATED_AT);
   });
 
   it('carries the placed roster, so the AR-15 usage index needs no grid', () => {

@@ -132,7 +132,6 @@ export default function BattleGallery({ battles, organisms, seedStatus }: Battle
               key={summary.id}
               name={summary.name}
               gridSize={summary.gridSize}
-              createdAt={summary.createdAt}
               updatedAt={summary.updatedAt}
               organisms={resolveTileOrganisms(summary.organismIds, state.roster)}
             />

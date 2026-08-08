@@ -139,7 +139,7 @@ describe('BattleGallery', () => {
     expect((await axe(errorContainer)).violations).toEqual([]);
   });
 
-  it("resolves a battle's organism roster names for the tile (sanity, real data)", async () => {
+  it("resolves a battle's organism roster names for the tile's dots (sanity, real data)", async () => {
     const repos = createFakeRepositories({
       battles: [createMockBattles()[1]], // Grand Colony War — 3 mocks + Conway's Classic
       organisms: [...createMockOrganisms(), CONWAYS_CLASSIC],
@@ -150,7 +150,10 @@ describe('BattleGallery', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('4 organisms')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: "Conway's Classic" })).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: 'Aggressive Colonizer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Patient Defender' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chaotic Spreader' })).toBeInTheDocument();
   });
 });
