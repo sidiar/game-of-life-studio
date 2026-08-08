@@ -31,10 +31,13 @@ test.describe('app shell (Story 1.9)', () => {
     // console.error lands a few ms later, i.e. after the assertion below had already run, so the
     // one check this comment claims exists nowhere else was passing by racing it.
     //
-    // "workspace: ready" is the hydration signal: the text is "workspace: seeding" in the
-    // server-rendered HTML and only reaches "ready" once useWorkspaceSeed's client effect has
-    // run (Story 1.5), which cannot happen before React has hydrated this tree.
-    await expect(page.getByText('workspace: ready')).toBeVisible();
+    // "No battles yet." is the hydration signal now (Story 1.10 retargeted this from
+    // "workspace: ready", which the placeholder page no longer renders): the text is
+    // "Loading battles…" in the server-rendered HTML and only reaches the empty-Gallery copy once
+    // both useWorkspaceSeed's and BattleGallery's client effects have run, which cannot happen
+    // before React has hydrated this tree. Do NOT "fix" this by dropping the wait — it exists
+    // because the console-error assertion below was racing hydration (code review 2026-08-07).
+    await expect(page.getByText('No battles yet.')).toBeVisible();
 
     // Emotion hydration mismatches (missing AppRouterCacheProvider) surface only here, against
     // the served static export — not in `next dev`, and not in jsdom.

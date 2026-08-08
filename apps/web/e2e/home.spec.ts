@@ -3,10 +3,11 @@ import AxeBuilder from '@axe-core/playwright';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 
-// Thin e2e (RFC-008 Decision 2): only the home route exists this story. Gallery,
-// Editor, Play, Settings arrive later and get their own specs.
+// Thin e2e (RFC-008 Decision 2): only the home route exists this story. Editor, Play, Settings
+// arrive later and get their own specs; the POPULATED Gallery gets its own spec (gallery.spec.ts,
+// Story 1.10) — this file stays the production-empty-workspace proof.
 test.describe('home route', () => {
-  test('renders the placeholder gallery with zero console errors', async ({ page }) => {
+  test('renders the real Battle Gallery, empty, with zero console errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') errors.push(msg.text());
@@ -18,7 +19,9 @@ test.describe('home route', () => {
     // Story 1.9: the h1 moved to the page's own "Battle Gallery" heading — "Game of Life
     // Studio" is now the shell's wordmark (AppShell), not a document heading.
     await expect(page.getByRole('heading', { level: 1, name: 'Battle Gallery' })).toBeVisible();
-    await expect(page.getByText('Battle Gallery coming soon.')).toBeVisible();
+    // Story 1.10: the placeholder copy is gone — a production load seeds no battles, so the
+    // Gallery's real empty-state line renders instead (Story 1.12 owns its eventual design).
+    await expect(page.getByText('No battles yet.')).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -45,7 +48,10 @@ test.describe('home route', () => {
     page,
   }) => {
     await page.goto('/');
-    await expect(page.getByText('workspace: ready')).toBeVisible();
+    // "No battles yet." is the hydration signal now (Story 1.10): it is absent from the
+    // prerendered HTML ("Loading battles…") and only reachable once useWorkspaceSeed's effect and
+    // BattleGallery's own load effect have both run.
+    await expect(page.getByText('No battles yet.')).toBeVisible();
 
     const afterFirstLoad = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key) ?? '{}'),
@@ -58,7 +64,7 @@ test.describe('home route', () => {
     ).toBeNull();
 
     await page.reload();
-    await expect(page.getByText('workspace: ready')).toBeVisible();
+    await expect(page.getByText('No battles yet.')).toBeVisible();
 
     const afterReload = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key) ?? '{}'),

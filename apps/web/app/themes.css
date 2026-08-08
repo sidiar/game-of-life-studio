@@ -90,4 +90,12 @@
   --gol-text-primary-channel: 255 255 255;
   --gol-text-secondary-channel: 153 153 153;
   --gol-border-channel: 51 51 51;
+
+  /* Tile hover glow (Story 1.10). Mockup: box-shadow: 0 4px 12px rgba(0, 212, 255, 0.15).
+     Authored as the whole shadow value so the component references exactly one token, and
+     composed from --gol-accent-channel so the colour has a single source of truth — the same
+     rgb(<channel> / <alpha>) form the --gol-action-* tokens above already use. AR-46 bans a raw
+     rgba() literal in the component itself, and no existing --gol-* token already expressed this
+     composite. */
+  --gol-shadow-tile-hover: 0 4px 12px rgb(var(--gol-accent-channel) / 0.15);
 }

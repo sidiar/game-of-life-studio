@@ -77,6 +77,8 @@ interface BattleSummary {
   name: string
   gridSize: { cols: number; rows: number }
   organismIds: string[]
+  createdAt?: Date  // added 2026-08-07, Story 1.10 — FR-7.3's "date created" on the Gallery tile;
+                     // optional because list() skips records the schema rejects (Story 1.4 review)
   updatedAt: Date
 }
 

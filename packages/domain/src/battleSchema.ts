@@ -84,6 +84,14 @@ export const BattleSummarySchema = z.object({
   name: z.string().max(100),
   gridSize: EditableGridPresetSchema,
   organismIds: z.array(z.string().min(1)).max(255),
+  // Decision H.4's field list omits createdAt; FR-7.3 / Story 1.10 AC3 require the created date
+  // on the tile, and AR-15/AC1 forbid load()-per-tile to get it. It is a scalar already present
+  // in every stored record, so carrying it costs zero grid work — the projection's whole point.
+  // OPTIONAL, deliberately: list() SKIPS a record the summary schema rejects (Story 1.4 review:
+  // "one bad battle must not blank the entire Gallery"), so making it required would silently
+  // remove externally-tampered battles from the Gallery instead of showing them with one field
+  // missing. Widen what lists, never narrow it.
+  createdAt: IsoTimestamp.optional(),
   updatedAt: IsoTimestamp,
 });
 

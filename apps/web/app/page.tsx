@@ -1,19 +1,15 @@
 'use client';
 
 import { useMemo } from 'react';
-import { OrganismSchema } from '@gol/domain';
-
-import { APP_MODE } from '@/lib/mode';
+import BattleGallery from '@/components/BattleGallery';
 import { createRepositories } from '@/lib/repositoryFactory';
 import { useWorkspaceSeed } from '@/lib/useWorkspaceSeed';
 
-// Placeholder home route — the real Battle Gallery arrives in Story 1.10.
-//
-// Reading a field off OrganismSchema keeps Story 1.1's wiring proof honest: it fails the build
-// if @gol/domain stops resolving to its TS source through transpilePackages. A truthiness check
-// on the import would have passed for any non-schema value, proving nothing.
-const DOMAIN_ORGANISM_FIELDS = Object.keys(OrganismSchema.shape).length;
-
+// The page boundary (RFC-005 conflict 3): app/page.tsx IS the Gallery page under the App
+// Router, so a second `<BattleGalleryPage>` wrapper would add a layer with no state of its own.
+// It owns repository construction and the seed lifecycle, and passes repositories DOWN as props
+// typed to the interfaces (AR-2/27) — never AppRepositories, never createRepositories() inside a
+// child, never a concrete LocalStorage* import.
 export default function HomePage() {
   // createRepositories() runs ONCE per component instance (AR-27) — never at module scope, never
   // inside a child. useMemo with an empty dep array is what makes this "once", not "every render":
@@ -23,18 +19,12 @@ export default function HomePage() {
   const { status } = useWorkspaceSeed(repositories);
 
   // No <main> here — AppShell (Story 1.9) owns the single <main> landmark; this page renders only
-  // its own content into it. The <h1> moved from "Game of Life Studio" (now the shell's wordmark,
-  // a styled <div>, not a heading) to "Battle Gallery" (the mockup's .section-title) so the
-  // document keeps exactly one <h1>. That invariant is enforced by AppShell.test.tsx, not by axe
-  // — axe-core has no duplicate-h1 rule (corrected in code review 2026-08-07).
+  // its own content into it. BattleGallery owns the document's only <h1> ("Battle Gallery").
   return (
-    <>
-      <h1>Battle Gallery</h1>
-      <p>Battle Gallery coming soon.</p>
-      <p>
-        mode: {APP_MODE} · wired to @gol/domain ({DOMAIN_ORGANISM_FIELDS} organism fields)
-      </p>
-      <p>workspace: {status}</p>
-    </>
+    <BattleGallery
+      battles={repositories.battles}
+      organisms={repositories.organisms}
+      seedStatus={status}
+    />
   );
 }

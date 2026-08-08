@@ -7,32 +7,37 @@ import { STORAGE_KEYS } from '@gol/persistence';
 import { MOCK_BATTLE_IDS, MOCK_ORGANISM_IDS } from '@gol/test-utils';
 import HomePage from './page';
 
-// Wiring proof for the toolchain, not a feature test: rendering the Story 1.1
-// placeholder home page under Vitest exercises Vitest + React Testing Library +
-// jsdom + @vitejs/plugin-react + the @gol/domain workspace-source import path
-// (Vitest's parity with Next's transpilePackages) all at once.
+// Story 1.10 replaced the placeholder body with the real Battle Gallery. What these tests
+// exercise did not change: HomePage still owns createRepositories()/useWorkspaceSeed at the page
+// boundary, and this file remains the wiring proof for Vitest + RTL + jsdom +
+// @vitejs/plugin-react + the @gol/domain workspace-source import path all at once.
 describe('HomePage', () => {
   afterEach(() => {
     localStorage.clear();
     vi.unstubAllEnvs();
   });
 
-  it('renders the placeholder gallery copy wired through @gol/domain', () => {
-    const { container } = render(<HomePage />);
+  it('renders the Battle Gallery heading and, once ready, the empty-workspace copy', async () => {
+    render(<HomePage />);
 
     // Story 1.9: the h1 moved here from the shell's wordmark ("Game of Life Studio", now a
     // styled <div> in AppShell, not a heading) — this page owns the document's only <h1>.
     expect(screen.getByRole('heading', { level: 1, name: 'Battle Gallery' })).toBeInTheDocument();
-    expect(screen.getByText('Battle Gallery coming soon.')).toBeInTheDocument();
 
-    // The field count is read off the real OrganismSchema (Story 1.3), so matching a
-    // number here proves the workspace package resolved to its TS source under Vitest.
-    // Asserting only the literal text would pass even if the import were dead.
-    expect(container.textContent).toMatch(/wired to @gol\/domain \(\d+ organism fields\)/);
+    // "wired to @gol/domain (N organism fields)" is gone (Story 1.10 Task 5): a rendered tile can
+    // only exist if BattleSummarySchema (@gol/domain, through @gol/persistence) parsed a stored
+    // record, which is a strictly stronger proof that the package resolved to its TS source than
+    // a truthiness check ever was. The "seeds the AR-45 mock fixtures" test below is that stronger
+    // proof exercised for real — a fixture-seeded tile rendering by NAME.
+    await waitFor(() => {
+      expect(screen.getByText('No battles yet.')).toBeInTheDocument();
+    });
   });
 
-  it('has no axe accessibility violations', async () => {
+  it('has no axe accessibility violations once ready', async () => {
     const { container } = render(<HomePage />);
+    await waitFor(() => screen.getByText('No battles yet.'));
+
     const results = await axe(container);
     expect(results.violations).toEqual([]);
   });
@@ -77,8 +82,10 @@ describe('HomePage', () => {
   // mount bare and the e2e runs against the production export, where React does not double-invoke
   // effects — so `npm run ci` was fully green while `npm run dev` sat on "workspace: seeding"
   // forever. App Router turns StrictMode on by default (reactStrictMode unset => enabled), so dev
-  // is the strict environment and this test is the only place that reproduces it.
-  it('reaches "ready" under StrictMode, and still seeds exactly once', async () => {
+  // is the strict environment and this test is the only place that reproduces it. Retargeted
+  // (Story 1.10) from "workspace: ready" text to the empty-Gallery copy that now signals the same
+  // thing: the seed effect resolved and the Gallery's own load effect ran behind it.
+  it('reaches the ready Gallery under StrictMode, and still seeds exactly once', async () => {
     render(
       <StrictMode>
         <HomePage />
@@ -86,7 +93,7 @@ describe('HomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/workspace: ready/)).toBeInTheDocument();
+      expect(screen.getByText('No battles yet.')).toBeInTheDocument();
     });
 
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.organisms) ?? '{}') as Record<
@@ -96,10 +103,13 @@ describe('HomePage', () => {
     expect(Object.keys(stored)).toEqual([CONWAYS_CLASSIC_ID]);
   });
 
-  // Story 1.6 AC3, positive half: a dev build auto-seeds the AR-45 mock fixtures alongside
-  // Conway's Classic. vi.stubEnv is applied before render — reading NODE_ENV inside the effect
-  // (not at module scope) is what lets this take effect at all (Task 4 silent-failure trap).
-  it('seeds the AR-45 mock fixtures under NODE_ENV=development', async () => {
+  // Story 1.6 AC3, positive half, and Story 1.10 AC4: a dev build auto-seeds the AR-45 mock
+  // fixtures alongside Conway's Classic, and the Gallery renders a tile for each — Grand Colony
+  // War (updatedAt 2026-07-25T18:15Z) before Three-Way Skirmish (2026-07-20T09:00Z), the frozen
+  // literals in mockWorkspace.ts pinned precisely so this order is reproducible. vi.stubEnv is
+  // applied before render — reading NODE_ENV inside the effect (not at module scope) is what lets
+  // this take effect at all (Task 4 silent-failure trap).
+  it('seeds the AR-45 mock fixtures under NODE_ENV=development and renders both as tiles, most-recent first', async () => {
     vi.stubEnv('NODE_ENV', 'development');
 
     render(<HomePage />);
@@ -112,6 +122,11 @@ describe('HomePage', () => {
       expect(Object.keys(battles).sort()).toEqual(
         [MOCK_BATTLE_IDS.battleA, MOCK_BATTLE_IDS.battleB].sort(),
       );
+    });
+
+    await waitFor(() => {
+      const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+      expect(headings).toEqual(['Grand Colony War', 'Three-Way Skirmish']);
     });
 
     const organisms = JSON.parse(localStorage.getItem(STORAGE_KEYS.organisms) ?? '{}') as Record<
@@ -130,12 +145,12 @@ describe('HomePage', () => {
 
   // Story 1.6 AC3, negative half: the default NODE_ENV under Vitest is 'test', not 'development'
   // — the `=== 'development'` guard (not `!== 'production'`) must leave gol:battles untouched and
-  // gol:organisms holding only Conway's Classic.
+  // gol:organisms holding only Conway's Classic, and the Gallery renders no tiles.
   it('seeds no mock fixtures without the development stub (NODE_ENV=test)', async () => {
     render(<HomePage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/workspace: ready/)).toBeInTheDocument();
+      expect(screen.getByText('No battles yet.')).toBeInTheDocument();
     });
 
     expect(localStorage.getItem(STORAGE_KEYS.battles)).toBeNull();

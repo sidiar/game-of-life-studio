@@ -168,10 +168,11 @@ describe('BattleSchema', () => {
 });
 
 describe('BattleSummarySchema', () => {
-  it('projects a stored battle record down to exactly the Decision H.4 fields', () => {
+  it('projects a stored battle record down to exactly the Decision H.4 fields (+ createdAt, Story 1.10 AC3)', () => {
     const summary = BattleSummarySchema.parse(validBattle());
 
     expect(Object.keys(summary).sort()).toEqual([
+      'createdAt',
       'gridSize',
       'id',
       'name',
@@ -182,7 +183,19 @@ describe('BattleSummarySchema', () => {
 
   it('drops gridState — that omission is what keeps the Gallery off the heavy field', () => {
     expect('gridState' in BattleSummarySchema.parse(validBattle())).toBe(false);
-    expect('createdAt' in BattleSummarySchema.parse(validBattle())).toBe(false);
+  });
+
+  it('carries createdAt when the stored record has one (Story 1.10 AC3, FR-7.3)', () => {
+    expect('createdAt' in BattleSummarySchema.parse(validBattle())).toBe(true);
+  });
+
+  it('still projects a record with no createdAt — the field is optional, not required', () => {
+    const withoutCreatedAt: Record<string, unknown> = { ...validBattle() };
+    delete withoutCreatedAt.createdAt;
+
+    const result = BattleSummarySchema.safeParse(withoutCreatedAt);
+    expect(result.success).toBe(true);
+    expect(result.success && 'createdAt' in result.data).toBe(false);
   });
 
   it('hydrates updatedAt into a Date so the Gallery can sort on it', () => {
@@ -190,6 +203,13 @@ describe('BattleSummarySchema', () => {
 
     expect(summary.updatedAt).toBeInstanceOf(Date);
     expect(summary.updatedAt.toISOString()).toBe(UPDATED_AT);
+  });
+
+  it('hydrates createdAt into a Date when present (mirrors updatedAt)', () => {
+    const summary = BattleSummarySchema.parse(validBattle());
+
+    expect(summary.createdAt).toBeInstanceOf(Date);
+    expect(summary.createdAt?.toISOString()).toBe(CREATED_AT);
   });
 
   it('carries the placed roster, so the AR-15 usage index needs no grid', () => {
