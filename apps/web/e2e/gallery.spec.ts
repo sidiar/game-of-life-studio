@@ -87,7 +87,54 @@ test.describe('battle gallery (Story 1.10)', () => {
     // (2026-07-20T09:00Z). An ORDER assertion, not two toBeVisible() calls.
     await expect(headings).toHaveText(['Grand Colony War', 'Three-Way Skirmish']);
 
+    // Story 1.11 AC1/AC4: one real <canvas> per tile, each with a non-zero backing store. jsdom
+    // cannot rasterise at all (Task 8), so this is the only place a 0x0 backing store — the
+    // documented silent failure in gridLayout.ts:42-45 — can be caught for real.
+    const canvases = page.locator('canvas');
+    await expect(canvases).toHaveCount(2);
+    const boxes = await canvases.evaluateAll((elements) =>
+      elements.map((el) => {
+        const canvas = el as HTMLCanvasElement;
+        return { width: canvas.width, height: canvas.height };
+      }),
+    );
+    for (const box of boxes) {
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.height).toBeGreaterThan(0);
+    }
+
     expect(errors).toEqual([]);
+  });
+
+  // Story 1.11 AC1: the one smoke check AR-42 allows — a distinct-colour count, never a pixel or
+  // image snapshot. The canvas is untainted (no external images) so getImageData is legal here.
+  // Grand Colony War places four organisms plus a glider on a 100x60 grid, guaranteeing more than
+  // one colour is actually on screen (background + at least one organism).
+  test('a tile canvas actually paints more than one colour (AC1, AR-42 smoke check)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/');
+
+    const tile = page.locator('article', {
+      has: page.getByRole('heading', { name: 'Grand Colony War' }),
+    });
+    const canvas = tile.locator('canvas');
+    await expect(canvas).toBeAttached();
+
+    const distinctColorCount = await canvas.evaluate((el) => {
+      const canvasEl = el as HTMLCanvasElement;
+      const ctx = canvasEl.getContext('2d');
+      if (ctx === null) return 0;
+      const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+      const seen = new Set<string>();
+      for (let i = 0; i < data.length; i += 4) {
+        seen.add(`${data[i]},${data[i + 1]},${data[i + 2]},${data[i + 3]}`);
+      }
+      return seen.size;
+    });
+
+    expect(distinctColorCount).toBeGreaterThan(1);
   });
 
   test('each organism dot has its own accessible name and reveals a tooltip on hover and on keyboard focus (WCAG 1.4.13)', async ({
@@ -150,7 +197,36 @@ test.describe('battle gallery (Story 1.10)', () => {
     // the contrast pair most at risk, and a real browser is the only place axe can check it.
     await expect(page.getByRole('img', { name: /3 more organisms:/ })).toBeVisible();
 
+    // Story 1.11 AC1/AC2: canvases on screen must not introduce a NEW axe violation (the
+    // aria-hidden dish carries no accessible-name obligation of its own).
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
+  });
+
+  // Story 1.11 Task 5's degradation table, proven end to end: `crowded`'s organismIds run past
+  // its placed set, so BattleSummarySchema lists it (list() shows the heading) but BattleSchema's
+  // Decision H.1 superRefine rejects it (load() throws). jsdom cannot exercise this — only a real
+  // browser proves the thumbnail's own load failure produces zero console noise.
+  test('the crowded tile (whose load() throws) still renders its heading with zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page, { crowded: true });
+    await page.goto('/');
+
+    const headings = page.getByRole('heading', { level: 2 });
+    await expect(headings).toHaveCount(3);
+    await expect(page.getByRole('heading', { name: 'Crowded Roster' })).toBeVisible();
+
+    // Give the crowded tile's own failed load() a moment to settle before checking the console —
+    // the assertion above only proves the heading rendered, not that the async failure resolved.
+    await page.waitForTimeout(200);
+
+    expect(errors).toEqual([]);
   });
 });

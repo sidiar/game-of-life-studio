@@ -180,4 +180,31 @@ describe('groupByColourState', () => {
     expect(allCells).toEqual([0]); // only the in-range ref survives
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
+
+  // Story 1.11 Task 7: the dedupe is keyed PER LUT, not on the bare ref number. Two distinct
+  // battles (two distinct LUT objects) each carrying the same out-of-range ref must each warn —
+  // the assertion that fails against the pre-re-key module Set (which would report only 1) and
+  // passes after it.
+  it('warns twice when two different LUTs each carry the same out-of-range ref', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const g = grid(1, 1, [5], [0]);
+    const battleALut = lut([0, 2], [0, 0]); // size 2 — ref 5 is out of range
+    const battleBLut = lut([0, 2], [0, 0]); // a SEPARATE object, same shape
+
+    groupByColourState(g, battleALut);
+    groupByColourState(g, battleBLut);
+
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('still dedupes within the SAME LUT across multiple calls', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const g = grid(1, 1, [5], [0]);
+    const table = lut([0, 2], [0, 0]);
+
+    groupByColourState(g, table);
+    groupByColourState(g, table);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
 });

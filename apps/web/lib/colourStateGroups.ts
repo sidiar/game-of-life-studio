@@ -15,22 +15,35 @@ export interface FillGroup {
   readonly cells: number[]; // flat grid indices (row * width + col)
 }
 
-const warnedOutOfRangeRefs = new Set<number>();
+// Keyed PER-LUT (Story 1.11 Task 7), not on a bare ref number: a ref is an index into ONE
+// battle's roster, so Battle A's corrupt ref 3 and Battle B's corrupt ref 3 are unrelated
+// defects — a single module-level Set conflated them, permanently suppressing the second
+// battle's warning once the first had fired. One LUT is built per battle (battleThumbnail.ts), so
+// LUT identity IS battle identity for this purpose. A WeakMap also means the registry cannot grow
+// for the process lifetime — a LUT that is no longer referenced anywhere else becomes eligible for
+// collection, taking its warned-refs Set with it (unlike `warnedUnknownTokens` in
+// paletteRegistry.ts, which stays a plain Set and Story 5.7's unbounded-growth item).
+let warnedOutOfRangeRefs = new WeakMap<RefToFillGroup, Set<number>>();
 
 /**
  * Clears the out-of-range-ref warn-once registry. Exported because the registry is a module
  * singleton that `vi.restoreAllMocks()` does not touch, which silently makes every "warns once"
  * assertion depend on being the first in its file to touch that ref. Call it from `afterEach`.
- * A ref is battle-relative, so this key is also wrong across battles — see deferred-work.md
- * (Story 1.11), which owns the re-keying.
+ * A WeakMap cannot be iterated or cleared in place — replacing the binding is the only way to
+ * reset it, and every LUT-keyed entry becomes unreachable garbage at that point regardless.
  */
 export function resetColourStateWarnings(): void {
-  warnedOutOfRangeRefs.clear();
+  warnedOutOfRangeRefs = new WeakMap<RefToFillGroup, Set<number>>();
 }
 
-function warnOutOfRangeRefOnce(ref: number): void {
-  if (warnedOutOfRangeRefs.has(ref)) return;
-  warnedOutOfRangeRefs.add(ref);
+function warnOutOfRangeRefOnce(lut: RefToFillGroup, ref: number): void {
+  let warnedForLut = warnedOutOfRangeRefs.get(lut);
+  if (warnedForLut === undefined) {
+    warnedForLut = new Set<number>();
+    warnedOutOfRangeRefs.set(lut, warnedForLut);
+  }
+  if (warnedForLut.has(ref)) return;
+  warnedForLut.add(ref);
   console.warn(
     `[colourStateGroups] Ref ${ref} is outside the palette LUT — skipping the cell (treated as ` +
       'empty). A stale or hand-edited grid can carry a ref the current roster no longer covers.',
@@ -65,7 +78,7 @@ export function groupByColourState(grid: RenderableGrid, lut: RefToFillGroup): F
     // and landing in displayColorAt's silent clamp — painting a real organism's colour on a
     // phantom cell. Skip and warn once instead.
     if (ref >= lut.size) {
-      warnOutOfRangeRefOnce(ref);
+      warnOutOfRangeRefOnce(lut, ref);
       continue;
     }
 

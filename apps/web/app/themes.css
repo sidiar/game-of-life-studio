@@ -105,4 +105,11 @@
      shadow is a composite no existing token expressed. Black has no --gol-*-channel triplet to
      compose from (it is not a palette colour), so the channels are literal. */
   --gol-shadow-tooltip: 0 4px 12px rgb(0 0 0 / 0.8);
+
+  /* Canvas grid lines (Story 1.11). RFC-002/Story 1.8 specify --gol-border at 0.3 alpha; the
+     Clinical Lab mockups draw the same lines as #1a1a1a over #0a0a0a, which is what
+     rgb(51 51 51 / 0.3) composites to (clinical-lab-theme/petri-dish-lab-mode.html:461-468,
+     battle-gallery.html:288-296). Composed from --gol-border-channel so the colour has one
+     source of truth, and authored here because AR-46 bans the rgba() literal in .ts/.tsx. */
+  --gol-grid-line: rgb(var(--gol-border-channel) / 0.3);
 }

@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { styled } from '@mui/material/styles';
-import type { BattleSummary, Organism } from '@gol/domain';
-import type { BattleRepository, OrganismRepository } from '@gol/persistence';
+import { DEFAULT_SETTINGS, type BattleSummary, type Organism, type Settings } from '@gol/domain';
+import type { BattleRepository, OrganismRepository, SettingsRepository } from '@gol/persistence';
 import type { WorkspaceSeedStatus } from '@/lib/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallerySort';
 import { resolveTileOrganisms } from '@/lib/tileOrganisms';
+import { readGridColors } from '@/lib/themeColors';
 import BattleTile from './BattleTile';
 
 export interface BattleGalleryProps {
   battles: BattleRepository;
   organisms: OrganismRepository;
+  settings: SettingsRepository;
   seedStatus: WorkspaceSeedStatus;
 }
 
@@ -21,13 +23,13 @@ export interface BattleGalleryProps {
 // and here it trivially can: the 'error' case needs no data from the effect at all.
 type LoadState =
   | { kind: 'idle' }
-  | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[] }
+  | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[]; settings: Settings }
   | { kind: 'error' };
 
 type GalleryState =
   | { kind: 'loading' }
   | { kind: 'error' }
-  | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[] };
+  | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[]; settings: Settings };
 
 const HEADING_ID = 'battle-gallery-heading';
 
@@ -62,8 +64,24 @@ const StatusText = styled('p')({
   color: 'var(--gol-text-secondary)',
 });
 
-export default function BattleGallery({ battles, organisms, seedStatus }: BattleGalleryProps) {
+export default function BattleGallery({
+  battles,
+  organisms,
+  settings,
+  seedStatus,
+}: BattleGalleryProps) {
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'idle' });
+
+  // Resolved ONCE, not per tile: getComputedStyle forces a style recalculation, and at NFR-7.2's
+  // 50 tiles that is 50 forced recalcs on one commit if done per-canvas (themeColors.ts).
+  // ⚠️ `document` is not available during the static export's prerender — guarded rather than
+  // gated behind an effect, because gridColors is never read by the JSX this component renders
+  // before a tile actually mounts (Task 5), so a null-during-SSR value cannot produce a hydration
+  // mismatch; it only has to avoid throwing during that prerender pass.
+  const gridColors = useMemo(
+    () => (typeof document === 'undefined' ? null : readGridColors(document.documentElement)),
+    [],
+  );
 
   useEffect(() => {
     // Gated on seedStatus (silent-failure trap 1): useWorkspaceSeed writes Conway's Classic (and,
@@ -79,8 +97,9 @@ export default function BattleGallery({ battles, organisms, seedStatus }: Battle
     // effect callback to be callable from a handler, which is that story's change, not this one's.
     // No useAsyncResource — one call site until then.
     function refresh() {
-      // One Promise.all, not two sequential awaits: a tile cannot render a name without both, and
-      // two round-trips would double the localStorage latency budget (NFR-1.4) for no gain.
+      // One Promise.all, not two sequential awaits (now three sources): a tile cannot render a
+      // name without the first two, and a serial round-trip per source would multiply the
+      // localStorage latency budget (NFR-1.4) for no gain.
       Promise.all([
         battles.list(),
         // A corrupt gol:organisms must not blank a Gallery whose battles are all readable —
@@ -90,9 +109,14 @@ export default function BattleGallery({ battles, organisms, seedStatus }: Battle
         // record must not blank the view" stance (Story 1.4 review). Only battles.list() rejecting
         // is a real error state.
         organisms.list().catch(() => [] as Organism[]),
+        // SettingsRepository.load() never returns null (an absent record resolves to
+        // DEFAULT_SETTINGS, repositories.ts:48-51), so the catch is only for a corrupt record — a
+        // corrupt gol:settings must not blank the Gallery either, for the same reason a corrupt
+        // gol:organisms does not.
+        settings.load().catch(() => DEFAULT_SETTINGS),
       ])
-        .then(([summaries, roster]) => {
-          if (live) setLoadState({ kind: 'ready', summaries, roster });
+        .then(([summaries, roster, loadedSettings]) => {
+          if (live) setLoadState({ kind: 'ready', summaries, roster, settings: loadedSettings });
         })
         .catch(() => {
           if (live) setLoadState({ kind: 'error' });
@@ -107,7 +131,7 @@ export default function BattleGallery({ battles, organisms, seedStatus }: Battle
     return () => {
       live = false;
     };
-  }, [battles, organisms, seedStatus]);
+  }, [battles, organisms, settings, seedStatus]);
 
   // Derived, not stored: seedStatus === 'error' and loadState === 'error' both mean the same
   // thing to the view, and folding them here (rather than writing seedStatus's error into
@@ -164,10 +188,15 @@ export default function BattleGallery({ battles, organisms, seedStatus }: Battle
           {tiles.map(({ summary, organisms: tileOrganisms }) => (
             <BattleTile
               key={summary.id}
+              battleId={summary.id}
               name={summary.name}
               gridSize={summary.gridSize}
               updatedAt={summary.updatedAt}
               organisms={tileOrganisms}
+              battles={battles}
+              roster={state.roster}
+              showGridLines={state.settings.gridLines}
+              gridColors={gridColors}
             />
           ))}
         </TileGrid>

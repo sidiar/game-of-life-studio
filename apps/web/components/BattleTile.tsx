@@ -1,9 +1,17 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { styled } from '@mui/material/styles';
+import type { Organism } from '@gol/domain';
+import type { BattleRepository } from '@gol/persistence';
 import { formatBattleDate } from '@/lib/formatBattleDate';
+import { toThumbnailSource } from '@/lib/battleThumbnail';
+import type { GridRendererColors } from '@/lib/gridRenderer';
+import type { RefToFillGroup } from '@/lib/refToFillGroup';
+import type { RenderableGrid } from '@/lib/renderableGrid';
 import type { TileOrganism } from '@/lib/tileOrganisms';
+import { useInView } from '@/lib/useInView';
+import PetriDishCanvas from './PetriDishCanvas';
 
 // A battle may legally place 255 organisms (Decision G.3) — the mockup's 2-3 dots is not the
 // bound, and an uncapped row reflows the whole tile. Organisms beyond the cap fold into the "+n"
@@ -17,10 +25,17 @@ const MAX_VISIBLE_DOTS = 6;
 const UNTITLED_BATTLE = 'Untitled battle';
 
 export interface BattleTileProps {
+  battleId: string;
   name: string;
   gridSize: { cols: number; rows: number };
   updatedAt: Date;
   organisms: readonly TileOrganism[];
+  // The thumbnail's own inputs (Story 1.11, AC1/M4). battles/roster are typed to the interfaces
+  // (AR-2/27) — this component never imports a concrete repository.
+  battles: BattleRepository;
+  roster: readonly Organism[];
+  showGridLines: boolean; // FR-8.7, resolved once by the Gallery
+  gridColors: GridRendererColors | null; // null when the theme token layer is absent
 }
 
 // Mockup: .battle-tile (clinical-lab-theme/battle-gallery.html:242-255). No `cursor: pointer` —
@@ -77,13 +92,22 @@ const TileStats = styled('span')({
   whiteSpace: 'nowrap',
 });
 
-// Story 1.11 puts a canvas here. aria-hidden: it carries no information yet — a placeholder box.
+// Same box in EVERY thumbnail state ('idle' | 'loading' | 'ready' | 'unavailable') — a tile that
+// changes height when its thumbnail arrives reflows the whole Gallery grid mid-scroll. The canvas
+// (rendered only in 'ready') fills it via DishCanvas below; every other state leaves it empty.
 const PetriDish = styled('div')({
   width: '100%',
   aspectRatio: '5 / 3',
   background: 'var(--gol-bg-primary)',
   border: '1px solid var(--gol-border)',
   marginBottom: '16px',
+  overflow: 'hidden',
+});
+
+const DishCanvas = styled(PetriDishCanvas)({
+  width: '100%',
+  height: '100%',
+  display: 'block',
 });
 
 const TileFooter = styled('footer')({
@@ -249,10 +273,74 @@ function TooltipTrigger({ label, tooltip, more, color, children }: TooltipTrigge
   );
 }
 
-export default function BattleTile({ name, gridSize, updatedAt, organisms }: BattleTileProps) {
+// The tile's own thumbnail lifecycle (Story 1.11 Task 5). 'idle' before the observer has fired,
+// 'loading' while battles.load() is in flight, 'ready' once a grid/palette pair exists to paint,
+// 'unavailable' for every degradation row in the Dev Notes table (corrupt load, null load,
+// toThumbnailSource throwing, gridColors === null) — all four collapse to the same blank dish.
+type ThumbnailState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; grid: RenderableGrid; palette: RefToFillGroup }
+  | { kind: 'unavailable' };
+
+export default function BattleTile({
+  battleId,
+  name,
+  gridSize,
+  updatedAt,
+  organisms,
+  battles,
+  roster,
+  showGridLines,
+  gridColors,
+}: BattleTileProps) {
   const visibleDots = organisms.slice(0, MAX_VISIBLE_DOTS);
   const overflow = organisms.slice(MAX_VISIBLE_DOTS);
   const overflowNames = overflow.map((o) => o.name).join(', ');
+
+  const [containerRef, inView] = useInView();
+  const [thumbnail, setThumbnail] = useState<ThumbnailState>({ kind: 'idle' });
+
+  // Guards the ONE battles.load() call across StrictMode's double effect invocation — the same
+  // hasRun/mounted pair useWorkspaceSeed.ts uses, and for the same reason: the load must fire
+  // once per tile LIFETIME (not once per effect setup), and the second setup owns the promise the
+  // first setup's cleanup already invalidated.
+  const hasLoadStarted = useRef(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+
+    if (inView && gridColors !== null && !hasLoadStarted.current) {
+      hasLoadStarted.current = true;
+      setThumbnail({ kind: 'loading' });
+
+      battles
+        .load(battleId)
+        .then((battle) => {
+          // Deleted between list() and this tile's turn — a real race, not a corruption case.
+          if (battle === null) return { kind: 'unavailable' as const };
+          // Roster is already in hand from the Gallery's organisms.list() — never re-listed per
+          // tile.
+          const { grid, palette } = toThumbnailSource(battle, roster);
+          return { kind: 'ready' as const, grid, palette };
+        })
+        // Every degradation row collapses here: a CorruptDataError from load() (the crowded e2e
+        // fixture — organismIds past the placed set fails BattleSchema's Decision H.1 superRefine
+        // even though BattleSummarySchema listed it fine), and a ragged/out-of-range gridState
+        // from toThumbnailSource. The tile's metadata already rendered from list() alone and must
+        // stay intact — no console.error on any of these paths (gallery.spec.ts asserts a clean
+        // console); buildRefToFillGroup's own console.warn for a dangling roster id is unaffected.
+        .catch(() => ({ kind: 'unavailable' as const }))
+        .then((next) => {
+          if (mounted.current) setThumbnail(next);
+        });
+    }
+
+    return () => {
+      mounted.current = false;
+    };
+  }, [inView, gridColors, battles, battleId, roster]);
 
   return (
     <Tile>
@@ -262,7 +350,18 @@ export default function BattleTile({ name, gridSize, updatedAt, organisms }: Bat
           {gridSize.cols} × {gridSize.rows}
         </TileStats>
       </TileHeader>
-      <PetriDish aria-hidden="true" />
+      <PetriDish ref={containerRef as RefObject<HTMLDivElement>} aria-hidden="true">
+        {thumbnail.kind === 'ready' && gridColors !== null && (
+          <DishCanvas
+            variant="static"
+            grid={thumbnail.grid}
+            size={gridSize}
+            palette={thumbnail.palette}
+            showGridLines={showGridLines}
+            colors={gridColors}
+          />
+        )}
+      </PetriDish>
       <TileFooter>
         <TileDate>{formatBattleDate(updatedAt)}</TileDate>
         <DotRow>

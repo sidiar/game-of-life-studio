@@ -333,6 +333,17 @@ Following instinct here produces code that compiles, passes tests, and violates 
   `MIGRATIONS[from]` upgrades `from → from+1` (Decision I).
 - ⚠️ **The evaluator cache is session-scoped**, never global — compiled closures bake in that
   battle's id→ref map (Decision E.4).
+- ⚠️ **`ctx.fillStyle = 'var(--gol-bg-primary)'` is a silent no-op.** Canvas2D parses a CSS
+  `<color>`, not a `var()` reference — an unparseable assignment is *ignored* and the previous
+  `fillStyle` stays, so every cell paints in whatever colour was last set, with nothing logged.
+  The caller must resolve the token to a concrete string first via `getComputedStyle(root)
+  .getPropertyValue('--gol-*')` (the computed value of a custom property is substituted — this
+  returns `"rgb(51 51 51 / 0.3)"`, not the token's own `var(...)` expression) — this is
+  `apps/web/lib/themeColors.ts` (Story 1.11). Resolve once and pass the strings down; calling it
+  per canvas forces a style recalculation per call. This is why `GridRenderer` takes injected
+  `GridRendererColors` strings instead of reading the theme itself (Story 1.8), and it recurs
+  everywhere a canvas is added — Epic 2's edit-mode canvas and Epic 3's playback canvas both need
+  the same substitution step.
 
 **Bounds & invariants that are enforced, not assumed**
 
@@ -377,4 +388,4 @@ Following instinct here produces code that compiles, passes tests, and violates 
   toolchain stops being news; the `npm test` "vacuously green" warning was retired 2026-08-07,
   when the remote went live and CI started running for real.
 
-Last updated: 2026-08-07
+Last updated: 2026-08-08

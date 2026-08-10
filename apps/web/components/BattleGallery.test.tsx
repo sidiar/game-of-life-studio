@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
@@ -6,9 +9,16 @@ import { createFakeRepositories, createMockBattles, createMockOrganisms } from '
 import BattleGallery from './BattleGallery';
 
 describe('BattleGallery', () => {
-  // AC1, the load-bearing test: a Gallery render must never call load() or listFull(). A test
-  // that only checks tiles appear passes just as well after someone adds a load() per tile to
-  // fetch the grid — the spies are what actually proves "no grid deserialization" (AR-15).
+  // AC1/AR-15, RETARGETED (Story 1.11, conflict 1, architecture.md:274): the tile LIST is still
+  // summary-derived with zero grid deserialization — listFull() is still never called, unchanged
+  // assertion — but AC1's own thumbnail is M4's sanctioned on-demand load() (Decision H.4: "the
+  // Decision 8 usage index builds from list() with zero grid deserialization; thumbnails stay
+  // on-demand from load()"). The invariant this guard actually protects is narrower than "never
+  // load()": no tile's grid is EVER read before the tile list itself has painted from list()
+  // alone. In this default (unthemed) jsdom environment gridColors resolves null
+  // (themeColors.test.ts), so no tile's load effect ever engages at all — proving the stronger
+  // half structurally rather than by timing a race against each tile's own effect. AC4's 50-battle
+  // test below is what proves load() is BOUNDED once tiles do load for real.
   it('renders from list() only — never load() or listFull() (AC1, AR-15)', async () => {
     const battles = createMockBattles();
     const organisms = createMockOrganisms();
@@ -17,7 +27,12 @@ describe('BattleGallery', () => {
     const listFullSpy = vi.spyOn(repos.battles, 'listFull');
 
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
     );
 
     await waitFor(() => {
@@ -54,7 +69,12 @@ describe('BattleGallery', () => {
     });
 
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
     );
 
     await waitFor(() => {
@@ -69,7 +89,12 @@ describe('BattleGallery', () => {
     const organismListSpy = vi.spyOn(repos.organisms, 'list');
 
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="seeding" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="seeding"
+      />,
     );
 
     expect(screen.getByText('Loading battles…')).toBeInTheDocument();
@@ -80,7 +105,12 @@ describe('BattleGallery', () => {
   it('renders the alert body when seedStatus is "error"', () => {
     const repos = createFakeRepositories();
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="error" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="error"
+      />,
     );
 
     expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -91,7 +121,12 @@ describe('BattleGallery', () => {
     vi.spyOn(repos.battles, 'list').mockRejectedValue(new Error('boom'));
 
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
     );
 
     await waitFor(() => {
@@ -102,7 +137,12 @@ describe('BattleGallery', () => {
   it('renders the placeholder line and no tile grid for zero battles', async () => {
     const repos = createFakeRepositories();
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
     );
 
     await waitFor(() => {
@@ -120,6 +160,7 @@ describe('BattleGallery', () => {
       <BattleGallery
         battles={populated.battles}
         organisms={populated.organisms}
+        settings={populated.settings}
         seedStatus="ready"
       />,
     );
@@ -128,14 +169,24 @@ describe('BattleGallery', () => {
 
     const empty = createFakeRepositories();
     const { container: emptyContainer } = render(
-      <BattleGallery battles={empty.battles} organisms={empty.organisms} seedStatus="ready" />,
+      <BattleGallery
+        battles={empty.battles}
+        organisms={empty.organisms}
+        settings={empty.settings}
+        seedStatus="ready"
+      />,
     );
     await waitFor(() => screen.getByText('No battles yet.'));
     expect((await axe(emptyContainer)).violations).toEqual([]);
 
     const errored = createFakeRepositories();
     const { container: errorContainer } = render(
-      <BattleGallery battles={errored.battles} organisms={errored.organisms} seedStatus="error" />,
+      <BattleGallery
+        battles={errored.battles}
+        organisms={errored.organisms}
+        settings={errored.settings}
+        seedStatus="error"
+      />,
     );
     await waitFor(() => screen.getByRole('alert'));
     expect((await axe(errorContainer)).violations).toEqual([]);
@@ -148,7 +199,12 @@ describe('BattleGallery', () => {
     });
 
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
     );
 
     await waitFor(() => {
@@ -170,7 +226,12 @@ describe('BattleGallery', () => {
     vi.spyOn(repos.organisms, 'list').mockRejectedValue(new Error('corrupt'));
 
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
     );
 
     await waitFor(() => {
@@ -199,11 +260,147 @@ describe('BattleGallery', () => {
     });
 
     render(
-      <BattleGallery battles={repos.battles} organisms={repos.organisms} seedStatus="ready" />,
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
     );
 
     await waitFor(() => {
       expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    });
+  });
+
+  // AC4, the load-bearing test for conflict 2 (Task 6): 50 schema-valid battles (Decision H.1 —
+  // organismIds ≡ the placed set, satisfied trivially here by an empty roster over an all-empty
+  // grid, so list() does not skip a single one of them). A capped fake IntersectionObserver
+  // reports only the first N tiles as intersecting, simulating the visible slice of a scrolled
+  // Gallery. battles.load() is called AT MOST N times, never once per battle — an unbounded call
+  // count is exactly "thumbnail rendering blocks interactivity" (NFR-1.3/7.2), and each load() call
+  // re-reads and re-parses the WHOLE gol:battles collection
+  // (localStorageBattleRepository.ts:29-30), so 50 eager loads would be O(n^2) main-thread work.
+  it('bounds battles.load() calls to the visible slice at 50-battle scale, not one per battle (AC4)', async () => {
+    // The tile's load effect gates on gridColors !== null — set the tokens inline (jsdom never
+    // loads themes.css) so the effect actually engages and there is something real to bound.
+    document.documentElement.style.setProperty('--gol-bg-primary', '#0a0a0a');
+    document.documentElement.style.setProperty('--gol-grid-line', 'rgb(51 51 51 / 0.3)');
+
+    const VISIBLE_COUNT = 5;
+    class CappedIntersectionObserver implements IntersectionObserver {
+      static instancesCreated = 0;
+      readonly root = null;
+      readonly rootMargin = '';
+      readonly thresholds: ReadonlyArray<number> = [];
+      private readonly shouldIntersect: boolean;
+      constructor(private readonly callback: IntersectionObserverCallback) {
+        this.shouldIntersect = CappedIntersectionObserver.instancesCreated < VISIBLE_COUNT;
+        CappedIntersectionObserver.instancesCreated += 1;
+      }
+      observe(): void {
+        if (!this.shouldIntersect) return;
+        queueMicrotask(() =>
+          this.callback(
+            [{ isIntersecting: true } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+          ),
+        );
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', CappedIntersectionObserver);
+
+    const battleCount = 50;
+    const battles = Array.from({ length: battleCount }, (_, i) => {
+      const suffix = String(i).padStart(12, '0');
+      return {
+        id: `10000000-0000-4000-8000-${suffix}`,
+        name: `Battle ${i}`,
+        organismIds: [] as string[],
+        gridSize: { cols: 50, rows: 30 } as const,
+        gridState: Array.from({ length: 30 }, () => Array.from({ length: 50 }, () => 0)),
+        createdAt: new Date(2026, 0, 1, 0, 0, i),
+        updatedAt: new Date(2026, 0, 1, 0, 0, i),
+      };
+    });
+    const repos = createFakeRepositories({ battles });
+    const loadSpy = vi.spyOn(repos.battles, 'load');
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    // Every tile's heading renders — metadata is complete before any grid is deserialized.
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(battleCount);
+    });
+
+    await waitFor(() => expect(loadSpy).toHaveBeenCalled());
+    // Let every queued intersection callback and its resulting load() settle before counting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(loadSpy.mock.calls.length).toBeLessThanOrEqual(VISIBLE_COUNT);
+    expect(loadSpy.mock.calls.length).toBeLessThan(battleCount);
+
+    vi.unstubAllGlobals();
+    document.documentElement.style.cssText = '';
+  });
+
+  // AC2, "never stored" — two assertions, because the intent is easy to satisfy accidentally and
+  // easy to break silently.
+  describe('AC2 — thumbnails are never stored', () => {
+    it('never calls canvas.toDataURL() or canvas.toBlob() during a full Gallery render', async () => {
+      document.documentElement.style.setProperty('--gol-bg-primary', '#0a0a0a');
+      document.documentElement.style.setProperty('--gol-grid-line', 'rgb(51 51 51 / 0.3)');
+      const toDataUrlSpy = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL');
+      const toBlobSpy = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob');
+
+      const repos = createFakeRepositories({
+        battles: createMockBattles(),
+        organisms: createMockOrganisms(),
+      });
+
+      render(
+        <BattleGallery
+          battles={repos.battles}
+          organisms={repos.organisms}
+          settings={repos.settings}
+          seedStatus="ready"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+      });
+
+      expect(toDataUrlSpy).not.toHaveBeenCalled();
+      expect(toBlobSpy).not.toHaveBeenCalled();
+
+      document.documentElement.style.cssText = '';
+    });
+
+    // The behavioural spy above proves TODAY's build never calls these APIs; this structural
+    // check is the promise M4 is actually making — a future change cannot reintroduce the call
+    // path without also touching source text this test reads directly off disk.
+    it('never mentions toDataURL, toBlob, createImageBitmap, or localStorage in source (structural)', () => {
+      const componentsDir = dirname(fileURLToPath(import.meta.url));
+      const forbidden = ['toDataURL', 'toBlob', 'createImageBitmap', 'localStorage'];
+      for (const file of ['PetriDishCanvas.tsx', 'BattleTile.tsx']) {
+        const source = readFileSync(join(componentsDir, file), 'utf-8');
+        for (const term of forbidden) {
+          expect(source, `${file} must never mention ${term} (AC2/M4)`).not.toContain(term);
+        }
+      }
     });
   });
 });

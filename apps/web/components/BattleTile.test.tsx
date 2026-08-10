@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
+import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
 import type { TileOrganism } from '@/lib/tileOrganisms';
 import BattleTile from './BattleTile';
 
@@ -9,7 +10,11 @@ function organism(overrides: Partial<TileOrganism> & { id: string }): TileOrgani
   return { name: 'Organism', color: 'hsl(200, 80%, 50%)', ...overrides };
 }
 
+// gridColors: null keeps the thumbnail load effect permanently idle (Task 5's degradation
+// table) — these tests are about the tile's TEXT/dot behaviour, not the canvas, which has its own
+// suite. battles/roster come from the real fake-repo factory (never hand-rolled in a test file).
 const BASE_PROPS = {
+  battleId: 'aaaaaaaa-0000-4000-8000-000000000001',
   name: 'Three-Way Skirmish',
   gridSize: { cols: 50, rows: 30 },
   updatedAt: new Date('2026-07-25T18:15:00.000Z'),
@@ -18,6 +23,10 @@ const BASE_PROPS = {
     organism({ id: 'b', name: 'Patient Defender' }),
     organism({ id: 'c', name: 'Chaotic Spreader' }),
   ] as TileOrganism[],
+  battles: createFakeRepositories().battles,
+  roster: [],
+  showGridLines: true,
+  gridColors: null,
 };
 
 // The tooltip's visibility is a data attribute rather than a class so the assertion does not
@@ -166,6 +175,173 @@ describe('BattleTile', () => {
 
   it('has no axe violations with an empty battle name', async () => {
     const { container } = render(<BattleTile {...BASE_PROPS} name="" />);
+    const results = await axe(container);
+    expect(results.violations).toEqual([]);
+  });
+});
+
+// The thumbnail lifecycle (Story 1.11 Task 5). IntersectionObserver is absent in jsdom, so
+// useInView defaults to true — every tile here is "in view" from mount, and gridColors is a real
+// object rather than BASE_PROPS' null so the load effect actually fires.
+describe('BattleTile — thumbnail (Story 1.11)', () => {
+  const GRID_COLORS = { background: '#0a0a0a', gridLine: 'rgb(51 51 51 / 0.3)' };
+
+  it('mounts a canvas and calls battles.load exactly once for a visible tile (AC1)', async () => {
+    const [battle] = createMockBattles();
+    const repos = createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() });
+    const loadSpy = vi.spyOn(repos.battles, 'load');
+
+    const { container } = render(
+      <BattleTile
+        {...BASE_PROPS}
+        battleId={battle.id}
+        battles={repos.battles}
+        roster={createMockOrganisms()}
+        gridColors={GRID_COLORS}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelector('canvas')).not.toBeNull());
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(loadSpy).toHaveBeenCalledWith(battle.id);
+  });
+
+  it('never loads while gridColors is null — the tile still renders its heading', async () => {
+    const [battle] = createMockBattles();
+    const repos = createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() });
+    const loadSpy = vi.spyOn(repos.battles, 'load');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <BattleTile
+        {...BASE_PROPS}
+        battleId={battle.id}
+        battles={repos.battles}
+        roster={createMockOrganisms()}
+        gridColors={null}
+      />,
+    );
+
+    await screen.findByRole('heading', { level: 2, name: BASE_PROPS.name });
+    expect(loadSpy).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('degrades to a blank dish, without a console error, when load() throws CorruptDataError', async () => {
+    // The e2e crowded fixture in miniature: nine organismIds, none placed — BattleSummarySchema
+    // accepts it (list() shows the tile) but BattleSchema's Decision H.1 superRefine rejects it
+    // (load() throws). This is the best regression case in the repo for this row.
+    const [validBattle] = createMockBattles();
+    const crowded = {
+      ...validBattle,
+      id: 'c5b3e4f6-7d8a-4b9c-8e0f-2a3b4c5d6e7f',
+      organismIds: Array.from({ length: 9 }, (_, i) => `absent-organism-${i}`),
+    };
+    const repos = createFakeRepositories({
+      raw: { battles: { [crowded.id]: crowded } },
+    });
+    const loadSpy = vi.spyOn(repos.battles, 'load');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { container } = render(
+      <BattleTile
+        {...BASE_PROPS}
+        battleId={crowded.id}
+        battles={repos.battles}
+        roster={[]}
+        gridColors={GRID_COLORS}
+      />,
+    );
+
+    await screen.findByRole('heading', { level: 2, name: BASE_PROPS.name });
+    await waitFor(() => expect(loadSpy).toHaveBeenCalledTimes(1));
+    // Let the rejected load() promise settle and the component's own .catch chain re-render
+    // before asserting the dish stayed blank — a bare synchronous check would pass vacuously
+    // (the tile starts blank regardless) without proving the degradation path actually ran.
+    await expect(loadSpy.mock.results[0].value as Promise<unknown>).rejects.toThrow();
+    await waitFor(() => expect(container.querySelector('canvas')).toBeNull());
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('degrades to a blank dish when load() returns null (deleted mid-flight)', async () => {
+    const repos = createFakeRepositories();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { container } = render(
+      <BattleTile
+        {...BASE_PROPS}
+        battleId="00000000-0000-4000-8000-000000000099"
+        battles={repos.battles}
+        roster={[]}
+        gridColors={GRID_COLORS}
+      />,
+    );
+
+    await screen.findByRole('heading', { level: 2, name: BASE_PROPS.name });
+    await waitFor(() => expect(container.querySelector('canvas')).toBeNull());
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('degrades to a blank dish when toThumbnailSource throws', async () => {
+    const battleThumbnail = await import('@/lib/battleThumbnail');
+    const throwSpy = vi.spyOn(battleThumbnail, 'toThumbnailSource').mockImplementation(() => {
+      throw new Error('ragged gridState');
+    });
+    const [battle] = createMockBattles();
+    const repos = createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { container } = render(
+      <BattleTile
+        {...BASE_PROPS}
+        battleId={battle.id}
+        battles={repos.battles}
+        roster={createMockOrganisms()}
+        gridColors={GRID_COLORS}
+      />,
+    );
+
+    await screen.findByRole('heading', { level: 2, name: BASE_PROPS.name });
+    await waitFor(() => expect(throwSpy).toHaveBeenCalled());
+    expect(container.querySelector('canvas')).toBeNull();
+    expect(errorSpy).not.toHaveBeenCalled();
+    throwSpy.mockRestore();
+  });
+
+  it('does not throw or log when the 2D context is unavailable (real jsdom behaviour)', async () => {
+    const [battle] = createMockBattles();
+    const repos = createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { container } = render(
+      <BattleTile
+        {...BASE_PROPS}
+        battleId={battle.id}
+        battles={repos.battles}
+        roster={createMockOrganisms()}
+        gridColors={GRID_COLORS}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelector('canvas')).not.toBeNull());
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('has no axe violations with the canvas present', async () => {
+    const [battle] = createMockBattles();
+    const repos = createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() });
+
+    const { container } = render(
+      <BattleTile
+        {...BASE_PROPS}
+        battleId={battle.id}
+        battles={repos.battles}
+        roster={createMockOrganisms()}
+        gridColors={GRID_COLORS}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelector('canvas')).not.toBeNull());
     const results = await axe(container);
     expect(results.violations).toEqual([]);
   });

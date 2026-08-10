@@ -24,6 +24,7 @@ export default function HomePage() {
     <BattleGallery
       battles={repositories.battles}
       organisms={repositories.organisms}
+      settings={repositories.settings}
       seedStatus={status}
     />
   );
