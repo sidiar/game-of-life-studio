@@ -7,11 +7,18 @@
  */
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
-// RefObject<HTMLElement>'s `current` is `HTMLElement | null` in React's own types (a ref is
-// always null before mount) — the `| null` here is that same fact made explicit in the return
-// type, not a deviation from it.
-export function useInView(rootMargin = '200px'): [RefObject<HTMLElement | null>, boolean] {
-  const ref = useRef<HTMLElement | null>(null);
+// Generic in the observed element type, so a caller attaches the ref to its own element without
+// casting: `useInView<HTMLDivElement>()` returns a ref a <div> accepts directly. A non-generic
+// RefObject<HTMLElement> would force every call site to assert twice over — once to narrow the
+// element and once to strip the `| null` — which is an escape hatch the checker cannot verify
+// (project-context: "no non-null ! to silence a checker complaint — fix the type").
+//
+// The `| null` is React's own fact (a ref is always null before mount) made explicit in the
+// return type, not a deviation from it.
+export function useInView<T extends HTMLElement = HTMLElement>(
+  rootMargin = '200px',
+): [RefObject<T | null>, boolean] {
+  const ref = useRef<T | null>(null);
   // Feature-detect and default to true when IntersectionObserver is undefined (jsdom, and any
   // environment we have not enumerated). Defaulting to false would make the thumbnail invisible
   // in every unit test and silently in any browser missing the API — a blank Gallery with a clean

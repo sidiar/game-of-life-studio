@@ -64,13 +64,28 @@ describe('toThumbnailSource', () => {
   });
 
   it('builds the id -> organism map once per battle, not per cell (roster resolved by id)', () => {
-    const [, battleB] = createMockBattles(); // Grand Colony War, includes Conway's Classic
+    const [, battleB] = createMockBattles(); // Grand Colony War, 100x60, includes Conway's Classic
     const roster = createMockOrganisms();
+
+    // Counts index reads of the roster. This is the only assertion that can actually SEE the
+    // "once per battle" claim: palette.size and the warn count are both functions of the RESULT,
+    // so a version that rebuilt the Map inside a per-cell loop satisfied them identically while
+    // doing 6,000x the work. Any single-pass build (.map, for-of, a plain for) reads each index
+    // exactly once; a per-cell rebuild reads them cols*rows times.
+    let indexReads = 0;
+    const countingRoster = new Proxy(roster, {
+      get(target, prop, receiver) {
+        if (typeof prop === 'string' && Number.isInteger(Number(prop))) indexReads += 1;
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
     // Conway's Classic is not in createMockOrganisms() — its ref should degrade-and-warn, and
     // every OTHER organism must still resolve to its real token, proving the lookup is by id.
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { palette } = toThumbnailSource(battleB, roster);
+    const { palette } = toThumbnailSource(battleB, countingRoster);
 
+    expect(indexReads).toBe(roster.length);
     expect(palette.size).toBe(battleB.organismIds.length + 1);
     expect(warnSpy).toHaveBeenCalledTimes(1); // exactly Conway's Classic's dangling ref
   });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { styled } from '@mui/material/styles';
 import type { Organism } from '@gol/domain';
 import type { BattleRepository } from '@gol/persistence';
@@ -298,7 +298,7 @@ export default function BattleTile({
   const overflow = organisms.slice(MAX_VISIBLE_DOTS);
   const overflowNames = overflow.map((o) => o.name).join(', ');
 
-  const [containerRef, inView] = useInView();
+  const [containerRef, inView] = useInView<HTMLDivElement>();
   const [thumbnail, setThumbnail] = useState<ThumbnailState>({ kind: 'idle' });
 
   // Guards the ONE battles.load() call across StrictMode's double effect invocation — the same
@@ -350,7 +350,7 @@ export default function BattleTile({
           {gridSize.cols} × {gridSize.rows}
         </TileStats>
       </TileHeader>
-      <PetriDish ref={containerRef as RefObject<HTMLDivElement>} aria-hidden="true">
+      <PetriDish ref={containerRef} aria-hidden="true">
         {thumbnail.kind === 'ready' && gridColors !== null && (
           <DishCanvas
             variant="static"

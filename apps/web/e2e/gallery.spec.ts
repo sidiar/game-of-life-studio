@@ -134,7 +134,12 @@ test.describe('battle gallery (Story 1.10)', () => {
       return seen.size;
     });
 
-    expect(distinctColorCount).toBeGreaterThan(1);
+    // > 2, not > 1. Grid lines over the background are already two distinct colours before a
+    // single organism cell is drawn, and whether they render is DPR-dependent (100x60 clears
+    // MIN_GRID_LINE_CELL_SIZE at DPR 2 on the tablet project, not at DPR 1) — so `> 1` is passed
+    // by a canvas with no cells on it at all, on exactly the project where the check matters
+    // least. Three distinct colours cannot be reached without at least one organism painted.
+    expect(distinctColorCount).toBeGreaterThan(2);
   });
 
   test('each organism dot has its own accessible name and reveals a tooltip on hover and on keyboard focus (WCAG 1.4.13)', async ({
@@ -223,9 +228,12 @@ test.describe('battle gallery (Story 1.10)', () => {
     await expect(headings).toHaveCount(3);
     await expect(page.getByRole('heading', { name: 'Crowded Roster' })).toBeVisible();
 
-    // Give the crowded tile's own failed load() a moment to settle before checking the console —
-    // the assertion above only proves the heading rendered, not that the async failure resolved.
-    await page.waitForTimeout(200);
+    // Wait for the Gallery's terminal shape rather than sleeping: all three tiles issue their
+    // load() together, and exactly two of them can produce a canvas — `crowded`'s throws. A fixed
+    // timeout is both slower than it needs to be and, on a contended runner where the rejection
+    // settles later than the sleep, silently unable to observe a console.error regression at all.
+    // This barrier polls, so it tightens on a fast machine and stretches on a slow one.
+    await expect(page.locator('canvas')).toHaveCount(2);
 
     expect(errors).toEqual([]);
   });

@@ -3,9 +3,11 @@ import { render, screen } from '@testing-library/react';
 import { useInView } from './useInView';
 
 function Probe({ rootMargin }: { rootMargin?: string }) {
-  const [ref, inView] = useInView(rootMargin);
+  // Generic parameter, not a cast at the call site: the hook hands back a ref the <div> accepts
+  // directly, so nothing here asserts a type the checker cannot verify.
+  const [ref, inView] = useInView<HTMLDivElement>(rootMargin);
   return (
-    <div ref={ref as React.RefObject<HTMLDivElement>} data-testid="probe">
+    <div ref={ref} data-testid="probe">
       {inView ? 'in-view' : 'not-in-view'}
     </div>
   );

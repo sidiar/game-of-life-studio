@@ -1,12 +1,58 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/domain';
 import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
 import BattleGallery from './BattleGallery';
+
+// Two tests below stub IntersectionObserver and write the --gol-* token layer onto <html>. Undoing
+// that in the test BODY leaks both whenever an assertion throws first: the stub's instance counter
+// survives into the next test, every tile reports not-intersecting, no thumbnail loads, and the
+// AC2 never-stored assertions pass VACUOUSLY. One red test would report as one red plus one green.
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  document.documentElement.style.cssText = '';
+});
+
+// Sets the token layer jsdom never loads (app/themes.css is not applied here), so BattleTile's
+// gridColors !== null gate opens and thumbnails actually load. Returns the observer stub's class
+// so a test can cap how many tiles report as visible.
+function enableThumbnails({ visibleCount }: { visibleCount: number }) {
+  document.documentElement.style.setProperty('--gol-bg-primary', '#0a0a0a');
+  document.documentElement.style.setProperty('--gol-grid-line', 'rgb(51 51 51 / 0.3)');
+
+  class CappedIntersectionObserver implements IntersectionObserver {
+    static instancesCreated = 0;
+    readonly root = null;
+    readonly rootMargin = '';
+    readonly thresholds: ReadonlyArray<number> = [];
+    private readonly shouldIntersect: boolean;
+    constructor(private readonly callback: IntersectionObserverCallback) {
+      this.shouldIntersect = CappedIntersectionObserver.instancesCreated < visibleCount;
+      CappedIntersectionObserver.instancesCreated += 1;
+    }
+    observe(): void {
+      if (!this.shouldIntersect) return;
+      queueMicrotask(() =>
+        this.callback(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        ),
+      );
+    }
+    unobserve(): void {}
+    disconnect(): void {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+  vi.stubGlobal('IntersectionObserver', CappedIntersectionObserver);
+  return CappedIntersectionObserver;
+}
 
 describe('BattleGallery', () => {
   // AC1/AR-15, RETARGETED (Story 1.11, conflict 1, architecture.md:274): the tile LIST is still
@@ -20,6 +66,37 @@ describe('BattleGallery', () => {
   // half structurally rather than by timing a race against each tile's own effect. AC4's 50-battle
   // test below is what proves load() is BOUNDED once tiles do load for real.
   it('renders from list() only — never load() or listFull() (AC1, AR-15)', async () => {
+    // The token layer is SET here and the observer never fires on its own, so the thumbnail path
+    // is live but held: nothing but an intersection can start a load. That is what makes the
+    // ordering assertion falsifiable — under the previous form gridColors resolved null in jsdom,
+    // so no tile could load at any time and `expect(loadSpy).not.toHaveBeenCalled()` was satisfied
+    // by the environment rather than by the component (code review 2026-08-10).
+    document.documentElement.style.setProperty('--gol-bg-primary', '#0a0a0a');
+    document.documentElement.style.setProperty('--gol-grid-line', 'rgb(51 51 51 / 0.3)');
+
+    const observers: { fire: () => void }[] = [];
+    class ManualIntersectionObserver implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = '';
+      readonly thresholds: ReadonlyArray<number> = [];
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(): void {
+        observers.push({
+          fire: () =>
+            this.callback(
+              [{ isIntersecting: true } as IntersectionObserverEntry],
+              this as unknown as IntersectionObserver,
+            ),
+        });
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', ManualIntersectionObserver);
+
     const battles = createMockBattles();
     const organisms = createMockOrganisms();
     const repos = createFakeRepositories({ battles, organisms });
@@ -39,7 +116,19 @@ describe('BattleGallery', () => {
       expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
     });
 
+    // The invariant AR-15 actually protects (Story 1.11, conflict 1, architecture.md:274): the
+    // tile LIST is summary-derived, so every name/date/size/dot is on screen with zero grids
+    // deserialized. A regression that loads eagerly instead of on intersection fails HERE.
     expect(loadSpy).not.toHaveBeenCalled();
+    // listFull() is never called at all — unchanged from Story 1.10, and the stronger half:
+    // one listFull() would Zod-validate every grid in the workspace in a single synchronous chunk.
+    expect(listFullSpy).not.toHaveBeenCalled();
+
+    // …and the path is genuinely live, not merely switched off: an intersection starts exactly the
+    // M4-sanctioned on-demand load. Without this the test could pass by never wiring thumbnails.
+    expect(observers.length).toBeGreaterThan(0);
+    observers.forEach((o) => o.fire());
+    await waitFor(() => expect(loadSpy).toHaveBeenCalled());
     expect(listFullSpy).not.toHaveBeenCalled();
   });
 
@@ -87,6 +176,10 @@ describe('BattleGallery', () => {
     const repos = createFakeRepositories({ battles: createMockBattles() });
     const battleListSpy = vi.spyOn(repos.battles, 'list');
     const organismListSpy = vi.spyOn(repos.organisms, 'list');
+    // All THREE sources, not two: settings joined the same Promise.all in Story 1.11, and a guard
+    // that spies a subset of what it claims to cover is exactly the defect the 1.10 review found
+    // on this test (it then watched battles only). Every source in the gated effect gets a spy.
+    const settingsLoadSpy = vi.spyOn(repos.settings, 'load');
 
     render(
       <BattleGallery
@@ -100,6 +193,7 @@ describe('BattleGallery', () => {
     expect(screen.getByText('Loading battles…')).toBeInTheDocument();
     expect(battleListSpy).not.toHaveBeenCalled();
     expect(organismListSpy).not.toHaveBeenCalled();
+    expect(settingsLoadSpy).not.toHaveBeenCalled();
   });
 
   it('renders the alert body when seedStatus is "error"', () => {
@@ -282,38 +376,12 @@ describe('BattleGallery', () => {
   // re-reads and re-parses the WHOLE gol:battles collection
   // (localStorageBattleRepository.ts:29-30), so 50 eager loads would be O(n^2) main-thread work.
   it('bounds battles.load() calls to the visible slice at 50-battle scale, not one per battle (AC4)', async () => {
-    // The tile's load effect gates on gridColors !== null — set the tokens inline (jsdom never
-    // loads themes.css) so the effect actually engages and there is something real to bound.
-    document.documentElement.style.setProperty('--gol-bg-primary', '#0a0a0a');
-    document.documentElement.style.setProperty('--gol-grid-line', 'rgb(51 51 51 / 0.3)');
-
+    // The tile's load effect gates on gridColors !== null — the helper sets the tokens inline
+    // (jsdom never loads themes.css) so the effect actually engages, and caps how many tiles
+    // report as intersecting. Teardown is in the file-level afterEach, never in this body: an
+    // assertion that throws here must not leak the stub into the AC2 tests below.
     const VISIBLE_COUNT = 5;
-    class CappedIntersectionObserver implements IntersectionObserver {
-      static instancesCreated = 0;
-      readonly root = null;
-      readonly rootMargin = '';
-      readonly thresholds: ReadonlyArray<number> = [];
-      private readonly shouldIntersect: boolean;
-      constructor(private readonly callback: IntersectionObserverCallback) {
-        this.shouldIntersect = CappedIntersectionObserver.instancesCreated < VISIBLE_COUNT;
-        CappedIntersectionObserver.instancesCreated += 1;
-      }
-      observe(): void {
-        if (!this.shouldIntersect) return;
-        queueMicrotask(() =>
-          this.callback(
-            [{ isIntersecting: true } as IntersectionObserverEntry],
-            this as unknown as IntersectionObserver,
-          ),
-        );
-      }
-      unobserve(): void {}
-      disconnect(): void {}
-      takeRecords(): IntersectionObserverEntry[] {
-        return [];
-      }
-    }
-    vi.stubGlobal('IntersectionObserver', CappedIntersectionObserver);
+    enableThumbnails({ visibleCount: VISIBLE_COUNT });
 
     const battleCount = 50;
     const battles = Array.from({ length: battleCount }, (_, i) => {
@@ -349,19 +417,25 @@ describe('BattleGallery', () => {
     // Let every queued intersection callback and its resulting load() settle before counting.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    // Bounded ABOVE by the visible slice — an unbounded count is precisely "thumbnail rendering
+    // blocks interactivity", and each load() re-parses the whole gol:battles collection.
     expect(loadSpy.mock.calls.length).toBeLessThanOrEqual(VISIBLE_COUNT);
-    expect(loadSpy.mock.calls.length).toBeLessThan(battleCount);
-
-    vi.unstubAllGlobals();
-    document.documentElement.style.cssText = '';
+    // …and bounded BELOW by it: without this, "only one tile ever loads" — or a lazy path broken
+    // so thoroughly that nothing loads after the first — satisfies the cap just as well as
+    // correct behaviour does. Every tile the stub reported as visible must have loaded.
+    expect(loadSpy.mock.calls.length).toBe(VISIBLE_COUNT);
+    expect(new Set(loadSpy.mock.calls.map(([id]) => id)).size).toBe(VISIBLE_COUNT);
   });
 
   // AC2, "never stored" — two assertions, because the intent is easy to satisfy accidentally and
   // easy to break silently.
   describe('AC2 — thumbnails are never stored', () => {
     it('never calls canvas.toDataURL() or canvas.toBlob() during a full Gallery render', async () => {
-      document.documentElement.style.setProperty('--gol-bg-primary', '#0a0a0a');
-      document.documentElement.style.setProperty('--gol-grid-line', 'rgb(51 51 51 / 0.3)');
+      // Both mock battles must actually reach a painted canvas, or this proves nothing: waiting
+      // only for the headings puts the assertion in a window that structurally CANNOT contain a
+      // paint — the headings appear in the same commit that mounts the tiles, while every load()
+      // is still in flight and no <PetriDishCanvas> has mounted yet.
+      enableThumbnails({ visibleCount: 2 });
       const toDataUrlSpy = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL');
       const toBlobSpy = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob');
 
@@ -369,8 +443,9 @@ describe('BattleGallery', () => {
         battles: createMockBattles(),
         organisms: createMockOrganisms(),
       });
+      const loadSpy = vi.spyOn(repos.battles, 'load');
 
-      render(
+      const { container } = render(
         <BattleGallery
           battles={repos.battles}
           organisms={repos.organisms}
@@ -382,11 +457,13 @@ describe('BattleGallery', () => {
       await waitFor(() => {
         expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
       });
+      await waitFor(() => expect(loadSpy).toHaveBeenCalledTimes(2));
+      // The canvases are mounted and their paint effects have run — the spies now cover a window
+      // in which a stored thumbnail would actually have had to be produced.
+      await waitFor(() => expect(container.querySelectorAll('canvas')).toHaveLength(2));
 
       expect(toDataUrlSpy).not.toHaveBeenCalled();
       expect(toBlobSpy).not.toHaveBeenCalled();
-
-      document.documentElement.style.cssText = '';
     });
 
     // The behavioural spy above proves TODAY's build never calls these APIs; this structural

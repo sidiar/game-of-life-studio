@@ -106,24 +106,35 @@ describe('PetriDishCanvas (static variant)', () => {
   });
 
   it('paints background, then per-group beginPath/rect/fill, then grid lines, in that order', () => {
+    // A 10x10 grid in a 400px canvas: 40px per cell, comfortably over MIN_GRID_LINE_CELL_SIZE (4),
+    // so grid lines are actually drawn and the "then grid lines" half of this test's name has
+    // something to assert. At the 2x2/0px default the lines are suppressed and the ordering claim
+    // is unverifiable.
+    const bigSize = { cols: 10, rows: 10 };
+    const occupant = new Array(100).fill(0);
+    occupant[0] = 1;
+    const bigGrid = makeGrid(10, 10, occupant);
+
     const { container, rerender } = render(
       <PetriDishCanvas
         variant="static"
-        grid={GRID}
-        size={SIZE}
+        grid={bigGrid}
+        size={bigSize}
         palette={PALETTE}
         showGridLines
         colors={COLORS}
       />,
     );
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    canvas.width = 400;
+    canvas.height = 400;
     const recording = installRecordingContext2d(canvas);
 
     rerender(
       <PetriDishCanvas
         variant="static"
-        grid={GRID}
-        size={SIZE}
+        grid={bigGrid}
+        size={bigSize}
         palette={PALETTE}
         showGridLines
         colors={{ ...COLORS }}
@@ -139,6 +150,14 @@ describe('PetriDishCanvas (static variant)', () => {
     expect(beginPathIndex).toBeGreaterThan(firstFillRectIndex); // background before cells
     expect(ops[beginPathIndex + 1]).toBe('rect');
     expect(ops).toContain('fill');
+
+    // …and grid lines AFTER the cells. Lines painted first would be erased by the cell fills on
+    // top of them, which is a real regression the previous form of this test could not see: it
+    // asserted nothing at all about the third phase its own name promised.
+    const lastFillIndex = ops.lastIndexOf('fill');
+    const gridLineFillRectIndex = ops.indexOf('fillRect', lastFillIndex);
+    expect(gridLineFillRectIndex).toBeGreaterThan(lastFillIndex);
+
     // fillStyle writes are the LUT's colours (asserted against displayColorAt, ageShade 7: ref 1
     // is non-aging, and a non-aging organism renders at its token's age-cap shade — displayColor.ts)
     // — never a hex literal restated in the test.
@@ -263,6 +282,59 @@ describe('PetriDishCanvas (static variant)', () => {
     expect(renderStaticSpy).toHaveBeenCalledTimes(1);
   });
 
+  // The test above only proves React skips an effect whose dependencies did not change — which a
+  // renderer held in a ref would satisfy just as well. Forced decision 2 is the stronger claim:
+  // each paint CONSTRUCTS a renderer and drops it, so a repaint can never go through the retained
+  // instance's resize()/setGridLines() path (the one Story 2.3 gives dirty-state semantics).
+  it('constructs a fresh renderer per paint and never repaints through a retained instance', () => {
+    const renderStaticSpy = vi.spyOn(GridRenderer.prototype, 'renderStatic');
+    const resizeSpy = vi.spyOn(GridRenderer.prototype, 'resize');
+    const setGridLinesSpy = vi.spyOn(GridRenderer.prototype, 'setGridLines');
+
+    const { container, rerender } = render(
+      <PetriDishCanvas
+        variant="static"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+      />,
+    );
+    installRecordingContext2d(container.querySelector('canvas') as HTMLCanvasElement);
+
+    // Two genuine repaints: a colours change, then a grid-lines flip. A retained renderer would
+    // service the second through setGridLines() on the SAME instance.
+    rerender(
+      <PetriDishCanvas
+        variant="static"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={{ ...COLORS }}
+      />,
+    );
+    rerender(
+      <PetriDishCanvas
+        variant="static"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines={false}
+        colors={{ ...COLORS }}
+      />,
+    );
+
+    expect(renderStaticSpy).toHaveBeenCalledTimes(2);
+    // `this` for each renderStatic call — two distinct objects means two constructions, not one
+    // instance reused.
+    const [first, second] = renderStaticSpy.mock.instances;
+    expect(first).not.toBe(second);
+    expect(resizeSpy).not.toHaveBeenCalled();
+    expect(setGridLinesSpy).not.toHaveBeenCalled();
+  });
+
   // ResizeObserver is absent in jsdom (30.x, unpolyfilled) — every other test in this file proves
   // the initial paint does not depend on it. These two stub the global to prove the debounce and
   // cleanup contract instead.
@@ -275,8 +347,11 @@ describe('PetriDishCanvas (static variant)', () => {
       constructor(private readonly callback: ResizeObserverCallback) {
         FakeResizeObserver.instances.push(this);
       }
-      trigger(): void {
-        this.callback([] as unknown as ResizeObserverEntry[], this);
+      // Carries a real contentRect: the component skips a notification whose box matches the one
+      // the backing store was last rasterised for, so an entry-less trigger would be a no-op and
+      // every assertion below would pass vacuously.
+      trigger(width: number, height: number): void {
+        this.callback([{ contentRect: { width, height } } as ResizeObserverEntry], this);
       }
     }
 
@@ -306,14 +381,48 @@ describe('PetriDishCanvas (static variant)', () => {
 
       const observer = FakeResizeObserver.instances.at(-1);
       expect(observer).toBeDefined();
-      observer?.trigger();
-      observer?.trigger(); // a rapid second notification must not produce a second repaint
+      // Two DIFFERENT boxes in rapid succession: both clear the unchanged-box check, so the
+      // debounce is the only thing that can collapse them into one repaint.
+      observer?.trigger(400, 240);
+      observer?.trigger(420, 252);
 
       vi.advanceTimersByTime(149);
       expect(getContextSpy.mock.calls.length).toBe(callsAfterInitialPaint); // not yet
 
       vi.advanceTimersByTime(1); // total 150ms
       expect(getContextSpy.mock.calls.length).toBe(callsAfterInitialPaint + 1); // exactly one
+    });
+
+    // The Task 2 subtask "no-op when the observed box is unchanged". This is not a hypothetical:
+    // ResizeObserver fires an initial callback the moment observe() is called, reporting the box
+    // the canvas already has — so without the guard EVERY tile schedules a redundant renderer
+    // reconstruction (and a fresh full-size overlay allocation) 150ms after its first paint.
+    it('does not repaint when the observed box is unchanged', () => {
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      vi.useFakeTimers();
+      const getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext');
+
+      const { container } = render(
+        <PetriDishCanvas
+          variant="static"
+          grid={GRID}
+          size={SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+        />,
+      );
+      const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+      const callsAfterInitialPaint = getContextSpy.mock.calls.length;
+
+      const observer = FakeResizeObserver.instances.at(-1);
+      // jsdom performs no layout, so clientWidth/clientHeight are 0 — reporting that same box is
+      // exactly what a real observer's initial callback does.
+      observer?.trigger(canvas.clientWidth, canvas.clientHeight);
+      observer?.trigger(canvas.clientWidth, canvas.clientHeight);
+
+      vi.advanceTimersByTime(500);
+      expect(getContextSpy.mock.calls.length).toBe(callsAfterInitialPaint);
     });
 
     it('clears the pending timer and disconnects the observer on unmount', () => {
@@ -333,7 +442,7 @@ describe('PetriDishCanvas (static variant)', () => {
       );
       const callsAfterInitialPaint = getContextSpy.mock.calls.length;
       const observer = FakeResizeObserver.instances.at(-1);
-      observer?.trigger();
+      observer?.trigger(400, 240);
 
       unmount();
       expect(observer?.disconnect).toHaveBeenCalledTimes(1);

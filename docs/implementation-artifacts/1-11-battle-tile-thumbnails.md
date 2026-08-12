@@ -4,7 +4,7 @@ baseline_commit: 41248b5
 
 # Story 1.11: Battle Tile Thumbnails
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -199,7 +199,8 @@ so that I can recognize battles visually instead of by name alone.
   - [x] ❌ **Read nothing else out of `gol:settings`.** `theme`, `cellAnimation`, `defaultGridSize`,
         `autoSave` and `defaultSpeed` all belong to Epic 6 and Epic 2/3. This story consumes exactly
         one field.
-  - [x] `apps/web/app/page.test.tsx` — the boundary now passes three repositories. The seeding,
+  - [ ] ⚠️ **Not done — deviation, see Dev Agent Record and the 2026-08-10 review.**
+        `apps/web/app/page.test.tsx` — the boundary now passes three repositories. The seeding,
         StrictMode and AR-45 tests **stay**; only the props they exercise change. ⚠️ The StrictMode
         test is still the only reproduction of the review regression where `npm run ci` was fully
         green while `npm run dev` hung on "workspace: seeding" forever.
@@ -363,6 +364,141 @@ so that I can recognize battles visually instead of by name alone.
         likely to need adding: canvas `fillStyle` cannot resolve `var(--gol-*)`, so theme colours are
         substituted by the caller. That is a genuinely unobvious, repo-wide rule and Epic 2/3 will hit
         it again.
+
+### Review Findings
+
+_Code review 2026-08-10 (three parallel layers: Blind Hunter, Edge Case Hunter, Acceptance Auditor,
+against `41248b5..06ba795`). 20 patches, 5 deferred, 4 dismissed as noise — the review's one
+decision item was resolved by Sidiar (2026-08-12) and folded into the patch list as the first entry._
+
+_**All 20 patches applied 2026-08-12.** Verification: `npm run ci` **exit 0** — `@gol/test-utils`
+75, `@gol/domain` 85, `@gol/persistence` 82, `web` **305** (303 → 305: two new
+`PetriDishCanvas.test.tsx` cases, the unchanged-box no-op and the fresh-renderer-per-paint proof);
+e2e **44 passed** across the full four-project matrix; bundle **288.0 KB / 300 KB gzip** (287.8 →
+288.0, 12.0 KB headroom — the exhaustiveness guard, the repaint error channel and the box-compare).
+`npx eslint apps/web` clean, 0 errors and the same single pre-existing `exhaustive-deps` warning on
+`BattleGallery.tsx` this story inherited. Two patches were checked to be falsifiable by reverting
+the code they guard: removing the unchanged-box check fails "does not repaint when the observed box
+is unchanged", and dropping `BattleTile`'s `inView` gate fails **both** the retargeted AR-15 guard
+and the AC4 bound — the AR-15 test could not fail at all before this pass._
+
+- [x] [Review][Patch] **The retargeted AR-15 guard's `load()` half is unfalsifiable in jsdom** —
+      Task 6 required "assert the headings are on screen at a point where `loadSpy` has zero calls".
+      The test does that, but `BattleTile`'s load effect is gated on `gridColors !== null`, and the
+      Dev Agent Record concedes jsdom resolves it `null`, so *no tile ever loads at all*. Deleting
+      the `IntersectionObserver` gate, loading eagerly per tile, or dropping the ordering entirely
+      all leave this green. Only the Gallery-level half (`listFull` never; no `load()` in the
+      `Promise.all`) still bites — which is the more important half, but the story claimed both.
+      **Resolution (Sidiar, 2026-08-12): strengthen the test.** Set the `--gol-*` tokens inline on
+      `document.documentElement` and stub `IntersectionObserver` so tiles genuinely load, then assert
+      `loadSpy` is at zero at the moment the headings paint — making the ordering half falsifiable
+      rather than environment-satisfied. The `listFull` assertion is unchanged. AR-15's own text
+      (`epics.md:174`) scopes "no grid deserialization" to the organism-usage index, and
+      `architecture.md:274` (Decision H.4) sanctions the thumbnail's `load()`, so the retarget's
+      substance stands — only the test's rigour changes.
+      [apps/web/components/BattleGallery.test.tsx:12-43]
+
+- [x] [Review][Patch] ResizeObserver has no "observed box unchanged" no-op — the Task 2 subtask is
+      marked `[x]` but the callback discards its `entries` entirely; real `observe()` fires an
+      initial callback, so every tile schedules a redundant full renderer reconstruction +
+      `rebuildGridLineOverlay` allocation 150 ms after first paint, ~50× on the AC4 budget. The test
+      double's `observe` is a no-op `vi.fn()`, so it cannot catch this
+      [apps/web/components/PetriDishCanvas.tsx:86-89]
+- [x] [Review][Patch] A non-context throw from the debounced repaint escapes as an uncaught
+      macrotask error — the rethrow's comment reasons about the *effect* call site, but `paint()` has
+      two, and the second runs inside `setTimeout` where no error boundary can see it
+      [apps/web/components/PetriDishCanvas.tsx:67,88]
+- [x] [Review][Patch] The "seeding" guard still does not spy `settings.load` — Task 4's subtask is
+      `[x]` and the Dev Agent Record states the spy was added; it was not. A regression calling
+      `settings.load()` during `seeding` passes. This is the exact defect the 1.10 review found, one
+      repository wider [apps/web/components/BattleGallery.test.tsx:86-103]
+- [x] [Review][Patch] Degradation row 2 (`load()` returns `null`) is tested vacuously — no load spy,
+      no await on the load result; every assertion holds at t=0 because the tile starts blank. Passes
+      unchanged if `load()` is never called or the `battle === null` branch is deleted. The sibling
+      `CorruptDataError` row directly above it awaits the settled promise and says why
+      [apps/web/components/BattleTile.test.tsx:266-283]
+- [x] [Review][Patch] `console.error` is spied five times and never restored — no `afterEach` in the
+      file, no `restoreMocks` in `vitest.config.ts`. Later tests, including the `axe` run, execute
+      with `console.error` silenced, so React `act()`/key/ref warnings are invisible
+      [apps/web/components/BattleTile.test.tsx:213,244,268,292,314]
+- [x] [Review][Patch] Global stubs torn down in the test body, not an `afterEach` — any failure in
+      the ~70-line AC4 test leaves `CappedIntersectionObserver` installed with `instancesCreated`
+      already at 50, so the AC2 `toDataURL`/`toBlob` test that follows sees zero intersections, mounts
+      no canvas, and passes vacuously. One red test becomes one red plus one false green
+      [apps/web/components/BattleGallery.test.tsx:287-288,355-356,389]
+- [x] [Review][Patch] The `vi.mock('./BattleTile')` mock is never cleared between tests — no
+      `beforeEach(mockClear)`, no `clearMocks` in config, so `waitFor(() => expect(mockTile)
+      .toHaveBeenCalled())` can be satisfied by the *previous* test's calls and `.at(-1)` read from
+      the wrong render. Currently green only by resolution timing
+      [apps/web/components/BattleGallery.gridLines.test.tsx:33,54,76]
+- [x] [Review][Patch] The AC2 behavioural test asserts before a canvas can mount — it waits only for
+      the headings, which appear in the same commit that mounts the tiles while every `load()` is
+      still in flight. Await the canvas, then assert the spies
+      [apps/web/components/BattleGallery.test.tsx:380-388]
+- [x] [Review][Patch] The AC4 bound has no lower bound — `toBeLessThanOrEqual(5)` plus a redundant
+      `toBeLessThan(50)` cannot distinguish "correctly bounded to the visible slice" from "only one
+      tile ever loads". Add `toBeGreaterThanOrEqual` on the tiles that should have loaded
+      [apps/web/components/BattleGallery.test.tsx:354-355]
+- [x] [Review][Patch] The draw-order test never asserts the "then grid lines" half its name claims —
+      grid lines painted *before* the cell fills (which would erase them) pass unchanged
+      [apps/web/components/PetriDishCanvas.test.tsx]
+- [x] [Review][Patch] "does not retain the renderer" proves only that the effect skips a `className`
+      change — that is React's dependency-array behaviour; a renderer held in a ref passes this test
+      identically. Forced decision 2 is not actually pinned
+      [apps/web/components/PetriDishCanvas.test.tsx:225-264]
+- [x] [Review][Patch] The e2e distinct-colour smoke check is satisfiable by grid lines alone on the
+      DPR-2 tablet project — at DPR 2 a 100×60 tile clears `MIN_GRID_LINE_CELL_SIZE`, so background +
+      lines already gives 2 distinct colours with no organism cell painted. Assert against a
+      `displayColorAt`-derived value, or `> 2` [apps/web/e2e/gallery.spec.ts:109-138]
+- [x] [Review][Patch] `await page.waitForTimeout(200)` as the settle barrier for the crowded-tile
+      console assertion — both too slow for every run and too short on a contended runner, where a
+      real `console.error` regression would go unobserved [apps/web/e2e/gallery.spec.ts:228]
+- [x] [Review][Patch] `variant` is declared as a discriminant, documented as the extension point for
+      Stories 2.4/3.11, and never read — when the union widens, TypeScript raises no error anywhere
+      and `edit` silently renders as a static one-shot. Add an exhaustive switch or `assertNever`
+      [apps/web/components/PetriDishCanvas.tsx:17,31-38]
+- [x] [Review][Patch] `containerRef as RefObject<HTMLDivElement>` launders away both the `HTMLElement`
+      widening and the `| null` the hook deliberately made explicit — make `useInView` generic
+      (`useInView<T extends HTMLElement>`) instead of casting at each call site (the cast is repeated
+      in `useInView.test.tsx`) [apps/web/components/BattleTile.tsx:353]
+- [x] [Review][Patch] Two `deferred-work.md` entries now misattribute live concerns to Story 2.4 —
+      the overlay `drawImage` coverage entry says 2.4 is "the first story with a real canvas on screen
+      and therefore the first place a Playwright smoke check can cover it" (1.11 shipped exactly that
+      check), and the `rebuildGridLineOverlay` entry says 2.4 "introduces the first repeated-resize
+      caller" (1.11 wires the first `ResizeObserver`, across ~50 tiles). Task 9 corrected only the nav
+      entry [docs/implementation-artifacts/deferred-work.md:65,67]
+- [x] [Review][Patch] Task 4's `page.test.tsx` subtask is checked `[x]` but the file is untouched —
+      the deviation is self-declared in the Dev Agent Record with a sound rationale, but the checkbox
+      is the state a future reader trusts. Uncheck and annotate
+      [docs/implementation-artifacts/1-11-battle-tile-thumbnails.md:204-205]
+- [x] [Review][Patch] `readGridColors` runs in the render path behind a `typeof document` guard, not
+      the client-effect gate Task 4 mandated — functionally safe and explained in a code comment, but
+      it is a substituted mechanism that never reached the Dev Agent Record's deviation list
+      [apps/web/components/BattleGallery.tsx:81-84]
+- [x] [Review][Patch] `battleThumbnail.test.ts`'s "builds the map once per battle, not per cell"
+      asserts only `palette.size` and a warn count — both functions of the *result*. Rebuilding the
+      map inside a per-cell loop passes identically; the test duplicates the dangling-ref test above
+      it [apps/web/lib/battleThumbnail.test.ts]
+
+- [x] [Review][Defer] `hasLoadStarted` makes every declared dependency of the load effect inert
+      [apps/web/components/BattleTile.tsx:308,314,343] — deferred, not reachable today
+- [x] [Review][Defer] `readGridColors` validates non-empty, not Canvas2D-parseable
+      [apps/web/lib/themeColors.ts:28] — deferred, no current token triggers it
+- [x] [Review][Defer] `applyDevicePixelSizing`'s anti-double-scaling guard is inoperative under a
+      per-paint renderer [apps/web/lib/gridRenderer.ts:154-160] — deferred, belongs with 2.3's
+      retention policy
+- [x] [Review][Defer] `<PetriDishCanvas>`'s contract permits a resize feedback loop for any caller
+      that does not size the element in CSS [apps/web/components/PetriDishCanvas.tsx:84-90] —
+      deferred, not reachable from `BattleTile`
+- [x] [Review][Defer] Three of four thumbnail states render identical DOM, and there is no edge out
+      of `'unavailable'` [apps/web/components/BattleTile.tsx:316,353-363] — deferred, low severity
+
+_Dismissed as noise: the `gridColors` `useMemo([])` "latches null forever" claim (default tokens sit
+on bare `:root`, and the theme-switch case is already deferred to Story 6.4); the bare `.catch`
+"swallows everything" claim (the story's explicit design — Story 5.11 owns user-facing corruption);
+the AC4 fixture bypassing `emptyGrid`/`placePattern` (the vacuity it guarded against is provably
+absent — `createFakeRepositories` validates every seeded battle through `BattleSchema`); and a
+StrictMode-doubling premise on the AC4 observer count (RTL's `render` does not wrap in StrictMode)._
 
 ## Dev Notes
 
@@ -772,6 +908,15 @@ claude-sonnet-5 (Claude Sonnet 5, Anthropic)
   subtask), and the new `BattleGallery.gridLines.test.tsx` proves the value in transit
   (`gridLines: false` → `showGridLines: false`, absent record → `true`, a rejecting `load()` →
   `true`). Flagging this rather than silently leaving the file off the File List.
+- **Task 4 deviation #2, surfaced by the 2026-08-10 review rather than at implementation time:**
+  Task 4 specified `readGridColors` sit "behind the same client-effect gate the tiles do… Keep it
+  out of the render path that the prerendered HTML takes". The shipped form instead runs in the
+  render path behind a `typeof document === 'undefined'` guard
+  (`BattleGallery.tsx:81-84`). Functionally equivalent here — the memo recomputes on the client's
+  first render, and `gridColors` is not read by the `loading` body, so no hydration mismatch is
+  reachable — and the in-code comment explains the substitution. But it *is* a substituted
+  mechanism against a task that named one specifically, and it should have been listed here at
+  implementation time rather than found in review. Recorded, not reverted.
 - **`BattleGallery.gridLines.test.tsx` is a new file, not in the story's Project Structure Notes
   table.** `vi.mock('./BattleTile', ...)` is module-scoped in Vitest, and mocking it inside the
   main `BattleGallery.test.tsx` would blank every heading/dot/tooltip assertion the AR-15,

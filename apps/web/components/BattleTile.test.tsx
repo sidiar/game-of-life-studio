@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
@@ -28,6 +28,16 @@ const BASE_PROPS = {
   showGridLines: true,
   gridColors: null,
 };
+
+// Several degradation tests below spy console.error to prove a path stays silent. Without this,
+// the first spy survives the whole file: vi.spyOn on an already-spied property returns the
+// EXISTING mock with its call history intact, so each later `not.toHaveBeenCalled()` asserts over
+// every console.error since the first test — and the tests after it (including the axe run)
+// execute with console.error muted, hiding React act()/key/ref warnings entirely.
+// This project's vitest config sets neither `restoreMocks` nor `clearMocks`, so it must be here.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // The tooltip's visibility is a data attribute rather than a class so the assertion does not
 // depend on Emotion's generated names; jsdom cannot compute opacity, so this attribute IS the
@@ -265,6 +275,7 @@ describe('BattleTile — thumbnail (Story 1.11)', () => {
 
   it('degrades to a blank dish when load() returns null (deleted mid-flight)', async () => {
     const repos = createFakeRepositories();
+    const loadSpy = vi.spyOn(repos.battles, 'load');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { container } = render(
@@ -278,6 +289,12 @@ describe('BattleTile — thumbnail (Story 1.11)', () => {
     );
 
     await screen.findByRole('heading', { level: 2, name: BASE_PROPS.name });
+    // Same discipline as the CorruptDataError row above: wait for the load to be issued AND for
+    // its promise to settle before asserting the dish stayed blank. A tile starts blank in every
+    // state, so without these two awaits this test passes even if load() is never called at all
+    // or the `battle === null` branch is deleted outright.
+    await waitFor(() => expect(loadSpy).toHaveBeenCalledTimes(1));
+    await expect(loadSpy.mock.results[0].value as Promise<unknown>).resolves.toBeNull();
     await waitFor(() => expect(container.querySelector('canvas')).toBeNull());
     expect(errorSpy).not.toHaveBeenCalled();
   });

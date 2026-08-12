@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   GridRenderer,
   GridRendererContextError,
@@ -28,7 +28,16 @@ export interface PetriDishCanvasProps {
 
 const RESIZE_DEBOUNCE_MS = 150;
 
+// Exhaustiveness guard for `variant`. Today the union has one member, so this is unreachable —
+// its job is to stop COMPILING when Story 2.4's 'edit' or 3.11's 'playback' joins the union.
+// Without it, a widened union type-checks unchanged and the new variant silently renders as a
+// static one-shot: no error, no test failure, just an edit surface that ignores every pointer.
+function assertUnhandledVariant(variant: never): never {
+  throw new Error(`Unhandled PetriDishCanvas variant: ${String(variant)}`);
+}
+
 export default function PetriDishCanvas({
+  variant,
   grid,
   size,
   palette,
@@ -37,6 +46,8 @@ export default function PetriDishCanvas({
   className,
 }: PetriDishCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Routes a repaint failure into React's own error channel — see the debounced call site below.
+  const [, setPaintError] = useState<null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -54,11 +65,17 @@ export default function PetriDishCanvas({
     function paint(target: HTMLCanvasElement): void {
       try {
         const renderer = new GridRenderer(target, size, palette, { colors, showGridLines });
-        // ❌ Never drawFull: renderStatic is the terminal one-shot for a surface nothing drives
-        // again (gridRenderer.ts:288-306 names this story explicitly). Calling drawFull would
-        // pass every test here and silently opt this one-shot surface into the driven-renderer
-        // state machine Story 2.3 builds.
-        renderer.renderStatic(grid);
+        switch (variant) {
+          case 'static':
+            // ❌ Never drawFull: renderStatic is the terminal one-shot for a surface nothing
+            // drives again (gridRenderer.ts:288-306 names this story explicitly). Calling
+            // drawFull would pass every test here and silently opt this one-shot surface into
+            // the driven-renderer state machine Story 2.3 builds.
+            renderer.renderStatic(grid);
+            break;
+          default:
+            assertUnhandledVariant(variant);
+        }
       } catch (error) {
         // getContext('2d') returns null under jsdom always, and can return null in a real browser
         // once a tab is over its canvas-memory budget — a live possibility at 50 tiles, not a
@@ -83,9 +100,36 @@ export default function PetriDishCanvas({
     // must not depend on it.
 
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const observer = new ResizeObserver(() => {
+    // The box the current backing store was rasterised for. ResizeObserver fires an initial
+    // callback the moment observe() is called, and fires again for any layout reassignment that
+    // leaves the box identical — repainting on either is pure waste: it reconstructs the renderer
+    // and allocates a fresh full-size grid-line overlay for a canvas already sized correctly,
+    // ~50 times over on the Gallery's first commit (the NFR-1.3/7.2 budget AC4 protects).
+    let lastWidth = canvas.clientWidth;
+    let lastHeight = canvas.clientHeight;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries.at(-1);
+      if (entry === undefined) return;
+      const { width, height } = entry.contentRect;
+      if (width === lastWidth && height === lastHeight) return;
+      lastWidth = width;
+      lastHeight = height;
+
       if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(() => paint(canvas), RESIZE_DEBOUNCE_MS);
+      timer = setTimeout(() => {
+        try {
+          paint(canvas);
+        } catch (error) {
+          // paint() rethrows anything that is not a missing-2D-context. From the effect body
+          // that lands in React's error channel; from a macrotask it would be an uncaught
+          // window error instead — no boundary, no unmount, just a tile frozen on a stale
+          // bitmap. Hand it back to React so BOTH call sites fail identically.
+          setPaintError(() => {
+            throw error;
+          });
+        }
+      }, RESIZE_DEBOUNCE_MS);
     });
     observer.observe(canvas);
 
@@ -93,7 +137,7 @@ export default function PetriDishCanvas({
       if (timer !== undefined) clearTimeout(timer);
       observer.disconnect();
     };
-  }, [grid, size, palette, showGridLines, colors]);
+  }, [variant, grid, size, palette, showGridLines, colors]);
 
   // aria-hidden, deliberately (Dev Notes forced decision 5): everything the snapshot conveys is
   // already exposed as text in the same tile — the name (<h2>), the grid size, the date, and every

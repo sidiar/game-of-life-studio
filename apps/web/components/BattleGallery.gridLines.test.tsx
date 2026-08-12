@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { DEFAULT_SETTINGS } from '@gol/domain';
 import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
@@ -10,6 +10,16 @@ import BattleGallery from './BattleGallery';
 // showGridLines prop — the pixel-level "does a grid line actually paint" behaviour is already
 // covered at PetriDishCanvas.test.tsx (the renderer) and BattleTile.test.tsx (the load lifecycle).
 vi.mock('./BattleTile', () => ({ default: vi.fn(() => null) }));
+
+// vi.mock is module-scoped and this project's vitest config sets no `clearMocks`, so without this
+// the mock accumulates calls across tests: `waitFor(() => expect(mockTile).toHaveBeenCalled())`
+// is then satisfied on its first tick by the PREVIOUS test's calls — while this test's Gallery is
+// still in its loading state with no tile rendered — and `.at(-1)` reads the wrong render's props.
+// The barrier has to be able to distinguish "this render happened" from "some render happened".
+beforeEach(async () => {
+  const { default: BattleTile } = await import('./BattleTile');
+  vi.mocked(BattleTile).mockClear();
+});
 
 describe('BattleGallery — settings.gridLines wiring (AC3, Task 4)', () => {
   it('passes showGridLines: false through to the tile when the setting is off', async () => {
