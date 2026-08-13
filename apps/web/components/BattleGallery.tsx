@@ -9,6 +9,7 @@ import { sortByLastModified } from '@/lib/gallerySort';
 import { resolveTileOrganisms } from '@/lib/tileOrganisms';
 import { readGridColors } from '@/lib/themeColors';
 import BattleTile from './BattleTile';
+import GalleryEmptyState from './GalleryEmptyState';
 
 export interface BattleGalleryProps {
   battles: BattleRepository;
@@ -177,12 +178,7 @@ export default function BattleGallery({
       {state.kind === 'error' && (
         <StatusText role="alert">Something went wrong loading your battles.</StatusText>
       )}
-      {state.kind === 'ready' && state.summaries.length === 0 && (
-        // Deliberately undesigned — Story 1.12 owns the visual, the "what is this app" copy, and
-        // the "Create Your First Battle" prompt. This sentence is a placeholder for that story to
-        // replace, not merge with.
-        <StatusText>No battles yet.</StatusText>
-      )}
+      {state.kind === 'ready' && state.summaries.length === 0 && <GalleryEmptyState />}
       {state.kind === 'ready' && state.summaries.length > 0 && (
         <TileGrid>
           {tiles.map(({ summary, organisms: tileOrganisms }) => (

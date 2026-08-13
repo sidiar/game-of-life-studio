@@ -30,13 +30,13 @@ describe('HomePage', () => {
     // a truthiness check ever was. The "seeds the AR-45 mock fixtures" test below is that stronger
     // proof exercised for real — a fixture-seeded tile rendering by NAME.
     await waitFor(() => {
-      expect(screen.getByText('No battles yet.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeInTheDocument();
     });
   });
 
   it('has no axe accessibility violations once ready', async () => {
     const { container } = render(<HomePage />);
-    await waitFor(() => screen.getByText('No battles yet.'));
+    await waitFor(() => screen.getByRole('heading', { level: 2, name: 'No Battles Yet' }));
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
@@ -83,8 +83,8 @@ describe('HomePage', () => {
   // effects — so `npm run ci` was fully green while `npm run dev` sat on "workspace: seeding"
   // forever. App Router turns StrictMode on by default (reactStrictMode unset => enabled), so dev
   // is the strict environment and this test is the only place that reproduces it. Retargeted
-  // (Story 1.10) from "workspace: ready" text to the empty-Gallery copy that now signals the same
-  // thing: the seed effect resolved and the Gallery's own load effect ran behind it.
+  // (Story 1.10, then 1.12) from "workspace: ready" text to the empty-Gallery heading that now
+  // signals the same thing: the seed effect resolved and the Gallery's own load effect ran behind it.
   it('reaches the ready Gallery under StrictMode, and still seeds exactly once', async () => {
     render(
       <StrictMode>
@@ -93,7 +93,7 @@ describe('HomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('No battles yet.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeInTheDocument();
     });
 
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.organisms) ?? '{}') as Record<
@@ -150,7 +150,7 @@ describe('HomePage', () => {
     render(<HomePage />);
 
     await waitFor(() => {
-      expect(screen.getByText('No battles yet.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeInTheDocument();
     });
 
     expect(localStorage.getItem(STORAGE_KEYS.battles)).toBeNull();

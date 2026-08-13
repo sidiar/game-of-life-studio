@@ -19,14 +19,24 @@ test.describe('home route', () => {
     // Story 1.9: the h1 moved to the page's own "Battle Gallery" heading — "Game of Life
     // Studio" is now the shell's wordmark (AppShell), not a document heading.
     await expect(page.getByRole('heading', { level: 1, name: 'Battle Gallery' })).toBeVisible();
-    // Story 1.10: the placeholder copy is gone — a production load seeds no battles, so the
-    // Gallery's real empty-state line renders instead (Story 1.12 owns its eventual design).
-    await expect(page.getByText('No battles yet.')).toBeVisible();
+    // Story 1.12: a production load seeds no battles, so the designed empty state renders — its
+    // own <h2> heading, "what is this app" explanation, and the FR-7.4 prompt.
+    await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
+    await expect(page.getByText(/cellular battles/i)).toBeVisible();
+    await expect(page.getByText(/create your first battle/i)).toBeVisible();
+    // AC2 / no-dead-affordance: the empty state ships copy, not a control, until Story 2.2.
+    const emptyState = page.locator('h2', { hasText: 'No Battles Yet' }).locator('..');
+    await expect(emptyState.getByRole('button')).toHaveCount(0);
+    await expect(emptyState.getByRole('link')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
   // Real-browser axe run — covers rules jsdom cannot (e.g. colour-contrast),
-  // which the component-level vitest-axe check necessarily skips.
+  // which the component-level vitest-axe check necessarily skips. Story 1.12: this is also where
+  // the empty state's decorative glyph gets a real contrast evaluation — jsdom has no layout, so
+  // the vitest-axe run in GalleryEmptyState.test.tsx skips colour-contrast entirely. See that
+  // file's silent-failure-trap note on why the glyph is expected to land in axe's `incomplete`
+  // bucket (unicode-only visible text), not `violations`.
   test('has no axe accessibility violations', async ({ page }) => {
     await page.goto('/');
     const { violations } = await new AxeBuilder({ page }).analyze();
@@ -48,10 +58,10 @@ test.describe('home route', () => {
     page,
   }) => {
     await page.goto('/');
-    // "No battles yet." is the hydration signal now (Story 1.10): it is absent from the
-    // prerendered HTML ("Loading battles…") and only reachable once useWorkspaceSeed's effect and
-    // BattleGallery's own load effect have both run.
-    await expect(page.getByText('No battles yet.')).toBeVisible();
+    // The empty state's <h2> is the hydration signal now (Story 1.12, retargeted from "No battles
+    // yet."): it is absent from the prerendered HTML ("Loading battles…") and only reachable once
+    // useWorkspaceSeed's effect and BattleGallery's own load effect have both run.
+    await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
 
     const afterFirstLoad = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key) ?? '{}'),
@@ -64,7 +74,7 @@ test.describe('home route', () => {
     ).toBeNull();
 
     await page.reload();
-    await expect(page.getByText('No battles yet.')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
 
     const afterReload = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key) ?? '{}'),

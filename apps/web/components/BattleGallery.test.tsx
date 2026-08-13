@@ -228,7 +228,9 @@ describe('BattleGallery', () => {
     });
   });
 
-  it('renders the placeholder line and no tile grid for zero battles', async () => {
+  // Story 1.12: retargeted from "renders the placeholder line and no tile grid" — there is no
+  // placeholder any more, GalleryEmptyState is the designed AC1 body.
+  it('renders the designed empty state and no tile grid for zero battles (AC1)', async () => {
     const repos = createFakeRepositories();
     render(
       <BattleGallery
@@ -240,9 +242,53 @@ describe('BattleGallery', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('No battles yet.')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeInTheDocument();
     });
-    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0);
+    expect(screen.getByText(/cellular battles/i)).toBeInTheDocument();
+    expect(screen.getByText(/create your first battle/i)).toBeInTheDocument();
+    // "no tile grid": zero rendered BattleTile roots. The empty state's own <h2> means a raw
+    // `heading level 2` count of zero no longer means "no tiles" (GalleryEmptyState.tsx retargets
+    // that check to what it actually meant) — BattleTile's root is styled('article').
+    expect(screen.queryAllByRole('article')).toHaveLength(0);
+  });
+
+  // AC3, both directions in one test (the AC's own wording: "disappears when the first battle
+  // exists and reappears if all battles are deleted"). Story 1.13 owns the delete flow itself —
+  // this proves the render condition already reacts correctly to "storage holds a battle" vs.
+  // "storage holds none", which is all the condition (BattleGallery.tsx) actually depends on.
+  it('shows a tile and hides the empty state with a battle, and shows the empty state again with none (AC3)', async () => {
+    const populated = createFakeRepositories({ battles: createMockBattles() });
+    const { unmount } = render(
+      <BattleGallery
+        battles={populated.battles}
+        organisms={populated.organisms}
+        settings={populated.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('article').length).toBeGreaterThan(0);
+    });
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'No Battles Yet' }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    const empty = createFakeRepositories();
+    render(
+      <BattleGallery
+        battles={empty.battles}
+        organisms={empty.organisms}
+        settings={empty.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeInTheDocument();
+    });
+    expect(screen.queryAllByRole('article')).toHaveLength(0);
   });
 
   it('has no axe violations: populated, empty, and error bodies', async () => {
@@ -270,7 +316,7 @@ describe('BattleGallery', () => {
         seedStatus="ready"
       />,
     );
-    await waitFor(() => screen.getByText('No battles yet.'));
+    await waitFor(() => screen.getByRole('heading', { level: 2, name: 'No Battles Yet' }));
     expect((await axe(emptyContainer)).violations).toEqual([]);
 
     const errored = createFakeRepositories();
