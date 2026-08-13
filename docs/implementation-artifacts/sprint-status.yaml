@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-08-12
+# last_updated: 2026-08-13
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-08-12
+last_updated: 2026-08-13
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -55,7 +55,7 @@ development_status:
   1-9-clinical-lab-theme-tokens-app-shell: done
   1-10-battle-gallery-tiles-sorting: done
   1-11-battle-tile-thumbnails: done
-  1-12-gallery-empty-state: review
+  1-12-gallery-empty-state: done
   1-13-delete-battle-with-confirmation: backlog
   epic-1-retrospective: optional
 

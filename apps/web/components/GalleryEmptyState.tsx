@@ -5,8 +5,13 @@ import { styled } from '@mui/material/styles';
 // Mockup split (Story 1.12, spec conflict 2): the clinical theme styles .empty-state
 // (clinical-lab-theme/battle-gallery.html:425-451) but never renders it — the only markup, copy
 // and glyph are a commented-out block in the biotech (Epic 6) file
-// (biotech-terminal-theme/battle-gallery.html:961-966). Structure and copy come from there; every
-// value below comes from the clinical CSS, same resolution Stories 1.10/1.11 used for this split.
+// (biotech-terminal-theme/battle-gallery.html:961-966). Structure and copy come from there, styled
+// values from the clinical CSS, same resolution Stories 1.10/1.11 used for this split.
+//
+// Two deliberate departures from that CSS, both prescribed by the story's Task 1 table:
+// EmptyDescription's bottom margin is 16px where .empty-state-description says 30px (the mockup's
+// 30px gap sat above a button this story does not ship), and EmptyPrompt has no mockup class at all
+// — see its own comment below.
 const EmptyState = styled('div')({
   textAlign: 'center',
   padding: '80px 20px',

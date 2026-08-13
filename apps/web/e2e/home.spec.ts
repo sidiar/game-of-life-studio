@@ -26,19 +26,39 @@ test.describe('home route', () => {
     await expect(page.getByText(/create your first battle/i)).toBeVisible();
     // AC2 / no-dead-affordance: the empty state ships copy, not a control, until Story 2.2.
     const emptyState = page.locator('h2', { hasText: 'No Battles Yet' }).locator('..');
+    // Anchor the scope FIRST. toHaveCount(0) against a locator whose ancestor matched nothing is a
+    // pass, not a failure — so without this line the two assertions below would silently evaporate
+    // the moment the h2 text, tag, or nesting changed, rather than going red.
+    await expect(emptyState).toContainText('Create your first battle to begin.');
     await expect(emptyState.getByRole('button')).toHaveCount(0);
     await expect(emptyState.getByRole('link')).toHaveCount(0);
+    // Story 2.2 will add the CTA as a real control; these two cover the shapes it is most likely to
+    // arrive as before it does, which getByRole('button'/'link') alone would miss.
+    await expect(emptyState.locator('[role="button"]')).toHaveCount(0);
+    await expect(emptyState.locator('[tabindex]:not([tabindex="-1"])')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
-  // Real-browser axe run — covers rules jsdom cannot (e.g. colour-contrast),
-  // which the component-level vitest-axe check necessarily skips. Story 1.12: this is also where
-  // the empty state's decorative glyph gets a real contrast evaluation — jsdom has no layout, so
-  // the vitest-axe run in GalleryEmptyState.test.tsx skips colour-contrast entirely. See that
-  // file's silent-failure-trap note on why the glyph is expected to land in axe's `incomplete`
-  // bucket (unicode-only visible text), not `violations`.
+  // Real-browser axe run — covers rules jsdom cannot (e.g. colour-contrast), which the
+  // component-level vitest-axe check necessarily skips because jsdom has no layout. Story 1.12:
+  // this is therefore the only place the empty state's TEXT (--gol-text-secondary on the page
+  // background) is contrast-checked for real.
+  //
+  // The decorative ∅ glyph is NOT contrast-checked here or anywhere, and that is expected rather
+  // than a gap: color-contrast declares excludeHidden:false, so aria-hidden does not exempt it, but
+  // `ignoreUnicode` is on by default and axe's textIsEmojis() matches any node whose visible text is
+  // only symbol-range characters (∅ is U+2205, inside getUnicodeNonBmpRegExp()'s ∀-⋿).
+  // The rule returns undefined for it, landing the node in `incomplete` — which this test discards.
+  // ⚠️ Swap the glyph for a letter, a word, or an inline SVG and the exemption is gone: at
+  // opacity 0.3 it composites to roughly 1.9:1 and becomes a serious violation. Re-run this then.
   test('has no axe accessibility violations', async ({ page }) => {
     await page.goto('/');
+    // ⚠️ page.goto resolves at waitUntil:'load', i.e. against the prerendered HTML — which says
+    // "Loading battles…" and contains no empty state at all (the Task 6 grep gate proves it).
+    // Without this wait, analyze() races hydration and can scan the loading body instead, checking
+    // nothing this story added while still reporting green.
+    await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
+
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
   });

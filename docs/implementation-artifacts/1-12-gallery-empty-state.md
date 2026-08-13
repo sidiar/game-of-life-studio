@@ -4,7 +4,7 @@ baseline_commit: 734aea5
 
 # Story 1.12: Gallery Empty State
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -163,6 +163,172 @@ so that I understand what the app is and what to do first without a tutorial.
         Story 1.11's review pass. Record the new number.
   - [x] Report the per-package test counts (`web` was **305**) and the e2e count (**44** across the
         four-project matrix), so a reviewer can see tests were added rather than moved.
+
+### Review Findings
+
+_Code review 2026-08-13 (three parallel layers: Blind Hunter, Edge Case Hunter, Acceptance Auditor,
+against `734aea5..e0e8fcb`). 1 decision, 10 patches, 4 deferred, 7 dismissed as noise._
+
+_**All 11 patches applied 2026-08-13.** Verification: `npm run ci` **exit 0** (redirected to a file,
+exit code echoed separately — not piped). `@gol/test-utils` 75, `@gol/domain` 85, `@gol/persistence`
+82, `web` **311 passed / 27 files** (unchanged — every patch tightened existing assertions or
+comments; none added a test). e2e **44 passed** across the full four-project matrix, including both
+axe runs now gated behind the new hydration wait. Bundle **288.2 KB / 300 KB gzip**, unchanged —
+no patch touched shipped markup, only comments and tests._
+
+_**Three patches were falsification-checked** (1.11 review pattern), each reverted after: (1)
+title-casing the prompt to `Create Your First Battle` — the exact regression
+`GalleryEmptyState.tsx`'s own comment forbids — turns the AC1 test **red**, where the previous
+`/create your first battle/i` match accepted it; (2) removing `aria-hidden` from the glyph turns the
+forced-decision-3 test **red**, where the deleted `queryByRole('img')` line could not; (3) adding
+`<input type="button" value="Create Your First Battle">` turns the AC2 test **red**, where the
+previous `'button, a, [role="button"], [tabindex]'` selector passed it straight through._
+
+_Two layer claims were **rejected on direct verification** and are recorded here so they are not
+re-raised: (a) the Blind Hunter asserted axe-core excludes `aria-hidden` subtrees from
+`color-contrast` — false, the rule declares `excludeHidden: false` (`node_modules/axe-core/axe.js`,
+`id: 'color-contrast'`), and the glyph escapes via the `ignoreUnicode`/`textIsEmojis` path exactly as
+this story's Dev Notes describe (`∅` U+2205 ∈ `∀-⋿`, `◉` U+25C9 ∈ `■-◿` in
+`getUnicodeNonBmpRegExp()`); the story's cited reasoning holds. (b) The Acceptance Auditor computed
+the web test count as 310 and called the recorded 311 impossible — `npx vitest run` in `apps/web`
+reports **311 passed, 27 files**, so 311 is correct; the off-by-one is in *Story 1.11's* recorded
+baseline (305 → actually 306), captured as a defer item below._
+
+**Decision resolved** _(Sidiar, 2026-08-13)_
+
+- [x] [Review][Decision] **AC3's "reappears if all battles are deleted" has no reachable code path,
+      and the test cannot detect that** — `BattleGallery.tsx:87-135` calls `refresh()` once per
+      effect run and the dep array `[battles, organisms, settings, seedStatus]` is stable after mount
+      (`app/page.tsx` memoises the repositories; `seedStatus` settles at `'ready'`). A mounted gallery
+      can therefore never transition `summaries.length > 0 → 0`. The AC3 test
+      (`BattleGallery.test.tsx:258-292`) substitutes `unmount()` + a second `render()` against a fresh
+      empty repo, so its second half is path-identical to the AC1 test at `:232-253` and passes for a
+      reason unrelated to any transition. The story explicitly prescribed this ("AC3 needs no new
+      code… do not add a second code path"), so the code follows spec.
+      **Resolution: defer the mechanism, reword the test.** The re-list edge is Story 1.13's to build
+      (it is forced by the delete flow anyway) and is tracked in `deferred-work.md`; the test's name
+      and comment are corrected now so they stop claiming to prove reactivity they do not exercise.
+      Folded into the patch list as the last entry.
+
+**Patches**
+
+- [x] [Review][Patch] **The axe e2e run never waits for hydration, so AC4 may be scanning the
+      pre-hydration body** [`apps/web/e2e/home.spec.ts:40-44`] — `await page.goto('/')` resolves at
+      `waitUntil: 'load'`, i.e. against the prerendered HTML, which the Task 6 gate proves contains
+      no empty state (`grep -c "No Battles Yet" out/index.html` → 0; it says "Loading battles…").
+      `analyze()` then runs with no wait. The other two tests in this file were given explicit
+      hydration waits for exactly this reason. This is the only place `themes.css` is applied and
+      `color-contrast` actually runs, so the empty state's contrast coverage is a race that reports
+      green either way. `apps/web/e2e/appShell.spec.ts:63-67` has the identical gap. Fix: add
+      `await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();`
+      before `analyze()`. _(edge+auditor)_
+- [x] [Review][Patch] **Wrong WHY comment: claims a "real contrast evaluation" that provably does not
+      happen, and cites a note that does not exist** [`apps/web/e2e/home.spec.ts:34-39`] — the comment
+      says this is where "the empty state's decorative glyph gets a real contrast evaluation", then
+      two lines later correctly says the glyph lands in axe's `incomplete` bucket. Both cannot be
+      true: `incomplete` is precisely *not* an evaluation, and the test destructures only
+      `{ violations }`, discarding `incomplete` entirely. It also points at "that file's
+      silent-failure-trap note" in `GalleryEmptyState.test.tsx`, which contains no such note — the
+      word "incomplete" appears nowhere in its 44 lines. Project rule: a wrong WHY is worse than none.
+      _(blind+auditor)_
+- [x] [Review][Patch] **"every value below comes from the clinical CSS" is false**
+      [`apps/web/components/GalleryEmptyState.tsx:8-9`] — `EmptyPrompt` has no clinical source at all
+      (its own comment at `:40-42` says "No mockup class for this line", contradicting the header),
+      and `.empty-state-description` in the mockup is `margin-bottom: 30px` against the shipped
+      `margin: '0 auto 16px'`. The 16px **is** what Task 1's table prescribes, so the code is
+      spec-compliant — the blanket comment and the Dev Agent Record's "confirmed matching by direct
+      comparison" are the inaccuracy, and the deliberate 30px→16px departure from the UX-DR18 mockup
+      went unrecorded. _(blind+auditor)_
+- [x] [Review][Patch] **The e2e AC2 guard can pass vacuously** [`apps/web/e2e/home.spec.ts:28-30`] —
+      `page.locator('h2', { hasText: 'No Battles Yet' }).locator('..')` is never asserted non-empty,
+      and `toHaveCount(0)` on a locator whose ancestor matches nothing is a pass, not a failure. The
+      `..` scope is also structurally derived: it is the whole empty state only because `EmptyTitle`
+      happens to be a direct child of `EmptyState`. Wrap the h2 in any container and the scope
+      silently narrows, leaving a CTA added elsewhere in the empty state uninspected. Unlike the unit
+      test it also omits `[role="button"]` and `[tabindex]` — the two shapes Story 2.2 is most likely
+      to introduce first. Fix: anchor with
+      `await expect(emptyState).toContainText('Create your first battle to begin.');` after deriving
+      the scope. _(blind+edge+auditor)_
+- [x] [Review][Patch] **`queryByRole('img')` is a test that cannot fail**
+      [`apps/web/components/GalleryEmptyState.test.tsx:22`] — `EmptyIcon` is a `styled('div')`, and a
+      `<div>` has no implicit ARIA role, so the query returns null regardless of the component. RTL's
+      `queryByRole` additionally defaults to `hidden: false`, excluding `aria-hidden` subtrees — so
+      even `role="img"` on the glyph would still pass. Satisfied by the environment, not the code;
+      the load-bearing lines are the `querySelector('[aria-hidden="true"]')` / `textContent` pair
+      below it. This is the exact "tests that cannot fail" pattern the 1.11 review produced 20 patches
+      for. _(blind)_
+- [x] [Review][Patch] **The no-focusable-control selector is narrower than its own title claims**
+      [`apps/web/components/GalleryEmptyState.test.tsx:34-36`] — the test says "no button, link, or
+      other focusable control" but checks `'button, a, [role="button"], [tabindex]'`, missing `input`,
+      `select`, `textarea`, `summary`, `[contenteditable]`, `area[href]`, and interactive roles other
+      than `button`. An `<input type="button" value="Create Your First Battle">` leaves all three
+      assertions green. Conversely `[tabindex]` matches `tabindex="-1"`, which is not tab-focusable —
+      simultaneously too narrow for the claim and too broad for the mechanism. _(blind+edge)_
+- [x] [Review][Patch] **The title-case regression the component comment explicitly forbids is
+      asserted nowhere** [`GalleryEmptyState.test.tsx:15`, `BattleGallery.test.tsx:248`,
+      `e2e/home.spec.ts:26`] — `GalleryEmptyState.tsx:53-54` states the prompt ships as sentence text
+      because "a title-cased standalone line here would read as a dead button", yet every assertion on
+      that copy is `/create your first battle/i`. Rewriting `EmptyPrompt` to the standalone
+      title-cased `Create Your First Battle` — the precise regression named — passes all three, and
+      the button/link checks do not fire because it is still a `<p>`. Relatedly, no test asserts the
+      description and prompt are *different* elements, so merging them back into one `<p>` (undoing
+      the entire stated rationale for `EmptyPrompt`) also stays green. Fix: assert the exact string in
+      at least the unit test. _(edge+blind)_
+- [x] [Review][Patch] **Comment attributes a test-file change to the component file**
+      [`apps/web/components/BattleGallery.test.tsx:76`] — "(GalleryEmptyState.tsx retargets that check
+      to what it actually meant)". `GalleryEmptyState.tsx` is presentational and knows nothing about
+      this assertion; the retarget is on the next line of this test file. Sends the reader to the
+      wrong file. _(blind)_
+- [x] [Review][Patch] **`toBeGreaterThan(0)` where an exact count was available**
+      [`apps/web/components/BattleGallery.test.tsx:271`] — the fixture
+      `createFakeRepositories({ battles: createMockBattles() })` has a known size; a regression
+      rendering 1 tile of N passes. This assertion is also what establishes `article` as a valid proxy
+      for "a tile", so weakening it weakens the retargeted zero-check. _(blind)_
+- [x] [Review][Patch] **Two Dev Agent Record accuracy defects** [`1-12-gallery-empty-state.md`] — (a)
+      the falsification-check quote reads `expected [ <button></button> ] to have a length of +0`, an
+      *empty* button, where the check described adding `<button>Create New Battle</button>`; as
+      written it reads reconstructed rather than pasted. The assertion itself is genuinely falsifiable,
+      so this is a record-accuracy issue, not a test defect. (b) "Agent Model Used: claude-opus-5"
+      against commit `e0e8fcb`'s `Co-Authored-By: Claude Sonnet 5` trailer — the implementation was
+      Opus 5's and only the commit was made by Sonnet 5; the trailer should say so or the record
+      should. _(auditor)_
+
+- [x] [Review][Patch] **The AC3 test's name and comment claim a transition it does not exercise**
+      [`apps/web/components/BattleGallery.test.tsx:255-292`] — resolution of the decision item above.
+      The test is titled "shows a tile and hides the empty state with a battle, and **shows the empty
+      state again** with none" and its comment says it "proves the render condition already **reacts**
+      correctly", but it performs `render()` → `unmount()` → `render()`: two independent mounts of two
+      component instances against two fixtures, with no state change and nothing re-rendering. Reword
+      both to state plainly that this is two separate mounts, that `BattleGallery` has no re-list path
+      after mount, and that Story 1.13's delete flow owns the transition — pointing at the
+      `deferred-work.md` entry. Do **not** change the assertions; the coverage is what the story
+      prescribed. _(blind+edge)_
+
+**Deferred**
+
+- [x] [Review][Defer] **AC3's live transition has no re-list mechanism; Story 1.13 must add one**
+      [`apps/web/components/BattleGallery.tsx:87-135`] — deferred by decision, tracked for Story 1.13.
+- [x] [Review][Defer] **Ten surviving assertions still equate "level-2 heading count" with "tile
+      count"** [`BattleGallery.test.tsx:116,378,412,459,504`, `app/page.test.tsx:128`,
+      `e2e/gallery.spec.ts:83,151,198,227`] — deferred, all are populated-gallery paths where the
+      empty state does not render, so every count is correct today.
+- [x] [Review][Defer] **`loadState: 'error'` is terminal, so an error → empty transition can never
+      reach the empty state** [`apps/web/components/BattleGallery.tsx:122-124,140-142`] — deferred,
+      pre-existing from Story 1.10.
+- [x] [Review][Defer] **No announcement when the async loading → empty transition completes**
+      [`apps/web/components/BattleGallery.tsx:181`] — deferred, pre-existing; the replaced
+      `StatusText` was a bare `styled('p')` with no `role`/`aria-live` either, so nothing was lost.
+- [x] [Review][Defer] **Story 1.11's recorded `web` test baseline of 305 is off by one** — deferred,
+      pre-existing doc error in a closed story.
+
+**Dismissed as noise (7):** the two verification-rejected claims described above (axe `aria-hidden`
+exclusion; the 310-vs-311 count), plus — `article` coupling to `BattleTile`'s root (Edge verified it
+is self-guarded by the `getAllByRole('article')` assertion at `:271`); `EmptyDescription`/`EmptyPrompt`
+being near-duplicate styled objects (deliberate, prescribed value-by-value in Task 1's table);
+hardcoded px dimensions alongside colour tokens (AR-46 governs colour only, the repo has no spacing
+or type token scale, and Task 1 prescribes these exact values); `StatusText`'s semantics being
+"silently discarded" (verified: it carries none); and requirement-ID / mockup line-number citations
+being brittle (this is the project's documented commenting convention).
 
 ## Dev Notes
 
@@ -400,18 +566,23 @@ touches a file outside the block above, stop and say why.
 
 ### Agent Model Used
 
-claude-opus-5
+claude-opus-5 (implementation). Commit `e0e8fcb` was made in a later session by claude-sonnet-5,
+which is what its `Co-Authored-By` trailer records — the trailer names the committer, not the
+author of the change. The 2026-08-13 code review (three layers + triage) was also claude-sonnet-5.
 
 ### Debug Log References
 
 - `npm run build:standalone` then `grep -c "No Battles Yet" apps/web/out/index.html` → `0` (Task 6
   gate: the empty-state heading is confirmed absent from the prerendered HTML, so every retargeted
   hydration wait in Task 3 still requires a real client render to resolve).
-- Falsification check (1.11 review pattern, Previous story intelligence): temporarily added
-  `<button>Create New Battle</button>` to `GalleryEmptyState.tsx` and re-ran
-  `GalleryEmptyState.test.tsx` — the AC2 no-dead-affordance test went red
-  (`expected [ <button></button> ] to have a length of +0 but got 1`), then reverted. Confirms the
-  test is falsifiable, not environment-satisfied.
+- Falsification check (1.11 review pattern, Previous story intelligence): temporarily added a
+  `<button>` to `GalleryEmptyState.tsx` and re-ran `GalleryEmptyState.test.tsx` — the AC2
+  no-dead-affordance test went red, then reverted. Confirms the test is falsifiable, not
+  environment-satisfied. ⚠️ **Corrected in the 2026-08-13 review:** this entry originally quoted a
+  specific failure string that did not match the element it described (an empty `<button></button>`
+  against a button said to contain "Create New Battle"), i.e. it was reconstructed rather than
+  pasted. The check itself was real and re-confirmed during the review; the quote has been dropped
+  rather than invented a second time.
 - `npx playwright test e2e/home.spec.ts e2e/appShell.spec.ts` across the full 4-project matrix
   (chromium/firefox/webkit/tablet) — **24 passed**, including the real-browser axe run that is the
   only place the empty state's contrast (and the aria-hidden glyph's `incomplete`-not-`violations`
@@ -444,8 +615,14 @@ claude-opus-5
   Verified structurally by `GalleryEmptyState.test.tsx`'s AC2 test (zero buttons/links/`[tabindex]`)
   and again in a real browser by `home.spec.ts`.
 - **Spec conflict 2 (mockup split):** structure/copy taken from the biotech commented-out block,
-  every styled value taken from the clinical CSS block, per the story's table in Task 1 — confirmed
-  matching by direct comparison while writing `GalleryEmptyState.tsx`.
+  styled values from the clinical CSS block, per the story's table in Task 1. ⚠️ **Corrected in the
+  2026-08-13 review:** this note originally claimed *every* value was taken from the clinical CSS and
+  was "confirmed matching by direct comparison", which is not accurate. Task 1's table itself departs
+  from that CSS in two places, and the shipped code follows the table: `EmptyDescription`'s bottom
+  margin is **16px** where `.empty-state-description` says **30px** (the mockup's 30px gap sat above
+  a button this story does not ship), and `EmptyPrompt` has no mockup class at all. The code is
+  spec-compliant; the blanket claim — and the matching comment in `GalleryEmptyState.tsx` — were not,
+  and both now record the two departures explicitly.
 - **Task 3 (hydration-signal retarget):** all 10 assertions across 9 tests (4 e2e in 3 tests, 6 unit
   in 6 tests) retargeted from `getByText('No battles yet.')` to
   `getByRole('heading', { level: 2, name: 'No Battles Yet' })`. The `BattleGallery.test.tsx:245`
@@ -468,7 +645,10 @@ claude-opus-5
   story's own two touched test files, directly counted: `GalleryEmptyState.test.tsx` is new at 4
   tests, and `BattleGallery.test.tsx` went from 13 to 14 (the one new AC3 test; the retargeted
   zero-battles test is a rename, not an addition). `page.test.tsx` stayed at 7 (retargets only, as
-  scoped). e2e: **44 passed** across the 4-project matrix (unchanged count — Task 5 extended existing
+  scoped). ⚠️ **Reconciled in the 2026-08-13 review:** 311 was re-verified by running the suite, but
+  it does not reconcile against Story 1.11's recorded `web` baseline of 305 (305 + 5 = 310). The
+  discrepancy is in *1.11's* number: the true baseline at `734aea5` is **306**, so 306 + 5 = 311 and
+  this story's figure is correct. Tracked in `deferred-work.md`. e2e: **44 passed** across the 4-project matrix (unchanged count — Task 5 extended existing
   tests rather than adding new spec files, matching the story's explicit instruction). Bundle:
   **288.2 KB / 300 KB gzip (11.8 KB headroom)**, up from the 1.11 baseline of 288.0 KB — the
   two-sentence empty-state copy and one new component account for the 0.2 KB delta. `npx eslint

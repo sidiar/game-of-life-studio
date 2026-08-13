@@ -247,16 +247,23 @@ describe('BattleGallery', () => {
     expect(screen.getByText(/cellular battles/i)).toBeInTheDocument();
     expect(screen.getByText(/create your first battle/i)).toBeInTheDocument();
     // "no tile grid": zero rendered BattleTile roots. The empty state's own <h2> means a raw
-    // `heading level 2` count of zero no longer means "no tiles" (GalleryEmptyState.tsx retargets
-    // that check to what it actually meant) — BattleTile's root is styled('article').
+    // `heading level 2` count of zero no longer means "no tiles", so this assertion was retargeted
+    // (here, Story 1.12) to what it always meant — BattleTile's root is styled('article').
     expect(screen.queryAllByRole('article')).toHaveLength(0);
   });
 
-  // AC3, both directions in one test (the AC's own wording: "disappears when the first battle
-  // exists and reappears if all battles are deleted"). Story 1.13 owns the delete flow itself —
-  // this proves the render condition already reacts correctly to "storage holds a battle" vs.
-  // "storage holds none", which is all the condition (BattleGallery.tsx) actually depends on.
-  it('shows a tile and hides the empty state with a battle, and shows the empty state again with none (AC3)', async () => {
+  // AC3, both directions — but as TWO SEPARATE MOUNTS, not a live transition, and the distinction
+  // is load-bearing. BattleGallery has no re-list path after mount: refresh() runs once per effect
+  // run and its dep array is stable once seedStatus settles, so a mounted gallery cannot go
+  // summaries.length > 0 -> 0 at all. What this test proves is that the render condition maps
+  // "storage holds a battle" and "storage holds none" to the right body — which is what the
+  // condition actually depends on, and all Story 1.12 was scoped to ship.
+  //
+  // ⚠️ Story 1.13 (delete) owns the missing edge: it has to lift refresh() out of the effect so a
+  // handler can call it, and only then can the empty state genuinely REAPPEAR in a live session.
+  // Until that lands, nothing here would go red if it never did — see deferred-work.md,
+  // "Deferred from: code review of 1-12-gallery-empty-state".
+  it('renders a tile for a stored battle and the designed empty state for none (AC3, two mounts)', async () => {
     const populated = createFakeRepositories({ battles: createMockBattles() });
     const { unmount } = render(
       <BattleGallery
@@ -267,8 +274,12 @@ describe('BattleGallery', () => {
       />,
     );
 
+    // Exact count, not > 0: createMockBattles() ships two battles, and a regression that rendered
+    // only one of them would satisfy a truthiness check. This assertion is also what establishes
+    // `article` as a sound proxy for "a tile" for the zero-count assertions below and in the AC1
+    // test above, so weakening it weakens those too.
     await waitFor(() => {
-      expect(screen.getAllByRole('article').length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('article')).toHaveLength(2);
     });
     expect(
       screen.queryByRole('heading', { level: 2, name: 'No Battles Yet' }),

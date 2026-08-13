@@ -62,6 +62,11 @@ test.describe('app shell (Story 1.9)', () => {
 
   test('has no axe accessibility violations', async ({ page }) => {
     await page.goto('/');
+    // ⚠️ Same hydration race as home.spec.ts's axe run: page.goto resolves at waitUntil:'load',
+    // against a prerender that says "Loading battles…". Without this wait the shell is scanned with
+    // the placeholder body under it rather than the real Gallery, and reports green either way.
+    await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
+
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
   });
