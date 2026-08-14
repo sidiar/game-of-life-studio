@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/domain';
 import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
@@ -113,7 +114,10 @@ describe('BattleGallery', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+      // Story 1.13 Task 7 retarget: "level-2 heading count" stopped meaning "tile count" once
+      // GalleryEmptyState/DeleteBattleDialog started rendering their own <h2>. article is
+      // BattleTile's own root (styled('article')) and is the sound proxy (established 1.12).
+      expect(screen.getAllByRole('article')).toHaveLength(2);
     });
 
     // The invariant AR-15 actually protects (Story 1.11, conflict 1, architecture.md:274): the
@@ -315,7 +319,9 @@ describe('BattleGallery', () => {
         seedStatus="ready"
       />,
     );
-    await waitFor(() => screen.getAllByRole('heading', { level: 2 }));
+    // Story 1.13 Task 7 retarget: a "tiles have rendered" barrier, same false invariant as the
+    // count assertions above.
+    await waitFor(() => screen.getAllByRole('article'));
     expect((await axe(populatedContainer)).violations).toEqual([]);
 
     const empty = createFakeRepositories();
@@ -386,7 +392,10 @@ describe('BattleGallery', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+      // Story 1.13 Task 7 retarget: "level-2 heading count" stopped meaning "tile count" once
+      // GalleryEmptyState/DeleteBattleDialog started rendering their own <h2>. article is
+      // BattleTile's own root (styled('article')) and is the sound proxy (established 1.12).
+      expect(screen.getAllByRole('article')).toHaveLength(2);
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getAllByRole('img', { name: 'Unknown organism' }).length).toBeGreaterThan(0);
@@ -420,7 +429,7 @@ describe('BattleGallery', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+      expect(screen.getAllByRole('article')).toHaveLength(1);
     });
   });
 
@@ -467,7 +476,7 @@ describe('BattleGallery', () => {
 
     // Every tile's heading renders — metadata is complete before any grid is deserialized.
     await waitFor(() => {
-      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(battleCount);
+      expect(screen.getAllByRole('article')).toHaveLength(battleCount);
     });
 
     await waitFor(() => expect(loadSpy).toHaveBeenCalled());
@@ -512,7 +521,10 @@ describe('BattleGallery', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+        // Story 1.13 Task 7 retarget: "level-2 heading count" stopped meaning "tile count" once
+        // GalleryEmptyState/DeleteBattleDialog started rendering their own <h2>. article is
+        // BattleTile's own root (styled('article')) and is the sound proxy (established 1.12).
+        expect(screen.getAllByRole('article')).toHaveLength(2);
       });
       await waitFor(() => expect(loadSpy).toHaveBeenCalledTimes(2));
       // The canvases are mounted and their paint effects have run — the spies now cover a window
@@ -536,5 +548,234 @@ describe('BattleGallery', () => {
         }
       }
     });
+  });
+});
+
+// Story 1.13 — the delete flow: dialog open/cancel/confirm, AC3's organism protection, and the
+// live >0 -> 0 transition Story 1.12's review deferred to this story (deferred-work.md).
+describe('BattleGallery — delete flow (Story 1.13)', () => {
+  it('opens a dialog naming the clicked battle, without deleting anything yet (AC1)', async () => {
+    const user = userEvent.setup();
+    const [threeWay, grand] = createMockBattles();
+    const repos = createFakeRepositories({
+      battles: [threeWay, grand],
+      organisms: createMockOrganisms(),
+    });
+    const deleteSpy = vi.spyOn(repos.battles, 'delete');
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+
+    // Two battles seeded — proves the dialog names the CLICKED one, not a hardcoded string a
+    // single-battle fixture would satisfy vacuously.
+    await user.click(screen.getByRole('button', { name: `Delete ${grand.name}` }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Delete Battle?' });
+    expect(within(dialog).getByText(new RegExp(grand.name))).toBeInTheDocument();
+    expect(within(dialog).queryByText(new RegExp(threeWay.name))).not.toBeInTheDocument();
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  it("confirming calls battles.delete exactly once with that battle's id, and the Gallery drops to the surviving tile (AC2 confirm)", async () => {
+    const user = userEvent.setup();
+    const [threeWay, grand] = createMockBattles();
+    const repos = createFakeRepositories({
+      battles: [threeWay, grand],
+      organisms: createMockOrganisms(),
+    });
+    const deleteSpy = vi.spyOn(repos.battles, 'delete');
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    await user.click(screen.getByRole('button', { name: `Delete ${grand.name}` }));
+    await user.click(screen.getByRole('button', { name: 'Delete Battle' }));
+
+    await waitFor(() => expect(deleteSpy).toHaveBeenCalledTimes(1));
+    expect(deleteSpy).toHaveBeenCalledWith(grand.id);
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(1));
+    expect(screen.getByRole('heading', { level: 2, name: threeWay.name })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: grand.name })).not.toBeInTheDocument();
+  });
+
+  it('cancelling closes the dialog, never calls battles.delete, and leaves the tile count unchanged (AC2 cancel)', async () => {
+    const user = userEvent.setup();
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      organisms: createMockOrganisms(),
+    });
+    const deleteSpy = vi.spyOn(repos.battles, 'delete');
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    await user.click(screen.getAllByRole('button', { name: /^Delete /u })[0]);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+  });
+
+  it('never calls organisms.delete, and the roster still resolves in full after the delete (AC3)', async () => {
+    const user = userEvent.setup();
+    const [threeWay, grand] = createMockBattles();
+    const organisms = createMockOrganisms();
+    const repos = createFakeRepositories({ battles: [threeWay, grand], organisms });
+    const organismsDeleteSpy = vi.spyOn(repos.organisms, 'delete');
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    await user.click(screen.getByRole('button', { name: `Delete ${grand.name}` }));
+    await user.click(screen.getByRole('button', { name: 'Delete Battle' }));
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(1));
+    expect(organismsDeleteSpy).not.toHaveBeenCalled();
+    // Two assertions, not one: the spy alone would pass if the delete went through some other
+    // path that never touched organisms at all without actually preserving the library.
+    await expect(repos.organisms.list()).resolves.toHaveLength(organisms.length);
+  });
+
+  it('reappears the empty state, live, after deleting the last battle — one mounted instance, no unmount (AC4)', async () => {
+    const user = userEvent.setup();
+    const [threeWay] = createMockBattles();
+    const repos = createFakeRepositories({ battles: [threeWay], organisms: createMockOrganisms() });
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(1));
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'No Battles Yet' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: `Delete ${threeWay.name}` }));
+    await user.click(screen.getByRole('button', { name: 'Delete Battle' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeInTheDocument();
+    });
+    expect(screen.queryAllByRole('article')).toHaveLength(0);
+  });
+
+  it('has no axe violations with the delete dialog open (AC5)', async () => {
+    const user = userEvent.setup();
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      organisms: createMockOrganisms(),
+    });
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    await user.click(screen.getAllByRole('button', { name: /^Delete /u })[0]);
+    await screen.findByRole('dialog');
+
+    // MUI's Dialog PORTALS to document.body, so render()'s own `container` never contains it —
+    // scope the axe run to document.body, not container (Story 1.12 review "tests that cannot
+    // fail" pattern). This is also the measurement for the aria-hidden-focus question the story
+    // banner raises: MUI marks the Gallery's tiles/buttons aria-hidden while the dialog is open
+    // and ships no `inert` anywhere in the package.
+    const results = await axe(document.body);
+    expect(results.violations).toEqual([]);
+  });
+
+  it('Escape closes the dialog without deleting anything', async () => {
+    const user = userEvent.setup();
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      organisms: createMockOrganisms(),
+    });
+    const deleteSpy = vi.spyOn(repos.battles, 'delete');
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    await user.click(screen.getAllByRole('button', { name: /^Delete /u })[0]);
+    await screen.findByRole('dialog');
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+  });
+
+  it('a rejecting delete closes the dialog and renders the alert body', async () => {
+    const user = userEvent.setup();
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      organisms: createMockOrganisms(),
+    });
+    vi.spyOn(repos.battles, 'delete').mockRejectedValue(new Error('boom'));
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    await user.click(screen.getAllByRole('button', { name: /^Delete /u })[0]);
+    await user.click(screen.getByRole('button', { name: 'Delete Battle' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
   });
 });

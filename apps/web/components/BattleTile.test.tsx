@@ -27,6 +27,9 @@ const BASE_PROPS = {
   roster: [],
   showGridLines: true,
   gridColors: null,
+  // Story 1.13. A no-op default so the ~20 render() calls below that don't care about the delete
+  // affordance don't each need their own spy; tests that DO care pass their own vi.fn() instead.
+  onRequestDelete: vi.fn(),
 };
 
 // Several degradation tests below spy console.error to prove a path stays silent. Without this,
@@ -75,13 +78,22 @@ describe('BattleTile', () => {
   // Each dot is individually named — the accessible-name check a mouse-only CSS tooltip (the
   // mockup's ::before pattern) could never pass. role="img", not button: the dot has no activation
   // behaviour, so a button would announce an action that does not exist.
+  //
+  // Story 1.13: the tile now legitimately renders ONE button (delete) elsewhere in the tile, so
+  // "no dot is a button" is asserted per-dot rather than as a blanket zero-buttons count — the
+  // blanket form would fail the moment a real, unrelated button exists anywhere in the tile.
   it('gives each organism dot its own accessible name, and no dot is a button', () => {
     render(<BattleTile {...BASE_PROPS} />);
 
-    expect(screen.getByRole('img', { name: 'Aggressive Colonizer' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Patient Defender' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Chaotic Spreader' })).toBeInTheDocument();
-    expect(screen.queryAllByRole('button')).toEqual([]);
+    const aggressive = screen.getByRole('img', { name: 'Aggressive Colonizer' });
+    const patient = screen.getByRole('img', { name: 'Patient Defender' });
+    const chaotic = screen.getByRole('img', { name: 'Chaotic Spreader' });
+    expect(aggressive).toBeInTheDocument();
+    expect(patient).toBeInTheDocument();
+    expect(chaotic).toBeInTheDocument();
+    for (const dot of [aggressive, patient, chaotic]) {
+      expect(dot.tagName).not.toBe('BUTTON');
+    }
   });
 
   it('is keyboard-focusable through the dots (AC5)', async () => {
@@ -187,6 +199,55 @@ describe('BattleTile', () => {
     const { container } = render(<BattleTile {...BASE_PROPS} name="" />);
     const results = await axe(container);
     expect(results.violations).toEqual([]);
+  });
+});
+
+// Story 1.13, Task 2. jsdom cannot compute :hover/:focus-within-driven `opacity`, so the actual
+// reveal is proven in a real browser (e2e/deleteBattle.spec.ts) — these tests cover the DOM
+// structure and behaviour that CAN be asserted here: the button's accessible name, its glyph, and
+// that it reports the request rather than acting on it itself.
+describe('BattleTile — delete affordance (Story 1.13)', () => {
+  it('names the delete button after the battle, and calls onRequestDelete on click, not the repository', async () => {
+    const user = userEvent.setup();
+    const onRequestDelete = vi.fn();
+    const deleteSpy = vi.spyOn(BASE_PROPS.battles, 'delete');
+    render(<BattleTile {...BASE_PROPS} onRequestDelete={onRequestDelete} />);
+
+    const button = screen.getByRole('button', { name: 'Delete Three-Way Skirmish' });
+    await user.click(button);
+
+    expect(onRequestDelete).toHaveBeenCalledTimes(1);
+    expect(onRequestDelete).toHaveBeenCalledWith();
+    // The tile never calls the repository itself — <BattleGallery> owns that call (AR-2/27: a
+    // component receives repositories as props but a presentational tile must not act on them for
+    // an operation it doesn't own).
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the same "Untitled battle" name the heading uses, so the two cannot drift', () => {
+    render(<BattleTile {...BASE_PROPS} name="   " />);
+    expect(screen.getByRole('button', { name: 'Delete Untitled battle' })).toBeInTheDocument();
+  });
+
+  it('gives two tiles with different names distinct delete-button accessible names', () => {
+    const { unmount } = render(<BattleTile {...BASE_PROPS} name="Triple Threat" />);
+    expect(screen.getByRole('button', { name: 'Delete Triple Threat' })).toBeInTheDocument();
+    unmount();
+
+    render(<BattleTile {...BASE_PROPS} name="Grand Colony War" />);
+    expect(screen.getByRole('button', { name: 'Delete Grand Colony War' })).toBeInTheDocument();
+  });
+
+  it("renders the × glyph as aria-hidden, so it does not double the button's accessible name", () => {
+    const { container } = render(<BattleTile {...BASE_PROPS} />);
+    const glyph = container.querySelector('[data-tile-actions] button span[aria-hidden="true"]');
+    expect(glyph).not.toBeNull();
+    expect(glyph).toHaveTextContent('×');
+  });
+
+  it('is a type="button", never a submit button inside an implicit form context', () => {
+    render(<BattleTile {...BASE_PROPS} />);
+    expect(screen.getByRole('button', { name: /^Delete/ })).toHaveAttribute('type', 'button');
   });
 });
 

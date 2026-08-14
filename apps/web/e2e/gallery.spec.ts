@@ -81,7 +81,10 @@ test.describe('battle gallery (Story 1.10)', () => {
     // Hydration signal before asserting on console errors (appShell.spec.ts:28-37 explains why):
     // the prerendered HTML says "Loading battles…" and only the client effect can reach a tile.
     const headings = page.getByRole('heading', { level: 2 });
-    await expect(headings).toHaveCount(2);
+    // Story 1.13 Task 7: count via `article` (BattleTile's own root), not the heading count — a
+    // level-2 heading no longer means "one tile" once GalleryEmptyState/DeleteBattleDialog render
+    // their own <h2>. `headings` itself stays heading-based below, for the order assertion.
+    await expect(page.getByRole('article')).toHaveCount(2);
 
     // AC2: descending updatedAt — Grand Colony War (2026-07-25T18:15Z) before Three-Way Skirmish
     // (2026-07-20T09:00Z). An ORDER assertion, not two toBeVisible() calls.
@@ -148,7 +151,7 @@ test.describe('battle gallery (Story 1.10)', () => {
     await seedWorkspace(page);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { level: 2 })).toHaveCount(2);
+    await expect(page.getByRole('article')).toHaveCount(2);
 
     // Three-Way Skirmish: 3 organisms, no Conway's Classic.
     const tile = page.locator('article', {
@@ -195,7 +198,7 @@ test.describe('battle gallery (Story 1.10)', () => {
     await seedWorkspace(page, { crowded: true });
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { level: 2 })).toHaveCount(3);
+    await expect(page.getByRole('article')).toHaveCount(3);
 
     // The +n indicator must actually be on screen for this run to mean anything: it is the
     // smallest text in the tile (10px --gol-text-tertiary on --gol-bg-secondary) and therefore
@@ -224,8 +227,8 @@ test.describe('battle gallery (Story 1.10)', () => {
     await seedWorkspace(page, { crowded: true });
     await page.goto('/');
 
-    const headings = page.getByRole('heading', { level: 2 });
-    await expect(headings).toHaveCount(3);
+    // Story 1.13 Task 7: count via `article`, not a heading count — see the first test's comment.
+    await expect(page.getByRole('article')).toHaveCount(3);
     await expect(page.getByRole('heading', { name: 'Crowded Roster' })).toBeVisible();
 
     // Wait for the Gallery's terminal shape rather than sleeping: all three tiles issue their

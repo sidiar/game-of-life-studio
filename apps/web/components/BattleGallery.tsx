@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type BattleSummary, type Organism, type Settings } from '@gol/domain';
 import type { BattleRepository, OrganismRepository, SettingsRepository } from '@gol/persistence';
@@ -8,7 +8,8 @@ import type { WorkspaceSeedStatus } from '@/lib/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallerySort';
 import { resolveTileOrganisms } from '@/lib/tileOrganisms';
 import { readGridColors } from '@/lib/themeColors';
-import BattleTile from './BattleTile';
+import BattleTile, { battleDisplayName } from './BattleTile';
+import DeleteBattleDialog from './DeleteBattleDialog';
 import GalleryEmptyState from './GalleryEmptyState';
 
 export interface BattleGalleryProps {
@@ -65,6 +66,14 @@ const StatusText = styled('p')({
   color: 'var(--gol-text-secondary)',
 });
 
+// Which battle the confirmation dialog is open for. `null` means closed — the parent conditionally
+// renders <DeleteBattleDialog open> off this being non-null, so "closed" and "not asked yet" are
+// the same state (no separate `open` boolean that could drift from it).
+interface ConfirmState {
+  id: string;
+  name: string;
+}
+
 export default function BattleGallery({
   battles,
   organisms,
@@ -72,6 +81,21 @@ export default function BattleGallery({
   seedStatus,
 }: BattleGalleryProps) {
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'idle' });
+
+  // Bumped by reload() (Story 1.13) to re-enter the load effect below without resetting loadState
+  // — see the effect's own comment for why a token rather than a lifted refresh().
+  const [reloadToken, setReloadToken] = useState(0);
+
+  // Which battle the confirmation dialog is open for; null means closed. deletePending gates the
+  // dialog's own buttons while battles.delete() is in flight (Task 3).
+  const [confirming, setConfirming] = useState<ConfirmState | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+
+  // Forced decision 4: focus-restoration target after a successful delete. The tile's Delete
+  // button that opened the dialog is gone from the DOM by the time the dialog closes, so without
+  // an explicit target the browser drops focus to <body> — the same "restarts the tab order at
+  // the top of the document" failure the Story 1.10 review found with TooltipTrigger's blur().
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
   // Resolved ONCE, not per tile: getComputedStyle forces a style recalculation, and at NFR-7.2's
   // 50 tiles that is 50 forced recalcs on one commit if done per-canvas (themeColors.ts).
@@ -132,7 +156,51 @@ export default function BattleGallery({
     return () => {
       live = false;
     };
-  }, [battles, organisms, settings, seedStatus]);
+    // reloadToken is a dependency solely to RE-TRIGGER this effect (Story 1.13's delete flow) —
+    // bumping it tears the effect down (live = false in cleanup) and sets it back up, so the
+    // in-flight-response cancellation above keeps working unchanged. loadState is deliberately
+    // NOT reset to 'idle' on reload: the previous summaries stay on screen while the refetch is in
+    // flight, which is what makes a delete feel instant rather than swapping the whole Gallery for
+    // "Loading battles…" (and re-rendering/re-observing every surviving tile) on every delete.
+  }, [battles, organisms, settings, seedStatus, reloadToken]);
+
+  // Named `reload`, not `refresh`: refresh() is the effect-internal function it re-invokes.
+  const reload = useCallback(() => setReloadToken((n) => n + 1), []);
+
+  const requestDelete = useCallback((id: string, name: string) => {
+    setConfirming({ id, name });
+  }, []);
+
+  const cancelDelete = useCallback(() => {
+    setConfirming(null);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (confirming === null) return;
+    setDeletePending(true);
+    try {
+      // AC3: battles only. Never organisms.delete() — the shared library is workspace-level and a
+      // battle deletion must not touch it.
+      await battles.delete(confirming.id);
+      setConfirming(null);
+      reload();
+      // Deferred one tick, not called synchronously here: MUI's FocusTrap keeps its document-level
+      // `enforceFocus` listener attached until its OWN cleanup effect runs (torn down after React
+      // commits `open=false`), and a synchronous focus() call in this same handler can still be
+      // inside that window — the trap sees focus leave its subtree and pulls it straight back,
+      // silently winning the race (confirmed by e2e: disableRestoreFocus alone did not fix it).
+      // setTimeout(0) runs after React has committed and the trap's cleanup has actually executed.
+      setTimeout(() => titleRef.current?.focus(), 0);
+    } catch {
+      // Forced decision 3: a rejecting delete (CorruptDataError from an unparseable gol:battles)
+      // closes the dialog and reuses the shipped alert body. No retry control, no new copy — see
+      // Task 1's "out of scope" note.
+      setConfirming(null);
+      setLoadState({ kind: 'error' });
+    } finally {
+      setDeletePending(false);
+    }
+  }, [battles, confirming, reload]);
 
   // Derived, not stored: seedStatus === 'error' and loadState === 'error' both mean the same
   // thing to the view, and folding them here (rather than writing seedStatus's error into
@@ -171,7 +239,11 @@ export default function BattleGallery({
   return (
     <section aria-labelledby={HEADING_ID} aria-busy={state.kind === 'loading'}>
       <SectionHeader>
-        <SectionTitle id={HEADING_ID}>Battle Gallery</SectionTitle>
+        {/* tabIndex={-1}: a legal, non-tab-stop programmatic focus target — see the titleRef
+            comment above for why confirmDelete() needs one that isn't the button it just removed. */}
+        <SectionTitle id={HEADING_ID} ref={titleRef} tabIndex={-1}>
+          Battle Gallery
+        </SectionTitle>
         <SectionSubtitle>Your saved cellular competitions</SectionSubtitle>
       </SectionHeader>
       {state.kind === 'loading' && <StatusText>Loading battles…</StatusText>}
@@ -193,10 +265,18 @@ export default function BattleGallery({
               roster={state.roster}
               showGridLines={state.settings.gridLines}
               gridColors={gridColors}
+              onRequestDelete={() => requestDelete(summary.id, battleDisplayName(summary.name))}
             />
           ))}
         </TileGrid>
       )}
+      <DeleteBattleDialog
+        open={confirming !== null}
+        battleName={confirming?.name ?? ''}
+        pending={deletePending}
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
     </section>
   );
 }

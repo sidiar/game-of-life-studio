@@ -58,8 +58,9 @@ describe('Clinical Lab token layer — WCAG AA (AC5)', () => {
   it('parsed at least the expected token count from the shipped CSS', () => {
     // Sanity floor, not an exhaustive list — guards against the regex matching zero tokens
     // (e.g. themes.css moved or its syntax changed) and silently passing every test below with
-    // an empty tokens object.
-    expect(Object.keys(tokens).length).toBeGreaterThanOrEqual(13);
+    // an empty tokens object. Bumped 13 -> 16 in Story 1.13 (--gol-danger, --gol-danger-hover,
+    // --gol-on-danger).
+    expect(Object.keys(tokens).length).toBeGreaterThanOrEqual(16);
   });
 
   describe('text pairs — SC 1.4.3, >= 4.5:1', () => {
@@ -78,6 +79,32 @@ describe('Clinical Lab token layer — WCAG AA (AC5)', () => {
     for (const state of accentStates) {
       it(`on-accent on ${state}`, () => {
         const ratio = contrastRatio(tok('on-accent'), tok(state));
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+
+    // Danger (Story 1.13) — same shape as the accent-state loop above, for the delete dialog's
+    // filled Button (error.main/error.contrastText).
+    const dangerStates = ['danger', 'danger-hover'];
+    for (const state of dangerStates) {
+      it(`on-danger on ${state}`, () => {
+        const ratio = contrastRatio(tok('on-danger'), tok(state));
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  });
+
+  // Danger text on a background — NOT the same loop as the text-pairs block above, because
+  // bg-hover is DELIBERATELY excluded: --gol-danger on --gol-bg-hover measures 4.48, just under
+  // the 4.5 floor, and nothing in the app paints danger TEXT on that surface (BattleTile's delete
+  // button is --gol-text-secondary; only the dialog's filled Delete button is danger, and its
+  // surface is --gol-bg-secondary via MuiDialog's paper override). Adding a bg-hover row here
+  // would fail the gate for a pair the app never renders.
+  describe('danger pairs — SC 1.4.3, >= 4.5:1 (bg-hover excluded — see comment)', () => {
+    const dangerBackgrounds = ['bg-primary', 'bg-secondary'];
+    for (const bg of dangerBackgrounds) {
+      it(`danger on ${bg}`, () => {
+        const ratio = contrastRatio(tok('danger'), tok(bg));
         expect(ratio).toBeGreaterThanOrEqual(4.5);
       });
     }
@@ -129,7 +156,8 @@ describe('channel tokens mirror their hex counterparts', () => {
   }));
 
   it('found the channel tokens', () => {
-    expect(channels.length).toBeGreaterThanOrEqual(7);
+    // Bumped 7 -> 8 in Story 1.13 (--gol-danger-channel).
+    expect(channels.length).toBeGreaterThanOrEqual(8);
   });
 
   for (const { name, rgb } of channels) {

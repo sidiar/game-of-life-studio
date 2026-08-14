@@ -56,11 +56,24 @@
      Backs theme.shape.borderRadius: 0 as well as the two styleOverrides — see lib/theme.ts. */
   --gol-radius: 0px;
 
+  /* Danger (Story 1.13). --warning in the clinical settings mockup (settings.html:15); backs
+     palette.error (theme.ts) — the delete confirmation's filled button and the first consumer of
+     that palette entry. --gol-on-danger departs from the mockup's white .btn-warning text (see
+     the AA-departure comment in themeTokens.test.ts) at 3.55:1; dark-on-danger measures 5.58:1,
+     matching --gol-on-accent's own precedent. --gol-backdrop replaces MuiBackdrop's raw
+     rgba(0,0,0,0.5) default, which AR-46 cannot see because it lives in MUI's source, not ours. */
+  --gol-danger: #ff3366;
+  --gol-danger-hover: #ff4477;
+  --gol-on-danger: #0a0a0a;
+  --gol-danger-channel: 255 51 102;
+  --gol-backdrop: rgb(0 0 0 / 0.6);
+
   /* Interaction state layers (added in code review 2026-08-07). Left unset, MUI fills palette
      .action.* with its own dark-mode defaults — raw rgba() literals that appear in no source
      file, so AR-46 cannot see them, and that a data-theme flip would never change. Every
-     component already on screen reads these, so they are pinned now; the status set
-     (error/warning/info/success) has no consumer until Story 1.13 and is deferred there.
+     component already on screen reads these, so they are pinned now. Story 1.13 pins `error`
+     (the delete dialog's fill); `warning`/`info`/`success`/`grey`/`common` remain Material
+     defaults and stay deferred until each has a real consumer.
      Composed from --gol-text-primary-channel so the overlay colour has one source of truth. */
   --gol-action-active: var(--gol-text-primary);
   --gol-action-hover: rgb(var(--gol-text-primary-channel) / 0.08);

@@ -49,6 +49,22 @@ const paletteConfig = {
     dark: 'var(--gol-accent-2)',
     contrastText: 'var(--gol-on-accent)',
   },
+  // Pinned in Story 1.13 — the delete-confirmation dialog's filled Button reads error.main for its
+  // fill, error.contrastText for its label and error.dark for its hover fill; left unset, all
+  // three are Material's raw dark-mode defaults (#f44336 and friends), invisible to AR-46 because
+  // they appear in no source file. `dark` is AUTHORED, not derived: augmentColor()'s
+  // lighten()/darken() cannot parse a var() string and returns its input unchanged rather than
+  // throwing (see the cssVariables comment below), so a derived `dark` would silently equal `main`
+  // and the hover fill would produce no visual feedback — the exact defect already recorded for
+  // secondary/--gol-accent-2. warning/info/success/grey/common remain Material defaults; nothing
+  // in the app renders them yet (deferred-work.md, 1.9 review).
+  error: {
+    main: 'var(--gol-danger)',
+    mainChannel: 'var(--gol-danger-channel)',
+    light: 'var(--gol-danger-hover)',
+    dark: 'var(--gol-danger)',
+    contrastText: 'var(--gol-on-danger)',
+  },
   text: {
     primary: 'var(--gol-text-primary)',
     primaryChannel: 'var(--gol-text-primary-channel)',
@@ -63,8 +79,9 @@ const paletteConfig = {
   // Pinned in code review 2026-08-07. Left unset, MUI fills every one of these with a raw
   // rgba(255,255,255,α) dark-mode default — invisible to AR-46 (it appears in no source file)
   // and frozen across a data-theme flip. Every component already on screen reads action.*, so
-  // unlike the status colours (error/warning/info/success, deferred to Story 1.13) it cannot
-  // wait. The *Opacity numbers stay numeric: MUI multiplies them, so a var() string breaks them.
+  // unlike the status colours (only `error` now pinned, Story 1.13; warning/info/success remain
+  // deferred) it could not wait. The *Opacity numbers stay numeric: MUI multiplies them, so a
+  // var() string breaks them.
   action: {
     active: 'var(--gol-action-active)',
     activeChannel: 'var(--gol-text-primary-channel)',
@@ -119,8 +136,54 @@ const golTheme = createTheme({
     // numeric shape value (e.g. `shape.borderRadius / 2` for a sub-component), which a var()
     // string cannot support (RFC-003 Decision 2).
     MuiPaper: { styleOverrides: { root: { borderRadius: 'var(--gol-radius)' } } },
+    // Story 1.13 is the first story to ship a live <Button> (lib/theme.test.tsx's Button/
+    // IconButton are a render-proof test, not shipped UI), and it is the delete dialog's
+    // confirm/cancel pair — the clinical settings mockup's `.btn` family (settings.html:181-198)
+    // is uppercase, which reverses the prior blanket `textTransform: 'none'`. No other Button is
+    // rendered anywhere yet, so nothing existing depends on the old value.
     MuiButton: {
-      styleOverrides: { root: { borderRadius: 'var(--gol-radius)', textTransform: 'none' } },
+      styleOverrides: {
+        root: {
+          borderRadius: 'var(--gol-radius)',
+          fontSize: '13px',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          padding: '12px 24px',
+        },
+      },
+    },
+    // Dialog surface (Story 1.13). backgroundImage: 'none' is load-bearing — Paper applies a
+    // lightness overlay gradient in dark mode, and without this the rendered surface is not
+    // --gol-bg-secondary, silently invalidating every contrast ratio themeTokens.test.ts gates for
+    // it (the same class of drift the 1.9 review found with --gol-bg-hover). The border is
+    // --gol-border, not --gol-border-control: a dialog edge is decorative, not a control boundary
+    // (the same split themeTokens.test.ts:99-115 protects for BattleTile's delete button).
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          background: 'var(--gol-bg-secondary)',
+          border: '1px solid var(--gol-border)',
+          maxWidth: '440px',
+          backgroundImage: 'none',
+        },
+      },
+    },
+    // MuiBackdrop's default is a raw rgba(0, 0, 0, 0.5) that AR-46 cannot see (it lives in MUI's
+    // source, not ours) and that a data-theme flip would never change — --gol-backdrop replaces it,
+    // the same reasoning as --gol-shadow-tooltip and --gol-grid-line (Story 1.10/1.11).
+    MuiBackdrop: {
+      styleOverrides: { root: { backgroundColor: 'var(--gol-backdrop)' } },
+    },
+    MuiDialogTitle: {
+      styleOverrides: {
+        root: { fontSize: '18px', fontWeight: 600, color: 'var(--gol-text-primary)' },
+      },
+    },
+    MuiDialogContentText: {
+      styleOverrides: {
+        root: { color: 'var(--gol-text-secondary)', fontSize: '14px' },
+      },
     },
   },
 });

@@ -24,6 +24,13 @@ const MAX_VISIBLE_DOTS = 6;
 // gallery e2e's zero-violations assertion for the whole page over one bad record.
 const UNTITLED_BATTLE = 'Untitled battle';
 
+// Exported (Story 1.13) so <BattleGallery> can compute the identical fallback for the delete
+// dialog's body without a second, independently-maintained copy of this ternary — the tile's own
+// <h2> and the dialog naming the same battle must never be able to drift from each other.
+export function battleDisplayName(name: string): string {
+  return name.trim() === '' ? UNTITLED_BATTLE : name;
+}
+
 export interface BattleTileProps {
   battleId: string;
   name: string;
@@ -36,6 +43,11 @@ export interface BattleTileProps {
   roster: readonly Organism[];
   showGridLines: boolean; // FR-8.7, resolved once by the Gallery
   gridColors: GridRendererColors | null; // null when the theme token layer is absent
+  // Story 1.13 — the parent owns the confirmation dialog and the repository call; this component
+  // only reports the request. No args: the parent already knows this tile's id/name from the
+  // summary it rendered the tile from (AR-2/27 — a repository call belongs to the owner of the
+  // repositories, which is <BattleGallery>, not this presentational component).
+  onRequestDelete(): void;
 }
 
 // Mockup: .battle-tile (clinical-lab-theme/battle-gallery.html:242-255). No `cursor: pointer` —
@@ -53,10 +65,69 @@ const Tile = styled('article')({
     borderColor: 'var(--gol-accent)',
     transform: 'translateY(-2px)',
     boxShadow: 'var(--gol-shadow-tile-hover)',
+    // Story 1.13: reveals TileActions under the SAME hover/focus-within trigger this rule already
+    // uses, giving the keyboard path the delete button's tab-order presence the mouse-only mockup
+    // (`.battle-tile:hover .tile-actions { display: block }`) never had to think about. A plain
+    // attribute selector rather than an Emotion cross-component selector — unambiguous and matches
+    // this file's own Tooltip `[data-open]` precedent below.
+    '& [data-tile-actions]': {
+      opacity: 1,
+    },
   },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
     '&:hover, &:focus-within': { transform: 'none' },
+  },
+});
+
+// Mockup: .tile-actions (clinical-lab-theme/battle-gallery.html:395-400). Departure: the mockup
+// reveals this with `display: none` under `.battle-tile:hover`, which removes the control from the
+// tab order entirely — unsatisfiable against AC5's "keyboard-operable". `opacity` reveals it
+// instead, under the same hover/focus-within trigger `Tile` above already reacts to (via
+// `[data-tile-actions]`, set on this component below), giving the keyboard path the same reveal
+// the mouse path gets — the same parity fix the Story 1.9 review applied to AppNav.
+const TileActions = styled('div')({
+  position: 'absolute',
+  top: '18px',
+  right: '18px',
+  opacity: 0,
+  transition: 'opacity 0.2s',
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
+  },
+});
+
+// Mockup: .action-menu-btn (battle-gallery.html:406-419). Two departures from the literal CSS,
+// both re-applications of rules this repo already wrote down:
+//   1. border: var(--gol-border-control), not var(--gol-border) — SC 1.4.11 needs 3:1 for a
+//      boundary that identifies a CONTROL; --gol-border (#333333) measures only 1.57:1. Repainting
+//      --gol-border itself is the fix themeTokens.test.ts:99-115 explicitly forbids.
+//   2. This is the first real consumer of --gol-bg-hover (deferred from the Story 1.9 review) —
+//      painted here as a RESTING surface, not a hover state.
+const DeleteButton = styled('button')({
+  background: 'var(--gol-bg-hover)',
+  border: '1px solid var(--gol-border-control)',
+  color: 'var(--gol-text-secondary)',
+  width: '28px',
+  height: '28px',
+  padding: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  fontSize: '16px',
+  fontFamily: 'inherit',
+  transition: 'border-color 0.2s, color 0.2s',
+  '&:hover, &:focus-visible': {
+    borderColor: 'var(--gol-accent)',
+    color: 'var(--gol-accent)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
   },
 });
 
@@ -293,7 +364,9 @@ export default function BattleTile({
   roster,
   showGridLines,
   gridColors,
+  onRequestDelete,
 }: BattleTileProps) {
+  const displayName = battleDisplayName(name);
   const visibleDots = organisms.slice(0, MAX_VISIBLE_DOTS);
   const overflow = organisms.slice(MAX_VISIBLE_DOTS);
   const overflowNames = overflow.map((o) => o.name).join(', ');
@@ -301,18 +374,25 @@ export default function BattleTile({
   const [containerRef, inView] = useInView<HTMLDivElement>();
   const [thumbnail, setThumbnail] = useState<ThumbnailState>({ kind: 'idle' });
 
-  // Guards the ONE battles.load() call across StrictMode's double effect invocation — the same
-  // hasRun/mounted pair useWorkspaceSeed.ts uses, and for the same reason: the load must fire
-  // once per tile LIFETIME (not once per effect setup), and the second setup owns the promise the
-  // first setup's cleanup already invalidated.
-  const hasLoadStarted = useRef(false);
+  // Guards the ONE battles.load() call per tile LIFETIME (not once per effect setup — StrictMode's
+  // double invocation, and the same reason useWorkspaceSeed.ts uses a ref rather than relying on
+  // the dependency array). Keyed on the BATTLE ID actually loaded, not a plain boolean (Story 1.13
+  // review deferral, 1.11): the declared deps [inView, gridColors, battles, battleId, roster]
+  // otherwise say something the old `!hasLoadStarted.current` boolean guard did not honour — every
+  // one of them was inert after the first load. `key={summary.id}` in <BattleGallery> already
+  // forces a remount when the id changes, so in practice this guard only has to be TRUTHFUL about
+  // what it depends on; it does not change behaviour today. A roster/battles identity change after
+  // a delete-triggered reload() deliberately does NOT re-fetch this tile's grid (the surviving
+  // battle's grid did not change) — a roster change invalidating an already-painted palette is the
+  // separate, still-open `setPalette` item (deferred-work.md, 1.8 review, owned by Story 2.10).
+  const loadedBattleId = useRef<string | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
 
-    if (inView && gridColors !== null && !hasLoadStarted.current) {
-      hasLoadStarted.current = true;
+    if (inView && gridColors !== null && loadedBattleId.current !== battleId) {
+      loadedBattleId.current = battleId;
       setThumbnail({ kind: 'loading' });
 
       battles
@@ -345,7 +425,7 @@ export default function BattleTile({
   return (
     <Tile>
       <TileHeader>
-        <TileTitle>{name.trim() === '' ? UNTITLED_BATTLE : name}</TileTitle>
+        <TileTitle>{displayName}</TileTitle>
         <TileStats>
           {gridSize.cols} × {gridSize.rows}
         </TileStats>
@@ -384,6 +464,28 @@ export default function BattleTile({
           )}
         </DotRow>
       </TileFooter>
+      {/* DOM-last, not DOM-first: `position: absolute` keeps it visually top-right (matching the
+          mockup) independent of source order, and putting it after the dots in the DOM keeps the
+          established tab order (Story 1.10: first Tab lands on the first organism dot) intact — a
+          destructive "delete this card" action reads naturally as the tile's LAST tab stop, not
+          its first, and moving it earlier silently pulled focus in front of every dot instead. */}
+      <TileActions data-tile-actions="">
+        {/* aria-label carries the battle name so every tile's delete button has a distinct
+            accessible name (AC1); `title` gives the pointer tooltip the mockup's `title="Actions"`
+            provided. The glyph is deliberately a BMP character (Story 1.12 Dev Notes) — outside
+            axe-core's ignoreUnicode/textIsEmojis range, so it gets a REAL color-contrast check
+            rather than landing in `incomplete`, which is what we want for a real control. */}
+        <DeleteButton
+          type="button"
+          aria-label={`Delete ${displayName}`}
+          title={`Delete ${displayName}`}
+          // Wrapped, not passed directly: onRequestDelete's contract is `(): void` — passing it
+          // straight to onClick hands it the DOM MouseEvent as an argument instead.
+          onClick={() => onRequestDelete()}
+        >
+          <span aria-hidden="true">×</span>
+        </DeleteButton>
+      </TileActions>
     </Tile>
   );
 }

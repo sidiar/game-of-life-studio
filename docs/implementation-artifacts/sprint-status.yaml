@@ -56,7 +56,7 @@ development_status:
   1-10-battle-gallery-tiles-sorting: done
   1-11-battle-tile-thumbnails: done
   1-12-gallery-empty-state: done
-  1-13-delete-battle-with-confirmation: backlog
+  1-13-delete-battle-with-confirmation: review
   epic-1-retrospective: optional
 
   # Epic 2: Battle Editor (Edit Mode & Canvas Renderer)
