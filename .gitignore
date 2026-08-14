@@ -23,3 +23,6 @@ playwright/.cache/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
+# Per-machine agent session state (never shared)
+.claude/scheduled_tasks.lock
