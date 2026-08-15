@@ -4,7 +4,7 @@ baseline_commit: d49ce59
 
 # Story 1.13: Delete Battle with Confirmation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -482,6 +482,44 @@ so that I can curate my collection without fear of accidental loss.
   - [x] `npx eslint apps/web` — the pre-existing `BattleGallery.tsx` `exhaustive-deps` warning is
         inherited; report whether Task 1 changed it, and do **not** silence it with a disable
         comment.
+
+### Review Findings
+
+Code review 2026-08-14 against commit `92f384b` (baseline `d49ce59`). Three parallel layers —
+Blind Hunter (diff only), Edge Case Hunter (diff + project read), Acceptance Auditor (diff + spec
++ context docs). 41 raw findings → 33 unique after dedup → 5 dismissed. All three layers
+independently found the cancel-path focus gap; two independently found `error.dark`.
+
+- [x] [Review][Decision → Patch] **Delete button is invisible but tappable on no-hover pointers** — `TileActions` reveals only under `Tile`'s `&:hover, &:focus-within`, and `opacity: 0` leaves the element hit-testable. On touch (incl. the `tablet` Playwright project, which passes because Playwright treats `opacity: 0` as visible) every tile carries an invisible 28×28 destructive control at its top-right. A tap opens a delete confirmation for a button the user never saw. Found independently by all three layers. **Resolved (Sidiar, 2026-08-14): option (a) — add `@media (hover: none) { opacity: 1 }`** so the control is permanently visible on touch pointers rather than inert. [apps/web/components/BattleTile.tsx:64-98]
+- [x] [Review][Decision → Patch] **One component's needs pushed into global theme overrides** — `MuiDialog.styleOverrides.paper.maxWidth: '440px'` applies to every Dialog the app will ever render and silently beats MUI's own `maxWidth="sm|md|lg"` prop (a `paper` styleOverride outranks the prop-driven class), so a future full-screen editor dialog is 440px for non-obvious reasons. `MuiButton.styleOverrides.root` pins `padding: '12px 24px'` / `fontSize: '13px'` unconditioned on `size`, making `small`/`large` indistinguishable from `medium`. Decision J says one immutable theme, which is why these landed there. **Resolved (Sidiar, 2026-08-14): move the component-specific values to `sx` on the call sites** in `DeleteBattleDialog.tsx`, leaving only genuinely global styling in the theme. [apps/web/lib/theme.ts:MuiDialog, MuiButton]
+
+- [x] [Review][Patch] **`disableRestoreFocus` strands focus on `<body>` on every cancel path — AC5 gap** [apps/web/components/DeleteBattleDialog.tsx:60, apps/web/components/BattleGallery.tsx:174-176]
+- [x] [Review][Patch] **`error.dark` is byte-identical to `error.main`, so the destructive confirm button has no hover state** — the exact defect its own comment says it authored `dark` to avoid; `--gol-danger-hover` is on `light`, which no Button variant reads. Fixing this also legitimises the `danger-hover` AA gate row, which currently gates a pair nothing paints [apps/web/lib/theme.ts:62,65]
+- [x] [Review][Patch] **Escape / backdrop during an in-flight delete closes the dialog but the delete still completes** — `pending` disables both Buttons but nothing gates `onClose` [apps/web/components/DeleteBattleDialog.tsx:52]
+- [x] [Review][Patch] **Post-delete focus lands inside a still-`aria-hidden` subtree** — `closeAfterTransition` defers `ModalManager.remove()` to `onExited` (~195ms); the `setTimeout(…, 0)` focus move beats it, so screen readers announce nothing for the move forced decision 4 exists to make announceable [apps/web/components/BattleGallery.tsx:193]
+- [x] [Review][Patch] **Un-inert window during the exit transition re-opens the gap the hook closes** — cleanup fires on `open=false` but aria-hidden persists to `onExited`, so Tab during fade-out reaches background controls the a11y tree calls hidden [apps/web/lib/useInertBackground.ts:40-42]
+- [x] [Review][Patch] **`battleName` blanks to `''` for the ~195ms exit transition** — `setConfirming(null)` clears the name while Dialog keeps children mounted, rendering `“” will be permanently deleted.` during every close [apps/web/components/BattleGallery.tsx:275]
+- [x] [Review][Patch] **`palette.error` is outside `theme.test.tsx`'s "every leaf is a `var(--gol-*)`" walk** — the enumerated list drifted exactly as its own comment warns [apps/web/lib/theme.test.tsx:30-42]
+- [x] [Review][Patch] **Comment claims e2e coverage of the hover/focus reveal that does not exist** — `deleteBattle.spec.ts` has no tile opacity or `[data-tile-actions]` assertion; its only `toHaveCSS('opacity')` is on the dialog. The reveal that makes the control keyboard-reachable ships unverified [apps/web/components/BattleTile.test.tsx:205-207]
+- [x] [Review][Patch] **The open-dialog axe assertions cannot fail for `aria-hidden-focus`** — axe honours `inert`, so the hook excludes the background subtree from its own scan; the test comment claims this run *is* the measurement, and it also describes the pre-fix world in present tense [apps/web/components/BattleGallery.test.tsx:283-288]
+- [x] [Review][Patch] **`loadedBattleId` latches before the promise settles, and `deferred-work.md` overclaims the fix** — a rejected load latches permanently with no retry edge; the entry says "confirmed live" for an observation identical with the old boolean in place, while `BattleTile.tsx` says the change "does not change behaviour today". Four of five declared deps are still ignored [apps/web/components/BattleTile.tsx:388-395, docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] **Bundle comment overstates the breach 3×** — "306.3 KB gzip — 18.1 KB over budget" conflates the delta over the 1.12 baseline (18.1) with the overage against the 300 KB budget (6.3). `deferred-work.md` words the same fact correctly [scripts/check-bundle-size.mjs:18]
+- [x] [Review][Patch] **No synchronous re-entrancy latch on confirm** — the guard tests `confirming !== null`, which is still non-null on a second activation, and `setDeletePending(true)` only disables after commit; a second delete of a removed id can reject into the catch and error out the Gallery after a *successful* delete [apps/web/components/BattleGallery.tsx:178-203]
+- [x] [Review][Patch] **The handler's error write is not guarded by the load effect's `live` flag** — a later-resolving reload silently overwrites the alert, so a failed delete leaves no trace [apps/web/components/BattleGallery.tsx:199]
+- [x] [Review][Patch] **`useInertBackground` restores `inert = false` unconditionally and snapshots once** — no prior-value capture, and body children appended while open are never inerted [apps/web/lib/useInertBackground.ts:34-42]
+- [x] [Review][Patch] **A 100-char unbroken battle name overflows the 440px dialog paper** — `BattleSchema` allows it; `DialogContentText` sets no `overflow-wrap` [apps/web/components/DeleteBattleDialog.tsx:66-68]
+- [x] [Review][Dismissed on inspection] ~~**`accent` on `bg-hover` is ungated**~~ — **false positive, verified 2026-08-14.** `accent` is already in `textTokens` AND in `controlTokens`, and `BACKGROUNDS` already includes `bg-hover`, so the pair is gated twice: `accent on bg-hover` at ≥4.5:1 (SC 1.4.3) and at ≥3:1 (SC 1.4.11), both listed by `vitest --reporter=verbose` and both passing. No row added — a third would have been a duplicate.
+- [x] [Review][Patch] **The deferred focus call is never cancelled** — no `clearTimeout`; confirming and then clicking elsewhere inside the same tick yanks focus back to the heading [apps/web/components/BattleGallery.tsx:193]
+- [x] [Review][Patch] **Task 6's "cannot be reached by `Tab`" assertion was never written** — the test never presses Tab; `not.toBeFocused()` right after open is near-vacuous [apps/web/e2e/deleteBattle.spec.ts:1159-1183]
+- [x] [Review][Patch] **Nothing guards the `await delete` → `reload()` ordering** — Task 5's falsification (a) is recorded as having stayed green and was substituted with a different mutation; the story's own silent-failure trap #1 ships unguarded [apps/web/components/BattleGallery.test.tsx]
+- [x] [Review][Patch] **A test named for two tiles renders one at a time** — `unmount()` between the two renders, so the distinctness property in the title is never exercised [apps/web/components/BattleTile.test.tsx:560-567]
+- [x] [Review][Dismissed on inspection] ~~**Module-level `BASE_PROPS` mutated by `vi.spyOn` with no restore in this file**~~ — **false positive on both halves, verified 2026-08-14.** A file-level `afterEach(() => vi.restoreAllMocks())` already exists at `BattleTile.test.tsx:41` (pre-existing, so it was outside the reviewed diff — the layer only saw the diff). The shared `onRequestDelete: vi.fn()` is a documented deliberate no-op default (`:30-32`); every test that asserts on it passes its own `vi.fn()`.
+- [x] [Review][Patch] **Comment describes conditional rendering the code does not do** — the parent renders `<DeleteBattleDialog>` unconditionally with `open={confirming !== null}`; the unmount is MUI's. Also: the "Task 7 retarget" comment is pasted verbatim three times while two identical retargets get none, and `DeleteBattleDialog.test.tsx`'s portalling comment sits above an unrelated `afterEach` [apps/web/components/BattleGallery.tsx:69-71, BattleGallery.test.tsx:51-106]
+
+- [x] [Review][Defer] **A successful delete whose reload rejects wipes the whole Gallery into a terminal error** [apps/web/components/BattleGallery.tsx:146-148] — deferred, extends the already-recorded terminal-`loadState` item; the retry affordance that fixes it is explicitly out of scope for this story
+- [x] [Review][Defer] **`delete(id)` is keyed on the collection key while `list()` returns each record's own `id`** [packages/persistence/src/localStorageBattleRepository.ts:69-74] — deferred, pre-existing repository semantics; the Gallery already de-duplicates for render but the delete path silently no-ops on a divergent workspace
+
+**Dismissed as noise (5):** the `13 → 16` token-floor bump (verified correct — `HEX_TOKEN_RE` matches 6-digit hex only, so `--gol-backdrop` and `--gol-danger-channel` are rightly outside it, and the channel token has its own `7 → 8` floor); the "previous summaries stay on screen" claim (verified — `refresh()` never writes `loading`); Task 6's `page.reload()` substitution (the `addInitScript` re-seed rationale is correct and the direct `localStorage` read proves the same thing); shipping `useInertBackground` despite the measurement landing in `incomplete` rather than `violations` (the structural argument is sound and e2e proves the mechanism directly); `DeleteButton`'s `transition` omitting `opacity 0.2s` (the opacity transition correctly lives on `TileActions`, the element that animates).
 
 ## Dev Notes
 
@@ -974,9 +1012,55 @@ that actually produced each artifact rather than defaulting to whichever session
   2 new entries added)
 - `docs/implementation-artifacts/sprint-status.yaml` — modified (story status lifecycle)
 
+### Review fixes applied (2026-08-14)
+
+Verification after applying all 22 patches + the 2 resolved decisions — `npm run ci` redirected to
+a file with the exit code echoed separately, not piped:
+
+- **`npm run ci` → exit 0.** `web` **340 passed / 28 files** (up from 336: +4 net — the inert
+  structural test, the delete/re-list ordering guard, the Escape-while-pending guard, and the
+  name-through-transition test; the two-tile naming test was rewritten in place, not added).
+  `@gol/domain` 85, `@gol/persistence` 82, `@gol/test-utils` 75 — all unchanged.
+- **e2e: 88 passed, 4 skipped** across the four-project matrix (was 76). +4 new tests: the
+  hover/focus reveal, its touch counterpart, and focus restoration on both cancel and Escape. The
+  4 skips are the two pointer-specific tests excluding the projects they do not apply to
+  (`test.skip(hasTouch)` / `test.skip(!hasTouch)`), not silenced failures.
+- **Bundle: 306.6 KB gzip, 13.4 KB headroom** against the 320 KB gate — +0.3 KB from moving the
+  Dialog/Button values to `sx`.
+- **ESLint: 0 errors, 1 warning** — the same pre-existing `exhaustive-deps` warning on
+  `BattleGallery.tsx`, not silenced.
+- **Falsification of the three new unit tests** (each broken, confirmed red, reverted): reordering
+  `reload()` ahead of `await battles.delete(id)` → *"expected list to not be called at all, but
+  actually been called 1 times"* — **this is the falsification Task 5 recorded as having stayed
+  green**, now genuinely guarded by holding the delete promise open; removing `useInertBackground`
+  → *"expected false to be true"*; rendering `battleName` instead of the retained name → *"Unable
+  to find an element with the text: /Triple Threat/"*.
+
+Two findings were dismissed during application rather than patched, both verified false positives —
+see the struck-through bullets above. Three defects surfaced only while applying the fixes, none
+predicted by the review:
+
+1. **`disableEscapeKeyDown` no longer exists on MUI v9's Modal.** Escape is always routed through
+   `onClose(event, 'escapeKeyDown')` (`useModal.js:115-125`), so the callback guard is the only
+   available mechanism, not a belt-and-braces pair with the prop.
+2. **React Compiler's lint rules rejected the first shape of two fixes** — `react-hooks/refs`
+   (reading a ref during render, for the retained battle name) and
+   `react-hooks/set-state-in-effect` (for the held-inert flag). Both were rebuilt around a
+   three-phase parent state (`confirming` outliving `dialogOpen`) instead, which is a better model
+   anyway: one piece of state now expresses "a confirmation is on screen in some form", which is
+   exactly the window the background must stay inert for.
+3. **The focus restore failed on WebKit only, twice, for two different reasons.** First a
+   `setTimeout(0)` that could beat React's commit releasing `inert` (replaced with an effect keyed
+   on `confirming` clearing, so the ordering is guaranteed by React rather than by the event loop).
+   Then, after instrumenting the running page: **WebKit does not focus a `<button>` on click**, so
+   `document.activeElement` read in the click handler was `<body>` and the code was faithfully
+   restoring focus to the body. Replaced with a `data-delete-battle-id` lookup at restore time.
+   Chromium and Firefox passed throughout both bugs — the four-project matrix is what caught them.
+
 ## Change Log
 
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-08-13 | 0.1 | Story created from epics.md#Story 1.13 | Sidiar |
 | 2026-08-13 | 1.0 | Implemented: delete affordance, `<DeleteBattleDialog>` (MUI), danger tokens + `palette.error`, the Gallery re-list edge, `hasLoadStarted` fix, heading-count retargets, bundle budget moved 300→320KB (measured), full `npm run ci` gate green, 4-project e2e matrix green | Claude (claude-sonnet-5) |
+| 2026-08-14 | 1.1 | Code review (3 parallel layers, 41 raw → 33 unique findings): 22 patches + 2 decisions applied, 2 deferred, 7 dismissed. Headline fixes — focus restored on every cancel path (AC5 gap), `error.dark` no longer identical to `error.main`, Escape ignored mid-delete, dialog close-transition lifecycle reworked (inert + name + focus), touch reveal, re-entrancy latch, stale-error guard. `npm run ci` exit 0; 340 unit / 88 e2e | Claude (claude-opus-5) |

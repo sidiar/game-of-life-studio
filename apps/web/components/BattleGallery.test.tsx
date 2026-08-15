@@ -55,6 +55,11 @@ function enableThumbnails({ visibleCount }: { visibleCount: number }) {
   return CappedIntersectionObserver;
 }
 
+// Tile counts throughout this file read `getAllByRole('article')`, never a level-2 heading count
+// (Story 1.13 Task 7). "Level-2 heading count" stopped meaning "tile count" once GalleryEmptyState
+// and DeleteBattleDialog started rendering their own <h2>; `article` is BattleTile's own root
+// (styled('article')) and is the sound proxy, established in 1.12. The rationale lives here rather
+// than beside each of the six retargeted sites, which is where it was pasted three times.
 describe('BattleGallery', () => {
   // AC1/AR-15, RETARGETED (Story 1.11, conflict 1, architecture.md:274): the tile LIST is still
   // summary-derived with zero grid deserialization — listFull() is still never called, unchanged
@@ -114,9 +119,6 @@ describe('BattleGallery', () => {
     );
 
     await waitFor(() => {
-      // Story 1.13 Task 7 retarget: "level-2 heading count" stopped meaning "tile count" once
-      // GalleryEmptyState/DeleteBattleDialog started rendering their own <h2>. article is
-      // BattleTile's own root (styled('article')) and is the sound proxy (established 1.12).
       expect(screen.getAllByRole('article')).toHaveLength(2);
     });
 
@@ -319,7 +321,7 @@ describe('BattleGallery', () => {
         seedStatus="ready"
       />,
     );
-    // Story 1.13 Task 7 retarget: a "tiles have rendered" barrier, same false invariant as the
+    // A "tiles have rendered" barrier, same false invariant as the
     // count assertions above.
     await waitFor(() => screen.getAllByRole('article'));
     expect((await axe(populatedContainer)).violations).toEqual([]);
@@ -392,9 +394,6 @@ describe('BattleGallery', () => {
     );
 
     await waitFor(() => {
-      // Story 1.13 Task 7 retarget: "level-2 heading count" stopped meaning "tile count" once
-      // GalleryEmptyState/DeleteBattleDialog started rendering their own <h2>. article is
-      // BattleTile's own root (styled('article')) and is the sound proxy (established 1.12).
       expect(screen.getAllByRole('article')).toHaveLength(2);
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -521,9 +520,6 @@ describe('BattleGallery', () => {
       );
 
       await waitFor(() => {
-        // Story 1.13 Task 7 retarget: "level-2 heading count" stopped meaning "tile count" once
-        // GalleryEmptyState/DeleteBattleDialog started rendering their own <h2>. article is
-        // BattleTile's own root (styled('article')) and is the sound proxy (established 1.12).
         expect(screen.getAllByRole('article')).toHaveLength(2);
       });
       await waitFor(() => expect(loadSpy).toHaveBeenCalledTimes(2));
@@ -719,11 +715,133 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
 
     // MUI's Dialog PORTALS to document.body, so render()'s own `container` never contains it —
     // scope the axe run to document.body, not container (Story 1.12 review "tests that cannot
-    // fail" pattern). This is also the measurement for the aria-hidden-focus question the story
-    // banner raises: MUI marks the Gallery's tiles/buttons aria-hidden while the dialog is open
-    // and ships no `inert` anywhere in the package.
+    // fail" pattern).
+    //
+    // ⚠️ This run does NOT measure aria-hidden-focus, despite what this comment claimed before the
+    // 2026-08-14 review. axe honours `inert` and skips the subtree entirely, so once
+    // useInertBackground has run the background is outside the scan and the rule cannot fire here
+    // whether the hook is correct or not. The hook's mechanism is asserted directly instead —
+    // structurally in the test below, and in a real browser by e2e/deleteBattle.spec.ts's
+    // `closest('[inert]')` and Tab-cycle checks. What this run still covers is everything else the
+    // OPEN DIALOG contributes: its roles, its labelling, and its own colour contrast.
     const results = await axe(document.body);
     expect(results.violations).toEqual([]);
+  });
+
+  // The assertion the axe run above cannot make. Not a colour or layout check — purely structural,
+  // which is exactly what jsdom can prove: every background element MUI marked aria-hidden must
+  // also be inert, so the "hidden from assistive tech" claim and "reachable by Tab" cannot diverge.
+  it('makes every aria-hidden background sibling inert while the dialog is open', async () => {
+    const user = userEvent.setup();
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      organisms: createMockOrganisms(),
+    });
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    await user.click(screen.getAllByRole('button', { name: /^Delete /u })[0]);
+    await screen.findByRole('dialog');
+
+    const hidden = Array.from(document.body.children).filter(
+      (el) => el.getAttribute('aria-hidden') === 'true',
+    );
+    // Guards the guard: if MUI ever stops aria-hiding siblings, an empty list would make the
+    // every() below vacuously true.
+    expect(hidden.length).toBeGreaterThan(0);
+    expect(hidden.every((el) => (el as HTMLElement).inert)).toBe(true);
+  });
+
+  // MUI keeps the dialog's children mounted for the whole exit transition. Clearing the battle
+  // name at close time (rather than at onExited, which is what <BattleGallery> now waits for) put
+  // a visible `“” will be permanently deleted.` on screen for those frames — on EVERY close, both
+  // cancel and confirm (code review 2026-08-14).
+  it('keeps the battle name in the dialog body for the whole close transition', async () => {
+    const user = userEvent.setup();
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      organisms: createMockOrganisms(),
+    });
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    const trigger = screen.getAllByRole('button', { name: /^Delete /u })[0];
+    const battleName = trigger.getAttribute('aria-label')?.replace(/^Delete /, '') ?? '';
+    expect(battleName).not.toBe('');
+
+    await user.click(trigger);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(battleName);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Mid-transition: still mounted, still naming the battle. The empty-quote form must never
+    // appear at any point in the close.
+    expect(dialog).toHaveTextContent(battleName);
+    expect(dialog).not.toHaveTextContent('“”');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  // Silent-failure trap 1, finally guarded (code review 2026-08-14). Task 5's falsification (a)
+  // — moving reload() ahead of `await battles.delete(id)` — stayed GREEN against the whole suite,
+  // because createFakeRepositories' synchronous store lets the reordered delete finish before any
+  // waitFor barrier can observe the difference. Holding the delete promise open is what makes the
+  // ordering observable: with the reordering in place, list() is called during the click instead
+  // of after the resolve, and the assertion below goes red.
+  it('re-lists only after battles.delete() resolves, never before', async () => {
+    const user = userEvent.setup();
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      organisms: createMockOrganisms(),
+    });
+
+    let resolveDelete: (() => void) | undefined;
+    const deleteSpy = vi.spyOn(repos.battles, 'delete').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = () => resolve();
+        }),
+    );
+
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+
+    // Spied only now, so the mount's own list() call is not in the count.
+    const listSpy = vi.spyOn(repos.battles, 'list');
+
+    await user.click(screen.getAllByRole('button', { name: /^Delete /u })[0]);
+    await user.click(screen.getByRole('button', { name: 'Delete Battle' }));
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(listSpy).not.toHaveBeenCalled();
+
+    resolveDelete?.();
+    await waitFor(() => expect(listSpy).toHaveBeenCalledTimes(1));
   });
 
   it('Escape closes the dialog without deleting anything', async () => {

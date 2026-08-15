@@ -73,6 +73,56 @@ test.describe('delete battle with confirmation (Story 1.13)', () => {
     expect(stored).not.toHaveProperty(deletedBattle.id);
   });
 
+  // The reveal BattleTile.test.tsx cannot assert: jsdom computes no :hover/:focus-within opacity,
+  // so this is the only place the control's visibility is actually proven. Task 2's departure from
+  // the mockup (opacity rather than display: none, so the button keeps its place in the tab order)
+  // is only defensible if the keyboard path really does reveal it.
+  test('reveals the delete button on hover and on keyboard focus, and hides it otherwise', async ({
+    page,
+    hasTouch,
+  }) => {
+    test.skip(
+      hasTouch,
+      'hover-gated reveal does not apply to a touch pointer — @media (hover: none) pins it visible, covered by the test below',
+    );
+
+    await seedWorkspace(page);
+    await page.goto('/');
+
+    const tile = page.getByRole('article').filter({ hasText: FIRST_BATTLE });
+    const actions = tile.locator('[data-tile-actions]');
+
+    await expect(actions).toHaveCSS('opacity', '0');
+
+    await tile.hover();
+    await expect(actions).toHaveCSS('opacity', '1');
+
+    // Move the pointer away, then reach the same tile by keyboard: focus-within must reveal it on
+    // its own, with no pointer involved.
+    await page.mouse.move(0, 0);
+    await expect(actions).toHaveCSS('opacity', '0');
+
+    await tile.getByRole('button', { name: `Delete ${FIRST_BATTLE}` }).focus();
+    await expect(actions).toHaveCSS('opacity', '1');
+  });
+
+  // The other half of the same rule. A pointer that cannot hover never fires the reveal, and
+  // opacity: 0 does not stop hit-testing — so before the 2026-08-14 review every tile on a touch
+  // device carried an invisible but fully tappable destructive control. @media (hover: none) pins
+  // it visible instead; this is the test that would go red if that branch were dropped.
+  test('keeps the delete button permanently visible on a touch pointer', async ({
+    page,
+    hasTouch,
+  }) => {
+    test.skip(!hasTouch, 'the touch branch only applies to a no-hover pointer');
+
+    await seedWorkspace(page);
+    await page.goto('/');
+
+    const tile = page.getByRole('article').filter({ hasText: FIRST_BATTLE });
+    await expect(tile.locator('[data-tile-actions]')).toHaveCSS('opacity', '1');
+  });
+
   test('Escape cancels — nothing changes in storage (AC2 cancel)', async ({ page }) => {
     await seedWorkspace(page);
     await page.goto('/');
@@ -173,6 +223,54 @@ test.describe('delete battle with confirmation (Story 1.13)', () => {
     // no-op, unlike Tab (which the accessibility-tree exclusion above already rules out).
     await otherDeleteButton.evaluate((el) => (el as HTMLElement).focus());
     await expect(otherDeleteButton).not.toBeFocused();
+
+    // Task 6's assertion, written for real: Tab all the way round the dialog's focus cycle and
+    // confirm focus never lands on a background control. The `not.toBeFocused()` above is close to
+    // vacuous on its own — nothing had focused the button — so the escape path needs Tab itself.
+    // Four presses is comfortably more than the dialog's two tabbables, so a leak would show.
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Tab');
+      const focusedInDialog = await page.evaluate(
+        () => document.activeElement?.closest('[role="dialog"]') !== null,
+      );
+      expect(focusedInDialog).toBe(true);
+    }
+  });
+
+  test('cancelling returns focus to the delete button that opened the dialog, not <body>', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/');
+
+    const trigger = page.getByRole('button', { name: `Delete ${FIRST_BATTLE}` });
+    await expect(page.getByRole('article')).toHaveCount(2);
+    await trigger.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // `disableRestoreFocus` turns MUI's own restore off for every close path, not just the
+    // post-delete one, so without an explicit move this lands on <body> — the "tab order restarts
+    // at the top of the document" failure forced decision 4 exists to prevent (code review
+    // 2026-08-14). Unlike the delete path, the trigger is still mounted here, so it is the target.
+    await expect(trigger).toBeFocused();
+  });
+
+  test('Escape also returns focus to the delete button that opened the dialog', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/');
+
+    const trigger = page.getByRole('button', { name: `Delete ${FIRST_BATTLE}` });
+    await trigger.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(trigger).toBeFocused();
   });
 
   test('a successful delete moves focus to the Gallery heading, not <body>', async ({ page }) => {

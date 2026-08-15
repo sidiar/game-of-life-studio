@@ -27,11 +27,15 @@ describe('golTheme', () => {
     expect(golTheme.palette.mode).toBe('dark');
   });
 
-  it('every palette.background / primary / secondary / text / action leaf, plus divider, is a --gol-* var()', () => {
+  it('every palette.background / primary / secondary / error / text / action leaf, plus divider, is a --gol-* var()', () => {
     assertAllVarGol({
       background: golTheme.palette.background,
       primary: golTheme.palette.primary,
       secondary: golTheme.palette.secondary,
+      // error joined the walk in code review 2026-08-14, when Story 1.13 pinned it — the exact
+      // drift this test's own comment predicts, a colour added without a matching test line.
+      // AR-46 would have caught a raw hex here, but not a bare 'red' or an rgba() string.
+      error: golTheme.palette.error,
       text: golTheme.palette.text,
       // action joined the walk in code review 2026-08-07, when it was pinned to tokens. Its
       // *Opacity members are numbers and are skipped by the walk's typeof check — MUI multiplies

@@ -8,6 +8,7 @@ import type { WorkspaceSeedStatus } from '@/lib/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallerySort';
 import { resolveTileOrganisms } from '@/lib/tileOrganisms';
 import { readGridColors } from '@/lib/themeColors';
+import { useInertBackground } from '@/lib/useInertBackground';
 import BattleTile, { battleDisplayName } from './BattleTile';
 import DeleteBattleDialog from './DeleteBattleDialog';
 import GalleryEmptyState from './GalleryEmptyState';
@@ -66,9 +67,10 @@ const StatusText = styled('p')({
   color: 'var(--gol-text-secondary)',
 });
 
-// Which battle the confirmation dialog is open for. `null` means closed — the parent conditionally
-// renders <DeleteBattleDialog open> off this being non-null, so "closed" and "not asked yet" are
-// the same state (no separate `open` boolean that could drift from it).
+// Which battle the confirmation dialog is showing. Non-null from the moment delete is requested
+// until the dialog's close transition has fully finished — NOT the same window as the dialog's
+// `open` prop, which goes false at the start of that transition. See the two state declarations
+// in the component for why the phases are tracked separately.
 interface ConfirmState {
   id: string;
   name: string;
@@ -86,16 +88,91 @@ export default function BattleGallery({
   // — see the effect's own comment for why a token rather than a lifted refresh().
   const [reloadToken, setReloadToken] = useState(0);
 
-  // Which battle the confirmation dialog is open for; null means closed. deletePending gates the
-  // dialog's own buttons while battles.delete() is in flight (Task 3).
+  // Two states, not one, because the dialog has three phases and not two: open, EXITING, closed.
+  // `dialogOpen` drives the fade; `confirming` outlives it and is cleared only once the transition
+  // has finished (handleDialogExited). MUI keeps the dialog's children mounted for that whole
+  // ~195ms, so clearing the name at close time rendered a visible `“” will be permanently
+  // deleted.` on the way out (code review 2026-08-14). `confirming !== null` is therefore exactly
+  // the window "a confirmation is on screen in some form", which is what the background needs to
+  // stay inert for.
   const [confirming, setConfirming] = useState<ConfirmState | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  // deletePending gates the dialog's own buttons while battles.delete() is in flight (Task 3).
   const [deletePending, setDeletePending] = useState(false);
+
+  // Called here rather than inside <DeleteBattleDialog> so it spans the exit transition too: MUI
+  // clears the background's aria-hidden from ModalManager.remove(), which closeAfterTransition
+  // defers to the transition's end (Modal/useModal.js:177-181). Releasing inert at close time
+  // would leave a window in which the background is aria-hidden AND tabbable again — the exact
+  // state the hook exists to prevent, reachable by pressing Tab during the fade-out. Being the
+  // PARENT effect is also what keeps the ordering right: child effects (MUI's focus trap moving
+  // focus onto Cancel) run first, so this never inerts a subtree that still holds focus.
+  useInertBackground(confirming !== null);
 
   // Forced decision 4: focus-restoration target after a successful delete. The tile's Delete
   // button that opened the dialog is gone from the DOM by the time the dialog closes, so without
   // an explicit target the browser drops focus to <body> — the same "restarts the tab order at
   // the top of the document" failure the Story 1.10 review found with TooltipTrigger's blur().
   const titleRef = useRef<HTMLHeadingElement>(null);
+
+  // Where focus goes once the close transition has finished; null means "no move pending".
+  // 'trigger' is resolved by DOM lookup at restore time rather than captured as an element at
+  // click time, because WebKit does not focus a <button> on click — reading document.activeElement
+  // in the click handler yields <body> there, and the restore silently no-ops on that engine alone
+  // (code review 2026-08-14). `disableRestoreFocus` turns MUI's own restore off for EVERY path,
+  // not just the post-delete one, which is why cancel needs an explicit target at all.
+  const focusAfterExitRef = useRef<
+    { kind: 'trigger'; battleId: string } | { kind: 'heading' } | null
+  >(null);
+
+  // A synchronous latch, unlike `deletePending` (state, and therefore only observable after a
+  // commit): two activations dispatched before that commit — a double-click, or Enter and click
+  // together — would both pass a `deletePending`-based guard and both call battles.delete(). The
+  // second, against an id the first already removed, resolves into the catch and flips the whole
+  // Gallery to the error body after a SUCCESSFUL delete.
+  const deleteInFlightRef = useRef(false);
+
+  // Bumped whenever something writes loadState from outside the load effect. The effect captures
+  // its own value and discards its result if it no longer matches, so a refresh() still in flight
+  // from an earlier reload() cannot resolve on top of a newer error — which would silently erase
+  // the alert for a delete that actually failed (code review 2026-08-14).
+  const loadGenRef = useRef(0);
+
+  // The focus move for every dialog close path, run as an EFFECT keyed on the confirmation
+  // clearing rather than from a timer inside the exit callback. Ordering is the whole point and it
+  // has to be guaranteed, not raced (code review 2026-08-14): by the time this runs, MUI has
+  // cleared the background's aria-hidden (ModalManager.remove(), synchronous right after
+  // onTransitionExited) and useInertBackground's cleanup has released `inert` — React runs all
+  // cleanups for a commit before any setups, and that hook is declared above this one. Focusing
+  // any earlier targets a node that is still inert, where focus() is a spec-mandated no-op: a
+  // setTimeout(0) here passed on Chromium and Firefox and failed on WebKit, which is exactly the
+  // kind of ordering that must not be left to the event loop.
+  useEffect(() => {
+    if (confirming !== null) return;
+
+    const intent = focusAfterExitRef.current;
+    if (intent === null) return;
+    focusAfterExitRef.current = null;
+
+    // Do not steal focus the user has already placed somewhere real during the ~195ms transition.
+    // "Loose" is <body>, nothing, or still inside the dialog that is closing — that last case is
+    // not hypothetical: on WebKit this effect runs while the closing dialog is still mounted, so
+    // activeElement is its Cancel button, and a body-only check would skip the restore there.
+    const active = document.activeElement;
+    const focusIsLoose =
+      active === null || active === document.body || active.closest('[role="dialog"]') !== null;
+    if (!focusIsLoose) return;
+
+    // Looked up now, not held as a captured element: on the delete path the trigger went with its
+    // tile, and querySelector simply returns null — which falls through to the heading, the same
+    // outcome forced decision 4 specifies.
+    const trigger =
+      intent.kind === 'trigger'
+        ? document.querySelector<HTMLElement>(`[data-delete-battle-id="${intent.battleId}"]`)
+        : null;
+
+    (trigger ?? titleRef.current)?.focus();
+  }, [confirming]);
 
   // Resolved ONCE, not per tile: getComputedStyle forces a style recalculation, and at NFR-7.2's
   // 50 tiles that is 50 forced recalcs on one commit if done per-canvas (themeColors.ts).
@@ -116,6 +193,9 @@ export default function BattleGallery({
     if (seedStatus !== 'ready') return;
 
     let live = true;
+    // Paired with loadGenRef: `live` only covers this effect's own teardown, which a setLoadState
+    // from an event handler does not trigger. See the ref's declaration.
+    const gen = ++loadGenRef.current;
 
     // Named rather than inlined so the shape Story 1.13's delete flow needs
     // (`await battles.delete(id); …`) is already written; it will have to be lifted out of this
@@ -141,10 +221,11 @@ export default function BattleGallery({
         settings.load().catch(() => DEFAULT_SETTINGS),
       ])
         .then(([summaries, roster, loadedSettings]) => {
-          if (live) setLoadState({ kind: 'ready', summaries, roster, settings: loadedSettings });
+          if (live && gen === loadGenRef.current)
+            setLoadState({ kind: 'ready', summaries, roster, settings: loadedSettings });
         })
         .catch(() => {
-          if (live) setLoadState({ kind: 'error' });
+          if (live && gen === loadGenRef.current) setLoadState({ kind: 'error' });
         });
     }
     refresh();
@@ -169,35 +250,49 @@ export default function BattleGallery({
 
   const requestDelete = useCallback((id: string, name: string) => {
     setConfirming({ id, name });
+    setDialogOpen(true);
   }, []);
 
-  const cancelDelete = useCallback(() => {
+  // Only once the exit transition has finished is it safe to drop the name the dialog was still
+  // rendering and to release the background from inert. Clearing `confirming` does both, and is
+  // what schedules the focus effect above.
+  const handleDialogExited = useCallback(() => {
     setConfirming(null);
   }, []);
 
+  const cancelDelete = useCallback(() => {
+    // The tile's Delete button is still mounted on this path, so it is the correct restore target
+    // — anything else moves the keyboard user somewhere they did not ask to go.
+    if (confirming !== null)
+      focusAfterExitRef.current = { kind: 'trigger', battleId: confirming.id };
+    setDialogOpen(false);
+  }, [confirming]);
+
   const confirmDelete = useCallback(async () => {
-    if (confirming === null) return;
+    if (confirming === null || deleteInFlightRef.current) return;
+    deleteInFlightRef.current = true;
     setDeletePending(true);
     try {
       // AC3: battles only. Never organisms.delete() — the shared library is workspace-level and a
       // battle deletion must not touch it.
       await battles.delete(confirming.id);
-      setConfirming(null);
+      // The tile that owned the trigger button is about to unmount, so the Gallery heading is the
+      // restore target; handleDialogExited performs the move once the transition has finished.
+      focusAfterExitRef.current = { kind: 'heading' };
+      setDialogOpen(false);
       reload();
-      // Deferred one tick, not called synchronously here: MUI's FocusTrap keeps its document-level
-      // `enforceFocus` listener attached until its OWN cleanup effect runs (torn down after React
-      // commits `open=false`), and a synchronous focus() call in this same handler can still be
-      // inside that window — the trap sees focus leave its subtree and pulls it straight back,
-      // silently winning the race (confirmed by e2e: disableRestoreFocus alone did not fix it).
-      // setTimeout(0) runs after React has committed and the trap's cleanup has actually executed.
-      setTimeout(() => titleRef.current?.focus(), 0);
     } catch {
       // Forced decision 3: a rejecting delete (CorruptDataError from an unparseable gol:battles)
       // closes the dialog and reuses the shipped alert body. No retry control, no new copy — see
       // Task 1's "out of scope" note.
-      setConfirming(null);
+      focusAfterExitRef.current = { kind: 'heading' };
+      setDialogOpen(false);
+      // Bumped so an in-flight refresh() from an earlier reload() cannot resolve 'ready' on top of
+      // this and erase the alert for a delete that genuinely failed.
+      loadGenRef.current++;
       setLoadState({ kind: 'error' });
     } finally {
+      deleteInFlightRef.current = false;
       setDeletePending(false);
     }
   }, [battles, confirming, reload]);
@@ -271,11 +366,12 @@ export default function BattleGallery({
         </TileGrid>
       )}
       <DeleteBattleDialog
-        open={confirming !== null}
+        open={dialogOpen}
         battleName={confirming?.name ?? ''}
         pending={deletePending}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+        onExited={handleDialogExited}
       />
     </section>
   );

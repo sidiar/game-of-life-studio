@@ -56,13 +56,16 @@ const paletteConfig = {
   // lighten()/darken() cannot parse a var() string and returns its input unchanged rather than
   // throwing (see the cssVariables comment below), so a derived `dark` would silently equal `main`
   // and the hover fill would produce no visual feedback — the exact defect already recorded for
-  // secondary/--gol-accent-2. warning/info/success/grey/common remain Material defaults; nothing
-  // in the app renders them yet (deferred-work.md, 1.9 review).
+  // secondary/--gol-accent-2. `dark` therefore carries --gol-danger-hover: Button reads `dark` and
+  // ONLY `dark` for its contained hover fill (Button.js:174), so pointing the hover shade at
+  // `light` instead leaves the destructive control with no hover state at all while looking
+  // plausible. warning/info/success/grey/common remain Material defaults; nothing in the app
+  // renders them yet (deferred-work.md, 1.9 review).
   error: {
     main: 'var(--gol-danger)',
     mainChannel: 'var(--gol-danger-channel)',
-    light: 'var(--gol-danger-hover)',
-    dark: 'var(--gol-danger)',
+    light: 'var(--gol-danger)',
+    dark: 'var(--gol-danger-hover)',
     contrastText: 'var(--gol-on-danger)',
   },
   text: {
@@ -141,15 +144,17 @@ const golTheme = createTheme({
     // confirm/cancel pair — the clinical settings mockup's `.btn` family (settings.html:181-198)
     // is uppercase, which reverses the prior blanket `textTransform: 'none'`. No other Button is
     // rendered anywhere yet, so nothing existing depends on the old value.
+    // Only size-independent styling lives here. `fontSize` and `padding` were pulled back out to
+    // the call sites (code review 2026-08-14): set on `root`, they apply to every size, so
+    // size="small" and size="large" render identically to medium — MUI's own size styles are
+    // variant-keyed and lose to a root override. A future Button that wants a size gets one.
     MuiButton: {
       styleOverrides: {
         root: {
           borderRadius: 'var(--gol-radius)',
-          fontSize: '13px',
           fontWeight: 600,
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
-          padding: '12px 24px',
         },
       },
     },
@@ -159,12 +164,15 @@ const golTheme = createTheme({
     // it (the same class of drift the 1.9 review found with --gol-bg-hover). The border is
     // --gol-border, not --gol-border-control: a dialog edge is decorative, not a control boundary
     // (the same split themeTokens.test.ts:99-115 protects for BattleTile's delete button).
+    // maxWidth is NOT set here (code review 2026-08-14): a styleOverride on `paper` outranks the
+    // class MUI's own maxWidth="sm|md|lg" prop applies, so pinning a width here would silently
+    // defeat that prop for every dialog the app ever adds. The delete dialog's 440px is set at its
+    // own call site instead.
     MuiDialog: {
       styleOverrides: {
         paper: {
           background: 'var(--gol-bg-secondary)',
           border: '1px solid var(--gol-border)',
-          maxWidth: '440px',
           backgroundImage: 'none',
         },
       },

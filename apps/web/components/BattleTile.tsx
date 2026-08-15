@@ -92,6 +92,14 @@ const TileActions = styled('div')({
   right: '18px',
   opacity: 0,
   transition: 'opacity 0.2s',
+  // A pointer that cannot hover never fires the reveal above, and opacity: 0 does NOT remove the
+  // button from hit-testing — so on touch every tile carried an invisible but fully tappable
+  // destructive control, and a tap opened a delete confirmation for a button the user never saw
+  // (code review 2026-08-14; Playwright's own visibility check treats opacity: 0 as visible, which
+  // is why the tablet project never caught it). Permanently visible there instead.
+  '@media (hover: none)': {
+    opacity: 1,
+  },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
   },
@@ -380,11 +388,17 @@ export default function BattleTile({
   // review deferral, 1.11): the declared deps [inView, gridColors, battles, battleId, roster]
   // otherwise say something the old `!hasLoadStarted.current` boolean guard did not honour — every
   // one of them was inert after the first load. `key={summary.id}` in <BattleGallery> already
-  // forces a remount when the id changes, so in practice this guard only has to be TRUTHFUL about
-  // what it depends on; it does not change behaviour today. A roster/battles identity change after
-  // a delete-triggered reload() deliberately does NOT re-fetch this tile's grid (the surviving
-  // battle's grid did not change) — a roster change invalidating an already-painted palette is the
-  // separate, still-open `setPalette` item (deferred-work.md, 1.8 review, owned by Story 2.10).
+  // forces a remount when the id changes, so on the delete path this guard only has to be TRUTHFUL
+  // about what it depends on; it does not change the happy-path behaviour. A roster/battles
+  // identity change after a delete-triggered reload() deliberately does NOT re-fetch this tile's
+  // grid (the surviving battle's grid did not change) — a roster change invalidating an
+  // already-painted palette is the separate, still-open `setPalette` item (deferred-work.md, 1.8
+  // review, owned by Story 2.10).
+  //
+  // The latch is RELEASED again when a load ends 'unavailable' (code review 2026-08-14). Set
+  // before the promise settles and never cleared, it made a single failed load permanent for the
+  // tile's whole mount: reload() re-runs this effect but the guard had already claimed the id, so
+  // a tile blanked by one transient corrupt read stayed blank with no retry edge at all.
   const loadedBattleId = useRef<string | null>(null);
   const mounted = useRef(true);
 
@@ -413,6 +427,9 @@ export default function BattleTile({
         // console); buildRefToFillGroup's own console.warn for a dangling roster id is unaffected.
         .catch(() => ({ kind: 'unavailable' as const }))
         .then((next) => {
+          // Released so a later effect run (a reload() after a delete) can try this battle again.
+          // Kept claimed on success — that is the once-per-lifetime guarantee the ref exists for.
+          if (next.kind === 'unavailable') loadedBattleId.current = null;
           if (mounted.current) setThumbnail(next);
         });
     }
@@ -477,6 +494,12 @@ export default function BattleTile({
             rather than landing in `incomplete`, which is what we want for a real control. */}
         <DeleteButton
           type="button"
+          // How <BattleGallery> finds this button again to restore focus to it after a cancelled
+          // confirmation. NOT document.activeElement captured at click time: WebKit does not focus
+          // a <button> on click at all, so that read returns <body> there and the "restore" is a
+          // no-op on one engine only (code review 2026-08-14). The id is a UUID, so it is always
+          // safe to interpolate into the attribute selector.
+          data-delete-battle-id={battleId}
           aria-label={`Delete ${displayName}`}
           title={`Delete ${displayName}`}
           // Wrapped, not passed directly: onRequestDelete's contract is `(): void` — passing it

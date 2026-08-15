@@ -8,6 +8,7 @@ import DeleteBattleDialog from './DeleteBattleDialog';
 // query below goes through `screen` (which searches document.body) rather than `container`, and
 // axe runs are scoped to `document.body` too. Scoping either to `container` would silently pass
 // against an empty tree (Story 1.12 review pattern: "tests that cannot fail").
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -107,6 +108,42 @@ describe('DeleteBattleDialog', () => {
       />,
     );
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  });
+
+  // `pending` disables both buttons, but Escape and the backdrop do not go through them — without
+  // an explicit guard they close the dialog as if cancelled while battles.delete() runs on to
+  // completion, destroying the battle after the user made the documented cancel gesture
+  // (code review 2026-08-14).
+  it('ignores Escape while a delete is in flight', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(
+      <DeleteBattleDialog
+        open
+        battleName="Triple Threat"
+        pending
+        onCancel={onCancel}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    await user.keyboard('{Escape}');
+    expect(onCancel).not.toHaveBeenCalled();
+
+    // Falsifiable: the same key press with pending=false must still cancel, so this test cannot
+    // pass by Escape being broken outright.
+    onCancel.mockClear();
+    render(
+      <DeleteBattleDialog
+        open
+        battleName="Triple Threat"
+        pending={false}
+        onCancel={onCancel}
+        onConfirm={vi.fn()}
+      />,
+    );
+    await user.keyboard('{Escape}');
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('has no axe violations', async () => {

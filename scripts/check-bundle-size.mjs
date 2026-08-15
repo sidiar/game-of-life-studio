@@ -14,10 +14,11 @@ import { join } from 'node:path';
 // 300 -> 320 (Story 1.13, Sidiar 2026-08-13): RFC-003 §"Component Inventory" and AR-3 both quote
 // ~300 KB, but RFC-003:48 frames that figure as a target "to be validated by benchmarking after
 // MUI integration" — Story 1.13 (the delete-confirmation dialog, the app's first shipped
-// `@mui/material/Dialog` + `Button`) is that benchmark. Measured at the 1.12 baseline of 288.2 KB,
-// the dialog landed the home route at 306.3 KB gzip — 18.1 KB over budget, well under the ~45 KB
-// per-file-sum upper bound the story estimated before measuring (shared @mui/utils/ButtonBase
-// chunks were already in the bundle). New budget set from the measurement, not a round number:
+// `@mui/material/Dialog` + `Button`) is that benchmark. Measured against the 1.12 baseline of
+// 288.2 KB, the dialog landed the home route at 306.3 KB gzip — +18.1 KB on the baseline, and
+// 6.3 KB over the old 300 KB budget. Well under the ~45 KB per-file-sum upper bound the story
+// estimated before measuring (shared @mui/utils/ButtonBase chunks were already in the bundle).
+// New budget set from the measurement, not a round number:
 // ceil((306.3 + 12) / 5) * 5 = 320 — preserving roughly the ~12 KB headroom the gate carried
 // before, rounded up to the next 5 KB. RFC-003:48/253/309 and epics.md:159/:371 still read
 // "~300KB" — filed as a docs-reconciliation item in deferred-work.md rather than edited from here.

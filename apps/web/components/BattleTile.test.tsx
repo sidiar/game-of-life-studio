@@ -203,9 +203,11 @@ describe('BattleTile', () => {
 });
 
 // Story 1.13, Task 2. jsdom cannot compute :hover/:focus-within-driven `opacity`, so the actual
-// reveal is proven in a real browser (e2e/deleteBattle.spec.ts) — these tests cover the DOM
-// structure and behaviour that CAN be asserted here: the button's accessible name, its glyph, and
-// that it reports the request rather than acting on it itself.
+// reveal is proven in a real browser — `e2e/deleteBattle.spec.ts`'s "the delete button is revealed
+// by hover and by keyboard focus, and is hidden otherwise" (the claim this comment made before the
+// 2026-08-14 review pointed at a test that did not exist). These tests cover the DOM structure and
+// behaviour that CAN be asserted here: the button's accessible name, its glyph, and that it reports
+// the request rather than acting on it itself.
 describe('BattleTile — delete affordance (Story 1.13)', () => {
   it('names the delete button after the battle, and calls onRequestDelete on click, not the repository', async () => {
     const user = userEvent.setup();
@@ -229,13 +231,24 @@ describe('BattleTile — delete affordance (Story 1.13)', () => {
     expect(screen.getByRole('button', { name: 'Delete Untitled battle' })).toBeInTheDocument();
   });
 
+  // Both tiles rendered into ONE document, not one-then-unmount-then-the-other: the property this
+  // test is named for is that a screen-reader user on a POPULATED gallery can tell the delete
+  // buttons apart. Rendered in isolation, each assertion only re-proves that the label interpolates
+  // `name`, which the two tests above already cover.
   it('gives two tiles with different names distinct delete-button accessible names', () => {
-    const { unmount } = render(<BattleTile {...BASE_PROPS} name="Triple Threat" />);
-    expect(screen.getByRole('button', { name: 'Delete Triple Threat' })).toBeInTheDocument();
-    unmount();
+    render(
+      <>
+        <BattleTile {...BASE_PROPS} name="Triple Threat" />
+        <BattleTile {...BASE_PROPS} name="Grand Colony War" />
+      </>,
+    );
 
-    render(<BattleTile {...BASE_PROPS} name="Grand Colony War" />);
-    expect(screen.getByRole('button', { name: 'Delete Grand Colony War' })).toBeInTheDocument();
+    const names = screen
+      .getAllByRole('button', { name: /^Delete / })
+      .map((button) => button.getAttribute('aria-label'));
+
+    expect(names).toEqual(['Delete Triple Threat', 'Delete Grand Colony War']);
+    expect(new Set(names).size).toBe(2);
   });
 
   it("renders the × glyph as aria-hidden, so it does not double the button's accessible name", () => {

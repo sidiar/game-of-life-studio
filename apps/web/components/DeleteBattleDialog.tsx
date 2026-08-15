@@ -6,7 +6,6 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import { useInertBackground } from '@/lib/useInertBackground';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel, and this story is already spending bundle budget on the Dialog stack (Task 9); a barrel
@@ -15,12 +14,32 @@ import { useInertBackground } from '@/lib/useInertBackground';
 const TITLE_ID = 'delete-battle-dialog-title';
 const BODY_ID = 'delete-battle-dialog-body';
 
+// The clinical mockup's dialog width. Set here rather than in the theme's MuiDialog.paper
+// styleOverride, which would apply to every future dialog and outrank MUI's own maxWidth prop.
+const PAPER_MAX_WIDTH = '440px';
+
+// Pulled out of the theme's MuiButton root override for the same reason: on `root` they apply to
+// every size, collapsing size="small"/"large" into medium.
+const BUTTON_SX = { fontSize: '13px', padding: '12px 24px' } as const;
+
 export interface DeleteBattleDialogProps {
   open: boolean;
+  /**
+   * Must stay populated for the whole close transition, not cleared the moment `open` goes false:
+   * MUI keeps children mounted until the fade-out finishes (~195ms), so an emptied name renders a
+   * visible `“” will be permanently deleted.` on the way out. `<BattleGallery>` holds its
+   * `confirming` state until this dialog's `onExited` for exactly that reason.
+   */
   battleName: string;
   pending: boolean;
   onCancel(): void;
   onConfirm(): void;
+  /**
+   * Fired once the close transition has fully finished. The parent owns focus restoration
+   * (forced decision 4) and must not move focus before this point — see the handler in
+   * `<BattleGallery>` for the ordering this exists to guarantee.
+   */
+  onExited?(): void;
 }
 
 /**
@@ -37,33 +56,42 @@ export default function DeleteBattleDialog({
   pending,
   onCancel,
   onConfirm,
+  onExited,
 }: DeleteBattleDialogProps) {
-  // Task 5 measurement: axe's aria-hidden-focus rule lands in `incomplete` under jsdom (no real
-  // layout to resolve visibility against), not `violations` — but the structural fact behind it is
-  // real, so the fix ships rather than waiting for a real-browser run to confirm it. See the hook's
-  // own comment for the full measurement.
-  useInertBackground(open);
-
   return (
     <Dialog
       open={open}
       // Fires for both Escape and backdrop click. Dismissal is the non-destructive action either
-      // way, so there is no reason to branch on MUI's `reason` argument here.
-      onClose={onCancel}
-      // <BattleGallery> manages its own post-delete focus target (forced decision 4 — the tile's
-      // Delete button that opened this dialog is gone from the DOM after a successful delete, so
-      // focus moves to the Gallery heading instead). MUI's default restore-to-trigger behaviour
-      // fires from the exit TRANSITION's completion (~195ms after close, well after any
-      // synchronous focus() call made at close time) and would silently overwrite that move —
-      // confirmed by e2e: without this prop, focus lands back on a button that may already be
-      // gone rather than on the heading.
+      // way, so there is no reason to branch on MUI's `reason` argument — but it must not fire
+      // while a delete is in flight: the buttons are disabled by `pending`, and without this guard
+      // Escape/backdrop would close the dialog as if cancelled while battles.delete() runs on to
+      // completion, destroying the battle after the user made the documented cancel gesture
+      // (code review 2026-08-14).
+      //
+      // This callback is the ONLY place that guard can live: `disableEscapeKeyDown` was removed
+      // from Modal in MUI v9 (useModal.js:115-125 now always routes Escape through onClose with
+      // reason 'escapeKeyDown'), so there is no prop-level equivalent to pair it with.
+      onClose={() => {
+        if (pending) return;
+        onCancel();
+      }}
+      onTransitionExited={onExited}
+      // <BattleGallery> manages focus for every close path (forced decision 4 — after a successful
+      // delete the tile's Delete button is gone from the DOM, so focus goes to the Gallery heading;
+      // after a cancel it goes back to the button that opened this). MUI's default
+      // restore-to-trigger fires from the exit transition's completion and would silently overwrite
+      // that move — confirmed by e2e: without this prop focus lands back on a button that may
+      // already be gone rather than on the heading.
       disableRestoreFocus
+      slotProps={{ paper: { sx: { maxWidth: PAPER_MAX_WIDTH } } }}
       aria-labelledby={TITLE_ID}
       aria-describedby={BODY_ID}
     >
       <DialogTitle id={TITLE_ID}>Delete Battle?</DialogTitle>
       <DialogContent>
-        <DialogContentText id={BODY_ID}>
+        {/* overflowWrap: BattleSchema allows a 100-character name with no spaces, which the
+            default `normal` will not break — it would overflow the 440px paper horizontally. */}
+        <DialogContentText id={BODY_ID} sx={{ overflowWrap: 'anywhere' }}>
           “{battleName}” will be permanently deleted. This cannot be undone.
         </DialogContentText>
       </DialogContent>
@@ -78,6 +106,7 @@ export default function DeleteBattleDialog({
           autoFocus
           color="inherit"
           variant="outlined"
+          sx={BUTTON_SX}
         >
           Cancel
         </Button>
@@ -87,6 +116,7 @@ export default function DeleteBattleDialog({
           disabled={pending}
           color="error"
           variant="contained"
+          sx={BUTTON_SX}
         >
           Delete Battle
         </Button>

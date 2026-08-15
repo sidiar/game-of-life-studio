@@ -31,14 +31,26 @@ export function useInertBackground(active: boolean): void {
     // (onto the dialog's autoFocus target) must already have happened before this runs; inerting a
     // subtree that still holds the focused element would drop focus to <body> instead of landing
     // it on Cancel.
-    const hidden = Array.from(document.body.children).filter(
-      (el): el is HTMLElement =>
-        el instanceof HTMLElement && el.getAttribute('aria-hidden') === 'true',
-    );
-    for (const el of hidden) el.inert = true;
+    // Prior value captured per element, not restored to a blanket `false`: ModalManager keeps
+    // siblings that were ALREADY aria-hidden before the dialog opened in its hidden set
+    // (ModalManager.getHiddenSiblings), so one of them could legitimately have been inert on its
+    // own account. Restoring `false` unconditionally would permanently un-inert it after the first
+    // dialog cycle.
+    const restore = Array.from(document.body.children)
+      .filter(
+        (el): el is HTMLElement =>
+          el instanceof HTMLElement && el.getAttribute('aria-hidden') === 'true',
+      )
+      .map((el) => ({ el, wasInert: el.inert }));
 
+    for (const { el } of restore) el.inert = true;
+
+    // Bound worth knowing: the set is snapshotted once per open, so a body child appended WHILE
+    // the dialog is open is neither swept by MUI's already-run ariaHiddenSiblings pass nor inerted
+    // here. Nothing in the app mounts a second body-level portal today; the day one does (a nested
+    // modal, a toast layer), this needs a MutationObserver rather than a one-shot read.
     return () => {
-      for (const el of hidden) el.inert = false;
+      for (const { el, wasInert } of restore) el.inert = wasInert;
     };
   }, [active]);
 }
