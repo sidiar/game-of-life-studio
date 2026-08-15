@@ -124,7 +124,18 @@
       "Bash(timeout 15 bash -c 'until curl -sf http://localhost:4321 >/dev/null; do sleep 0.5; done')",
       "Bash(lsof -ti:4321 -sTCP:LISTEN)",
       "Bash(xargs -r kill)",
-      "Bash(awk '/id: *.color-contrast.,/{found=NR} found && NR>=found && NR<=found+18' node_modules/axe-core/axe.js)"
+      "Bash(awk '/id: *.color-contrast.,/{found=NR} found && NR>=found && NR<=found+18' node_modules/axe-core/axe.js)",
+      "Bash(cp components/BattleGallery.tsx /tmp/bg.bak)",
+      "Bash(perl -0pi -e 's/      await battles\\\\.delete\\\\\\(confirming\\\\.id\\\\\\);\\\\n\\(.*?\\\\n.*?\\\\n.*?\\\\n\\)      setConfirming\\\\\\(null\\\\\\);\\\\n      reload\\\\\\(\\\\\\);/      reload\\(\\);\\\\n      await battles.delete\\(confirming.id\\);\\\\n$1      setConfirming\\(null\\);/s' components/BattleGallery.tsx)",
+      "Bash(cp /tmp/bg.bak components/BattleGallery.tsx)",
+      "Bash(rm /tmp/bg.bak)",
+      "Bash(cp components/DeleteBattleDialog.tsx /tmp/dbd.bak)",
+      "Bash(perl -0pi -e 's/  useInertBackground\\\\\\(inertHeld\\\\\\);/  \\\\/\\\\/ falsification: hook disabled/' components/DeleteBattleDialog.tsx)",
+      "Bash(cp /tmp/dbd.bak components/DeleteBattleDialog.tsx)",
+      "Bash(perl -0pi -e 's/“\\\\{lastName\\\\.current\\\\}”/“{battleName}”/' components/DeleteBattleDialog.tsx)",
+      "Bash(rm /tmp/dbd.bak)",
+      "Bash(echo \"BUILD=$?\")",
+      "Bash(echo \"TSC=$?\")"
     ],
     "deny": [],
     "ask": []
