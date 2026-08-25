@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type BattleSummary, type Organism, type Settings } from '@gol/domain';
 import type { BattleRepository, OrganismRepository, SettingsRepository } from '@gol/persistence';
@@ -27,6 +27,61 @@ type LoadState =
   | { kind: 'idle' }
   | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[]; settings: Settings }
   | { kind: 'error' };
+
+// requestId identifies one load ATTEMPT, not one load — a fresh object per attempt, not a counter.
+// The reducer only ever compares it for identity (===), so "which attempt is newer" never has to
+// be encoded; "is this the attempt currently allowed to write status" is all it needs to answer.
+interface LoadReducerState {
+  status: LoadState;
+  requestId: object;
+}
+
+type LoadAction =
+  | { type: 'start'; requestId: object }
+  | {
+      type: 'success';
+      requestId: object;
+      summaries: BattleSummary[];
+      roster: Organism[];
+      settings: Settings;
+    }
+  | { type: 'error'; requestId: object }
+  // A delete failure discovered OUTSIDE the load flow (handleDeleteFailed) — see its call site.
+  | { type: 'invalidate' };
+
+// Centralises the race the ref-based version used to enforce at each call site by convention: a
+// resolution only lands if its requestId still matches the reducer's own, so a refresh() left over
+// from an earlier reload() — or from React StrictMode's double effect setup — cannot resolve on
+// top of a newer attempt or an invalidate(). Code review 2026-08-14 found the failure this
+// prevents: a still-in-flight refresh() silently erasing the alert for a delete that actually
+// failed.
+function loadReducer(state: LoadReducerState, action: LoadAction): LoadReducerState {
+  if (action.type === 'invalidate') {
+    // Fresh, unmatchable requestId: no in-flight 'success'/'error' can ever satisfy the identity
+    // check below again, so this error state is safe from being overwritten by a stale resolution.
+    return { status: { kind: 'error' }, requestId: {} };
+  }
+  if (action.type === 'start') {
+    // status is deliberately left untouched — see the effect's own comment for why the previous
+    // summaries must stay on screen while a reload()'s refetch is in flight.
+    return { status: state.status, requestId: action.requestId };
+  }
+  if (action.requestId !== state.requestId) return state; // superseded — discard
+  return {
+    status:
+      action.type === 'success'
+        ? {
+            kind: 'ready',
+            summaries: action.summaries,
+            roster: action.roster,
+            settings: action.settings,
+          }
+        : { kind: 'error' },
+    requestId: state.requestId,
+  };
+}
+
+const initialLoadState: LoadReducerState = { status: { kind: 'idle' }, requestId: {} };
 
 type GalleryState =
   | { kind: 'loading' }
@@ -72,17 +127,11 @@ export default function BattleGallery({
   settings,
   seedStatus,
 }: BattleGalleryProps) {
-  const [loadState, setLoadState] = useState<LoadState>({ kind: 'idle' });
+  const [loadState, dispatchLoad] = useReducer(loadReducer, initialLoadState);
 
   // Bumped by reload() (Story 1.13) to re-enter the load effect below without resetting loadState
   // — see the effect's own comment for why a token rather than a lifted refresh().
   const [reloadToken, setReloadToken] = useState(0);
-
-  // Bumped whenever something writes loadState from outside the load effect. The effect captures
-  // its own value and discards its result if it no longer matches, so a refresh() still in flight
-  // from an earlier reload() cannot resolve on top of a newer error — which would silently erase
-  // the alert for a delete that actually failed (code review 2026-08-14).
-  const loadGenRef = useRef(0);
 
   // Named `reload`, not `refresh`: refresh() is the effect-internal function it re-invokes.
   // Declared above the load effect rather than beside it only so the hook call below — which
@@ -94,10 +143,7 @@ export default function BattleGallery({
   // reuses the shipped alert body. No retry control, no new copy — see Task 1's "out of scope"
   // note. The dialog is already closed by the time the hook calls this.
   const handleDeleteFailed = useCallback(() => {
-    // Bumped so an in-flight refresh() from an earlier reload() cannot resolve 'ready' on top of
-    // this and erase the alert for a delete that genuinely failed.
-    loadGenRef.current++;
-    setLoadState({ kind: 'error' });
+    dispatchLoad({ type: 'invalidate' });
   }, []);
 
   // Forced decision 4: focus-restoration target after a successful delete. The tile's Delete
@@ -133,13 +179,17 @@ export default function BattleGallery({
     // Gated on seedStatus (silent-failure trap 1): useWorkspaceSeed writes Conway's Classic (and,
     // in dev, the AR-45 fixtures) from a sibling effect. Listing before that resolves returns []
     // and this state would go to 'ready' with zero battles before the seed ever runs. The
-    // seedStatus === 'error' case needs no setState here at all — it is folded into `state` below.
+    // seedStatus === 'error' case needs no dispatch here at all — it is folded into `state` below.
     if (seedStatus !== 'ready') return;
 
-    let live = true;
-    // Paired with loadGenRef: `live` only covers this effect's own teardown, which a setLoadState
-    // from an event handler does not trigger. See the ref's declaration.
-    const gen = ++loadGenRef.current;
+    // A fresh identity per effect run — not a ref, not a counter. loadReducer only ever compares
+    // it for identity (===) against its own state, so no cleanup flag is needed to cancel a stale
+    // resolution: dispatching 'success'/'error' with a superseded requestId is a no-op in the
+    // reducer itself, whether the effect that started it has since torn down (a reload(), or
+    // StrictMode's second setup) or the component has unmounted (React safely drops dispatches to
+    // unmounted components). See loadReducer's own comment for the invalidate() half of this.
+    const requestId = {};
+    dispatchLoad({ type: 'start', requestId });
 
     // Named rather than inlined so the shape Story 1.13's delete flow needs
     // (`await battles.delete(id); …`) is already written; it will have to be lifted out of this
@@ -165,39 +215,32 @@ export default function BattleGallery({
         settings.load().catch(() => DEFAULT_SETTINGS),
       ])
         .then(([summaries, roster, loadedSettings]) => {
-          if (live && gen === loadGenRef.current)
-            setLoadState({ kind: 'ready', summaries, roster, settings: loadedSettings });
+          dispatchLoad({ type: 'success', requestId, summaries, roster, settings: loadedSettings });
         })
         .catch(() => {
-          if (live && gen === loadGenRef.current) setLoadState({ kind: 'error' });
+          dispatchLoad({ type: 'error', requestId });
         });
     }
     refresh();
 
-    // `live` is a closure flag, not a ref (unlike useWorkspaceSeed's `hasRun`/`mounted`): this
-    // effect re-runs from scratch on StrictMode's second setup, so the closure flag matches the
-    // effect's own lifetime — copying the ref pattern here would leave a stale `false` and drop
-    // the result.
-    return () => {
-      live = false;
-    };
     // reloadToken is a dependency solely to RE-TRIGGER this effect (Story 1.13's delete flow) —
-    // bumping it tears the effect down (live = false in cleanup) and sets it back up, so the
-    // in-flight-response cancellation above keeps working unchanged. loadState is deliberately
-    // NOT reset to 'idle' on reload: the previous summaries stay on screen while the refetch is in
-    // flight, which is what makes a delete feel instant rather than swapping the whole Gallery for
-    // "Loading battles…" (and re-rendering/re-observing every surviving tile) on every delete.
+    // bumping it tears this effect down and sets it back up with a new requestId, so the
+    // stale-resolution guard above keeps working unchanged. status is deliberately NOT reset to
+    // 'idle' on reload (see loadReducer's 'start' case): the previous summaries stay on screen
+    // while the refetch is in flight, which is what makes a delete feel instant rather than
+    // swapping the whole Gallery for "Loading battles…" (and re-rendering/re-observing every
+    // surviving tile) on every delete.
   }, [battles, organisms, settings, seedStatus, reloadToken]);
 
-  // Derived, not stored: seedStatus === 'error' and loadState === 'error' both mean the same
-  // thing to the view, and folding them here (rather than writing seedStatus's error into
-  // loadState from the effect) is what avoids the synchronous cascading setState.
+  // Derived, not stored: seedStatus === 'error' and loadState.status === 'error' both mean the
+  // same thing to the view, and folding them here (rather than writing seedStatus's error into
+  // the reducer from the effect) is what avoids the synchronous cascading setState.
   const state: GalleryState =
-    seedStatus === 'error' || loadState.kind === 'error'
+    seedStatus === 'error' || loadState.status.kind === 'error'
       ? { kind: 'error' }
-      : loadState.kind === 'idle'
+      : loadState.status.kind === 'idle'
         ? { kind: 'loading' }
-        : loadState;
+        : loadState.status;
 
   // Memoised because resolveTileOrganisms builds a Map over the whole roster per tile: done in the
   // render body it is O(tiles x roster) on every render, and it mints a fresh array identity per
