@@ -27,7 +27,17 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
 const CODE_ROOTS = ['packages', 'apps'];
-const DOC_ROOT = 'docs';
+
+// The AUTHORITY set — deliberately not all of `docs/`. A story file under
+// docs/implementation-artifacts/ CITES ids; it does not DEFINE them, and counting a
+// citation as a definition makes this gate unable to detect the rot it exists for:
+// renumber AR-46 in architecture.md and every code citation still "resolves" via an
+// echo in epic-1/1-9-*.md, green forever (review 2026-08-25). CLAUDE.md names these
+// same files as the specs: architecture.md is the umbrella, the RFCs own their areas,
+// project-context.md carries deliberate overrides.
+const AUTHORITY_DIRS = ['docs/planning-artifacts'];
+const AUTHORITY_FILES = ['docs/project-context.md'];
+
 const CODE_EXT = new Set(['.ts', '.tsx']);
 const DOC_EXT = new Set(['.md']);
 const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', '.git', 'coverage', 'out', 'dist']);
@@ -54,6 +64,19 @@ const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', '.git', 'coverage'
 // `M11` can and will. Adding a Minor Resolution beyond M10 means widening this.
 const SPEC_ID =
   /(?<![\w.-])(AR-\d+|RFC-00\d|NFR-\d+(?:\.\d+)*|FR-\d+(?:\.\d+)*|M(?:[1-9]|10)|Decision [A-Z](?:\.\d+)?|Story \d+\.\d+)(?![\w.-])/g;
+
+// Sub-decisions are DECLARED in a different shape from how they are CITED. Code
+// writes `(Decision I.4)`; architecture.md writes the list item
+//
+//     - **I.4 — Subordinate versions are stamps, not switches.** …
+//
+// so the literal string "Decision I.4" appears nowhere in the authority docs. Without
+// this, narrowing to the authority set above fails five genuine citations — Decision
+// E.4, F.2, I.4, J.1, J.3 — which is why restricting the doc root ALONE (the obvious
+// half of this fix) red-builds `main`. architecture.md declares the full A.1–J.4 grid
+// this way; the RFCs use no such form, and top-level `### Decision A —` headings are
+// already caught by SPEC_ID's prose match.
+const SUB_DECISION_DECLARATION = /^\s*-\s*\*\*([A-Z]\.\d+)\s*—/gm;
 
 // Ids the PRD defines only inside a RANGE (e.g. "FR-8.2-8.5" covers FR-8.3) and
 // so cannot tokenise on the docs side. Empty today — every one of the 119 ids
@@ -89,18 +112,32 @@ function collect(files) {
 }
 
 const codeFiles = CODE_ROOTS.flatMap((root) => walk(root, CODE_EXT));
-const docFiles = walk(DOC_ROOT, DOC_EXT);
+const docFiles = [
+  ...AUTHORITY_DIRS.flatMap((dir) => walk(dir, DOC_EXT)),
+  ...AUTHORITY_FILES.filter((file) => existsSync(file)),
+];
 
 if (docFiles.length === 0) {
   console.error(
-    `✖ spec-ids: no markdown found under ${DOC_ROOT}/. Every citation would "fail" against an ` +
-      `empty authority set — treat as a broken gate, not a real result.`,
+    `✖ spec-ids: no markdown found in the authority set (${[...AUTHORITY_DIRS, ...AUTHORITY_FILES].join(', ')}). ` +
+      `Every citation would "fail" against an empty authority set — treat as a broken gate, ` +
+      `not a real result.`,
   );
   process.exit(1);
 }
 
 const cited = collect(codeFiles);
 const defined = collect(docFiles);
+
+// Fold the declaration form in, so `- **I.4 — …` counts as defining `Decision I.4`.
+for (const file of docFiles) {
+  const text = readFileSync(file, 'utf8');
+  for (const [, sub] of text.matchAll(SUB_DECISION_DECLARATION)) {
+    const id = `Decision ${sub}`;
+    if (!defined.has(id)) defined.set(id, []);
+    defined.get(id).push(file);
+  }
+}
 
 // A gate that silently stops matching is worse than no gate: it goes green forever.
 // The workspace cites ~119 distinct ids; a collapse to near-zero means the regex or
@@ -120,14 +157,15 @@ const unresolved = [...cited.keys()]
   .sort();
 
 console.log(`Spec-ID integrity`);
-console.log(`  source files scanned: ${codeFiles.length}`);
-console.log(`  doc files scanned:    ${docFiles.length}`);
-console.log(`  distinct ids cited:   ${cited.size}`);
-console.log(`  distinct ids defined: ${defined.size}`);
+console.log(`  source files scanned:  ${codeFiles.length}`);
+console.log(`  authority docs scanned: ${docFiles.length}`);
+console.log(`  distinct ids cited:    ${cited.size}`);
+console.log(`  distinct ids defined:  ${defined.size}`);
 
 if (unresolved.length > 0) {
   console.error(
-    `\n✖ spec-ids: ${unresolved.length} citation(s) resolve to nothing in ${DOC_ROOT}/:`,
+    `\n✖ spec-ids: ${unresolved.length} citation(s) resolve to nothing in the authority docs ` +
+      `(${[...AUTHORITY_DIRS, ...AUTHORITY_FILES].join(', ')}):`,
   );
   for (const id of unresolved) {
     const sites = cited.get(id);
