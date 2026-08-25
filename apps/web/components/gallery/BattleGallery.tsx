@@ -7,7 +7,7 @@ import type { BattleRepository, OrganismRepository, SettingsRepository } from '@
 import type { WorkspaceSeedStatus } from '@/lib/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallerySort';
 import { resolveTileOrganisms } from '@/lib/tileOrganisms';
-import { readGridColors } from '@/lib/themeColors';
+import { readGridColors } from '@/lib/canvas/themeColors';
 import BattleTile, { battleDisplayName } from './BattleTile';
 import DeleteBattleDialog, { useDeleteBattleDialog } from './DeleteBattleDialog';
 import GalleryEmptyState from './GalleryEmptyState';

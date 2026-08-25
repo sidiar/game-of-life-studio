@@ -384,7 +384,7 @@ describe('BattleTile — thumbnail (Story 1.11)', () => {
   });
 
   it('degrades to a blank dish when toThumbnailSource throws', async () => {
-    const battleThumbnail = await import('@/lib/battleThumbnail');
+    const battleThumbnail = await import('@/lib/canvas/battleThumbnail');
     const throwSpy = vi.spyOn(battleThumbnail, 'toThumbnailSource').mockImplementation(() => {
       throw new Error('ragged gridState');
     });

@@ -339,7 +339,7 @@ Following instinct here produces code that compiles, passes tests, and violates 
   The caller must resolve the token to a concrete string first via `getComputedStyle(root)
   .getPropertyValue('--gol-*')` (the computed value of a custom property is substituted — this
   returns `"rgb(51 51 51 / 0.3)"`, not the token's own `var(...)` expression) — this is
-  `apps/web/lib/themeColors.ts` (Story 1.11). Resolve once and pass the strings down; calling it
+  `apps/web/lib/canvas/themeColors.ts` (Story 1.11). Resolve once and pass the strings down; calling it
   per canvas forces a style recalculation per call. This is why `GridRenderer` takes injected
   `GridRendererColors` strings instead of reading the theme itself (Story 1.8), and it recurs
   everywhere a canvas is added — Epic 2's edit-mode canvas and Epic 3's playback canvas both need

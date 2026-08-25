@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONWAYS_CLASSIC } from '@gol/domain';
-import { displayColor, MAX_AGE_SHADE } from '@/lib/displayColor';
-import { DEFAULT_COLOR_TOKEN } from '@/lib/paletteRegistry';
+import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
+import { DEFAULT_COLOR_TOKEN } from '@/lib/palette/paletteRegistry';
 import { resolveTileOrganisms } from './tileOrganisms';
 
 describe('resolveTileOrganisms', () => {

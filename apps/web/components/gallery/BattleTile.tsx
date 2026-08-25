@@ -6,13 +6,13 @@ import Tooltip from '@mui/material/Tooltip';
 import type { Organism } from '@gol/domain';
 import type { BattleRepository } from '@gol/persistence';
 import { formatBattleDate } from '@/lib/formatBattleDate';
-import { toThumbnailSource } from '@/lib/battleThumbnail';
-import type { GridRendererColors } from '@/lib/gridRenderer';
-import type { RefToFillGroup } from '@/lib/refToFillGroup';
-import type { RenderableGrid } from '@/lib/renderableGrid';
+import { toThumbnailSource } from '@/lib/canvas/battleThumbnail';
+import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
+import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
+import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { TileOrganism } from '@/lib/tileOrganisms';
 import { useInView } from '@/lib/useInView';
-import PetriDishCanvas from './PetriDishCanvas';
+import PetriDishCanvas from '../PetriDishCanvas';
 
 // A battle may legally place 255 organisms (Decision G.3) — the mockup's 2-3 dots is not the
 // bound, and an uncapped row reflows the whole tile. Organisms beyond the cap fold into the "+n"

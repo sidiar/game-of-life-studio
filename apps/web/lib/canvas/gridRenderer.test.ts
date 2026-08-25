@@ -3,20 +3,20 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID, emptyGrid, placePattern } from '@gol/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { displayColor, displayColorAt } from './displayColor';
+import { displayColor, displayColorAt } from '../palette/displayColor';
 import {
   GridRenderer,
   GridRendererContextError,
   GridRendererDimensionMismatchError,
 } from './gridRenderer';
-import { installRecordingContext2d } from './recordingContext2d';
+import { installRecordingContext2d } from '../recordingContext2d';
 import { buildRefToFillGroup, type RefToFillGroup } from './refToFillGroup';
 import { toRenderableGrid, type RenderableGrid } from './renderableGrid';
 
 // Resolved from this file's own location, not process.cwd(): cwd depends on where the runner was
 // invoked from, so it would silently read the wrong path (or nothing) outside a Turbo-scoped run.
 // The point of the structural check is to read the same files the imports above pull in.
-const LIB_DIR = dirname(fileURLToPath(import.meta.url));
+const CANVAS_DIR = dirname(fileURLToPath(import.meta.url));
 
 // AC3 binds the whole renderer module set, not just the class file — colourStateGroups, gridLayout,
 // refToFillGroup and renderableGrid all run inside the same no-scheduling promise Epic 3 is given.
@@ -97,7 +97,7 @@ describe('AC3 — the frozen contract: no scheduling, ever', () => {
   it.each(NO_SCHEDULING_SOURCES)(
     '%s contains no scheduling primitive at all (structural, belt-and-braces)',
     (file) => {
-      const source = readFileSync(join(LIB_DIR, file), 'utf8');
+      const source = readFileSync(join(CANVAS_DIR, file), 'utf8');
       expect(source).not.toMatch(/requestAnimationFrame|setTimeout|setInterval|queueMicrotask/);
     },
   );

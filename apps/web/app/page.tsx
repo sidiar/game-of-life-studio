@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import BattleGallery from '@/components/BattleGallery';
+import BattleGallery from '@/components/gallery/BattleGallery';
 import { createRepositories } from '@/lib/repositoryFactory';
 import { useWorkspaceSeed } from '@/lib/useWorkspaceSeed';
 

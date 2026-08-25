@@ -15,9 +15,9 @@
  * 6.11 re-run it after any hex re-tune and paste the output back into the validation doc.
  */
 import { describe, it } from 'vitest';
-import { hslToRgb, rgbToHex } from '../lib/colorMath';
-import { displayColor, MAX_AGE_SHADE } from '../lib/displayColor';
-import { PALETTE } from '../lib/paletteRegistry';
+import { hslToRgb, rgbToHex } from '../lib/palette/colorMath';
+import { displayColor, MAX_AGE_SHADE } from '../lib/palette/displayColor';
+import { PALETTE } from '../lib/palette/paletteRegistry';
 import {
   contrastRatio,
   deltaE76,
@@ -26,7 +26,7 @@ import {
   srgbToLab,
   type CvdType,
   type Lab,
-} from '../lib/paletteCvd';
+} from '../lib/palette/paletteCvd';
 
 type Mode = 'normal' | CvdType;
 

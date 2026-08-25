@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { GridRenderer } from '@/lib/gridRenderer';
+import { GridRenderer } from '@/lib/canvas/gridRenderer';
 import { installRecordingContext2d } from '@/lib/recordingContext2d';
-import type { RefToFillGroup } from '@/lib/refToFillGroup';
-import type { RenderableGrid } from '@/lib/renderableGrid';
-import { displayColorAt } from '@/lib/displayColor';
+import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
+import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
+import { displayColorAt } from '@/lib/palette/displayColor';
 import PetriDishCanvas from './PetriDishCanvas';
 
 const COLORS = { background: '#0a0a0a', gridLine: 'rgb(51 51 51 / 0.3)' };
