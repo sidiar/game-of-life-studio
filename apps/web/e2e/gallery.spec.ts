@@ -160,32 +160,37 @@ test.describe('battle gallery (Story 1.10)', () => {
     // role="img", not button — the dot has no activation behaviour, so a button role would
     // announce an action that does not exist.
     const dot = tile.getByRole('img', { name: 'Aggressive Colonizer' });
-    // The dot itself carries no visible text (aria-label only) — the tooltip is the visible
-    // span with the same name, matched separately here.
-    const tooltip = tile.getByText('Aggressive Colonizer', { exact: true });
+    // MUI's Tooltip (2026-08-25 — replaced the hand-rolled version) only mounts its content
+    // (role="tooltip") while open, rather than always being present at opacity 0 — presence IS
+    // the visibility signal now, not a CSS property jsdom's unit suite couldn't compute anyway.
+    const tooltip = page.getByRole('tooltip', { name: 'Aggressive Colonizer' });
 
     await expect(dot).toBeVisible();
-    await expect(tooltip).toHaveCSS('opacity', '0');
+    await expect(tooltip).not.toBeAttached();
 
     // Content-on-hover must also appear on focus (SC 1.4.13) — the real assertion a mouse-only
-    // CSS ::before tooltip (the mockup's original pattern) could never pass.
+    // CSS ::before tooltip (the mockup's original pattern) could never pass. A real `.focus()`
+    // call, not a Tab keypress: MUI gates this reveal on `:focus-visible` (jsdom cannot evaluate
+    // that selector at all — BattleTile.test.tsx works around it via hover instead — so this
+    // browser-level check is the only place the keyboard-focus path is actually verified).
     await dot.focus();
-    await expect(tooltip).toHaveCSS('opacity', '1');
+    await expect(tooltip).toBeVisible();
 
     // Dismissible (SC 1.4.13): Escape hides the tooltip WITHOUT moving focus. An earlier
     // implementation blurred the trigger, which dropped the user at <body> and restarted the
-    // tab order at the top of the document.
+    // tab order at the top of the document. MUI's Tooltip closes on Escape the same way (its own
+    // document keydown listener, Tooltip.js:444-451) without touching focus.
     await page.keyboard.press('Escape');
-    await expect(tooltip).toHaveCSS('opacity', '0');
+    await expect(tooltip).not.toBeAttached();
     await expect(dot).toBeFocused();
 
-    // Hoverable (SC 1.4.13): the tooltip must survive the pointer travelling onto it. This is
-    // what `pointer-events: auto` + the ::after gap bridge buy — with neither, the tooltip
-    // vanishes mid-traverse and this assertion fails.
+    // Hoverable (SC 1.4.13): the tooltip must survive the pointer travelling onto it — MUI's
+    // Tooltip is interactive by default (`disableInteractive={false}`), which is what buys this
+    // for free now instead of the old `pointer-events: auto` + ::after gap bridge.
     await dot.hover();
-    await expect(tooltip).toHaveCSS('opacity', '1');
+    await expect(tooltip).toBeVisible();
     await tooltip.hover();
-    await expect(tooltip).toHaveCSS('opacity', '1');
+    await expect(tooltip).toBeVisible();
 
     // Every organism is reachable this way, not just the first.
     await expect(tile.getByRole('img', { name: 'Patient Defender' })).toBeVisible();

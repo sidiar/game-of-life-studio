@@ -206,6 +206,12 @@ so that I can find and pick up my work instantly.
     - `useId()` for `panelId` — hardcoding one id breaks the moment two tiles render, and
       `aria-controls` silently points at the wrong panel rather than failing.
     - ❌ **No MUI `Tooltip`, `Popper`, `Collapse`, `Card`, or `Grid`** — see Task 7's budget note.
+      ⚠️ **SUPERSEDED 2026-08-25 (Tooltip only) — Sidiar's explicit decision.** The organism-dot
+      tooltip now ships `@mui/material/Tooltip`; the hand-rolled `styled('span')` + open-state +
+      Escape-listener version this line describes is gone. Cost measured at +10.8 KB gzip against
+      the (by then) 320 KB budget, moved to 330 KB — see `scripts/check-bundle-size.mjs`'s own
+      history comment for the arithmetic. `Popper`/`Collapse`/`Card`/`Grid` remain unshipped; this
+      does not reopen those. Kept for history.
   - [x] Cap the visible dots: `const MAX_VISIBLE_DOTS = 6;` then `+{n} more` as text. A battle may
         legally place **255** organisms (Decision G.3) — the mockup's 2–3 dots is not the bound, and
         an uncapped row reflows the whole tile. The **full** list always renders inside the panel.

@@ -193,6 +193,28 @@ const golTheme = createTheme({
         root: { color: 'var(--gol-text-secondary)', fontSize: '14px' },
       },
     },
+    // First real MuiTooltip consumer — deferred-work.md's "Tooltip-bg remains Material default;
+    // pick it up in the story that first renders one." BattleTile's organism dots (Sidiar,
+    // 2026-08-25 — reverses Story 1.10's rejection of MUI's Tooltip; see BattleTile.tsx). Visuals
+    // reproduce the mockup's original custom tooltip exactly: --gol-bg-primary fill, --gol-accent
+    // border/text (already gated at >= 4.5:1 by themeTokens.test.ts's text-pairs loop), and
+    // --gol-shadow-tooltip, the same drop-shadow token Story 1.10/1.11 already shipped.
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          background: 'var(--gol-bg-primary)',
+          border: '1px solid var(--gol-accent)',
+          boxShadow: 'var(--gol-shadow-tooltip)',
+          color: 'var(--gol-accent)',
+          padding: '6px 10px',
+          fontSize: '11px',
+          maxWidth: '240px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          fontWeight: 500,
+        },
+      },
+    },
   },
 });
 

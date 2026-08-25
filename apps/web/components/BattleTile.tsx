@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { styled } from '@mui/material/styles';
+import Tooltip from '@mui/material/Tooltip';
 import type { Organism } from '@gol/domain';
 import type { BattleRepository } from '@gol/persistence';
 import { formatBattleDate } from '@/lib/formatBattleDate';
@@ -208,11 +209,6 @@ const DotRow = styled('span')({
   gap: '6px',
 });
 
-const DotWrapper = styled('span')({
-  position: 'relative',
-  display: 'inline-flex',
-});
-
 // Mockup: .participant-dot (battle-gallery.html:338-345). `role="img"` rather than a <button>:
 // the dot has no activation behaviour, and a <button> that does nothing on Enter/Space is a dead
 // affordance that also announces itself to assistive tech as actionable. `role="img"` is a naming
@@ -247,57 +243,6 @@ const MoreIndicator = styled(Dot)({
   textAlign: 'center',
 });
 
-// Mockup: .participant-dot::before (battle-gallery.html:347-368) — same visual, including the
-// mockup's drop shadow, now a real element rather than a CSS-only pseudo-element so it can carry
-// the hover/focus parity WCAG SC 1.4.13 requires.
-//
-// `maxWidth` + wrapping rather than the mockup's `nowrap`: the "+n" tooltip's content is every
-// remaining organism name, which at the 255-organism bound is one unwrappable line extending left
-// off-screen (it is anchored `right: 0`, and left overflow is not scrollable in LTR).
-//
-// `pointerEvents` flips to `auto` only when shown, and `::after` bridges the 10px gap the reveal
-// transform opens up: SC 1.4.13 "hoverable" requires that a pointer user can move onto the tooltip
-// without it vanishing, and :hover matches an ancestor for out-of-flow descendants too, so the
-// bridge is what keeps the traverse inside the wrapper's hover region.
-const Tooltip = styled('span')({
-  position: 'absolute',
-  bottom: '100%',
-  right: 0,
-  transform: 'translateY(-8px)',
-  background: 'var(--gol-bg-primary)',
-  border: '1px solid var(--gol-accent)',
-  boxShadow: 'var(--gol-shadow-tooltip)',
-  color: 'var(--gol-accent)',
-  padding: '6px 10px',
-  fontSize: '11px',
-  maxWidth: '240px',
-  width: 'max-content',
-  overflowWrap: 'anywhere',
-  opacity: 0,
-  pointerEvents: 'none',
-  transition: 'opacity 0.2s, transform 0.2s',
-  zIndex: 100,
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-  fontWeight: 500,
-  '&[data-open]': {
-    opacity: 1,
-    transform: 'translateY(-10px)',
-    pointerEvents: 'auto',
-  },
-  '&[data-open]::after': {
-    content: '""',
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    height: '10px',
-  },
-  '@media (prefers-reduced-motion: reduce)': {
-    transition: 'none',
-  },
-});
-
 interface TooltipTriggerProps {
   label: string;
   tooltip: string;
@@ -306,35 +251,31 @@ interface TooltipTriggerProps {
   children?: ReactNode;
 }
 
-/**
- * A focusable, individually-named organism marker with a tooltip that satisfies WCAG SC 1.4.13.
- *
- * Visibility is React state rather than a pure `:hover`/`:focus-within` CSS rule because the
- * criterion's "dismissible" clause needs an Escape handler that works for a *pointer* user too —
- * who has no focused element to receive a keydown, hence the document-level listener — and because
- * dismissal must not move focus (the earlier `blur()` implementation dropped the user at
- * `<body>`, restarting the tab order at the top of the document).
- */
+// Mockup: .participant-dot::before (battle-gallery.html:347-368) — the visual (accent border,
+// bg-primary fill, --gol-shadow-tooltip drop shadow, uppercase 11px label) now lives in
+// theme.ts's `MuiTooltip` styleOverrides rather than a styled('span') here.
+//
+// MUI `Tooltip` (Sidiar, 2026-08-25) — reverses Story 1.10 Task 3's rejection of MUI's Tooltip
+// (Task 7's bundle-budget note: 18.6 KB headroom at the time; "zero new MUI component imports").
+// Measured cost today: +10.8 KB gzip against a 320 KB budget with 13.2 KB headroom — see
+// `scripts/check-bundle-size.mjs` for the moved budget and the arithmetic behind it.
+//
+// The hand-rolled open-state/Escape-listener machinery this replaced is no longer needed: MUI's
+// Tooltip already satisfies WCAG SC 1.4.13 — hoverable (interactive by default,
+// `disableInteractive` defaults to `false`), dismissible (its own document `keydown` listener
+// closes on Escape — `Tooltip.js:444-451` — without moving focus, the exact failure the earlier
+// `blur()` attempt had), and persistent (stays open while the pointer is over either the trigger
+// or the tooltip content). `enterDelay={0}`: the mockup's hover reveal was instant; MUI's own
+// default is a 100ms hover-intent delay, which the earlier implementation never had.
+//
+// No `aria-describedby` double-announcement either: MUI's `describeChild` prop defaults to
+// `false`, and — regardless of that flag — `children.props` is spread last in Tooltip.js's own
+// prop merge, so the `aria-label` below always wins over whatever aria-* MUI would otherwise set.
 function TooltipTrigger({ label, tooltip, more, color, children }: TooltipTriggerProps) {
-  const [open, setOpen] = useState(false);
   const Trigger = more ? MoreIndicator : Dot;
 
-  useEffect(() => {
-    if (!open) return;
-    function dismiss(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('keydown', dismiss);
-    return () => document.removeEventListener('keydown', dismiss);
-  }, [open]);
-
   return (
-    <DotWrapper
-      onPointerEnter={() => setOpen(true)}
-      onPointerLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-    >
+    <Tooltip title={tooltip} enterDelay={0} leaveDelay={0}>
       <Trigger
         role="img"
         tabIndex={0}
@@ -343,12 +284,7 @@ function TooltipTrigger({ label, tooltip, more, color, children }: TooltipTrigge
       >
         {children}
       </Trigger>
-      {/* aria-hidden: the trigger's aria-label already carries this text, so exposing the tooltip
-          as well would announce every organism name twice. */}
-      <Tooltip aria-hidden="true" data-open={open || undefined}>
-        {tooltip}
-      </Tooltip>
-    </DotWrapper>
+    </Tooltip>
   );
 }
 
