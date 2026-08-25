@@ -1,15 +1,15 @@
 # Quality gate for Game of Life Studio (AR-3 / RFC-008 Decision 9).
 #
-# NOTE: this repository is local-only — there is NO GitHub remote yet, so this
-# workflow has never executed on GitHub Actions. It is authored and validated by
-# running its stages locally via `npm run ci`. Keep the stage order here in
-# LOCKSTEP with the root `ci` script (package.json): if they drift, a local-green
-# tree can still fail on the first real push.
+# Keep the stage order here in LOCKSTEP with the root `ci` script (package.json):
+# if they drift, a local-green tree can still fail on the first real push. The
+# triggers below are `main` + pull_request only, so a topic branch gets its first
+# real run when its PR opens — `npm run ci` locally is the only gate before that.
 #
 # Stage order (both here and in `npm run ci`):
-#   typecheck -> lint -> format:check -> test:coverage -> build:standalone -> bundle:check -> e2e (+axe)
+#   typecheck -> lint -> format:check -> spec:check -> test:coverage
+#     -> build:standalone -> bundle:check -> e2e (+axe)
 #
-# Deployment is intentionally NOT part of this workflow: there is no remote/host
+# Deployment is intentionally NOT part of this workflow: no static host is chosen
 # yet ($0 static deploy lands when one exists).
 
 name: CI
