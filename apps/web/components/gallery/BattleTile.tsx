@@ -262,8 +262,9 @@ interface TooltipTriggerProps {
 //
 // MUI `Tooltip` (Sidiar, 2026-08-25) — reverses Story 1.10 Task 3's rejection of MUI's Tooltip
 // (Task 7's bundle-budget note: 18.6 KB headroom at the time; "zero new MUI component imports").
-// Measured cost today: +10.8 KB gzip against a 320 KB budget with 13.2 KB headroom — see
-// `scripts/check-bundle-size.mjs` for the moved budget and the arithmetic behind it.
+// Measured cost: +10.7 KB gzip, landing the home route at 317.5 KB. The budget moved 320 -> 330
+// for it, leaving 12.5 KB headroom — see `scripts/check-bundle-size.mjs`, which is authoritative
+// for all four of those figures; do not restate them anywhere else.
 //
 // The hand-rolled open-state/Escape-listener machinery this replaced is no longer needed: MUI's
 // Tooltip already satisfies WCAG SC 1.4.13 — hoverable (interactive by default,

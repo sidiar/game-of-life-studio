@@ -22,9 +22,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # Only cancel in-flight PR runs. Cancelling an in-flight `main` push would
-  # silently mask an unfinished run on the only branch that matters — there's
-  # no PR flow yet, so every push IS main.
+  # Only cancel in-flight PR runs. Superseding a PR push is free — the branch head
+  # is what matters and a newer run covers it. Cancelling an in-flight `main` push
+  # is not: it leaves the protected branch with no completed run for that commit.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Explicit least-privilege default; jobs here only read the repo and upload
