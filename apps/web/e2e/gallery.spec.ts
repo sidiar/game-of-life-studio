@@ -15,10 +15,27 @@ import { createMockWorkspace } from '@gol/test-utils';
 // indicator. That matters because the +n indicator is 10px --gol-text-tertiary on
 // --gol-bg-secondary, the smallest text in the tile, and only a real browser can check its
 // contrast: jsdom has no layout, so axe skips colour-contrast there entirely.
-function buildSeedPayload(options: { crowded?: boolean } = {}) {
+
+// A name long enough that its first line must run the full width of the tile's content box. The
+// mock workspace's own names ("Grand Colony War") wrap well short of the delete button and so
+// cannot exercise the reservation TileHeader's paddingRight exists for.
+const LONG_BATTLE_NAME = 'Transcontinental Assimilation Front Expansion Campaign';
+
+function buildSeedPayload(options: { crowded?: boolean; longName?: boolean } = {}) {
   const { battles, organisms } = createMockWorkspace();
   const battlesRecord: Record<string, unknown> = Object.fromEntries(battles.map((b) => [b.id, b]));
   const organismsRecord = Object.fromEntries(organisms.map((o) => [o.id, o]));
+
+  if (options.longName) {
+    const longNamed = {
+      ...battles[0],
+      id: 'd6c4f5a7-8e9b-4c0d-9f1a-3b4c5d6e7f80',
+      name: LONG_BATTLE_NAME,
+      // Newest, so it sorts first and is the tile the test locates by index 0.
+      updatedAt: '2030-01-01T00:00:00.000Z',
+    };
+    battlesRecord[longNamed.id] = longNamed;
+  }
 
   if (options.crowded) {
     const crowded = {
@@ -40,7 +57,7 @@ function buildSeedPayload(options: { crowded?: boolean } = {}) {
   };
 }
 
-async function seedWorkspace(page: Page, options: { crowded?: boolean } = {}) {
+async function seedWorkspace(page: Page, options: { crowded?: boolean; longName?: boolean } = {}) {
   const payload = buildSeedPayload(options);
 
   await page.addInitScript(
@@ -107,6 +124,40 @@ test.describe('battle gallery (Story 1.10)', () => {
     }
 
     expect(errors).toEqual([]);
+  });
+
+  // Review 2026-08-25: removing the grid-size stat took the tile corner's only space reservation
+  // with it, so a long name's first line ran underneath the absolutely-positioned delete button.
+  // Only a real browser can catch this — jsdom has no layout, so every box it reports is 0x0 and
+  // an overlap assertion there passes no matter what the CSS says. Asserted as a geometric
+  // non-intersection rather than by reading paddingRight back: the padding is the current fix, not
+  // the requirement, and a test that restates the implementation cannot fail when the two diverge.
+  test('a long battle name never runs underneath the delete button', async ({ page }) => {
+    await seedWorkspace(page, { longName: true });
+    await page.goto('/');
+
+    const tile = page.getByRole('article').first();
+    await expect(tile.getByRole('heading', { level: 2 })).toHaveText(LONG_BATTLE_NAME);
+
+    // Hover to reveal the button. It is in the DOM and hit-testable at opacity 0 regardless, and
+    // permanently visible under `@media (hover: none)` — the overlap is not hover-gated, so this
+    // only makes the measured state the one a mouse user actually sees.
+    await tile.hover();
+    const button = tile.locator('[data-tile-actions] button');
+    await expect(button).toBeVisible();
+
+    const titleBox = await tile.getByRole('heading', { level: 2 }).boundingBox();
+    const buttonBox = await button.boundingBox();
+    if (titleBox === null || buttonBox === null) {
+      throw new Error('Expected both the heading and the delete button to have a layout box.');
+    }
+
+    // The heading's box is the full wrapped block, so a vertical-only clearance would be a false
+    // pass on a one-line title: assert horizontally instead — the title must END before the button
+    // BEGINS. Guard that the name really did wrap to more than one line, otherwise a short-name
+    // regression would satisfy this without ever testing the crowded case.
+    expect(titleBox.height).toBeGreaterThan(30);
+    expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(buttonBox.x);
   });
 
   // Story 1.11 AC1: the one smoke check AR-42 allows — a distinct-colour count, never a pixel or

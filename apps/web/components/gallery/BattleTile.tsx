@@ -149,6 +149,16 @@ const TileHeader = styled('header')({
   display: 'flex',
   alignItems: 'center',
   marginBottom: '16px',
+  // Reserves the band TileActions floats over. That control is absolutely positioned against the
+  // Tile's border box (right: 18px, 28px wide), so it occupies 18→46px from the tile's right edge
+  // while this header's content box stops at the Tile's own 20px padding — an overlap of 46 − 20 =
+  // 26px, plus 8px of breathing room. Until the 2026-08-25 review this was reserved only as a side
+  // effect of the grid-size stat sitting there: a `nowrap` sibling under `justify-content:
+  // space-between` shrank the title clear of the band. Removing the stat took the reservation with
+  // it, so a long name's first line ran under the delete button — permanently under
+  // `@media (hover: none)`, where the button never fades out. Padding, not a margin on TileTitle,
+  // so the reservation survives any future second child.
+  paddingRight: '34px',
 });
 
 // The tile heading is <h2>: the page's only <h1> is "Battle Gallery" (Story 1.9). A tile <h3>
