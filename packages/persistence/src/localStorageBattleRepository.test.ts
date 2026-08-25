@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BattleSchema, type Battle } from '@gol/domain';
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
-import { CorruptDataError, QuotaExceededError, STORAGE_KEYS } from './storage';
+import { CorruptDataError } from './errors';
+import { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
   localStorage.clear();

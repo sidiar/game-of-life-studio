@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CURRENT_FORMAT_VERSION } from '@gol/domain';
+import { CorruptDataError } from './errors';
 import {
-  CorruptDataError,
   hasSchemaStamp,
   QuotaExceededError,
   readCollection,
@@ -10,7 +10,7 @@ import {
   STORAGE_KEYS,
   writeDataKey,
   writeSettingsKey,
-} from './storage';
+} from './localStorageAccess';
 
 // jsdom keeps ONE localStorage per test file. Without this, a key left behind by an earlier test
 // silently satisfies a later assertion.

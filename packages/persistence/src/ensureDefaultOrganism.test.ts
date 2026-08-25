@@ -2,7 +2,7 @@ import { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ensureDefaultOrganism } from './ensureDefaultOrganism';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
-import { STORAGE_KEYS } from './storage';
+import { STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
   localStorage.clear();

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '@gol/domain';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
-import { CorruptDataError, STORAGE_KEYS } from './storage';
+import { CorruptDataError } from './errors';
+import { STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
   localStorage.clear();

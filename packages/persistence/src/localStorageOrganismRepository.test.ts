@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { OrganismSchema, type Organism } from '@gol/domain';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
-import { CorruptDataError, STORAGE_KEYS } from './storage';
+import { CorruptDataError } from './errors';
+import { STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
   localStorage.clear();

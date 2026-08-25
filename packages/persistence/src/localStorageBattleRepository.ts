@@ -1,12 +1,7 @@
 import { BattleSchema, BattleSummarySchema, type Battle, type BattleSummary } from '@gol/domain';
 import type { BattleRepository } from './repositories';
-import {
-  CorruptDataError,
-  describeIssues,
-  readCollection,
-  STORAGE_KEYS,
-  writeDataKey,
-} from './storage';
+import { CorruptDataError, describeIssues } from './errors';
+import { readCollection, STORAGE_KEYS, writeDataKey } from './localStorageAccess';
 
 /**
  * The whole collection lives under a single `gol:battles` key (RFC-006 Decision 7). Per-battle
