@@ -837,7 +837,7 @@ to be reopened in a later review.
   implementations both AC2 and AC3 assert against
 - [Source: scripts/check-bundle-size.mjs:15] — `BUDGET_GZIP_KB = 300`, the constant Task 9 raises;
   **288.2 KB** is the 1.12 baseline
-- [Source: docs/implementation-artifacts/1-12-gallery-empty-state.md#Review Findings] — the AC3
+- [Source: docs/implementation-artifacts/epic-1/1-12-gallery-empty-state.md#Review Findings] — the AC3
   decision this story closes, and the falsification-check practice
 - [Source: docs/implementation-artifacts/deferred-work.md] — the six entries in the table above
 - [Source: docs/project-context.md] — injected repositories, no DOM types in `packages/*`, one
@@ -849,7 +849,7 @@ to be reopened in a later review.
 ### Agent Model Used
 
 claude-sonnet-5 (implementation, this session, after Sidiar's `/model` switch). The story file
-itself (docs/implementation-artifacts/1-13-delete-battle-with-confirmation.md) was authored by
+itself (docs/implementation-artifacts/epic-1/1-13-delete-battle-with-confirmation.md) was authored by
 claude-opus-5 in the earlier planning turn of this same conversation, before the switch — recorded
 separately per this project's convention (Story 1.12's Dev Agent Record) of attributing the model
 that actually produced each artifact rather than defaulting to whichever session made the commit.

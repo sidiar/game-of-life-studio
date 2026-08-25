@@ -218,6 +218,15 @@ are active on `apps/web`. ESLint is pinned to **v9** — v10 breaks `eslint-conf
   leave review artefacts ("fixed per review", "as requested") in code.
 - Cite the governing spec by ID where a rule is non-local: `(RFC-004 §3.5)`, `(Decision B.5)`,
   `(AR-2)`. That is how the next reader finds the authority.
+  - **Enforced:** `npm run spec:check` (in `ci`, after `format:check`) fails the build when a
+    cited ID resolves to nothing under `docs/`. It tokenises `ARn`, `RFC-00n`, `FRx.y`/`NFRx.y`,
+    `Mn` (M1–M10 only), `Decision A–Z` and `Story N.M` out of both code and docs and compares
+    them as sets — a renumbered decision otherwise keeps compiling and keeps *looking*
+    authoritative. Write IDs exactly as the specs spell them (`AR-2`, `M9`, `FR-8.7`); a
+    hyphenated `M-9` matches nothing and is silently exempt forever. `ACn` and bare
+    `Decision 7` are not checked (story- and RFC-relative, no global referent).
+  - When an ID is retired, drop the tag and **keep the prose** — every citation here is attached
+    to a sentence that stands without it, which is what makes the tags safe to remove.
 
 **Naming**
 
@@ -339,7 +348,7 @@ Following instinct here produces code that compiles, passes tests, and violates 
   The caller must resolve the token to a concrete string first via `getComputedStyle(root)
   .getPropertyValue('--gol-*')` (the computed value of a custom property is substituted — this
   returns `"rgb(51 51 51 / 0.3)"`, not the token's own `var(...)` expression) — this is
-  `apps/web/lib/themeColors.ts` (Story 1.11). Resolve once and pass the strings down; calling it
+  `apps/web/lib/canvas/themeColors.ts` (Story 1.11). Resolve once and pass the strings down; calling it
   per canvas forces a style recalculation per call. This is why `GridRenderer` takes injected
   `GridRendererColors` strings instead of reading the theme itself (Story 1.8), and it recurs
   everywhere a canvas is added — Epic 2's edit-mode canvas and Epic 3's playback canvas both need

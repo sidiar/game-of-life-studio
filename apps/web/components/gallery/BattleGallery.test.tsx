@@ -535,10 +535,13 @@ describe('BattleGallery', () => {
     // check is the promise M4 is actually making — a future change cannot reintroduce the call
     // path without also touching source text this test reads directly off disk.
     it('never mentions toDataURL, toBlob, createImageBitmap, or localStorage in source (structural)', () => {
-      const componentsDir = dirname(fileURLToPath(import.meta.url));
+      const galleryDir = dirname(fileURLToPath(import.meta.url));
       const forbidden = ['toDataURL', 'toBlob', 'createImageBitmap', 'localStorage'];
-      for (const file of ['PetriDishCanvas.tsx', 'BattleTile.tsx']) {
-        const source = readFileSync(join(componentsDir, file), 'utf-8');
+      // Both halves of the thumbnail path, and they no longer sit side by side: PetriDishCanvas
+      // is the SHARED render surface one level up in components/ (the Battle page uses the same
+      // one — component-tree-battle-page.md §2), while BattleTile is a gallery sibling.
+      for (const file of ['../PetriDishCanvas.tsx', 'BattleTile.tsx']) {
+        const source = readFileSync(join(galleryDir, file), 'utf-8');
         for (const term of forbidden) {
           expect(source, `${file} must never mention ${term} (AC2/M4)`).not.toContain(term);
         }

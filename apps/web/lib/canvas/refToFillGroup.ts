@@ -9,8 +9,8 @@
  * layer in Epic 1 — this LUT is exactly the one Story 3.4 will produce from its interning step.
  */
 import type { Organism } from '@gol/domain';
-import { ageShadeFor } from './displayColor';
-import { DEFAULT_COLOR_TOKEN, paletteIndexOf } from './paletteRegistry';
+import { ageShadeFor } from '../palette/displayColor';
+import { DEFAULT_COLOR_TOKEN, paletteIndexOf } from '../palette/paletteRegistry';
 
 export interface RefToFillGroup {
   readonly tokenIndex: Uint8Array; // [ref] -> palette index (0..19). Slot 0 unused: ref 0 = empty.

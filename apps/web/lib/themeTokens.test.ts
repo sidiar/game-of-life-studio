@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { contrastRatio } from './paletteCvd';
+import { contrastRatio } from './palette/paletteCvd';
 
 // Parses the SHIPPED CSS file, not a re-declared copy — a test that hardcodes the hexes in
 // TypeScript passes forever after someone edits themes.css and verifies nothing (Story 1.9 Dev

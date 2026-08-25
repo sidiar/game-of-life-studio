@@ -15,10 +15,27 @@ import { createMockWorkspace } from '@gol/test-utils';
 // indicator. That matters because the +n indicator is 10px --gol-text-tertiary on
 // --gol-bg-secondary, the smallest text in the tile, and only a real browser can check its
 // contrast: jsdom has no layout, so axe skips colour-contrast there entirely.
-function buildSeedPayload(options: { crowded?: boolean } = {}) {
+
+// A name long enough that its first line must run the full width of the tile's content box. The
+// mock workspace's own names ("Grand Colony War") wrap well short of the delete button and so
+// cannot exercise the reservation TileHeader's paddingRight exists for.
+const LONG_BATTLE_NAME = 'Transcontinental Assimilation Front Expansion Campaign';
+
+function buildSeedPayload(options: { crowded?: boolean; longName?: boolean } = {}) {
   const { battles, organisms } = createMockWorkspace();
   const battlesRecord: Record<string, unknown> = Object.fromEntries(battles.map((b) => [b.id, b]));
   const organismsRecord = Object.fromEntries(organisms.map((o) => [o.id, o]));
+
+  if (options.longName) {
+    const longNamed = {
+      ...battles[0],
+      id: 'd6c4f5a7-8e9b-4c0d-9f1a-3b4c5d6e7f80',
+      name: LONG_BATTLE_NAME,
+      // Newest, so it sorts first and is the tile the test locates by index 0.
+      updatedAt: '2030-01-01T00:00:00.000Z',
+    };
+    battlesRecord[longNamed.id] = longNamed;
+  }
 
   if (options.crowded) {
     const crowded = {
@@ -40,7 +57,7 @@ function buildSeedPayload(options: { crowded?: boolean } = {}) {
   };
 }
 
-async function seedWorkspace(page: Page, options: { crowded?: boolean } = {}) {
+async function seedWorkspace(page: Page, options: { crowded?: boolean; longName?: boolean } = {}) {
   const payload = buildSeedPayload(options);
 
   await page.addInitScript(
@@ -109,6 +126,40 @@ test.describe('battle gallery (Story 1.10)', () => {
     expect(errors).toEqual([]);
   });
 
+  // Review 2026-08-25: removing the grid-size stat took the tile corner's only space reservation
+  // with it, so a long name's first line ran underneath the absolutely-positioned delete button.
+  // Only a real browser can catch this — jsdom has no layout, so every box it reports is 0x0 and
+  // an overlap assertion there passes no matter what the CSS says. Asserted as a geometric
+  // non-intersection rather than by reading paddingRight back: the padding is the current fix, not
+  // the requirement, and a test that restates the implementation cannot fail when the two diverge.
+  test('a long battle name never runs underneath the delete button', async ({ page }) => {
+    await seedWorkspace(page, { longName: true });
+    await page.goto('/');
+
+    const tile = page.getByRole('article').first();
+    await expect(tile.getByRole('heading', { level: 2 })).toHaveText(LONG_BATTLE_NAME);
+
+    // Hover to reveal the button. It is in the DOM and hit-testable at opacity 0 regardless, and
+    // permanently visible under `@media (hover: none)` — the overlap is not hover-gated, so this
+    // only makes the measured state the one a mouse user actually sees.
+    await tile.hover();
+    const button = tile.locator('[data-tile-actions] button');
+    await expect(button).toBeVisible();
+
+    const titleBox = await tile.getByRole('heading', { level: 2 }).boundingBox();
+    const buttonBox = await button.boundingBox();
+    if (titleBox === null || buttonBox === null) {
+      throw new Error('Expected both the heading and the delete button to have a layout box.');
+    }
+
+    // The heading's box is the full wrapped block, so a vertical-only clearance would be a false
+    // pass on a one-line title: assert horizontally instead — the title must END before the button
+    // BEGINS. Guard that the name really did wrap to more than one line, otherwise a short-name
+    // regression would satisfy this without ever testing the crowded case.
+    expect(titleBox.height).toBeGreaterThan(30);
+    expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(buttonBox.x);
+  });
+
   // Story 1.11 AC1: the one smoke check AR-42 allows — a distinct-colour count, never a pixel or
   // image snapshot. The canvas is untainted (no external images) so getImageData is legal here.
   // Grand Colony War places four organisms plus a glider on a 100x60 grid, guaranteeing more than
@@ -160,32 +211,37 @@ test.describe('battle gallery (Story 1.10)', () => {
     // role="img", not button — the dot has no activation behaviour, so a button role would
     // announce an action that does not exist.
     const dot = tile.getByRole('img', { name: 'Aggressive Colonizer' });
-    // The dot itself carries no visible text (aria-label only) — the tooltip is the visible
-    // span with the same name, matched separately here.
-    const tooltip = tile.getByText('Aggressive Colonizer', { exact: true });
+    // MUI's Tooltip (2026-08-25 — replaced the hand-rolled version) only mounts its content
+    // (role="tooltip") while open, rather than always being present at opacity 0 — presence IS
+    // the visibility signal now, not a CSS property jsdom's unit suite couldn't compute anyway.
+    const tooltip = page.getByRole('tooltip', { name: 'Aggressive Colonizer' });
 
     await expect(dot).toBeVisible();
-    await expect(tooltip).toHaveCSS('opacity', '0');
+    await expect(tooltip).not.toBeAttached();
 
     // Content-on-hover must also appear on focus (SC 1.4.13) — the real assertion a mouse-only
-    // CSS ::before tooltip (the mockup's original pattern) could never pass.
+    // CSS ::before tooltip (the mockup's original pattern) could never pass. A real `.focus()`
+    // call, not a Tab keypress: MUI gates this reveal on `:focus-visible` (jsdom cannot evaluate
+    // that selector at all — BattleTile.test.tsx works around it via hover instead — so this
+    // browser-level check is the only place the keyboard-focus path is actually verified).
     await dot.focus();
-    await expect(tooltip).toHaveCSS('opacity', '1');
+    await expect(tooltip).toBeVisible();
 
     // Dismissible (SC 1.4.13): Escape hides the tooltip WITHOUT moving focus. An earlier
     // implementation blurred the trigger, which dropped the user at <body> and restarted the
-    // tab order at the top of the document.
+    // tab order at the top of the document. MUI's Tooltip closes on Escape the same way (its own
+    // document keydown listener, Tooltip.js:444-451) without touching focus.
     await page.keyboard.press('Escape');
-    await expect(tooltip).toHaveCSS('opacity', '0');
+    await expect(tooltip).not.toBeAttached();
     await expect(dot).toBeFocused();
 
-    // Hoverable (SC 1.4.13): the tooltip must survive the pointer travelling onto it. This is
-    // what `pointer-events: auto` + the ::after gap bridge buy — with neither, the tooltip
-    // vanishes mid-traverse and this assertion fails.
+    // Hoverable (SC 1.4.13): the tooltip must survive the pointer travelling onto it — MUI's
+    // Tooltip is interactive by default (`disableInteractive={false}`), which is what buys this
+    // for free now instead of the old `pointer-events: auto` + ::after gap bridge.
     await dot.hover();
-    await expect(tooltip).toHaveCSS('opacity', '1');
+    await expect(tooltip).toBeVisible();
     await tooltip.hover();
-    await expect(tooltip).toHaveCSS('opacity', '1');
+    await expect(tooltip).toBeVisible();
 
     // Every organism is reachable this way, not just the first.
     await expect(tile.getByRole('img', { name: 'Patient Defender' })).toBeVisible();

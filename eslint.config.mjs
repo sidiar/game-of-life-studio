@@ -18,7 +18,7 @@ const nextScopedToWeb = next.map((config) =>
 // template literal (Emotion's `css\`color: #fff\`` pattern), plus rgb()/rgba()/
 // hsl()/hsla() functional notation. Raw colours belong only in the token layer
 // (themes.css — a CSS file, outside this .ts/.tsx lint scope) and the palette
-// registry (RFC-007 — apps/web/lib/paletteRegistry.ts, whitelisted below).
+// registry (RFC-007 — apps/web/lib/palette/paletteRegistry.ts, whitelisted below).
 // AR-46 / NFR-8.1: keeping components token-only is what makes the Epic 6
 // second theme a one-file change.
 // Named CSS colours ("red") are deliberately NOT matched — too high a
@@ -86,7 +86,7 @@ export default tseslint.config(
       'apps/web/**/*.test.{ts,tsx}',
       'apps/web/**/*.spec.{ts,tsx}',
       'apps/web/e2e/**',
-      'apps/web/lib/paletteRegistry.ts',
+      'apps/web/lib/palette/paletteRegistry.ts',
     ],
     rules: {
       'no-restricted-syntax': [

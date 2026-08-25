@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, waitForElementToBeRemoved } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
@@ -42,15 +42,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// The tooltip's visibility is a data attribute rather than a class so the assertion does not
-// depend on Emotion's generated names; jsdom cannot compute opacity, so this attribute IS the
-// observable state in unit tests (the real opacity transition is asserted in gallery.spec.ts).
-function tooltipOf(marker: HTMLElement): HTMLElement {
-  const tooltip = marker.nextElementSibling;
-  if (!(tooltip instanceof HTMLElement)) throw new Error('marker has no tooltip sibling');
-  return tooltip;
-}
-
 describe('BattleTile', () => {
   it('renders the battle name as a level-2 heading', () => {
     render(<BattleTile {...BASE_PROPS} />);
@@ -64,9 +55,14 @@ describe('BattleTile', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Untitled battle' })).toBeInTheDocument();
   });
 
-  it('renders the grid-size stat, not a cycle count (forced decision 2)', () => {
+  // Forced decision 2's grid-size substitute for the mockup's unimplementable "Gen 47" is gone
+  // (Sidiar, 2026-08-25) — it sat in the same top-right corner TileActions reveals the delete
+  // button into on hover (the mockup has the identical collision: `.tile-actions` is
+  // `position: absolute; top: 18px; right: 18px`, the same slot `.tile-stats` occupies), and
+  // grid size wasn't valuable enough to keep fighting that overlap for. The corner is empty now.
+  it('renders no grid-size stat in the header', () => {
     render(<BattleTile {...BASE_PROPS} />);
-    expect(screen.getByText('50 × 30')).toBeInTheDocument();
+    expect(screen.queryByText('50 × 30')).not.toBeInTheDocument();
   });
 
   it('renders the single last-modified date, with no visible organism-count text', () => {
@@ -104,51 +100,65 @@ describe('BattleTile', () => {
     expect(screen.getByRole('img', { name: 'Aggressive Colonizer' })).toHaveFocus();
   });
 
-  it('reveals the tooltip on focus and on pointer hover (WCAG 1.4.13)', async () => {
+  // MUI's Tooltip only mounts its content (role="tooltip", via a Popper portal) while open — no
+  // data-attribute needed; presence/absence in the DOM IS the observable state.
+  //
+  // The keyboard-focus half of SC 1.4.13 is NOT verified here: MUI gates that reveal on
+  // `:focus-visible` (@mui/utils/isFocusVisible), and jsdom's `Element#matches(':focus-visible')`
+  // throws — caught, and treated as `false` — so a jsdom-focused dot never opens the tooltip
+  // regardless of real-browser behaviour. gallery.spec.ts's tab-focus assertion is the only place
+  // that reveal is actually exercised (verified there against chromium, firefox and webkit).
+  it('reveals the tooltip on pointer hover, and hides it on pointer leave', async () => {
     const user = userEvent.setup();
     render(<BattleTile {...BASE_PROPS} />);
     const dot = screen.getByRole('img', { name: 'Aggressive Colonizer' });
 
-    expect(tooltipOf(dot)).not.toHaveAttribute('data-open');
-
-    await user.tab();
-    expect(tooltipOf(dot)).toHaveAttribute('data-open');
-
-    await user.tab();
-    expect(tooltipOf(dot)).not.toHaveAttribute('data-open');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
     await user.hover(dot);
-    expect(tooltipOf(dot)).toHaveAttribute('data-open');
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Aggressive Colonizer');
+
+    await user.unhover(dot);
+    await waitForElementToBeRemoved(() => screen.queryByRole('tooltip'));
   });
 
   // SC 1.4.13 "dismissible" requires dismissal WITHOUT moving focus — an earlier implementation
-  // blurred the trigger, which dropped the user at <body> and restarted the tab order.
+  // blurred the trigger, which dropped the user at <body> and restarted the tab order. MUI's
+  // Tooltip closes on Escape via its own document keydown listener (Tooltip.js:444-451) without
+  // touching focus, which is what this test now verifies against MUI's behaviour rather than a
+  // hand-rolled one.
+  //
+  // Opened via hover, not Tab: MUI's focus-triggered reveal is `:focus-visible`-gated, which
+  // jsdom cannot evaluate (see the test above). A real `.focus()` call still puts real DOM focus
+  // on the dot regardless of that gate, which is all this test needs to verify Escape's
+  // no-refocus behaviour.
   it('dismisses the tooltip on Escape while keeping focus on the dot', async () => {
     const user = userEvent.setup();
     render(<BattleTile {...BASE_PROPS} />);
     const dot = screen.getByRole('img', { name: 'Aggressive Colonizer' });
 
-    await user.tab();
+    await user.hover(dot);
+    dot.focus();
     expect(dot).toHaveFocus();
-    expect(tooltipOf(dot)).toHaveAttribute('data-open');
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    expect(tooltipOf(dot)).not.toHaveAttribute('data-open');
+    await waitForElementToBeRemoved(() => screen.queryByRole('tooltip'));
     expect(dot).toHaveFocus();
   });
 
-  // A pointer user has no focused element to receive the keydown, which is why the listener is on
-  // document rather than on the trigger.
+  // A pointer user has no focused element to receive the keydown, which is why MUI's listener is
+  // on `document` rather than on the trigger.
   it('dismisses a hover-triggered tooltip on Escape', async () => {
     const user = userEvent.setup();
     render(<BattleTile {...BASE_PROPS} />);
     const dot = screen.getByRole('img', { name: 'Aggressive Colonizer' });
 
     await user.hover(dot);
-    expect(tooltipOf(dot)).toHaveAttribute('data-open');
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    expect(tooltipOf(dot)).not.toHaveAttribute('data-open');
+    await waitForElementToBeRemoved(() => screen.queryByRole('tooltip'));
   });
 
   it('caps the visible dots at 6 and folds the rest into a "+n" control whose accessible name lists every remaining organism', () => {
@@ -374,7 +384,7 @@ describe('BattleTile — thumbnail (Story 1.11)', () => {
   });
 
   it('degrades to a blank dish when toThumbnailSource throws', async () => {
-    const battleThumbnail = await import('@/lib/battleThumbnail');
+    const battleThumbnail = await import('@/lib/canvas/battleThumbnail');
     const throwSpy = vi.spyOn(battleThumbnail, 'toThumbnailSource').mockImplementation(() => {
       throw new Error('ragged gridState');
     });

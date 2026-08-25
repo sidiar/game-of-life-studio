@@ -5,9 +5,9 @@ import {
   GridRenderer,
   GridRendererContextError,
   type GridRendererColors,
-} from '@/lib/gridRenderer';
-import type { RefToFillGroup } from '@/lib/refToFillGroup';
-import type { RenderableGrid } from '@/lib/renderableGrid';
+} from '@/lib/canvas/gridRenderer';
+import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
+import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 
 // component-tree-battle-page.md#3.10 names this component and assigns three variants across three
 // epics: static -> Epic 1 (this story), edit -> 2.4, playback -> 3.11. Built here with the

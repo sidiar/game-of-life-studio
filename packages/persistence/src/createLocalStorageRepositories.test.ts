@@ -4,7 +4,7 @@ import { createLocalStorageRepositories } from './createLocalStorageRepositories
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
-import { STORAGE_KEYS } from './storage';
+import { STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
   localStorage.clear();

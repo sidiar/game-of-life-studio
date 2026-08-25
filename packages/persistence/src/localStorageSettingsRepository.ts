@@ -1,12 +1,7 @@
 import { SettingsSchema, type Settings } from '@gol/domain';
 import type { SettingsRepository } from './repositories';
-import {
-  CorruptDataError,
-  describeIssues,
-  readStoredValue,
-  STORAGE_KEYS,
-  writeSettingsKey,
-} from './storage';
+import { CorruptDataError, describeIssues } from './errors';
+import { readStoredValue, STORAGE_KEYS, writeSettingsKey } from './localStorageAccess';
 
 /**
  * Device-local preferences under `gol:settings` (Decision F). This record is the one thing in the

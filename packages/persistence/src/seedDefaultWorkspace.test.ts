@@ -2,7 +2,7 @@ import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalStorageRepositories } from './createLocalStorageRepositories';
 import { seedDefaultWorkspace } from './seedDefaultWorkspace';
-import { QuotaExceededError, STORAGE_KEYS } from './storage';
+import { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
   localStorage.clear();

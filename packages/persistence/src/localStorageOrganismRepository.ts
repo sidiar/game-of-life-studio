@@ -1,13 +1,7 @@
 import { OrganismSchema, type Organism } from '@gol/domain';
 import type { OrganismRepository } from './repositories';
-import {
-  assertSafeCollectionId,
-  CorruptDataError,
-  describeIssues,
-  readCollection,
-  STORAGE_KEYS,
-  writeDataKey,
-} from './storage';
+import { assertSafeCollectionId, CorruptDataError, describeIssues } from './errors';
+import { readCollection, STORAGE_KEYS, writeDataKey } from './localStorageAccess';
 
 /**
  * The workspace-shared Organism Library (FR-7.15) under a single `gol:organisms` key. Battles

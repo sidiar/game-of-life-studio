@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { groupByColourState, resetColourStateWarnings } from './colourStateGroups';
-import { ageShadeFor } from './displayColor';
+import { ageShadeFor } from '../palette/displayColor';
 import type { RefToFillGroup } from './refToFillGroup';
 import type { RenderableGrid } from './renderableGrid';
 

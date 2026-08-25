@@ -20,11 +20,12 @@ export { LocalStorageSettingsRepository } from './localStorageSettingsRepository
 
 // Callers need these to tell "storage is full" apart from "stored data is unreadable" — both are
 // recoverable states the UI reports differently (NFR-7.2 / NFR-7.3).
-export { CorruptDataError, QuotaExceededError, STORAGE_KEYS } from './storage';
-export type { StorageKey } from './storage';
+export { CorruptDataError } from './errors';
+export { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
+export type { StorageKey } from './localStorageAccess';
 
 // Exported so @gol/test-utils' in-memory fakes can enforce the identical id guard rather than
 // re-stating it (review 2026-08-05). A fake that accepts an id LocalStorageOrganismRepository
 // rejects lets a test go green against a save the real store would have thrown on — and two
 // copies of the rule would be free to drift apart silently.
-export { assertSafeCollectionId } from './storage';
+export { assertSafeCollectionId } from './errors';

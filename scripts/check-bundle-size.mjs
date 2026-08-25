@@ -22,7 +22,15 @@ import { join } from 'node:path';
 // ceil((306.3 + 12) / 5) * 5 = 320 — preserving roughly the ~12 KB headroom the gate carried
 // before, rounded up to the next 5 KB. RFC-003:48/253/309 and epics.md:159/:371 still read
 // "~300KB" — filed as a docs-reconciliation item in deferred-work.md rather than edited from here.
-const BUDGET_GZIP_KB = 320;
+//
+// 320 -> 330 (Sidiar, 2026-08-25): BattleTile's organism-dot tooltip moved from a hand-rolled
+// `styled('span')` to `@mui/material/Tooltip` — a deliberate reversal of Story 1.10 Task 3's
+// rejection of that same component (its own budget note, at 18.6 KB headroom, targeted "zero new
+// MUI component imports"). Measured against the 1.13 baseline of 306.8 KB, the swap landed the
+// home route at 317.5 KB gzip — +10.7 KB, 2.5 KB under the old 320 KB budget (passed, but did not
+// leave the ~12 KB headroom the gate is meant to carry). Same formula as the 1.13 move, applied
+// again rather than picked round: ceil((317.5 + 12) / 5) * 5 = 330.
+const BUDGET_GZIP_KB = 330;
 
 const OUT_DIR = join('apps', 'web', 'out');
 const HOME_HTML = join(OUT_DIR, 'index.html');

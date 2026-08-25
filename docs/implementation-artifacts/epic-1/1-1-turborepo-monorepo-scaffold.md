@@ -196,7 +196,7 @@ New:
 
 Modified:
 - .gitignore (added `*.tsbuildinfo`)
-- docs/implementation-artifacts/1-1-turborepo-monorepo-scaffold.md (story tracking)
+- docs/implementation-artifacts/epic-1/1-1-turborepo-monorepo-scaffold.md (story tracking)
 - docs/implementation-artifacts/sprint-status.yaml (status transitions)
 
 ## Change Log

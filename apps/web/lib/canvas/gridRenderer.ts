@@ -17,7 +17,7 @@
  * disk, naming the exact primitives banned) — belt and braces, because the structural check is
  * the promise Epic 3 is actually being given.
  */
-import { displayColorAt } from './displayColor';
+import { displayColorAt } from '../palette/displayColor';
 import { groupByColourState } from './colourStateGroups';
 import { computeGridLayout, type GridLayout } from './gridLayout';
 import type { RefToFillGroup } from './refToFillGroup';

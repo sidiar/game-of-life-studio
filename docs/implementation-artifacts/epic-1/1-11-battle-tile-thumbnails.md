@@ -470,7 +470,7 @@ and the AC4 bound — the AR-15 test could not fail at all before this pass._
 - [x] [Review][Patch] Task 4's `page.test.tsx` subtask is checked `[x]` but the file is untouched —
       the deviation is self-declared in the Dev Agent Record with a sound rationale, but the checkbox
       is the state a future reader trusts. Uncheck and annotate
-      [docs/implementation-artifacts/1-11-battle-tile-thumbnails.md:204-205]
+      [docs/implementation-artifacts/epic-1/1-11-battle-tile-thumbnails.md:204-205]
 - [x] [Review][Patch] `readGridColors` runs in the render path behind a `typeof document` guard, not
       the client-effect gate Task 4 mandated — functionally safe and explained in a code comment, but
       it is a substituted mechanism that never reached the Dev Agent Record's deviation list
@@ -821,10 +821,10 @@ or `packages/persistence`; **no package has a coverage gate this story can trip.
 - [Source: docs/planning-artifacts/ux-designs/…/clinical-lab-theme/battle-gallery.html:279-296] — the
   `.petri-dish` box and `.grid-pattern` line treatment; **petri-dish-lab-mode.html:461-468** — the
   same lines at 0.3 opacity, the value `--gol-grid-line` encodes
-- [Source: docs/implementation-artifacts/1-8-gridrenderer-static-core.md:165, 209, 244-245, 253] — the
+- [Source: docs/implementation-artifacts/epic-1/1-8-gridrenderer-static-core.md:165, 209, 244-245, 253] — the
   `renderStatic`/`drawFull` split, the warn-dedupe deferral naming this story, and the decision that
   the caller resolves `--gol-*` via `getComputedStyle`
-- [Source: docs/implementation-artifacts/1-10-battle-gallery-tiles-sorting.md] — the Gallery's shipped
+- [Source: docs/implementation-artifacts/epic-1/1-10-battle-gallery-tiles-sorting.md] — the Gallery's shipped
   shape, its 19 review patches, and the bundle/`npm run ci` lessons
 - [Source: docs/implementation-artifacts/deferred-work.md] — the four renderer entries (overlay
   `drawImage` coverage, `rebuildGridLineOverlay` allocation, `lastGrid` retention, `setPalette`), the

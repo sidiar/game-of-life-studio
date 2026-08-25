@@ -1,6 +1,6 @@
 import { createMockOrganisms, MOCK_ORGANISM_IDS } from '@gol/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { paletteIndexOf } from './paletteRegistry';
+import { paletteIndexOf } from '../palette/paletteRegistry';
 import { buildRefToFillGroup, fillGroupOf, resetRefToFillGroupWarnings } from './refToFillGroup';
 
 const ORGANISM_IDS = [

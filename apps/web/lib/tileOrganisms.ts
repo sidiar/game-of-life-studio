@@ -1,6 +1,6 @@
 import type { Organism } from '@gol/domain';
-import { displayColor, MAX_AGE_SHADE } from '@/lib/displayColor';
-import { DEFAULT_COLOR_TOKEN } from '@/lib/paletteRegistry';
+import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
+import { DEFAULT_COLOR_TOKEN } from '@/lib/palette/paletteRegistry';
 
 export interface TileOrganism {
   id: string;

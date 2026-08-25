@@ -2,7 +2,7 @@ import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
 import type { AppRepositories } from './repositories';
-import { hasSchemaStamp, removeDataKeys } from './storage';
+import { hasSchemaStamp, removeDataKeys } from './localStorageAccess';
 
 /**
  * The Standalone-mode repository set. Mode selection itself lives in the app's factory
