@@ -27,7 +27,14 @@ otherwise violates while still compiling and passing tests. The load-bearing one
 ## Working state
 
 - `docs/implementation-artifacts/sprint-status.yaml` — story tracker and current phase.
-- Per-story files live beside it (`1-1-*.md`, …) with a Dev Agent Record per story.
+- Per-story files (`1-1-*.md`, …) carry a Dev Agent Record each. **Completed epics are
+  archived into `epic-N/`; the epic in progress stays flat beside `sprint-status.yaml`.**
+  That split is not cosmetic — the BMad skills glob story files *non-recursively* off
+  `implementation_artifacts` (create-story writes `{implementation_artifacts}/{story_key}.md`
+  and reads `{epic}-{prev}-*.md`; retrospective reads `{epic}-{n}-*.md`; dev-story
+  scans `*-*-*.md`). Move an epic's stories down only once it is done, or those lookups
+  silently find nothing. Cross-epic artifacts (`deferred-work.md`, the validation docs)
+  stay at the root.
 
 ## Workflow
 

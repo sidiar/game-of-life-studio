@@ -146,7 +146,7 @@ Corresponding test files beside each (`packages/domain/src/*.test.ts`, or under 
 - [Source: docs/planning-artifacts/architecture.md#Decision H — "Used by a battle" means placed on its grid] — H.1 (`organismIds` ≡ placed set, the third superRefine check)
 - [Source: docs/planning-artifacts/architecture.md#Decision I — One migration pipeline] — I.4 (`schemaVersion` is a stamp, never a switch — don't branch on it in this story)
 - [Source: docs/project-context.md#Language-Specific Rules / Naming] — no DOM types in `packages/*`; non-component TS files are camelCase, never dotted
-- [Source: docs/implementation-artifacts/1-2-ci-pipeline-quality-gates.md] — Vitest/coverage infra already wired per-package; `passWithNoTests` context; comment-convention precedent
+- [Source: docs/implementation-artifacts/epic-1/1-2-ci-pipeline-quality-gates.md] — Vitest/coverage infra already wired per-package; `passWithNoTests` context; comment-convention precedent
 - [Source: docs/implementation-artifacts/deferred-work.md] — open item `@gol/persistence` has no DOM lib (Story 1.4's concern, not this story's)
 
 ## Dev Agent Record
@@ -202,7 +202,7 @@ Modified:
 - apps/web/app/page.tsx (wiring-proof text now derived from real `OrganismSchema` export instead of the removed `GOL_DOMAIN` placeholder)
 - apps/web/app/page.test.tsx (comment updated to match; assertions unchanged)
 - docs/implementation-artifacts/sprint-status.yaml (status transitions)
-- docs/implementation-artifacts/1-3-domain-entities-zod-schemas.md (this story — tracking)
+- docs/implementation-artifacts/epic-1/1-3-domain-entities-zod-schemas.md (this story — tracking)
 
 ## Change Log
 

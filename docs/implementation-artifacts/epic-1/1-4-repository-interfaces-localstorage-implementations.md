@@ -220,7 +220,7 @@ Test files co-located as `*.test.ts` (the pattern 1.2/1.3 established — this r
 - [Source: docs/planning-artifacts/architecture.md#Decision I] — I.3/I.4 stamps are asserted, never branched on
 - [Source: docs/project-context.md#Framework-Specific Rules] — repositories injected never imported (AR-2/27); `APP_MODE` single read-point; no global store
 - [Source: docs/project-context.md#Language-Specific Rules] — `packages/persistence` adds `"lib": ["ES2022", "DOM"]` to its **own** tsconfig; camelCase-never-dotted filenames; Zod parses at boundaries
-- [Source: docs/implementation-artifacts/1-3-domain-entities-zod-schemas.md] — ISO-timestamp resolution and its two regression tests; placeholder-removal fallout
+- [Source: docs/implementation-artifacts/epic-1/1-3-domain-entities-zod-schemas.md] — ISO-timestamp resolution and its two regression tests; placeholder-removal fallout
 - [Source: docs/implementation-artifacts/deferred-work.md] — `@gol/persistence` DOM lib (Task 1); RFC-001 §3 snippet correction (Task 10); strict-vs-strip posture (Decision 2 above)
 
 ## Dev Agent Record
@@ -309,7 +309,7 @@ Modified (2026-08-05 code review — see Review Findings):
 - docs/planning-artifacts/rfcs/RFC-001-multi-mode-architecture.md (§3 schema + repository snippet corrected)
 - docs/implementation-artifacts/deferred-work.md (two items resolved, strict-vs-strip decision recorded)
 - docs/implementation-artifacts/sprint-status.yaml (status transitions)
-- docs/implementation-artifacts/1-4-repository-interfaces-localstorage-implementations.md (this story — tracking)
+- docs/implementation-artifacts/epic-1/1-4-repository-interfaces-localstorage-implementations.md (this story — tracking)
 
 ## Change Log
 

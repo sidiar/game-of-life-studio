@@ -200,7 +200,7 @@ Test files co-located as `*.test.ts(x)` — this repo has never used a `__tests_
 - [Source: docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md#FR-8.4] — the deep-equal "unmodified default" suppression rule that consumes this constant (Story 5.9)
 - [Source: docs/project-context.md#Framework-Specific Rules] — repositories injected never imported (AR-2/27); no server/API routes; three state categories
 - [Source: docs/project-context.md#Critical Don't-Miss Rules] — Conway's Classic is protected (M9); `clearAll()` never touches `gol:settings`
-- [Source: docs/implementation-artifacts/1-4-repository-interfaces-localstorage-implementations.md] — the stamp-ordering trap, `exists()` vs `load()` semantics, the `DEFAULT_SETTINGS` freeze finding, `npm run ci` as the only gate that catches cross-package breakage
+- [Source: docs/implementation-artifacts/epic-1/1-4-repository-interfaces-localstorage-implementations.md] — the stamp-ordering trap, `exists()` vs `load()` semantics, the `DEFAULT_SETTINGS` freeze finding, `npm run ci` as the only gate that catches cross-package breakage
 - [Source: docs/implementation-artifacts/deferred-work.md] — open items touching this area (none block this story; add the contentHash regeneration entry per forced decision 2)
 
 ## Dev Agent Record

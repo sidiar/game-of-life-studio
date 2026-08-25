@@ -850,7 +850,7 @@ they are exempt from its ≥90% gate. Nothing new enters `packages/simulation` o
 - [Source: docs/implementation-artifacts/deferred-work.md] — the `--gol-bg-hover`,
   `useWorkspaceSeed` error-path, `updatedAt < createdAt`, and renderer entries this story resolves,
   re-points, or must leave alone
-- [Source: docs/implementation-artifacts/1-9-clinical-lab-theme-tokens-app-shell.md] — the shell
+- [Source: docs/implementation-artifacts/epic-1/1-9-clinical-lab-theme-tokens-app-shell.md] — the shell
   patterns, the three corrected comments, and the bundle/`npm run ci` lessons
 - [Source: docs/project-context.md] — injected repositories, no DOM types in `packages/*`, grid
   dimensions are never constants, camelCase filenames, the commit gate

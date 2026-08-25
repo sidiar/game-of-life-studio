@@ -555,7 +555,7 @@ touches a file outside the block above, stop and say why.
   `excludeHidden: false`, the matcher that does not skip `aria-hidden`, and the `ignoreUnicode` /
   `textIsEmojis` path that puts a symbol-only glyph in `incomplete` rather than `violations`
 - [Source: scripts/check-bundle-size.mjs] — the 300 KB gzip gate; **288.0 KB** is the 1.11 baseline
-- [Source: docs/implementation-artifacts/1-11-battle-tile-thumbnails.md#Review Findings] — the 20
+- [Source: docs/implementation-artifacts/epic-1/1-11-battle-tile-thumbnails.md#Review Findings] — the 20
   patches, and the "tests that cannot fail" pattern Task 4's falsification step exists to avoid
 - [Source: docs/implementation-artifacts/deferred-work.md] — nothing here is owed by this story; the
   1.10 "zero placed organisms has no focusable element" entry resolves in **2.2**, not here

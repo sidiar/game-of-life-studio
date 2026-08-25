@@ -192,7 +192,7 @@ _**The defects are concentrated in `palette-cvd-validation.md` — which is the 
 - [x] [Review][Patch] **The doc's "reproduces `entry.hex` exactly" claim is true only under case-folding** — `rgbToHex` emits lowercase (`Number.prototype.toString(16)`), `PALETTE_SOURCE` hexes are uppercase, and neither side is canonicalised. The *values* round-trip with zero drift for all 20 tokens (verified), but any future check written literally against that documented sentence — `pixelHexAt(id, 7) === entry.hex` — fails on all 20 for a reason unrelated to colour. Either canonicalise case in the registry or qualify the sentence. [docs/implementation-artifacts/palette-cvd-validation.md:16, apps/web/lib/colorMath.ts:98]
 - [x] [Review][Patch] **The drift narrative is understated** — the doc claims the only shift from the story's precomputed table is the shade-0 core worst-pair identity. Measured, identities also shift at shade-0 tritan all-20 (`coral-red`/`rose` 4.07 → `cyan`/`mint` 4.02) and shade-3 tritan all-20 (`coral-red`/`rose` 6.72 → `tangerine`/`rose` 6.51), and the deutan shade-0 core delta is 0.45 (9.69 → 9.24), beyond the story's stated "±0.1 is fine" tolerance. The likely benign cause — this pipeline quantizes through `formatHsl`'s 1-dp string and then to 8-bit hex before Lab, which the story's context-engine run presumably did not — is worth stating rather than fixing. [docs/implementation-artifacts/palette-cvd-validation.md:84-91]
 - [x] [Review][Patch] **`toBeCloseTo(expectedPercent, 1)` sits exactly on `round1`'s error budget** — `toBeCloseTo(x, 1)` passes when `|diff| < 0.05`; `round1`'s maximum error is exactly 0.05. Any token whose `entry.s * rampPercent` lands on a `.X5` boundary fails the ramp test for a rounding decision the code made deliberately. Given the palette is explicitly designated re-tunable, this is a landmine rather than a tolerance. [apps/web/lib/displayColor.test.ts:32]
-- [x] [Review][Patch] **Dev Agent Record File List omits two changed files** — `docs/implementation-artifacts/sprint-status.yaml` (flipped to `review` in the same commit `86bfec7`) and the story file itself. [docs/implementation-artifacts/1-7-palette-token-registry-display-color-lut.md:319-332]
+- [x] [Review][Patch] **Dev Agent Record File List omits two changed files** — `docs/implementation-artifacts/sprint-status.yaml` (flipped to `review` in the same commit `86bfec7`) and the story file itself. [docs/implementation-artifacts/epic-1/1-7-palette-token-registry-display-color-lut.md:319-332]
 - [x] [Review][Defer] **`displayColorAt` clamps a corrupt numeric index silently, with no diagnostic** [apps/web/lib/displayColor.ts:59-65] — deferred, Story 1.8 concern
 - [x] [Review][Defer] **The warn-dedupe `Set` is unbounded and `colorToken` has no `.max()` in the schema** [apps/web/lib/paletteRegistry.ts:70, packages/domain/src/organismSchema.ts:22] — deferred, schema was deliberately out of scope this story
 - [x] [Review][Defer] **Duplicate ids in `PALETTE_SOURCE` are swallowed at module init — only the unit test catches it** [apps/web/lib/paletteRegistry.ts:65] — deferred, hardening not a defect
@@ -319,7 +319,7 @@ No `package.json` changes and no new dependencies. Filenames are **camelCase, ne
 - [Source: docs/planning-artifacts/ux-designs/.../organism-editor-design.md:185-187] — the **stale** 20-hex list (see Spec conflicts); its layout guidance survives for Story 4.8
 - [Source: docs/project-context.md#Framework-Specific Rules] — one immutable MUI theme; the Canvas grid is drawn outside MUI; organism colour is not a theme token
 - [Source: docs/project-context.md#Critical Don't-Miss Rules] — never batch by organism; `MAX_RELEVANT_AGE` arithmetic; `formatVersion` is the only branched-on version
-- [Source: docs/implementation-artifacts/1-6-test-utilities-dev-fixture-workspace.md] — the tokens the AR-45 fixtures already persist; the "ticked but unshipped" review lesson; `npm run ci` as the only real gate
+- [Source: docs/implementation-artifacts/epic-1/1-6-test-utilities-dev-fixture-workspace.md] — the tokens the AR-45 fixtures already persist; the "ticked but unshipped" review lesson; `npm run ci` as the only real gate
 - [Source: eslint.config.mjs:66-84] — the AR-46 block, its `TODO(1.7)`, and the near-identical import-boundary block below it
 - [Source: packages/domain/src/organismSchema.ts:15-23] — the `colorToken` `#` guard and the stale "validation … lands in Story 1.7" comment Task 5 corrects
 
@@ -366,7 +366,7 @@ G1 worst 5.12 (`vermillion` vs `#0a0a0a`); G2 worst 3.06 (`bluish-green`, shade 
 - `packages/domain/src/organismSchema.ts` (modified — `colorToken` comment corrected, no schema behaviour change)
 - `docs/implementation-artifacts/palette-cvd-validation.md` (new)
 - `docs/implementation-artifacts/sprint-status.yaml` (modified — story status)
-- `docs/implementation-artifacts/1-7-palette-token-registry-display-color-lut.md` (this file)
+- `docs/implementation-artifacts/epic-1/1-7-palette-token-registry-display-color-lut.md` (this file)
 
 **Added by code review 2026-08-06:**
 

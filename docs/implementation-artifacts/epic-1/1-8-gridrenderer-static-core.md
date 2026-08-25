@@ -334,7 +334,7 @@ No `package.json` changes, no new dependencies, no ESLint changes (the injected-
 - [Source: docs/planning-artifacts/architecture.md#Decision B.3 / B.5] — the saturation ramp and the `MAX_RELEVANT_AGE` constant that must not be conflated with the visual cap
 - [Source: docs/planning-artifacts/architecture.md#Decision G.3 / H.1] — 255 organisms per battle; `organismIds` ≡ the placed set
 - [Source: docs/planning-artifacts/architecture.md#Minor Resolutions M4] — thumbnails rendered on demand through the existing renderer, never stored
-- [Source: docs/implementation-artifacts/1-7-palette-token-registry-display-color-lut.md] — `displayColorAt(tokenIndex, shade)` and its `tokenIndex * 8 + shade` table layout; `ageShadeFor`; `paletteIndexOf`'s warn-once fallback; the "what NOT to build" note deferring `buildRefToFillGroup` to this story
+- [Source: docs/implementation-artifacts/epic-1/1-7-palette-token-registry-display-color-lut.md] — `displayColorAt(tokenIndex, shade)` and its `tokenIndex * 8 + shade` table layout; `ageShadeFor`; `paletteIndexOf`'s warn-once fallback; the "what NOT to build" note deferring `buildRefToFillGroup` to this story
 - [Source: docs/implementation-artifacts/deferred-work.md:53] — the deferred `displayColorAt` silent-clamp diagnostic, explicitly assigned to this story
 - [Source: apps/web/lib/displayColor.ts:44-73] — the 160-entry table and its indexing arithmetic, which Task 2's group key must match
 - [Source: packages/domain/src/battleSchema.ts:20-45] — `gridState` dense encoding, `v ≤ organismIds.length`, dims match `gridSize`

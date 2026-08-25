@@ -92,7 +92,7 @@ so that regressions are blocked from the first story onward.
 - [x] [Review][Patch] `scripts/check-bundle-size.mjs` silently reports "within budget" at 0 KB if the asset regex matches zero assets (e.g. Next markup format changes) — needs a guard that errors when `assetPaths.size === 0`. [scripts/check-bundle-size.mjs:30-68] — **Fixed:** added an explicit `assetPaths.size === 0` guard that errors and exits 1 before the budget math runs.
 - [x] [Review][Patch] Neither CI job sets `timeout-minutes`, and `concurrency.cancel-in-progress: true` applies to `main` pushes too (no PR flow exists yet), so a second push can silently cancel an unfinished run on the only branch that matters. [.github/workflows/ci.yml:23-25,29-30,71-73] — **Fixed:** added `timeout-minutes: 15` to both jobs; `cancel-in-progress` now `${{ github.event_name == 'pull_request' }}`.
 - [x] [Review][Patch] No `permissions:` block on the CI workflow — runs with default `GITHUB_TOKEN` permissions instead of an explicit least-privilege grant. [.github/workflows/ci.yml] — **Fixed:** added top-level `permissions: contents: read`.
-- [x] [Review][Patch] Task 2's checklist bullet claims `vitest-axe`'s `toHaveNoViolations` matcher is used ("proven... on the rendered container"), but `vitest.setup.ts`/`page.test.tsx` show it was correctly dropped in favour of `axe()` + asserting `results.violations` (the Debug Log entry already describes this correctly — only the Task 2 bullet is stale). `README.md`'s pre-commit description also omits that the hook runs `npm run typecheck`. [docs/implementation-artifacts/1-2-ci-pipeline-quality-gates.md Task 2; README.md] — **Fixed:** both bullets corrected.
+- [x] [Review][Patch] Task 2's checklist bullet claims `vitest-axe`'s `toHaveNoViolations` matcher is used ("proven... on the rendered container"), but `vitest.setup.ts`/`page.test.tsx` show it was correctly dropped in favour of `axe()` + asserting `results.violations` (the Debug Log entry already describes this correctly — only the Task 2 bullet is stale). `README.md`'s pre-commit description also omits that the hook runs `npm run typecheck`. [docs/implementation-artifacts/epic-1/1-2-ci-pipeline-quality-gates.md Task 2; README.md] — **Fixed:** both bullets corrected.
 - [x] [Review][Patch] `globals@^17.9.0` added as a root devDependency but never imported or referenced in `eslint.config.mjs` (no `languageOptions.globals` block exists), and it wasn't in Task 1's install list. [package.json:45] — **Fixed:** removed from `package.json`; `package-lock.json` regenerated via `npm install`.
 - [x] [Review][Defer] `nextScopedToWeb` in `eslint.config.mjs` blanket-rewrites the `files` glob on every `eslint-config-next` sub-config that has one, which could clobber narrower intentional scoping if Next's config array shape changes — currently verified working (`eslint .` clean). [eslint.config.mjs:13-15] — deferred, theoretical risk with no reproduction; revisit only if `eslint-config-next` changes shape or lint breaks.
 - [x] [Review][Defer] Bundle-budget gate assumes gzip is the real transfer encoding (most hosts negotiate Brotli) and scrapes `index.html` via regex rather than walking Next's build manifest. [scripts/check-bundle-size.mjs] — deferred, pre-existing design tradeoff already reasoned about in Dev Notes; revisit once an actual $0 static host is chosen.
@@ -203,7 +203,7 @@ packages/{domain,simulation,persistence,test-utils}/
 - [Source: docs/planning-artifacts/rfcs/RFC-003-frontend-ui-architecture.md#L97-L115] — `themes.css` token layer (the AR-46 CSS token file)
 - [Source: docs/planning-artifacts/rfcs/RFC-007-organism-colour-palette.md#Decision 1] — palette registry (the AR-46 TS whitelist target; lands Story 1.7)
 - [Source: docs/project-context.md#Testing Rules / Code Quality / Development Workflow] — coverage gate flips in 3.7; ESLint/Prettier/husky land here; `npm test` warning to delete; local-only repo, no remote
-- [Source: docs/implementation-artifacts/1-1-turborepo-monorepo-scaffold.md] — JIT source-exports convention, turbo output-glob relativity, mode-default alignment, `npm test` vacuously-green trap
+- [Source: docs/implementation-artifacts/epic-1/1-1-turborepo-monorepo-scaffold.md] — JIT source-exports convention, turbo output-glob relativity, mode-default alignment, `npm test` vacuously-green trap
 - [Source: docs/implementation-artifacts/deferred-work.md] — `turbo run test` meaningfulness (this story), `@gol/test-utils` bundle-boundary (import rule, this story)
 
 ## Dev Agent Record
@@ -273,7 +273,7 @@ Modified:
 - docs/project-context.md (version table + Testing/Quality/Workflow rules updated; `npm test` warning removed)
 - docs/implementation-artifacts/deferred-work.md (2 items marked resolved in 1.2)
 - docs/implementation-artifacts/sprint-status.yaml (status transitions)
-- docs/implementation-artifacts/1-2-ci-pipeline-quality-gates.md (this story — tracking)
+- docs/implementation-artifacts/epic-1/1-2-ci-pipeline-quality-gates.md (this story — tracking)
 
 ## Change Log
 

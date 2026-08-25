@@ -316,8 +316,8 @@ No `package.json` changes: `@gol/test-utils` already declares `@gol/domain` + `@
 - [Source: docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md#User Journey] — the three PRD organisms verbatim: Aggressive Colonizer / Patient Defender / Chaotic Spreader, with their colours, aging flags, and born/survive intent (Dominance rescaled — forced decision 2)
 - [Source: docs/project-context.md#Testing Rules] — shared fixtures come from `@gol/test-utils`; don't hand-roll a fake repo; determinism is a precondition; no pixel-snapshotting the Canvas
 - [Source: docs/project-context.md#Language-Specific Rules] — no DOM types in `packages/*`; `isolatedModules` re-export form; cross-package imports by package name
-- [Source: docs/implementation-artifacts/1-5-default-workspace-seeding.md] — `CONWAYS_CLASSIC` is imported not restated; the `useWorkspaceSeed` extension point; the StrictMode ref pair; the `contentHash` canonicalization pinned in `defaultWorkspace.ts`
-- [Source: docs/implementation-artifacts/1-4-repository-interfaces-localstorage-implementations.md] — the repository contracts the fakes must reproduce (`exists()` on corrupt records, `list()` skipping corrupt records, `npm run ci` as the only cross-package gate)
+- [Source: docs/implementation-artifacts/epic-1/1-5-default-workspace-seeding.md] — `CONWAYS_CLASSIC` is imported not restated; the `useWorkspaceSeed` extension point; the StrictMode ref pair; the `contentHash` canonicalization pinned in `defaultWorkspace.ts`
+- [Source: docs/implementation-artifacts/epic-1/1-4-repository-interfaces-localstorage-implementations.md] — the repository contracts the fakes must reproduce (`exists()` on corrupt records, `list()` skipping corrupt records, `npm run ci` as the only cross-package gate)
 - [Source: docs/implementation-artifacts/deferred-work.md] — the Story 1.5 `contentHash` entry these fixtures extend; nothing else here blocks this story
 
 ## Dev Agent Record
@@ -375,7 +375,7 @@ Claude Opus 5 (claude-opus-5), via the `bmad-dev-story` workflow.
 - `packages/persistence/src/index.ts` (review 2026-08-05: exports `assertSafeCollectionId` so the fakes enforce the identical id guard rather than restating it)
 - `docs/implementation-artifacts/deferred-work.md` (extended Story 1.5 contentHash entry; review 2026-08-05 added two deferred items)
 - `docs/implementation-artifacts/sprint-status.yaml` (status → in-progress → review)
-- `docs/implementation-artifacts/1-6-test-utilities-dev-fixture-workspace.md` (this file — task checkboxes, Dev Agent Record, Status)
+- `docs/implementation-artifacts/epic-1/1-6-test-utilities-dev-fixture-workspace.md` (this file — task checkboxes, Dev Agent Record, Status)
 
 ## Change Log
 
