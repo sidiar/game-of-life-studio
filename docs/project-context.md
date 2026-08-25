@@ -219,10 +219,12 @@ are active on `apps/web`. ESLint is pinned to **v9** — v10 breaks `eslint-conf
 - Cite the governing spec by ID where a rule is non-local: `(RFC-004 §3.5)`, `(Decision B.5)`,
   `(AR-2)`. That is how the next reader finds the authority.
   - **Enforced:** `npm run spec:check` (in `ci`, after `format:check`) fails the build when a
-    cited ID resolves to nothing under `docs/`. It tokenises `AR-n`, `RFC-00n`, `FR`/`NFR-x.y`,
-    `M-n`, `Decision A–Z` and `Story N.M` out of both code and docs and compares them as sets —
-    a renumbered decision otherwise keeps compiling and keeps *looking* authoritative. `ACn`
-    and bare `Decision 7` are not checked (story- and RFC-relative, no global referent).
+    cited ID resolves to nothing under `docs/`. It tokenises `ARn`, `RFC-00n`, `FRx.y`/`NFRx.y`,
+    `Mn` (M1–M10 only), `Decision A–Z` and `Story N.M` out of both code and docs and compares
+    them as sets — a renumbered decision otherwise keeps compiling and keeps *looking*
+    authoritative. Write IDs exactly as the specs spell them (`AR-2`, `M9`, `FR-8.7`); a
+    hyphenated `M-9` matches nothing and is silently exempt forever. `ACn` and bare
+    `Decision 7` are not checked (story- and RFC-relative, no global referent).
   - When an ID is retired, drop the tag and **keep the prose** — every citation here is attached
     to a sentence that stands without it, which is what makes the tags safe to remove.
 
