@@ -140,12 +140,15 @@ const DeleteButton = styled('button')({
   },
 });
 
+// `display: flex` stays even though TileTitle is now its only child (the grid-size stat that used
+// to sit beside it is gone — Sidiar, 2026-08-25, see the removal note on forced decision 2 in
+// 1-10-battle-gallery-tiles-sorting.md) — TileTitle's own `minWidth: 0` overflow guard below only
+// works because it is a flex item; switching this to a plain block would silently drop that guard.
+// `justifyContent`/`gap` are gone with the second child they used to space against.
 const TileHeader = styled('header')({
   display: 'flex',
-  justifyContent: 'space-between',
   alignItems: 'center',
   marginBottom: '16px',
-  gap: '12px',
 });
 
 // The tile heading is <h2>: the page's only <h1> is "Battle Gallery" (Story 1.9). A tile <h3>
@@ -162,14 +165,6 @@ const TileTitle = styled('h2')({
   color: 'var(--gol-text-primary)',
   minWidth: 0,
   overflowWrap: 'anywhere',
-});
-
-const TileStats = styled('span')({
-  fontSize: '12px',
-  color: 'var(--gol-text-secondary)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-  whiteSpace: 'nowrap',
 });
 
 // Same box in EVERY thumbnail state ('idle' | 'loading' | 'ready' | 'unavailable') — a tile that
@@ -379,9 +374,6 @@ export default function BattleTile({
     <Tile>
       <TileHeader>
         <TileTitle>{displayName}</TileTitle>
-        <TileStats>
-          {gridSize.cols} × {gridSize.rows}
-        </TileStats>
       </TileHeader>
       <PetriDish ref={containerRef} aria-hidden="true">
         {thumbnail.kind === 'ready' && gridColors !== null && (

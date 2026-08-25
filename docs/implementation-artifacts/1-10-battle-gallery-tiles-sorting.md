@@ -504,6 +504,15 @@ unexplained (Task 5 specifies it explicitly, with the `createRepositories()` thr
    holds a generation, and there is no live simulation to read one from on the Gallery path. The
    `.tile-stats` slot instead shows `{cols} × {rows}` — already in `BattleSummary`, genuinely useful
    (the two editable presets look very different), and honest. Flag as a deliberate mockup deviation.
+   ⚠️ **SUPERSEDED 2026-08-25 — Sidiar's explicit decision.** The grid-size substitute is removed;
+   `TileHeader` renders only the title now, and the corner is left empty. Two reasons: (a) it was
+   never the intended content — a stand-in for the unimplementable `Gen 47`, not something anyone
+   asked to see — and wasn't judged valuable enough on its own to keep; (b) the mockup's own CSS
+   already puts `.tile-actions` at the identical `position: absolute; top: 18px; right: 18px`
+   as `.tile-stats`'s flex slot (`battle-gallery.html:395-400` vs `:271-276`), so Story 1.13's real
+   delete button visibly overlapping this text on hover is not a Story 1.13 regression — the mockup
+   had the same collision with `Gen 47`, just never noticed because nothing renders `.tile-actions`
+   outside a hover state in a static mockup. Kept for history.
 
 3. **⚠️ SUPERSEDED 2026-08-08 (see conflict 1a). Originally: FR-7.3's metadata is an expandable
    disclosure, not the mockup's CSS hover tooltip.** The `.participant-dot::before` pattern is

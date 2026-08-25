@@ -55,9 +55,14 @@ describe('BattleTile', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Untitled battle' })).toBeInTheDocument();
   });
 
-  it('renders the grid-size stat, not a cycle count (forced decision 2)', () => {
+  // Forced decision 2's grid-size substitute for the mockup's unimplementable "Gen 47" is gone
+  // (Sidiar, 2026-08-25) — it sat in the same top-right corner TileActions reveals the delete
+  // button into on hover (the mockup has the identical collision: `.tile-actions` is
+  // `position: absolute; top: 18px; right: 18px`, the same slot `.tile-stats` occupies), and
+  // grid size wasn't valuable enough to keep fighting that overlap for. The corner is empty now.
+  it('renders no grid-size stat in the header', () => {
     render(<BattleTile {...BASE_PROPS} />);
-    expect(screen.getByText('50 × 30')).toBeInTheDocument();
+    expect(screen.queryByText('50 × 30')).not.toBeInTheDocument();
   });
 
   it('renders the single last-modified date, with no visible organism-count text', () => {
