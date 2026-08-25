@@ -135,7 +135,9 @@
       "Bash(perl -0pi -e 's/“\\\\{lastName\\\\.current\\\\}”/“{battleName}”/' components/DeleteBattleDialog.tsx)",
       "Bash(rm /tmp/dbd.bak)",
       "Bash(echo \"BUILD=$?\")",
-      "Bash(echo \"TSC=$?\")"
+      "Bash(echo \"TSC=$?\")",
+      "Bash(awk 'NF==3 && $3 !~ /test/ {a[$3]+=$1+$2} END {for\\(f in a\\) print a[f], f}')",
+      "Artifact"
     ],
     "deny": [],
     "ask": []
