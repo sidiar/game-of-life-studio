@@ -1,60 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { styled } from '@mui/material/styles';
 import type { Battle, Organism } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { useAsyncResource } from '@/lib/useAsyncResource';
+import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
 
 const Body = styled('div')({
   padding: '30px',
   color: 'var(--gol-text-secondary)',
-});
-
-const Notice = styled('div')({
-  padding: '30px',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'flex-start',
-  gap: '12px',
-});
-
-const NoticeTitle = styled('h1')({
-  fontSize: '18px',
-  fontWeight: 600,
-  margin: 0,
-  letterSpacing: 'var(--gol-letter-spacing-title)',
-  color: 'var(--gol-text-primary)',
-  textTransform: 'uppercase',
-});
-
-const NoticeText = styled('p')({
-  margin: 0,
-  fontSize: '14px',
-  color: 'var(--gol-text-secondary)',
-});
-
-// Same hover/focus-visible parity the Story 1.9 review established on AppNav: textDecoration is
-// kept here rather than removed, so the link is identifiable without relying on colour alone.
-const BackLink = styled(Link)({
-  fontSize: '14px',
-  fontWeight: 500,
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-  color: 'var(--gol-accent)',
-  textDecoration: 'none',
-  padding: '8px 16px',
-  border: '1px solid var(--gol-border-control)',
-  '&:hover': {
-    borderColor: 'var(--gol-accent)',
-  },
-  '&:focus-visible': {
-    outline: '2px solid var(--gol-accent)',
-    outlineOffset: '2px',
-  },
 });
 
 /**

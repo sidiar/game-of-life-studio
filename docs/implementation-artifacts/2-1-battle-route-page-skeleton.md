@@ -224,20 +224,31 @@ Code review 2026-08-26 (`bmad-code-review`, three layers: Blind Hunter, Edge Cas
 Acceptance Auditor). Decision K's route shape was explicitly out of scope for review — it is
 ratified, not a deviation. Its *propagation* was audited and was incomplete; see the patches.
 
-**Decision needed (Sidiar)**
+**Decision needed (Sidiar) — RESOLVED 2026-08-26**
 
-- [ ] [Review][Decision] **The static 404 page lost the app shell** — moving `AppShell` off the
+- [x] [Review][Decision] **The static 404 page lost the app shell** — moving `AppShell` off the
       root layout onto `(gallery)/layout.tsx` (forced decision 2) also moved it off Next's
       built-in not-found boundary, which renders under the ROOT layout only. Verified against this
-      branch's own build: `out/404.html` and `out/_not-found.html` now contain **zero `<nav>` and
+      branch's own build: `out/404.html` and `out/_not-found.html` contained **zero `<nav>` and
       zero `<main>`** (`out/index.html` has one of each) — bare Next default chrome, no wordmark,
       no link home, no landmark. On `main` the 404 inherited the shell. Any mistyped or stale URL
       on the deployed static host lands there. Not a regression the story anticipated and not in
-      `deferred-work.md`. **The fix needs your intent, not a reviewer's:** (a) add
-      `apps/web/app/not-found.tsx` rendering `<AppShell>` plus 404 copy — but no mockup specifies
-      that copy and a 404 page is outside this story's stated scope; (b) accept it and defer to a
-      story that owns the 404 surface; or (c) something else. Left unresolved, so this story stays
-      at `review` and the PR opens as a draft.
+      `deferred-work.md`.
+      **Sidiar's call: option (a) — restore it now.** Implemented as `apps/web/app/not-found.tsx`
+      mounting `<AppShell>` around a "Page Not Found" notice with a Back-to-Gallery link. The
+      notice primitives (`Notice`/`NoticeTitle`/`NoticeText`/`BackLink`) moved out of
+      `BattlePage.tsx` into `components/layout/Notice.tsx` rather than being copied a second time;
+      a `gutters` prop covers the two mount points padding differently (AppShell's `<main>` pads
+      32px, the battle layout's does not — deliberately, for Story 2.4's auto-fit canvas).
+      Copy was written for this fix, since no mockup specifies a 404: it says the address matched
+      nothing, and deliberately does **not** say "damaged", which is the battle route's
+      corrupt-data wording and a different fact.
+      Guarded at both levels: `app/not-found.test.tsx` (landmark counts, single `<h1>`, the link,
+      the copy distinction, axe) and `e2e/notFound.spec.ts`, which hits `/no-such-page` against the
+      **served static export** in all four Playwright projects — the level the regression was
+      actually visible at, and the level no jsdom test could have caught it at.
+      Re-verified after the fix: `out/404.html`, `out/_not-found.html` and `out/index.html` each
+      now report `nav=1 main=1 header=1 h1=1`.
 
 **Patched in the review commit**
 
@@ -711,6 +722,10 @@ New:
 - `apps/web/lib/useAsyncResource.test.tsx`
 - `apps/web/lib/battleDisplayName.ts`
 - `apps/web/e2e/battleRoute.spec.ts`
+- `apps/web/app/not-found.tsx` — 404-decision commit
+- `apps/web/app/not-found.test.tsx` — 404-decision commit
+- `apps/web/components/layout/Notice.tsx` — 404-decision commit (extracted from `BattlePage.tsx`)
+- `apps/web/e2e/notFound.spec.ts` — 404-decision commit
 
 Moved (content unchanged):
 
@@ -726,7 +741,9 @@ Modified:
   delete-not-nested assertions
 - `apps/web/components/gallery/BattleGallery.tsx` — `battleDisplayName` import site only
 - `docs/implementation-artifacts/deferred-work.md` — `:85` re-pointed, `:93` closed, three new items
-- `docs/implementation-artifacts/sprint-status.yaml` — `2-1-…: ready-for-dev → in-progress → review`
+- `docs/implementation-artifacts/sprint-status.yaml` — `2-1-…: ready-for-dev → in-progress → review → done`
+- `apps/web/components/battle/BattlePage.tsx` — 404-decision commit: the four notice primitives
+  moved to `components/layout/Notice.tsx` and are now imported; no behaviour change
 
 Modified — **Architecture Decision K propagation**. Ratified by Sidiar on 2026-08-26 *before*
 implementation began, and carried in this same commit because the decision and the code that
@@ -746,7 +763,8 @@ list would leave the spec edits unreviewed unless someone diffed the commit:
 - `CLAUDE.md` — "Decisions A–J" → "A–K"
 
 Unchanged, and verified so: `apps/web/components/layout/AppShell.tsx`, `AppShell.test.tsx`,
-`AppNav.tsx`, `AppNav.test.tsx`, `e2e/appShell.spec.ts`.
+`AppNav.tsx`, `AppNav.test.tsx`, `e2e/appShell.spec.ts`. `AppShell` is now mounted from two places
+— `app/(gallery)/layout.tsx` and `app/not-found.tsx` — but its own source did not change.
 
 ## Change Log
 
