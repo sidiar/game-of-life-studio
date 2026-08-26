@@ -43,6 +43,19 @@ function withFailingOrganismList(): AppRepositories {
   };
 }
 
+// A repository whose SETTINGS load rejects (a corrupt gol:settings record). Built by replacing
+// one method on a real fake, same pattern as the two helpers above — never a hand-rolled fake.
+function withFailingSettingsLoad(): AppRepositories {
+  const repositories = seeded();
+  return {
+    ...repositories,
+    settings: {
+      ...repositories.settings,
+      load: () => Promise.reject(new Error('gol:settings is corrupt')),
+    },
+  };
+}
+
 describe('BattlePage', () => {
   it('loads the battle through the injected repositories and shows its title', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
@@ -123,18 +136,43 @@ describe('BattlePage', () => {
   });
 
   // battleId === 'new' must never reach battles.load(): 'new' is not an id, and a repository miss
-  // would render "this battle is gone" for the create route. Story 2.2 owns the seeding.
-  it('never calls battles.load for the "new" route, and renders its own placeholder', async () => {
+  // would render "this battle is gone" for the create route. Story 2.2 seeds a fresh draft
+  // instead — forced decision 3 drops the Back-to-Gallery link for symmetry with the loaded
+  // branch, which has never had one (deferred-work.md, owned by Story 2.16).
+  it('never calls battles.load for the "new" route, and renders the seeded battle title', async () => {
     const repositories = seeded();
     const loadSpy = vi.spyOn(repositories.battles, 'load');
 
     render(<BattlePage repositories={repositories} battleId="new" />);
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'New Battle' }),
+      await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' }),
     ).toBeInTheDocument();
     expect(loadSpy).not.toHaveBeenCalled();
-    expect(screen.getByRole('link', { name: 'Back to Gallery' })).toHaveAttribute('href', '/');
+    expect(screen.queryByRole('link', { name: 'Back to Gallery' })).not.toBeInTheDocument();
+  });
+
+  // AC1/Task 1: the default preset is READ, never hardcoded — the settings repository is
+  // consulted for every 'new' render, not just assumed.
+  it('consults the settings repository for the "new" route (Task 1)', async () => {
+    const repositories = seeded();
+    const settingsLoadSpy = vi.spyOn(repositories.settings, 'load');
+
+    render(<BattlePage repositories={repositories} battleId="new" />);
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(settingsLoadSpy).toHaveBeenCalled();
+  });
+
+  // A corrupt gol:settings record must not blank the create route (Task 1's silent-failure trap):
+  // settings.load().catch(() => DEFAULT_SETTINGS) is the same degrade BattleGallery.tsx already
+  // uses, so the seeded battle still renders rather than falling into the error body.
+  it('still renders the seeded battle when settings.load() rejects', async () => {
+    render(<BattlePage repositories={withFailingSettingsLoad()} battleId="new" />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' }),
+    ).toBeInTheDocument();
   });
 
   // Branch ORDER regression (Story 2.1 review). /battle/new describes no stored battle, yet it
@@ -143,13 +181,23 @@ describe('BattlePage', () => {
   // — the wrong fact about the wrong record, which is exactly what the not-found branch exists to
   // avoid. Asserting the heading is not enough on its own: assert the failure copy is absent too,
   // so re-swapping the branches fails here rather than silently passing on a substring.
-  it('renders the New Battle placeholder even when the organism library fails to load', async () => {
+  it('renders the seeded "new" battle even when the organism library fails to load', async () => {
     render(<BattlePage repositories={withFailingOrganismList()} battleId="new" />);
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'New Battle' }),
+      await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/stored data may be damaged/i)).not.toBeInTheDocument();
+  });
+
+  // AC2/NFR-4.1 on the create route specifically, mirroring the loaded-route assertion below:
+  // zero buttons and exactly one <h1>, the same shape a canvas-free skeleton must hold.
+  it('renders zero buttons and exactly one heading on the "new" route', async () => {
+    render(<BattlePage repositories={seeded()} battleId="new" />);
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
   // The other half of the same ordering: a real battle id with a corrupt organism library DOES

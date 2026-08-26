@@ -24,18 +24,16 @@ test.describe('home route', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
     await expect(page.getByText(/cellular battles/i)).toBeVisible();
     await expect(page.getByText(/create your first battle/i)).toBeVisible();
-    // AC2 / no-dead-affordance: the empty state ships copy, not a control, until Story 2.2.
+    // AC2 (Story 2.2): the empty-state prompt is now a real control, not copy — the "no
+    // dead-affordance" gap this route shipped with (Story 1.12) closes here.
     const emptyState = page.locator('h2', { hasText: 'No Battles Yet' }).locator('..');
-    // Anchor the scope FIRST. toHaveCount(0) against a locator whose ancestor matched nothing is a
-    // pass, not a failure — so without this line the two assertions below would silently evaporate
-    // the moment the h2 text, tag, or nesting changed, rather than going red.
-    await expect(emptyState).toContainText('Create your first battle to begin.');
+    // Anchor the scope FIRST. toHaveCount(0)/(1) against a locator whose ancestor matched nothing
+    // is a pass, not a failure — so without this line the assertions below would silently
+    // evaporate the moment the h2 text, tag, or nesting changed, rather than going red.
     await expect(emptyState.getByRole('button')).toHaveCount(0);
-    await expect(emptyState.getByRole('link')).toHaveCount(0);
-    // Story 2.2 will add the CTA as a real control; these two cover the shapes it is most likely to
-    // arrive as before it does, which getByRole('button'/'link') alone would miss.
-    await expect(emptyState.locator('[role="button"]')).toHaveCount(0);
-    await expect(emptyState.locator('[tabindex]:not([tabindex="-1"])')).toHaveCount(0);
+    const cta = emptyState.getByRole('link', { name: 'Create Your First Battle' });
+    await expect(cta).toHaveCount(1);
+    await expect(cta).toHaveAttribute('href', '/battle/new');
     expect(errors).toEqual([]);
   });
 

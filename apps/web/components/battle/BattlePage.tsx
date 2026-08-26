@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { styled } from '@mui/material/styles';
-import type { Battle, Organism } from '@gol/domain';
+import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { useAsyncResource } from '@/lib/useAsyncResource';
+import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
 
@@ -37,9 +38,24 @@ export interface BattlePageProps {
   battleId: string | 'new';
 }
 
-interface LoadedBattle {
+interface LoadedResource {
   battle: Battle | null;
   organisms: readonly Organism[];
+  // Read unconditionally, not only for the 'new' branch: Task 1 wants it loaded once through the
+  // page's existing useAsyncResource call rather than threaded down as a fresh prop, and the
+  // loaded-battle branch reading it too costs nothing.
+  settings: Settings;
+}
+
+// Converts a loaded Battle to the SAME shape createNewBattleDraft seeds, so the render below reads
+// one shape instead of branching on battleId === 'new' forever (Task 3).
+function toDraft(battle: Battle): NewBattleDraft {
+  return {
+    name: battle.name,
+    gridSize: battle.gridSize,
+    gridState: battle.gridState,
+    organismIds: battle.organismIds,
+  };
 }
 
 export default function BattlePage({ repositories, battleId }: BattlePageProps) {
@@ -51,18 +67,22 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // ⚠️ 'new' must never reach battles.load(). It is not a uuid, so the repository would treat it
   // as a plain miss and return null — indistinguishable from a stale/deleted id, which would make
   // /battle/new render "this battle is gone" for a page whose whole purpose is that it does not
-  // exist yet. Story 2.2 owns the seeding; this story short-circuits and renders a distinct
-  // placeholder for the branch.
+  // exist yet. Story 2.2 short-circuits and seeds a fresh draft for the branch instead (below).
   //
   // ⚠️ Promise.all rejects on the FIRST rejection, so one corrupt ORGANISM record blanks the page
   // with "something went wrong" even when the battle itself loaded fine. Accepted for this story
   // — AC4 asks only for a distinct failure state — and recorded rather than discovered in review.
-  const resource = useAsyncResource<LoadedBattle>(async () => {
-    const [battle, organisms] = await Promise.all([
+  //
+  // settings.load() never rejects INTO this Promise.all: a corrupt gol:settings record must not
+  // blank the create route (Task 1), so it degrades to DEFAULT_SETTINGS itself, the same shape
+  // BattleGallery.tsx already establishes for the identical failure.
+  const resource = useAsyncResource<LoadedResource>(async () => {
+    const [battle, organisms, settings] = await Promise.all([
       battleId === 'new' ? Promise.resolve(null) : repositories.battles.load(battleId),
       repositories.organisms.list(),
+      repositories.settings.load().catch(() => DEFAULT_SETTINGS),
     ]);
-    return { battle, organisms };
+    return { battle, organisms, settings };
   }, [repositories, battleId]);
 
   if (resource.status === 'loading') return <BattleLoading />;
@@ -73,13 +93,20 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // could not be loaded, its stored data may be damaged" about a battle that does not exist. That
   // is the same wrong-fact-about-the-wrong-record failure the not-found branch below exists to
   // prevent, reintroduced by branch order alone (Story 2.1 review).
+  //
+  // resource.data is undefined here only when organisms.list() rejected (settings.load() cannot
+  // reject into this resource — see above), so the settings fallback below is DEFAULT_SETTINGS in
+  // that case, matching the same degrade BattleGallery.tsx already uses.
   if (battleId === 'new') {
+    const settings = resource.data?.settings ?? DEFAULT_SETTINGS;
+    const draft = createNewBattleDraft(settings.defaultGridSize);
     return (
-      <Notice>
-        <NoticeTitle>New Battle</NoticeTitle>
-        <NoticeText>There is nothing here yet — creating a battle is not wired up.</NoticeText>
-        <BackLink href="/">Back to Gallery</BackLink>
-      </Notice>
+      <>
+        <BattleHeader battleTitle={battleDisplayName(draft.name)} />
+        {/* AC3/AC4: this seeds the empty grid STATE (the model), never persists anything, and
+            renders no canvas yet — <PetriDishCanvas variant="edit"> is Story 2.4. */}
+        <Body data-mode={mode}>The battle editor arrives in the next stories.</Body>
+      </>
     );
   }
 
@@ -112,9 +139,11 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     );
   }
 
+  const draft = toDraft(battle);
+
   return (
     <>
-      <BattleHeader battleTitle={battleDisplayName(battle.name)} />
+      <BattleHeader battleTitle={battleDisplayName(draft.name)} />
       {/* The roster IS loaded and held (AC1) — <OrganismRoster> is its consumer in Story 2.9.
           `mode` is read here so the state cell is not merely declared: the Lab chassis, the canvas
           and the sidebar are Stories 2.4/2.9+, and this is the skeleton they mount into. */}

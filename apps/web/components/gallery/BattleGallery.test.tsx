@@ -550,6 +550,96 @@ describe('BattleGallery', () => {
   });
 });
 
+// Story 2.2 — the toolbar's "Create New Battle" CTA. Forced decision 2: it renders
+// UNCONDITIONALLY, so both the populated and empty Gallery are covered below.
+describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
+  it('renders the toolbar CTA with href="/battle/new" in a populated Gallery', async () => {
+    const repos = createFakeRepositories({ battles: createMockBattles() });
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    expect(screen.getByRole('link', { name: '+ Create New Battle' })).toHaveAttribute(
+      'href',
+      '/battle/new',
+    );
+  });
+
+  // Forced decision 2, proven rather than merely asserted in the Dev Notes: the empty Gallery
+  // shows BOTH the toolbar CTA and GalleryEmptyState's own CTA, with distinct accessible names —
+  // never the same name announced twice.
+  it('renders the toolbar CTA alongside the empty-state CTA, with distinct names', async () => {
+    const repos = createFakeRepositories();
+    render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: '+ Create New Battle' })).toHaveAttribute(
+      'href',
+      '/battle/new',
+    );
+    expect(screen.getByRole('link', { name: 'Create Your First Battle' })).toHaveAttribute(
+      'href',
+      '/battle/new',
+    );
+  });
+
+  it('renders the toolbar CTA even while loading or errored', () => {
+    const seeding = createFakeRepositories();
+    const { unmount } = render(
+      <BattleGallery
+        battles={seeding.battles}
+        organisms={seeding.organisms}
+        settings={seeding.settings}
+        seedStatus="seeding"
+      />,
+    );
+    expect(screen.getByRole('link', { name: '+ Create New Battle' })).toBeInTheDocument();
+    unmount();
+
+    const errored = createFakeRepositories();
+    render(
+      <BattleGallery
+        battles={errored.battles}
+        organisms={errored.organisms}
+        settings={errored.settings}
+        seedStatus="error"
+      />,
+    );
+    expect(screen.getByRole('link', { name: '+ Create New Battle' })).toBeInTheDocument();
+  });
+
+  it('has no axe accessibility violations with the toolbar CTA present', async () => {
+    const repos = createFakeRepositories({ battles: createMockBattles() });
+    const { container } = render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        seedStatus="ready"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    const results = await axe(container);
+    expect(results.violations).toEqual([]);
+  });
+});
+
 // Story 1.13 — the delete flow: dialog open/cancel/confirm, AC3's organism protection, and the
 // live >0 -> 0 transition Story 1.12's review deferred to this story (deferred-work.md).
 describe('BattleGallery — delete flow (Story 1.13)', () => {

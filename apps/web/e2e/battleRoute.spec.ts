@@ -85,14 +85,18 @@ test.describe('battle route (Story 2.1)', () => {
     expect(errors).toEqual([]);
   });
 
-  // Decision K's second static page. Reached by URL only in this story — the "New Battle" CTA
-  // stays inert until Story 2.2 — so this is the only proof the segment prerenders.
-  test('serves /battle/new as its own prerendered page', async ({ page }) => {
+  // Decision K's second static page, reached by URL directly. Story 2.2 wires the Gallery CTA
+  // that navigates here (createBattle.spec.ts) and seeds the route with a fresh draft — forced
+  // decision 3 drops the Back-to-Gallery link for symmetry with the loaded battle branch, which
+  // has never had one (deferred-work.md, owned by Story 2.16).
+  test('serves /battle/new as its own prerendered page, seeded as Untitled Battle', async ({
+    page,
+  }) => {
     await seedWorkspace(page);
     await page.goto('/battle/new');
 
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('New Battle');
-    await expect(page.getByRole('link', { name: 'Back to Gallery' })).toHaveAttribute('href', '/');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+    await expect(page.getByRole('link', { name: 'Back to Gallery' })).toHaveCount(0);
   });
 
   // An id that parses but matches nothing: the not-found branch, never an endless spinner (the

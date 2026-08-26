@@ -10,6 +10,7 @@ import { sortByLastModified } from '@/lib/gallerySort';
 import { resolveTileOrganisms } from '@/lib/tileOrganisms';
 import { readGridColors } from '@/lib/canvas/themeColors';
 import BattleTile from './BattleTile';
+import CreateBattleLink from './CreateBattleLink';
 import DeleteBattleDialog, { useDeleteBattleDialog } from './DeleteBattleDialog';
 import GalleryEmptyState from './GalleryEmptyState';
 
@@ -108,6 +109,14 @@ const SectionSubtitle = styled('p')({
   fontSize: '14px',
   color: 'var(--gol-text-secondary)',
   margin: 0,
+});
+
+// Mockup: .toolbar (battle-gallery.html:111-118), but shipping ONLY the create CTA — the mockup's
+// search input and Sort-By dropdown are Story 1.10's recorded resolution (spec conflict #3): no
+// FR covers battle search, and a five-option sort directly contradicts FR-7.1's fixed "most recent
+// first" (lib/gallerySort.ts). "Ship the mockup's toolbar band, not the mockup's whole toolbar."
+const Toolbar = styled('div')({
+  marginBottom: '35px',
 });
 
 // Native CSS Grid, not MUI Grid (which is flexbox/spacing and cannot express auto-fill, and
@@ -278,6 +287,14 @@ export default function BattleGallery({
         </SectionTitle>
         <SectionSubtitle>Your saved cellular competitions</SectionSubtitle>
       </SectionHeader>
+      {/* Forced decision 2: renders UNCONDITIONALLY across loading/error/empty/ready. It is the
+          persistent affordance, not first-run guidance (that is GalleryEmptyState's own CTA) — an
+          empty Gallery legitimately shows two controls with the SAME action but DIFFERENT
+          accessible names ("+ Create New Battle" vs "Create Your First Battle"), so a screen-reader
+          user never hears one name announced twice. */}
+      <Toolbar>
+        <CreateBattleLink href="/battle/new">+ Create New Battle</CreateBattleLink>
+      </Toolbar>
       {state.kind === 'loading' && <StatusText>Loading battles…</StatusText>}
       {state.kind === 'error' && (
         <StatusText role="alert">Something went wrong loading your battles.</StatusText>
