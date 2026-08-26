@@ -4,7 +4,7 @@ baseline_commit: 6d035ad934ada206476a0f474c3ee298760c4155
 
 # Story 2.5: Click Placement
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -202,6 +202,56 @@ can independently check:
   - [x] Record new deferred work: the **keyboard-placement gap** (forced decision 5) at minimum.
   - [x] Update `sprint-status.yaml`: `2-5-click-placement` → `review`.
   - [x] ⚠️ A green local run is not proof CI is green — check `gh run list` after pushing.
+
+### Review Findings
+
+Reviewed by Sonnet (deliberately a different model from the opus implementation), via three parallel
+adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus independent manual
+verification of the four claims flagged for extra scrutiny. All four held up under direct
+inspection of the code and its tests — no bucket contains a `decision-needed` finding.
+
+- [x] [Review][Patch] `pointerToCell` never checked `rect.left`/`rect.top` for finiteness, despite
+      its own comment claiming "non-finite inputs fold into the same guard" — a NaN there
+      NaN-poisons every downstream comparison (all false) and returns `{ col: NaN, row: NaN }`
+      instead of `null`, which `markDirty` would throw on. [`apps/web/lib/canvas/pointerToCell.ts`]
+      Fixed, with a regression test.
+- [x] [Review][Patch] `e2e/battleRoute.spec.ts` added a byte-for-byte duplicate of its own new
+      `distinctColorCount` helper as an inline block inside the pre-existing Story 2.4 test, in the
+      same file. [`apps/web/e2e/battleRoute.spec.ts`] Fixed — the old test now calls the helper.
+- [x] [Review][Patch] `BattleEditorView.test.tsx`'s "commits nothing when the roster contains no
+      match" test re-declared the entire `mountEditor` mount/mock/rect-stub boilerplate instead of
+      parameterizing the existing helper with a `rosterIds` override.
+      [`apps/web/components/battle/BattleEditorView.test.tsx`] Fixed.
+- [x] [Review][Patch] `handlePointerDown` computes the flat index from `grid.width`/`grid.height`
+      while `cell.col`/`cell.row` are only vouched for against the separate `size` prop.
+      `GridRenderer.assertGridMatchesSize` already throws loudly for the constructed-renderer path
+      (drawFull validates on mount), but trap 12's no-2D-context path builds no renderer and calls
+      no drawFull, leaving that one path with no guard against a desync landing on the wrong cell
+      or past the occupant buffer. [`apps/web/components/PetriDishCanvas.tsx`] Fixed, with a
+      regression test exercising the no-renderer path specifically.
+- [x] [Review][Defer] `Battle.gridState`/`organismIds` (packages/domain) are still plain mutable
+      arrays — the `toDraft()` readonly fix only stops a write made through a `NewBattleDraft`
+      reference — deferred, pre-existing (`deferred-work.md`).
+- [x] [Review][Defer] `sessionRoster` is not reset across a `battleId` change on an already-mounted
+      `<BattlePage>` — unreachable today (no same-mount battle-to-battle navigation exists), owner:
+      whichever story first adds one — deferred (`deferred-work.md`).
+- [x] [Review][Defer] Appending the session organism to `rosterIds` has no cap check against
+      `buildRefToFillGroup`'s 255-organism limit — a latent crash this story's new union-building
+      introduces, owner: Story 2.9 — deferred (`deferred-work.md`).
+- [x] [Review][Defer] No `touch-action`/`preventDefault()` on the paintable canvas — harmless for a
+      single tap, will matter once Story 2.6 adds an actual drag gesture — deferred
+      (`deferred-work.md`).
+
+Dismissed as noise or already correctly handled: `tool` prop declared-but-unread (pre-disclosed,
+forced decision 2); `refForTool`'s exhaustiveness tripwire being "unverified" until Story 2.7 (an
+inherent property of the pattern, mirrors `assertUnhandledVariant`); a hypothetical malformed
+`toolRef` outside `[1, 255]` (the one production caller, `refForTool`, cannot produce one — adding
+runtime validation for a type-guaranteed invariant would be the same speculative-generality the
+project already declines elsewhere); non-uniform X/Y DPR scaling in `pointerToCell` (the dish box
+enforces the same aspect ratio as its backing store; not a reachable scenario); the keyboard-
+placement gap (already recorded by the implementer with an explicit owner, Story 6.11); the e2e
+seed-helper triplication (already recorded and deliberately not touched further); process/doc-
+volume observations (not code defects).
 
 ## Dev Notes
 
@@ -660,5 +710,6 @@ no `packages/*` change, no new dependency.
 | ---------- | ------------------------------------------------------------------------- |
 | 2026-08-26 | Story created (create-story), ready-for-dev                                |
 | 2026-08-26 | Implemented (dev-story): Tasks 1-9 complete, `npm run ci` exit 0 → review  |
+| 2026-08-26 | Reviewed (code-review, Sonnet): 4 patches applied (own commit), 4 items deferred, 0 decision-needed → done |
 
 Dev Model: opus   # establishes the pointer→cell mapping, the Tool model, the onStrokeCommit→onCommitGrid seam, grid-copy discipline and the roster-ref allocation — five patterns 2.6–2.15 all build on, none of which exist yet

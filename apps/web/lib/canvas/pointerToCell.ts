@@ -56,6 +56,14 @@ export function pointerToCell(input: PointerToCellInput): CellCoord | null {
   if (!isPositiveFinite(canvasWidth) || !isPositiveFinite(canvasHeight)) return null;
   if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
   if (!isPositiveFinite(cellSize)) return null;
+  // review (2026-08-26): `rect.left`/`rect.top` were the one pair of finite-ness-load-bearing
+  // inputs the comment above claimed were covered but never actually were. A non-finite offset
+  // (unreachable from a real `getBoundingClientRect()`, but not guaranteed for every future
+  // caller) would NaN-poison `deviceX`/`deviceY` and every comparison below it silently evaluates
+  // to false, so this would fall through to `Math.floor(NaN / cellSize)` and return
+  // `{ col: NaN, row: NaN }` instead of `null` — exactly the ungoverned coordinate `markDirty`
+  // throws on.
+  if (!Number.isFinite(rect.left) || !Number.isFinite(rect.top)) return null;
 
   const deviceX = (clientX - rect.left) * (canvasWidth / rect.width);
   const deviceY = (clientY - rect.top) * (canvasHeight / rect.height);

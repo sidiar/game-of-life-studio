@@ -314,6 +314,33 @@ describe('pointerToCell', () => {
     expect(pointerToCell({ ...base, clientX: 10, clientY: Number.POSITIVE_INFINITY })).toBeNull();
   });
 
+  // review (2026-08-26): the ONLY pair of geometry inputs the earlier finiteness guard did not
+  // actually cover, despite the file's own comment claiming otherwise. A non-finite `rect.left`/
+  // `rect.top` NaN-poisons `deviceX`/`deviceY`, and every `<`/`>=` comparison against NaN is
+  // false — so without this guard the function falls through to `{ col: NaN, row: NaN }` instead
+  // of `null`, which is exactly the ungoverned coordinate `markDirty` throws on.
+  it('returns null for a non-finite rect.left or rect.top', () => {
+    const size = { cols: 50, rows: 30 };
+    const layout = computeGridLayout({ width: 500, height: 300 }, size, true);
+    const base: PointerToCellInput = {
+      rect: { left: Number.NaN, top: 0, width: 500, height: 300 },
+      canvasWidth: 500,
+      canvasHeight: 300,
+      layout,
+      size,
+      clientX: 10,
+      clientY: 10,
+    };
+
+    expect(pointerToCell(base)).toBeNull();
+    expect(
+      pointerToCell({
+        ...base,
+        rect: { left: 0, top: Number.POSITIVE_INFINITY, width: 500, height: 300 },
+      }),
+    ).toBeNull();
+  });
+
   // `showGridLines` changes only `gridLinesVisible`, never `cellSize`/`originX`/`originY`
   // (gridLayout.ts) — which is what makes the component's "recompute the layout in the handler"
   // approach (forced decision 1b) safe even if the two ever disagreed on that one flag.

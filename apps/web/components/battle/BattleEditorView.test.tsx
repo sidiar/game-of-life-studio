@@ -114,7 +114,14 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
     vi.restoreAllMocks();
   });
 
-  function mountEditor(onCommitGrid: (next: RenderableGrid) => void) {
+  // review (2026-08-26): `rosterIds` is a parameter, not a second hand-copied mount, so the
+  // "no ref in the roster" case below reuses the exact same mount/mock/rect-stub wiring instead
+  // of re-declaring it — the same discipline the story's own e2e helpers already apply to
+  // `seedWorkspace`.
+  function mountEditor(
+    onCommitGrid: (next: RenderableGrid) => void,
+    rosterIds: readonly string[] = ROSTER_WITH_CONWAY_SECOND,
+  ) {
     const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
       this: HTMLCanvasElement,
@@ -134,7 +141,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
         palette={PALETTE_3}
         showGridLines
         colors={COLORS}
-        rosterIds={ROSTER_WITH_CONWAY_SECOND}
+        rosterIds={rosterIds}
         onCommitGrid={onCommitGrid}
       />,
     );
@@ -183,40 +190,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   // must then place nothing rather than writing ref 0 — which means EMPTY (Story 2.7's eraser).
   it('commits nothing when the roster contains no match for the selected tool', () => {
     const onCommitGrid = vi.fn();
-    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
-      this: HTMLCanvasElement,
-    ) {
-      let context = contexts.get(this);
-      if (context === undefined) {
-        context = new RecordingContext2D();
-        contexts.set(this, context);
-      }
-      return context as unknown as CanvasRenderingContext2D;
-    });
-    const { container } = render(
-      <BattleEditorView
-        grid={EMPTY_GRID}
-        size={PLACE_SIZE}
-        palette={PALETTE_3}
-        showGridLines
-        colors={COLORS}
-        rosterIds={[]}
-        onCommitGrid={onCommitGrid}
-      />,
-    );
-    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
-    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-      left: 0,
-      top: 0,
-      width: 300,
-      height: 150,
-      right: 300,
-      bottom: 150,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
+    const canvas = mountEditor(onCommitGrid, []);
 
     fireEvent.pointerDown(canvas, {
       clientX: 3 * CELL + CELL / 2,

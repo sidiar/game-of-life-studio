@@ -361,6 +361,16 @@ function EditDish({
     // normal outcome — the user pointed at no cell — and it is also what keeps `markDirty`'s
     // `DirtyCellRangeError` (dirtyCells.ts) unreachable from inside this handler.
     if (cell === null) return;
+    // review (2026-08-26): `cell.col`/`cell.row` are only vouched for against `size` — the prop
+    // pointerToCell/computeGridLayout were given — while the flat index below is computed against
+    // `grid.width`/`grid.height`. `GridRenderer.assertGridMatchesSize` already throws loudly for
+    // the CONSTRUCTED-renderer path (drawFull validates on every mount, before a click is
+    // possible), but trap 12's no-context path builds no renderer and calls no drawFull, so a
+    // desync reaching the handler that way would go straight to a wrong-cell write or an
+    // out-of-bounds Uint8Array assignment (silently dropped, not thrown) while `onStrokeCommit`
+    // still fires with a "changed" grid. Fail closed here too, rather than rely on a guard that
+    // only fires on one of the two paths.
+    if (grid.width !== size.cols || grid.height !== size.rows) return;
 
     const index = cell.row * grid.width + cell.col;
     // AC7: the cell already holds this organism. No copy, no mark, no draw, no commit — a

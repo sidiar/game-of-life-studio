@@ -230,22 +230,14 @@ test.describe('battle route (Story 2.1)', () => {
     const canvas = page.getByRole('img', { name: /petri dish/i });
     await expect(canvas).toBeAttached();
 
-    const distinctColorCount = await canvas.evaluate((el) => {
-      const canvasEl = el as HTMLCanvasElement;
-      const ctx = canvasEl.getContext('2d');
-      if (ctx === null) return 0;
-      const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
-      const seen = new Set<string>();
-      for (let i = 0; i < data.length; i += 4) {
-        seen.add(`${data[i]},${data[i + 1]},${data[i + 2]},${data[i + 3]}`);
-      }
-      return seen.size;
-    });
+    // review (2026-08-26): was an inline duplicate of Story 2.5's `distinctColorCount` helper
+    // (below), added to this same file for the click-placement smoke check. One copy, not two.
+    const count = await distinctColorCount(canvas);
 
     // > 2, not > 1: background + grid lines are already two distinct colours before a single
     // organism cell is drawn. Three distinct colours cannot be reached without at least one
     // organism actually painted.
-    expect(distinctColorCount).toBeGreaterThan(2);
+    expect(count).toBeGreaterThan(2);
   });
 
   // Story 2.5 (AC1, AC3, AC6): THE test that proves the whole chain end to end — real DPR, real

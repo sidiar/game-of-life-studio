@@ -1008,6 +1008,37 @@ describe('PetriDishCanvas (edit variant) — click placement', () => {
     expect(onStrokeCommit).not.toHaveBeenCalled();
   });
 
+  // review (2026-08-26): `cell.col`/`cell.row` are only vouched for against the `size` prop;
+  // the flat index write is against `grid.width`/`grid.height`. `GridRenderer.assertGridMatchesSize`
+  // already catches this loudly for the constructed-renderer path (drawFull throws
+  // GridRendererDimensionMismatchError on mount, before any click is possible), so the gap is
+  // narrower than it first looks — but trap 12's no-context path builds no renderer and calls no
+  // drawFull, so nothing upstream of this guard would have caught a mismatch reaching the handler
+  // that way. Rendered WITHOUT installContexts() — real jsdom's getContext() returns null, exactly
+  // trap 12's path — so this exercises the one branch the renderer's own guard cannot reach.
+  it('places nothing when the grid dimensions disagree with size (trap 12 path, no renderer)', () => {
+    const mismatched = makeGrid(10, 10, new Array(100).fill(0));
+    const onStrokeCommit = vi.fn();
+    const { container } = render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={mismatched}
+        size={PLACE_SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={onStrokeCommit}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+
+    expect(() => fireEvent.pointerDown(canvas, centreOf(3, 4))).not.toThrow();
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+
   // ⚠️ AC2, and the single most likely defect in this story. The click must repaint through
   // markDirty + draw, and the committed grid coming back down as a new `grid` prop must NOT
   // trigger the grid effect's drawFull. Both halves fail silently: the dish looks perfect either
