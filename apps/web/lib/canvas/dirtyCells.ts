@@ -64,13 +64,19 @@ export function toFlatIndex(size: { cols: number; rows: number }, coord: CellCoo
 /**
  * Accumulates candidates into `marks`. A `Set` makes re-marking the same cell free, which is the
  * shape a drag stroke (Story 2.6) produces — the pointer crosses one cell many times per gesture.
+ *
+ * Validates every coord into a plain array BEFORE touching `marks`: `marks` is caller-owned,
+ * persistent state (`GridRenderer`'s `dirtyCells`), unlike `toRenderableGrid`'s local buffer that
+ * a throw discards wholesale. Adding-then-throwing partway through a batch would leave the first
+ * N coords marked with no way for the caller to know or roll back — review finding, Story 2.3.
  */
 export function markDirtyCells(
   marks: Set<number>,
   size: { cols: number; rows: number },
   cells: Iterable<CellCoord>,
 ): void {
-  for (const coord of cells) marks.add(toFlatIndex(size, coord));
+  const indices = Array.from(cells, (coord) => toFlatIndex(size, coord));
+  for (const index of indices) marks.add(index);
 }
 
 export interface DirtyCellRepaint {

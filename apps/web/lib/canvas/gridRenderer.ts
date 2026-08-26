@@ -445,12 +445,19 @@ export class GridRenderer {
 
     const repaints = selectDirtyCells(this.dirtyCells, grid, this.palette, this.lastColourState);
     this.lastGrid = grid;
-    this.dirtyCells.clear();
     // RFC-002 §"Only redraw dirty regions": nothing survived, so the context is not touched at
     // all — this is the property Decision D.3 relies on to make idle playback frames free.
-    if (repaints.length === 0) return;
+    if (repaints.length === 0) {
+      this.dirtyCells.clear();
+      return;
+    }
 
+    // Marks are cleared only AFTER a successful paint (review finding, Story 2.3): if
+    // paintDirtyCells were to throw partway, the still-unconsumed marks stay in `dirtyCells` so
+    // the next draw() retries them, instead of the marks being discarded underneath a half-drawn
+    // repaint with no record left to recover it.
     this.paintDirtyCells(grid, repaints);
+    this.dirtyCells.clear();
     for (const repaint of repaints) this.lastColourState[repaint.index] = repaint.colourState;
   }
 
@@ -482,10 +489,10 @@ export class GridRenderer {
       if (cells === undefined) groups.set(colourState, [index]);
       else cells.push(index);
     }
-    for (const groupId of [...groups.keys()].sort((a, b) => a - b)) {
+    for (const [groupId, cells] of [...groups.entries()].sort(([a], [b]) => a - b)) {
       this.ctx.fillStyle = displayColorAt(tokenIndexOfGroup(groupId), ageShadeOfGroup(groupId));
       this.ctx.beginPath();
-      for (const index of groups.get(groupId) as number[]) {
+      for (const index of cells) {
         this.ctx.rect(
           originX + (index % grid.width) * cellSize,
           originY + Math.floor(index / grid.width) * cellSize,

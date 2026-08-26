@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resetColourStateWarnings, EMPTY_COLOUR_STATE } from './colourStateGroups';
+import { colourStateAt, resetColourStateWarnings, EMPTY_COLOUR_STATE } from './colourStateGroups';
 import {
   DirtyCellRangeError,
   markDirtyCells,
@@ -29,16 +29,18 @@ function grid(width: number, height: number, occupant: number[], age?: number[])
   };
 }
 
-/** The baseline a `drawFull` would have primed for `previous`. */
+/**
+ * The baseline a `drawFull` would have primed for `previous`. Routes through the real
+ * `colourStateAt` rather than re-deriving its branching here: a parallel copy of the out-of-range
+ * guard would happily diverge from the production one and mask a regression instead of catching
+ * it (review finding, Story 2.3 — the exact "re-derive instead of reuse" mistake the module's own
+ * doc comment warns production code against).
+ */
 function baselineFor(previous: RenderableGrid, table: RefToFillGroup): Uint16Array {
   const cellCount = previous.width * previous.height;
   const buffer = new Uint16Array(cellCount);
   for (let index = 0; index < cellCount; index++) {
-    const ref = previous.occupant[index];
-    buffer[index] =
-      ref === 0 || ref >= table.size
-        ? EMPTY_COLOUR_STATE
-        : fillGroupOf(table, ref, previous.age[index]);
+    buffer[index] = colourStateAt(previous, table, index);
   }
   return buffer;
 }
@@ -170,13 +172,16 @@ describe('selectDirtyCells — AC1: dirty on occupant OR age-shade change', () =
     ]);
   });
 
-  it('treats an out-of-range ref as empty and warns once, not per candidate', () => {
+  it('treats an out-of-range ref as empty and warns once per distinct ref, not per candidate', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const before = grid(4, 3, new Array(12).fill(0));
-    const after = grid(4, 3, [7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // ref 7 > lut.size
+    // ref 7 repeated (dedup within one ref) AND ref 8 (a distinct out-of-range ref) — this is
+    // what actually distinguishes "dedup keyed by that ref" from "warns only once globally"
+    // (review finding, Story 2.3): two candidates sharing one ref alone can't tell them apart.
+    const after = grid(4, 3, [7, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // 7, 8 both > lut.size
     const baseline = baselineFor(before, table);
 
-    expect(selectDirtyCells([0, 1], after, table, baseline)).toEqual([]);
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(selectDirtyCells([0, 1, 2], after, table, baseline)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2); // once for ref 7, once for ref 8 — not once globally
   });
 });

@@ -154,6 +154,72 @@ so that editing feedback stays under the interaction budget at every grid size.
         is stale). This story should cost ~0 KB — nothing here is imported by a route yet.
   - [x] After pushing, check `gh run list`. A local green `npm run ci` is not proof CI is green.
 
+### Review Findings
+
+Code review (Sonnet, second model) ran three parallel adversarial layers (Blind Hunter, Edge Case
+Hunter, Acceptance Auditor) against `git diff 074ed8f..1fcb919`, deduplicated and triaged below.
+
+- [ ] [Review][Decision] **The RFC-002-vs-implementation "no back buffer" divergence is
+      documented in code and the Dev Agent Record only, not propagated into the specs, and was
+      resolved by the same agent that raised it.** RFC-002's Decision line
+      (`docs/planning-artifacts/rfcs/RFC-002-grid-rendering-technology.md:85`) still reads "HTML5
+      Canvas API with double buffering and dirty rectangle optimization", and
+      `docs/planning-artifacts/architecture.md:63`'s Tech Stack table independently repeats
+      "double-buffer" — a second, un-addressed citation of the same claim the story's "Spec
+      conflicts surfaced" section didn't name. CLAUDE.md's own rule: *"Where docs/project-context.md
+      and an RFC disagree, the context file flags a deliberate override... Surface any new conflict
+      — don't silently pick one."* The reasoning itself checks out (verified independently: Canvas2D
+      never presents a partially-painted frame within one task, so there is no tearing to prevent,
+      and a full-canvas `drawImage` swap would repaint everything anyway — precisely what dirty
+      regions exist to avoid). The open question is process, not correctness: does this count as
+      "picking a side" on a cross-RFC conflict the project's own workflow says should be resolved
+      one-at-a-time with Sidiar rather than pre-baked into the story and executed end-to-end by a
+      single dev agent? **Options:** (a) accept the divergence as-is and have Sidiar (or a follow-up
+      task) update RFC-002's Decision line and `architecture.md:63` to match reality; (b) reject the
+      divergence and require an actual back buffer; (c) leave both docs stale deliberately and rely
+      on `gridRenderer.ts`'s class comment as the sole source of truth. Left unresolved for Sidiar.
+
+- [x] [Review][Patch] `markDirtyCells` could leave partial marks in caller-owned state on a
+      mid-batch throw [`apps/web/lib/canvas/dirtyCells.ts:68`] — fixed: coords are now converted to
+      indices in a local array before any is added to `marks`, so a throw touches nothing.
+- [x] [Review][Patch] `draw()` cleared `dirtyCells` before `paintDirtyCells` ran, so a throw
+      mid-paint would discard marks with no retry path
+      [`apps/web/lib/canvas/gridRenderer.ts:432`] — fixed: the clear is now ordered after a
+      successful paint.
+- [x] [Review][Patch] Unchecked `groups.get(groupId) as number[]` cast in `paintDirtyCells`
+      [`apps/web/lib/canvas/gridRenderer.ts:492`] — fixed: iterates `groups.entries()` directly,
+      removing both the second lookup and the cast.
+- [x] [Review][Patch] `dirtyCells.test.ts`'s `baselineFor()` fixture hand-reimplemented
+      `colourStateAt`'s branching instead of calling it, so the two could silently diverge
+      [`apps/web/lib/canvas/dirtyCells.test.ts:33`] — fixed: now calls the real `colourStateAt`.
+- [x] [Review][Patch] The "warns once, not per candidate" test used the same out-of-range ref for
+      both candidates, so it could not distinguish per-ref dedup from a global once-ever latch
+      [`apps/web/lib/canvas/dirtyCells.test.ts:173`] — fixed: uses two distinct out-of-range refs
+      and asserts two warnings, one per ref.
+- [x] [Review][Patch] Erasing a cell while grid lines are visible (silent-failure trap #1's exact
+      scenario) was never exercised end-to-end — every erase test used `showGridLines: false` and
+      every line-restoration test used an occupied cell
+      [`apps/web/lib/canvas/gridRenderer.test.ts`] — fixed: added a test combining both.
+- [x] [Review][Defer] Bar-clamp geometry (`Math.min(offset * cellSize, bound - 1)`) is duplicated
+      between `drawGridLinesInto` and `restoreGridLinesOver` rather than shared, risking silent
+      drift despite the "byte-identical" claim [`apps/web/lib/canvas/gridRenderer.ts`] — deferred,
+      low risk today (both private, same file, same review), tracked in `deferred-work.md`.
+- [x] [Review][Defer] `resetDirtyState` sweeps the whole grid through `colourStateAt` on every
+      full repaint (O(cells) baseline re-prime) — pre-existing, already tracked by the dev's own
+      `deferred-work.md` entry for Story 3.7; confirmed correct, not re-filed.
+- [x] [Review][Defer] `restoreGridLinesOver` draws 4 bar segments per dirty cell, 2 of which are
+      no-ops for interior cells — pre-existing, already tracked by the dev's own `deferred-work.md`
+      entry for Story 3.7/3.9; confirmed correct, not re-filed.
+
+Dismissed as noise or non-reachable given the class's actual invariants (verified against the real
+code, not assumed): `selectDirtyCells` receiving duplicate candidate indices (unreachable — its
+only caller passes a `Set`); an out-of-range index reaching `lastColourState`/`colourStateAt`
+(unreachable — `resize()`/`setGridLines()` clear `dirtyCells` and reset `lastColourState` together,
+and `assertGridMatchesSize` runs before every dirty selection); `EMPTY_COLOUR_STATE`'s magic-number
+justification; the "pure" doc-comment claim being technically impure w.r.t. `console.warn`/WeakMap
+state; unbacked verification claims (independently re-run and confirmed exact: 440 `web` tests,
+132/132 spec ids, 325.0 KB gzipped bundle); general comment-density/drift observations.
+
 ## Dev Notes
 
 ### Decisions this story is forced to make (flag each in the Dev Agent Record)

@@ -727,6 +727,34 @@ describe('draw — AC1/AC4: repaints only what changed', () => {
     expect(ctx.fillStyleWrites).toEqual([COLORS.background]);
   });
 
+  it('erases a cell AND restores its grid lines together, when lines are visible (silent-failure trap #1)', () => {
+    // Every other erase test in this file uses showGridLines: false, and every other line-
+    // restoration test uses an occupied cell — this is the one place the two combine (review
+    // finding, Story 2.3): erasing a cell while grid lines are on screen is exactly the scenario
+    // "(c) is not optional" in paintDirtyCells exists to protect.
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: true,
+    });
+    renderer.drawFull(makeGrid(2, 1, [1, 0]));
+    ctx.calls.length = 0;
+    ctx.fillStyleWrites.length = 0;
+
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.draw(makeGrid(2, 1, [0, 0]));
+
+    expect(ctx.calls).toEqual([
+      { op: 'fillRect', args: [0, 0, 10, 10] }, // (a) cell background — no colour group follows
+      { op: 'fillRect', args: [0, 0, 1, 10] }, // (c) left bar
+      { op: 'fillRect', args: [10, 0, 1, 10] }, // right bar
+      { op: 'fillRect', args: [0, 0, 10, 1] }, // top bar
+      { op: 'fillRect', args: [0, 9, 10, 1] }, // bottom bar, pulled back inside the rectangle
+    ]);
+    expect(ctx.fillStyleWrites).toEqual([COLORS.background, COLORS.gridLine]);
+  });
+
   it('batches surviving cells by colour state — one beginPath/fill/fillStyle per group', () => {
     const { ctx, renderer } = primedRenderer({ showGridLines: false });
 
