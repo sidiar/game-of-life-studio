@@ -100,11 +100,24 @@ that model and tell it to:
 The push is what gets CI to run before anyone reviews — so the reviewer reads real
 lint/typecheck/test results rather than the dev agent's account of them.
 
-## Step 3 — Review (Opus)
+## Step 3 — Review (the model Step 2 did *not* use)
 
-Spawn a fresh `model: "opus"` subagent to invoke `bmad-code-review` on the branch.
-This must be a different model than Step 2 used whenever Step 2 ran on Sonnet —
-that separation is the point of the split.
+Re-read the `Dev Model:` line from the story file and spawn a fresh subagent on the
+**other** model — the complement, never a fixed choice:
+
+| Step 2 ran on | Step 3 reviews on |
+| --- | --- |
+| `sonnet` | `opus` |
+| `opus`   | `sonnet` |
+
+Two models, never one. A model reviewing its own output re-runs the reasoning that
+produced the bug and agrees with itself; the split exists to break that. Escalating dev
+to Opus does **not** license an Opus review — it forces a Sonnet one. State in the spawn
+prompt which model implemented the story and that this review is deliberately the other
+one, so the reviewer knows it is the second pair of eyes.
+
+Before spawning, assert the choice out loud: *"Step 2 ran on X, so Step 3 spawns Y."*
+If X and Y are the same, you have mis-derived it — stop and recompute.
 
 **Auto-apply patches.** At `bmad-code-review`'s step 5 prompt, always choose
 **"Apply every patch"** — no per-finding confirmation. There is no human in this run to
@@ -146,7 +159,8 @@ Report, briefly:
 - story id and title, and its status on the branch (`done`, or unchanged if decisions
   are outstanding)
 - the PR number and URL, and CI status
-- which model implemented it
+- which model implemented it, and which reviewed it — name both, so a collapsed
+  split is visible in the hand-back rather than only in the commit trailers
 - the file list
 - patches auto-applied, and any `decision-needed` findings awaiting Sidiar's call
 
