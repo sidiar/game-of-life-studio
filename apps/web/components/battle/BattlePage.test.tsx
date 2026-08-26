@@ -1,14 +1,50 @@
 import { StrictMode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
-import type { Battle } from '@gol/domain';
+import { DEFAULT_SETTINGS, type Battle } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
+import { RecordingContext2D } from '@/lib/recordingContext2d';
 import BattlePage from './BattlePage';
 
 const { battles, organisms } = createMockWorkspace();
 const SKIRMISH = battles.find((b) => b.id === MOCK_BATTLE_IDS.battleA) as Battle;
+
+// jsdom never loads themes.css, so `readGridColors` resolves null and <BattleEditorView> renders
+// the dish BOX with no canvas inside (Task 6's degradation) unless a test writes the --gol-*
+// tokens onto <html> itself — the same workaround BattleGallery.test.tsx establishes for the
+// identical gate on BattleTile's thumbnail.
+function enableCanvasRendering() {
+  document.documentElement.style.setProperty('--gol-bg-primary', '#0a0a0a');
+  document.documentElement.style.setProperty('--gol-grid-line', 'rgb(51 51 51 / 0.3)');
+}
+
+// Real (unmocked) jsdom's `getContext('2d')` always returns null (no native `canvas` package —
+// recordingContext2d.ts's own doc comment), which is enough to prove a canvas is PRESENT but
+// nothing about what it painted. Gives every canvas its own `RecordingContext2D` (keyed by
+// identity, like `installRecordingContexts`'s `offscreen: true` mode) so the very first mount
+// paints for real — no forced-rerender trick needed, and the MAIN canvas's own recording is
+// retrievable afterwards via `contextsByCanvas.get(mainCanvas)`.
+function installPerCanvasRecording(): Map<HTMLCanvasElement, RecordingContext2D> {
+  const contextsByCanvas = new Map<HTMLCanvasElement, RecordingContext2D>();
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+    this: HTMLCanvasElement,
+  ) {
+    let ctx = contextsByCanvas.get(this);
+    if (ctx === undefined) {
+      ctx = new RecordingContext2D();
+      contextsByCanvas.set(this, ctx);
+    }
+    return ctx as unknown as CanvasRenderingContext2D;
+  });
+  return contextsByCanvas;
+}
+
+afterEach(() => {
+  document.documentElement.style.cssText = '';
+  vi.restoreAllMocks();
+});
 
 // Always the real factory from @gol/test-utils — a hand-rolled fake in a test file is what the
 // shared fixtures exist to prevent (project-context, Testing rules).
@@ -277,5 +313,128 @@ describe('BattlePage', () => {
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
+  });
+
+  // Task 9 (AC1): a canvas mounts on BOTH battle routes, not just the loaded one.
+  it('mounts a canvas on the loaded battle route', async () => {
+    enableCanvasRendering();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).not.toBeNull();
+    expect(canvas).toHaveAttribute('role', 'img');
+  });
+
+  it('mounts a canvas on the /battle/new route', async () => {
+    enableCanvasRendering();
+    const { container } = render(<BattlePage repositories={seeded()} battleId="new" />);
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).not.toBeNull();
+    expect(canvas).toHaveAttribute('role', 'img');
+  });
+
+  // Task 6: showGridLines is READ from the loaded settings, not hardcoded (FR-8.7). Proven through
+  // an actual paint: real jsdom's getContext('2d') always returns null (no canvas package), which
+  // is enough to prove a canvas is present but nothing about what it painted — so this installs a
+  // recording double PER canvas (main + GridRenderer's offscreen grid-line overlay) before the
+  // very first mount. SKIRMISH is 50x30 against jsdom's default 300x150 canvas box: cellSize =
+  // min(300/50, 150/30) = 5, clearing MIN_GRID_LINE_CELL_SIZE(4) — grid lines are legible here.
+  it('paints grid lines when settings.gridLines is true, and none when it is false (FR-8.7)', async () => {
+    const contextsByCanvas = installPerCanvasRecording();
+    enableCanvasRendering();
+
+    const linesOn = render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [SKIRMISH],
+          organisms,
+          settings: { ...DEFAULT_SETTINGS, gridLines: true },
+        })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await linesOn.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    const canvasOn = linesOn.container.querySelector('canvas') as HTMLCanvasElement;
+    const recordingOn = contextsByCanvas.get(canvasOn);
+    linesOn.unmount();
+
+    const linesOff = render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [SKIRMISH],
+          organisms,
+          settings: { ...DEFAULT_SETTINGS, gridLines: false },
+        })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await linesOff.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    const canvasOff = linesOff.container.querySelector('canvas') as HTMLCanvasElement;
+    const recordingOff = contextsByCanvas.get(canvasOff);
+
+    // paintGridLines() draws the overlay via drawImage on the MAIN canvas's context whenever the
+    // layout says lines are visible, and is a total no-op (no drawImage call at all) when they are
+    // not — GridRenderer never falls back to direct fillRect line-drawing here because the
+    // recording double makes the offscreen overlay canvas succeed, unlike real jsdom.
+    expect(recordingOn?.calls.some((c) => c.op === 'drawImage')).toBe(true);
+    expect(recordingOff?.calls.some((c) => c.op === 'drawImage')).toBe(false);
+  });
+
+  // AC7 / deferred-work.md:179: the grid the canvas is given must be HELD state with one stable
+  // identity per load, not rebuilt in the render body. A rebuild-per-render bug would give
+  // `palette` (built by the SAME `toThumbnailSource` memo as `grid`) a fresh identity on every
+  // render, which the retained EditDish would notice by attempting a SECOND renderer construction
+  // — a second getContext() call — on a rerender that changed nothing relevant.
+  it('keeps the grid/palette identity stable across an unrelated rerender (AC7)', async () => {
+    enableCanvasRendering();
+    const getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext');
+    const repositories = seeded();
+
+    const { rerender } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    const callsAfterMount = getContextSpy.mock.calls.length;
+    expect(callsAfterMount).toBeGreaterThan(0); // the construction effect attempted at least once
+
+    // Same repositories reference, same battleId — nothing that should change the seeded draft,
+    // the grid, or the palette. React still re-invokes the component body (it is not memoized).
+    rerender(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+
+    expect(getContextSpy.mock.calls.length).toBe(callsAfterMount);
+  });
+
+  // Task 7 / deferred-work.md:183: a corrupt gol:organisms record must not silently override the
+  // user's actual default grid size on /battle/new. The aria-label EditDish carries names the
+  // grid's own dimensions (Story 2.4), so this reads the seeded size straight off the DOM rather
+  // than reaching into React internals.
+  it('does not change the seeded grid size on /battle/new when the organism library fails to load (Task 7)', async () => {
+    enableCanvasRendering();
+    const repositories = seeded();
+    const nonDefaultSettings = {
+      ...DEFAULT_SETTINGS,
+      defaultGridSize: { cols: 50, rows: 30 } as const,
+    };
+    const withCustomSettings: AppRepositories = {
+      ...repositories,
+      settings: {
+        ...repositories.settings,
+        load: () => Promise.resolve(nonDefaultSettings),
+      },
+      organisms: {
+        ...repositories.organisms,
+        list: () => Promise.reject(new Error('gol:organisms is corrupt')),
+      },
+    };
+
+    const { container } = render(<BattlePage repositories={withCustomSettings} battleId="new" />);
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    const canvas = container.querySelector('canvas');
+    // DEFAULT_SETTINGS.defaultGridSize is 100x60 (settingsSchema.ts) — if the corrupt organism
+    // record discarded the settings value that loaded perfectly, the dish would seed at that
+    // default instead of the user's real 50x30 preference.
+    expect(canvas).toHaveAccessibleName('Petri dish, 50 by 30 cells');
   });
 });

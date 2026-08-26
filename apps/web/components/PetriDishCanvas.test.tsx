@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { GridRenderer } from '@/lib/canvas/gridRenderer';
@@ -451,6 +452,266 @@ describe('PetriDishCanvas (static variant)', () => {
       // unmount and repaints a canvas no longer in the document.
       vi.advanceTimersByTime(200);
       expect(getContextSpy.mock.calls.length).toBe(callsAfterInitialPaint);
+    });
+  });
+});
+
+// The retained-renderer lifecycle (Story 2.4, AC6). Every real construction below is forced by a
+// COLORS identity rerender AFTER installRecordingContext2d is attached — the real (unmocked)
+// jsdom context on the FIRST render is always null (see the static describe's own note), so the
+// mount alone never exercises a genuine paint. This mirrors the static file's own
+// "calls GridRenderer.prototype.renderStatic and never drawFull" test.
+describe('PetriDishCanvas (edit variant)', () => {
+  it('mounts a canvas with an accessible name (AC7) and calls drawFull, never renderStatic (AC1)', () => {
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const renderStaticSpy = vi.spyOn(GridRenderer.prototype, 'renderStatic');
+
+    const { container, rerender } = render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+      />,
+    );
+    const canvas = container.querySelector('canvas');
+    expect(canvas).not.toBeNull();
+    // role="img" is a naming role, so aria-label is permitted here — the inverse of the static
+    // tile's aria-hidden (Story 2.4 Dev Notes trap 9).
+    expect(canvas).toHaveAttribute('role', 'img');
+    expect(canvas).toHaveAccessibleName('Petri dish, 2 by 2 cells');
+    expect(canvas).not.toHaveAttribute('aria-hidden');
+
+    installRecordingContext2d(canvas as HTMLCanvasElement);
+    rerender(
+      <PetriDishCanvas
+        variant="edit"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={{ ...COLORS }}
+      />,
+    );
+
+    expect(drawFullSpy).toHaveBeenCalledTimes(1);
+    expect(renderStaticSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not throw when getContext('2d') returns null (real jsdom behaviour)", () => {
+    expect(() =>
+      render(
+        <PetriDishCanvas
+          variant="edit"
+          grid={GRID}
+          size={SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
+  it('retains the renderer: an unrelated prop change (className) triggers no further construction', () => {
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const renderStaticSpy = vi.spyOn(GridRenderer.prototype, 'renderStatic');
+
+    const { container, rerender } = render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        className="a"
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    installRecordingContext2d(canvas);
+
+    // A real dependency change (colors identity) forces one genuine construction under the
+    // recording context, giving a non-zero baseline to test the next rerender against.
+    const colors = { ...COLORS };
+    rerender(
+      <PetriDishCanvas
+        variant="edit"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={colors}
+        className="a"
+      />,
+    );
+    expect(drawFullSpy).toHaveBeenCalledTimes(1);
+
+    const getContextCallsBefore = vi.mocked(HTMLCanvasElement.prototype.getContext).mock.calls
+      .length;
+
+    // className is not a construction-effect dependency; every other prop keeps its exact
+    // identity — React must skip every effect entirely, so the retained renderer sees NO new
+    // construction and NO redundant repaint.
+    rerender(
+      <PetriDishCanvas
+        variant="edit"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={colors}
+        className="b"
+      />,
+    );
+
+    expect(vi.mocked(HTMLCanvasElement.prototype.getContext).mock.calls.length).toBe(
+      getContextCallsBefore,
+    );
+    expect(drawFullSpy).toHaveBeenCalledTimes(1);
+    expect(renderStaticSpy).not.toHaveBeenCalled();
+  });
+
+  // ResizeObserver is absent in jsdom — stub it to prove AC3's immediate (never debounced)
+  // re-fit, and the cleanup contract.
+  describe('immediate re-fit (ResizeObserver feature-detected, AC3)', () => {
+    class FakeResizeObserver implements ResizeObserver {
+      static instances: FakeResizeObserver[] = [];
+      readonly observe = vi.fn();
+      readonly unobserve = vi.fn();
+      readonly disconnect = vi.fn();
+      constructor(private readonly callback: ResizeObserverCallback) {
+        FakeResizeObserver.instances.push(this);
+      }
+      trigger(width: number, height: number): void {
+        this.callback([{ contentRect: { width, height } } as ResizeObserverEntry], this);
+      }
+    }
+
+    afterEach(() => {
+      FakeResizeObserver.instances = [];
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    });
+
+    // Forces a genuine construction (colors identity change) under a recording context, then
+    // returns the ALREADY-registered observer instance — the resize effect's own ResizeObserver is
+    // set up once on mount and is not tied to the construction effect, so it stays the same
+    // instance across the rerender below.
+    function mountAndRetain(rerender: (ui: ReactElement) => void, canvas: HTMLCanvasElement) {
+      installRecordingContext2d(canvas);
+      rerender(
+        <PetriDishCanvas
+          variant="edit"
+          grid={GRID}
+          size={SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={{ ...COLORS }}
+        />,
+      );
+    }
+
+    it('calls resize() SYNCHRONOUSLY on a changed box — no timer advance needed (AC3)', () => {
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      vi.useFakeTimers();
+      const resizeSpy = vi.spyOn(GridRenderer.prototype, 'resize');
+
+      const { container, rerender } = render(
+        <PetriDishCanvas
+          variant="edit"
+          grid={GRID}
+          size={SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+        />,
+      );
+      const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+      mountAndRetain(rerender, canvas);
+
+      const observer = FakeResizeObserver.instances.at(-1);
+      expect(observer).toBeDefined();
+      // A box that differs from the target's (jsdom-zero) clientWidth/clientHeight.
+      observer?.trigger(400, 240);
+
+      // No vi.advanceTimersByTime anywhere in this test — resize() must already have been called
+      // by the time this assertion runs, which is the entire content of AC3's "immediately"
+      // (and the static path's 150ms debounce, deliberately NOT reproduced here).
+      expect(resizeSpy).toHaveBeenCalledTimes(1);
+      expect(resizeSpy).toHaveBeenCalledWith(SIZE);
+    });
+
+    it('does not repaint when the observed box is unchanged', () => {
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      const resizeSpy = vi.spyOn(GridRenderer.prototype, 'resize');
+
+      const { container, rerender } = render(
+        <PetriDishCanvas
+          variant="edit"
+          grid={GRID}
+          size={SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+        />,
+      );
+      const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+      mountAndRetain(rerender, canvas);
+
+      const observer = FakeResizeObserver.instances.at(-1);
+      const target = canvas.parentElement as HTMLElement;
+      // jsdom performs no layout, so clientWidth/clientHeight are 0 — reporting that same box is
+      // exactly what a real observer's initial observe() callback does.
+      observer?.trigger(target.clientWidth, target.clientHeight);
+      observer?.trigger(target.clientWidth, target.clientHeight);
+
+      expect(resizeSpy).not.toHaveBeenCalled();
+    });
+
+    it('disconnects the observer on unmount', () => {
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+
+      const { unmount } = render(
+        <PetriDishCanvas
+          variant="edit"
+          grid={GRID}
+          size={SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+        />,
+      );
+      const observer = FakeResizeObserver.instances.at(-1);
+
+      unmount();
+
+      expect(observer?.disconnect).toHaveBeenCalledTimes(1);
+    });
+
+    // Task 4: the observed TARGET is the canvas's PARENT, not the canvas itself — paint() writes
+    // canvas.width/height (the intrinsic dimensions `resize()`/`drawFull` set), and observing that
+    // same element would be the resize-feedback loop deferred-work.md:113 names.
+    it('observes the parent element, not the canvas', () => {
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+
+      const { container } = render(
+        <PetriDishCanvas
+          variant="edit"
+          grid={GRID}
+          size={SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+        />,
+      );
+      const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+      const observer = FakeResizeObserver.instances.at(-1);
+
+      expect(observer?.observe).toHaveBeenCalledWith(canvas.parentElement);
+      expect(observer?.observe).not.toHaveBeenCalledWith(canvas);
     });
   });
 });

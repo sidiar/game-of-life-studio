@@ -171,4 +171,36 @@ test.describe('battle route (Story 2.1)', () => {
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
   });
+
+  // Story 2.4 AC1/AC6: the SAME AR-42-permitted smoke check gallery.spec.ts:163-196 uses for
+  // <PetriDishCanvas variant="static"> — never a pixel or image snapshot (project-context, "Never
+  // pixel/snapshot-test the Canvas"). Three-Way Skirmish places three organisms on a 50x30 grid,
+  // guaranteeing more than the background/grid-line pair is actually on screen.
+  test('the edit canvas actually paints more than two colours (AC1, AR-42 smoke check)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    await expect(canvas).toBeAttached();
+
+    const distinctColorCount = await canvas.evaluate((el) => {
+      const canvasEl = el as HTMLCanvasElement;
+      const ctx = canvasEl.getContext('2d');
+      if (ctx === null) return 0;
+      const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+      const seen = new Set<string>();
+      for (let i = 0; i < data.length; i += 4) {
+        seen.add(`${data[i]},${data[i + 1]},${data[i + 2]},${data[i + 3]}`);
+      }
+      return seen.size;
+    });
+
+    // > 2, not > 1: background + grid lines are already two distinct colours before a single
+    // organism cell is drawn. Three distinct colours cannot be reached without at least one
+    // organism actually painted.
+    expect(distinctColorCount).toBeGreaterThan(2);
+  });
 });

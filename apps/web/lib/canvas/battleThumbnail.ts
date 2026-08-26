@@ -14,9 +14,17 @@ import { toRenderableGrid, type RenderableGrid } from './renderableGrid';
  * Throws only what its two collaborators throw: `toRenderableGrid` on a ragged/out-of-range
  * `gridState`, `buildRefToFillGroup` on a >255-organism roster. The caller catches — see Task 5's
  * degradation contract.
+ *
+ * Parameter widened from `Battle` to `Pick<Battle, 'gridState' | 'organismIds'>` (Story 2.4 Task
+ * 6) — a structural widening, so every existing `Battle` call site (BattleTile) is unaffected.
+ * `NewBattleDraft` (`lib/newBattleDraft.ts`) carries the same two fields with the same shapes and
+ * so satisfies this without adaptation, which is what lets `<BattlePage>` reuse this conversion
+ * for the unsaved-draft path instead of hand-rolling the dense->renderable loop or the LUT a
+ * second time. The function's name is now narrower than its signature — a rename candidate,
+ * recorded as deferred work rather than done here.
  */
 export function toThumbnailSource(
-  battle: Battle,
+  battle: Pick<Battle, 'gridState' | 'organismIds'>,
   roster: readonly Organism[],
 ): { grid: RenderableGrid; palette: RefToFillGroup } {
   // Built once per battle, not per ref — buildRefToFillGroup resolves every roster organism's
