@@ -67,7 +67,7 @@ development_status:
   epic-2: in-progress
   2-1-battle-route-page-skeleton: done
   2-2-create-new-battle-gallery-wiring: done
-  2-3-renderer-dirty-region-editing-paths: backlog
+  2-3-renderer-dirty-region-editing-paths: done
   2-4-edit-canvas-display: backlog
   2-5-click-placement: backlog
   2-6-drag-painting: backlog

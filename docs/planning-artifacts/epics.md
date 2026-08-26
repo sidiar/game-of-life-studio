@@ -184,7 +184,7 @@ Extracted from the Architecture umbrella document (Decisions A–K, M1–M10, Cr
 
 **Rendering (RFC-002, RFC-007, Decisions A, B, D, M4):**
 
-- AR-22: Canvas 2D renderer outside MUI — double buffering, dirty-region tracking (dirty on occupant OR age-shade change), auto-fit (`cellSize = floor(canvasPx / dimension)`)
+- AR-22: Canvas 2D renderer outside MUI — dirty-region tracking (dirty on occupant OR age-shade change), cached grid-line overlay as the only offscreen surface (no cell-layer back buffer — Story 2.3), auto-fit (`cellSize = floor(canvasPx / dimension)`)
 - AR-23: Batch rendering by colour state `(colorToken, min(age,7))` — ≤160 fill groups, palette-derived, independent of organism count; per-battle `OrganismRef → fill-group` LUT
 - AR-24: RAF loop with time accumulator — one `step()` per `msPerCycle`, ≤1 step/frame, frame delta clamped to `msPerCycle` (no fast-forward burst after tab suspension); repaint only after a step
 - AR-25: Loopless `renderStatic` for Gallery tile thumbnails (rendered on demand, never stored) and editor-preview paused frames

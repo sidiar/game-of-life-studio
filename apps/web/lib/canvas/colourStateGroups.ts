@@ -50,6 +50,44 @@ function warnOutOfRangeRefOnce(lut: RefToFillGroup, ref: number): void {
   );
 }
 
+/**
+ * The "this cell paints nothing" colour state. Valid fill-group ids run 0..159 (20 tokens x 8
+ * shades), so any value above that range is free; 0xFFFF is chosen because the dirty baseline
+ * buffer is a `Uint16Array` and this is its maximum — a zero-filled fresh buffer therefore reads
+ * as "group 0" rather than accidentally as "empty", which is what forces `drawFull` to prime the
+ * baseline explicitly instead of relying on the allocation (Story 2.3).
+ */
+export const EMPTY_COLOUR_STATE = 0xffff;
+
+/**
+ * The single per-cell colour state both paint paths compare and batch on: `fillGroupOf` already
+ * folds occupant token AND age shade into one number (Decision B.2), which is exactly AC1's
+ * "dirty on occupant OR age-shade change" rule in one comparison.
+ *
+ * Extracted from `groupByColourState`'s loop in Story 2.3 so the dirty path re-uses the
+ * out-of-range guard rather than re-deriving it: a second call site computing `fillGroupOf`
+ * directly would read past `lut.size` off the typed array and reintroduce the phantom-organism
+ * paint this guard exists to stop, with the warn-once registry none the wiser.
+ */
+export function colourStateAt(grid: RenderableGrid, lut: RefToFillGroup, index: number): number {
+  const ref = grid.occupant[index];
+  if (ref === 0) return EMPTY_COLOUR_STATE;
+  if (ref >= lut.size) {
+    warnOutOfRangeRefOnce(lut, ref);
+    return EMPTY_COLOUR_STATE;
+  }
+  return fillGroupOf(lut, ref, grid.age[index]);
+}
+
+/** Splits a fill-group id back into its two coordinates — the inverse of `tokenIndex * 8 + shade`. */
+export function tokenIndexOfGroup(groupId: number): number {
+  return Math.floor(groupId / 8);
+}
+
+export function ageShadeOfGroup(groupId: number): number {
+  return groupId % 8;
+}
+
 export function groupByColourState(grid: RenderableGrid, lut: RefToFillGroup): FillGroup[] {
   // groupId -> in-progress group. A Map (not a 160-slot array) because most grids use only a
   // handful of the 160 possible groups, and insertion order doesn't matter — the result is
@@ -70,26 +108,17 @@ export function groupByColourState(grid: RenderableGrid, lut: RefToFillGroup): F
   }
 
   for (let index = 0; index < cellCount; index++) {
-    const ref = grid.occupant[index];
-    if (ref === 0) continue; // Empty is the majority of most grids; the background fill covers it.
-
-    // occupant is a Uint8Array, so a stale or hand-edited grid can carry a ref >= lut.size.
-    // Reading past that bound would read undefined off the typed array, becoming NaN * 8 + shade
-    // and landing in displayColorAt's silent clamp — painting a real organism's colour on a
-    // phantom cell. Skip and warn once instead.
-    if (ref >= lut.size) {
-      warnOutOfRangeRefOnce(lut, ref);
-      continue;
-    }
-
-    const age = grid.age[index];
-    const groupId = fillGroupOf(lut, ref, age);
+    // Empty is the majority of most grids, and an out-of-range ref is folded to the same state
+    // (with its warn-once diagnostic) inside colourStateAt — either way the background fill this
+    // path always lays down first already covers the cell.
+    const groupId = colourStateAt(grid, lut, index);
+    if (groupId === EMPTY_COLOUR_STATE) continue;
 
     let group = groups.get(groupId);
     if (group === undefined) {
       group = {
-        tokenIndex: lut.tokenIndex[ref],
-        ageShade: groupId - lut.tokenIndex[ref] * 8,
+        tokenIndex: tokenIndexOfGroup(groupId),
+        ageShade: ageShadeOfGroup(groupId),
         cells: [],
       };
       groups.set(groupId, group);

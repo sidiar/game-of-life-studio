@@ -60,7 +60,7 @@ Game of Life Studio is a **client-only, statically-hosted** web app (NFR-6: $0 h
 | Language | TypeScript (strict) | RFC-001 |
 | UI library | MUI v6 (single theme + app CSS-variable token layer — Decision J) + Emotion | RFC-003 |
 | Animation | MUI transitions + CSS keyframes + Framer Motion (sparingly) | RFC-003 |
-| Grid rendering | HTML5 Canvas 2D (double-buffer, dirty regions, auto-fit) | RFC-002 |
+| Grid rendering | HTML5 Canvas 2D (dirty regions, cached grid-line overlay, auto-fit) | RFC-002 |
 | Simulation engine | Pure functional TS (no classes, DI, seedable RNG) | RFC-004 |
 | Runtime state | React local state + refs (no global store) | RFC-005 |
 | Validation | Zod (shared schemas) | RFC-001, RFC-004, RFC-006 |

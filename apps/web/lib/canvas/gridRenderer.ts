@@ -1,14 +1,23 @@
 /**
- * GridRenderer — the frozen contract's static core (Story 1.8 Task 5, AC1/2/3/4).
- * `component-tree-battle-page.md#5` names six methods split across three epics; this story ships
- * exactly `drawFull` and `renderStatic` (plus `resize`/`setGridLines`, which both need). `draw`
- * (dirty regions) and `markDirty` are Story 2.3 — implementing them now means designing them
- * blind, before any editing gesture exists to shape them.
+ * GridRenderer — the frozen contract (`component-tree-battle-page.md#5`), whose six methods land
+ * across three epics. Story 1.8 shipped `drawFull` + `renderStatic` (plus `resize`/`setGridLines`,
+ * which both need); **Story 2.3 adds the dirty-region editing paths** (`draw` + `markDirty`).
+ * Epic 3 wraps it with the loop, adding nothing to it.
  *
  * A class, deliberately: the "no classes" rule (project-context.md) is scoped to the engine
  * (packages/simulation, the rules layer); this is the one place in apps/web a class is correct —
- * it holds genuine instance state (canvas, context, layout, overlay cache) that Epic 3 hands
- * around via `onRendererReady`.
+ * it holds genuine instance state (canvas, context, layout, overlay cache, and now the dirty-cell
+ * marks and last-drawn colour-state baseline) that Epic 3 hands around via `onRendererReady`. The
+ * dirty-region *decision logic* stays a pure module (dirtyCells.ts, AR-42) — only the hand lives
+ * here.
+ *
+ * ⚠️ **No back buffer** (Story 2.3, spec conflict #1 — resolved by Sidiar 2026-08-26). A
+ * full-canvas `drawImage` swap per frame repaints everything anyway, which is precisely the cost
+ * dirty regions exist to avoid — and Canvas2D never presents a partially-painted frame from
+ * within one task, so there is no tearing to prevent. Dirty regions win; the grid-line overlay
+ * (RFC-002 Risk 4) remains the only offscreen canvas here. RFC-002's Decision line, its §"1."
+ * sketch, Risk 3, AR-22 and the architecture Tech Stack row were all updated to match, so this
+ * is the spec now, not a divergence from it.
  *
  * AC3 — the frozen contract's other half: this file calls no browser scheduling primitive of any
  * kind (frame callbacks, timers, or microtask queuing), never mutates the grid it is given, and
@@ -18,10 +27,27 @@
  * the promise Epic 3 is actually being given.
  */
 import { displayColorAt } from '../palette/displayColor';
-import { groupByColourState } from './colourStateGroups';
-import { computeGridLayout, type GridLayout } from './gridLayout';
+import {
+  ageShadeOfGroup,
+  colourStateAt,
+  EMPTY_COLOUR_STATE,
+  groupByColourState,
+  tokenIndexOfGroup,
+} from './colourStateGroups';
+import {
+  markDirtyCells,
+  selectDirtyCells,
+  type CellCoord,
+  type DirtyCellRepaint,
+} from './dirtyCells';
+import { computeGridLayout, gridLayoutEquals, type GridLayout } from './gridLayout';
 import type { RefToFillGroup } from './refToFillGroup';
 import type { RenderableGrid } from './renderableGrid';
+
+// Re-exported so Stories 2.5/2.6/2.7 import the coordinate type from the renderer they hand it to,
+// rather than reaching into the pure module behind it. `export type` is mandatory under
+// isolatedModules — a bare re-export fails to compile.
+export type { CellCoord };
 
 // Narrow structural alias of the canvas members this file actually uses. Declared here (not
 // imported from lib.dom) so the hand-rolled test double in recordingContext2d.ts can satisfy it
@@ -97,6 +123,19 @@ export class GridRenderer {
   // see resize().
   private lastGrid: RenderableGrid | null = null;
 
+  // Dirty state (Story 2.3). Flat cell indices, not merged rectangles — see dirtyCells.ts for why
+  // a merged rect cannot go through the (colorToken, ageShade) batching path at all.
+  private readonly dirtyCells = new Set<number>();
+
+  // Per-cell last-drawn colour state — `fillGroupOf`'s `tokenIndex * 8 + ageShade`, which encodes
+  // occupant token AND age shade in one comparison (AC1's rule verbatim), with EMPTY_COLOUR_STATE
+  // for an empty cell. One Uint16Array of width * height (~12 KB at 100x60) is strictly cheaper
+  // than retaining copies of both the occupant and age buffers, and it correctly treats two
+  // organisms sharing a colour token as visually identical (Decision B.2 / M6).
+  // `null` means "no baseline primed yet" — only a driven full repaint primes it, which is what
+  // keeps renderStatic out of this state machine entirely.
+  private lastColourState: Uint16Array | null = null;
+
   // The CSS-pixel box the backing store was last computed from, and the backing store this class
   // last wrote. Both exist to keep applyDevicePixelSizing idempotent — see the comment there.
   private cssWidth = 0;
@@ -142,6 +181,17 @@ export class GridRenderer {
    * what "crisply" in the story statement means. `clientWidth`/`clientHeight` are 0 for an
    * unattached canvas (jsdom, any pre-layout call); fall back to the canvas's existing width/
    * height attributes rather than producing a 0x0 backing store.
+   *
+   * ⚠️ **The anti-double-scaling guard below requires a RETAINED renderer** (Story 2.3, closing
+   * the 1.11 review item). `backingWidth` starts at -1 per instance, so a caller that constructs a
+   * fresh GridRenderer for every paint — which is exactly what `<PetriDishCanvas>`'s `static`
+   * Gallery tiles do, deliberately (Story 1.11) — never matches it, and `authoredWidth` is always
+   * the *previous* renderer's already-multiplied `cssPx * dpr`. That case is documented rather
+   * than engineered around: making the guard instance-independent means writing renderer state
+   * onto the canvas element, and the surfaces where repeated `resize()` on one instance is real —
+   * the edit canvas (2.4) and the playback canvas (3.11) — are precisely the ones that retain a
+   * renderer, because dirty tracking is meaningless without one. The residual `dpr²` exposure for
+   * a static tile repainted at a 0-width box is recorded in deferred-work.md.
    */
   private applyDevicePixelSizing(): void {
     const dpr = resolveDevicePixelRatio();
@@ -221,8 +271,32 @@ export class GridRenderer {
     }
   }
 
-  /** Builds (or rebuilds) the offscreen grid-line overlay for the current layout, if possible. */
+  /**
+   * Builds (or rebuilds) the offscreen grid-line overlay for the current layout, if possible —
+   * and **reuses** the cached one when the new layout describes the same picture at the same
+   * backing-store size (Story 2.3, closing the 1.8 review item).
+   *
+   * `computeGridLayout` returns a fresh object per call, so `resize()`/`setGridLines()` reassign
+   * `this.layout` on every invocation whether or not anything changed. Without this guard that
+   * meant one full-backing-store canvas allocation per call: at NFR-7.2's ~50 Gallery tiles under
+   * a sustained ResizeObserver drag, one per tile per debounce tick. The re-pointing below is what
+   * makes the reuse visible to `paintGridLines`, whose cache check is an identity comparison.
+   */
   private rebuildGridLineOverlay(): void {
+    if (
+      this.gridLineOverlay !== null &&
+      this.gridLineOverlayLayout !== null &&
+      this.layout.gridLinesVisible &&
+      gridLayoutEquals(this.gridLineOverlayLayout, this.layout) &&
+      // The overlay is drawn at 1:1 onto the main canvas, so a backing-store change invalidates it
+      // even when the grid geometry inside it is unchanged.
+      this.gridLineOverlay.width === this.canvas.width &&
+      this.gridLineOverlay.height === this.canvas.height
+    ) {
+      this.gridLineOverlayLayout = this.layout;
+      return;
+    }
+
     this.gridLineOverlay = null;
     this.gridLineOverlayLayout = null;
     if (!this.layout.gridLinesVisible) return;
@@ -275,22 +349,46 @@ export class GridRenderer {
     this.drawGridLinesInto(this.ctx);
   }
 
-  /** Shared body for drawFull/renderStatic — see the doc comments on each for why they stay two
-   *  distinctly-named methods rather than one being an alias of the other. */
-  private paint(grid: RenderableGrid): void {
+  /** The pixels-only full repaint: no retention, no dirty state. Shared by both public entries. */
+  private paintSurface(grid: RenderableGrid): void {
     this.assertGridMatchesSize(grid);
     this.paintBackground();
     this.paintCells(grid);
     this.paintGridLines();
-    this.lastGrid = grid;
   }
 
   /**
-   * Full repaint. In Epic 1 this has the same body as `renderStatic` — they diverge in Story 2.3,
-   * which gives `drawFull` dirty-state reset semantics that a terminal one-shot must not carry.
-   * Keep calling this from a renderer that will be driven again; Story 1.11's Gallery tiles must
-   * call `renderStatic` instead, so their one-shot renderers never enter the driven-renderer
-   * state machine.
+   * Full repaint for a renderer that will be DRIVEN again: pixels, plus the retention and
+   * dirty-state reset that make a subsequent `draw` correct. `resize()`/`setGridLines()` go
+   * through here too — both repaint the whole surface, so both must leave the same clean state.
+   */
+  private paint(grid: RenderableGrid): void {
+    this.paintSurface(grid);
+    this.lastGrid = grid;
+    this.resetDirtyState(grid);
+  }
+
+  /**
+   * Drops accumulated marks and (re)primes the last-drawn colour-state baseline for the whole
+   * grid. The sweep is O(cells) and allocates once per grid shape — affordable because it runs on
+   * a full repaint (mount, resize, grid-lines toggle), never on the per-edit `draw` path this
+   * story exists to keep cheap.
+   */
+  private resetDirtyState(grid: RenderableGrid): void {
+    this.dirtyCells.clear();
+    const cellCount = grid.width * grid.height;
+    if (this.lastColourState === null || this.lastColourState.length !== cellCount) {
+      this.lastColourState = new Uint16Array(cellCount);
+    }
+    for (let index = 0; index < cellCount; index++) {
+      this.lastColourState[index] = colourStateAt(grid, this.palette, index);
+    }
+  }
+
+  /**
+   * Full repaint. Keep calling this from a renderer that will be driven again — it resets dirty
+   * state, which is what makes a `draw` after a `resize`/`setGridLines` correct. Story 1.11's
+   * Gallery tiles must call `renderStatic` instead.
    */
   drawFull(grid: RenderableGrid): void {
     this.paint(grid);
@@ -298,11 +396,148 @@ export class GridRenderer {
 
   /**
    * Loopless one-shot for a surface nothing will drive again (a Gallery tile, an editor-preview
-   * still — M4/AR-25). Never call `drawFull` where this belongs (Story 1.11); see `drawFull`'s
-   * doc comment for the semantic split Story 2.3 introduces.
+   * still — M4/AR-25).
+   *
+   * Deliberately NOT an alias of `drawFull` (Story 2.3): it primes no colour-state baseline, keeps
+   * no marks, and — closing the 1.8 review's retention item — **retains no `lastGrid`**. Making
+   * these two aliases again opts ~50 Gallery canvases (NFR-7.2) into per-cell bookkeeping and 50
+   * pinned typed-array pairs they never use. The retention it drops protected re-layout repaint
+   * for static tiles, which since Story 1.11 has no caller: `<PetriDishCanvas>` constructs a fresh
+   * renderer per paint and never calls `resize()`/`setGridLines()` on a static one. A static
+   * surface re-layouts by reconstruction, not by repaint.
    */
   renderStatic(grid: RenderableGrid): void {
-    this.paint(grid);
+    this.paintSurface(grid);
+  }
+
+  /**
+   * Accumulates dirty CANDIDATES between draws (AC2). Marking is legal before any draw; marks
+   * survive until the next `draw`/`drawFull` consumes them, and re-marking a cell is free.
+   *
+   * ⚠️ It marks only. It must never paint, never read the canvas, and never touch `lastGrid`:
+   * Stories 2.5/2.6 call this once per cell during a drag, so a repaint in here converts one
+   * repaint per committed gesture into one per pointer move — the NFR-4.2 interaction budget this
+   * whole story exists to protect. The hot stroke state stays in the caller's refs (RFC-005
+   * Decision 6, project-context "hot simulation state").
+   */
+  markDirty(cells: Iterable<CellCoord>): void {
+    markDirtyCells(this.dirtyCells, this.size, cells);
+  }
+
+  /**
+   * Repaints only the marked cells whose colour state actually changed (AC1). Each surviving cell
+   * is repainted background-first, then its colour through the shared batching, then the grid
+   * lines that cross it.
+   */
+  draw(grid: RenderableGrid): void {
+    // Same guard drawFull applies, and for a stronger reason: a dirty repaint against a mis-shaped
+    // grid corrupts more silently than a full one, leaving the rest of the dish looking correct.
+    this.assertGridMatchesSize(grid);
+
+    // No baseline to diff against — a renderer's first frame legitimately has nothing to be
+    // incremental against (Story 2.3 forced decision 3). Fall back to a full repaint rather than
+    // throwing: `draw` becomes a pointer-move path in 2.6, and one extra full paint is cheaper
+    // than an exception out of an event handler.
+    if (this.lastColourState === null) {
+      this.paint(grid);
+      return;
+    }
+
+    const repaints = selectDirtyCells(this.dirtyCells, grid, this.palette, this.lastColourState);
+    this.lastGrid = grid;
+    // RFC-002 §"Only redraw dirty regions": nothing survived, so the context is not touched at
+    // all — this is the property Decision D.3 relies on to make idle playback frames free.
+    if (repaints.length === 0) {
+      this.dirtyCells.clear();
+      return;
+    }
+
+    // Marks are cleared only AFTER a successful paint (review finding, Story 2.3): if
+    // paintDirtyCells were to throw partway, the still-unconsumed marks stay in `dirtyCells` so
+    // the next draw() retries them, instead of the marks being discarded underneath a half-drawn
+    // repaint with no record left to recover it.
+    this.paintDirtyCells(grid, repaints);
+    this.dirtyCells.clear();
+    for (const repaint of repaints) this.lastColourState[repaint.index] = repaint.colourState;
+  }
+
+  private paintDirtyCells(grid: RenderableGrid, repaints: readonly DirtyCellRepaint[]): void {
+    const { originX, originY, cellSize } = this.layout;
+
+    // (a) Background first, for EVERY repainted cell — including the ones that are now empty. The
+    // full-repaint path can `continue` past empty cells (colourStateGroups.ts) because it fills
+    // the whole background first; this path has no such prior fill, so skipping empties would
+    // leave an erased cell showing its old colour, and a test that only ever paints would pass.
+    this.ctx.fillStyle = this.colors.background;
+    for (const { index } of repaints) {
+      this.ctx.fillRect(
+        originX + (index % grid.width) * cellSize,
+        originY + Math.floor(index / grid.width) * cellSize,
+        cellSize,
+        cellSize,
+      );
+    }
+
+    // (b) Colour, through the same (colorToken, ageShade) batching as the full path (AR-23,
+    // Decision B.2). Opening a fresh path per cell is the RFC-002 §3 anti-pattern whether 6000
+    // cells or 6 are involved, and one shared beginPath/fill across groups would re-fill groups
+    // 1..n in group n's colour.
+    const groups = new Map<number, number[]>();
+    for (const { index, colourState } of repaints) {
+      if (colourState === EMPTY_COLOUR_STATE) continue;
+      const cells = groups.get(colourState);
+      if (cells === undefined) groups.set(colourState, [index]);
+      else cells.push(index);
+    }
+    for (const [groupId, cells] of [...groups.entries()].sort(([a], [b]) => a - b)) {
+      this.ctx.fillStyle = displayColorAt(tokenIndexOfGroup(groupId), ageShadeOfGroup(groupId));
+      this.ctx.beginPath();
+      for (const index of cells) {
+        this.ctx.rect(
+          originX + (index % grid.width) * cellSize,
+          originY + Math.floor(index / grid.width) * cellSize,
+          cellSize,
+          cellSize,
+        );
+      }
+      this.ctx.fill();
+    }
+
+    // (c) Not optional. paint() draws background -> cells -> lines, so lines sit ON TOP of cells;
+    // filling a cell rect paints over the line segments bordering it. Without this the dish
+    // accumulates line gaps wherever the user has painted, and in Edit mode nothing full-repaints
+    // to clear them.
+    this.restoreGridLinesOver(grid, repaints);
+  }
+
+  /**
+   * Redraws just the four bar segments bordering each repainted cell, at the same clamped
+   * coordinates `drawGridLinesInto` uses — so a restored border is byte-identical to the one a
+   * full repaint would have drawn, including the closing bars pulled back inside the rectangle.
+   *
+   * Bar segments rather than a sub-rectangle `drawImage` of the cached overlay: the 9-argument
+   * `drawImage` overload is outside the `Canvas2D` alias this file deliberately narrows to, so
+   * that route would widen both the alias and the test double — and the double silently drops
+   * arguments it does not declare, which is the wrong failure mode for a geometry change.
+   */
+  private restoreGridLinesOver(grid: RenderableGrid, repaints: readonly DirtyCellRepaint[]): void {
+    if (!this.layout.gridLinesVisible) return;
+    const { originX, originY, drawWidth, drawHeight, cellSize } = this.layout;
+    if (drawWidth <= 0 || drawHeight <= 0) return;
+
+    this.ctx.fillStyle = this.colors.gridLine;
+    for (const { index } of repaints) {
+      const col = index % grid.width;
+      const row = Math.floor(index / grid.width);
+      const x = originX + col * cellSize;
+      const y = originY + row * cellSize;
+      // min(..., drawWidth - 1) mirrors drawGridLinesInto: a closing bar at its natural offset
+      // lands one pixel past the grid rectangle and gets clipped away.
+      this.ctx.fillRect(originX + Math.min(col * cellSize, drawWidth - 1), y, 1, cellSize);
+      this.ctx.fillRect(originX + Math.min((col + 1) * cellSize, drawWidth - 1), y, 1, cellSize);
+      this.ctx.fillRect(x, originY + Math.min(row * cellSize, drawHeight - 1), cellSize, 1);
+      this.ctx.fillRect(x, originY + Math.min((row + 1) * cellSize, drawHeight - 1), cellSize, 1);
+    }
   }
 
   /**
@@ -324,16 +559,27 @@ export class GridRenderer {
     this.applyDevicePixelSizing();
     this.layout = computeGridLayout(this.canvas, this.size, this.showGridLines);
     this.rebuildGridLineOverlay();
-    if (this.lastGrid === null) return;
 
-    if (this.lastGrid.width === this.size.cols && this.lastGrid.height === this.size.rows) {
-      this.paint(this.lastGrid);
+    // Every cached cell position is now stale, so marks accumulated at the OLD geometry would
+    // repaint at the wrong place on the next draw (Story 2.3). Whichever branch follows, the
+    // surface either gets fully repainted or holds nothing worth diffing against.
+    this.dirtyCells.clear();
+
+    if (
+      this.lastGrid !== null &&
+      this.lastGrid.width === this.size.cols &&
+      this.lastGrid.height === this.size.rows
+    ) {
+      this.paint(this.lastGrid); // re-primes the colour-state baseline at the new layout
       return;
     }
     // Dropping the reference is what keeps setGridLines() safe: it repaints lastGrid whenever
     // there is one, so a grid left behind at the wrong shape turns the FR-8.7 toggle into a
     // GridRendererDimensionMismatchError thrown out of a UI event handler (review 2026-08-06).
+    // The colour-state baseline goes with it — a grid-dimension change (Story 2.14) makes the
+    // buffer the wrong length, and a stale-length baseline would mis-index every comparison.
     this.lastGrid = null;
+    this.lastColourState = null;
   }
 
   /** No-op-repaint when the value is unchanged; otherwise stores, invalidates the overlay cache,
@@ -343,6 +589,9 @@ export class GridRenderer {
     this.showGridLines = on;
     this.layout = computeGridLayout(this.canvas, this.size, this.showGridLines);
     this.rebuildGridLineOverlay();
+    // Same reasoning as resize(): the whole surface is about to be repainted (or there is nothing
+    // to diff against), so no accumulated mark can survive the toggle meaningfully.
+    this.dirtyCells.clear();
     if (this.lastGrid !== null) this.paint(this.lastGrid);
   }
 }

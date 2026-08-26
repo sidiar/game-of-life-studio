@@ -20,6 +20,23 @@ export interface GridLayout {
   readonly gridLinesVisible: boolean;
 }
 
+/**
+ * Structural equality over every field that changes what gets drawn. `computeGridLayout` returns a
+ * fresh object each call, so an identity check answers "is this the same object" rather than "does
+ * this describe the same picture" — and GridRenderer's overlay cache needs the second question
+ * (Story 2.3, closing the 1.8 review's "rebuildGridLineOverlay allocates on every resize" item).
+ */
+export function gridLayoutEquals(a: GridLayout, b: GridLayout): boolean {
+  return (
+    a.cellSize === b.cellSize &&
+    a.originX === b.originX &&
+    a.originY === b.originY &&
+    a.drawWidth === b.drawWidth &&
+    a.drawHeight === b.drawHeight &&
+    a.gridLinesVisible === b.gridLinesVisible
+  );
+}
+
 export function computeGridLayout(
   canvas: { width: number; height: number },
   size: { cols: number; rows: number },

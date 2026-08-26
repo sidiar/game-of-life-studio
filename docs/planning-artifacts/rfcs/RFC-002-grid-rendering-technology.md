@@ -82,7 +82,15 @@ Canvas-based approaches provide direct pixel manipulation but require careful op
 
 #### Recommended Solution: HTML5 Canvas 2D with Optimizations
 
-**Decision:** HTML5 Canvas API with double buffering and dirty rectangle optimization
+**Decision:** HTML5 Canvas API with dirty rectangle optimization and a cached grid-line overlay
+
+> **Revised 2026-08-26 (Story 2.3, Sidiar's call).** This line originally read *"with double
+> buffering and dirty rectangle optimization"*. There is **no back buffer** in the shipped
+> renderer, deliberately: a full-canvas `drawImage` swap per frame repaints everything anyway,
+> which is precisely the cost dirty regions exist to avoid, and Canvas2D never presents a
+> partially-painted frame from within one task, so there is no tearing to prevent. The two
+> optimisations were in direct tension and dirty regions won. The grid-line overlay cache
+> (Risk 4) remains the only offscreen canvas. The sketches below are updated to match.
 
 **Architecture:**
 ```typescript
@@ -90,8 +98,6 @@ Canvas-based approaches provide direct pixel manipulation but require careful op
 class GridRenderer {
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
-  private offscreenCanvas: HTMLCanvasElement
-  private offscreenCtx: CanvasRenderingContext2D
   private cellSize: number
   private dirtyRegions: Set<CellCoordinate>
 
@@ -103,10 +109,6 @@ class GridRenderer {
       desynchronized: true  // Hint for better performance
     })
 
-    // Offscreen canvas for double buffering
-    this.offscreenCanvas = document.createElement('canvas')
-    this.offscreenCtx = this.offscreenCanvas.getContext('2d')
-
     this.calculateCellSize(width, height)
     this.setupCanvasSize()
   }
@@ -117,11 +119,8 @@ class GridRenderer {
     // Only redraw dirty regions
     if (this.dirtyRegions.size === 0) return
 
-    // Draw to offscreen canvas
-    this.renderDirtyRegions(this.offscreenCtx, grid)
-
-    // Copy to main canvas in one operation
-    this.ctx.drawImage(this.offscreenCanvas, 0, 0)
+    // Paint the dirty cells straight to the visible context — no back buffer
+    this.renderDirtyRegions(this.ctx, grid)
 
     this.dirtyRegions.clear()
   }
@@ -148,29 +147,24 @@ class GridRenderer {
 
 **Optimization Strategies:**
 
-**1. Double Buffering:**
+**1. Direct Painting (no back buffer):**
 ```typescript
-// Prevents flicker by drawing to offscreen canvas first
-class DoubleBufferedRenderer {
-  private bufferA: HTMLCanvasElement
-  private bufferB: HTMLCanvasElement
-  private activeBuffer: 'A' | 'B' = 'A'
+// Canvas2D never presents a partially-painted frame from within one task, so there is no
+// tearing for a back buffer to prevent — and a full-canvas drawImage swap would repaint
+// every cell, defeating the dirty-region optimisation below. Paint the visible context.
+class GridRenderer {
+  private ctx: CanvasRenderingContext2D
 
-  render(grid: Grid): void {
-    const buffer = this.activeBuffer === 'A' ? this.bufferA : this.bufferB
-    const ctx = buffer.getContext('2d')
-
-    // Draw entire frame to inactive buffer
-    this.drawGrid(ctx, grid)
-
-    // Swap buffers
-    this.swapBuffers()
-
-    // Copy to main canvas
-    this.mainCtx.drawImage(buffer, 0, 0)
+  draw(grid: Grid): void {
+    if (this.dirtyRegions.size === 0) return  // idle frames are free
+    this.renderDirtyRegions(this.ctx, grid)
+    this.dirtyRegions.clear()
   }
 }
 ```
+
+The one offscreen surface that *does* earn its keep is the static grid-line overlay cache
+(Risk 4) — it is redrawn only when the layout or the grid-line setting changes, not per frame.
 
 **2. Dirty Rectangle Tracking:**
 ```typescript
@@ -320,12 +314,13 @@ self.onmessage = (e) => {
   - Feature detection for optimal paths
   - Fallback rendering modes if needed
 
-**Risk 3: Memory Pressure from Double Buffering**
-- **Risk:** Two full-size canvases might cause memory issues
+**Risk 3: Memory Pressure from Offscreen Canvases** *(largely retired — Story 2.3)*
+- **Risk:** Originally, two full-size canvases (visible + back buffer) causing memory pressure.
+  With the back buffer dropped, the only offscreen surface is the grid-line overlay cache, so
+  the ceiling is one extra canvas rather than a per-renderer pair.
 - **Mitigation:**
-  - Use single buffer on mobile/tablets
+  - Free the overlay cache when grid lines are switched off
   - Monitor memory usage and adapt
-  - Clear unused canvases immediately
 
 **Risk 4: Grid Line Rendering Performance**
 - **Risk:** Drawing `cols + rows` grid lines per frame (160 at 100×60, up to 320 at 200×120 — Decision A)
