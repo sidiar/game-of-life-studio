@@ -1,14 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft';
-import { toThumbnailSource } from '@/lib/canvas/battleThumbnail';
+import { buildRefToFillGroup } from '@/lib/canvas/refToFillGroup';
+import { toRenderableGrid, type RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { readGridColors } from '@/lib/canvas/themeColors';
+import { DEFAULT_TOOL } from '@/lib/tool';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
 import BattleEditorView from './BattleEditorView';
@@ -58,6 +60,17 @@ interface BattleResource {
 
 // Converts a loaded Battle to the SAME shape createNewBattleDraft seeds, so the render below reads
 // one shape instead of branching on battleId === 'new' forever (Task 3, Story 2.2).
+//
+// ⚠️ These two arrays are handed out BY REFERENCE — they are the loaded `Battle` record's own,
+// still held inside `battleResource.data`. `NewBattleDraft` used to declare them mutable, so any
+// story that wrote `draft.gridState[r][c]` or pushed onto `draft.organismIds` would destroy the
+// pristine loaded state in place, leaving nothing to revert to — and it would behave CORRECTLY on
+// /battle/new (fresh arrays from createNewBattleDraft) and INCORRECTLY on /battle?id=…, the
+// hardest possible shape for a bug to take. Story 2.5 closes that (deferred-work.md) by making
+// `NewBattleDraft`'s arrays `readonly` at the TYPE level, so the compiler rejects the write
+// instead of a convention having to catch it. Copying here was the alternative and was rejected:
+// it costs a 6,000-element clone per load to defend against something the type system can rule
+// out for free.
 function toDraft(battle: Battle): NewBattleDraft {
   return {
     name: battle.name,
@@ -140,17 +153,88 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     [],
   );
 
-  // Task 6: ONE memo derives BOTH the grid and the palette, so both identities are stable
-  // together. `toThumbnailSource` already composes `toRenderableGrid` + `buildRefToFillGroup`
-  // (Story 1.11) — reused via a structural widening (`lib/canvas/battleThumbnail.ts`) rather than
-  // reimplementing the dense->renderable loop or the LUT a second time. `undefined` roster
-  // (organisms.list() failed) degrades to an empty roster, matching the "no roster to show yet"
-  // reality of this story.
   const organisms = battleResource.data?.organisms;
-  const renderable = useMemo(
-    () => (draft === null ? null : toThumbnailSource(draft, organisms ?? [])),
-    [draft, organisms],
+
+  // Story 2.5 Task 5: the grid and the palette no longer share one memo. Until this story they
+  // came from a single `toThumbnailSource(draft, organisms)` call, which was right while both
+  // were derived from the same draft — but the grid is now HELD STATE the user edits, and the
+  // palette is derived from the roster UNION below rather than from `draft.organismIds`. They no
+  // longer share a lifetime or an input, so joining them would only mean one of the two has a
+  // reason to churn that the other does not. ❌ Do not widen `toThumbnailSource` further to keep
+  // them together.
+  const seedGrid = useMemo<RenderableGrid | null>(
+    () => (draft === null ? null : toRenderableGrid(draft.gridState)),
+    [draft],
   );
+
+  // Decision H.2's session roster. Seeded ONCE, in a lazy initialiser, with the default tool's
+  // organism — the union must already contain it before the FIRST click, or `refForTool` resolves
+  // to null and the click silently places nothing. Unconditional rather than conditional on
+  // `draft.organismIds`: the union below de-duplicates, so seeding it either way produces the same
+  // array, and a conditional seed would depend on a `draft` that does not exist on the first
+  // render. Nothing sets it in this story — Story 2.9 (add from library) and 2.13 (save + H.1
+  // prune) are its writers. ❌ Not persisted here: H.1 prunes at save, which is 2.13's story.
+  const [sessionRoster] = useState<readonly string[]>(() => [DEFAULT_TOOL.organismId]);
+
+  // `draft.organismIds` first — their ORDER is the dense encoding's own (RFC-006 Decision 2: cell
+  // value = roster index + 1), so a session entry may only ever be APPENDED. Re-ordering, or
+  // building the union the other way round, would silently repaint every already-placed cell as a
+  // different organism.
+  //
+  // ⚠️ A NEW array, never a push onto `draft.organismIds` — see toDraft above.
+  //
+  // ⚠️ The session seed is withheld until the battle resource has SETTLED. `buildRefToFillGroup`
+  // warns once for a roster id with no matching organism (Decision I.4) — and while the resource
+  // is still in flight there is no organism library to match against yet, so seeding early prints
+  // that diagnostic on every load, and on the static export's prerender, about nothing at all. A
+  // settled-but-failed resource is different: the library genuinely IS broken there, the seed goes
+  // in, and the degrade-and-warn is the correct, informative behaviour. Nothing renders the canvas
+  // before the resource settles (the loading guard below), so the editor never sees the unseeded
+  // union.
+  const rosterSettled = battleResource.status !== 'loading';
+  const rosterIds = useMemo<readonly string[]>(() => {
+    const ids = draft === null ? [] : [...draft.organismIds];
+    if (rosterSettled) {
+      for (const id of sessionRoster) if (!ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  }, [draft, sessionRoster, rosterSettled]);
+
+  // Built over `rosterIds`, NOT `draft.organismIds` (trap 3). On /battle/new the draft's roster is
+  // empty, so a LUT built from it would have `size === 1` while placement writes ref 1 —
+  // `colourStateAt` folds every ref >= size to EMPTY with only a warn-once, so the click would
+  // appear to do nothing at all: no error, no throw, a fully green test suite, AC1 quietly unmet.
+  //
+  // Memoised on `rosterIds` + `organisms` because `palette` is one of `EditDish`'s three
+  // construction dependencies (PetriDishCanvas.tsx) — a churning identity there throws away the
+  // retained renderer, the grid-line overlay, and the dirty baseline AC2 depends on, on every
+  // render.
+  const palette = useMemo(() => {
+    const organismsById = new Map((organisms ?? []).map((o) => [o.id, o] as const));
+    return buildRefToFillGroup(rosterIds, organismsById);
+  }, [rosterIds, organisms]);
+
+  // The user's edits. State, not a ref: this IS the value React renders, and it changes once per
+  // COMMITTED gesture (one click here, one stroke from Story 2.6) — never per pointer move. The
+  // hot, in-progress state stays in the canvas's refs (project-context, RFC-005 Decision 6).
+  //
+  // ⚠️ Held SEPARATELY from the seed rather than `useState(seedGrid)`. Every hook here precedes
+  // four early returns, so this one runs on the very first render — a render where the resource is
+  // still loading and `seedGrid` is null. `useState(seedGrid)` captures that null forever and the
+  // editor stays permanently blank, with no error anywhere. `editedGrid ?? seedGrid` plus the
+  // reset below is React's "adjusting state when a prop changes" pattern, and it is what makes a
+  // resource that settles AFTER the first render work at all.
+  const [editedGrid, setEditedGrid] = useState<RenderableGrid | null>(null);
+  const lastSeedRef = useRef<RenderableGrid | null>(null);
+  if (lastSeedRef.current !== seedGrid) {
+    lastSeedRef.current = seedGrid;
+    // A new seed means a different battle (or the first one arriving): the edits belonged to the
+    // old one. Setting state during render is deliberate and is the documented pattern — React
+    // re-runs the body immediately, and the ref guard above makes the second pass a no-op, so it
+    // cannot loop.
+    if (editedGrid !== null) setEditedGrid(null);
+  }
+  const grid = editedGrid ?? seedGrid;
 
   // Both resources must settle before anything renders — not just battleResource. Without this,
   // a battle that resolves before settings would briefly seed /battle/new at the DEFAULT_SETTINGS
@@ -192,22 +276,29 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // (`draft` is `newDraft`, always non-null), and a loaded battle (`draft` is `loadedDraft`, which
   // the guard above has already excluded being null for).
   //
-  // `renderable` is non-null here too: it is null only when `draft` is, and that branch already
+  // `grid` is non-null here too: it is null only when `draft` is, and that branch already
   // returned above.
   return (
     // mode is read here so the state cell is not merely declared: the sidebar and
     // <EditorStatusBar> are Stories 2.9+, and this is the skeleton they mount into.
     <Root data-mode={mode}>
       <BattleHeader battleTitle={battleDisplayName(draft.name)} />
-      {/* renderable is non-null whenever draft is (see the memo above) — the check exists for
+      {/* `grid` is non-null whenever draft is (the seed memo above) — the check exists for
           TypeScript, not because the two can disagree at runtime. */}
-      {renderable !== null && (
+      {grid !== null && (
         <BattleEditorView
-          grid={renderable.grid}
+          grid={grid}
           size={draft.gridSize}
-          palette={renderable.palette}
+          palette={palette}
           showGridLines={settings.gridLines}
           colors={colors}
+          rosterIds={rosterIds}
+          /* `setEditedGrid` IS the commit handler for this story — passed directly, so its
+             identity is stable. ❌ No mini undo ring here: Story 2.8 replaces this with
+             `useUndoableGrid` (RFC-005 Decision 6), and Story 2.4's forced decision 2 already
+             recorded that instruction. ❌ No `isDirty` either — Story 2.11 owns dirty tracking and
+             its own AC covers "given any grid commit, isDirty becomes true". */
+          onCommitGrid={setEditedGrid}
         />
       )}
     </Root>

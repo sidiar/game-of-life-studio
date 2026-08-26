@@ -1,21 +1,24 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   GridRenderer,
   GridRendererContextError,
   type GridRendererColors,
 } from '@/lib/canvas/gridRenderer';
+import { computeGridLayout } from '@/lib/canvas/gridLayout';
+import { pointerToCell } from '@/lib/canvas/pointerToCell';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
+import type { Tool } from '@/lib/tool';
 
 const RESIZE_DEBOUNCE_MS = 150;
 
 // component-tree-battle-page.md#3.10 names this component and assigns three variants across three
 // epics: static -> Epic 1 (Story 1.11), edit -> Epic 2 (this story), playback -> 3.11. Shared props
 // stay common across the union; the variant tag decides the lifecycle. `tool` + `onStrokeCommit`
-// join the EDIT member in 2.5/2.6 — not declared yet, so this story's `edit` member is identical
-// in shape to `static`'s.
+// joined the EDIT member in Story 2.5, which is what makes it structurally different from
+// `static` for the first time.
 interface PetriDishCanvasSharedProps {
   size: { cols: number; rows: number };
   palette: RefToFillGroup;
@@ -28,7 +31,28 @@ interface PetriDishCanvasSharedProps {
 }
 
 export type PetriDishCanvasProps = PetriDishCanvasSharedProps &
-  ({ variant: 'static'; grid: RenderableGrid } | { variant: 'edit'; grid: RenderableGrid });
+  (
+    | { variant: 'static'; grid: RenderableGrid }
+    | {
+        variant: 'edit';
+        grid: RenderableGrid;
+        // component-tree-battle-page.md#3.10's own shape for the edit member. `tool` is accepted
+        // and deliberately NOT read here yet: this story's only arm is `{ kind: 'organism' }` and
+        // the ref it resolves to arrives pre-resolved as `toolRef` (forced decision 2), so
+        // branching on `tool.kind` would be a branch with one reachable case. Story 2.7's eraser
+        // is what makes it load-bearing — declaring it now keeps the seam at §3.10's shape so 2.7
+        // widens a union rather than adding a prop.
+        tool: Tool;
+        // The ONE additive prop beyond §3.10 — same deviation, same justification, as `colors`
+        // (Story 1.11) and `size`: a `Tool` carries an organism ID and the grid buffer stores a
+        // numeric OrganismRef, and the roster that translates between them belongs to
+        // <BattleEditorView> / <BattlePage> (Decision H.2), not to a rendering surface. `null`
+        // means "this tool resolves to no organism in this battle's roster" — the click is then a
+        // no-op, never a write of ref 0 (which means EMPTY, and is Story 2.7's eraser).
+        toolRef: number | null;
+        onStrokeCommit(next: RenderableGrid): void;
+      }
+  );
 // 'playback' (3.11) joins this union next.
 
 // Exhaustiveness guard for `variant`. Its job is to stop COMPILING the moment 3.11's 'playback'
@@ -143,7 +167,11 @@ function StaticDish({ grid, size, palette, showGridLines, colors, className }: S
   return <canvas ref={canvasRef} aria-hidden="true" className={className} />;
 }
 
-type EditDishProps = PetriDishCanvasSharedProps & { grid: RenderableGrid };
+type EditDishProps = PetriDishCanvasSharedProps & {
+  grid: RenderableGrid;
+  toolRef: number | null;
+  onStrokeCommit(next: RenderableGrid): void;
+};
 
 /**
  * The editor's retained-renderer lifecycle (Story 2.4, AC6). Unlike `StaticDish`, this surface
@@ -156,7 +184,16 @@ type EditDishProps = PetriDishCanvasSharedProps & { grid: RenderableGrid };
  * the component "remounting" from `static` to `edit` mid-life is unreachable — §3.11's future
  * fullscreen is a re-layout, never a remount.
  */
-function EditDish({ grid, size, palette, showGridLines, colors, className }: EditDishProps) {
+function EditDish({
+  grid,
+  size,
+  palette,
+  showGridLines,
+  colors,
+  className,
+  toolRef,
+  onStrokeCommit,
+}: EditDishProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Hot, non-serialisable instance state — a ref, never React state (project-context "hot
   // simulation state lives in refs").
@@ -211,11 +248,12 @@ function EditDish({ grid, size, palette, showGridLines, colors, className }: Edi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size, palette, colors]);
 
-  // Grid effect — the paint path for a `grid` that changes AFTER mount. Nothing in this story
-  // changes `grid`; this is the seam Stories 2.5/2.6 replace with `markDirty` + `draw`. It skips
-  // the grid the construction effect above already painted, which is what keeps a mount (and a
-  // palette/colours rebuild, where `grid` is unchanged and this effect does not re-run at all) at
-  // exactly one full paint.
+  // Grid effect — the paint path for a `grid` that changes AFTER mount. Since Story 2.5 the
+  // editor's OWN edits do not come through here: `handlePointerDown` paints them incrementally
+  // (`markDirty` + `draw`) and records the result in `paintedGridRef`, so the committed grid's
+  // round trip through <BattlePage>'s state lands on the skip below. What is left for this effect
+  // is a grid that changes for a reason the canvas did not cause — Story 2.8's undo, 2.14's
+  // resize, 2.15's Clear — each of which genuinely wants the full repaint.
   useEffect(() => {
     const renderer = rendererRef.current;
     if (renderer === null) return; // construction failed (missing 2D context) — leave it blank.
@@ -279,19 +317,106 @@ function EditDish({ grid, size, palette, showGridLines, colors, className }: Edi
     return () => observer.disconnect();
   }, [size]);
 
+  /**
+   * Click placement (Story 2.5, FR-3.4). ONE commit per click, carrying a NEW grid value.
+   *
+   * `onPointerDown`, not `onClick` (RFC-002 Risk 5: "use pointer events API for unified
+   * handling"): painting on press is what keeps the visible feedback inside NFR-4.2's 100 ms —
+   * a click event does not fire until pointer-up — and it is what makes Story 2.6's drag an
+   * extension of this path rather than a rewrite of it. ❌ No `setPointerCapture` here: a single
+   * press needs none, and adding it pre-empts 2.6's "pointer-up outside the canvas" AC.
+   */
+  function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>): void {
+    // A right-click, a middle-click, or a secondary touch point must never paint. `button === 0`
+    // is the primary button on a pointerdown (it is 0 for touch and pen contact too, so this is
+    // not a mouse-only check).
+    if (event.button !== 0 || !event.isPrimary) return;
+    // No organism to place: the tool resolves to nothing in this battle's roster. Painting ref 0
+    // instead would ERASE the cell (that is Story 2.7's eraser), which is not what a failed
+    // lookup means.
+    if (toolRef === null) return;
+
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+
+    // Forced decision 1(b): the layout is RECOMPUTED here rather than read off the renderer.
+    // `GridRenderer.layout` is private and adding an accessor would change the frozen contract
+    // (component-tree-battle-page.md#5), which no story since Epic 1 has done. `computeGridLayout`
+    // is pure and reads `canvas.width`/`height` live, so given the same three inputs it re-derives
+    // exactly what the renderer derived — including after a `resize()`. The one input that can
+    // legitimately differ is `showGridLines`, and that changes only `gridLinesVisible`, never
+    // `cellSize`/`originX`/`originY` (gridLayout.ts) — so the mapping stays correct either way.
+    // Do not "fix" this into a renderer accessor.
+    const layout = computeGridLayout(canvas, size, showGridLines);
+    const cell = pointerToCell({
+      rect: canvas.getBoundingClientRect(),
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      layout,
+      size,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+    // The centring margin, the far-edge boundary, and a degenerate box all land here. `null` is a
+    // normal outcome — the user pointed at no cell — and it is also what keeps `markDirty`'s
+    // `DirtyCellRangeError` (dirtyCells.ts) unreachable from inside this handler.
+    if (cell === null) return;
+
+    const index = cell.row * grid.width + cell.col;
+    // AC7: the cell already holds this organism. No copy, no mark, no draw, no commit — a
+    // redundant click must not create a Story 2.8 undo entry or flip Story 2.11's isDirty.
+    if (grid.occupant[index] === toolRef) return;
+
+    const occupant = grid.occupant.slice();
+    occupant[index] = toolRef;
+    const nextGrid: RenderableGrid = {
+      width: grid.width,
+      height: grid.height,
+      occupant,
+      // Carried by REFERENCE, on purpose. Every edit-mode grid is age-zero everywhere (RFC-005's
+      // "Representation note"; `toRenderableGrid` allocates a zero-filled buffer) and nothing in
+      // Epic 2 writes age, so copying 12 KB per click at 100x60 would buy nothing. The instinct
+      // is to `slice()` both — don't, until something actually mutates age.
+      age: grid.age,
+    };
+
+    const renderer = rendererRef.current;
+    if (renderer !== null) {
+      // AC2: the dirty path, never `drawFull`. One click repaints one cell.
+      renderer.markDirty([cell]);
+      renderer.draw(nextGrid);
+      // ⚠️ THE trap this story is most likely to fall into. `onStrokeCommit` sends `nextGrid`
+      // up to <BattlePage>, which puts it in state and hands it straight back down as a NEW
+      // `grid` prop identity — and the grid effect above repaints whatever it has not already
+      // seen. Without this line that round trip full-repaints all 6,000 cells and re-primes the
+      // whole colour-state baseline on every single click, while every test still passes and the
+      // dish still looks perfect.
+      paintedGridRef.current = nextGrid;
+    }
+    // The commit fires even when the renderer is absent (a missing 2D context — always, under
+    // jsdom). The model is not the view: a canvas that cannot paint must not silently swallow the
+    // user's edit. `paintedGridRef` is deliberately NOT set in that case — there is nothing
+    // painted for it to describe, and the construction effect will paint the current grid if a
+    // context ever becomes available.
+    onStrokeCommit(nextGrid);
+  }
+
   // role="img" + aria-label, deliberately the INVERSE of the static tile's aria-hidden (Story
   // 1.11 Dev Notes forced decision 5, Story 2.4 Dev Notes trap 9): the tile's snapshot has a
   // textual equivalent already on screen; the editor's dish IS the page's subject, with no
   // textual equivalent until Story 2.12's stats. `role="img"` is a naming role, so `aria-label`
   // is permitted here — on a bare element it would be stripped and flagged by axe's
-  // `aria-prohibited-attr`. No `tabIndex`: keyboard editing is out of scope for this story, and a
-  // focusable dish would promise interaction it does not deliver.
+  // `aria-prohibited-attr`. No `tabIndex`: Story 2.5 adds POINTER placement only, and no AC in
+  // Epic 2 asks for a keyboard path — inventing one here would be unreviewed UX. That leaves cell
+  // editing pointer-only, a WCAG 2.1.1 gap axe cannot detect (there is no focusable control to
+  // flag); it is recorded in deferred-work.md rather than left unstated.
   return (
     <canvas
       ref={canvasRef}
       role="img"
       aria-label={`Petri dish, ${size.cols} by ${size.rows} cells`}
       className={className}
+      onPointerDown={handlePointerDown}
     />
   );
 }

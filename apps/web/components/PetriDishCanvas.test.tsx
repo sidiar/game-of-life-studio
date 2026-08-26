@@ -1,11 +1,12 @@
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { GridRenderer } from '@/lib/canvas/gridRenderer';
 import { installRecordingContext2d, RecordingContext2D } from '@/lib/recordingContext2d';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { displayColorAt } from '@/lib/palette/displayColor';
+import type { Tool } from '@/lib/tool';
 import PetriDishCanvas from './PetriDishCanvas';
 
 const COLORS = { background: '#0a0a0a', gridLine: 'rgb(51 51 51 / 0.3)' };
@@ -31,6 +32,11 @@ function makeLut(tokenIndex: number[], aging: number[]): RefToFillGroup {
 // Cells 0 (empty) and 1 (ref 1 -> token index 0, non-aging).
 const GRID = makeGrid(2, 2, [1, 0, 0, 1]);
 const PALETTE = makeLut([0, 0], [0, 0]);
+
+// The edit variant's Story 2.5 props. `TOOL` is the shape spec §3.10 gives the canvas; `toolRef`
+// is what it actually paints with (forced decision 2 — <BattleEditorView> resolves the id).
+const TOOL: Tool = { kind: 'organism', organismId: 'conways-classic' };
+const noopCommit = () => {};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -469,6 +475,9 @@ describe('PetriDishCanvas (edit variant)', () => {
     const { container, rerender } = render(
       <PetriDishCanvas
         variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
         grid={GRID}
         size={SIZE}
         palette={PALETTE}
@@ -488,6 +497,9 @@ describe('PetriDishCanvas (edit variant)', () => {
     rerender(
       <PetriDishCanvas
         variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
         grid={GRID}
         size={SIZE}
         palette={PALETTE}
@@ -525,6 +537,9 @@ describe('PetriDishCanvas (edit variant)', () => {
     render(
       <PetriDishCanvas
         variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
         grid={GRID}
         size={SIZE}
         palette={PALETTE}
@@ -541,6 +556,9 @@ describe('PetriDishCanvas (edit variant)', () => {
       render(
         <PetriDishCanvas
           variant="edit"
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={noopCommit}
           grid={GRID}
           size={SIZE}
           palette={PALETTE}
@@ -558,6 +576,9 @@ describe('PetriDishCanvas (edit variant)', () => {
     const { container, rerender } = render(
       <PetriDishCanvas
         variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
         grid={GRID}
         size={SIZE}
         palette={PALETTE}
@@ -575,6 +596,9 @@ describe('PetriDishCanvas (edit variant)', () => {
     rerender(
       <PetriDishCanvas
         variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
         grid={GRID}
         size={SIZE}
         palette={PALETTE}
@@ -594,6 +618,9 @@ describe('PetriDishCanvas (edit variant)', () => {
     rerender(
       <PetriDishCanvas
         variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
         grid={GRID}
         size={SIZE}
         palette={PALETTE}
@@ -641,6 +668,9 @@ describe('PetriDishCanvas (edit variant)', () => {
       rerender(
         <PetriDishCanvas
           variant="edit"
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={noopCommit}
           grid={GRID}
           size={SIZE}
           palette={PALETTE}
@@ -658,6 +688,9 @@ describe('PetriDishCanvas (edit variant)', () => {
       const { container, rerender } = render(
         <PetriDishCanvas
           variant="edit"
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={noopCommit}
           grid={GRID}
           size={SIZE}
           palette={PALETTE}
@@ -687,6 +720,9 @@ describe('PetriDishCanvas (edit variant)', () => {
       const { container, rerender } = render(
         <PetriDishCanvas
           variant="edit"
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={noopCommit}
           grid={GRID}
           size={SIZE}
           palette={PALETTE}
@@ -713,6 +749,9 @@ describe('PetriDishCanvas (edit variant)', () => {
       const { unmount } = render(
         <PetriDishCanvas
           variant="edit"
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={noopCommit}
           grid={GRID}
           size={SIZE}
           palette={PALETTE}
@@ -736,6 +775,9 @@ describe('PetriDishCanvas (edit variant)', () => {
       const { container } = render(
         <PetriDishCanvas
           variant="edit"
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={noopCommit}
           grid={GRID}
           size={SIZE}
           palette={PALETTE}
@@ -749,5 +791,320 @@ describe('PetriDishCanvas (edit variant)', () => {
       expect(observer?.observe).toHaveBeenCalledWith(canvas.parentElement);
       expect(observer?.observe).not.toHaveBeenCalledWith(canvas);
     });
+  });
+});
+
+// Click placement (Story 2.5, AC1/AC2/AC4/AC7). Every test here installs a per-canvas recording
+// double BEFORE the first render — real jsdom's first `getContext('2d')` returns null, and a
+// renderer that never got built cannot be observed painting OR not painting.
+describe('PetriDishCanvas (edit variant) — click placement', () => {
+  // 20x10 against jsdom's default 300x150 canvas box: cellSize = min(300/20, 150/10) = 15,
+  // drawWidth/drawHeight fill the box exactly, so originX/originY are 0. 200 cells is enough for
+  // "one cell, not the grid" to be a meaningful claim about call volume.
+  const PLACE_SIZE = { cols: 20, rows: 10 };
+  const CELL = 15;
+  const RECT = { left: 0, top: 0, width: 300, height: 150 };
+  const EMPTY_GRID = makeGrid(20, 10, new Array(200).fill(0));
+
+  function installContexts(): Map<HTMLCanvasElement, RecordingContext2D> {
+    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      let context = contexts.get(this);
+      if (context === undefined) {
+        context = new RecordingContext2D();
+        contexts.set(this, context);
+      }
+      return context as unknown as CanvasRenderingContext2D;
+    });
+    return contexts;
+  }
+
+  // jsdom performs no layout, so getBoundingClientRect() is all zeros — which pointerToCell
+  // correctly maps to "no cell". Stubbing it is what gives the component real geometry; the
+  // end-to-end geometry claim belongs to e2e/battleRoute.spec.ts, where layout is real.
+  function stubRect(canvas: HTMLCanvasElement): void {
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      ...RECT,
+      right: RECT.left + RECT.width,
+      bottom: RECT.top + RECT.height,
+      x: RECT.left,
+      y: RECT.top,
+      toJSON: () => ({}),
+    } as DOMRect);
+  }
+
+  function mount(
+    overrides: {
+      grid?: RenderableGrid;
+      toolRef?: number | null;
+      onStrokeCommit?: (next: RenderableGrid) => void;
+      size?: { cols: number; rows: number };
+    } = {},
+  ) {
+    const contexts = installContexts();
+    const grid = overrides.grid ?? EMPTY_GRID;
+    const size = overrides.size ?? PLACE_SIZE;
+    const onStrokeCommit = overrides.onStrokeCommit ?? vi.fn();
+    const view = render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={grid}
+        size={size}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        tool={TOOL}
+        toolRef={overrides.toolRef === undefined ? 1 : overrides.toolRef}
+        onStrokeCommit={onStrokeCommit}
+      />,
+    );
+    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+    return { ...view, canvas, contexts, grid, size, onStrokeCommit };
+  }
+
+  /** The client coordinate of the centre of cell (col, row) under the stubbed geometry. */
+  function centreOf(col: number, row: number) {
+    return {
+      clientX: RECT.left + col * CELL + CELL / 2,
+      clientY: RECT.top + row * CELL + CELL / 2,
+      button: 0,
+      isPrimary: true,
+    };
+  }
+
+  it('commits exactly once per click, with a NEW grid differing at exactly one cell (AC1, AC4)', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas, grid } = mount({ onStrokeCommit });
+    const before = Uint8Array.from(grid.occupant);
+
+    fireEvent.pointerDown(canvas, centreOf(3, 4));
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    const next = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+
+    // A NEW value, not the same object mutated — Story 2.8's snapshot ring needs the previous
+    // grid to still be the previous grid.
+    expect(next).not.toBe(grid);
+    expect(next.occupant).not.toBe(grid.occupant);
+    expect(next.width).toBe(grid.width);
+    expect(next.height).toBe(grid.height);
+
+    const changed = [...next.occupant].flatMap((value, index) =>
+      value === before[index] ? [] : [index],
+    );
+    expect(changed).toEqual([4 * PLACE_SIZE.cols + 3]);
+    expect(next.occupant[4 * PLACE_SIZE.cols + 3]).toBe(1);
+
+    // ⚠️ `readonly Uint8Array` is readonly on the PROPERTY, not the contents — TypeScript will
+    // not stop a `grid.occupant[i] = …`, so the copy discipline needs an actual assertion.
+    expect(grid.occupant).toEqual(before);
+  });
+
+  // AC1's "overwriting any previous occupant" (FR-3.4): a cell already held by ANOTHER organism
+  // is replaced, not skipped.
+  it('overwrites a cell already occupied by a different organism (AC1)', () => {
+    const occupied = makeGrid(
+      20,
+      10,
+      new Array(200).fill(0).map((_, i) => (i === 25 ? 1 : 0)),
+    );
+    const palette3 = makeLut([0, 0, 0], [0, 0, 0]);
+    const onStrokeCommit = vi.fn();
+    installContexts();
+    const { container } = render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={occupied}
+        size={PLACE_SIZE}
+        palette={palette3}
+        showGridLines
+        colors={COLORS}
+        tool={TOOL}
+        toolRef={2}
+        onStrokeCommit={onStrokeCommit}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+
+    fireEvent.pointerDown(canvas, centreOf(5, 1)); // index 1 * 20 + 5 = 25
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    expect((onStrokeCommit.mock.calls[0][0] as RenderableGrid).occupant[25]).toBe(2);
+  });
+
+  // AC7: a redundant click is a TRUE no-op. Without this, every re-click creates a Story 2.8 undo
+  // entry and flips Story 2.11's isDirty for a grid that did not change.
+  it('does nothing at all when the cell already holds the selected organism (AC7)', () => {
+    const already = makeGrid(
+      20,
+      10,
+      new Array(200).fill(0).map((_, i) => (i === 25 ? 1 : 0)),
+    );
+    const drawSpy = vi.spyOn(GridRenderer.prototype, 'draw');
+    const markDirtySpy = vi.spyOn(GridRenderer.prototype, 'markDirty');
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ grid: already, onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(5, 1));
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+    expect(markDirtySpy).not.toHaveBeenCalled();
+    expect(drawSpy).not.toHaveBeenCalled();
+  });
+
+  it('places nothing for a pointer in the centring margin (AC3)', () => {
+    // 20x4 in the same 300x150 box: cellSize = min(15, 37) = 15, drawHeight = 60, so
+    // originY = floor((150 - 60) / 2) = 45 — a real, clickable 45px letterbox.
+    const shortGrid = makeGrid(20, 4, new Array(80).fill(0));
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({
+      grid: shortGrid,
+      size: { cols: 20, rows: 4 },
+      onStrokeCommit,
+    });
+
+    fireEvent.pointerDown(canvas, { clientX: 100, clientY: 10, button: 0, isPrimary: true });
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+
+  it('places nothing for a pointer outside the canvas box (AC3)', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, {
+      clientX: RECT.left + RECT.width + 20,
+      clientY: 50,
+      button: 0,
+      isPrimary: true,
+    });
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+
+  it('places nothing for a non-primary button or a secondary pointer', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, { ...centreOf(3, 4), button: 2 }); // right-click
+    fireEvent.pointerDown(canvas, { ...centreOf(3, 4), button: 1 }); // middle-click
+    fireEvent.pointerDown(canvas, { ...centreOf(3, 4), isPrimary: false }); // 2nd touch point
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+
+  // Trap 3's sibling at the canvas boundary: an unresolvable tool must place NOTHING, and must
+  // never fall back to ref 0 — that means EMPTY, and is Story 2.7's eraser.
+  it('places nothing when the tool resolves to no ref', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ toolRef: null, onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(3, 4));
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ AC2, and the single most likely defect in this story. The click must repaint through
+  // markDirty + draw, and the committed grid coming back down as a new `grid` prop must NOT
+  // trigger the grid effect's drawFull. Both halves fail silently: the dish looks perfect either
+  // way, and only the call volume tells them apart.
+  it('repaints one cell through markDirty + draw, and never drawFull — including on the commit round trip (AC2)', () => {
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const drawSpy = vi.spyOn(GridRenderer.prototype, 'draw');
+    const markDirtySpy = vi.spyOn(GridRenderer.prototype, 'markDirty');
+    const onStrokeCommit = vi.fn();
+    const { canvas, contexts, rerender } = mount({ onStrokeCommit });
+
+    const recording = contexts.get(canvas);
+    expect(recording).toBeDefined();
+    expect(drawFullSpy).toHaveBeenCalledTimes(1); // the mount's one full paint
+    const callsAfterMount = (recording as RecordingContext2D).calls.length;
+
+    fireEvent.pointerDown(canvas, centreOf(3, 4));
+
+    expect(markDirtySpy).toHaveBeenCalledTimes(1);
+    expect(markDirtySpy).toHaveBeenCalledWith([{ col: 3, row: 4 }]);
+    expect(drawSpy).toHaveBeenCalledTimes(1);
+    expect(drawFullSpy).toHaveBeenCalledTimes(1); // still just the mount's
+
+    // The click's own drawing ops, bounded — NOT proportional to cols * rows. A full repaint of
+    // this grid fills the background plus up to 200 cells plus the grid-line overlay; a
+    // single-cell dirty repaint touches a handful of ops. The bound is deliberately generous:
+    // the claim is "one cell, not the grid", not an exact op count.
+    const clickOps = (recording as RecordingContext2D).calls.length - callsAfterMount;
+    expect(clickOps).toBeGreaterThan(0);
+    expect(clickOps).toBeLessThan(PLACE_SIZE.cols * PLACE_SIZE.rows);
+
+    // THE round trip. <BattlePage> puts the committed grid in state and hands it straight back
+    // down; without `paintedGridRef` being set at commit time the grid effect full-repaints all
+    // 200 cells and re-primes the whole colour-state baseline, on every single click.
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    rerender(
+      <PetriDishCanvas
+        variant="edit"
+        grid={committed}
+        size={PLACE_SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={onStrokeCommit}
+      />,
+    );
+
+    expect(drawFullSpy).toHaveBeenCalledTimes(1);
+    expect(drawSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Trap 12: `getContext('2d')` returns null under real jsdom, so the renderer is absent. The
+  // model is not the view — a canvas that cannot paint must not swallow the user's edit.
+  it('still commits when the 2D context is unavailable (no renderer to paint with)', () => {
+    const onStrokeCommit = vi.fn();
+    const { container } = render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={EMPTY_GRID}
+        size={PLACE_SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={onStrokeCommit}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+
+    expect(() => fireEvent.pointerDown(canvas, centreOf(3, 4))).not.toThrow();
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+  });
+
+  // The static tile must stay inert: it has no tool, no commit seam, and aria-hidden — a pointer
+  // handler leaking onto the shared element would make ~50 Gallery thumbnails paintable.
+  it('does not attach placement to the static variant', () => {
+    installContexts();
+    const drawSpy = vi.spyOn(GridRenderer.prototype, 'draw');
+    const { container } = render(
+      <PetriDishCanvas
+        variant="static"
+        grid={EMPTY_GRID}
+        size={PLACE_SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+
+    fireEvent.pointerDown(canvas, centreOf(3, 4));
+
+    expect(drawSpy).not.toHaveBeenCalled();
   });
 });

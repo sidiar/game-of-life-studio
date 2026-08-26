@@ -1,11 +1,13 @@
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
-import { DEFAULT_SETTINGS, type Battle } from '@gol/domain';
+import { CONWAYS_CLASSIC, DEFAULT_SETTINGS, type Battle, type Organism } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
 import { RecordingContext2D } from '@/lib/recordingContext2d';
+import { computeGridLayout } from '@/lib/canvas/gridLayout';
+import { resetRefToFillGroupWarnings } from '@/lib/canvas/refToFillGroup';
 import BattlePage from './BattlePage';
 
 const { battles, organisms } = createMockWorkspace();
@@ -44,7 +46,45 @@ function installPerCanvasRecording(): Map<HTMLCanvasElement, RecordingContext2D>
 afterEach(() => {
   document.documentElement.style.cssText = '';
   vi.restoreAllMocks();
+  // The dangling-roster-id registry is a module singleton vi.restoreAllMocks() does not touch —
+  // without this, a "warns once" claim silently depends on test order (refToFillGroup.ts).
+  resetRefToFillGroupWarnings();
 });
+
+// jsdom performs no layout, so getBoundingClientRect() is all zeros — which pointerToCell
+// correctly maps to "no cell", making every click a no-op. Stubbing the rect to the canvas's own
+// backing-store box (jsdom's default 300x150, which GridRenderer keeps because clientWidth is 0)
+// gives the component real geometry at scale 1.
+function stubCanvasRect(canvas: HTMLCanvasElement): void {
+  vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+    left: 0,
+    top: 0,
+    width: canvas.width,
+    height: canvas.height,
+    right: canvas.width,
+    bottom: canvas.height,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect);
+}
+
+/** The client coordinate of the centre of cell (col, row), derived from the real auto-fit math. */
+function centreOfCell(
+  canvas: HTMLCanvasElement,
+  size: { cols: number; rows: number },
+  col: number,
+  row: number,
+  showGridLines = DEFAULT_SETTINGS.gridLines,
+) {
+  const { cellSize, originX, originY } = computeGridLayout(canvas, size, showGridLines);
+  return {
+    clientX: originX + col * cellSize + cellSize / 2,
+    clientY: originY + row * cellSize + cellSize / 2,
+    button: 0,
+    isPrimary: true,
+  };
+}
 
 // Always the real factory from @gol/test-utils — a hand-rolled fake in a test file is what the
 // shared fixtures exist to prevent (project-context, Testing rules).
@@ -403,6 +443,42 @@ describe('BattlePage', () => {
     rerender(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
 
     expect(getContextSpy.mock.calls.length).toBe(callsAfterMount);
+
+    // Story 2.5 (trap 4) extends the same claim across a COMMIT. `rosterIds` and `palette` are
+    // now derived values feeding EditDish's construction deps `[size, palette, colors]`; if either
+    // is rebuilt inline in the render body, the grid commit below throws away the retained
+    // renderer, the grid-line overlay and — critically — the dirty baseline AC2 depends on, then
+    // full-repaints. A second construction is a second getContext() call.
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+    stubCanvasRect(canvas);
+    fireEvent.pointerDown(canvas, centreOfCell(canvas, SKIRMISH.gridSize, 2, 2));
+    rerender(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+
+    expect(getContextSpy.mock.calls.length).toBe(callsAfterMount);
+  });
+
+  // ⚠️ Trap 2. Every hook in <BattlePage> precedes four early returns, so the grid state is
+  // declared on a render where the resource has NOT settled and `seedGrid` is still null.
+  // `useState(seedGrid)` would capture that null forever — a permanently blank editor with no
+  // error anywhere, and every existing test still green because a canvas would still mount. The
+  // seed is therefore held separately from the edit (`editedGrid ?? seedGrid`); this asserts the
+  // observable consequence: the resource resolves AFTER the first render and the dish still
+  // paints the loaded battle's contents.
+  it('paints the seeded grid for a resource that resolves after the first render (trap 2)', async () => {
+    const contextsByCanvas = installPerCanvasRecording();
+    enableCanvasRendering();
+
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    // The first render is the loading state — nothing has been seeded yet at this point.
+    expect(screen.getByRole('status')).toHaveTextContent('Loading battle…');
+
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    const recording = contextsByCanvas.get(canvas) as RecordingContext2D;
+
+    // Three-Way Skirmish places three organisms, so a grid that actually arrived paints more than
+    // the background. An all-empty grid (the captured-null failure) writes exactly one fillStyle.
+    expect(new Set(recording.fillStyleWrites.map(String)).size).toBeGreaterThan(1);
   });
 
   // Task 7 / deferred-work.md:183: a corrupt gol:organisms record must not silently override the
@@ -438,3 +514,161 @@ describe('BattlePage', () => {
     expect(canvas).toHaveAccessibleName('Petri dish, 50 by 30 cells');
   });
 });
+
+// Click placement wiring (Story 2.5, AC1/AC4/AC6). <BattlePage> holds the grid, owns the roster
+// union, and builds the palette over it — the three things that make a click actually land.
+describe('BattlePage — click placement wiring (Story 2.5)', () => {
+  // Conway's Classic is absent from createMockWorkspace() (trap 6) while production always has it
+  // (M9: protected, re-seeded after import). Seed it explicitly so these tests exercise the real
+  // colour path rather than buildRefToFillGroup's dangling-id fallback.
+  const ORGANISMS_WITH_CONWAY: readonly Organism[] = [...organisms, CONWAYS_CLASSIC];
+  const NEW_ROUTE_SIZE = DEFAULT_SETTINGS.defaultGridSize;
+
+  async function renderNewRoute() {
+    const contextsByCanvas = installPerCanvasRecording();
+    enableCanvasRendering();
+    const view = render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
+        battleId="new"
+      />,
+    );
+    await view.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
+    stubCanvasRect(canvas);
+    return { ...view, canvas, recording: contextsByCanvas.get(canvas) as RecordingContext2D };
+  }
+
+  // ⚠️ Trap 3, and the reason AC6 exists. On /battle/new `draft.organismIds` is EMPTY. A palette
+  // built from it has size 1, so the ref 1 the click writes is out of range — `colourStateAt`
+  // folds it to EMPTY_COLOUR_STATE with only a warn-once, `selectDirtyCells` finds nothing
+  // changed, and the context is never touched: the click appears to do nothing, with no error, no
+  // throw, and a fully green suite. The palette must come from the roster UNION.
+  it('paints a placed organism on /battle/new, where the battle roster is empty (AC6)', async () => {
+    const { canvas, recording } = await renderNewRoute();
+    const opsBefore = recording.calls.length;
+    const fillsBefore = recording.fillStyleWrites.length;
+
+    fireEvent.pointerDown(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 10, 10));
+
+    expect(recording.calls.length).toBeGreaterThan(opsBefore);
+    const clickFills = recording.fillStyleWrites.slice(fillsBefore);
+    // A repaint that only ever restored the background would mean the cell resolved to EMPTY.
+    const backgroundish = new Set([
+      document.documentElement.style.getPropertyValue('--gol-bg-primary'),
+      document.documentElement.style.getPropertyValue('--gol-grid-line'),
+    ]);
+    expect(clickFills.some((fill) => !backgroundish.has(String(fill)))).toBe(true);
+  });
+
+  // ⚠️ THE held-state assertion. A second click on the SAME cell can only be a no-op if the first
+  // commit was actually held and handed back down as the live grid; against a grid rebuilt from
+  // the draft every render, the cell would still read empty and the click would repaint again.
+  it('holds a committed grid: re-clicking the same cell is a no-op, another cell still paints', async () => {
+    const { canvas, recording } = await renderNewRoute();
+
+    const first = centreOfCell(canvas, NEW_ROUTE_SIZE, 10, 10);
+    const second = centreOfCell(canvas, NEW_ROUTE_SIZE, 20, 12);
+
+    fireEvent.pointerDown(canvas, first);
+    const afterFirst = recording.calls.length;
+    expect(afterFirst).toBeGreaterThan(0);
+
+    fireEvent.pointerDown(canvas, first); // redundant — AC7, all the way through the page
+    expect(recording.calls.length).toBe(afterFirst);
+
+    fireEvent.pointerDown(canvas, second);
+    const afterSecond = recording.calls.length;
+    expect(afterSecond).toBeGreaterThan(afterFirst);
+
+    // …and the FIRST cell is still occupied after the second commit: re-clicking it is still a
+    // no-op. A commit that replaced rather than accumulated would have cleared it.
+    fireEvent.pointerDown(canvas, first);
+    expect(recording.calls.length).toBe(afterSecond);
+  });
+
+  // The same claim on a LOADED battle, where the roster is non-empty and `toDraft()` hands out the
+  // stored record's own arrays. The click must never write through them (trap 5).
+  it('places into a loaded battle without mutating the stored record', async () => {
+    installPerCanvasRecording();
+    enableCanvasRendering();
+    const storedGridState = SKIRMISH.gridState;
+    const storedRoster = SKIRMISH.organismIds;
+    const beforeGrid = JSON.stringify(storedGridState);
+    const beforeRoster = [...storedRoster];
+
+    const { container } = render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [SKIRMISH],
+          organisms: ORGANISMS_WITH_CONWAY,
+        })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    stubCanvasRect(canvas);
+
+    fireEvent.pointerDown(canvas, centreOfCell(canvas, SKIRMISH.gridSize, 4, 4));
+
+    expect(JSON.stringify(storedGridState)).toBe(beforeGrid);
+    expect([...storedRoster]).toEqual(beforeRoster);
+  });
+
+  // AC5, read off the DOM rather than out of React internals: the default tool is Conway's
+  // Classic, so the ref written is Conway's index in the ROSTER UNION plus one. Three-Way
+  // Skirmish's own roster does not contain Conway, so the union appends it — placing at ref
+  // organismIds.length + 1, a ref the palette must also cover.
+  it('appends the session organism to the roster union rather than reusing an existing ref', async () => {
+    installPerCanvasRecording();
+    enableCanvasRendering();
+    const withoutConway = SKIRMISH.organismIds.filter((id) => id !== CONWAYS_CLASSIC.id);
+    const battle: Battle = { ...SKIRMISH, organismIds: withoutConway };
+
+    const { container } = render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [battle],
+          organisms: ORGANISMS_WITH_CONWAY,
+        })}
+        battleId={battle.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    stubCanvasRect(canvas);
+
+    const recording = (
+      vi.mocked(HTMLCanvasElement.prototype.getContext).mock.results[0] as {
+        value: RecordingContext2D;
+      }
+    ).value;
+
+    // A cell that is empty in the stored grid, so the placement definitely changes it.
+    const emptyCell = findEmptyCell(battle.gridState);
+    const at = centreOfCell(canvas, battle.gridSize, emptyCell.col, emptyCell.row);
+
+    // The DELTA around the first click, not the running total — the mount's own full paint is
+    // already in `calls` and would make a "greater than zero" check vacuous. A palette built from
+    // `battle.organismIds` alone leaves the appended session ref out of range, `colourStateAt`
+    // folds it to EMPTY, and this delta is 0.
+    const beforeClick = recording.calls.length;
+    fireEvent.pointerDown(canvas, at);
+    const afterFirst = recording.calls.length;
+    expect(afterFirst).toBeGreaterThan(beforeClick);
+
+    // Re-clicking is a no-op only if the first click actually placed the session organism there.
+    fireEvent.pointerDown(canvas, at);
+    expect(recording.calls.length).toBe(afterFirst);
+  });
+});
+
+function findEmptyCell(gridState: readonly (readonly number[])[]): { col: number; row: number } {
+  for (let row = 0; row < gridState.length; row++) {
+    for (let col = 0; col < gridState[row].length; col++) {
+      if (gridState[row][col] === 0) return { col, row };
+    }
+  }
+  throw new Error('fixture has no empty cell');
+}

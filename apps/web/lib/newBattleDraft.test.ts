@@ -53,7 +53,11 @@ describe('createNewBattleDraft', () => {
     // symptom a reader will actually recognise.
     expect(draft.gridState[0]).not.toBe(draft.gridState[1]);
 
-    draft.gridState[0][0] = 7;
+    // The cast is the point, not a workaround: Story 2.5 made `NewBattleDraft`'s arrays
+    // `readonly` so PRODUCTION code cannot write through them (the toDraft-aliasing hazard). The
+    // runtime shape is still a plain array, and the `fill([])` trap this test exists for is a
+    // runtime aliasing bug — so the check has to reach past the type to stay observable.
+    (draft.gridState[0] as number[])[0] = 7;
 
     expect(draft.gridState[1][0]).toBe(0);
     expect(draft.gridState[0][0]).toBe(7);

@@ -11,8 +11,16 @@ import type { EditableGridPreset } from '@gol/domain';
 export interface NewBattleDraft {
   name: string;
   gridSize: EditableGridPreset;
-  gridState: number[][];
-  organismIds: string[];
+  // ⚠️ `readonly`, both levels, since Story 2.5 (deferred-work.md's toDraft-aliasing entry).
+  // `<BattlePage>`'s `toDraft()` builds this shape from a LOADED battle by handing out that
+  // record's own arrays, so a mutable declaration made `draft.gridState[r][c] = …` or
+  // `draft.organismIds.push(…)` a silent in-place edit of the pristine loaded battle still held
+  // in the resource — correct on /battle/new (fresh arrays) and wrong on /battle?id=…. The
+  // compiler now rejects the write, which is the only enforcement that survives a story that does
+  // not know the hazard exists. Every consumer already reads these (`toRenderableGrid`,
+  // `buildRefToFillGroup`) through `readonly` parameters; an edit produces a NEW array.
+  gridState: readonly (readonly number[])[];
+  organismIds: readonly string[];
 }
 
 /**
