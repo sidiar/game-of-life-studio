@@ -4,7 +4,7 @@ baseline_commit: 4256822
 
 # Story 2.2: Create New Battle & Gallery Wiring
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -207,9 +207,9 @@ so that I can begin designing immediately.
 ### Review Findings
 
 Code review 2026-08-26 (Opus, three parallel layers: Blind Hunter / Edge Case Hunter / Acceptance
-Auditor). **1 decision-needed, 8 patched, 9 deferred, 5 dismissed.**
+Auditor). **1 decision-needed (resolved by Sidiar 2026-08-26), 8 patched, 9 deferred, 5 dismissed.**
 
-- [ ] [Review][Decision] **`EmptyDescription`'s 16px bottom margin vs the mockup's 30px** —
+- [x] [Review][Decision — RESOLVED] **`EmptyDescription`'s 16px bottom margin vs the mockup's 30px** —
       Story 1.12 overrode `.empty-state-description`'s `margin-bottom: 30px`
       (`clinical-lab-theme/battle-gallery.html:445-451`) down to 16px, and recorded the reason
       verbatim: *"the mockup's 30px gap sat above a button this story does not ship."* **This story
@@ -220,6 +220,12 @@ Auditor). **1 decision-needed, 8 patched, 9 deferred, 5 dismissed.**
       rule this is surfaced rather than silently picked. **Sidiar's call:** restore the mockup's
       30px now that the CTA it was spaced for exists, or keep 16px and retire Story 1.12's stale
       reasoning from the comment.
+      **Resolution (Sidiar, 2026-08-26): keep 16px, retire the stale premise.** The value is now
+      justified on its own merits in `GalleryEmptyState.tsx` — the mockup's 30px was drawn against
+      a taller button treatment than `CreateBattleLink`'s, and 16px holds the description-to-CTA
+      gap in proportion with `EmptyTitle`'s 12px. Story 1.12's expired "button this story does not
+      ship" reasoning is gone from the comment rather than reworded. Task 5's *"stays exactly as it
+      is"* therefore holds for the value; only the comment changed.
 
 - [x] [Review][Patch] Shared CTA animates with no `prefers-reduced-motion` escape, and used
       `transition: all` [apps/web/components/gallery/CreateBattleLink.tsx:35] — added the guard and

@@ -10,9 +10,12 @@ import CreateBattleLink from './CreateBattleLink';
 // Story 2.2 now wires here. Structure and copy come from that block, styled values from the
 // clinical CSS, same resolution Stories 1.10/1.11 used for this split.
 //
-// One deliberate departure from that CSS: EmptyDescription's bottom margin stays 16px rather than
-// .empty-state-description's 30px — a spacing call made once (Story 1.12) and not revisited here,
-// since no AC in this story governs the empty-state's internal spacing.
+// One deliberate departure from that CSS: EmptyDescription's bottom margin is 16px, not
+// .empty-state-description's 30px. Story 1.12 justified that by the CTA being absent; Story 2.2
+// ships the CTA, so that premise is gone and the value was re-decided on its own merits (Sidiar,
+// 2026-08-26): 16px stands. The mockup's 30px was drawn against a taller button treatment than
+// CreateBattleLink's, and 16px keeps the description-to-CTA gap in proportion with EmptyTitle's
+// 12px above it. Revisit only if the CTA's own metrics change — not because the mockup says 30px.
 const EmptyState = styled('div')({
   textAlign: 'center',
   padding: '80px 20px',
