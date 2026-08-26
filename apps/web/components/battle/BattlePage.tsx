@@ -1,18 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft';
+import { toThumbnailSource } from '@/lib/canvas/battleThumbnail';
+import { readGridColors } from '@/lib/canvas/themeColors';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
+import BattleEditorView from './BattleEditorView';
 
 const Body = styled('div')({
   padding: '30px',
   color: 'var(--gol-text-secondary)',
+});
+
+// The composition root's own flex column (mockup's `.app-container`, minus the sidebar row this
+// story has no content for yet). `<BattleHeader>` is NOT `position: fixed` here (BattleHeader.tsx
+// forced decision), so `<BattleEditorView>`'s `flex: 1` needs an actual flex-column ancestor to
+// fill the remaining height against, rather than the mockup's `margin-top` offset trick.
+const Root = styled('div')({
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: '100vh',
 });
 
 /**
@@ -38,20 +51,13 @@ export interface BattlePageProps {
   battleId: string | 'new';
 }
 
-interface LoadedResource {
+interface BattleResource {
   battle: Battle | null;
   organisms: readonly Organism[];
-  // Read unconditionally, not only for the 'new' branch: Task 1 wants it loaded once through the
-  // page's existing useAsyncResource call rather than threaded down as a fresh prop. Only the
-  // 'new' branch consumes it today — the loaded battle carries its own gridSize and ignores this
-  // — so the loaded route pays one extra localStorage read, inside a Promise.all it is already
-  // awaiting two others in. Do not make the read conditional to save it: `useAsyncResource`'s
-  // deps are [repositories, battleId], so a branch here would need a second resource shape.
-  settings: Settings;
 }
 
 // Converts a loaded Battle to the SAME shape createNewBattleDraft seeds, so the render below reads
-// one shape instead of branching on battleId === 'new' forever (Task 3).
+// one shape instead of branching on battleId === 'new' forever (Task 3, Story 2.2).
 function toDraft(battle: Battle): NewBattleDraft {
   return {
     name: battle.name,
@@ -74,63 +80,101 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   //
   // ⚠️ Promise.all rejects on the FIRST rejection, so one corrupt ORGANISM record blanks the page
   // with "something went wrong" even when the battle itself loaded fine. Accepted for this story
-  // — AC4 asks only for a distinct failure state — and recorded rather than discovered in review.
-  //
-  // settings.load() never rejects INTO this Promise.all: a corrupt gol:settings record must not
-  // blank the create route (Task 1), so it degrades to DEFAULT_SETTINGS itself, the same shape
-  // BattleGallery.tsx already establishes for the identical failure.
-  const resource = useAsyncResource<LoadedResource>(async () => {
-    const [battle, organisms, settings] = await Promise.all([
+  // — AC4 asks only for a distinct failure state — and recorded rather than discovered in review
+  // (deferred-work.md, owned by Story 2.9).
+  const battleResource = useAsyncResource<BattleResource>(async () => {
+    const [battle, organisms] = await Promise.all([
       battleId === 'new' ? Promise.resolve(null) : repositories.battles.load(battleId),
       repositories.organisms.list(),
-      repositories.settings.load().catch(() => DEFAULT_SETTINGS),
     ]);
-    return { battle, organisms, settings };
+    return { battle, organisms };
   }, [repositories, battleId]);
 
-  if (resource.status === 'loading') return <BattleLoading />;
+  // Task 7 (deferred-work.md:183): LIFTED OUT of the battle/organisms Promise.all entirely,
+  // rather than riding inside it with its own `.catch`. Before this story that `.catch` prevented
+  // settings.load() from rejecting INTO the shared Promise.all, but did nothing about the reverse
+  // problem — organisms.list() rejecting discarded a settings value that had already resolved
+  // perfectly, because Promise.all fails the whole combinator on the first rejection regardless of
+  // which OTHER promise already settled. A user whose default grid size is 50x30 would silently
+  // get 100x60 on /battle/new the moment an unrelated organism record was corrupt. A fully
+  // separate resource makes the two failures structurally independent: this one's own `.catch`
+  // means its status is always eventually 'ready', never 'error', so it cannot be blanked by
+  // anything battleResource does.
+  const settingsResource = useAsyncResource<Settings>(
+    () => repositories.settings.load().catch(() => DEFAULT_SETTINGS),
+    [repositories],
+  );
+  const settings = settingsResource.data ?? DEFAULT_SETTINGS;
 
-  // ⚠️ ORDER IS LOAD-BEARING: 'new' is checked BEFORE 'error'. /battle/new describes no stored
-  // battle at all, but it still awaits organisms.list() in the same Promise.all — so with the
-  // error branch first, one corrupt ORGANISM record made the create route announce "this battle
-  // could not be loaded, its stored data may be damaged" about a battle that does not exist. That
-  // is the same wrong-fact-about-the-wrong-record failure the not-found branch below exists to
-  // prevent, reintroduced by branch order alone (Story 2.1 review).
-  //
-  // resource.data is undefined here only when organisms.list() rejected (settings.load() cannot
-  // reject into this resource — see above), so the settings fallback below is DEFAULT_SETTINGS in
-  // that case, matching the same degrade BattleGallery.tsx already uses.
-  if (battleId === 'new') {
-    const settings = resource.data?.settings ?? DEFAULT_SETTINGS;
-    const draft = createNewBattleDraft(settings.defaultGridSize);
-    return (
-      <>
-        <BattleHeader battleTitle={battleDisplayName(draft.name)} />
-        {/* AC3/AC4: this seeds the empty grid STATE (the model), never persists anything, and
-            renders no canvas yet — <PetriDishCanvas variant="edit"> is Story 2.4. */}
-        <Body data-mode={mode}>The battle editor arrives in the next stories.</Body>
-      </>
-    );
+  // Task 6 / deferred-work.md:179 (AC7): the seeded draft used to be rebuilt in the RENDER BODY —
+  // 61 array allocations per render at 100x60, with a fresh identity every time, which would make
+  // the canvas's `[grid]` effect repaint on every unrelated render. Held here instead, in a hook
+  // declared before every early `return` below (the hooks-order trap: `<BattlePage>` returns early
+  // four times, and a hook below any of them is a conditional hook — React's error, not a subtle
+  // one, but the *fix* people reach for, moving the return, is what would break the branch order
+  // the Story 2.1 review fixed). `newDraft` is intentionally unconditional and independent of
+  // `battleResource` — it depends only on `settings`, which is what keeps it correct even when
+  // organisms.list() has failed (see settingsResource above).
+  const newDraft = useMemo<NewBattleDraft | null>(
+    () => (battleId === 'new' ? createNewBattleDraft(settings.defaultGridSize) : null),
+    [battleId, settings],
+  );
+  const loadedBattle = battleResource.data?.battle ?? null;
+  const loadedDraft = useMemo<NewBattleDraft | null>(
+    () => (loadedBattle === null ? null : toDraft(loadedBattle)),
+    [loadedBattle],
+  );
+  // The unified shape (Story 2.2's NewBattleDraft) both branches resolve to. For battleId ===
+  // 'new', `newDraft` is always non-null (the memo above always seeds one in that branch); this
+  // is null only for a real battle id with no usable battle in hand yet (a genuine load failure,
+  // or a real not-found) — which is exactly the distinction the render below needs.
+  const draft = battleId === 'new' ? newDraft : loadedDraft;
+
+  // Task 6: `colors` resolved ONCE here (getComputedStyle forces a style recalculation) and
+  // passed down, never resolved inside the canvas — the same memoised pattern
+  // BattleGallery.tsx:183-185 already establishes. `document` is unavailable during the static
+  // export's prerender; guarded rather than gated behind an effect for the same reason the
+  // Gallery's version is — `colors` is never read by JSX rendered before a canvas actually mounts.
+  const colors = useMemo(
+    () => (typeof document === 'undefined' ? null : readGridColors(document.documentElement)),
+    [],
+  );
+
+  // Task 6: ONE memo derives BOTH the grid and the palette, so both identities are stable
+  // together. `toThumbnailSource` already composes `toRenderableGrid` + `buildRefToFillGroup`
+  // (Story 1.11) — reused via a structural widening (`lib/canvas/battleThumbnail.ts`) rather than
+  // reimplementing the dense->renderable loop or the LUT a second time. `undefined` roster
+  // (organisms.list() failed) degrades to an empty roster, matching the "no roster to show yet"
+  // reality of this story.
+  const organisms = battleResource.data?.organisms;
+  const renderable = useMemo(
+    () => (draft === null ? null : toThumbnailSource(draft, organisms ?? [])),
+    [draft, organisms],
+  );
+
+  // Both resources must settle before anything renders — not just battleResource. Without this,
+  // a battle that resolves before settings would briefly seed /battle/new at the DEFAULT_SETTINGS
+  // fallback grid size before correcting itself the moment settings arrives, which is the exact
+  // flash Task 7 exists to prevent, just moved one tick later instead of removed.
+  if (battleResource.status === 'loading' || settingsResource.status === 'loading') {
+    return <BattleLoading />;
   }
 
-  if (resource.status === 'error') {
-    return (
-      <Notice>
-        <NoticeTitle>Something Went Wrong</NoticeTitle>
-        <NoticeText>This battle could not be loaded. Its stored data may be damaged.</NoticeText>
-        <BackLink href="/">Back to Gallery</BackLink>
-      </Notice>
-    );
-  }
-
-  // ⚠️ THE third terminal state, and the one the intuitive code loses. `status === 'ready'` with
-  // `battle === null` means the repository looked and found nothing (a deleted, stale or
-  // hand-typed id, or a missing/empty ?id=). Branching on the VALUE first — `if (!data) return
-  // <Loading/>` — folds it into "still loading" and spins forever with nothing logged. Its copy
-  // must also differ from the error copy above: "gone" and "broken" are different facts and offer
-  // the user different next moves.
-  const battle = resource.data?.battle ?? null;
-  if (battle === null) {
+  if (draft === null) {
+    // Unreachable for battleId === 'new' — that branch's memo always seeds a draft — so this is
+    // only ever a real battle id with no usable battle: either the load genuinely failed (status
+    // 'error') or it succeeded and found nothing (a stale/deleted id, or a hand-typed one). "Gone"
+    // and "broken" are different facts and offer the user different next moves, so the copy must
+    // differ.
+    if (battleResource.status === 'error') {
+      return (
+        <Notice>
+          <NoticeTitle>Something Went Wrong</NoticeTitle>
+          <NoticeText>This battle could not be loaded. Its stored data may be damaged.</NoticeText>
+          <BackLink href="/">Back to Gallery</BackLink>
+        </Notice>
+      );
+    }
     return (
       <Notice>
         <NoticeTitle>Battle Not Found</NoticeTitle>
@@ -142,15 +186,30 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     );
   }
 
-  const draft = toDraft(battle);
-
+  // Task 6 (deferred-work.md:189): Task 3 unified the draft TYPE but not the RENDER — this used to
+  // be two byte-identical `return`s, each building its own local `draft`. Both arms already
+  // resolve to the same `NewBattleDraft` shape, so one render now serves both: the create route
+  // (`draft` is `newDraft`, always non-null), and a loaded battle (`draft` is `loadedDraft`, which
+  // the guard above has already excluded being null for).
+  //
+  // `renderable` is non-null here too: it is null only when `draft` is, and that branch already
+  // returned above.
   return (
-    <>
+    // mode is read here so the state cell is not merely declared: the sidebar and
+    // <EditorStatusBar> are Stories 2.9+, and this is the skeleton they mount into.
+    <Root data-mode={mode}>
       <BattleHeader battleTitle={battleDisplayName(draft.name)} />
-      {/* The roster IS loaded and held (AC1) — <OrganismRoster> is its consumer in Story 2.9.
-          `mode` is read here so the state cell is not merely declared: the Lab chassis, the canvas
-          and the sidebar are Stories 2.4/2.9+, and this is the skeleton they mount into. */}
-      <Body data-mode={mode}>The battle editor arrives in the next stories.</Body>
-    </>
+      {/* renderable is non-null whenever draft is (see the memo above) — the check exists for
+          TypeScript, not because the two can disagree at runtime. */}
+      {renderable !== null && (
+        <BattleEditorView
+          grid={renderable.grid}
+          size={draft.gridSize}
+          palette={renderable.palette}
+          showGridLines={settings.gridLines}
+          colors={colors}
+        />
+      )}
+    </Root>
   );
 }
