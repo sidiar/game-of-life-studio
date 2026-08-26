@@ -27,13 +27,16 @@ test.describe('home route', () => {
     // AC2 (Story 2.2): the empty-state prompt is now a real control, not copy — the "no
     // dead-affordance" gap this route shipped with (Story 1.12) closes here.
     const emptyState = page.locator('h2', { hasText: 'No Battles Yet' }).locator('..');
-    // Anchor the scope FIRST. toHaveCount(0)/(1) against a locator whose ancestor matched nothing
-    // is a pass, not a failure — so without this line the assertions below would silently
-    // evaporate the moment the h2 text, tag, or nesting changed, rather than going red.
-    await expect(emptyState.getByRole('button')).toHaveCount(0);
+    // Anchor the scope FIRST, and never lead with a zero-count: toHaveCount(0) against a locator
+    // whose ancestor matched nothing is a pass, not a failure. The CTA's toHaveCount(1) is the
+    // anchor — it goes red the moment the h2 text, tag or nesting changes, which is what stops the
+    // button assertion after it from silently evaporating.
     const cta = emptyState.getByRole('link', { name: 'Create Your First Battle' });
     await expect(cta).toHaveCount(1);
     await expect(cta).toHaveAttribute('href', '/battle/new');
+    // That link is the empty state's ONLY control — the CTA replaced the inert sentence, it did
+    // not join a button.
+    await expect(emptyState.getByRole('button')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 

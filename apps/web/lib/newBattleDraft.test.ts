@@ -20,6 +20,18 @@ describe('createNewBattleDraft', () => {
     }
   });
 
+  // toEqual above passes for an ALIAS, so it cannot catch this on its own. The caller's preset is
+  // often `DEFAULT_SETTINGS.defaultGridSize` — a shallow-frozen, process-wide singleton — so a
+  // draft that shares the reference lets a later in-place resize corrupt the app-wide default.
+  it.each(PRESETS)(
+    'copies the preset rather than aliasing the caller ($cols x $rows)',
+    (preset) => {
+      const draft = createNewBattleDraft(preset);
+
+      expect(draft.gridSize).not.toBe(preset);
+    },
+  );
+
   it.each(PRESETS)('seeds every cell as 0 ($cols x $rows)', (preset) => {
     const draft = createNewBattleDraft(preset);
 
@@ -35,6 +47,11 @@ describe('createNewBattleDraft', () => {
   // equal in content.
   it('gives each row its own array instance, not a shared reference', () => {
     const draft = createNewBattleDraft({ cols: 50, rows: 30 });
+
+    // Identity first — that is literally what "distinct instances" means and what `fill([])`
+    // breaks. The mutation check below is the observable consequence, kept because it is the
+    // symptom a reader will actually recognise.
+    expect(draft.gridState[0]).not.toBe(draft.gridState[1]);
 
     draft.gridState[0][0] = 7;
 

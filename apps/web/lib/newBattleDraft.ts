@@ -29,7 +29,12 @@ export interface NewBattleDraft {
 export function createNewBattleDraft(gridSize: EditableGridPreset): NewBattleDraft {
   return {
     name: '',
-    gridSize,
+    // COPIED, not stored by reference. On the degrade path `<BattlePage>` passes
+    // `DEFAULT_SETTINGS.defaultGridSize`, and `Object.freeze` is shallow — that nested object is a
+    // mutable, process-wide singleton. Aliasing it into a draft the later editor stories resize
+    // would corrupt the default for every subsequent reader. This is the same reference-vs-copy
+    // divergence `packages/test-utils/src/fakeRepositories.ts` calls out for loaded settings.
+    gridSize: { ...gridSize },
     // `Array.from({ length }, () => …)`, NOT `Array(rows).fill([])` — the latter hands every row
     // the SAME array reference, so writing one cell would silently write the whole column. This
     // is the exact trap `packages/test-utils/src/gridBuilders.ts#emptyGrid` documents; that

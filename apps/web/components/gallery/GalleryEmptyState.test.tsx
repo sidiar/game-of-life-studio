@@ -16,10 +16,14 @@ describe('GalleryEmptyState', () => {
     const cta = screen.getByRole('link', { name: 'Create Your First Battle' });
     expect(cta).toHaveAttribute('href', '/battle/new');
 
-    // Two separate elements, not one merged node. Splitting "what is this app" from "what do I do"
-    // is the explanation/CTA split's entire reason to exist; merging them back leaves every other
-    // assertion in this file green.
-    expect(description).not.toBe(cta);
+    // The explanation stays a non-interactive paragraph rather than being absorbed into the CTA's
+    // accessible name — "what is this app" and "what do I do" are two jobs, and a link whose name
+    // swallowed the NFR-4.1 explanation would still satisfy every other assertion in this file.
+    // (`not.toBe(cta)` is NOT the guard it looks like: a <p> and an <a> can never be the same
+    // node, so that comparison cannot fail. This asserts the property that actually can.)
+    expect(description.tagName).toBe('P');
+    expect(cta).not.toContainElement(description);
+    expect(cta).toHaveAccessibleName('Create Your First Battle');
   });
 
   it('renders the decorative glyph as aria-hidden, not as an accessible name (forced decision 3)', () => {

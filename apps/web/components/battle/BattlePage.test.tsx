@@ -167,12 +167,29 @@ describe('BattlePage', () => {
   // A corrupt gol:settings record must not blank the create route (Task 1's silent-failure trap):
   // settings.load().catch(() => DEFAULT_SETTINGS) is the same degrade BattleGallery.tsx already
   // uses, so the seeded battle still renders rather than falling into the error body.
+  //
+  // ⚠️ This test alone does NOT pin the .catch(): the 'new' branch is checked before 'error' and
+  // independently falls back with `resource.data?.settings ?? DEFAULT_SETTINGS`, so it stays green
+  // with the .catch() deleted. The LOADED-route test below is the one that actually holds it.
   it('still renders the seeded battle when settings.load() rejects', async () => {
     render(<BattlePage repositories={withFailingSettingsLoad()} battleId="new" />);
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' }),
     ).toBeInTheDocument();
+  });
+
+  // Where the .catch() is the ONLY guard. A real battle id has no 'new'-branch fallback in front
+  // of it, so an uncaught settings rejection takes the shared Promise.all down and the page shows
+  // "its stored data may be damaged" about a battle that loaded perfectly. Delete the .catch() in
+  // BattlePage.tsx and this test goes red — which is what makes the degrade falsifiable.
+  it('still renders a loaded battle when settings.load() rejects', async () => {
+    render(<BattlePage repositories={withFailingSettingsLoad()} battleId={SKIRMISH.id} />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/stored data may be damaged/i)).not.toBeInTheDocument();
   });
 
   // Branch ORDER regression (Story 2.1 review). /battle/new describes no stored battle, yet it

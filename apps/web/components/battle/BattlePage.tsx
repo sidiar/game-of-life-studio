@@ -42,8 +42,11 @@ interface LoadedResource {
   battle: Battle | null;
   organisms: readonly Organism[];
   // Read unconditionally, not only for the 'new' branch: Task 1 wants it loaded once through the
-  // page's existing useAsyncResource call rather than threaded down as a fresh prop, and the
-  // loaded-battle branch reading it too costs nothing.
+  // page's existing useAsyncResource call rather than threaded down as a fresh prop. Only the
+  // 'new' branch consumes it today — the loaded battle carries its own gridSize and ignores this
+  // — so the loaded route pays one extra localStorage read, inside a Promise.all it is already
+  // awaiting two others in. Do not make the read conditional to save it: `useAsyncResource`'s
+  // deps are [repositories, battleId], so a branch here would need a second resource shape.
   settings: Settings;
 }
 

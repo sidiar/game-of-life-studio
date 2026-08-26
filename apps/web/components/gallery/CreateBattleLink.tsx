@@ -32,7 +32,10 @@ const CreateBattleLink = styled(Link)({
   letterSpacing: '0.5px',
   textDecoration: 'none',
   cursor: 'pointer',
-  transition: 'all 0.2s',
+  // Enumerated rather than the mockup's `all 0.2s`, matching BattleTile's rule and the reason
+  // recorded there: with `all`, any property added to this block later starts animating by
+  // accident — including a layout-affecting one.
+  transition: 'background-color 0.2s, transform 0.2s',
   whiteSpace: 'nowrap',
   '&:hover': {
     background: 'var(--gol-accent-hover)',
@@ -43,6 +46,13 @@ const CreateBattleLink = styled(Link)({
   '&:focus-visible': {
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '2px',
+  },
+  // The hover lift is motion, and this control now appears twice on an empty Gallery. Every other
+  // piece of gallery chrome carries this guard (BattleTile's Tile, TileActions and ActionButton);
+  // without it a user who asked for no motion still gets the translate.
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
+    '&:hover': { transform: 'none' },
   },
 });
 

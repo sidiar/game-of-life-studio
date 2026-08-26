@@ -204,6 +204,83 @@ so that I can begin designing immediately.
   - [x] ⚠️ A locally green `npm run ci` is not proof CI is green (the `e2e` job runs on Linux
         against a cached Playwright install). Check `gh run list` after pushing.
 
+### Review Findings
+
+Code review 2026-08-26 (Opus, three parallel layers: Blind Hunter / Edge Case Hunter / Acceptance
+Auditor). **1 decision-needed, 8 patched, 9 deferred, 5 dismissed.**
+
+- [ ] [Review][Decision] **`EmptyDescription`'s 16px bottom margin vs the mockup's 30px** —
+      Story 1.12 overrode `.empty-state-description`'s `margin-bottom: 30px`
+      (`clinical-lab-theme/battle-gallery.html:445-451`) down to 16px, and recorded the reason
+      verbatim: *"the mockup's 30px gap sat above a button this story does not ship."* **This story
+      ships that button.** The premise the override rested on has expired, and the diff rewrote the
+      justification (*"a spacing call made once (Story 1.12) and not revisited here"*) rather than
+      revisiting the value. Against that, this story's own **Task 5** says `EmptyDescription`
+      *"stays exactly as it is."* Two normative sources now point opposite ways, so per the project
+      rule this is surfaced rather than silently picked. **Sidiar's call:** restore the mockup's
+      30px now that the CTA it was spaced for exists, or keep 16px and retire Story 1.12's stale
+      reasoning from the comment.
+
+- [x] [Review][Patch] Shared CTA animates with no `prefers-reduced-motion` escape, and used
+      `transition: all` [apps/web/components/gallery/CreateBattleLink.tsx:35] — added the guard and
+      enumerated the properties, matching `BattleTile`'s three shipped rules and the reason
+      recorded there.
+- [x] [Review][Patch] `createNewBattleDraft` stored the caller's `gridSize` **by reference**
+      [apps/web/lib/newBattleDraft.ts:32] — on the degrade path that is
+      `DEFAULT_SETTINGS.defaultGridSize`, and `Object.freeze` is shallow, so a later in-place
+      resize would corrupt the process-wide default. Now copied; two tests added.
+- [x] [Review][Patch] **Task 1 was pinned by nothing** — replacing `settings.defaultGridSize` with
+      a hardcoded literal passed the entire suite (mutation-verified)
+      [apps/web/components/battle/BattlePage.tsx:102]. Added
+      `BattlePage.seedPreset.test.tsx`, a dedicated module-mock file following the
+      `BattleGallery.gridLines.test.tsx` precedent, asserting the value in transit at a
+      **non-default** preset. Confirmed red under the hardcode.
+- [x] [Review][Patch] **The corrupt-settings `.catch()` was unfalsifiable** — deleting it left all
+      17 tests green, because the `'new'` branch independently falls back and is checked before
+      `'error'` [apps/web/components/battle/BattlePage.test.tsx]. Added a **loaded-route** test,
+      where the `.catch()` is the only guard. Confirmed red without it.
+- [x] [Review][Patch] `expect(description).not.toBe(cta)` could no longer fail — a `<p>` and an
+      `<a>` are never the same node [apps/web/components/gallery/GalleryEmptyState.test.tsx] —
+      while its comment still advertised it as the merge guard. Replaced with assertions that can.
+- [x] [Review][Patch] Comment claimed *"the loaded-battle branch reading it too costs nothing"*;
+      that branch never reads `settings` at all [apps/web/components/battle/BattlePage.tsx:44].
+      Corrected to state the real trade-off.
+- [x] [Review][Patch] Stale comment pointed at a line the same hunk deleted, and mis-stated that
+      `toHaveCount(1)` passes vacuously [apps/web/e2e/home.spec.ts:28] — the zero-count assertion
+      also ran before any anchor. Reordered so the anchor leads; comment corrected.
+- [x] [Review][Patch] The AC2 empty-workspace e2e asserted navigation but not the AC3 invariant
+      [apps/web/e2e/createBattle.spec.ts:96] — added the `gol:battles` check.
+- [x] [Review][Patch] Dev Agent Record's bundle attribution was false — this story costs **~0 KB**,
+      not ~4.5 KB (reviewer-measured). Corrected in Debug Log References above.
+
+- [x] [Review][Defer] The seeded draft is rebuilt on every render and held nowhere
+      [apps/web/components/battle/BattlePage.tsx:102] — deferred, Story 2.4/2.5.
+- [x] [Review][Defer] `toDraft()` aliases the loaded `Battle`'s own arrays
+      [apps/web/components/battle/BattlePage.tsx:52-59] — deferred, Story 2.5.
+- [x] [Review][Defer] A corrupt `gol:organisms` silently substitutes `DEFAULT_SETTINGS` for the
+      user's real `defaultGridSize` on `/battle/new` — deferred, Story 2.4.
+- [x] [Review][Defer] `/battle/new` renders a fully successful page while the resource is in
+      `error`; the roster is silently absent — deferred, Story 2.9.
+- [x] [Review][Defer] The toolbar CTA is an interactive control inside `aria-busy="true"`
+      [apps/web/components/gallery/BattleGallery.tsx:280] — deferred, accessibility pass.
+- [x] [Review][Defer] Task 3 unified the draft *type* but not the *render* — two byte-identical
+      returns remain — deferred, Story 2.4.
+- [x] [Review][Defer] The toolbar band omits the mockup's flex rules
+      [apps/web/components/gallery/BattleGallery.tsx:118] — deferred, Story 2.16.
+- [x] [Review][Defer] `e2e/createBattle.spec.ts` forks `buildSeedPayload`/`seedWorkspace` a third
+      time — deferred, next e2e-touching story.
+- [x] [Review][Defer] A synchronous throw from an injected `settings.load()` bypasses the `.catch()`
+      [apps/web/components/battle/BattlePage.tsx:83] — deferred, unreachable via the real repository.
+
+**Dismissed (5):** a layer's report that the working tree hardcoded 50×30 (its own mutation
+experiment — tree verified clean at `c0f6acd`); "the toolbar test exercises neither loading nor
+error" (false — `seedStatus === 'error'` folds into `state.kind === 'error'` at
+`BattleGallery.tsx:249`); "the two-CTA empty state is never axe-checked" (false —
+`BattleGallery.test.tsx:311` axes the empty body, which now contains both CTAs); "the
+empty-workspace e2e omits the schema stamp" (the M1 first-run seed is correct product behaviour and
+the test makes no claim against it); "`e2e/home.spec.ts` is outside the file list" (disclosed, and
+forced — its no-control assertions would otherwise have gone red).
+
 ## Dev Notes
 
 ### Decisions this story is forced to make (flag each in the Dev Agent Record)
@@ -510,9 +587,15 @@ the end of Task 8:
   funcs / 97.23% lines (no gate on `apps/web` — reported for the record only)
 - `build:standalone`: pass — route table unchanged: `○ /`, `○ /_not-found`, `○ /battle`,
   `○ /battle/new`, all `○ (Static)`. Decision K.5 intact.
-- `bundle:check`: pass — **324.2 KB gzipped / 330 KB budget, 5.8 KB headroom** (down from Story
-  2.1's 10.3 KB; this story's toolbar CTA, empty-state CTA and `CreateBattleLink` cost ~4.5 KB
-  gzipped, all `styled()` chrome, zero new MUI components)
+- `bundle:check`: pass — **324.2 KB gzipped / 330 KB budget, 5.8 KB headroom**
+  - ⚠️ **Corrected in code review (2026-08-26).** This entry originally read "this story's toolbar
+    CTA, empty-state CTA and `CreateBattleLink` cost ~4.5 KB gzipped". That attribution is wrong.
+    Measured by the reviewer: deleting both CTAs and `CreateBattleLink` gives **324.1 KB**, and
+    reverting the story's whole source (`BattlePage.tsx` back to `4256822`, `newBattleDraft.ts` and
+    `CreateBattleLink.tsx` deleted) still gives **324.2 KB**. **Story 2.2 costs ~0 KB.** The
+    319.7 → 324.2 KB movement predates this story, so Story 2.1's recorded 319.7 KB baseline is
+    stale. Epic 2's canvas stories must budget against **324.2 KB / 5.8 KB headroom**, and should
+    not assume `styled()` chrome is what consumed it.
 - `e2e`: pass — **140 passed** across chromium/firefox/webkit/tablet, including the 2 new
   `createBattle.spec.ts` tests and the retargeted `battleRoute.spec.ts` test, on all 4 projects
 
@@ -571,6 +654,8 @@ Local `npm run ci` is green; per project-context.md this is not proof CI is gree
 - `apps/web/lib/newBattleDraft.test.ts`
 - `apps/web/components/gallery/CreateBattleLink.tsx`
 - `apps/web/e2e/createBattle.spec.ts`
+- `apps/web/components/battle/BattlePage.seedPreset.test.tsx` (added in code review — pins Task 1's
+  settings→draft wiring, which nothing else could fail on)
 
 **Modified:**
 

@@ -92,5 +92,11 @@ test.describe('create new battle (Story 2.2)', () => {
 
     await expect(page).toHaveURL('/battle/new');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+    // AC3 on THIS path too, not just the seeded one above: the empty workspace is where a
+    // "helpfully create the record on open" regression would be least visible, because there is
+    // no existing battle count to notice it changing.
+    expect(
+      await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEYS.battles),
+    ).toBeNull();
   });
 });
