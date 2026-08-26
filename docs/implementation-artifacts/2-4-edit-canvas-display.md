@@ -4,7 +4,7 @@ baseline_commit: 2e7713f
 
 # Story 2.4: Edit Canvas Display
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -259,6 +259,71 @@ so that I always see the entire petri dish while designing.
   - [x] Fill the Dev Agent Record: forced decisions, verification commands **and their real
         output** — "tested" means the checklist ran, never that typecheck passed.
 
+### Review Findings
+
+Code review (Opus, second model) ran the adversarial layers (Blind Hunter, Edge Case Hunter,
+Acceptance Auditor) against `git diff 2e7713f..03bc3be`, deduplicated and triaged below. All seven
+ACs are met; the findings are one real defect plus four accuracy items. No `decision-needed`
+finding remains, so the story moves to `done`.
+
+- [x] [Review][Patch] **`EditDish` full-painted the same grid TWICE on every editor mount in a real
+      browser** — the exact redundant mount paint Task 2's `rendererGeneration` design was chosen to
+      avoid. React flushes every passive effect of a commit *before* applying a state update one of
+      them queued, so the grid effect ran once for the pre-signal value (`rendererGeneration === 0`,
+      renderer already stored by the construction effect declared above it) and again for the
+      0 → 1 bump: two `drawFull` calls, each re-priming the whole colour-state baseline
+      (`resetDirtyState`, ~6,000 cells at 100×60), plus one extra React render. Invisible to every
+      existing test because real jsdom's first `getContext('2d')` returns `null`, so the mount's
+      construction always fails and neither run paints — the edit-variant suite forces its genuine
+      construction with a `colors`-identity rerender, which only ever exercises the rebuild path.
+      Confirmed by measurement (2 calls) before fixing. **Fixed** by having the construction effect
+      paint in the commit that built the renderer and adding a `paintedGridRef` the grid effect
+      checks before repainting: exactly one full paint per mount, one per palette/colours rebuild,
+      one per genuine `grid` change (the 2.5/2.6 seam is unchanged), and the `rendererGeneration`
+      React state is gone from a hot path. Guarding the pre-signal run instead was tried and
+      rejected — it removes the wasted paint but leaves the dish blank until a second commit lands.
+- [x] [Review][Patch] **The mount's paint count was untestable** — added
+      `PetriDishCanvas.test.tsx` "full-paints exactly once on a mount whose 2D context is available
+      from the start", which installs a `RecordingContext2D` per canvas *before* the first render
+      (the shape `BattlePage.test.tsx` already uses). It is the only way to observe the
+      real-browser mount under jsdom, and it fails against the pre-fix implementation.
+- [x] [Review][Patch] **`StaticDish`'s JSDoc pointed at a `resizeTargetOf` helper that does not
+      exist** — both variants inline `canvas.parentElement ?? canvas`. Comment corrected to
+      describe what is actually there.
+- [x] [Review][Patch] **Task 8 asked for the home budget's comment history "intact"; two facts were
+      dropped in the rewrite** — Sidiar's attribution on both budget moves, and the pointer that
+      `RFC-003:48/253/309` and `epics.md:159/:371` still quote the pre-measurement `~300KB` (a
+      docs-reconciliation item that is still open in deferred-work.md:131). Both restored, plus the
+      "passed but did not carry the ~12 KB headroom" reason for the 320 → 330 move.
+- [x] [Review][Patch] **The Dev Agent Record's "Agent Model Used" said Claude Opus 5**, contradicting
+      this story's own `Dev Model: sonnet` line and the orchestration record. Corrected — the audit
+      trail is the point of that field.
+- [ ] [Review][Deferred] **The dish box can overflow a short viewport, and centred-flex overflow is
+      unreachable by scrolling** — `<PetriDishBox>` is `width: 100%; max-width: 1000px;
+      aspect-ratio: 5/3` with no `max-height`, inside a `<GridContainer>` that centres it
+      (`align-items: center`). On a wide-but-short window the box is taller than the container and
+      overflows equally in both directions, so the top of the dish cannot be scrolled to. Both
+      editable presets are exactly 5:3 against a 5:3 box, so auto-fit itself is correct and
+      letterboxing is zero — this is the *container*, not `computeGridLayout`. Left as-is because
+      the story prescribed these exact rules from `petri-dish-lab-mode.html:452-459` and a fix
+      (`align-items: safe center`, or a `max-height`/`aspect-ratio` pairing) is a layout design call
+      with no mockup behind it. Tracked in deferred-work.md, pointed at Story 2.12, which is the
+      next story to touch this box.
+- [ ] [Review][Deferred] **The home route now carries 4.5 KB of headroom against its 330 KB budget**
+      (325.5 KB measured on this branch), where the gate's own convention is ~12 KB and the 320 → 330
+      move was triggered at 2.5 KB. Almost none of that growth is this story's — `main` already
+      measures ~325 KB after Story 2.3 — and the gate is green, so nothing is changed here. Tracked
+      in deferred-work.md: the next story to touch a home-route component should expect to move the
+      budget, and by precedent that number is Sidiar's to set.
+
+**Verified independently rather than trusting the Dev Agent Record:** the mount paint count was
+measured, not reasoned about; the full `npm run ci` was re-run from scratch on the reviewed tree
+(exit 0 — 457 web unit tests, 144 e2e across chromium/firefox/webkit/tablet, all three bundle
+routes within budget); and `BattleSchema`'s `gridState`-vs-`gridSize` cross-validation was checked
+to confirm `toThumbnailSource`'s two documented throw paths (`toRenderableGrid` on a ragged grid,
+`buildRefToFillGroup` on a >255 roster) are unreachable from `<BattlePage>`'s uncaught `useMemo`
+call — the schema rejects both at the persistence boundary, unlike `<BattleTile>`, which catches.
+
 ## Dev Notes
 
 ### Decisions this story is forced to make (flag each in the Dev Agent Record)
@@ -475,7 +540,10 @@ tests that raise a number.
 
 ### Agent Model Used
 
-Claude Opus 5 (claude-opus-5), via the `bmad-dev-story` workflow.
+Claude Sonnet, via the `bmad-dev-story` workflow — matching this story's own `Dev Model: sonnet`
+assignment below and the `implement-next-story` orchestration's record. (Corrected in review
+2026-08-26: this line originally read "Claude Opus 5", which is the model that reviewed the
+story, not the one that implemented it.)
 
 ### Debug Log References
 
@@ -589,5 +657,6 @@ Modified:
 | ---------- | ---------------------------------------------------------------------- |
 | 2026-08-26 | Story created (create-story), ready-for-dev                          |
 | 2026-08-26 | Implemented (dev-story): edit canvas display, retained-renderer lifecycle, immediate re-fit, resize-loop fix, BattleEditorView, BattlePage wiring + settings decoupling, battle-route bundle gate. Status → review |
+| 2026-08-26 | Code review (Opus, second model): fixed the double full paint on every editor mount, added the mount-paint regression test, restored the home budget's comment history, corrected the Dev Agent Record's model attribution; two items deferred. Status → done |
 
 Dev Model: sonnet   # follows patterns that already exist — 2.3 froze the renderer's retention/dirty policy, 1.11 shipped the PetriDishCanvas lifecycle and the injected-colours seam, spec §3.3/§3.10 fix the component APIs, and §3.1 already assigns initialGrid ownership (2.8's useUndoableGrid replaces whatever is held here); the remaining work is wiring plus five named deferred-work fixes, each with its trap and test spelled out above

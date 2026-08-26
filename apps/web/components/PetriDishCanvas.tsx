@@ -43,7 +43,8 @@ type StaticDishProps = PetriDishCanvasSharedProps & { grid: RenderableGrid };
 
 /**
  * The Gallery tile lifecycle (Story 1.11), unchanged in substance by this story except for the
- * observed-resize target (Task 4, see the shared `resizeTargetOf` helper below).
+ * observed-resize target: both variants now observe `canvas.parentElement ?? canvas` (Story 2.4
+ * Task 4), each with its own rationale comment at its `observe()` call site.
  */
 function StaticDish({ grid, size, palette, showGridLines, colors, className }: StaticDishProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -160,10 +161,11 @@ function EditDish({ grid, size, palette, showGridLines, colors, className }: Edi
   // Hot, non-serialisable instance state — a ref, never React state (project-context "hot
   // simulation state lives in refs").
   const rendererRef = useRef<GridRenderer | null>(null);
-  // Bumped by the construction effect instead of it painting directly — see that effect's own
-  // comment for why a construction effect that neither draws nor signals leaves the dish blank
-  // after a palette/colours rebuild.
-  const [rendererGeneration, setRendererGeneration] = useState(0);
+  // The grid `rendererRef.current` was last full-painted with — a ref, and NOT React state, for
+  // the same reason the renderer itself is one. Its whole job is to keep the mount at exactly ONE
+  // full paint: the construction effect paints, then the grid effect below reads this and skips
+  // the grid it has already seen painted (review 2026-08-26 — see both effects).
+  const paintedGridRef = useRef<RenderableGrid | null>(null);
   // Routes a resize()-time repaint failure into React's own error channel, mirroring StaticDish.
   const [, setPaintError] = useState<null>(null);
 
@@ -176,42 +178,51 @@ function EditDish({ grid, size, palette, showGridLines, colors, className }: Edi
     if (canvas === null) return;
 
     try {
-      rendererRef.current = new GridRenderer(canvas, size, palette, { colors, showGridLines });
+      const renderer = new GridRenderer(canvas, size, palette, { colors, showGridLines });
+      rendererRef.current = renderer;
+      // Painted HERE, in the commit that built the renderer. A construction effect that only
+      // SIGNALS (the `rendererGeneration` counter this replaced, review 2026-08-26) cannot paint
+      // in this commit at all: React flushes every passive effect of a commit before applying a
+      // state update one of them queued, so the grid effect below ran once for the pre-signal
+      // value and again for the bump — two full repaints of the same grid through the same
+      // renderer on every editor mount, each re-priming the whole colour-state baseline (~6,000
+      // cells at 100x60). Guarding that first run instead only trades the wasted paint for a
+      // blank canvas until a second commit lands.
+      renderer.drawFull(grid);
+      paintedGridRef.current = grid;
     } catch (error) {
       // getContext('2d') returns null under jsdom always, and can return null in a real browser
       // past the canvas-memory budget. Leave the dish blank rather than throwing out of the
       // effect, which would unmount the whole editor.
       if (!(error instanceof GridRendererContextError)) throw error;
       rendererRef.current = null;
+      paintedGridRef.current = null;
     }
-    // Signals "a (possibly new) renderer is ready", rather than painting here directly — the grid
-    // effect below is the SINGLE place a full paint happens. The alternative (this effect also
-    // calling drawFull) leaves an unconditional redundant full paint on every mount, since the
-    // grid effect would then paint AGAIN for the same renderer the moment it first runs. What is
-    // not acceptable is this effect neither drawing nor signalling: `grid` is unchanged across a
-    // palette/colours rebuild, so the grid effect would not re-run and the dish would go blank
-    // with nothing logged.
-    setRendererGeneration((n) => n + 1);
 
     return () => {
       rendererRef.current = null;
+      paintedGridRef.current = null;
     };
-    // showGridLines is read above but deliberately absent from deps: it is not a GridRenderer
-    // constructor argument with no setter (the grid-lines effect below owns changing it after
-    // construction via setGridLines), and this effect must not reconstruct the renderer just
-    // because the FR-8.7 toggle flipped.
+    // `grid` and `showGridLines` are read above but deliberately absent from deps. Neither is a
+    // GridRenderer constructor argument without a setter, and listing either would reconstruct
+    // the renderer for a change `drawFull`/`setGridLines` already serve — which is the retention
+    // AC6 exists to protect. React rebuilds this closure on every render, so the `grid` it paints
+    // when the deps DO change is always the current one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size, palette, colors]);
 
-  // Grid effect — the single place a full paint happens (AC1). `rendererGeneration` is a
-  // dependency precisely so a construction-effect rebuild (palette/colours change) repaints even
-  // though `grid` itself is unchanged. Nothing in this story changes `grid` after mount; this is
-  // the seam Stories 2.5/2.6 replace with `markDirty` + `draw`.
+  // Grid effect — the paint path for a `grid` that changes AFTER mount. Nothing in this story
+  // changes `grid`; this is the seam Stories 2.5/2.6 replace with `markDirty` + `draw`. It skips
+  // the grid the construction effect above already painted, which is what keeps a mount (and a
+  // palette/colours rebuild, where `grid` is unchanged and this effect does not re-run at all) at
+  // exactly one full paint.
   useEffect(() => {
     const renderer = rendererRef.current;
     if (renderer === null) return; // construction failed (missing 2D context) — leave it blank.
+    if (paintedGridRef.current === grid) return;
     renderer.drawFull(grid);
-  }, [grid, rendererGeneration]);
+    paintedGridRef.current = grid;
+  }, [grid]);
 
   // Grid-lines effect. `setGridLines` is a no-op when the value is unchanged (gridRenderer.ts:587)
   // so this is safe to run on every mount, including the one right after construction.

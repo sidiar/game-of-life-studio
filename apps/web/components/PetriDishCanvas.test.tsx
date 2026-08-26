@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { GridRenderer } from '@/lib/canvas/gridRenderer';
-import { installRecordingContext2d } from '@/lib/recordingContext2d';
+import { installRecordingContext2d, RecordingContext2D } from '@/lib/recordingContext2d';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { displayColorAt } from '@/lib/palette/displayColor';
@@ -498,6 +498,42 @@ describe('PetriDishCanvas (edit variant)', () => {
 
     expect(drawFullSpy).toHaveBeenCalledTimes(1);
     expect(renderStaticSpy).not.toHaveBeenCalled();
+  });
+
+  // Review regression (2026-08-26): the mount must produce EXACTLY ONE full paint. Every other
+  // test in this block forces its genuine construction with a colors-identity rerender, because
+  // real jsdom's first `getContext('2d')` returns null — which also hides the MOUNT's paint count
+  // entirely. Installing a recording double per canvas BEFORE the first render (the shape
+  // BattlePage.test.tsx uses) is the only way to observe the real-browser mount, and it is what
+  // caught the construction effect signalling a repaint instead of performing one: the grid
+  // effect then ran for both the pre-signal value and the bump, repainting the same grid twice
+  // through the same renderer.
+  it('full-paints exactly once on a mount whose 2D context is available from the start', () => {
+    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      let context = contexts.get(this);
+      if (context === undefined) {
+        context = new RecordingContext2D();
+        contexts.set(this, context);
+      }
+      return context as unknown as CanvasRenderingContext2D;
+    });
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+
+    render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+      />,
+    );
+
+    expect(drawFullSpy).toHaveBeenCalledTimes(1);
   });
 
   it("does not throw when getContext('2d') returns null (real jsdom behaviour)", () => {

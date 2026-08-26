@@ -24,15 +24,19 @@ const OUT_DIR = join('apps', 'web', 'out');
 // (`BattleTile.tsx` already says so for the home figure).
 const ROUTES = [
   {
-    // 300 -> 320 (Story 1.13): RFC-003 §"Component Inventory" and AR-3 both quote ~300 KB, but
-    // RFC-003:48 frames that figure as a target "to be validated by benchmarking after MUI
-    // integration" — Story 1.13 (the delete-confirmation dialog) was that benchmark. Measured
-    // against the 1.12 baseline of 288.2 KB, the dialog landed the home route at 306.3 KB gzip.
-    // New budget: ceil((306.3 + 12) / 5) * 5 = 320.
+    // 300 -> 320 (Story 1.13, Sidiar 2026-08-13): RFC-003 §"Component Inventory" and AR-3 both
+    // quote ~300 KB, but RFC-003:48 frames that figure as a target "to be validated by
+    // benchmarking after MUI integration" — Story 1.13 (the delete-confirmation dialog) was that
+    // benchmark. Measured against the 1.12 baseline of 288.2 KB, the dialog landed the home route
+    // at 306.3 KB gzip. New budget: ceil((306.3 + 12) / 5) * 5 = 320. RFC-003:48/253/309 and
+    // epics.md:159/:371 still read "~300KB" — a docs-reconciliation item in deferred-work.md,
+    // never edited from here.
     //
-    // 320 -> 330 (Story 1.10 review, 2026-08-25): BattleTile's organism-dot tooltip moved to
-    // `@mui/material/Tooltip`. Measured against the 1.13 baseline of 306.8 KB, the swap landed
-    // the home route at 317.5 KB gzip. Same formula: ceil((317.5 + 12) / 5) * 5 = 330.
+    // 320 -> 330 (Story 1.10 review, Sidiar 2026-08-25): BattleTile's organism-dot tooltip moved
+    // to `@mui/material/Tooltip`. Measured against the 1.13 baseline of 306.8 KB, the swap landed
+    // the home route at 317.5 KB gzip — it passed the 320 budget but did not leave the ~12 KB
+    // headroom the gate is meant to carry, which is what triggered the move. Same formula:
+    // ceil((317.5 + 12) / 5) * 5 = 330.
     name: 'home (/)',
     html: 'index.html',
     budgetGzipKb: 330,
