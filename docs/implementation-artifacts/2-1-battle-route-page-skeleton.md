@@ -218,6 +218,110 @@ so that I can view and work on a specific battle.
         (the home route). The new battle route is **not** covered by the AR-3 gate — a green
         `bundle:check` says nothing about it.
 
+### Review Findings
+
+Code review 2026-08-26 (`bmad-code-review`, three layers: Blind Hunter, Edge Case Hunter,
+Acceptance Auditor). Decision K's route shape was explicitly out of scope for review — it is
+ratified, not a deviation. Its *propagation* was audited and was incomplete; see the patches.
+
+**Decision needed (Sidiar)**
+
+- [ ] [Review][Decision] **The static 404 page lost the app shell** — moving `AppShell` off the
+      root layout onto `(gallery)/layout.tsx` (forced decision 2) also moved it off Next's
+      built-in not-found boundary, which renders under the ROOT layout only. Verified against this
+      branch's own build: `out/404.html` and `out/_not-found.html` now contain **zero `<nav>` and
+      zero `<main>`** (`out/index.html` has one of each) — bare Next default chrome, no wordmark,
+      no link home, no landmark. On `main` the 404 inherited the shell. Any mistyped or stale URL
+      on the deployed static host lands there. Not a regression the story anticipated and not in
+      `deferred-work.md`. **The fix needs your intent, not a reviewer's:** (a) add
+      `apps/web/app/not-found.tsx` rendering `<AppShell>` plus 404 copy — but no mockup specifies
+      that copy and a 404 page is outside this story's stated scope; (b) accept it and defer to a
+      story that owns the 404 surface; or (c) something else. Left unresolved, so this story stays
+      at `review` and the PR opens as a draft.
+
+**Patched in the review commit**
+
+- [x] [Review][Patch] `/battle/new` announced "this battle could not be loaded, its stored data
+      may be damaged" whenever the ORGANISM library was corrupt — the `status === 'error'` branch
+      was checked before the `battleId === 'new'` branch, and `'new'` still awaits
+      `organisms.list()` in the shared `Promise.all`. The create route claimed a nonexistent
+      battle's data was damaged: the same wrong-fact-about-the-wrong-record failure the not-found
+      branch exists to prevent, reintroduced by branch order alone. Branches reordered and the
+      ordering documented as load-bearing; two regression tests added, one per side of the branch.
+      [apps/web/components/battle/BattlePage.tsx:113]
+- [x] [Review][Patch] The liveness test could not fail. Its comment claimed "the assertion is on
+      the setState spies not firing"; there are no spies, and React 18.3+ removed the
+      unmounted-setState warning entirely, so it passed identically with the `alive` closure flag
+      deleted — the hook's most-argued design choice had zero coverage. Comment corrected to say
+      what it actually is (a silence smoke test), and a real liveness test added: a superseded
+      request resolving late must not overwrite the current one.
+      [apps/web/lib/useAsyncResource.test.tsx:73]
+- [x] [Review][Patch] `useAsyncResource`'s deps-stability precondition was undocumented. The
+      deps-change reset runs during RENDER, so an unstable deps element makes every render set
+      state and re-render — React throws "Too many re-renders" and the page white-screens. The
+      JSDoc documented the `undefined`/`null` trap, the `reload` omission and the `mounted`-ref
+      rationale, but not the one hazard that hard-crashes. [apps/web/lib/useAsyncResource.ts:37]
+- [x] [Review][Patch] The stretched link had no test. Every assertion clicked the `<a>` by role —
+      i.e. the anchor's own text — and jsdom does no hit-testing, so deleting
+      `TitleLink`'s `::after { inset: 0 }` left the whole suite green while the tile reverted to
+      "only the title text opens the battle". Added an e2e that clicks the tile BODY.
+      [apps/web/components/gallery/BattleTile.tsx:179]
+- [x] [Review][Patch] `app/(battle)/layout.tsx` claims "exactly one `<main>`" and `BattleHeader`
+      claims the route's sole `<h1>`; nothing asserted either on the composed route, because
+      `BattlePage.test.tsx` renders the component without its layout. Added both count assertions
+      to the e2e. [apps/web/app/(battle)/layout.tsx:10]
+- [x] [Review][Patch] Task 9 asked for an axe scan of *the battle route*; the shipped scan covers
+      the component in a bare container, so the layout's landmark structure was never checked.
+      Added a route-level axe scan to the e2e. [apps/web/e2e/battleRoute.spec.ts]
+- [x] [Review][Patch] The delete-does-not-navigate e2e asserted `toHaveURL('/')` before the
+      dialog. That assertion is polled and succeeds on its first poll — before a regressed Link
+      navigation would commit — so the real guard was the incidental dialog assertion after it.
+      Reordered. [apps/web/e2e/battleRoute.spec.ts:122]
+- [x] [Review][Patch] Decision K propagation was incomplete: RFC-005 Decision 3's own decision
+      sentence still read "The app has three routes only — `/` (Gallery), `/battle/:id` (Battle),
+      `/settings`". That is normative prose in an owning RFC, not one of the `<Routes>` snippets
+      the doc disclaims at :197, and the story itself lists RFC-005 Decision 3 as an authority to
+      load. Also fixed: the Risk 7 mitigation's `/battle/:id` (:353), and Decision K's own
+      "Affects" list, which scoped RFC-005 to "routing reconciliation note" and is why the other
+      two were missed. [docs/planning-artifacts/rfcs/RFC-005-application-state-modes-undo.md:181]
+- [x] [Review][Patch] RFC-005's reconciliation note and RFC-001's repo tree named file paths
+      (`app/battle/page.tsx`) that do not exist — the route groups were omitted. Corrected to
+      `app/(gallery)/page.tsx` / `app/(battle)/battle/page.tsx`, with a note that parentheses
+      never appear in the URL.
+- [x] [Review][Patch] Decision K.5 ("every route statically prerenderable; entity ids ride as
+      query params") binds every later story, but `project-context.md` — which CLAUDE.md points
+      every agent at *before writing code* — did not carry it. Added, along with the route-group /
+      `AppShell`-stays-route-unaware rule. [docs/project-context.md:88]
+- [x] [Review][Patch] The Dev Agent Record's File List omitted all seven authority docs this
+      commit edits for the Decision K propagation, so the spec edits would go unreviewed unless
+      someone diffed the commit. File List completed, with the reason the story's
+      "don't edit planning-artifacts" rule does not apply to a ratified decision.
+- [x] [Review][Patch] `BattleTile.tsx`'s delete-button comment still claimed "first Tab lands on
+      the first organism dot", which this story's own new test contradicts. Task 7 said to fix the
+      neighbouring stale comment and this one was missed.
+      [apps/web/components/gallery/BattleTile.tsx:465]
+
+**Deferred (recorded in `deferred-work.md`)**
+
+- [x] [Review][Defer] The loading state is probably not announced despite `role="status"`.
+- [x] [Review][Defer] The dot-row z-index fix is load-bearing and untested.
+- [x] [Review][Defer] `TileActions` is a permanent invisible hit target, now over the nav overlay.
+- [x] [Review][Defer] Prototype-key ids (`?id=__proto__`, `?id=toString`) render the failure body
+      rather than not-found.
+- [x] [Review][Defer] Every battle shares one browser-tab title.
+- [x] [Review][Defer] Stretched link makes tile text unselectable.
+- [x] [Review][Defer] AC5's route count has no automated guard.
+
+**Dismissed as noise:** the `<Routes>` snippet at RFC-005:119 and rejected Alternative 4 at :372
+(both explicitly illustrative/historical); `BattlePage.test.tsx`'s StrictMode test being a smoke
+test (its comment already says so); a claimed fake-vs-real repository divergence for malformed ids
+(verified false — `LocalStorageBattleRepository.load()` returns `null` for any absent key, with no
+id validation, exactly as the fake does); `/battle?id=new` reaching the `'new'` sentinel (the
+`string | 'new'` prop shape is mandated by `component-tree-battle-page.md` §3.1, so it is
+inherited, not introduced); the orphaned "These resolve spec-vs-spec drift…" paragraph now
+trailing Decision K (pre-existing on `main` — the Cross-RFC Reconciliations list has never had a
+heading).
+
 ## Dev Notes
 
 ### Decisions this story is forced to make (flag each in the Dev Agent Record)
@@ -542,8 +646,11 @@ title is the only heading candidate and it genuinely is what the document is abo
 branch's rule is unchanged (the shell wordmark stays a `<div>` so "Battle Gallery" remains that
 document's sole `<h1>`). Nothing automated enforces single-`<h1>` — axe has no duplicate-h1 rule —
 so `BattlePage.test.tsx` now carries this route's count assertion, the equivalent of
-`AppShell.test.tsx`'s for the gallery branch. Each of the three terminal states renders its own
-single `<h1>` too, so the property holds on every branch, not just the happy path.
+`AppShell.test.tsx`'s for the gallery branch. Each of the three TERMINAL states (error,
+not-found, and the `new` placeholder) renders its own single `<h1>` too, so the property holds on
+those branches as well as the happy path. The loading branch renders none — `<BattleLoading>` is a
+bare `role="status"` body — which is not a violation (zero is not two) but is not "every branch"
+either. *(Corrected in the 2026-08-26 review, which found the original claim overstated.)*
 
 **AC2 / NFR-4.1 is tested as a count, not a presence check.** `BattlePage.test.tsx` asserts
 `queryAllByRole('button')` is empty on the loaded route and `BattleHeader.test.tsx` asserts the same
@@ -620,6 +727,23 @@ Modified:
 - `apps/web/components/gallery/BattleGallery.tsx` — `battleDisplayName` import site only
 - `docs/implementation-artifacts/deferred-work.md` — `:85` re-pointed, `:93` closed, three new items
 - `docs/implementation-artifacts/sprint-status.yaml` — `2-1-…: ready-for-dev → in-progress → review`
+
+Modified — **Architecture Decision K propagation**. Ratified by Sidiar on 2026-08-26 *before*
+implementation began, and carried in this same commit because the decision and the code that
+depends on it are one change. Listed explicitly because these are authority docs: they are not
+covered by the story's "❌ do not edit `docs/planning-artifacts/`" rule (that rule forbids a story
+patching a spec to suit itself, not recording a ratified decision), and omitting them from this
+list would leave the spec edits unreviewed unless someone diffed the commit:
+
+- `docs/planning-artifacts/architecture.md` — Decision K added (the decision itself, K.1–K.5)
+- `docs/planning-artifacts/epics.md` — AR-28 and the Story 2.1 ACs amended; "Decisions A–J" → "A–K"
+- `docs/planning-artifacts/component-tree-battle-page.md` — the route path in the §2 component tree
+- `docs/planning-artifacts/rfcs/RFC-001-multi-mode-architecture.md` — the repo-structure tree
+- `docs/planning-artifacts/rfcs/RFC-005-application-state-modes-undo.md` — the routing
+  reconciliation note
+- `docs/project-context.md` — "Decisions A–J" → "A–K" in both the Critical Don't-Miss Rules heading
+  and the spec-authority-order line
+- `CLAUDE.md` — "Decisions A–J" → "A–K"
 
 Unchanged, and verified so: `apps/web/components/layout/AppShell.tsx`, `AppShell.test.tsx`,
 `AppNav.tsx`, `AppNav.test.tsx`, `e2e/appShell.spec.ts`.

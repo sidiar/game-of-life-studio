@@ -463,10 +463,11 @@ export default function BattleTile({
         </DotRow>
       </TileFooter>
       {/* DOM-last, not DOM-first: `position: absolute` keeps it visually top-right (matching the
-          mockup) independent of source order, and putting it after the dots in the DOM keeps the
-          established tab order (Story 1.10: first Tab lands on the first organism dot) intact — a
-          destructive "delete this card" action reads naturally as the tile's LAST tab stop, not
-          its first, and moving it earlier silently pulled focus in front of every dot instead. */}
+          mockup) independent of source order, and putting it after the dots in the DOM keeps
+          Delete as the tile's LAST tab stop. The full order is title link → organism dots →
+          Delete; Story 2.1 moved the FIRST stop off the leading dot when the title became a link,
+          and BattleTile.test.tsx pins the whole sequence. A destructive "delete this card" action
+          reads naturally last, and moving it earlier silently pulls focus in front of the rest. */}
       <TileActions data-tile-actions="">
         {/* aria-label carries the battle name so every tile's delete button has a distinct
             accessible name (AC1); `title` gives the pointer tooltip the mockup's `title="Actions"`

@@ -303,7 +303,7 @@ This section records architecture-level decisions that span multiple RFCs and re
 
 - **Status:** Accepted — 2026-08-26
 - **Resolves:** Story 2.1 implementation conflict — **AR-28's literal `/battle/[id]` cannot be built under NFR-6's `output: 'export'`.** The two were never simultaneously satisfiable; nothing before Epic 2 tried to build a battle route, so the clash surfaced only when Story 2.1 went to write one.
-- **Affects:** `epics.md` AR-28 + Story 2.1 ACs; `component-tree-battle-page.md` (route path); RFC-001 (repo-structure tree); RFC-005 (routing reconciliation note). **PRD: no change** — no requirement names a URL.
+- **Affects:** `epics.md` AR-28 + Story 2.1 ACs; `component-tree-battle-page.md` (route path); RFC-001 (repo-structure tree); RFC-005 (Decision 3's route list, its routing reconciliation note, and the Risk 7 mitigation — the route shape appears in all three); `docs/project-context.md` and `CLAUDE.md` (the A–J → A–K enumerations, plus K.5 as a standing rule agents read before writing code). **PRD: no change** — no requirement names a URL.
 
 **The constraint.** Verified against the installed `next@16.2.12`, `node_modules/next/dist/build/index.js:1362-1368`:
 

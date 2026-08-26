@@ -67,10 +67,11 @@ describe('useAsyncResource', () => {
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ready:null'));
   });
 
-  // Liveness. React logs "state update on an unmounted component" as a console.error in some
-  // versions and silently no-ops in others, so the assertion is on the setState spies not firing
-  // rather than on a warning that may never be emitted.
-  it('sets no state when the load settles after unmount', async () => {
+  // Unmount safety, as a crash/noise smoke test only. React 18.3+ REMOVED the "state update on an
+  // unmounted component" warning and made the update a silent no-op, so this test cannot fail if
+  // the `alive` guard is deleted — it is not the liveness test, and the one below is. Kept because
+  // it still catches a load that throws synchronously or logs on the unmount path.
+  it('stays silent when the load settles after unmount', async () => {
     const { promise, resolve } = deferred<string>();
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -81,6 +82,42 @@ describe('useAsyncResource', () => {
 
     expect(errors).not.toHaveBeenCalled();
     errors.mockRestore();
+  });
+
+  // ⚠️ THE liveness test. The closure `alive` flag's real job is not unmount (React no-ops that
+  // silently) — it is this: a SUPERSEDED request resolving late must not overwrite the current
+  // one. Delete `alive`/`if (!alive) return` from useAsyncResource and this test fails, showing
+  // 'battle-a' after the user already switched to b. Nothing else in this file covers it.
+  it('ignores a superseded request that resolves after the deps already changed', async () => {
+    const slowA = deferred<string>();
+    const loads: Record<string, Promise<string>> = {
+      a: slowA.promise,
+      b: Promise.resolve('battle-b'),
+    };
+
+    function Switcher() {
+      const [id, setId] = useState('a');
+      return (
+        <>
+          <button type="button" onClick={() => setId('b')}>
+            switch
+          </button>
+          <Probe load={() => loads[id]} deps={[id]} />
+        </>
+      );
+    }
+
+    render(<Switcher />);
+    // Switch while a is still in flight — a's closure is torn down by the effect cleanup here.
+    await userEvent.click(screen.getByRole('button', { name: 'switch' }));
+    await waitFor(() => expect(screen.getByTestId('data')).toHaveTextContent('battle-b'));
+
+    // a now answers, far too late. It must be dropped on the floor.
+    slowA.resolve('battle-a');
+    await slowA.promise;
+
+    expect(screen.getByTestId('data')).toHaveTextContent('battle-b');
+    expect(screen.getByTestId('status')).toHaveTextContent('ready');
   });
 
   // A deps change is a NEW request: the hook must re-run the load and must not keep showing the

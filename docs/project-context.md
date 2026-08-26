@@ -86,6 +86,16 @@ build, not latest. Do not bump versions opportunistically.
 - `output: 'export'` in standalone. There is **no backend in the MVP**. Never add an API
   route, a server action, `next/headers`, `cookies()`, or any dynamic SSR. If a feature
   seems to need a server, it belongs to Connected mode (post-MVP).
+- ⚠️ **Every route must be statically prerenderable; entity ids ride as query params**
+  (Decision K.5). A dynamic segment does not merely misbehave under `output: 'export'` — it
+  **fails the build**: Next throws when a dynamic route has no `generateStaticParams()`, and one
+  returning `[]` fails the identical check. Ids are uuids minted in the browser, so there is
+  nothing to enumerate at build time, ever. Hence `/battle?id=<uuid>` + a static `/battle/new`,
+  never `app/battle/[id]/page.tsx`. This binds Epic 4's `/organisms` and Epic 5's `/settings` too.
+- **Route groups split the layout tree, and `AppShell` stays route-unaware.** `app/(gallery)/`
+  wears `AppShell`; `app/(battle)/` is the battle chassis (no wordmark, no nav) and owns its own
+  `<main>`. Parentheses never appear in the URL. Do not teach `AppShell` `usePathname()` — that
+  puts route knowledge in a presentational shell and grows a branch per route forever.
 - **Only `apps/web/lib/mode.ts` may read `process.env.NEXT_PUBLIC_MODE`.** `NEXT_PUBLIC_*`
   is string-inlined at build time and **only direct property access is replaced** —
   `process.env[name]` or destructuring yields `undefined` in the browser bundle.

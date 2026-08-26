@@ -34,6 +34,19 @@ function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
  * own load with its own live closure, so the closure flag is correct and the ref would import a
  * fix for a bug that cannot occur here.
  *
+ * ⚠️ PRECONDITION: every element of `deps` must be referentially stable across renders, exactly
+ * as for `useEffect`. The deps-change reset below runs during RENDER, so an unstable element (an
+ * inline object, or a `createRepositories()` call that is not wrapped in `useMemo`) makes every
+ * render see changed deps, set state, and re-render — React throws "Too many re-renders" and the
+ * page white-screens. This is a hard crash, not a slow loop, and it is why `<BattlePage>`'s
+ * `repositories` come `useMemo`-stable from the page boundary.
+ *
+ * ⚠️ `deps` must also keep a FIXED LENGTH. `sameDeps` short-circuits on `a.length === b.length`,
+ * but React's own `areHookInputsEqual` compares only up to the shorter array and returns true for
+ * a prefix — so growing `[a]` into `[a, b]` makes the render-phase reset fire (back to 'loading')
+ * while the effect does NOT re-run. No request is ever started and the caller spins forever, with
+ * only a dev-mode console error. Same rule as every other hook: never vary the deps array's shape.
+ *
  * `reload` is deliberately not implemented. RFC-005's sketch (`() => load().then(setData)`) sets
  * no status and honours no liveness flag; nothing in this story needs it, and it belongs to the
  * story that does — written correctly there rather than shipped broken here.
@@ -62,7 +75,13 @@ export function useAsyncResource<T>(load: () => Promise<T>, deps: unknown[]): As
   useEffect(() => {
     let alive = true;
 
-    load()
+    // `Promise.resolve().then(load)` rather than `load()`: a non-async `load` that throws
+    // synchronously would throw while the call expression is being evaluated — BEFORE .catch is
+    // attached — so it escapes the effect entirely and tears the tree down to the nearest error
+    // boundary, instead of landing in the 'error' status this hook exists to produce. The typed
+    // `() => Promise<T>` signature does not prevent it.
+    Promise.resolve()
+      .then(load)
       .then((value) => {
         if (!alive) return;
         setResource({ data: value, status: 'ready' });

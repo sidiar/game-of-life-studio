@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { CURRENT_FORMAT_VERSION } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 import { createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
@@ -68,6 +69,12 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
     // AC5 / AR-28: the battle route does NOT wear the app shell — no wordmark, no nav.
     await expect(page.getByRole('navigation')).toHaveCount(0);
+    // ...but it DOES still own exactly one <main> and exactly one <h1>. app/(battle)/layout.tsx
+    // claims both in a comment and nothing asserted either: BattlePage.test.tsx renders the
+    // component WITHOUT its layout, so only the composed route can prove it. Story 2.4 mounts the
+    // Lab chassis into this same layout, which is exactly when a second landmark would appear.
+    await expect(page.getByRole('main')).toHaveCount(1);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
 
     // ⚠️ THE assertion this spec exists for. A click-only test passes for route shapes that 404
     // on refresh, because the App Router never leaves the SPA — the reload is what asks the
@@ -119,7 +126,45 @@ test.describe('battle route (Story 2.1)', () => {
 
     await page.getByRole('button', { name: 'Delete Three-Way Skirmish' }).click();
 
-    await expect(page).toHaveURL('/');
+    // Dialog FIRST, then the URL. `toHaveURL('/')` is polled and succeeds on its first poll —
+    // immediately after the click, before a regressed client-side Link navigation would have
+    // committed — so on its own it is decorative. Awaiting the dialog gives the navigation a
+    // chance to happen, which is what makes the URL assertion mean something.
     await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page).toHaveURL('/');
+  });
+
+  // ⚠️ THE stretched link's own test. Every other assertion in this story clicks the <a> by role,
+  // i.e. the anchor's ~18px of title text — and jsdom does no hit-testing at all. Delete
+  // `TitleLink`'s `::after { position: absolute; inset: 0 }` and all of those still pass while the
+  // tile silently reverts to "only the title text opens the battle". This clicks the tile's BODY,
+  // away from the title, so it can only succeed through the overlay.
+  test('opens the battle when the tile body — not the title — is clicked', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto('/');
+    await expect(page.getByRole('article')).toHaveCount(2);
+
+    const tile = page.getByRole('article').filter({ hasText: 'Three-Way Skirmish' });
+    const box = await tile.boundingBox();
+    if (box === null) throw new Error('tile has no layout box');
+    // Low-centre: below the title, clear of the top-right delete button's 34px band.
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height - 24);
+
+    await expect(page).toHaveURL(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+  });
+
+  // Task 9 asked for an axe scan of THE ROUTE. BattlePage.test.tsx scans the component into a bare
+  // container, so the layout's <main>, the <header>-inside-<main> composition and the real
+  // document landmark structure were never checked by anything.
+  test('has no axe accessibility violations on the loaded battle route', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    // Wait past hydration: goto resolves against the prerendered HTML, which is the Suspense
+    // fallback ("Loading battle…") and contains none of what this story added.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
   });
 });

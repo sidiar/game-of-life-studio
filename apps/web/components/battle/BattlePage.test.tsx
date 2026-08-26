@@ -29,6 +29,20 @@ function withFailingBattleLoad(): AppRepositories {
   };
 }
 
+// A repository whose ORGANISM list rejects while the battle itself is perfectly readable. The
+// page loads both through one Promise.all, so this is the only way to reach the error status
+// without the battle being at fault.
+function withFailingOrganismList(): AppRepositories {
+  const repositories = seeded();
+  return {
+    ...repositories,
+    organisms: {
+      ...repositories.organisms,
+      list: () => Promise.reject(new Error('gol:organisms is corrupt')),
+    },
+  };
+}
+
 describe('BattlePage', () => {
   it('loads the battle through the injected repositories and shows its title', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
@@ -121,6 +135,33 @@ describe('BattlePage', () => {
     ).toBeInTheDocument();
     expect(loadSpy).not.toHaveBeenCalled();
     expect(screen.getByRole('link', { name: 'Back to Gallery' })).toHaveAttribute('href', '/');
+  });
+
+  // Branch ORDER regression (Story 2.1 review). /battle/new describes no stored battle, yet it
+  // still awaits organisms.list() in the shared Promise.all. With the error branch checked first,
+  // a corrupt organism record made the create route claim a nonexistent battle's data was damaged
+  // — the wrong fact about the wrong record, which is exactly what the not-found branch exists to
+  // avoid. Asserting the heading is not enough on its own: assert the failure copy is absent too,
+  // so re-swapping the branches fails here rather than silently passing on a substring.
+  it('renders the New Battle placeholder even when the organism library fails to load', async () => {
+    render(<BattlePage repositories={withFailingOrganismList()} battleId="new" />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'New Battle' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/stored data may be damaged/i)).not.toBeInTheDocument();
+  });
+
+  // The other half of the same ordering: a real battle id with a corrupt organism library DOES
+  // still reach the failure body. Deliberate for this story (AC4 wants one distinct failure
+  // state; nothing renders the roster yet) and tracked in deferred-work.md for Story 2.9 — pinned
+  // here so the deferral is visible rather than assumed.
+  it('still shows the failure body when a real battle id meets a corrupt organism library', async () => {
+    render(<BattlePage repositories={withFailingOrganismList()} battleId={SKIRMISH.id} />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Something Went Wrong' }),
+    ).toBeInTheDocument();
   });
 
   // AC2 / NFR-4.1 as a COUNT, not a presence check: `queryByRole('button', { name: /run/i })`

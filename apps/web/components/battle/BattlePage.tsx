@@ -110,21 +110,27 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
 
   if (resource.status === 'loading') return <BattleLoading />;
 
-  if (resource.status === 'error') {
-    return (
-      <Notice>
-        <NoticeTitle>Something Went Wrong</NoticeTitle>
-        <NoticeText>This battle could not be loaded. Its stored data may be damaged.</NoticeText>
-        <BackLink href="/">Back to Gallery</BackLink>
-      </Notice>
-    );
-  }
-
+  // ⚠️ ORDER IS LOAD-BEARING: 'new' is checked BEFORE 'error'. /battle/new describes no stored
+  // battle at all, but it still awaits organisms.list() in the same Promise.all — so with the
+  // error branch first, one corrupt ORGANISM record made the create route announce "this battle
+  // could not be loaded, its stored data may be damaged" about a battle that does not exist. That
+  // is the same wrong-fact-about-the-wrong-record failure the not-found branch below exists to
+  // prevent, reintroduced by branch order alone (Story 2.1 review).
   if (battleId === 'new') {
     return (
       <Notice>
         <NoticeTitle>New Battle</NoticeTitle>
         <NoticeText>There is nothing here yet — creating a battle is not wired up.</NoticeText>
+        <BackLink href="/">Back to Gallery</BackLink>
+      </Notice>
+    );
+  }
+
+  if (resource.status === 'error') {
+    return (
+      <Notice>
+        <NoticeTitle>Something Went Wrong</NoticeTitle>
+        <NoticeText>This battle could not be loaded. Its stored data may be damaged.</NoticeText>
         <BackLink href="/">Back to Gallery</BackLink>
       </Notice>
     );
