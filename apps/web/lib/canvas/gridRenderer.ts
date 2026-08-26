@@ -11,13 +11,13 @@
  * dirty-region *decision logic* stays a pure module (dirtyCells.ts, AR-42) — only the hand lives
  * here.
  *
- * ⚠️ **No back buffer** (Story 2.3, spec conflict #1). RFC-002's headline Decision line reads
- * "HTML5 Canvas API with double buffering and dirty rectangle optimization", and its §"1. Double
- * Buffering" sketches a full offscreen frame plus a `drawImage` swap. The two optimisations are in
- * tension: a full-canvas `drawImage` per frame repaints everything anyway, which is precisely the
- * cost dirty regions exist to avoid — and Canvas2D never presents a partially-painted frame from
+ * ⚠️ **No back buffer** (Story 2.3, spec conflict #1 — resolved by Sidiar 2026-08-26). A
+ * full-canvas `drawImage` swap per frame repaints everything anyway, which is precisely the cost
+ * dirty regions exist to avoid — and Canvas2D never presents a partially-painted frame from
  * within one task, so there is no tearing to prevent. Dirty regions win; the grid-line overlay
- * (RFC-002 Risk 4) remains the only offscreen canvas here.
+ * (RFC-002 Risk 4) remains the only offscreen canvas here. RFC-002's Decision line, its §"1."
+ * sketch, Risk 3, AR-22 and the architecture Tech Stack row were all updated to match, so this
+ * is the spec now, not a divergence from it.
  *
  * AC3 — the frozen contract's other half: this file calls no browser scheduling primitive of any
  * kind (frame callbacks, timers, or microtask queuing), never mutates the grid it is given, and

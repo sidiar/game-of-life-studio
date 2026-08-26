@@ -544,8 +544,12 @@ the cost is the code being reachable, not used, and Story 2.4 is where it starts
   full-canvas `drawImage` per frame repaints everything anyway, which is exactly the cost dirty
   regions exist to avoid — and Canvas2D never presents a partially-painted frame from within one
   task, so there is no tearing to prevent. The grid-line overlay (RFC-002 Risk 4) remains the only
-  offscreen canvas. **This is a live RFC-002-vs-implementation divergence and it is now deliberate,
-  not accidental; RFC-002's Decision line still says "double buffering".**
+  offscreen canvas. **Sidiar's call, 2026-08-26: option (a) — the specs were updated to match the
+  code, so this is no longer a divergence.** RFC-002's Decision line (with a dated revision note),
+  its class sketch, its §"1. Double Buffering" → "1. Direct Painting (no back buffer)", its Risk 3,
+  `epics.md` AR-22 and the `architecture.md` Tech Stack row now all describe a renderer with no
+  back buffer. RFC-004's *grid* double buffering (the typed arrays, §3.4) is a different mechanism
+  and was deliberately left untouched.
 - **#2 — `draw` (frozen contract) vs `render` (RFC-002 §5's `SimulationLoop` sketch): the frozen
   contract wins.** The method is `draw(grid)`. `component-tree-battle-page.md#5` is the artefact
   Epic 3 is handed and the one Story 1.8's code already matches. Noted here so **Story 3.8** does
