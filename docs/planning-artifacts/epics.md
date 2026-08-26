@@ -150,7 +150,7 @@ Requirement IDs below preserve the PRD's canonical numbering (FR-1.1 … FR-8.12
 
 ### Additional Requirements
 
-Extracted from the Architecture umbrella document (Decisions A–J, M1–M10, Cross-RFC Reconciliations) and RFC-001…008.
+Extracted from the Architecture umbrella document (Decisions A–K, M1–M10, Cross-RFC Reconciliations) and RFC-001…008.
 
 **Project scaffold & infrastructure (RFC-001, RFC-008) — no external starter template; scaffold defined by RFC-001:**
 
@@ -193,7 +193,7 @@ Extracted from the Architecture umbrella document (Decisions A–J, M1–M10, Cr
 **Runtime state (RFC-005, Decision D, M2, M3, M5):**
 
 - AR-27: No global store — repositories injected by props at page boundary; three state categories (persisted / ephemeral local / hot refs)
-- AR-28: `<BattlePage>` owns mode (`lab | run` as local state, not routes), authoritative `initialGrid`, undo, battleName + dirty flag; three routes only (`/`, `/battle/[id]`, `/settings`)
+- AR-28: `<BattlePage>` owns mode (`lab | run` as local state, not routes), authoritative `initialGrid`, undo, battleName + dirty flag; three page surfaces only — Gallery (`/`), Battle (`/battle?id=<uuid>`, plus `/battle/new`), Settings (`/settings`). Every route is statically prerenderable; entity ids ride as query params, never dynamic segments (Decision K)
 - AR-29: `useSimulation` hook — live grid + RAF in refs, zero React re-renders per cycle; publishes only throttled `cycle` + `population` (≤10 Hz, M2)
 - AR-30: `useUndoableGrid` — 30-snapshot ring buffer (occupant + dimensions), gesture-coalesced strokes, ≤180 KB budget; component lifetime = undo lifetime
 - AR-31: Dual grid model — authoritative `initialGrid` (edited, saved, exported) vs disposable live grid (cloned on Run start, discarded on Stop/Run→Lab)
@@ -532,11 +532,11 @@ So that I can view and work on a specific battle.
 
 **Acceptance Criteria:**
 
-**Given** a Gallery tile, **When** clicked, **Then** the app navigates to `/battle/[id]` and `<BattlePage>` loads that battle and the organism library via injected repositories (FR-7.5, AR-27; spec §3.1)
+**Given** a Gallery tile, **When** clicked, **Then** the app navigates to `/battle?id=<uuid>` and `<BattlePage>` loads that battle and the organism library via injected repositories (FR-7.5, AR-27, Decision K; spec §3.1)
 **Given** `<BattlePage>`, **When** mounted, **Then** it owns `mode` as local state with only `'lab'` populated — no Play toggle, no fullscreen affordance, no dead buttons (AR-28, NFR-4.1)
 **And** the slim header displays the battle title read-only, falling back to "Untitled Battle" (spec §3.2)
 **And** load in progress and load failure render distinct states (`useAsyncResource`), with failure offering navigation back to the Gallery
-**And** routes remain exactly `/` and `/battle/[id]` (`/settings` arrives in Epic 5) (AR-28)
+**And** routes remain exactly `/`, `/battle` and `/battle/new` (`/settings` arrives in Epic 5) (AR-28, Decision K)
 
 ### Story 2.2: Create New Battle & Gallery Wiring
 

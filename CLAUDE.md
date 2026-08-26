@@ -18,7 +18,7 @@ otherwise violates while still compiling and passing tests. The load-bearing one
 ## Where the specs live
 
 - `docs/planning-artifacts/architecture.md` — the umbrella. Its **Cross-Cutting Decisions
-  (A–J) and Minor Resolutions (M1–M10) are authoritative** for anything spanning areas.
+  (A–K) and Minor Resolutions (M1–M10) are authoritative** for anything spanning areas.
 - `docs/planning-artifacts/rfcs/RFC-00*.md` — each owns one area in depth. Within one area
   the RFC wins; for a cross-cutting concern the Architecture Decision wins.
 - Where `docs/project-context.md` and an RFC disagree, the context file flags a deliberate

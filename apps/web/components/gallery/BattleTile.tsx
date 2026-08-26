@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { styled } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import type { Organism } from '@gol/domain';
 import type { BattleRepository } from '@gol/persistence';
+import { battleDisplayName } from '@/lib/battleDisplayName';
 import { formatBattleDate } from '@/lib/formatBattleDate';
 import { toThumbnailSource } from '@/lib/canvas/battleThumbnail';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
@@ -19,18 +21,6 @@ import PetriDishCanvas from '../PetriDishCanvas';
 // indicator, whose own tooltip lists their names — nothing is ever unreachable (silent-failure
 // trap: "the dot row must be capped; the name list must not be").
 const MAX_VISIBLE_DOTS = 6;
-
-// BattleSummarySchema.name is `z.string().max(100)` with no lower bound, so "" parses and lists.
-// An empty <h2> is both unidentifiable and an axe `empty-heading` violation, which would fail the
-// gallery e2e's zero-violations assertion for the whole page over one bad record.
-const UNTITLED_BATTLE = 'Untitled battle';
-
-// Exported (Story 1.13) so <BattleGallery> can compute the identical fallback for the delete
-// dialog's body without a second, independently-maintained copy of this ternary — the tile's own
-// <h2> and the dialog naming the same battle must never be able to drift from each other.
-export function battleDisplayName(name: string): string {
-  return name.trim() === '' ? UNTITLED_BATTLE : name;
-}
 
 export interface BattleTileProps {
   battleId: string;
@@ -51,8 +41,11 @@ export interface BattleTileProps {
   onRequestDelete(): void;
 }
 
-// Mockup: .battle-tile (clinical-lab-theme/battle-gallery.html:242-255). No `cursor: pointer` —
-// the mockup has it because its tile navigates; ours does not until Story 2.2. `:focus-within`
+// Mockup: .battle-tile (clinical-lab-theme/battle-gallery.html:242-255). `cursor: pointer` is
+// restored now that the tile navigates (this story) — the comment that used to sit here said it
+// waited on Story 2.2, which was simply wrong: epics.md puts tile-click in Story 2.1 and only the
+// New Battle CTA in Story 2.2. `position: relative` is load-bearing beyond the delete button now:
+// it is the containing block for TitleLink's stretched `::after` overlay below. `:focus-within`
 // alongside `:hover` gives the keyboard path the same tile-level state change the mouse path does
 // (the parity gap the Story 1.9 review found on AppNav). Transitions are enumerated rather than
 // `all` so a property added to this rule later cannot start animating by accident.
@@ -60,6 +53,7 @@ const Tile = styled('article')({
   background: 'var(--gol-bg-secondary)',
   border: '1px solid var(--gol-border)',
   padding: '20px',
+  cursor: 'pointer',
   transition: 'border-color 0.3s, transform 0.3s, box-shadow 0.3s',
   position: 'relative',
   '&:hover, &:focus-within': {
@@ -91,6 +85,11 @@ const TileActions = styled('div')({
   position: 'absolute',
   top: '18px',
   right: '18px',
+  // Above TitleLink's stretched overlay (this story). Without it the overlay — which covers the
+  // whole tile — swallows every click aimed at Delete, and the destructive control silently
+  // becomes a second "open this battle" button. `opacity: 0` does not remove an element from
+  // hit-testing, so this is a real collision, not a theoretical one.
+  zIndex: 1,
   opacity: 0,
   transition: 'opacity 0.2s',
   // A pointer that cannot hover never fires the reveal above, and opacity: 0 does NOT remove the
@@ -177,6 +176,36 @@ const TileTitle = styled('h2')({
   overflowWrap: 'anywhere',
 });
 
+// The stretched-link pattern (this story, AC1). The anchor wraps the TITLE TEXT only and grows an
+// `::after` overlay across the whole Tile, rather than the anchor wrapping the tile's content:
+// nesting <TileActions>'s delete <button> inside an anchor is invalid HTML that browsers reparse
+// silently, and the visible effect is that Delete starts navigating. The Story 1.13
+// `@media (hover: none)` fix makes that button permanently visible on touch, so it would be a
+// permanent trap there.
+//
+// The overlay's containing block is Tile (`position: relative`), so this element must stay
+// unpositioned. The outline on :focus-visible wraps the anchor's own inline box — the text — not
+// the pseudo-element, which is why the keyboard ring lands on the title rather than the tile.
+const TitleLink = styled(Link)({
+  color: 'inherit',
+  textDecoration: 'none',
+  '&::after': {
+    content: '""',
+    position: 'absolute',
+    inset: 0,
+  },
+  '&:hover': {
+    color: 'var(--gol-accent)',
+  },
+  // Keyboard parity with the hover rule above — the same gap the Story 1.9 review found on
+  // AppNav. textDecoration: 'none' leaves the UA outline as the only focus signal otherwise, in a
+  // colour never chosen against this background.
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+});
+
 // Same box in EVERY thumbnail state ('idle' | 'loading' | 'ready' | 'unavailable') — a tile that
 // changes height when its thumbnail arrives reflows the whole Gallery grid mid-scroll. The canvas
 // (rendered only in 'ready') fills it via DishCanvas below; every other state leaves it empty.
@@ -209,9 +238,16 @@ const TileDate = styled('span')({
   letterSpacing: '0.5px',
 });
 
+// `position: relative` + `zIndex` for the same reason TileActions carries them (this story): the
+// dots are focusable tooltip triggers, and TitleLink's full-tile overlay sits above them
+// otherwise — hovering a dot would hit the overlay instead and the tooltip would never open. Only
+// the keyboard path would still work, which is exactly the kind of half-broken state that reads
+// as fine in a unit test.
 const DotRow = styled('span')({
   display: 'flex',
   gap: '6px',
+  position: 'relative',
+  zIndex: 1,
 });
 
 // Mockup: .participant-dot (battle-gallery.html:338-345). `role="img"` rather than a <button>:
@@ -384,7 +420,13 @@ export default function BattleTile({
   return (
     <Tile>
       <TileHeader>
-        <TileTitle>{displayName}</TileTitle>
+        <TileTitle>
+          {/* Architecture Decision K: the battle route takes the id as a QUERY PARAMETER, never as
+              a dynamic path segment — `/battle/[id]` cannot be built under `output: 'export'` at
+              all. The id is a uuid, so it needs no encoding, but encodeURIComponent is not free
+              insurance to skip: BattleSummary.id is only as trustworthy as the stored record. */}
+          <TitleLink href={`/battle?id=${encodeURIComponent(battleId)}`}>{displayName}</TitleLink>
+        </TileTitle>
       </TileHeader>
       <PetriDish ref={containerRef} aria-hidden="true">
         {thumbnail.kind === 'ready' && gridColors !== null && (
@@ -421,10 +463,11 @@ export default function BattleTile({
         </DotRow>
       </TileFooter>
       {/* DOM-last, not DOM-first: `position: absolute` keeps it visually top-right (matching the
-          mockup) independent of source order, and putting it after the dots in the DOM keeps the
-          established tab order (Story 1.10: first Tab lands on the first organism dot) intact — a
-          destructive "delete this card" action reads naturally as the tile's LAST tab stop, not
-          its first, and moving it earlier silently pulled focus in front of every dot instead. */}
+          mockup) independent of source order, and putting it after the dots in the DOM keeps
+          Delete as the tile's LAST tab stop. The full order is title link → organism dots →
+          Delete; Story 2.1 moved the FIRST stop off the leading dot when the title became a link,
+          and BattleTile.test.tsx pins the whole sequence. A destructive "delete this card" action
+          reads naturally last, and moving it earlier silently pulls focus in front of the rest. */}
       <TileActions data-tile-actions="">
         {/* aria-label carries the battle name so every tile's delete button has a distinct
             accessible name (AC1); `title` gives the pointer tooltip the mockup's `title="Actions"`

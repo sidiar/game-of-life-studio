@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import AppProviders from '@/components/layout/AppProviders';
-import AppShell from '@/components/layout/AppShell';
 import './themes.css';
 
 export const metadata: Metadata = {
@@ -16,13 +15,17 @@ export const metadata: Metadata = {
 //
 // Stays a SERVER component — ThemeProvider/styled()/sx all require 'use client' (Emotion has no
 // RSC support), which is why that boundary starts one level down in AppProviders instead of here.
+//
+// AppShell is deliberately NOT mounted here (this story). A root-layout shell renders on EVERY
+// route, and the battle route's chrome is the battle title alone — the two shells belong to route
+// groups now: app/(gallery)/layout.tsx wears AppShell, app/(battle)/layout.tsx is the battle
+// chassis. This layout keeps only what genuinely is global: the document, the token layer, and the
+// provider stack. Note that the <main> landmark moved with the shells, so this file owns none.
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-theme="clinical-lab">
       <body>
-        <AppProviders>
-          <AppShell>{children}</AppShell>
-        </AppProviders>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

@@ -178,7 +178,7 @@ The component tree below (from the design intent) is annotated with **where each
 
 ### Decision 3: Modes are local state, not routes
 
-**Decision:** `mode: 'lab' | 'run'` is **local state in `<BattlePage>`**. The app has three routes only — `/` (Gallery), `/battle/:id` (Battle), `/settings`. Switching Lab↔Run swaps the rendered child; it is never a route change.
+**Decision:** `mode: 'lab' | 'run'` is **local state in `<BattlePage>`**. The app has three page surfaces only — `/` (Gallery), the Battle route (`/battle?id=<uuid>`, plus `/battle/new`), `/settings` (**Decision K**). Switching Lab↔Run swaps the rendered child; it is never a route change.
 
 This honors *"feels like mode switching, not navigation"* and keeps the persistent top bar mounted across modes. The mode-transition animations (Play Mode Proposal: 800ms / 600ms sequences) are presentation layered on the `setMode` call; they do not alter the state model.
 
@@ -194,7 +194,7 @@ function BattlePage({ repositories }: { repositories: AppRepositories }) {
 }
 ```
 
-> **Routing reconciliation (App Router).** The canonical router is **Next.js App Router** with file-based routes — `app/page.tsx` (Gallery), `app/battle/[id]/page.tsx` (Battle), `app/settings/page.tsx` (Settings). The `<Routes>/<Route>` snippets above are *structural illustrations*, not the literal API (RFC-001/003 fix the App Router choice). Because modes are local state (Decision 3), the only real navigation away from an open battle is **Back-to-Gallery** (an in-app button → a confirm dialog) and **tab close/refresh** (`beforeunload`, Decision 7); no router-level navigation blocker is needed for the FR-7.9 guard.
+> **Routing reconciliation (App Router).** The canonical router is **Next.js App Router** with file-based routes — `app/(gallery)/page.tsx` (Gallery), `app/(battle)/battle/page.tsx` (Battle, opened as `/battle?id=<uuid>`; `app/(battle)/battle/new/page.tsx` creates one — **Decision K**: `[id]` is unbuildable under `output: 'export'`), `app/settings/page.tsx` (Settings). The parenthesised segments are **route groups**: they split the layout tree (the Gallery wears `AppShell`, the battle route does not) and never appear in the URL. The `<Routes>/<Route>` snippets above are *structural illustrations*, not the literal API (RFC-001/003 fix the App Router choice). Because modes are local state (Decision 3), the only real navigation away from an open battle is **Back-to-Gallery** (an in-app button → a confirm dialog) and **tab close/refresh** (`beforeunload`, Decision 7); no router-level navigation blocker is needed for the FR-7.9 guard.
 
 > **In-battle organism edit (FR-3.12, M5).** Editing an organism from the Battle Editor's Organism Dropdown (per-row pencil) opens the Organism Editor as a **modal overlay over the mounted `<BattlePage>`** — like Back-to-Gallery, it is *not* a route change, so the in-progress `initialGrid` (Decision 4) stays in local state untouched and the FR-7.9 guard does **not** fire. The editor keeps its own independent dirty/discard scope (Decision 7). On **Save & Close**, the organism repository write makes the new config flow to the grid renderer (shared Library, FR-7.15) so the change is visible immediately on return. The FR-1.3 warning still applies (the open battle counts) and offers **Edit Anyway** or **Cancel** only — **there is no Clone & Edit or grid rebind from the Battle Editor** (removed 2026-07-08, reversing the 2026-06-26 addition). A battle-specific variant is made by cloning in the Library (`organisms.clone()`, FR-1.6) and re-selecting the clone; the Battle Editor edit path therefore needs **no** `useUndoableGrid` rebind op and **no** clone-lifecycle handling. This is why a real `/organism/[id]` route was rejected: a route would unmount `<BattlePage>` and force battle-draft persistence; the modal gives state preservation for free.
 
@@ -350,7 +350,7 @@ Most settings are read on the Settings page itself. The few **display preference
 - *Mitigation:* Edit grids are capped at 100×60 (H-9), so snapshots are **≤180 KB** for 30 levels (30 × 6 KB) — within budget; 30 levels kept at all sizes. Snapshots capture dimensions (resize-aware, 50×30 ↔ 100×60). The ring-buffer hook hides the representation, so switching to delta encoding or a smaller cap later is localized.
 
 **Risk 7: State lost on accidental route change or close.**
-- *Mitigation:* the navigation guard wraps exits from `/battle/:id`; `beforeunload` covers hard close/refresh while dirty. Undo intentionally does not survive (FR-3.8), but unsaved *battle* data is protected.
+- *Mitigation:* the navigation guard wraps exits from the battle route (`/battle?id=<uuid>`, Decision K); `beforeunload` covers hard close/refresh while dirty. Undo intentionally does not survive (FR-3.8), but unsaved *battle* data is protected.
 
 ## Alternatives Considered
 

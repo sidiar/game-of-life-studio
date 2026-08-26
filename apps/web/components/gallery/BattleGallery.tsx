@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type BattleSummary, type Organism, type Settings } from '@gol/domain';
 import type { BattleRepository, OrganismRepository, SettingsRepository } from '@gol/persistence';
+import { battleDisplayName } from '@/lib/battleDisplayName';
 import type { WorkspaceSeedStatus } from '@/lib/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallerySort';
 import { resolveTileOrganisms } from '@/lib/tileOrganisms';
 import { readGridColors } from '@/lib/canvas/themeColors';
-import BattleTile, { battleDisplayName } from './BattleTile';
+import BattleTile from './BattleTile';
 import DeleteBattleDialog, { useDeleteBattleDialog } from './DeleteBattleDialog';
 import GalleryEmptyState from './GalleryEmptyState';
 

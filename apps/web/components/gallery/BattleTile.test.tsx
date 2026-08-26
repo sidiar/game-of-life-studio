@@ -52,7 +52,7 @@ describe('BattleTile', () => {
 
   it('falls back to a placeholder title rather than rendering an empty heading', () => {
     render(<BattleTile {...BASE_PROPS} name="   " />);
-    expect(screen.getByRole('heading', { level: 2, name: 'Untitled battle' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Untitled Battle' })).toBeInTheDocument();
   });
 
   // Forced decision 2's grid-size substitute for the mockup's unimplementable "Gen 47" is gone
@@ -92,12 +92,55 @@ describe('BattleTile', () => {
     }
   });
 
-  it('is keyboard-focusable through the dots (AC5)', async () => {
+  // Story 2.1 moved the FIRST tab stop from the leading organism dot to the title link, which is
+  // the tile's own navigation affordance. That also closes the Story 1.10 gap where a battle with
+  // zero placed organisms had no focusable element at all: the tile is now a focus stop
+  // regardless of its roster (see the empty-roster case below).
+  it('puts the title link first in the tab order, then the dots (AC5)', async () => {
     const user = userEvent.setup();
     render(<BattleTile {...BASE_PROPS} />);
 
     await user.tab();
+    expect(screen.getByRole('link', { name: 'Three-Way Skirmish' })).toHaveFocus();
+
+    await user.tab();
     expect(screen.getByRole('img', { name: 'Aggressive Colonizer' })).toHaveFocus();
+  });
+
+  it('is keyboard-reachable even with no placed organisms', async () => {
+    const user = userEvent.setup();
+    render(<BattleTile {...BASE_PROPS} organisms={[]} />);
+
+    await user.tab();
+    expect(screen.getByRole('link', { name: 'Three-Way Skirmish' })).toHaveFocus();
+  });
+
+  // AC1: the tile opens the battle at Architecture Decision K's query-param route.
+  it('links the title to the battle route, carrying the id as a query parameter', () => {
+    render(<BattleTile {...BASE_PROPS} />);
+
+    expect(screen.getByRole('link', { name: 'Three-Way Skirmish' })).toHaveAttribute(
+      'href',
+      `/battle?id=${BASE_PROPS.battleId}`,
+    );
+  });
+
+  // ⚠️ The delete <button> must NOT be inside the anchor. Nested interactive content is invalid
+  // HTML that browsers reparse silently, and the visible symptom is that Delete navigates instead
+  // of deleting — which the click test below would still pass, because the handler does fire.
+  // Asserted structurally.
+  it('keeps the delete button outside the title link, and independently focusable', async () => {
+    const user = userEvent.setup();
+    render(<BattleTile {...BASE_PROPS} />);
+
+    const link = screen.getByRole('link', { name: 'Three-Way Skirmish' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete Three-Way Skirmish' });
+    expect(link).not.toContainElement(deleteButton);
+
+    // Title link, then the three organism dots, then Delete — a destructive action reads
+    // naturally as the tile's LAST tab stop (Story 1.13's DOM-last placement, unchanged here).
+    for (let i = 0; i < 5; i += 1) await user.tab();
+    expect(deleteButton).toHaveFocus();
   });
 
   // MUI's Tooltip only mounts its content (role="tooltip", via a Popper portal) while open — no
@@ -236,9 +279,9 @@ describe('BattleTile — delete affordance (Story 1.13)', () => {
     expect(deleteSpy).not.toHaveBeenCalled();
   });
 
-  it('falls back to the same "Untitled battle" name the heading uses, so the two cannot drift', () => {
+  it('falls back to the same "Untitled Battle" name the heading uses, so the two cannot drift', () => {
     render(<BattleTile {...BASE_PROPS} name="   " />);
-    expect(screen.getByRole('button', { name: 'Delete Untitled battle' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete Untitled Battle' })).toBeInTheDocument();
   });
 
   // Both tiles rendered into ONE document, not one-then-unmount-then-the-other: the property this

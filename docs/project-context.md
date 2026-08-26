@@ -86,6 +86,16 @@ build, not latest. Do not bump versions opportunistically.
 - `output: 'export'` in standalone. There is **no backend in the MVP**. Never add an API
   route, a server action, `next/headers`, `cookies()`, or any dynamic SSR. If a feature
   seems to need a server, it belongs to Connected mode (post-MVP).
+- ⚠️ **Every route must be statically prerenderable; entity ids ride as query params**
+  (Decision K.5). A dynamic segment does not merely misbehave under `output: 'export'` — it
+  **fails the build**: Next throws when a dynamic route has no `generateStaticParams()`, and one
+  returning `[]` fails the identical check. Ids are uuids minted in the browser, so there is
+  nothing to enumerate at build time, ever. Hence `/battle?id=<uuid>` + a static `/battle/new`,
+  never `app/battle/[id]/page.tsx`. This binds Epic 4's `/organisms` and Epic 5's `/settings` too.
+- **Route groups split the layout tree, and `AppShell` stays route-unaware.** `app/(gallery)/`
+  wears `AppShell`; `app/(battle)/` is the battle chassis (no wordmark, no nav) and owns its own
+  `<main>`. Parentheses never appear in the URL. Do not teach `AppShell` `usePathname()` — that
+  puts route knowledge in a presentational shell and grows a branch per route forever.
 - **Only `apps/web/lib/mode.ts` may read `process.env.NEXT_PUBLIC_MODE`.** `NEXT_PUBLIC_*`
   is string-inlined at build time and **only direct property access is replaced** —
   `process.env[name]` or destructuring yields `undefined` in the browser bundle.
@@ -303,7 +313,7 @@ projects under `NewJob/`), so it never shows up in this repo's `git status`.
 
 ### Critical Don't-Miss Rules
 
-The architecture's Decisions A–J and M1–M10 mostly encode **reversals of the intuitive default**.
+The architecture's Decisions A–K and M1–M10 mostly encode **reversals of the intuitive default**.
 Following instinct here produces code that compiles, passes tests, and violates the spec.
 
 **Anti-patterns — these compile and pass tests, and are still wrong**
@@ -386,7 +396,7 @@ Following instinct here produces code that compiles, passes tests, and violates 
   deliberately override stale RFC snippets (`repositoryFactory.ts` naming, the factory's
   `APP_MODE` read, RFC-003 Decision 2's per-`[data-theme]` token structure and its illustrative
   theme snippet). New conflicts are signal, not noise.
-- Spec authority order: **Architecture Cross-Cutting Decisions** (A–J, M1–M10) → owning **RFC**
+- Spec authority order: **Architecture Cross-Cutting Decisions** (A–K, M1–M10) → owning **RFC**
   → companion specs. Within one area the RFC wins; for anything cross-cutting the Decision wins.
 
 **For humans:**
