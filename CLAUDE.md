@@ -40,5 +40,7 @@ otherwise violates while still compiling and passing tests. The load-bearing one
 
 - BMad skills (`/bmad-dev-story`, `/bmad-create-story`, the agent personas) auto-load
   `docs/project-context.md` on activation — you don't need to restate project facts to them.
-- **Never commit or stage without Sidiar's explicit go-ahead:** present the file list and a
-  suggested message, then wait. Approval for one commit does not carry to the next.
+- **Nothing reaches `main` without Sidiar's explicit go-ahead.** In direct work, present the
+  file list and a suggested message, then wait. Story subagents running under
+  `implement-next-story` may commit and push to their own `story/*` branch without asking —
+  merging that branch is always Sidiar's call. Approval for one merge does not carry to the next.
