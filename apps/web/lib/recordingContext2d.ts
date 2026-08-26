@@ -67,25 +67,62 @@ export class RecordingContext2D {
   }
 }
 
+export interface RecordingContext2dInstall {
+  /** The double serving the canvas passed to `installRecordingContexts`. */
+  readonly context: RecordingContext2D;
+  /**
+   * Doubles handed to every OTHER canvas, in the order those canvases first asked for a context —
+   * i.e. GridRenderer's offscreen grid-line overlays. Stays empty unless `offscreen: true`.
+   */
+  readonly offscreenContexts: readonly RecordingContext2D[];
+}
+
 /**
  * Installs a RecordingContext2D as `canvas`'s '2d' context by spying on
- * `HTMLCanvasElement.prototype.getContext`. Any OTHER canvas (GridRenderer's own offscreen
- * grid-line overlay) gets real, unmocked jsdom behaviour — `null` — which is exactly the
- * "cache unavailable, fall back to direct drawing" path Task 5 must degrade through.
+ * `HTMLCanvasElement.prototype.getContext`.
+ *
+ * `offscreen` (default false) decides what every OTHER canvas gets:
+ * - **false** — real, unmocked jsdom behaviour (`null`), which is the "cache unavailable, fall
+ *   back to direct line drawing" path (RFC-002 Risk 4) every Story 1.8 test exercises.
+ * - **true** — its own recording double, so GridRenderer's offscreen grid-line overlay actually
+ *   builds and `paintGridLines` takes its `drawImage` branch. Story 2.3 closes the 1.8 review's
+ *   "the overlay cache's drawImage path has zero test coverage" item with this: the spy was
+ *   scoped to one canvas *instance*, so the cached branch was unreachable from a test by
+ *   construction, not by omission.
  */
-export function installRecordingContext2d(canvas: HTMLCanvasElement): RecordingContext2D {
+export function installRecordingContexts(
+  canvas: HTMLCanvasElement,
+  options: { offscreen?: boolean } = {},
+): RecordingContext2dInstall {
   const context = new RecordingContext2D();
+  const offscreenContexts: RecordingContext2D[] = [];
+  // Keyed by canvas so a rebuilt-vs-reused overlay is distinguishable: a reused overlay never asks
+  // for a context again, and a rebuilt one is a different element and gets a different double.
+  const offscreenByCanvas = new WeakMap<HTMLCanvasElement, RecordingContext2D>();
 
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
     this: HTMLCanvasElement,
   ) {
-    if (this !== canvas) return null;
     // The one cast in this file: getContext's declared return type is the full lib.dom
     // CanvasRenderingContext2D, but RecordingContext2D implements only the narrow Canvas2D
     // subset gridRenderer.ts actually reads through — that subset doesn't overlap enough with
     // the full interface for a direct cast, so `unknown` is the required stepping stone.
-    return context as unknown as CanvasRenderingContext2D;
+    if (this === canvas) return context as unknown as CanvasRenderingContext2D;
+    if (options.offscreen !== true) return null;
+
+    let existing = offscreenByCanvas.get(this);
+    if (existing === undefined) {
+      existing = new RecordingContext2D();
+      offscreenByCanvas.set(this, existing);
+      offscreenContexts.push(existing);
+    }
+    return existing as unknown as CanvasRenderingContext2D;
   });
 
-  return context;
+  return { context, offscreenContexts };
+}
+
+/** The one-canvas install every Story 1.8 test uses — offscreen canvases still get jsdom's null. */
+export function installRecordingContext2d(canvas: HTMLCanvasElement): RecordingContext2D {
+  return installRecordingContexts(canvas).context;
 }

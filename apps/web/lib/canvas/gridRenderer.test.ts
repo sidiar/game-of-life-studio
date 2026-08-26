@@ -4,12 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID, emptyGrid, placePattern } from '@gol/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { displayColor, displayColorAt } from '../palette/displayColor';
+import { DirtyCellRangeError } from './dirtyCells';
 import {
   GridRenderer,
   GridRendererContextError,
   GridRendererDimensionMismatchError,
 } from './gridRenderer';
-import { installRecordingContext2d } from '../recordingContext2d';
+import { installRecordingContext2d, installRecordingContexts } from '../recordingContext2d';
 import { buildRefToFillGroup, type RefToFillGroup } from './refToFillGroup';
 import { toRenderableGrid, type RenderableGrid } from './renderableGrid';
 
@@ -23,6 +24,7 @@ const CANVAS_DIR = dirname(fileURLToPath(import.meta.url));
 const NO_SCHEDULING_SOURCES = [
   'gridRenderer.ts',
   'colourStateGroups.ts',
+  'dirtyCells.ts',
   'gridLayout.ts',
   'refToFillGroup.ts',
   'renderableGrid.ts',
@@ -86,6 +88,9 @@ describe('AC3 — the frozen contract: no scheduling, ever', () => {
 
     renderer.drawFull(grid);
     renderer.renderStatic(grid);
+    // Story 2.3 grew the surface — markDirty and draw run inside the same promise (AC3).
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.draw(makeGrid(2, 1, [0, 1]));
     renderer.resize({ cols: 2, rows: 1 });
     renderer.setGridLines(false);
 
@@ -114,6 +119,13 @@ describe('AC3 — the frozen contract: no scheduling, ever', () => {
 
     renderer.drawFull(grid);
     renderer.renderStatic(grid);
+    // The dirty path reads occupant/age and writes a SEPARATE colour-state buffer. A dev who
+    // wrote that state back into grid.age would pass every other test in this file.
+    renderer.markDirty([
+      { col: 0, row: 0 },
+      { col: 1, row: 0 },
+    ]);
+    renderer.draw(grid);
     renderer.resize({ cols: 2, rows: 1 });
     renderer.setGridLines(false);
     renderer.setGridLines(true);
@@ -133,6 +145,29 @@ describe('AC3 — the frozen contract: no scheduling, ever', () => {
     const canvasB = makeCanvas(20, 10);
     const doubleB = installRecordingContext2d(canvasB);
     new GridRenderer(canvasB, { cols: 2, rows: 1 }, table, { colors: COLORS }).drawFull(grid);
+
+    expect(doubleA.calls).toEqual(doubleB.calls);
+    expect(doubleA.fillStyleWrites).toEqual(doubleB.fillStyleWrites);
+  });
+
+  it('owns no scheduling state — the same markDirty/draw sweep produces identical call logs', () => {
+    const table = lut([0, 5, 9], [1, 1, 1]);
+
+    function sweep() {
+      const canvas = makeCanvas(20, 10);
+      const double = installRecordingContext2d(canvas);
+      const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, table, { colors: COLORS });
+      renderer.drawFull(makeGrid(2, 1, [0, 0]));
+      renderer.markDirty([
+        { col: 1, row: 0 },
+        { col: 0, row: 0 },
+      ]);
+      renderer.draw(makeGrid(2, 1, [1, 2]));
+      return double;
+    }
+
+    const doubleA = sweep();
+    const doubleB = sweep();
 
     expect(doubleA.calls).toEqual(doubleB.calls);
     expect(doubleA.fillStyleWrites).toEqual(doubleB.fillStyleWrites);
@@ -514,5 +549,378 @@ describe('resize and setGridLines', () => {
     const fillRectsAfterOn = ctx.calls.filter((c) => c.op === 'fillRect').length;
 
     expect(fillRectsAfterOn).toBeGreaterThan(fillRectsAfterOff);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Story 2.3 — dirty-region editing paths
+// ---------------------------------------------------------------------------------------------
+
+// cols=2, rows=1 in a 20x10 canvas -> cellSize 10, origin (0,0), grid lines visible.
+const DIRTY_TABLE = lut([0, 5, 9], [1, 1, 1]);
+
+function primedRenderer(options?: { showGridLines?: boolean }) {
+  const canvas = makeCanvas(20, 10);
+  const ctx = installRecordingContext2d(canvas);
+  const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+    colors: COLORS,
+    showGridLines: options?.showGridLines ?? true,
+  });
+  renderer.drawFull(makeGrid(2, 1, [0, 0]));
+  ctx.calls.length = 0;
+  ctx.fillStyleWrites.length = 0;
+  return { canvas, ctx, renderer };
+}
+
+describe('markDirty — AC2: accumulates between draws, and paints nothing', () => {
+  it('touches neither the context nor the fillStyle log', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.markDirty([
+      { col: 0, row: 0 },
+      { col: 1, row: 0 },
+    ]);
+
+    expect(ctx.calls).toHaveLength(0);
+    expect(ctx.fillStyleWrites).toHaveLength(0);
+  });
+
+  it('is idempotent for a repeated cell — one repaint, not one per mark', () => {
+    const { ctx, renderer } = primedRenderer({ showGridLines: false });
+
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.draw(makeGrid(2, 1, [1, 0]));
+
+    expect(ctx.calls.filter((c) => c.op === 'fillRect')).toHaveLength(1); // one background cell
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(1);
+  });
+
+  it('is a no-op for an empty iterable', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.markDirty([]);
+    renderer.draw(makeGrid(2, 1, [1, 0]));
+
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it('throws on a coord outside the renderer size rather than marking a wrapped cell', () => {
+    const { renderer } = primedRenderer();
+    expect(() => renderer.markDirty([{ col: 2, row: 0 }])).toThrow(DirtyCellRangeError);
+  });
+
+  it('is legal before any draw, and those marks are consumed by the first drawFull', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+
+    expect(() => renderer.markDirty([{ col: 0, row: 0 }])).not.toThrow();
+    renderer.drawFull(makeGrid(2, 1, [1, 0]));
+    ctx.calls.length = 0;
+
+    renderer.draw(makeGrid(2, 1, [1, 0])); // marks already consumed, nothing changed
+    expect(ctx.calls).toHaveLength(0);
+  });
+});
+
+describe('draw — AC1/AC4: repaints only what changed', () => {
+  it('repaints ONE region, not the full grid, for a single-cell change (AC4)', () => {
+    // The control: a 100x60 drawFull with every cell occupied.
+    const fullCanvas = makeCanvas(100, 60); // cellSize 1 -> grid lines suppressed, no line noise
+    const fullCtx = installRecordingContext2d(fullCanvas);
+    const fullRenderer = new GridRenderer(fullCanvas, { cols: 100, rows: 60 }, DIRTY_TABLE, {
+      colors: COLORS,
+    });
+    fullRenderer.drawFull(makeGrid(100, 60, new Array(6000).fill(1)));
+    expect(fullCtx.calls.filter((c) => c.op === 'rect')).toHaveLength(6000);
+
+    // The dirty path, same size: one cell painted.
+    const canvas = makeCanvas(100, 60);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 100, rows: 60 }, DIRTY_TABLE, {
+      colors: COLORS,
+    });
+    renderer.drawFull(makeGrid(100, 60, new Array(6000).fill(0)));
+    ctx.calls.length = 0;
+    ctx.fillStyleWrites.length = 0;
+
+    const painted = new Array(6000).fill(0);
+    painted[42 * 100 + 17] = 1;
+    renderer.markDirty([{ col: 17, row: 42 }]);
+    renderer.draw(makeGrid(100, 60, painted));
+
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(1);
+    expect(ctx.calls.filter((c) => c.op === 'fillRect')).toHaveLength(1); // the cell background
+    expect(ctx.fillStyleWrites).toHaveLength(2); // background + one colour group
+  });
+
+  it('paints background, then the cell colour, then the grid lines crossing it', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.draw(makeGrid(2, 1, [1, 0]));
+
+    expect(ctx.calls).toEqual([
+      { op: 'fillRect', args: [0, 0, 10, 10] }, // (a) cell background
+      { op: 'beginPath', args: [] }, // (b) the one colour group
+      { op: 'rect', args: [0, 0, 10, 10] },
+      { op: 'fill', args: [] },
+      { op: 'fillRect', args: [0, 0, 1, 10] }, // (c) left bar
+      { op: 'fillRect', args: [10, 0, 1, 10] }, // right bar
+      { op: 'fillRect', args: [0, 0, 10, 1] }, // top bar
+      { op: 'fillRect', args: [0, 9, 10, 1] }, // bottom bar, pulled back inside the rectangle
+    ]);
+    expect(ctx.fillStyleWrites).toEqual([COLORS.background, displayColorAt(5, 0), COLORS.gridLine]);
+  });
+
+  it('is a complete no-op when no marks are outstanding', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.draw(makeGrid(2, 1, [1, 1])); // a genuinely different grid, but nothing marked
+
+    expect(ctx.calls).toHaveLength(0);
+    expect(ctx.fillStyleWrites).toHaveLength(0);
+  });
+
+  it("is a complete no-op when a marked cell's colour state did not change", () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.markDirty([{ col: 0, row: 0 }]); // erasing an already-empty cell (Story 2.7)
+    renderer.draw(makeGrid(2, 1, [0, 0]));
+
+    expect(ctx.calls).toHaveLength(0);
+    expect(ctx.fillStyleWrites).toHaveLength(0);
+  });
+
+  it('consumes the marks, so a second identical draw does nothing', () => {
+    const { ctx, renderer } = primedRenderer();
+    const grid = makeGrid(2, 1, [1, 0]);
+
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.draw(grid);
+    const callsAfterFirst = ctx.calls.length;
+
+    renderer.draw(grid);
+    expect(ctx.calls).toHaveLength(callsAfterFirst);
+  });
+
+  it('repaints the background for an erased cell and paints no colour for it', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+    renderer.drawFull(makeGrid(2, 1, [1, 0]));
+    ctx.calls.length = 0;
+    ctx.fillStyleWrites.length = 0;
+
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.draw(makeGrid(2, 1, [0, 0]));
+
+    expect(ctx.calls).toEqual([{ op: 'fillRect', args: [0, 0, 10, 10] }]);
+    expect(ctx.fillStyleWrites).toEqual([COLORS.background]);
+  });
+
+  it('batches surviving cells by colour state — one beginPath/fill/fillStyle per group', () => {
+    const { ctx, renderer } = primedRenderer({ showGridLines: false });
+
+    renderer.markDirty([
+      { col: 0, row: 0 },
+      { col: 1, row: 0 },
+    ]);
+    renderer.draw(makeGrid(2, 1, [1, 1])); // both cells the same organism -> one group
+
+    expect(ctx.calls.filter((c) => c.op === 'beginPath')).toHaveLength(1);
+    expect(ctx.calls.filter((c) => c.op === 'fill')).toHaveLength(1);
+    expect(ctx.fillStyleWrites).toHaveLength(2); // background + one group
+
+    // The control: two DIFFERENT tokens must produce two groups, or the assertion above is
+    // equally satisfied by a path that never opens more than one. A fresh renderer, because the
+    // one above has already drawn ref 1 into cell 0 — that cell's colour state is now unchanged
+    // and would (correctly) drop out of the dirty set.
+    const control = primedRenderer({ showGridLines: false });
+    control.renderer.markDirty([
+      { col: 0, row: 0 },
+      { col: 1, row: 0 },
+    ]);
+    control.renderer.draw(makeGrid(2, 1, [1, 2]));
+
+    expect(control.ctx.calls.filter((c) => c.op === 'beginPath')).toHaveLength(2);
+    expect(control.ctx.calls.filter((c) => c.op === 'fill')).toHaveLength(2);
+    expect(control.ctx.fillStyleWrites).toHaveLength(3);
+  });
+
+  it('rejects a mis-shaped grid before touching the context', () => {
+    const { ctx, renderer } = primedRenderer();
+    renderer.markDirty([{ col: 0, row: 0 }]);
+
+    expect(() => renderer.draw(makeGrid(2, 3, new Array(6).fill(0)))).toThrow(
+      GridRendererDimensionMismatchError,
+    );
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it('falls back to a FULL repaint when no baseline has been primed yet', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+    ctx.calls.length = 0;
+
+    renderer.draw(makeGrid(2, 1, [1, 1])); // no drawFull ever happened
+
+    // The full-backing-store background fill is the tell — the dirty path only ever fills cells.
+    expect(ctx.calls[0]).toEqual({ op: 'fillRect', args: [0, 0, 20, 10] });
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(2);
+  });
+});
+
+describe('drawFull / renderStatic divergence — Story 2.3 Task 4', () => {
+  it('drawFull resets outstanding marks and re-primes the baseline', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.drawFull(makeGrid(2, 1, [1, 0]));
+    ctx.calls.length = 0;
+
+    renderer.draw(makeGrid(2, 1, [1, 0]));
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it('renderStatic retains no grid — a later resize repaints nothing', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+    });
+
+    renderer.renderStatic(makeGrid(2, 1, [1, 1]));
+    ctx.calls.length = 0;
+    renderer.resize({ cols: 2, rows: 1 });
+
+    // A static surface re-layouts by reconstruction, not repaint (Story 2.3 forced decision 4).
+    expect(ctx.calls.filter((c) => c.op === 'fillRect' || c.op === 'rect')).toHaveLength(0);
+  });
+
+  it('renderStatic primes no dirty state — a following draw full-repaints instead', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+
+    renderer.renderStatic(makeGrid(2, 1, [1, 0]));
+    ctx.calls.length = 0;
+    renderer.markDirty([{ col: 1, row: 0 }]);
+    renderer.draw(makeGrid(2, 1, [1, 1]));
+
+    expect(ctx.calls[0]).toEqual({ op: 'fillRect', args: [0, 0, 20, 10] }); // full background
+  });
+
+  it('resize drops marks accumulated at the old geometry', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.resize({ cols: 2, rows: 1 }); // repaints the whole surface at the new layout
+    ctx.calls.length = 0;
+
+    renderer.draw(makeGrid(2, 1, [0, 0]));
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it('a dimension-changing resize drops the colour-state buffer with the grid', () => {
+    const canvas = makeCanvas(40, 20);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+    renderer.drawFull(makeGrid(2, 1, [1, 1]));
+
+    renderer.resize({ cols: 4, rows: 2 }); // Story 2.14's grid-dimension change
+    ctx.calls.length = 0;
+
+    // A stale 2-entry baseline would mis-index every comparison against an 8-cell grid; dropping
+    // it makes the next draw a full repaint instead.
+    expect(() => renderer.draw(makeGrid(4, 2, new Array(8).fill(1)))).not.toThrow();
+    expect(ctx.calls[0]).toEqual({ op: 'fillRect', args: [0, 0, 40, 20] });
+  });
+
+  it('setGridLines resets dirty state along with its repaint', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.markDirty([{ col: 0, row: 0 }]);
+    renderer.setGridLines(false);
+    ctx.calls.length = 0;
+
+    renderer.draw(makeGrid(2, 1, [0, 0]));
+    expect(ctx.calls).toHaveLength(0);
+  });
+});
+
+describe('grid-line overlay cache — Story 2.3 Task 5', () => {
+  it('takes the drawImage branch when an offscreen context is available', () => {
+    const canvas = makeCanvas(20, 10);
+    const { context: ctx, offscreenContexts } = installRecordingContexts(canvas, {
+      offscreen: true,
+    });
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: true,
+    });
+
+    renderer.drawFull(makeGrid(2, 1, [0, 0]));
+
+    expect(offscreenContexts).toHaveLength(1);
+    // The bars went into the OVERLAY, not the main context: cols+1 + rows+1 = 5.
+    expect(offscreenContexts[0].calls.filter((c) => c.op === 'fillRect')).toHaveLength(5);
+    // The main context sees one background fillRect and one drawImage of the cached overlay.
+    expect(ctx.calls.filter((c) => c.op === 'fillRect')).toHaveLength(1);
+    expect(ctx.calls.filter((c) => c.op === 'drawImage')).toHaveLength(1);
+  });
+
+  it('reuses the cached overlay by identity across an unchanged-layout resize', () => {
+    const canvas = makeCanvas(20, 10);
+    const { context: ctx } = installRecordingContexts(canvas, { offscreen: true });
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: true,
+    });
+    renderer.drawFull(makeGrid(2, 1, [0, 0]));
+    const createElement = vi.spyOn(document, 'createElement');
+
+    renderer.resize({ cols: 2, rows: 1 }); // same box, same layout -> nothing to rebuild
+    renderer.resize({ cols: 2, rows: 1 });
+
+    expect(createElement).not.toHaveBeenCalled();
+    const overlays = ctx.calls.filter((c) => c.op === 'drawImage').map((c) => c.args[0]);
+    expect(overlays.length).toBeGreaterThan(1);
+    expect(new Set(overlays).size).toBe(1); // literally the same canvas object every time
+  });
+
+  it('rebuilds the overlay when the layout genuinely changes', () => {
+    const canvas = makeCanvas(20, 10);
+    const { context: ctx } = installRecordingContexts(canvas, { offscreen: true });
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: true,
+    });
+    renderer.drawFull(makeGrid(2, 1, [0, 0]));
+
+    canvas.width = 40;
+    canvas.height = 20;
+    renderer.resize({ cols: 2, rows: 1 }); // cellSize 10 -> 20
+
+    const overlays = ctx.calls.filter((c) => c.op === 'drawImage').map((c) => c.args[0]);
+    expect(new Set(overlays).size).toBe(2);
   });
 });
