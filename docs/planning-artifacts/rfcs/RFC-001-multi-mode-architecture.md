@@ -396,7 +396,7 @@ CREATE TABLE battle_organisms (
 game-of-life-studio/
 ├── apps/
 │   ├── web/                 # Next.js application
-│   │   ├── app/             # App Router (canonical — Cross-RFC Reconciliation #4): page.tsx, battle/[id]/, settings/
+│   │   ├── app/             # App Router (canonical — Cross-RFC Reconciliation #4): page.tsx, battle/ (?id=<uuid>, + battle/new/ — Decision K), settings/
 │   │   ├── components/
 │   │   └── package.json
 │   └── api/                 # FastAPI application

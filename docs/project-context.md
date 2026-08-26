@@ -303,7 +303,7 @@ projects under `NewJob/`), so it never shows up in this repo's `git status`.
 
 ### Critical Don't-Miss Rules
 
-The architecture's Decisions A–J and M1–M10 mostly encode **reversals of the intuitive default**.
+The architecture's Decisions A–K and M1–M10 mostly encode **reversals of the intuitive default**.
 Following instinct here produces code that compiles, passes tests, and violates the spec.
 
 **Anti-patterns — these compile and pass tests, and are still wrong**
@@ -386,7 +386,7 @@ Following instinct here produces code that compiles, passes tests, and violates 
   deliberately override stale RFC snippets (`repositoryFactory.ts` naming, the factory's
   `APP_MODE` read, RFC-003 Decision 2's per-`[data-theme]` token structure and its illustrative
   theme snippet). New conflicts are signal, not noise.
-- Spec authority order: **Architecture Cross-Cutting Decisions** (A–J, M1–M10) → owning **RFC**
+- Spec authority order: **Architecture Cross-Cutting Decisions** (A–K, M1–M10) → owning **RFC**
   → companion specs. Within one area the RFC wins; for anything cross-cutting the Decision wins.
 
 **For humans:**

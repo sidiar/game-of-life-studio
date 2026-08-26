@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-08-25
+# last_updated: 2026-08-26
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-08-25
+last_updated: 2026-08-26
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -64,8 +64,8 @@ development_status:
   # to actually run one, move the story files back up beside this file first (CLAUDE.md).
 
   # Epic 2: Battle Editor (Edit Mode & Canvas Renderer)
-  epic-2: backlog
-  2-1-battle-route-page-skeleton: backlog
+  epic-2: in-progress
+  2-1-battle-route-page-skeleton: review
   2-2-create-new-battle-gallery-wiring: backlog
   2-3-renderer-dirty-region-editing-paths: backlog
   2-4-edit-canvas-display: backlog

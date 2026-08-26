@@ -299,6 +299,36 @@ This section records architecture-level decisions that span multiple RFCs and re
 - **J.3 — Single source of truth for the preference:** the FOUC inline script reads the theme from the **`gol:settings`** record (RFC-006 Decision 7) with a defensive parse + default — no separate `theme` localStorage key. Settings toggle = write attribute + persist via the settings repository (RFC-005 Decision 9).
 - **J.4 — NFR alignment:** NFR-8.2 ("applied via data attribute on root element"), NFR-8.4 ("dedicated CSS files", "component styles reference only CSS variable names", "new theme = (1) new CSS variable definitions, (2) registration in settings"), and NFR-8.5 (script-before-paint) are now satisfied **verbatim** by construction.
 
+### Decision K — The battle route is `/battle?id=<uuid>`; every route is statically prerenderable
+
+- **Status:** Accepted — 2026-08-26
+- **Resolves:** Story 2.1 implementation conflict — **AR-28's literal `/battle/[id]` cannot be built under NFR-6's `output: 'export'`.** The two were never simultaneously satisfiable; nothing before Epic 2 tried to build a battle route, so the clash surfaced only when Story 2.1 went to write one.
+- **Affects:** `epics.md` AR-28 + Story 2.1 ACs; `component-tree-battle-page.md` (route path); RFC-001 (repo-structure tree); RFC-005 (routing reconciliation note). **PRD: no change** — no requirement names a URL.
+
+**The constraint.** Verified against the installed `next@16.2.12`, `node_modules/next/dist/build/index.js:1362-1368`:
+
+```js
+const hasGenerateStaticParams = workerResult.prerenderedRoutes && workerResult.prerenderedRoutes.length > 0;
+if (config.output === 'export' && isDynamic && !hasGenerateStaticParams) {
+  throw new Error(`Page "${page}" is missing "generateStaticParams()" so it cannot be used with "output: export" config.`)
+}
+```
+
+Battle ids are `z.uuid()` values minted **in the browser** (`packages/domain/src/battleSchema.ts`), so there is no build-time set to enumerate — in this story or any future one. A `generateStaticParams()` returning `[]` fails the identical check (`prerenderedRoutes.length > 0`). Client-side navigation cannot rescue it either: in export mode the App Router fetches each route's RSC payload by appending `.txt` to the pathname, so `/battle/<uuid>.txt` 404s into a hard navigation to the static 404 page. **Under static export the prerendered set is the entire reachable set.**
+
+**Decision.** Two static pages, both prerendered:
+
+| Route | File | Purpose |
+|---|---|---|
+| `/battle?id=<uuid>` | `app/(battle)/battle/page.tsx` | Open a saved battle; the id is a **query parameter**, not a path segment |
+| `/battle/new` | `app/(battle)/battle/new/page.tsx` | Create a new battle (`new` is a *static* segment, so it prerenders fine) |
+
+- **K.1 — What AR-28 actually protects is unchanged.** `<BattlePage>` still owns `mode` (`lab | run`) as local state; Lab↔Run is still **not** a route change; `<BattlePage>` still stays mounted across modes; there are still exactly two reachable page surfaces in Epic 2 (`/` and the battle route), with `/settings` arriving in Epic 5. The deviation is the **spelling of one URL**, not the routing model. AR-28 is amended to describe the battle route **by role** rather than by literal path, so a future host change does not re-open a settled decision.
+- **K.2 — Why not a host-level SPA rewrite.** A rewrite of `/battle/*` → `/battle/index.html` works on Vercel and is **impossible on GitHub Pages**, which `architecture.md` names as a target alongside it. No deploy job exists to verify such a rewrite, so CI would keep passing green while the deployed app 404s — the failure would surface only in production. Rejected for cause.
+- **K.3 — Why not `/battle#<id>`.** A hash also builds, but it never reaches the Next router: `usePathname`/`Link` matching degrades and the id is invisible to router-driven code. Same size of deviation from AR-28 for strictly less capability.
+- **K.4 — Why not drop static export.** Keeping `/battle/[id]` literally means reversing NFR-6 and the $0-hosting constraint, ruling out GitHub Pages and requiring a Node host plus a deploy pipeline — a far larger architectural change than the URL spelling it would buy back.
+- **K.5 — Standing rule for later routes.** **Every route this app adds must be statically prerenderable.** Entity-scoped pages take the id as a query parameter (`/battle?id=`), never as a dynamic segment. This binds Epic 4's `/organisms` and Epic 5's `/settings` too — both are static paths and already comply.
+
 These resolve spec-vs-spec drift surfaced in review — mostly RFC-001 (the oldest doc) going stale against the newer authorities (RFC-004 for rules, RFC-006 for persistence). They are alignments, not new product decisions, except #5/#6 which the product owner decided.
 
 1. **Repository interface (RFC-001 ← RFC-006).** RFC-001 already uses `SettingsRepository`; added the bulk methods the serializer needs — `listFull()`, `replaceAll()`, and a **data-only** `clearAll()` (FR-8.5: battles + organisms, never `gol:settings` — Decision F).

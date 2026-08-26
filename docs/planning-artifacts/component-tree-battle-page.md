@@ -49,7 +49,7 @@ Rule (RFC-005): React never holds hot state; non-React modules never reach into 
 ## 2. Component Tree (both modes + fullscreen)
 
 ```
-app/battle/[id]/page.tsx
+app/(battle)/battle/page.tsx        # /battle?id=<uuid> — Decision K (static export)
 └─ <BattlePage repositories>                                      [Epic 2]
    │  owns: mode, battleName, initialGrid (useUndoableGrid), isDirty,
    │        loaded organisms, session roster (H.2)
