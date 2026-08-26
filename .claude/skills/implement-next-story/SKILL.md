@@ -14,9 +14,19 @@ the caller's job — normally just asking again.
 **Paths:** sprint status is `docs/implementation-artifacts/sprint-status.yaml`.
 Story files for the epic in progress sit flat beside it.
 
+**Stats:** every step is timed and token-counted by `story-run-stats.py`, in this skill
+directory. Call `mark` at each boundary as you go — a mark you skip is a phase you
+cannot reconstruct afterwards — and `report` at the end. See *Run stats* below.
+
 ---
 
 ## Step 0 — Re-entry guard (always run first)
+
+Mark the clock before anything else, so a run that stops at the guard is still measured:
+
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark step0
+```
 
 Get to a clean, current `main` first — `git checkout main && git pull`. A dirty working
 tree means Sidiar has work in progress: STOP, do not stash or clobber it.
@@ -72,6 +82,10 @@ This guard is what makes the skill safe to fire repeatedly. Never skip it.
 
 ## Step 1 — Create the story (Opus)
 
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark step1
+```
+
 Spawn a subagent: `model: "opus"`, `subagent_type: "general-purpose"`.
 Do **not** use `fork` — it inherits context and ignores the model override.
 
@@ -87,6 +101,10 @@ picks a pattern that later stories build on, rather than following one that exis
 
 ## Step 2 — Implement (model from the story file)
 
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark step2
+```
+
 Read the `Dev Model:` line from the story file just written. Spawn a subagent with
 that model and tell it to:
 
@@ -101,6 +119,10 @@ The push is what gets CI to run before anyone reviews — so the reviewer reads 
 lint/typecheck/test results rather than the dev agent's account of them.
 
 ## Step 3 — Review (the model Step 2 did *not* use)
+
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark step3
+```
 
 Re-read the `Dev Model:` line from the story file and spawn a fresh subagent on the
 **other** model — the complement, never a fixed choice:
@@ -124,7 +146,7 @@ If X and Y are the same, you have mis-derived it — stop and recompute.
 answer it, and the `patch` bucket is defined as fixes that are unambiguous without one.
 
 **Never auto-resolve `decision-needed` findings.** That bucket exists precisely because
-the correct fix needs Sidiar's intent. Leave them unresolved and carry them to Step 4.
+the correct fix needs Sidiar's intent. Leave them unresolved and carry them to the hand-back in Step 5.
 
 Tell it to check the CI run for the pushed branch (`gh run list --branch story/{story_key}`)
 and treat a red run as a finding. If it fixes anything, that lands as its **own** commit
@@ -152,7 +174,38 @@ Body follows the house shape — see PR #1:
 
 Then **STOP**. Do not merge, do not enable auto-merge, do not approve your own PR.
 
-## Step 4 — Hand back to Sidiar
+## Step 4 — Record the run stats
+
+The PR is open, so the run is over: stop the clock and write the numbers down.
+
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark end
+python3 .claude/skills/implement-next-story/story-run-stats.py report \
+  --story-file docs/implementation-artifacts/{story_key}.md --write
+```
+
+That prints the table and appends it to the end of the story file under the line
+*"This story was implemented with the 'Implement next story' skill with the following
+stats:"*. Re-running replaces the previous block rather than stacking a second one, so a
+re-run of Step 4 is safe.
+
+Commit it on the story branch and push, so the PR carries it:
+
+```bash
+git add docs/implementation-artifacts/{story_key}.md
+git commit -m "docs: record implement-next-story run stats (story {id})"
+git push
+```
+
+This is a deliberate third commit. It does not blur the two-commit shape Step 3 protects —
+that split is about *implementation vs. review*, and this commit touches no code. Leave the
+PR body's two-commit list alone for the same reason: it describes the work, and this is
+bookkeeping about the run.
+
+Do this yourself. Do **not** spawn an agent for it: a fourth agent would add its own
+tokens to the very numbers it is reporting.
+
+## Step 5 — Hand back to Sidiar
 
 Report, briefly:
 
@@ -163,6 +216,8 @@ Report, briefly:
   split is visible in the hand-back rather than only in the commit trailers
 - the file list
 - patches auto-applied, and any `decision-needed` findings awaiting Sidiar's call
+- the stats table — paste it into the hand-back as printed, so the wall clock and token
+  cost of the run are visible without opening the story file
 
 Then **STOP**. Nothing "waits" — the run simply ends, and the open PR is where the
 work sits until Sidiar merges it. The gate is the **merge**: nothing reaches `main`
@@ -171,6 +226,39 @@ to the next.
 
 
 ---
+
+## Run stats
+
+`story-run-stats.py mark <label>` stamps a boundary; `report` turns consecutive
+boundaries into phases. Labels, in order: `step0`, `step1`, `step2`, `step3`, `end`.
+Marks are kept in `$TMPDIR/implement-next-story-$CLAUDE_CODE_SESSION_ID.json`.
+
+Each phase gets: wall clock, the model(s) its agents ran on, and tokens split
+input / output / cache-write / cache-read. Token counts are the `usage` blocks the
+runtime already recorded per assistant message — measured, not estimated.
+
+Three things worth knowing about what the numbers mean:
+
+- **A phase's cost is its whole subtree.** The report attributes every subagent
+  transcript that *started* inside a phase window, so `bmad-code-review`'s three
+  hunters count against Step 3, not against nothing. This works only because the
+  phases run strictly one after another — never overlap two spawns.
+- **The orchestrator is counted too**, folded into whichever phase window its turns
+  fall in, and broken out again in an *of which* row. That row is a subset, not an
+  addition — do not sum it into the total when narrating the table.
+- **Cache reads dominate and mean less than they look.** They are billed at a
+  fraction of input rate. Read Input and Output for real effort; treat the grand total
+  as a ceiling.
+
+The script reads the subagent transcripts under
+`~/.claude/projects/*/$CLAUDE_CODE_SESSION_ID/subagents/` and prints only the aggregate.
+Never `cat`, `tail`, or `Read` those files yourself — they are full JSONL transcripts and
+would blow out the context this skill exists to keep small.
+
+**A run split across sessions loses its marks** (they are keyed to the session id), and
+`report` then covers only the phases marked in the current session. That is a degraded
+report, not a failure — say so in the hand-back rather than presenting partial numbers as
+the whole run.
 
 ## Subagent instructions — apply to all three spawns
 
