@@ -713,3 +713,18 @@ no `packages/*` change, no new dependency.
 | 2026-08-26 | Reviewed (code-review, Sonnet): 4 patches applied (own commit), 4 items deferred, 0 decision-needed → done |
 
 Dev Model: opus   # establishes the pointer→cell mapping, the Tool model, the onStrokeCommit→onCommitGrid seam, grid-copy discipline and the roster-ref allocation — five patterns 2.6–2.15 all build on, none of which exist yet
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 31s | 14 | 3,012 | 8,840 | 283,438 | 295,304 |
+| Step 1 — create-story | opus-5 | 1 | 9m 53s | 174 | 40,200 | 465,727 | 9,175,722 | 9,681,823 |
+| Step 2 — dev-story | opus-5 | 1 | 42m 17s | 306 | 84,988 | 1,046,903 | 21,914,456 | 23,046,653 |
+| Step 3 — code review + PR | sonnet-5 | 4 | 39m 06s | 702 | 50,281 | 1,654,369 | 45,977,233 | 47,682,585 |
+| _of which the orchestrator_ | opus-5 | — | — | 72 | 18,265 | 37,221 | 1,787,810 | 1,843,368 |
+| **Total (create-story → PR ready)** | | 6 | **1h 31m** | 1,196 | 178,481 | 3,175,839 | 77,350,849 | **80,706,365** |
+
+Run started 2026-08-26 17:26 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
