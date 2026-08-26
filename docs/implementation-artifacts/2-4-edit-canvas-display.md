@@ -660,3 +660,18 @@ Modified:
 | 2026-08-26 | Code review (Opus, second model): fixed the double full paint on every editor mount, added the mount-paint regression test, restored the home budget's comment history, corrected the Dev Agent Record's model attribution; two items deferred. Status → done |
 
 Dev Model: sonnet   # follows patterns that already exist — 2.3 froze the renderer's retention/dirty policy, 1.11 shipped the PetriDishCanvas lifecycle and the injected-colours seam, spec §3.3/§3.10 fix the component APIs, and §3.1 already assigns initialGrid ownership (2.8's useUndoableGrid replaces whatever is held here); the remaining work is wiring plus five named deferred-work fixes, each with its trap and test spelled out above
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 34s | 24 | 3,007 | 12,787 | 479,141 | 494,959 |
+| Step 1 — create-story | opus-5 | 1 | 9m 01s | 188 | 21,136 | 462,500 | 8,982,924 | 9,466,748 |
+| Step 2 — dev-story | sonnet-5 | 1 | 30m 20s | 522 | 59,958 | 584,286 | 55,974,159 | 56,618,925 |
+| Step 3 — code review + PR | opus-5 | 1 | 27m 45s | 304 | 55,724 | 633,402 | 19,943,090 | 20,632,520 |
+| _of which the orchestrator_ | opus-5 | — | — | 72 | 16,673 | 37,462 | 1,648,869 | 1,703,076 |
+| **Total (create-story → PR ready)** | | 3 | **1h 07m** | 1,038 | 139,825 | 1,692,975 | 85,379,314 | **87,213,152** |
+
+Run started 2026-08-26 16:00 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
