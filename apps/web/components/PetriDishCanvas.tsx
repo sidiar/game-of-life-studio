@@ -259,6 +259,26 @@ function EditDish({
   // Routes a resize()-time repaint failure into React's own error channel, mirroring StaticDish.
   const [, setPaintError] = useState<null>(null);
 
+  // Story 2.8 Task 5 (deferred-work.md): the LATEST `endStroke`, for the two callers that outlive
+  // the render they were registered in — the `ResizeObserver` callback below and the grid effect.
+  //
+  // `endStroke` is a fresh closure every render, capturing THAT render's `grid`, `size` and
+  // `onStrokeCommit`. The resize effect's deps are `[size]` with an exhaustive-deps disable, so
+  // its observer callback held the closure from whichever render last changed `size` — usually the
+  // mount — and would commit through that render's `onStrokeCommit`. Inert until Story 2.8: while
+  // `<BattlePage>` passed a bare `useState` setter, the stale function and the live one were the
+  // same object. `useUndoableGrid`'s `commit` is stable too, and that is deliberately NOT relied
+  // on here: the staleness is in the WHOLE closure, so keeping one prop's identity stable re-arms
+  // the trap the moment another story wraps the handler or reads another prop inside `endStroke`.
+  const endStrokeRef = useRef(endStroke);
+  // Declared FIRST, before every effect that reads it: React runs a commit's passive effects in
+  // hook-declaration order, so this refresh lands before the grid and resize effects below run in
+  // that same commit. Assigning during render instead would be unsafe under concurrent rendering
+  // for a render that never commits.
+  useEffect(() => {
+    endStrokeRef.current = endStroke;
+  });
+
   // Construction effect — declared FIRST so a renderer is already stored before the grid / grid-
   // lines effects below run on mount. Deps are the three GridRenderer constructor arguments that
   // have no setter: `size` (Story 2.14 owns dimension changes; until then there is no resize()
@@ -312,9 +332,37 @@ function EditDish({
   // is a grid that changes for a reason the canvas did not cause — Story 2.8's undo, 2.14's
   // resize, 2.15's Clear — each of which genuinely wants the full repaint.
   useEffect(() => {
+    // The skip runs FIRST, and it is what distinguishes an EXTERNAL grid change from the canvas's
+    // own committed stroke coming back down as a new prop identity. Order matters for the
+    // reclaim path (`handlePointerDown`): that commits and immediately opens a FRESH stroke, so a
+    // terminate placed above this line would kill the new stroke on the very next commit.
+    if (paintedGridRef.current === grid) return;
+
+    // Story 2.8 Task 6 (deferred-work.md), forced decision 5. An external change landing
+    // mid-stroke used to be unreachable — nothing in <BattlePage> could change `grid` while a
+    // pointer was down. Undo makes it reachable: the user can press UNDO with the pointer still
+    // held. The stroke's working buffer was sliced off the PRE-change grid, so committing it would
+    // revert the external change wholesale — the undo would appear to do nothing and the ring
+    // would grow an entry for it.
+    //
+    // Policy: END the stroke, DISCARDING what it painted. `endStroke(false)` — the arm the
+    // parameter was kept for, and the first call site to use it. This follows the resize effect's
+    // "a mid-stroke re-layout ENDS the stroke" precedent on the part that matters (one gesture is
+    // never split across two grids) and departs from it on the commit, because a resize does not
+    // change grid CONTENT and an undo is entirely about content. Rebasing the working buffer onto
+    // the new grid was the alternative and was rejected: it has to invent an answer for cells the
+    // external change touched AND the stroke also touched, and nobody has asked for a gesture to
+    // survive the user cancelling it. ⚠️ Stories 2.14 (resize) and 2.15 (Clear) inherit this
+    // policy unchanged — it is a decision with three stories downstream, not a local patch.
+    //
+    // Deliberately ABOVE the renderer guard: trap 12's no-context path (always, under jsdom) still
+    // writes cells into the working grid and still commits, so gating the terminate on a renderer
+    // would leave exactly that path reverting the external change. The model is not the view — the
+    // same reasoning the resize effect's own terminate records.
+    if (strokeRef.current !== null) endStrokeRef.current(false);
+
     const renderer = rendererRef.current;
     if (renderer === null) return; // construction failed (missing 2D context) — leave it blank.
-    if (paintedGridRef.current === grid) return;
     renderer.drawFull(grid);
     paintedGridRef.current = grid;
   }, [grid]);
@@ -362,7 +410,7 @@ function EditDish({
       // no-context path still writes cells into the working grid and still commits — so gating
       // the terminate on `renderer !== null` would leave exactly that path mapping every
       // remaining move through the pre-resize box and committing the wrong cells.
-      if (strokeRef.current !== null) endStroke(true);
+      if (strokeRef.current !== null) endStrokeRef.current(true);
 
       const renderer = rendererRef.current;
       if (renderer === null) return;
@@ -385,11 +433,15 @@ function EditDish({
     observer.observe(target);
 
     return () => observer.disconnect();
-    // `endStroke` is a plain function value rebuilt every render, not a dependency with its own
-    // identity worth tracking — same reasoning as the construction effect's `grid`/`showGridLines`
-    // omission above. Listing it would re-register the ResizeObserver on every render instead of
-    // only when `size` actually changes, which is the retention this effect exists to protect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Story 2.8 Task 5: this effect no longer needs an exhaustive-deps SUPPRESSION — the disable
+    // comment that stood here is gone because the deps really are complete now. It used to call
+    // `endStroke` directly, a plain function value rebuilt every render, so `endStroke` belonged
+    // in the deps and was silenced instead; the suppression's own comment justified that on
+    // re-registration cost alone and never named the consequence, which is that the observer
+    // committed through the `onStrokeCommit` of whichever render last changed `size` (usually the
+    // mount). Going through `endStrokeRef` makes `[size]` genuinely exhaustive AND always current.
+    // ⚠️ Do not "simplify" the callback back to a direct `endStroke(…)` call — that reintroduces
+    // both the staleness and the suppression.
   }, [size]);
 
   /**

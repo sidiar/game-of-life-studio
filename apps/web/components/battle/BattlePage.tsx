@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
@@ -11,6 +11,7 @@ import { buildRefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import { toRenderableGrid, type RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { readGridColors } from '@/lib/canvas/themeColors';
 import { DEFAULT_TOOL } from '@/lib/tool';
+import { useUndoableGrid } from '@/lib/useUndoableGrid';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
 import BattleEditorView from './BattleEditorView';
@@ -222,27 +223,34 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     return buildRefToFillGroup(rosterIds, organismsById);
   }, [rosterIds, organisms]);
 
-  // The user's edits. State, not a ref: this IS the value React renders, and it changes once per
-  // COMMITTED gesture (one click here, one stroke from Story 2.6) — never per pointer move. The
-  // hot, in-progress state stays in the canvas's refs (project-context, RFC-005 Decision 6).
+  // Story 2.8: THE grid state, and the only one (AC1). `useState` + a `lastSeedRef` re-seed used
+  // to live here inline; both moved inside the hook, which now owns the async-seed adoption AND
+  // the 30-entry undo ring in one state cell (RFC-005 Decision 6, AR-30). ❌ No second grid state
+  // beside it — that is what the hook replaced, not what it joined.
   //
-  // ⚠️ Held SEPARATELY from the seed rather than `useState(seedGrid)`. Every hook here precedes
-  // four early returns, so this one runs on the very first render — a render where the resource is
-  // still loading and `seedGrid` is null. `useState(seedGrid)` captures that null forever and the
-  // editor stays permanently blank, with no error anywhere. `editedGrid ?? seedGrid` plus the
-  // reset below is React's "adjusting state when a prop changes" pattern, and it is what makes a
-  // resource that settles AFTER the first render work at all.
-  const [editedGrid, setEditedGrid] = useState<RenderableGrid | null>(null);
-  const lastSeedRef = useRef<RenderableGrid | null>(null);
-  if (lastSeedRef.current !== seedGrid) {
-    lastSeedRef.current = seedGrid;
-    // A new seed means a different battle (or the first one arriving): the edits belonged to the
-    // old one. Setting state during render is deliberate and is the documented pattern — React
-    // re-runs the body immediately, and the ref guard above makes the second pass a no-op, so it
-    // cannot loop.
-    if (editedGrid !== null) setEditedGrid(null);
-  }
-  const grid = editedGrid ?? seedGrid;
+  // The value changes once per COMMITTED gesture (a click, one stroke from Story 2.6, an undo)
+  // and never per pointer move: the hot, in-progress state stays in the canvas's refs
+  // (project-context, RFC-005 Decision 6).
+  //
+  // ⚠️ `seedGrid` is null on the FIRST render — every hook here precedes four early returns, and
+  // the battle resource has not settled yet. The hook adopts the seed when it arrives and resets
+  // the ring when it CHANGES (a different battle), which is what keeps a `useState(seedGrid)`
+  // from capturing that null forever and leaving a permanently blank editor.
+  const [{ value: grid, commit: commitGrid }, { undo, canUndo }] = useUndoableGrid(seedGrid);
+
+  // Forced decision 4 (Story 2.8): `size` is DERIVED from the grid, not carried separately as
+  // `draft.gridSize`. From this story dimensions are a property of every undo snapshot, so two
+  // sources for one fact would be two things that can disagree — and when 2.14 makes a resize
+  // commit a differently-shaped grid, that disagreement is `assertGridMatchesSize` throwing
+  // `GridRendererDimensionMismatchError` out of the canvas's grid effect (unmounting the editor),
+  // with `handlePointerDown`'s own dimension guard silently making the dish unpaintable first.
+  //
+  // Memoised on the two PRIMITIVES, never an inline literal: `size` is one of `EditDish`'s three
+  // construction dependencies, so a churning identity there throws away the retained renderer, the
+  // grid-line overlay and the dirty baseline on every render (Story 2.5 trap 7).
+  const gridCols = grid?.width ?? 0;
+  const gridRows = grid?.height ?? 0;
+  const size = useMemo(() => ({ cols: gridCols, rows: gridRows }), [gridCols, gridRows]);
 
   // Both resources must settle before anything renders — not just battleResource. Without this,
   // a battle that resolves before settings would briefly seed /battle/new at the DEFAULT_SETTINGS
@@ -296,17 +304,19 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
       {grid !== null && (
         <BattleEditorView
           grid={grid}
-          size={draft.gridSize}
+          size={size}
           palette={palette}
           showGridLines={settings.gridLines}
           colors={colors}
           rosterIds={rosterIds}
-          /* `setEditedGrid` IS the commit handler for this story — passed directly, so its
-             identity is stable. ❌ No mini undo ring here: Story 2.8 replaces this with
-             `useUndoableGrid` (RFC-005 Decision 6), and Story 2.4's forced decision 2 already
-             recorded that instruction. ❌ No `isDirty` either — Story 2.11 owns dirty tracking and
-             its own AC covers "given any grid commit, isDirty becomes true". */
-          onCommitGrid={setEditedGrid}
+          /* The hook's `commit` IS the commit handler (Story 2.8) — a stable identity, exactly as
+             the bare `useState` setter it replaced was, which is what lets the canvas's resize
+             effect keep holding it in a closure it does not re-register. ❌ No `isDirty` here —
+             Story 2.11 owns dirty tracking, and an undo that cleared it would be wrong anyway
+             (undoing to the seed is not the same as being saved). */
+          onCommitGrid={commitGrid}
+          onUndo={undo}
+          canUndo={canUndo}
         />
       )}
     </Root>
