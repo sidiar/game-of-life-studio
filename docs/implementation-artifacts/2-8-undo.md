@@ -817,3 +817,18 @@ now say what is true rather than promising a future that already happened differ
 | 2026-08-27 | 1.0 | Implemented: `useUndoableGrid` (30-entry ring), `<EditorStatusBar>` with UNDO, `size` derived from the grid, and the three owned deferred-work items closed (plus two more). Full `npm run ci` green. | dev-story |
 
 Dev Model: opus   # architecture-shaping: establishes `useUndoableGrid` — the commit/history seam every later editor mutation story (2.14 resize, 2.15 Clear, 2.16 reset) inherits — moves grid ownership out of `useState`, and must settle three decisions with downstream inheritance (ring container vs. reactive `canUndo`, the single source of grid dimensions, and mid-stroke external-change policy) while resolving two live RFC-005-vs-component-tree conflicts the RFC's own snippet cannot satisfy
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 19s | 12 | 1,856 | 8,564 | 244,136 | 254,568 |
+| Step 1 — create-story | opus-5 | 1 | 9m 20s | 192 | 30,963 | 489,184 | 9,565,286 | 10,085,625 |
+| Step 2 — dev-story | opus-5 | 1 | 22m 38s | 344 | 69,275 | 416,242 | 26,390,195 | 26,876,056 |
+| Step 3 — code review + PR | sonnet-5 | 2 | 24m 30s | 740 | 27,490 | 933,768 | 75,088,268 | 76,050,266 |
+| _of which the orchestrator_ | opus-5 | — | — | 40 | 6,686 | 25,131 | 903,654 | 935,511 |
+| **Total (create-story → PR ready)** | | 4 | **56m 47s** | 1,288 | 129,584 | 1,847,758 | 111,287,885 | **113,266,515** |
+
+Run started 2026-08-27 13:14 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
