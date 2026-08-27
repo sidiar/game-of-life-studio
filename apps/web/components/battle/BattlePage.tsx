@@ -243,11 +243,11 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // ⚠️ A NEW array, never a push onto `draft.organismIds` — see toDraft above.
   const rosterIds = useMemo<readonly string[]>(() => {
     if (!rosterSettled) return NO_ROSTER;
-    const union = buildRosterIds(draft?.organismIds ?? NO_ROSTER, sessionRoster);
+    const placed = draft?.organismIds ?? NO_ROSTER;
 
-    // Forced decision 4, option (b): seed the default tool's organism ONLY when the union would
-    // otherwise be empty. That is the one case where the seed still earns its keep — a battle with
-    // nothing placed (`/battle/new`, or a saved battle H.1 pruned to nothing) has no first row for
+    // Forced decision 4, option (b): seed the default tool's organism ONLY when the battle PLACES
+    // nothing. That is the one case where the seed still earns its keep — a battle with nothing
+    // placed (`/battle/new`, or a saved battle H.1 pruned to nothing) has no first row for
     // `<BattleEditorView>` to select, so without this the dish would be unpaintable until Story
     // 2.10 ships the add dropdown: a user-visible regression this story must not introduce.
     // A battle that places anything keeps a roster of exactly its own placed set (Decision H.1).
@@ -256,10 +256,21 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     // against, so it is read off that constant rather than `CONWAYS_CLASSIC_ID` directly (lib/
     // tool.ts's own trap — two independent constants would drift and leave `refForTool` returning
     // null at every press).
-    if (union.length > 0) return union;
-
-    // Story 2.9 review, decision 1 (Sidiar's option (a)): and ONLY when that organism is actually
-    // in the library that just loaded.
+    //
+    // ⚠️ Story 2.10 code review (2026-08-27) — trap 1, the append-only invariant. This condition
+    // used to be `union.length > 0`, i.e. the seed applied only while the union (placed + SESSION)
+    // was empty. Story 2.10 gave `sessionRoster` its first writer, which made that condition
+    // FALSIFIABLE BY AN ADD: on `/battle/new` the user painted with the seeded Conway's Classic
+    // (ref 1), then added an organism from the dropdown — the union became `['added']`, the seed
+    // branch stopped applying, and index 0 silently changed hands. Every cell painted as Conway
+    // repainted as the added organism, Conway's row vanished from the roster while its cells
+    // stayed on the grid, and Conway reappeared in the add dropdown. No throw, no warning, a fully
+    // green suite: exactly the failure mode trap 1 (RFC-006 Decision 2, `cell = roster index + 1`)
+    // describes. The seed now sits in the union's BASE, where session entries append AFTER it and
+    // can never displace it — the same position `draft.organismIds` occupies for a saved battle.
+    //
+    // Story 2.9 review, decision 1 (Sidiar's option (a)) is unchanged by this: the seed is still
+    // conditional on that organism actually being in the library that just loaded.
     //
     // `libraryUnavailable` covers a FAILED `organisms.list()`. A SUCCESSFUL EMPTY one is a
     // different, reachable state — a fresh browser profile, cleared storage, or a bookmarked
@@ -281,7 +292,8 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     const defaultInLibrary = (organisms ?? []).some(
       (organism) => organism.id === DEFAULT_TOOL.organismId,
     );
-    return defaultInLibrary ? buildRosterIds(union, [DEFAULT_TOOL.organismId]) : NO_ROSTER;
+    const base = placed.length === 0 && defaultInLibrary ? [DEFAULT_TOOL.organismId] : placed;
+    return buildRosterIds(base, sessionRoster);
   }, [draft, sessionRoster, rosterSettled, organisms]);
 
   // The roster resolved for DISPLAY — names and identity-shade colours — through the same
@@ -316,6 +328,14 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
       .map((organism) => organism.id);
     return resolveDisplayOrganisms(addableIds, organisms ?? []);
   }, [organisms, rosterIds]);
+
+  // Story 2.10 code review (2026-08-27), AC8 / trap 7. `library` is a DIFFERENCE — it is empty both
+  // when the roster has consumed the workspace AND when the workspace itself holds nothing, which
+  // are different facts that need different copy. The subtraction throws that apart, so the
+  // un-subtracted fact travels alongside it. Reachable exactly where Story 2.9's decision 1 said it
+  // was: a fresh profile, cleared storage, or a bookmarked `/battle/new` opened before the Gallery
+  // has ever run the workspace seed. ❌ Not `libraryUnavailable` — the list LOADED, it is just empty.
+  const workspaceEmpty = (organisms ?? []).length === 0;
 
   // Story 2.10 (AC5, trap 2): measured on the IDENTITY array's length, never `roster.length` —
   // `resolveDisplayOrganisms` de-duplicates, so the display list can be shorter than the number of
@@ -436,6 +456,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
           roster={roster}
           libraryUnavailable={libraryUnavailable}
           library={library}
+          workspaceEmpty={workspaceEmpty}
           onAddToRoster={onAddToRoster}
           atCap={atCap}
           /* The hook's `commit` IS the commit handler (Story 2.8) — a stable identity, exactly as

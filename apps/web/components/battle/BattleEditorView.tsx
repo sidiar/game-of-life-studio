@@ -52,6 +52,13 @@ export interface BattleEditorViewProps {
    */
   library: readonly DisplayOrganism[];
   /**
+   * Story 2.10 code review (AC8, trap 7): the WORKSPACE library holds nothing at all, as opposed
+   * to `library` above being empty because the roster has consumed it. Two different facts, two
+   * different messages — see `<OrganismRoster>`'s add control. ❌ Not `libraryUnavailable`: the
+   * list loaded fine, it is simply empty.
+   */
+  workspaceEmpty?: boolean;
+  /**
    * Story 2.10 (AC3): "+ ADD ORGANISM" -> `sessionRoster` (Decision H.2). `<BattlePage>` owns the
    * write; this component wraps it with forced decision 1's add-AND-select policy before handing
    * it to `<OrganismRoster>` — see `handleAddToRoster` below.
@@ -86,7 +93,13 @@ export interface BattleEditorViewProps {
  */
 type EditorMainProps = Omit<
   BattleEditorViewProps,
-  'rosterIds' | 'roster' | 'libraryUnavailable' | 'library' | 'onAddToRoster' | 'atCap'
+  | 'rosterIds'
+  | 'roster'
+  | 'libraryUnavailable'
+  | 'library'
+  | 'workspaceEmpty'
+  | 'onAddToRoster'
+  | 'atCap'
 > & {
   tool: Tool;
   toolRef: number | null;
@@ -399,6 +412,7 @@ export default function BattleEditorView({
   roster,
   libraryUnavailable = false,
   library,
+  workspaceEmpty = false,
   onAddToRoster,
   atCap,
   ...rest
@@ -462,6 +476,7 @@ export default function BattleEditorView({
               duplicateColorIds={duplicateColorIds}
               libraryUnavailable={libraryUnavailable}
               library={library}
+              workspaceEmpty={workspaceEmpty}
               onAddToRoster={handleAddToRoster}
               atCap={atCap}
             />

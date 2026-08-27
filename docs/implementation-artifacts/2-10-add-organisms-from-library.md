@@ -230,6 +230,98 @@ owner — inherited debt coming due, not extra scope.
         verification commands with their real output summary, and the File List.
   - [x] `sprint-status.yaml`: `2-10-add-organisms-from-library: review` when the work is done.
 
+### Review Findings
+
+Code review 2026-08-27, **Opus** (the story was implemented by Sonnet — the second pair of eyes is
+deliberately a different model). Three parallel adversarial layers: Blind Hunter (diff only, no
+project context), Edge Case Hunter (diff + full repo access), Acceptance Auditor (diff + this story
+file + `architecture.md` G.3/H.1/H.2/M6/B.2/I.4, `component-tree-battle-page.md` §2/§3.3/§3.4/§6,
+`epics.md`, `deferred-work.md`, `themes.css`, the mockup). 26 raw findings → 6 patched, 9 deferred,
+2 decision-needed, 9 dismissed as noise.
+
+- [ ] [Review][Decision] **The native `<select>` adds an organism on every Arrow-key press in
+      Firefox and Windows Chrome** — on a CLOSED `<select>`, those engines move the selection with
+      Up/Down and fire `change` per option rather than opening a popup. `onChange` here IS the add,
+      so a keyboard user browsing the list adds organisms they never chose — one per keypress, each
+      also stealing the tool selection through the add-and-select wrapper. AC9 asks for the control
+      to be "operable by keyboard alone"; it is operable and destructive. Not caught by the suite:
+      every test uses `user.selectOptions`, which sets the value directly. Fixing it means departing
+      from forced decision 2's mockup-faithful "`<select>` whose selection IS the action", so it is
+      Sidiar's call — see the PR body for the options.
+- [ ] [Review][Decision] **A palette change mid-stroke is reachable, and the story recorded it as
+      unreachable** [`apps/web/components/PetriDishCanvas.tsx`:313-319] — the Dev Agent Record and
+      `deferred-work.md` both close the `setPalette` entry with the residual "the cleanup nulls
+      `strokeRef` — unreachable via the UI today because the add control lives in the sidebar, not
+      on the canvas". Multi-touch defeats that: one finger holds the dish (pointer capture is on the
+      canvas, `touchAction: 'none'`), a second operates the sidebar `<select>`. Nothing rejects a
+      second pointer on a DIFFERENT element. The cleanup then nulls `strokeRef` DIRECTLY rather than
+      going through `endStroke`, so the painted cells are discarded with no undo entry AND
+      `releasePointerCapture` never runs. The two sibling paths already disagree deliberately — the
+      resize effect commits (`endStroke(true)`), the grid effect discards (`endStroke(false)`) — so
+      which one a palette change should follow is a policy call that Stories 2.14/2.15 inherit.
+- [x] [Review][Patch] **`/battle/new`'s seeded organism was evicted from index 0 by the first add,
+      silently repainting its cells** [`apps/web/components/battle/BattlePage.tsx`:244-290]
+- [x] [Review][Patch] **The new input and select painted their control boundary with the decorative
+      `--gol-border` (1.57:1) instead of `--gol-border-control`** [`OrganismRoster.tsx`:200,247]
+- [x] [Review][Patch] **The cap message instructed the user to "Remove an organism", an affordance
+      that exists nowhere in the app** [`OrganismRoster.tsx`:307]
+- [x] [Review][Patch] **"Every library organism is already in this battle" was stated for an EMPTY
+      workspace library, where nothing is in the battle at all** [`OrganismRoster.tsx`:316]
+- [x] [Review][Patch] **The search predicate was never trimmed, on a comment whose premise is false**
+      [`OrganismRoster.tsx`:330]
+- [x] [Review][Patch] **AC7 had no test, though the AC says in terms that it needs one**
+      [`BattlePage.test.tsx`]
+- [x] [Review][Defer] `sessionRoster` is still not reset when `battleId` changes on a mounted
+      `<BattlePage>` — deferred, pre-existing (already tracked from the Story 2.9 review; this
+      review strengthens the reachability argument and the entry is annotated)
+- [x] [Review][Defer] Focus falls to `<body>` and nothing is announced when the `<select>` is
+      replaced by a message by the user's own add — deferred, new
+- [x] [Review][Defer] `onAddToRoster` has no cap guard and `handleAddToRoster` selects
+      unconditionally, so an add clipped by `buildRosterIds` would be swallowed — deferred, unreachable today
+- [x] [Review][Defer] The AC5 cap test is over-determined — its empty library hides the combobox for
+      a second, independent reason — deferred, new
+- [x] [Review][Defer] Two library organisms with the same name are indistinguishable in the dropdown
+      — deferred, pre-existing (`OrganismSchema.name` has no uniqueness constraint)
+- [x] [Review][Defer] The search predicate does no Unicode normalisation and uses `toLowerCase`
+      rather than `toLocaleLowerCase` — deferred, new
+- [x] [Review][Defer] `filtered` is an unmemoised scan of the uncapped workspace library on every
+      render of `<OrganismSearchAdd>` — deferred, new
+- [x] [Review][Defer] The e2e AC6 paint check asserts a distinct-colour-count INCREASE, not the
+      added organism's own colour — deferred, new
+- [x] [Review][Defer] No test adds a colour-colliding organism THROUGH the add control and asserts
+      both rows warn, which the Dev Notes called "a cheap extra assertion worth having" — deferred, new
+- [x] [Review][Defer] The DISABLED Undo button fails axe's `color-contrast` at 2.9:1, so every
+      route-level axe scan is green only by luck about which state that button is in — deferred,
+      pre-existing (surfaced by a flake during this review's `npm run ci`; not this story's code)
+
+**Verified sound, for the record** (not taken on the Dev Agent Record's word):
+
+- **The `setPalette` closure (AC6) holds.** `<BattlePage>`'s `palette` memo really does depend on
+  `[rosterIds, organisms]`, `EditDish`'s construction effect really does list `palette` among its
+  three deps, and its cleanup really does drop the retained renderer — so an add reconstructs with
+  the new LUT and `drawFull`s. The closure is sound and **no `setPalette` was needed**; RFC-002's
+  frozen contract is untouched. The proof is also stronger than the Blind Hunter alleged: that layer
+  called the test's "no further warning" assertion vacuous on the warn-once dedupe, but
+  `warnedOutOfRangeRefs` is a `WeakMap` keyed by **LUT identity**
+  (`colourStateGroups.ts`:26), and the second render supplies a NEW identity — so a still-out-of-range
+  ref WOULD warn again. The assertion discriminates. The load-bearing `displayColorAt` fillStyle
+  assertion is independent of it either way. What the closure did NOT survive intact is its recorded
+  residual — see decision-needed #2.
+- **`bundle:check` re-measured independently** and matches the Dev Agent Record exactly: `/battle`
+  299.4 KB (10.6 KB headroom), `/battle/new` 299.3 KB (10.7 KB), `/` 326.5 KB (3.5 KB). No budget raised.
+- **The `deferred-work.md` bookkeeping is honest**: the `BattleTile` dependency residual is genuinely
+  re-pointed to Story 6.4 (which exists — `sprint-status.yaml`:158, `epics.md`:1488) with a written
+  reason, and the `resolveSelectedTool` scan entry is annotated rather than closed.
+- **AC9's keyboard and axe coverage exists** at both the unit and route level, as claimed.
+
+**Dismissed as noise:** the warn-once-vacuity claim above; `library` collapsing to `[]` when
+`organisms` is `null` (unreachable — `libraryUnavailable` is `status === 'error'` and the loading
+branch returns before the render); the `<select>`'s `aria-label` "duplicating" its placeholder (a
+placeholder is not a persistent visible label and vanishes on typing, so the label is correct
+practice, not the house-rule violation it was read as); several comment-accuracy nits; the
+`localStorage.length` assertion being decorative; the two test helpers re-based onto `renderEditor`'s
+defaults; the page-wide `/create/i` query in the e2e.
+
 ## Dev Notes
 
 ### The `setPalette` entry is probably already closed — verify, don't assume either way
@@ -515,6 +607,16 @@ contract is untouched; no `setPalette` was added. Residual recorded in `deferred
 construction effect's cleanup nulls `strokeRef` — unreachable via the UI today because the add
 control lives in the sidebar, not on the canvas.
 
+⚠️ **Amended by the code review (2026-08-27).** The closure itself was independently re-verified and
+stands — the mechanism, the tests and the untouched RFC-002 contract are all as described above. The
+SECOND residual's "unreachable via the UI today" is wrong, and was corrected in `deferred-work.md`:
+multi-touch reaches it (one finger holding the dish, a second operating the sidebar `<select>` —
+`handlePointerDown`'s second-pointer reject only guards the canvas element), and the cleanup nulls
+`strokeRef` **directly** rather than through `endStroke`, so the in-progress cells are discarded with
+no undo entry and `releasePointerCapture` never runs. Commit-vs-discard for a palette change is a
+policy Stories 2.14/2.15 inherit, so it went to Sidiar as a decision-needed finding rather than being
+patched here.
+
 **Forced decision 1 (add-and-select) — option (b) taken.** Selecting an entry both adds it to
 `sessionRoster` AND selects it (`<BattleEditorView>`'s `handleAddToRoster` wraps `<BattlePage>`'s
 `onAddToRoster` with `setChosenTool`). `<BattlePage>`'s write and `<BattleEditorView>`'s selection
@@ -557,6 +659,13 @@ whose search matches nothing renders "No organisms match "<query>"." and keeps t
 rendered so the user can see/clear what they typed. AC5's cap message ("Roster is full — 255
 organisms is the limit…") takes priority over both — checked first, since a full roster is true
 regardless of what the broader library holds.
+
+⚠️ **AC7 was claimed satisfied without a test, and the code review added one.** The
+`<BattleEditorView>` describe block titled "(AC3, AC7, forced decision 1)" renders the bare component
+with a hand-fed roster and a manual `rerender`; it never exercises `/battle/new`, a Conway-less
+library, or a paint, so it proved nothing about AC7 — which says in terms that "it needs a test that
+says so". The review's `BattlePage.test.tsx` addition is that test. The review also found that the
+one `/battle/new` path that WAS exercised by hand was the broken one — see the trap-1 finding.
 
 **AC5's cap test** reuses `rosterUnion.test.ts`'s approach rather than 255 schema-valid `Organism`
 library records: `BattlePage.test.tsx`'s cap test builds a real `Battle` with 255 distinct

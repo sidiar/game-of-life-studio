@@ -1190,6 +1190,101 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
     expect(within(sidebar).getByText(/roster is full/i)).toBeInTheDocument();
     expect(within(sidebar).getByText(/255/)).toBeInTheDocument();
   });
+
+  // ⚠️ Story 2.10 CODE REVIEW regression (2026-08-27) — trap 1, the append-only invariant, and the
+  // one failure this story shipped. The `rosterIds` memo applied the `DEFAULT_TOOL` seed only while
+  // the UNION (placed + session) was empty. This story gave `sessionRoster` its first writer, which
+  // made that condition falsifiable by an add: the seeded organism was silently evicted from index
+  // 0 and the added one took its place, so `cell = roster index + 1` (RFC-006 Decision 2)
+  // reinterpreted every cell painted with the seed. No throw, no warning — the whole 660-test suite
+  // stayed green. The seed now lives in the union's BASE, so a session add can only ever append.
+  it('keeps the seeded organism at index 0 when an add lands on /battle/new (trap 1)', async () => {
+    const user = userEvent.setup();
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    // The seed, before the add: one row, and it is the default tool's organism.
+    expect(
+      within(screen.getByRole('list'))
+        .getAllByRole('button')
+        .map((row) => row.textContent),
+    ).toEqual([CONWAYS_CLASSIC.name]);
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      organisms[0].id,
+    );
+
+    // APPENDED, never substituted: the seed keeps index 0, so every cell already painted as ref 1
+    // still means the seeded organism.
+    expect(
+      within(screen.getByRole('list'))
+        .getAllByRole('button')
+        .map((row) => row.textContent),
+    ).toEqual([CONWAYS_CLASSIC.name, organisms[0].name]);
+    // And the seeded organism is still NOT offered again (AC1's exclusion is the same union).
+    expect(
+      within(screen.getByRole('complementary'))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).not.toContain(CONWAYS_CLASSIC.name);
+  });
+
+  // AC7, which the story required a test for and did not have: the window Story 2.9's decision 1
+  // deliberately left open — a library that HOLDS organisms but not Conway's Classic, on
+  // /battle/new. The seed does not fire, so the roster is honestly empty and the eraser carries the
+  // selection; the add control is what makes the dish paintable again, and this is the assertion
+  // that says so.
+  it('makes /battle/new paintable again when the library lacks the default organism (AC7)', async () => {
+    const user = userEvent.setup();
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    // Story 2.9's accepted trade-off, still true: no roster, no organism tool, the eraser selected.
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      organisms[0].id,
+    );
+
+    // Paid back: a real roster row, selected, so `refForTool` resolves and the dish is paintable.
+    const row = screen.getByRole('button', { name: organisms[0].name });
+    expect(row).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  // AC8 / trap 7, code review: `library` is a DIFFERENCE, so it reads empty for two unrelated
+  // reasons. In the empty-WORKSPACE window (a fresh profile, or a bookmarked /battle/new opened
+  // before the Gallery ever ran the workspace seed) the roster is empty and nothing is in this
+  // battle — so the "already in this battle" copy was a plain falsehood, in the exact state where
+  // this message is the user's only signpost.
+  it('says the library is empty, not that the battle already holds it all (AC8)', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: [] })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    const sidebar = screen.getByRole('complementary');
+    expect(within(sidebar).getByText(/your organism library is empty/i)).toBeInTheDocument();
+    expect(within(sidebar).queryByText(/already in this battle/i)).toBeNull();
+    // Still not the AC7 degraded notice — the list loaded fine, it is simply empty.
+    expect(screen.queryByText(/organism library could not be read/i)).toBeNull();
+  });
 });
 
 function findEmptyCell(gridState: readonly (readonly number[])[]): { col: number; row: number } {

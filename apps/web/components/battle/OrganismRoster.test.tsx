@@ -424,6 +424,62 @@ describe('OrganismRoster — the add control (AC1, AC2, AC3, AC5, AC8)', () => {
     expect(screen.queryByText(/already in this battle/i)).toBeNull();
     expect(screen.getByText(/roster is full/i)).toBeInTheDocument();
   });
+
+  // Code review (AC5): the cap message used to end "Remove an organism to add another" — an
+  // instruction pointing at an affordance that exists in neither this story nor the app (the
+  // story's own "What NOT to build": no row removal; Decision H.1's prune is Story 2.13's save).
+  it('does not tell the user to remove an organism at the cap — there is no such control', () => {
+    renderRoster({ library: LIBRARY, atCap: true });
+
+    expect(screen.queryByText(/remove an organism/i)).toBeNull();
+  });
+
+  // Code review (AC8, trap 7): `library` is a DIFFERENCE, so it reads empty both when the roster
+  // consumed the workspace and when the workspace itself is empty. Only the first is "already in
+  // this battle"; asserting the pair keeps one message from being reused for the other fact.
+  it('distinguishes an empty WORKSPACE from a roster that consumed the library', () => {
+    const consumed = renderRoster({ library: [], workspaceEmpty: false });
+    expect(screen.getByText(/already in this battle/i)).toBeInTheDocument();
+    expect(screen.queryByText(/your organism library is empty/i)).toBeNull();
+    consumed.unmount();
+
+    renderRoster({ library: [], workspaceEmpty: true });
+    expect(screen.getByText(/your organism library is empty/i)).toBeInTheDocument();
+    expect(screen.queryByText(/already in this battle/i)).toBeNull();
+  });
+
+  // Code review (AC2): the predicate is trimmed. Mobile keyboards append a space after an accepted
+  // word and pasted names carry their own, and untrimmed that reported "No organisms match" with
+  // the organism sitting right there — with the offending character invisible in the message.
+  it('ignores surrounding whitespace in the search query', async () => {
+    const user = userEvent.setup();
+    renderRoster({ library: LIBRARY });
+
+    await user.type(screen.getByRole('textbox', { name: /search organisms/i }), '  gold  ');
+
+    expect(
+      within(screen.getByRole('combobox', { name: /add organism/i }))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['+ ADD ORGANISM', 'Gold Glider']);
+    expect(screen.queryByText(/no organisms match/i)).toBeNull();
+  });
+
+  // The other half of the same predicate: a query of nothing but spaces is an EMPTY query, so it
+  // matches everything — which is what the pre-trim comment claimed was already true and was not
+  // (it is false for any single-word name).
+  it('treats an all-whitespace query as an empty one', async () => {
+    const user = userEvent.setup();
+    renderRoster({ library: LIBRARY });
+
+    await user.type(screen.getByRole('textbox', { name: /search organisms/i }), '   ');
+
+    expect(
+      within(screen.getByRole('combobox', { name: /add organism/i }))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['+ ADD ORGANISM', 'Gold Glider', 'Magenta Mutant']);
+  });
 });
 
 describe('OrganismRoster — keyboard and axe (AC5)', () => {

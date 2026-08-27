@@ -197,7 +197,13 @@ const AddContainer = styled('div')({
  */
 const SearchInput = styled('input')({
   background: 'var(--gol-bg-secondary)',
-  border: '1px solid var(--gol-border)',
+  // Story 2.10 code review: `--gol-border-control`, NOT the mockup's literal `var(--border)`.
+  // themes.css departure #2 splits the two on purpose — `--gol-border` (#333333) is decorative
+  // (dividers, card edges) and measures 1.57:1, while SC 1.4.11 needs 3:1 for a boundary that
+  // IDENTIFIES a control. This border is this input's ONLY boundary, so it is squarely covered.
+  // `<BattleTile>`'s DeleteButton records the same departure verbatim, and `<EditorStatusBar>` —
+  // the house style this block claims to follow — already uses the control token.
+  border: '1px solid var(--gol-border-control)',
   color: 'var(--gol-text-primary)',
   padding: '10px 12px',
   fontSize: '11px',
@@ -236,7 +242,8 @@ const SearchInput = styled('input')({
  */
 const AddSelect = styled('select')({
   background: 'var(--gol-bg-secondary)',
-  border: '1px solid var(--gol-border)',
+  // `--gol-border-control` for the same SC 1.4.11 reason as `SearchInput` above.
+  border: '1px solid var(--gol-border-control)',
   color: 'var(--gol-text-primary)',
   padding: '10px 12px',
   fontSize: '11px',
@@ -278,8 +285,10 @@ const AddMessage = styled('p')({
  * Four states, in priority order:
  * 1. **At the cap** (AC5, Decision G.3) — the roster identity array is full. No search, no
  *    select: typing would filter a list nothing can be added from.
- * 2. **Library empty** (AC8, NFR-4.1) — every workspace organism is already in this battle's
- *    roster. Nothing to search either.
+ * 2. **Library empty** (AC8, NFR-4.1) — nothing to add, and nothing to search. Two sentences, not
+ *    one: `library` is a difference, so it reads empty both when the roster has consumed the
+ *    workspace and when the workspace itself is empty (`workspaceEmpty`), and only one of those
+ *    is "every library organism is already in this battle" (code review, trap 7).
  * 3. **Search matches nothing** (AC8) — a DIFFERENT fact from #2, and stated differently: the
  *    library has organisms, this search text just does not match any of them. The search input
  *    stays rendered so the user can see and clear what they typed.
@@ -292,10 +301,12 @@ const AddMessage = styled('p')({
  */
 function OrganismSearchAdd({
   library,
+  workspaceEmpty,
   onAddToRoster,
   atCap,
 }: {
   library: readonly DisplayOrganism[];
+  workspaceEmpty: boolean;
   onAddToRoster(organismId: string): void;
   atCap: boolean;
 }) {
@@ -305,25 +316,40 @@ function OrganismSearchAdd({
     return (
       <AddContainer>
         <AddMessage>
-          Roster is full — {MAX_ROSTER_SIZE} organisms is the limit for one battle. Remove an
-          organism to add another.
+          Roster is full — {MAX_ROSTER_SIZE} organisms is the limit for one battle.
         </AddMessage>
       </AddContainer>
     );
   }
 
   if (library.length === 0) {
+    // Story 2.10 code review (AC8, trap 7): `library` is a DIFFERENCE, so it reads empty for two
+    // unrelated reasons and each needs its own true sentence. Claiming "every library organism is
+    // already in this battle" for a workspace that holds NO organisms is false — and it is false in
+    // exactly the window Story 2.9's decision 1 left for this story to close (a fresh profile, or a
+    // bookmarked `/battle/new` opened before the Gallery ever ran the workspace seed), where the
+    // roster is empty, the dish is unpaintable, and this message is the user's only signpost.
     return (
       <AddContainer>
-        <AddMessage>Every library organism is already in this battle.</AddMessage>
+        <AddMessage>
+          {workspaceEmpty
+            ? 'Your organism library is empty — create an organism to place it in a battle.'
+            : 'Every library organism is already in this battle.'}
+        </AddMessage>
       </AddContainer>
     );
   }
 
   // Case-insensitive substring on the organism name (AC2's predicate — the story's own pick,
-  // recorded here rather than left implicit). Never trimmed: a search of all spaces is a substring
-  // of every name and correctly matches everything, the same as an empty search does.
-  const query = searchText.toLowerCase();
+  // recorded here rather than left implicit).
+  //
+  // Story 2.10 code review: TRIMMED. The comment that stood here justified leaving whitespace in
+  // on the claim that "a search of all spaces is a substring of every name" — which is false for
+  // any single-word name, and irrelevant to the case that actually bites: mobile keyboards append
+  // a space after an accepted word, and a pasted name carries its own. Untrimmed, "conway " then
+  // reports "No organisms match" with the organism sitting right there in the library, and the
+  // offending character is invisible in the message that quotes it back.
+  const query = searchText.trim().toLowerCase();
   const filtered = library.filter((organism) => organism.name.toLowerCase().includes(query));
 
   return (
@@ -406,6 +432,11 @@ export interface OrganismRosterProps {
   libraryUnavailable?: boolean;
   /** Story 2.10 (FR-7.15): the full shared library minus the roster — the add control's options. */
   library: readonly DisplayOrganism[];
+  /**
+   * Story 2.10 code review (AC8): the WORKSPACE library holds nothing at all — as distinct from
+   * `library` being empty because the roster consumed it. Two facts, two messages.
+   */
+  workspaceEmpty?: boolean;
   /** Story 2.10 (AC3): "+ ADD ORGANISM" -> `sessionRoster` (Decision H.2). */
   onAddToRoster(organismId: string): void;
   /** Story 2.10 (AC5, Decision G.3): the roster identity array is at the 255-organism cap. */
@@ -429,6 +460,7 @@ export default function OrganismRoster({
   duplicateColorIds,
   libraryUnavailable = false,
   library,
+  workspaceEmpty = false,
   onAddToRoster,
   atCap = false,
 }: OrganismRosterProps) {
@@ -482,7 +514,12 @@ export default function OrganismRoster({
               `.add-organism-container`'s own border-top separation from the list above it. Not
               rendered at all when the library failed to load (AC8's third state) — this whole
               branch is the `!libraryUnavailable` arm. */}
-          <OrganismSearchAdd library={library} onAddToRoster={onAddToRoster} atCap={atCap} />
+          <OrganismSearchAdd
+            library={library}
+            workspaceEmpty={workspaceEmpty}
+            onAddToRoster={onAddToRoster}
+            atCap={atCap}
+          />
         </>
       )}
       {/* FR-3.6. OUTSIDE <RosterList> — the eraser is a tool, not one of the battle's organisms,
