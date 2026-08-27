@@ -655,3 +655,18 @@ sonnet (Claude Opus 5, running as the Sonnet-designated dev agent per the story'
 - `docs/implementation-artifacts/sprint-status.yaml` — `2-11-battle-name-dirty-tracking: review`.
 
 Dev Model: sonnet   # follows the sidebar-section, seeded-state, styled-primitive and prop-threading patterns Stories 2.8-2.10 already established; no new architecture
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 25s | 20 | 3,214 | 11,871 | 398,151 | 413,256 |
+| Step 1 — create-story | opus-5 | 1 | 8m 41s | 180 | 9,080 | 394,801 | 8,322,216 | 8,726,277 |
+| Step 2 — dev-story | sonnet-5 | 1 | 51m 33s | 1,250 | 60,589 | 930,259 | 188,072,216 | 189,064,314 |
+| Step 3 — code review + PR | opus-5 | 4 | 28m 06s | 640 | 63,846 | 2,111,420 | 41,549,806 | 43,725,712 |
+| _of which the orchestrator_ | opus-5 | — | — | 64 | 12,461 | 44,857 | 1,502,509 | 1,559,891 |
+| **Total (create-story → PR ready)** | | 6 | **1h 28m** | 2,090 | 136,729 | 3,448,351 | 238,342,389 | **241,929,559** |
+
+Run started 2026-08-27 17:53 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
