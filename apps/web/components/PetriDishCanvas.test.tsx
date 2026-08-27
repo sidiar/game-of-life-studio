@@ -1154,12 +1154,11 @@ describe('PetriDishCanvas (edit variant) — click placement', () => {
   });
 });
 
-// Drag painting (Story 2.6, AC1-AC8). Same fixtures and helpers as the click-placement describe
-// above — `mount`/`centreOf`/`stubRect`/`installContexts` are declared there and reused here via
-// closure since this describe sits inside the same file scope... no: each `describe` above is a
-// SIBLING at module scope, so these are re-declared where needed and the shared constants
-// (PLACE_SIZE, CELL, RECT, EMPTY_GRID, PALETTE, TOOL, COLORS) are read off the module scope
-// directly, matching this file's existing convention of one fixture set per file.
+// Drag painting (Story 2.6, AC1-AC8). Each `describe` in this file is a sibling at module scope,
+// so the click-placement describe's `mount`/`centreOf`/`stubRect`/`installContexts` are private to
+// it and are re-declared here; only `PALETTE`, `TOOL`, `COLORS` and `makeGrid` come off module
+// scope. Folding the two fixture sets into one shared, parameterised helper is deferred work
+// (review 2026-08-27) rather than a rewrite of Story 2.5's describe from inside this story.
 describe('PetriDishCanvas (edit variant) — drag painting (Story 2.6)', () => {
   const PLACE_SIZE = { cols: 20, rows: 10 };
   const CELL = 15;
@@ -1339,17 +1338,10 @@ describe('PetriDishCanvas (edit variant) — drag painting (Story 2.6)', () => {
     'drawFull is never called during the stroke, and the round trip after the commit does not ' +
       'trigger it either (AC2 + the paintedGridRef trap)',
     () => {
-      const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
-      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
-        this: HTMLCanvasElement,
-      ) {
-        let context = contexts.get(this);
-        if (context === undefined) {
-          context = new RecordingContext2D();
-          contexts.set(this, context);
-        }
-        return context as unknown as CanvasRenderingContext2D;
-      });
+      // review (2026-08-27): the describe's own `installContexts()`, not a third inline copy of
+      // the same spy — this test renders directly rather than through `mount()` only because it
+      // needs the `rerender` handle for the commit round trip.
+      installContexts();
       const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
       const onStrokeCommit = vi.fn();
 
@@ -1477,6 +1469,17 @@ describe('PetriDishCanvas (edit variant) — drag painting (Story 2.6)', () => {
     expect(drawSpy.mock.calls.length).toBe(drawCallsAfterFirstDown);
     fireEvent.pointerMove(canvas, { ...moveTo(9, 8), pointerId: 2 });
     expect(drawSpy.mock.calls.length).toBe(drawCallsAfterFirstDown);
+
+    // review (2026-08-27): the second pointer's UP must not terminate the stroke it never
+    // started either — the guard the AC7 test above only covered for `pointerdown`/`pointermove`.
+    fireEvent.pointerUp(canvas, { ...centreOf(9, 8), pointerId: 2 });
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+
+    // review (2026-08-27): and neither must a SECONDARY button's release. A mouse reports every
+    // button on one pointerId, so a right-click during a left-drag arrives here as a `pointerup`
+    // with `button === 2` and the left button still held (`buttons === 1`).
+    fireEvent.pointerUp(canvas, { ...centreOf(3, 2), button: 2, buttons: 1 });
+    expect(onStrokeCommit).not.toHaveBeenCalled();
 
     // The PRIMARY stroke is unaffected and completes normally.
     fireEvent.pointerMove(canvas, moveTo(3, 2));

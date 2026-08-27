@@ -4,7 +4,7 @@ baseline_commit: 07b97d80f0c85a4f70b02cca83d8589aa9783615
 
 # Story 2.6: Drag Painting
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -658,11 +658,100 @@ Modified:
 - `docs/implementation-artifacts/sprint-status.yaml`
 - `docs/implementation-artifacts/2-6-drag-painting.md` (this file)
 
+### Code Review Record (2026-08-27, opus, fresh context)
+
+Three adversarial layers (Blind Hunter — diff only; Edge Case Hunter — diff + repo; Acceptance
+Auditor — diff + spec + context docs), plus an independent pass. Findings that survived
+verification against the code (each claim mutation-checked, not trusted):
+
+**Patched, in the review commit:**
+
+1. **`paintedGridRef` was set on the no-renderer commit path**, dropping the split Story 2.5
+   recorded in a comment and trap 12 spells out ("keep `paintedGridRef` unset on that path"). The
+   ref's contract is "this grid is already on screen"; with no 2D context nothing was painted.
+   Inert today (the grid effect returns on `renderer === null` first) but it is a deliberate
+   invariant that 2.8/2.14 will make observable. Guarded on `rendererRef.current !== null` again;
+   the commit still fires either way.
+2. **The mid-stroke-resize terminate was gated behind `renderer !== null`.** The cached `rect` goes
+   stale on a re-layout whether or not a renderer exists, and trap 12's no-context path still
+   writes cells and still commits — so that path would have mapped every remaining move through
+   the pre-resize box. `endStroke(true)` now runs before the renderer guard.
+3. **The e2e's area assertion did not bind.** `dragPixels > clickPixels` passes with `cellsBetween`
+   deleted outright: the drag still paints two cells (down + the single move's endpoint) against
+   the click's one. Task 8 named area as *the* claim that distinguishes this story from 2.5, so the
+   floor is now `clickPixels * 10` — the sweep covers 60% of the dish width.
+4. **No drag gesture crossed the `onCommitGrid` seam in any integration test** (Task 7's last
+   bullet asked for exactly that; both files only gained a `pointerUp` on existing *click*
+   fixtures). Added one press-move-move-release to `BattleEditorView.test.tsx`, reusing
+   `mountEditor` rather than re-declaring its boilerplate, asserting one call carrying cols 2..8 —
+   mutation-checked: it fails with the interpolation removed.
+5. **A secondary button's release ended and committed the stroke mid-drag.** `handlePointerUp`
+   checked only `pointerId`, and a mouse reports every button on ONE pointerId — so right-clicking
+   during a left-drag arrives as a `pointerup` with `button === 2` while the left button is still
+   held, and it terminated the gesture. AC7 says a non-primary button must not disturb the stroke;
+   the rest of the drag then painted nothing (`strokeRef` was null) and under 2.8 one gesture would
+   have become two undo entries. Added the mirror of pointer-down's own `button !== 0` guard —
+   deliberately NOT to `pointercancel`/`lostpointercapture`, which carry `button === -1` and are
+   real terminations whatever caused them. Pinned by extending the AC7 test, which now also fires
+   a foreign-`pointerId` `pointerup` (that guard survived every mutation before).
+6. **`cellsBetween`'s bounding-box invariant was unasserted** even though the module's own doc
+   comment declares it load-bearing — it is the whole reason `markDirty`'s `DirtyCellRangeError` is
+   unreachable from a pointer handler, since `pointerToCell` vouches only for the two *endpoints*.
+   Added a swept assertion over every integer endpoint pair in a 13×13 neighbourhood. (The exact
+   stair-step path stays deliberately unpinned — the test file says so, and both roundings are
+   valid lines.)
+7. **Two test-hygiene fixes**: a third inline copy of the `getContext` spy in the drawFull test
+   replaced with the describe's own `installContexts()`, and the drag describe's header comment —
+   which narrated a reversal mid-sentence and then stated the opposite of what the code does —
+   rewritten.
+
+**Verified and found sound** (highest-risk claims, each mutation-checked): `cellsBetween` is a
+correct Bresenham on all four quadrants, both slope-dominance branches and the 45° diagonal, with
+`from === to → []`, `to` always last, no repeats, and no cell outside the endpoints' bounding box;
+deleting `paintedGridRef.current = …` reddens two tests; replacing `cellsBetween(anchor, cell)`
+with `[cell]` reddens the AC4 unit test and the new integration test. `renderer.draw`'s retained
+`lastGrid` is a repaint source, not a diff baseline (`lastColourState` is a separate
+`Uint16Array`), so mutating the working buffer in place across segments is safe and is what makes
+`resize()`'s repaint show the live stroke. All 13 traps hold in the shipped code except trap 12's
+`paintedGridRef` half, patched above. No "What NOT to build" boundary crossed; no `packages/*`
+change; no widening of `onStrokeCommit`/`onCommitGrid`.
+
+**Deferred — 12 items, all recorded in `deferred-work.md` with owners:** stale cached geometry on a
+mid-stroke *scroll* (`ResizeObserver` sees size, not position); the resize effect's stale
+`endStroke`/`onStrokeCommit` closure (inert while `onCommitGrid` is a bare `setState`, live from
+2.8); the construction-effect cleanup discarding a stroke on any `[size, palette, colors]` change
+and not releasing capture; `releasePointerCapture` unguarded by `hasPointerCapture` on the
+cancel/lost-capture paths; pointer capture itself having no test that fails when it is deleted (and
+AC8 pinned only by a jsdom computed-style check, with no touch e2e); Task 4's resize decision
+untested (no `ResizeObserver` in jsdom); the duplicated fixture set across the two edit-variant
+describes; the home-route bundle headroom at 3.5 KB; and —
+
+**The `BattlePage.test.tsx` flake the Dev Agent Record reported: claim verified, diagnosis
+corrected.** It is genuinely pre-existing — reproduced on `main` at 1 failure in 10
+`npx turbo run test --force` runs, and on this branch at 1 in 6 — so it is not this story's doing.
+But it is not confined to one test and it is not test-*order* sensitivity: three tests in that file
+snapshot the recording context (or the `getContext` spy's call count) immediately after
+`await findByRole(...)`, assuming the construction effect has already flushed, and an `as` cast
+turns the miss into a `TypeError` instead of a clear failure. Under CPU contention that assumption
+sometimes fails. Zero failures across 8 solo runs of the file and a full single-project
+`vitest run`, which is why it looked like a one-off. **CI can go red on this PR without this story
+having caused it** — re-run rather than chase it here.
+
+**Decisions outstanding: none.** The home-route budget question is carried in the PR as the
+standing deferred item it already is (`bundle:check` is green at 3.5 KB headroom; both prior moves
+were Sidiar's call and none was made here).
+
+Verification after the patches: `npm run ci` **green** end to end — typecheck, lint, format:check,
+spec:check, coverage (5 packages, `apps/web` 39 files / 529 tests), build:standalone, bundle:check
+(`/battle` + `/battle/new` 296.4 KB / 310 KB budget, 13.6 KB headroom; `/` 326.5 KB / 330 KB, 3.5 KB
+headroom), e2e **160 passed, 4 skipped** across chromium/firefox/webkit/tablet.
+
 ## Change Log
 
 | Date       | Change                                                                                                                                                                            |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-08-27 | Story created (create-story), ready-for-dev                                                                                                                                       |
 | 2026-08-27 | Implemented (dev-story): drag-painting stroke pipeline, cellLine.ts interpolation unit, touch-action/user-select on the edit dish, updated Story 2.5 click tests for the pointer-up commit timing, new drag-painting unit and e2e tests. `npm run ci` green. Status -> review. |
+| 2026-08-27 | Code review (opus, fresh context): 7 patches applied in a separate commit, 12 items deferred, 0 decisions outstanding. `npm run ci` green after the patches. Status -> done. |
 
 Dev Model: sonnet   # extends the pointer/commit path Story 2.5 already established — the seam, the mapper, the Tool model and the dirty-paint discipline all exist; this adds a ref-held stroke and a pure interpolation unit on top of them, shaping nothing new for 2.7+

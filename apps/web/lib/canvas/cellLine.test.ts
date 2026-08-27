@@ -75,6 +75,39 @@ describe('cellsBetween', () => {
     expect(result.at(-1)).toEqual(to);
   });
 
+  // review (2026-08-27): the module's doc comment declares this invariant LOAD-BEARING — it is
+  // the whole reason `markDirty`'s `DirtyCellRangeError` is unreachable from inside a pointer
+  // handler, because `pointerToCell` only vouches for the two ENDPOINTS. Nothing asserted it, so
+  // a stepping change that walked one cell outside the box would have shipped green and thrown
+  // out of an event handler at some grid edge instead. Swept rather than sampled: every integer
+  // endpoint pair in a 13x13 neighbourhood, both directions.
+  it('never returns a cell outside the endpoints’ bounding box (the markDirty safety claim)', () => {
+    // Violations are COLLECTED and asserted once rather than `expect`-ed per cell: the sweep is
+    // ~28k endpoint pairs, and an expect() per coordinate runs for minutes under v8 coverage
+    // instrumentation (it timed out the 5s default during this review). One assertion also names
+    // the offending pair instead of just a number.
+    const escapes: string[] = [];
+    for (let x0 = 0; x0 < 13; x0++) {
+      for (let y0 = 0; y0 < 13; y0++) {
+        for (let x1 = 0; x1 < 13; x1++) {
+          for (let y1 = 0; y1 < 13; y1++) {
+            for (const { col, row } of cellsBetween({ col: x0, row: y0 }, { col: x1, row: y1 })) {
+              if (
+                col < Math.min(x0, x1) ||
+                col > Math.max(x0, x1) ||
+                row < Math.min(y0, y1) ||
+                row > Math.max(y0, y1)
+              ) {
+                escapes.push(`(${x0},${y0})->(${x1},${y1}) escaped at (${col},${row})`);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(escapes).toEqual([]);
+  });
+
   it('never repeats a cell', () => {
     const from = { col: 0, row: 0 };
     const targets = [

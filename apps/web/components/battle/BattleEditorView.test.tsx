@@ -193,6 +193,41 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
     expect([...next.occupant].filter((v) => v !== 0)).toHaveLength(1);
   });
 
+  // Story 2.6 Task 7, added in review (2026-08-27): the click above is the DEGENERATE stroke, so
+  // on its own it never proves the coalescing that RFC-005 Decision 6 and Story 2.8's undo ring
+  // both depend on. A real press-drag-release has to cross this seam exactly once too — with the
+  // interpolated cells included, since `cellsBetween` runs inside <PetriDishCanvas> and only the
+  // committed grid shows whether they survived the trip through `onStrokeCommit`.
+  it('coalesces a whole drag into ONE onCommitGrid call carrying every traversed cell (AC4, AC5)', () => {
+    const onCommitGrid = vi.fn();
+    const canvas = mountEditor(onCommitGrid);
+    const at = (col: number, row: number) => ({
+      clientX: col * CELL + CELL / 2,
+      clientY: row * CELL + CELL / 2,
+      button: 0,
+      isPrimary: true,
+    });
+
+    fireEvent.pointerDown(canvas, at(2, 4));
+    // `buttons: 1` is the move-time bitmask — `button` is -1 on a pointermove, and a move
+    // reporting no primary button self-terminates the stroke (trap 5).
+    fireEvent.pointerMove(canvas, { ...at(4, 4), buttons: 1 });
+    // One jump of four columns: the intervening cells exist only if the interpolation reached
+    // the committed grid.
+    fireEvent.pointerMove(canvas, { ...at(8, 4), buttons: 1 });
+    expect(onCommitGrid).not.toHaveBeenCalled(); // one gesture, still open.
+    fireEvent.pointerUp(canvas, { ...at(8, 4), buttons: 0 });
+
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
+    const next = onCommitGrid.mock.calls[0][0] as RenderableGrid;
+    const ref = ROSTER_WITH_CONWAY_SECOND.indexOf(CONWAYS_CLASSIC_ID) + 1;
+    const painted = [...next.occupant].flatMap((value, index) => (value === 0 ? [] : [index]));
+    expect(painted).toEqual(
+      Array.from({ length: 7 }, (_, i) => 4 * PLACE_SIZE.cols + (i + 2)), // cols 2..8 on row 4
+    );
+    for (const index of painted) expect(next.occupant[index]).toBe(ref);
+  });
+
   // The tool resolves against the roster it is GIVEN. An empty roster means no ref, and a click
   // must then place nothing rather than writing ref 0 — which means EMPTY (Story 2.7's eraser).
   it('commits nothing when the roster contains no match for the selected tool', () => {

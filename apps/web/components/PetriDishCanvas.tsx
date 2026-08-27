@@ -346,14 +346,21 @@ function EditDish({
       lastWidth = width;
       lastHeight = height;
 
-      const renderer = rendererRef.current;
-      if (renderer === null) return;
       // Task 4 forced decision: a mid-stroke re-layout ENDS the stroke rather than recomputing
       // the cached geometry (StrokeGeometry's doc comment). Ending it here — before resize() —
       // commits whatever was painted so far through the SAME `renderer.draw` calls the stroke
       // already made, so `renderer`'s own `lastGrid` is already the working grid resize() is
       // about to repaint: no flicker, no stale rect surviving into the next move.
+      //
+      // review (2026-08-27): this runs BEFORE the renderer guard below, not after. The stroke's
+      // cached `rect` goes stale on a re-layout whether or not a renderer exists — trap 12's
+      // no-context path still writes cells into the working grid and still commits — so gating
+      // the terminate on `renderer !== null` would leave exactly that path mapping every
+      // remaining move through the pre-resize box and committing the wrong cells.
       if (strokeRef.current !== null) endStroke(true);
+
+      const renderer = rendererRef.current;
+      if (renderer === null) return;
       try {
         // `resize()` — NOT reconstruction. Reconstructing here throws away the dirty baseline
         // 2.5 depends on, and this retained instance is one of exactly two surfaces where
@@ -445,7 +452,18 @@ function EditDish({
 
     if (!commit || !stroke.changed) return; // AC6: a no-op stroke commits nothing.
 
-    paintedGridRef.current = stroke.workingGrid;
+    // ⚠️ Trap 3, and the single most likely defect in this file: the committed grid comes straight
+    // back down as a NEW `grid` prop identity and the grid effect full-repaints anything it has
+    // not already seen — 6,000 cells plus a colour-state re-prime after every stroke, with every
+    // test green and the dish still looking perfect.
+    //
+    // review (2026-08-27): guarded on the renderer again, restoring the split Story 2.5 recorded
+    // and this story dropped. `paintedGridRef`'s contract is "this grid is already ON SCREEN";
+    // when construction failed for want of a 2D context (trap 12 — always, under jsdom) nothing
+    // was painted, so claiming it would suppress the full repaint the construction effect owes
+    // that grid if a context ever does become available. The commit itself fires either way —
+    // the model is not the view.
+    if (rendererRef.current !== null) paintedGridRef.current = stroke.workingGrid;
     onStrokeCommit(stroke.workingGrid);
   }
 
@@ -594,6 +612,16 @@ function EditDish({
   function handlePointerUp(event: ReactPointerEvent<HTMLCanvasElement>): void {
     const stroke = strokeRef.current;
     if (stroke === null || event.pointerId !== stroke.pointerId) return;
+    // review (2026-08-27): the SAME mirror of pointer-down's `button !== 0` guard, and the one
+    // place a `pointermove`'s `buttons` bitmask is the wrong tool. A mouse reports every button
+    // on ONE pointerId, so right-clicking during a left-drag fires a `pointerup` with
+    // `button === 2` while the left button is still held — without this, that ends and commits
+    // the stroke mid-gesture (AC7 says a non-primary button must not disturb it), the rest of the
+    // drag paints nothing because `strokeRef` is now null, and under Story 2.8 one gesture splits
+    // into two undo entries. `button` is 0 for touch contact and pen tip too, so this is not a
+    // mouse-only check; `pointercancel` and `lostpointercapture` deliberately do NOT get it —
+    // both carry `button === -1` and both are real terminations whatever button caused them.
+    if (event.button !== 0) return;
     endStroke(true);
   }
 

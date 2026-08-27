@@ -378,7 +378,13 @@ test.describe('battle route (Story 2.1)', () => {
     await page.mouse.up();
     const dragPixels = await countChangedPixels(dragCanvas);
 
-    expect(dragPixels).toBeGreaterThan(clickPixels);
+    // review (2026-08-27): a MULTIPLE, not a bare `> clickPixels`. With `cellsBetween` deleted
+    // outright the drag still paints two cells — the pointer-down cell and the single move's
+    // endpoint — against the click's one, so `dragPixels > clickPixels` passes with AC4's
+    // interpolation entirely absent, which is the one thing this test exists to prove. The sweep
+    // covers 60% of the dish width (dozens of cells at either editable preset), so a 10x floor
+    // clears the two-cell degenerate case by a wide margin without pinning an exact geometry.
+    expect(dragPixels).toBeGreaterThan(clickPixels * 10);
     expect(errors).toEqual([]);
   });
 
