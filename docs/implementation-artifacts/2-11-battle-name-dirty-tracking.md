@@ -270,6 +270,33 @@ named this story as its trigger**, likewise.
         real output summary, and the File List.
   - [x] `sprint-status.yaml`: `2-11-battle-name-dirty-tracking: review` when the work is done.
 
+### Review Findings
+
+Code review, 2026-08-27 (Opus, second pair of eyes on a Sonnet implementation). Three layers ran:
+Blind Hunter, Edge Case Hunter, Acceptance Auditor. 1 decision-needed, 9 patch, 5 defer, 4 dismissed.
+
+- [ ] [Review][Decision] **Forced decision 6 (native `maxLength` only) may need reversing to (b), a clamp in the change handler** — the story pre-recorded (a) "with a test", and (a) is what shipped and what `BattleNameField.test.tsx` pins. The review found that the DOM `maxLength` attribute is a UA guarantee for ordinary typing ONLY: it is not applied to text committed by an active IME (a long CJK phrase into a field already near the cap), nor to `document.execCommand('insertText')`, browser voice dictation, or a password-manager/autofill write. Each of those fires an `input` event whose `event.target.value` is over 100, and nothing downstream clamps it — `BattleNameField`'s handler passes `event.target.value` through verbatim and `<BattlePage>`'s `handleNameChange` stores it. The observable result is a counter reading "104 / 100" with no error state, over a `battleName` that `BattleSchema.name`'s `.max(100)` will reject at Story 2.13's save. The fix is one expression (`onChange(event.target.value.slice(0, maxLength))`), but the story itself flagged the consequence — "it changes what `onChange` receives and therefore what the counter can ever show" — so this is a reversal of a recorded decision, not a bug fix. **Sidiar's call.** Not resolved in review; the story is NOT `done` while it stands.
+
+- [x] [Review][Patch] Title `MutationObserver`'s re-assertions are now bounded [apps/web/components/battle/BattlePage.tsx:239-268] — a callback that writes back what it observes re-queues itself as a microtask, so any second reactive title writer starved the event loop and froze the tab permanently (reproduced against the built export in review: no paint, no timers, no input, no CDP recovery). Capped at 10 corrections, then the observer disconnects. The hydration race needs exactly one, and re-writing an identical title never spends the budget.
+- [x] [Review][Patch] `maxLength = 100` re-declared in `apps/web`, the one thing Task 2 forbids twice [apps/web/components/battle/BattleNameField.tsx:81] — now defaults to `@gol/domain`'s `MAX_BATTLE_NAME_LENGTH`. The test that pinned the literal now derives from the export.
+- [x] [Review][Patch] The whitespace comment inverted its own logic ("PERMANENTLY false" → TRUE) [apps/web/components/battle/BattlePage.tsx:268].
+- [x] [Review][Patch] `draft === null` documented as the not-found/error branch when it is also the loading branch [apps/web/components/battle/BattlePage.tsx:253].
+- [x] [Review][Patch] `handleCommitGrid`'s comment claimed the test asserts the prop's identity directly; the test's own comment says the opposite [apps/web/components/battle/BattlePage.tsx:514]. Comment corrected to name the structural guarantee; the missing assertion is deferred.
+- [x] [Review][Patch] `expect(localStorage.length).toBe(0)` is permanently green under `createFakeRepositories()` and Task 7 excluded it explicitly [apps/web/components/battle/BattlePage.test.tsx] — removed, call-count spies kept.
+- [x] [Review][Patch] An NFR-4.1 absence guard was weakened to a bare `toHaveLength(1)` rather than re-scoped [apps/web/components/battle/BattleEditorView.test.tsx] — now scoped by accessible name, so it fails if the one textbox is the wrong one.
+- [x] [Review][Patch] The keyboard-operability test asserted `'o'` as the last `onChange`, which is the symptom of an unfed controlled input, not the contract [apps/web/components/battle/BattleNameField.test.tsx] — now runs through `ControlledHarness` and asserts the accumulated value.
+- [x] [Review][Patch] Forced decision 3 promised `data-dirty` would give "both unit and e2e a real assertion"; only the unit half shipped [apps/web/e2e/battleRoute.spec.ts] — e2e assertion added, both states.
+- [x] [Review][Patch] `deferred-work.md`'s AC6 closure described the wrong effect as the `[]`-deps one and never mentioned the `MutationObserver` at all; the Dev Agent Record's lint evidence named a warning the gate does not emit. Both corrected with the real evidence.
+
+- [x] [Review][Defer] The direct `onCommitGrid` identity assertion Task 3 required was never written [apps/web/components/battle/BattlePage.test.tsx] — deferred, `vi.mock` is file-hoisted and would replace the child for ~40 other tests.
+- [x] [Review][Defer] `battleDisplayName` does not treat invisible-only names (U+200B, U+2060, U+00AD) as empty [apps/web/lib/battleDisplayName.ts] — deferred, pre-existing helper shared with the Gallery.
+- [x] [Review][Defer] `" · Game of Life Studio"` is a fourth hand-typed copy of the app name [apps/web/components/battle/BattlePage.tsx:262] — deferred, pre-existing on three of four sites.
+- [x] [Review][Defer] Reaching the 100-character cap is unannounced in every modality [apps/web/components/battle/BattleNameField.tsx] — deferred, an enhancement beyond AC8.
+- [x] [Review][Defer] While mounted, `<BattlePage>` silently reverts any other writer of `document.title` [apps/web/components/battle/BattlePage.tsx:239] — deferred, no second title owner exists before Story 2.16.
+
+**Verified, not findings.** The RFC-005 D7 conflict is resolved as the claimed event flag with no value-comparison residue. All six forced decisions are implemented as recorded. The `document.title` read-back genuinely closes the whitespace loop — the getter's output is a fixed point of setter+getter for every case walked (leading/trailing/doubled spaces, `\n`, `\t`, NBSP, U+3000, astral-plane characters), and jsdom normalises identically to the browser. The observer is load-bearing and was confirmed so empirically, by instrumenting the `document.title` setter against the built static export: the only two assignments in the page's life are the effect's own, then one from inside the observer callback — which by its guard fires only when the title had been changed out from under it, i.e. Next's metadata `<title>` element really does land after the effect. `handleCommitGrid`'s identity is stable by construction. Every hook precedes all four early returns. Bundle numbers in the Dev Agent Record reproduce to the decimal.
+
+
 ## Dev Notes
 
 ### ⚠️ Spec conflict to resolve deliberately: what "dirty" MEANS
@@ -566,7 +593,7 @@ sonnet (Claude Opus 5, running as the Sonnet-designated dev agent per the story'
 ### Debug Log References
 
 - `npm run typecheck` (turbo, all packages) — 0 errors.
-- `npm run lint` (`eslint .`) — 0 errors, 1 pre-existing warning (`deferred-work.md` has no ESLint config match; unrelated to this story).
+- `npm run lint` (`eslint .`) — 0 errors, 1 pre-existing warning. ⚠️ Corrected in the code review (2026-08-27): the warning the gate actually emits is `react-hooks/exhaustive-deps` at `apps/web/components/gallery/BattleGallery.tsx:248`, a file this story does not touch — not the `deferred-work.md` config-match warning recorded here on the first pass. The conclusion (pre-existing, unrelated) is unchanged; the evidence was wrong.
 - `npm run format:check` (`prettier --check .`) — all files match Prettier style.
 - `npm run spec:check` (`node scripts/check-spec-ids.mjs`) — "all 147 cited ids resolve."
 - `npm run test:coverage` (turbo, all packages) — full monorepo suite green; `packages/domain` 86 tests (incl. the new `MAX_BATTLE_NAME_LENGTH` boundary test), `apps/web` 699 tests (incl. new `BattleNameField.test.tsx` 12, and the extended `BattlePage.test.tsx` / `BattleEditorView.test.tsx` suites).

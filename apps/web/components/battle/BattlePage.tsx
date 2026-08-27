@@ -238,10 +238,29 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   const desiredTitleRef = useRef<string | null>(null);
   useEffect(() => {
     const previousTitle = document.title;
+    // ⚠️ The re-assertions are BOUNDED, and that bound is the whole safety story. A
+    // `MutationObserver` callback that writes back what it just observed re-queues itself as a
+    // MICROTASK, so two agents that each insist on their own title never reach a fixed point and
+    // the microtask queue never drains — the event loop starves and the tab freezes hard (no
+    // paint, no timers, no input, no CDP; verified against the built export in review, where the
+    // page never recovered). The whitespace read-back below closes the one instance of this the
+    // dev pass found; the counter closes the CLASS, for every other title writer this component
+    // cannot know about (a second `<BattlePage>` in a test, a browser extension, an analytics
+    // snippet, a later story that prefixes a dirty marker). The race being defended against needs
+    // exactly ONE correction, so a budget this generous cannot be reached by legitimate use:
+    // re-writing the SAME title never spends it, because the equality check short-circuits first.
+    // Losing the tab title is a cosmetic failure; hanging the page is not, so this fights a fixed
+    // number of rounds and then loses loudly rather than wedging the tab.
+    const MAX_TITLE_CORRECTIONS = 10;
+    let corrections = 0;
     const observer = new MutationObserver(() => {
-      if (desiredTitleRef.current !== null && document.title !== desiredTitleRef.current) {
-        document.title = desiredTitleRef.current;
+      if (desiredTitleRef.current === null || document.title === desiredTitleRef.current) return;
+      if (corrections >= MAX_TITLE_CORRECTIONS) {
+        observer.disconnect();
+        return;
       }
+      corrections += 1;
+      document.title = desiredTitleRef.current;
     });
     observer.observe(document.head, { childList: true, subtree: true, characterData: true });
     return () => {
@@ -250,11 +269,14 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     };
   }, []);
   useEffect(() => {
-    // `draft === null` is the not-found / error branch: it must not claim a battle name it does
-    // not have (AC6). Leaving `desiredTitleRef` at its previous value (or `null`) means the
-    // observer above stops reasserting anything new, so the tab keeps reading whatever the FIRST
-    // effect captured (the Gallery's, on first navigation into a bad link) rather than inventing
-    // one.
+    // `draft === null` covers BOTH the still-loading first commits (every hook here runs before
+    // the four early returns, so this effect fires while the resources are settling) and the
+    // not-found / error branch. Neither may claim a battle name it does not have (AC6). Nulling
+    // `desiredTitleRef` stops the observer reasserting anything, so the tab keeps reading whatever
+    // the FIRST effect captured (the Gallery's, on a navigation into a bad link) rather than
+    // inventing one. ⚠️ It only stops re-asserting; it does not UNDO a title already written, so a
+    // battle → bad-id transition on a MOUNTED instance would strand the old name in the tab —
+    // deferred-work.md's `battleId`-swap entry, unreachable until something navigates that way.
     if (draft === null) {
       desiredTitleRef.current = null;
       return;
@@ -265,7 +287,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     // ending in a space (an entirely normal mid-typing state, e.g. "New ") produces
     // "New  · Game of Life Studio" (two spaces) going IN, which the browser reports back as "New ·
     // Game of Life Studio" (one) coming OUT. Storing the un-normalised string here would make the
-    // observer's `document.title !== desiredTitleRef.current` comparison PERMANENTLY false —
+    // observer's `document.title !== desiredTitleRef.current` comparison PERMANENTLY TRUE —
     // browser mutation, observer reassigns, browser normalises again, observer fires again — a
     // same-tick MutationObserver retrigger loop with no macrotask in between, which starves the
     // event loop and makes every further keystroke (and, from OUTSIDE the page, every further
@@ -503,8 +525,10 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // `EditDish`'s resize effect holds whatever `onCommitGrid` resolves to in a closure it
   // deliberately does not re-register (PetriDishCanvas.tsx; Story 2.5 trap 7). A wrapper rebuilt
   // per render would silently break that, and the symptom is a mid-stroke resize committing
-  // through a stale closure, not a test failure — `BattlePage.test.tsx` asserts the identity
-  // directly rather than only the flag.
+  // through a stale closure, not a test failure. ⚠️ The guarantee is STRUCTURAL — this
+  // `useCallback`'s dep list and nothing else. `BattlePage.test.tsx` exercises the outward
+  // consequence (the seam still commits across an unrelated re-render), which is a proxy, not a
+  // direct assertion on the prop's identity; that assertion is still owed (deferred-work.md).
   //
   // ❌ `undo` (below) is NOT wrapped, and this is deliberate: `canUndo` is `state.past.length > 0`
   // and the ring is empty until a commit lands, so an undo can never be the FIRST mutation of a

@@ -117,8 +117,13 @@ describe('BattleEditorView', () => {
     renderEditor();
 
     // Grid Info (2.14), Tools (2.15) and the Back button (2.16) are the rest of the mockup's
-    // sidebar; Battle Name (2.11) is now real and deliberately NOT asserted absent here.
-    expect(screen.queryAllByRole('textbox')).toHaveLength(1);
+    // sidebar; Battle Name (2.11) is now real and deliberately NOT asserted absent here. Scoped by
+    // ACCESSIBLE NAME rather than counted: a bare `toHaveLength(1)` passes when the one textbox is
+    // the WRONG one — Battle Name gone and 2.14's Grid Size input arrived — which is the precise
+    // regression this NFR-4.1 absence guard exists to catch. The same re-scoping the roster's
+    // search box got in this diff, applied to its sibling.
+    expect(screen.getAllByRole('textbox', { name: /battle name/i })).toHaveLength(1);
+    expect(screen.queryByRole('textbox', { name: /grid size/i })).toBeNull();
     expect(screen.queryByText(/grid size/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /back/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /clear/i })).toBeNull();

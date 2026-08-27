@@ -1128,7 +1128,10 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
     expect(battleSaveSpy).not.toHaveBeenCalled();
     expect(organismSaveSpy).not.toHaveBeenCalled();
     expect(settingsSaveSpy).not.toHaveBeenCalled();
-    expect(localStorage.length).toBe(0);
+    // ❌ No `expect(localStorage.length).toBe(0)` here. `createFakeRepositories()` is in-memory, so
+    // that assertion is green no matter what the component does — a permanently-passing line in the
+    // one test AC5 rests on. Task 7 says so outright: assert the fake repos' CALL COUNTS, "not by
+    // inspecting storage".
   });
 
   // Forced decision 1 (option b): choosing an entry both adds AND selects it, immediately
@@ -1405,7 +1408,10 @@ describe('BattlePage — battle name & dirty tracking (Story 2.11)', () => {
     expect(battleSaveSpy).not.toHaveBeenCalled();
     expect(organismSaveSpy).not.toHaveBeenCalled();
     expect(settingsSaveSpy).not.toHaveBeenCalled();
-    expect(localStorage.length).toBe(0);
+    // ❌ No `expect(localStorage.length).toBe(0)` here. `createFakeRepositories()` is in-memory, so
+    // that assertion is green no matter what the component does — a permanently-passing line in the
+    // one test AC5 rests on. Task 7 says so outright: assert the fake repos' CALL COUNTS, "not by
+    // inspecting storage".
   });
 
   // AC4's real risk (Dev Notes): a churning `onCommitGrid` identity, not a missing flag. The

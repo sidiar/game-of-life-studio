@@ -2,6 +2,7 @@
 
 import { useId } from 'react';
 import { styled } from '@mui/material/styles';
+import { MAX_BATTLE_NAME_LENGTH } from '@gol/domain';
 
 // Mockup: `.battle-name-input` (clinical-lab-theme/petri-dish-lab-mode.html:381-403). Visual sizing
 // (14px, no text-transform) is copied straight from the mockup's OWN rule for this field — unlike
@@ -52,8 +53,10 @@ const CharCount = styled('div')({
 export interface BattleNameFieldProps {
   value: string;
   onChange(name: string): void;
-  /** FR-3.9 / `BattleSchema.name`'s cap (`@gol/domain`'s `MAX_BATTLE_NAME_LENGTH`) — imported by
-   * the caller, never re-typed here (Task 2). */
+  /** FR-3.9 / `BattleSchema.name`'s cap. Defaults to `@gol/domain`'s `MAX_BATTLE_NAME_LENGTH`,
+   * the schema's OWN constant — never a re-typed literal (Task 2). A `100` written here would be a
+   * second source for a number `BattleSchema` already owns, and the drift it allows ends as a
+   * `ZodError` from Story 2.13's write path with the counter still reading "/ 100". */
   maxLength?: number;
 }
 
@@ -75,7 +78,7 @@ export interface BattleNameFieldProps {
 export default function BattleNameField({
   value,
   onChange,
-  maxLength = 100,
+  maxLength = MAX_BATTLE_NAME_LENGTH,
 }: BattleNameFieldProps) {
   // Forced decision 4: `useId()`, not a hardcoded string — this is a statically exported, hydrated
   // page, so a hand-rolled id risks a server/client mismatch, and a hardcoded one breaks the moment

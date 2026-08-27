@@ -805,6 +805,26 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page).toHaveTitle('Three-Way Skirmish! · Game of Life Studio');
   });
 
+  // AC3/AC5 through forced decision 3's chosen observability: `data-dirty` on `<BattlePage>`'s
+  // Root, which the decision picked precisely because it "gives both unit AND e2e a real
+  // assertion" — the unit half shipped, this is the other half. Asserted in BOTH states, never as
+  // presence/absence: an attribute that is missing and one that reads 'false' are the same thing
+  // to a selector that has gone stale.
+  test('starts clean and goes dirty on a name edit, observable on the page root (AC3, AC5)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const root = page.locator('[data-dirty]');
+    await expect(root).toHaveAttribute('data-dirty', 'false');
+
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Three-Way Skirmish!');
+
+    await expect(root).toHaveAttribute('data-dirty', 'true');
+  });
+
   // AC5, and it stays true until Story 2.13: nothing this story writes reaches a repository, so a
   // reload — which discards all React state and re-reads localStorage from scratch — must show the
   // ORIGINAL stored name, not the typed edit.

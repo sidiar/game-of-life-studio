@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
+import { MAX_BATTLE_NAME_LENGTH } from '@gol/domain';
 import BattleNameField from './BattleNameField';
 
 /** A real controlled round trip — the same shape `<BattlePage>`'s `handleNameChange` provides —
@@ -62,13 +63,18 @@ describe('BattleNameField', () => {
     expect(screen.getByRole('textbox', { name: /battle name/i })).toHaveAttribute('maxlength', '5');
   });
 
-  it('defaults maxLength to 100 when the caller omits it', () => {
+  // Derived from the export, never the literal: a test that hardcoded '100' would PIN a default
+  // that had drifted away from `BattleSchema`'s own cap and keep the suite green while doing it —
+  // the exact second source Task 2 forbids, one layer up from `battleSchema.test.ts`'s own
+  // boundary test.
+  it('defaults maxLength to the schema’s own cap when the caller omits it (Task 2)', () => {
     render(<BattleNameField value="" onChange={() => {}} />);
 
     expect(screen.getByRole('textbox', { name: /battle name/i })).toHaveAttribute(
       'maxlength',
-      '100',
+      String(MAX_BATTLE_NAME_LENGTH),
     );
+    expect(screen.getByText(`0 / ${MAX_BATTLE_NAME_LENGTH}`)).toBeInTheDocument();
   });
 
   // The UA truncates typed input at `maxLength` — @testing-library/user-event v14 honours the
@@ -127,17 +133,19 @@ describe('BattleNameField', () => {
     expect(counter).not.toHaveAttribute('aria-live');
   });
 
+  // AC8, through a REAL controlled round trip. Against a bare `vi.fn()` the last call is 'o' rather
+  // than 'Go' — the value prop stays pinned at '' so every keystroke replaces the last — which is
+  // the symptom of an unfed controlled input, not the operability contract. Asserting it would
+  // enshrine "typing clobbers the previous character" as expected output.
   it('is keyboard-operable: tabbing in, typing, and reading the value back (AC8)', async () => {
     const user = userEvent.setup();
-    const handleChange = vi.fn();
-    render(<BattleNameField value="" onChange={handleChange} />);
+    render(<ControlledHarness />);
 
     await user.tab();
     expect(screen.getByRole('textbox', { name: /battle name/i })).toHaveFocus();
     await user.keyboard('Go');
 
-    expect(handleChange).toHaveBeenCalledWith('G');
-    expect(handleChange).toHaveBeenLastCalledWith('o');
+    expect(screen.getByRole('textbox', { name: /battle name/i })).toHaveValue('Go');
   });
 
   it('has no axe accessibility violations (AC8)', async () => {
