@@ -9,10 +9,18 @@ import { EditableGridPresetSchema } from './organismSchema';
 // two fields as ISO strings, so this is also what lets the two schemas share a value.
 const IsoTimestamp = z.iso.datetime().transform((s) => new Date(s));
 
+// FR-3.9 (Story 2.11): the single source for the name cap. `BattleSchema` and `BattleSummarySchema`
+// both enforce it below, and `apps/web`'s `<BattleNameField>` imports this rather than re-typing
+// `100` — the same "cap lives in the schema, the component borrows it" rule Story 2.10 applied to
+// `MAX_ROSTER_SIZE` (`refToFillGroup.ts`). ⚠️ 100, not the UX mockup's 50: component-tree-battle-
+// page.md §9.10 records the mockup's "/ 50" as superseded — the 50-char cap belongs to Organism
+// names, which the mockup likely borrowed.
+export const MAX_BATTLE_NAME_LENGTH = 100;
+
 export const BattleSchema = z
   .object({
     id: z.uuid(),
-    name: z.string().max(100),
+    name: z.string().max(MAX_BATTLE_NAME_LENGTH),
     // References into the shared Organism Library (FR-7.15); <=255 = the dense-encoding /
     // Uint8Array occupant cap (Decision G.3) — the library itself stays uncapped (M6).
     // Entries are non-empty: an empty id is unresolvable against the library.
@@ -86,7 +94,7 @@ export type Battle = z.infer<typeof BattleSchema>;
 // a later save. The Gallery mockup renders exactly one date per tile for the same reason.
 export const BattleSummarySchema = z.object({
   id: z.uuid(),
-  name: z.string().max(100),
+  name: z.string().max(MAX_BATTLE_NAME_LENGTH),
   gridSize: EditableGridPresetSchema,
   organismIds: z.array(z.string().min(1)).max(255),
   updatedAt: IsoTimestamp,

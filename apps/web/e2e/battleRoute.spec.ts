@@ -277,7 +277,12 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
 
     const sidebar = page.getByRole('complementary');
-    await expect(sidebar.getByRole('heading', { level: 2 })).toHaveText('Organisms');
+    // Story 2.11 (AC7): "Organisms" then "Battle Name" — two real `<h2>`s, siblings of each
+    // other, in the mockup's own order.
+    await expect(sidebar.getByRole('heading', { level: 2 })).toHaveText([
+      'Organisms',
+      'Battle Name',
+    ]);
     // Roster ORDER, not merely presence: the dense encoding is `cell = roster index + 1`, so a
     // sidebar that sorted for display would be the first visible symptom of a reordering bug.
     await expect(sidebar.getByRole('listitem')).toHaveText([
@@ -431,7 +436,10 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
 
     const sidebar = page.getByRole('complementary');
-    await expect(sidebar.getByRole('textbox')).toHaveCount(0);
+    // The roster's OWN search box, named — not `textbox` in general, which now also matches
+    // Story 2.11's always-present Battle Name field (a different control, unaffected by this
+    // state).
+    await expect(sidebar.getByRole('textbox', { name: /search organisms/i })).toHaveCount(0);
     await expect(sidebar.getByRole('combobox')).toHaveCount(0);
     await expect(sidebar.getByText(/already in this battle/i)).toBeVisible();
   });
@@ -769,6 +777,99 @@ test.describe('battle route (Story 2.1)', () => {
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5);
     await page.mouse.up();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  // Story 2.11 (AC1, AC2, AC6): the composed route is the only place the sidebar field, the
+  // header and the real browser tab title can all be checked together against the SAME keystroke.
+  test('shows the stored name in the sidebar, and typing updates the header and the tab title live (AC1, AC2, AC6)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const nameField = page.getByRole('textbox', { name: /battle name/i });
+    await expect(nameField).toHaveValue('Three-Way Skirmish');
+    await expect(page).toHaveTitle('Three-Way Skirmish · Game of Life Studio');
+
+    // `.fill()`, not `.pressSequentially()`: the caret position after a bare `.click()` is engine-
+    // dependent (and not necessarily end-of-text even after an explicit `End` press in this
+    // environment), which is immaterial to what this test actually claims — that the header and
+    // the tab title track the field's VALUE live, not that keystrokes land at a particular offset.
+    await nameField.fill('Three-Way Skirmish!');
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish!');
+    await expect(page).toHaveTitle('Three-Way Skirmish! · Game of Life Studio');
+  });
+
+  // AC5, and it stays true until Story 2.13: nothing this story writes reaches a repository, so a
+  // reload — which discards all React state and re-reads localStorage from scratch — must show the
+  // ORIGINAL stored name, not the typed edit.
+  test('a reload restores the stored name — nothing this story writes is persisted (AC5)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const nameField = page.getByRole('textbox', { name: /battle name/i });
+    await nameField.fill('Renamed But Not Saved');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Renamed But Not Saved');
+
+    await page.reload();
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.getByRole('textbox', { name: /battle name/i })).toHaveValue(
+      'Three-Way Skirmish',
+    );
+  });
+
+  // AC2: clearing the field is the one case `battleDisplayName`'s trim-and-fallback has to cover
+  // live, with no save and no blur.
+  test('clearing the field on /battle/new leaves the header reading "Untitled Battle" (AC2)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const nameField = page.getByRole('textbox', { name: /battle name/i });
+    await nameField.fill('Something');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Something');
+
+    await nameField.fill('');
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+  });
+
+  // Same pattern as the click/drag/erase axe checks above — the Battle Name section is new
+  // rendered content this story adds to both routes, so both get their own regression check,
+  // including after the field has actually been typed into (forced decision 4's live-region
+  // choice is exactly what a naive `aria-live="polite"` counter would fail here).
+  test('has no axe accessibility violations on /battle after typing in the name field (AC8)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('textbox', { name: /battle name/i }).pressSequentially(' Renamed');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('has no axe accessibility violations on /battle/new after typing in the name field (AC8)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    await page.getByRole('textbox', { name: /battle name/i }).pressSequentially('New Skirmish');
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);

@@ -2,20 +2,23 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { styled } from '@mui/material/styles';
+import { MAX_BATTLE_NAME_LENGTH } from '@gol/domain';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
 import { ERASER_TOOL, refForTool, type Tool } from '@/lib/tool';
 import PetriDishCanvas from '../PetriDishCanvas';
+import BattleNameField from './BattleNameField';
 import EditorStatusBar from './EditorStatusBar';
 import OrganismRoster from './OrganismRoster';
+import SidebarSection from './SidebarSection';
 
-// This story's slice of spec §3.3's ~13-prop interface: the ones this story can actually wire and
-// verify. The REST of the sidebar (<BattleNameField> 2.11, <GridSettingsSection> 2.14,
-// <EditorToolsSection> 2.15, <SidebarFooter> 2.16) and the rest of <EditorStatusBar>'s interface
-// (stats 2.12, SAVE 2.13) bring the rest with them — declaring their props now would be an
-// unverifiable claim this story cannot back up.
+// This story's slice of spec §3.3's ~13-prop interface: Story 2.11 adds `battleName` /
+// `onNameChange`. The REST of the sidebar (<GridSettingsSection> 2.14, <EditorToolsSection> 2.15,
+// <SidebarFooter> 2.16) and the rest of <EditorStatusBar>'s interface (stats 2.12, SAVE 2.13)
+// bring the rest with them — declaring their props now would be an unverifiable claim this story
+// cannot back up.
 export interface BattleEditorViewProps {
   grid: RenderableGrid;
   size: { cols: number; rows: number };
@@ -84,6 +87,16 @@ export interface BattleEditorViewProps {
    */
   onUndo(): void;
   canUndo: boolean;
+  /**
+   * Story 2.11 (spec §3.5, AC1/AC2): the LIVE edited value — `<BattlePage>` owns it, seeded from
+   * the loaded battle's stored name. Threaded straight to `<BattleNameField>`; this component does
+   * not read it for anything else (the header is fed separately, by `<BattlePage>`, not through
+   * this component at all).
+   */
+  battleName: string;
+  /** Story 2.11 (AC1, AC3): fires on every keystroke; `<BattlePage>` sets both the name and
+   * `isDirty` in the same handler. */
+  onNameChange(name: string): void;
 }
 
 /**
@@ -100,6 +113,8 @@ type EditorMainProps = Omit<
   | 'workspaceEmpty'
   | 'onAddToRoster'
   | 'atCap'
+  | 'battleName'
+  | 'onNameChange'
 > & {
   tool: Tool;
   toolRef: number | null;
@@ -149,36 +164,6 @@ const SidebarContent = styled('div')({
   flexDirection: 'column',
   gap: '25px',
   paddingBottom: '20px',
-});
-
-/**
- * Mockup: .sidebar-section / .sidebar-section-title (:149-164).
- *
- * Forced decision 5 (Story 2.9): built as a module-private styled pair NOW, exported only when a
- * second consumer arrives. Stories 2.11 (Battle Name), 2.14 (Grid Info) and 2.15 (Tools) each
- * mount a section into this same shell, so the frame is certainly shared — but a file move is
- * cheap and a premature public API is not, and with one consumer there is nothing yet to tell us
- * whether the shared thing is a styled pair or a `<SidebarSection title=…>` component.
- */
-const SidebarSection = styled('section')({
-  border: '1px solid var(--gol-border)',
-  padding: '15px',
-  background: 'var(--gol-bg-primary)',
-});
-
-// <h2>, where the mockup uses <h3>: the battle title is the route's only <h1> (BattleHeader), so
-// h2 is the next level down and the sidebar's sections are siblings of each other. Reproducing the
-// literal h3 would skip a level for no reason and trip axe's heading-order rule the moment 2.11
-// adds the second section.
-const SidebarSectionTitle = styled('h2')({
-  fontSize: '13px',
-  fontWeight: 600,
-  color: 'var(--gol-text-primary)',
-  textTransform: 'uppercase',
-  letterSpacing: 'var(--gol-letter-spacing-title)',
-  margin: '0 0 12px 0',
-  paddingBottom: '8px',
-  borderBottom: '1px solid var(--gol-border)',
 });
 
 // Mockup: .main-content (:434-441).
@@ -396,9 +381,9 @@ function resolveSelectedTool(
  * `<EditorSidebar>` — which ships with exactly ONE real section, Organisms — and `<EditorMain>`,
  * which carries `<EditorStatusBar>` (Story 2.8).
  *
- * ❌ No sidebar footer and no Back button (Story 2.16). ❌ No Battle Name (2.11), Grid Info (2.14)
- * or Tools (2.15) section. Story 2.4 declined to ship a half-built sidebar and that call stands:
- * what arrives here is one complete responsibility, not a panel of placeholders for five.
+ * ❌ No sidebar footer and no Back button (Story 2.16). ❌ No Grid Info (2.14) or Tools (2.15)
+ * section — Story 2.4 declined to ship a half-built sidebar and that call stands: each section
+ * arrives complete, not as a panel of placeholders for the rest.
  *
  * ⚠️ §3.3's "instantiates no hooks" line is about the GRID and UNDO hooks, which live in
  * `<BattlePage>` (`useUndoableGrid`, Story 2.8) — the same section's State line explicitly
@@ -415,6 +400,8 @@ export default function BattleEditorView({
   workspaceEmpty = false,
   onAddToRoster,
   atCap,
+  battleName,
+  onNameChange,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
@@ -464,8 +451,7 @@ export default function BattleEditorView({
     <EditorLayout>
       <EditorSidebar>
         <SidebarContent>
-          <SidebarSection>
-            <SidebarSectionTitle>Organisms</SidebarSectionTitle>
+          <SidebarSection title="Organisms">
             {/* Selection stays HERE (spec §3.3, §6): the roster is handed the value and the
                 setter and holds none of its own. `setChosenTool` is passed directly — it is a
                 stable identity, and wrapping it would only add a layer that can drift. */}
@@ -479,6 +465,16 @@ export default function BattleEditorView({
               workspaceEmpty={workspaceEmpty}
               onAddToRoster={handleAddToRoster}
               atCap={atCap}
+            />
+          </SidebarSection>
+          {/* AC7: the mockup's order is Organisms, then Battle Name — this story's own second
+              consumer of the shared shell. `battleName`/`onNameChange` are threaded straight
+              through from `<BattlePage>`; this component transforms neither. */}
+          <SidebarSection title="Battle Name">
+            <BattleNameField
+              value={battleName}
+              onChange={onNameChange}
+              maxLength={MAX_BATTLE_NAME_LENGTH}
             />
           </SidebarSection>
         </SidebarContent>
