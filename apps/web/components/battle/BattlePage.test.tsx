@@ -330,6 +330,11 @@ describe('BattlePage', () => {
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
     expect(screen.queryByRole('button', { name: /run/i })).not.toBeInTheDocument();
+    // review (2026-08-27): the two expected buttons are NAMED here, matching the sibling "new"
+    // route test above. A bare length-2 check is satisfied by a dead control replacing one of
+    // them, which is exactly the substitution this count was written to catch.
+    expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
     expect(screen.queryAllByRole('button')).toHaveLength(2);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.

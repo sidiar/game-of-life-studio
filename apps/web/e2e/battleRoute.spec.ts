@@ -469,9 +469,19 @@ test.describe('battle route (Story 2.1)', () => {
       // (`drawGridLinesInto`) never produces. It is identical after paint and after erase (same
       // code path, same batch shape), so it is stable, not growing, and it is this story's
       // Dev Notes-cited frozen infrastructure (Story 2.3) — "do not add caching or dedupe on top
-      // of it" — not something to patch here. A broken interpolation (only the endpoint cells
-      // erased, not the swept path) would leave the vast majority of `paintedPixels` still
-      // different — comfortably distinguishable from this artifact at any threshold below ~80%.
+      // of it" — not something to patch here.
+      //
+      // ⚠️ review (2026-08-27): this assertion does NOT pin interpolation, and the comment
+      // previously claimed it did. Both halves of the gesture run the same single `mouse.move`
+      // through the same `cellsBetween`, so breaking interpolation shrinks `paintedPixels` and
+      // the residual TOGETHER and the ratio still passes. Interpolation is genuinely pinned at
+      // the unit level (`PetriDishCanvas.test.tsx`'s interpolated-erase test, mutation-checked
+      // against `cellsBetween` -> `[cell]`). What this test does pin, and what no unit test can,
+      // is that a real browser's pointer capture, geometry and DPR round-trip a paint and an
+      // erase over identical coordinates back to the pre-paint floor. A binding lower floor on
+      // `paintedPixels` (the shape Story 2.6's review used: a multiple of a single click's
+      // pixels) needs its own calibration run — recorded in deferred-work.md rather than guessed
+      // at here, since an uncalibrated floor is a flaky CI failure, not a stronger test.
       const remainingChangedPixels = await countChangedPixels(canvas);
       expect(remainingChangedPixels).toBeLessThan(paintedPixels * 0.6);
 

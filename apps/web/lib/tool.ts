@@ -21,7 +21,7 @@ export type Tool = { kind: 'organism'; organismId: string } | { kind: 'eraser' }
  * Conway's Classic is always present in a production workspace (M9: protected, re-seeded after
  * import), so this id always resolves against the session roster union `<BattlePage>` builds.
  */
-export const DEFAULT_TOOL: Tool = Object.freeze({
+export const DEFAULT_TOOL: Extract<Tool, { kind: 'organism' }> = Object.freeze({
   kind: 'organism',
   organismId: CONWAYS_CLASSIC_ID,
 });

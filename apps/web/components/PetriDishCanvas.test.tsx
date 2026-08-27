@@ -1519,6 +1519,12 @@ describe('PetriDishCanvas (edit variant) — stroke reclaim (Story 2.7 Task 5)',
       expect(onStrokeCommit).toHaveBeenCalledTimes(2);
       const fresh = onStrokeCommit.mock.calls[1][0] as RenderableGrid;
       expect(fresh.occupant[flatIndex(6, 6)]).toBe(1);
+      // review (2026-08-27): THE assertion this test was missing. The fresh stroke must be based
+      // on the RECLAIMED stroke's buffer, not on the `grid` prop — React batches the reclaim's
+      // commit, so the prop is still pre-reclaim inside the same handler, and slicing it makes the
+      // fresh commit silently revert what the reclaim just committed. Without the fix this reads
+      // 0: the reclaim's own paint, undone by the gesture that reclaimed it.
+      expect(fresh.occupant[flatIndex(2, 2)]).toBe(1);
     },
   );
 

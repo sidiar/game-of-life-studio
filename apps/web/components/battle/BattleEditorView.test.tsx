@@ -100,7 +100,11 @@ describe('BattleEditorView', () => {
     // The toggle's own group carries the accessible name; nothing else claims 'toolbar'.
     expect(screen.queryAllByRole('toolbar')).toHaveLength(0);
     // Exactly the toggle's two buttons — Draw and Erase — nothing more (Story 2.9's roster rows
-    // are a different story).
+    // are a different story). review (2026-08-27): named, not merely counted. A bare length-2
+    // check passes if one of the two is swapped for a dead control, which is the failure the
+    // surrounding NFR-4.1 claim is about.
+    expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
     expect(screen.getAllByRole('button')).toHaveLength(2);
   });
 });
@@ -129,8 +133,9 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   //
   // Story 2.7: also returns `rerenderWithGrid`, standing in for <BattlePage> feeding a committed
   // grid back down as the next `grid` prop — the round trip the "switches tool ref" test below
-  // needs to prove an erase actually empties a cell the PRIOR commit painted. Existing call sites
-  // destructure only `{ canvas }`, unchanged.
+  // needs to prove an erase actually empties a cell the PRIOR commit painted. review (2026-08-27):
+  // the three pre-existing call sites were updated to destructure `{ canvas }` in this same change
+  // — the previous wording here claimed they were untouched.
   function mountEditor(
     onCommitGrid: (next: RenderableGrid) => void,
     rosterIds: readonly string[] = ROSTER_WITH_CONWAY_SECOND,
@@ -340,13 +345,28 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   // Dev Notes "Latest technical information": MUI's exclusive ToggleButtonGroup fires onChange
   // with `value === null` when the already-selected option is clicked again — unhandled, that
   // would set the tool to nothing (an unresolvable `tool.kind`). Pin that it is ignored instead.
+  // review (2026-08-27): this asserted on the already-selected DRAW button, which is the one case
+  // the guard cannot affect — without `if (value === null) return;` the ternary sends null to
+  // DEFAULT_TOOL, i.e. Draw, and the test stayed green. Deleting the guard reddened nothing. The
+  // discriminating case is the already-selected ERASE button: unguarded, null falls through to
+  // DEFAULT_TOOL and the tool silently snaps back to Draw under the user's finger.
   it('clicking the already-selected toggle option leaves the tool unchanged', async () => {
     const user = userEvent.setup();
     mountEditor(vi.fn());
     const drawButton = screen.getByRole('button', { name: 'Draw' });
+    const eraseButton = screen.getByRole('button', { name: 'Erase' });
 
+    await user.click(eraseButton);
+    expect(eraseButton).toHaveAttribute('aria-pressed', 'true');
+
+    // Clicking Erase AGAIN is MUI's `value === null` path. The eraser must stay selected.
+    await user.click(eraseButton);
+    expect(eraseButton).toHaveAttribute('aria-pressed', 'true');
+    expect(drawButton).toHaveAttribute('aria-pressed', 'false');
+
+    // And the same for Draw, the case that was already covered.
     await user.click(drawButton);
-
+    await user.click(drawButton);
     expect(drawButton).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -396,6 +416,40 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
       expect(backToDraw.occupant[index(6, 7)]).toBe(2);
     },
   );
+
+  // review (2026-08-27): the claim Task 3's last bullet actually asks for, at the level where it
+  // is observable. `PetriDishCanvas.test.tsx`'s "empty roster" eraser test cannot make it — the
+  // canvas never receives `rosterIds`, so it is handed `toolRef={0}` either way. Only here does a
+  // real `refForTool(ERASER_TOOL, [])` resolution reach the commit seam, which is the one case
+  // where the eraser and the organism tool legitimately differ: the organism tool commits nothing
+  // against an empty roster (test above), the eraser still erases.
+  it('erases through the commit seam even when the roster is EMPTY (AC4, Task 3)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    const painted = new Uint8Array(PLACE_SIZE.cols * PLACE_SIZE.rows);
+    const index = 4 * PLACE_SIZE.cols + 3;
+    painted[index] = 1;
+    const { canvas, rerenderWithGrid } = mountEditor(onCommitGrid, []);
+    rerenderWithGrid({
+      width: PLACE_SIZE.cols,
+      height: PLACE_SIZE.rows,
+      occupant: painted,
+      age: EMPTY_GRID.age,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Erase' }));
+    const at = {
+      clientX: 3 * CELL + CELL / 2,
+      clientY: 4 * CELL + CELL / 2,
+      button: 0,
+      isPrimary: true,
+    };
+    fireEvent.pointerDown(canvas, at);
+    fireEvent.pointerUp(canvas, at);
+
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
+    expect((onCommitGrid.mock.calls[0][0] as RenderableGrid).occupant[index]).toBe(0);
+  });
 
   // AC5 says "passes axe" in as many words. Scoped to `container`, the established pattern for a
   // bare-component render (BattleTile.test.tsx, GalleryEmptyState.test.tsx) — nothing here

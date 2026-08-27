@@ -487,6 +487,22 @@ function EditDish({
     // instead would ERASE the cell (that is Story 2.7's eraser), which is not what a failed
     // lookup means.
     if (toolRef === null) return;
+
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+
+    // review (2026-08-26, carried into this story): fail closed at STROKE START, the same guard
+    // Story 2.5 applied per click. The working grid's dimensions are then fixed for the whole
+    // gesture (Task 3) — trap 12's no-renderer path builds no renderer and calls no
+    // `assertGridMatchesSize`, so this is the only guard against an out-of-bounds write reaching
+    // `grid.occupant` that way.
+    //
+    // review (2026-08-27): both cheap guards moved ABOVE the reclaim below, which COMMITS. Left
+    // underneath it, a mid-stroke `size` change (Story 2.14) would push a stale-shaped grid into
+    // `editedGrid` and only then bail here, leaving the next draw to throw `assertGridMatchesSize`
+    // out of the grid effect. Nothing that can abandon the handler may run after a commit.
+    if (grid.width !== size.cols || grid.height !== size.rows) return;
+
     // AC7: a second pointer going down while a stroke is already active must not hijack or start
     // a second stroke. Checked BEFORE any geometry work, same reason as the move handler's guard.
     //
@@ -498,20 +514,24 @@ function EditDish({
     // mount, with no error and no visual cue. Reclaim instead: end the stale stroke (committing
     // whatever it already painted, same as any other termination) and fall through to open a
     // fresh one. A genuinely DIFFERENT pointer is still rejected outright — AC7 stays intact.
+    //
+    // ⚠️ Reclaim only rescues a pointer that kept its id — in practice the MOUSE, which is also
+    // the one pointer type the `buttons === 0` self-heal already covers. Touch and pen allocate a
+    // fresh id per contact, so the orphaned-touch deadlock this clause was taken for is NOT closed
+    // by it; see deferred-work.md, which records the open question rather than claiming otherwise.
+    let baseGrid = grid;
     if (strokeRef.current !== null) {
       if (strokeRef.current.pointerId !== event.pointerId) return;
+      // review (2026-08-27): the fresh stroke is based on the RECLAIMED stroke's own buffer, not
+      // on the `grid` prop. `endStroke` commits synchronously, but React batches the resulting
+      // state update, so the `grid` this closure holds is still the PRE-reclaim value for the rest
+      // of this handler — slicing it would silently revert every cell the reclaimed stroke just
+      // committed, the moment the fresh stroke commits, while `paintedGridRef` suppresses the
+      // repaint that would have made the divergence visible. Read-only here: the buffer is copied
+      // below and never written through, so trap 6's "committed buffer is radioactive" holds.
+      baseGrid = strokeRef.current.workingGrid;
       endStroke(true);
     }
-
-    const canvas = canvasRef.current;
-    if (canvas === null) return;
-
-    // review (2026-08-26, carried into this story): fail closed at STROKE START, the same guard
-    // Story 2.5 applied per click. The working grid's dimensions are then fixed for the whole
-    // gesture (Task 3) — trap 12's no-renderer path builds no renderer and calls no
-    // `assertGridMatchesSize`, so this is the only guard against an out-of-bounds write reaching
-    // `grid.occupant` that way.
-    if (grid.width !== size.cols || grid.height !== size.rows) return;
 
     // Task 4: geometry resolved ONCE here and cached on the stroke — never recomputed per move.
     // Forced decision 1(b) is unchanged from Story 2.5: `computeGridLayout` is pure and re-derives
@@ -540,10 +560,10 @@ function EditDish({
     // reference, unchanged from Story 2.5: every edit-mode grid is age-zero everywhere and
     // nothing in Epic 2 writes age.
     const workingGrid: RenderableGrid = {
-      width: grid.width,
-      height: grid.height,
-      occupant: grid.occupant.slice(),
-      age: grid.age,
+      width: baseGrid.width,
+      height: baseGrid.height,
+      occupant: baseGrid.occupant.slice(),
+      age: baseGrid.age,
     };
 
     const stroke: Stroke = {

@@ -218,6 +218,66 @@ independently check:
   - [x] Update `sprint-status.yaml`: `2-7-eraser` → `review`.
   - [x] ⚠️ A green local run is not proof CI is green — check `gh run list` after pushing.
 
+### Review Findings
+
+Code review 2026-08-27 (Opus, fresh context; three parallel adversarial layers — Blind Hunter,
+Edge Case Hunter, Acceptance Auditor — plus an independent pass). Every claim below was verified
+against the code; the Dev Agent Record was treated as a claim, not as evidence.
+
+**decision-needed (1) — unresolved, for Sidiar:**
+
+- [ ] [Review][Decision] **Task 5's reclaim clause does not close the deadlock it was taken for, and
+      closing it properly trades against AC7** — the clause only reclaims a `pointerdown` whose
+      `pointerId` equals the orphaned stroke's. That is the mouse, which the `buttons === 0`
+      self-heal on hover moves already rescued. Touch and pen allocate a fresh `pointerId` per
+      contact, so the next finger after a swallowed `pointerup` still hits the unchanged `return`
+      and the dish stays unpaintable — the exact failure the deferred-work entry described. The
+      entry's own proposed one-clause fix carried the flaw before this story inherited it. Any real
+      fix needs a staleness signal that does not exist today (pointer-type match, a timestamp, or
+      relaxing AC7's "a second pointer must not hijack"), which is a policy call. `deferred-work.md`
+      has been corrected from "✅ Resolved" to "PARTIALLY addressed" and the entry reopened.
+
+**patch (9) — all applied in the review commit:**
+
+- [x] [Review][Patch] Reclaim rebased the fresh stroke on the pre-commit `grid` prop, silently
+      reverting the reclaimed stroke's cells [apps/web/components/PetriDishCanvas.tsx:501-545]
+- [x] [Review][Patch] Fail-closed guards (`canvas === null`, grid/size mismatch) moved above the
+      committing reclaim [apps/web/components/PetriDishCanvas.tsx:485-514]
+- [x] [Review][Patch] The reclaim test never asserted the reclaimed cell survived — added
+      [apps/web/components/PetriDishCanvas.test.tsx:1521]
+- [x] [Review][Patch] The `value === null` toggle-guard test was vacuous (mutation-verified: the
+      guard could be deleted with all 12 tests green) — rewritten around the already-selected
+      *Erase* button [apps/web/components/battle/BattleEditorView.test.tsx:343]
+- [x] [Review][Patch] `DEFAULT_TOOL` ↔ `sessionRoster` coupling restored by narrowing
+      `DEFAULT_TOOL`'s annotation to the organism arm, rather than reading `CONWAYS_CLASSIC_ID`
+      independently [apps/web/lib/tool.ts:24, apps/web/components/battle/BattlePage.tsx:188]
+- [x] [Review][Patch] Button assertions named, not merely counted, on both routes
+      [apps/web/components/battle/BattlePage.test.tsx:331, BattleEditorView.test.tsx:100]
+- [x] [Review][Patch] Added the empty-roster erase test at the commit seam — the claim Task 3's last
+      bullet asks for, which the canvas-level test cannot make
+      [apps/web/components/battle/BattleEditorView.test.tsx]
+- [x] [Review][Patch] e2e reversal comment corrected: it does not pin interpolation (both halves of
+      the gesture share one `cellsBetween`, so the ratio survives breaking it)
+      [apps/web/e2e/battleRoute.spec.ts]
+- [x] [Review][Patch] Dev Agent Record's "Agent Model Used" said Opus 5; the story was implemented
+      by Sonnet [docs/implementation-artifacts/2-7-eraser.md:553]
+- [x] [Review][Patch] Stale comment claiming `mountEditor`'s existing call sites were unchanged —
+      they were changed in the same diff [apps/web/components/battle/BattleEditorView.test.tsx:131]
+
+**defer (10)** — all recorded in `deferred-work.md` under "code review of story 2-7-eraser": the
+untested capture release/re-acquire in the reclaim; `releasePointerCapture`'s `NotFoundError` raised
+in priority; the unreclaimable stale stroke under `toolRef === null` (owner 2.9); the e2e's missing
+lower floor on `paintedPixels`; two eraser tests bypassing the extracted `mount()`; `EMPTY_GRID` as
+a shared module instance; `flatIndex` vs `mount`'s `size` override; mid-drag tool switching unpinned
+(owner 2.8); the redundant `aria-label`s; and `tool` still declared-but-unread.
+
+**dismissed (3)** — raised by a layer, disproved here: "the erased cell paints `undefined` because
+LUT slot 0 has no entry" (`colourStateGroups.ts` short-circuits `ref === 0` before any bounds check,
+and slot 0 is documented as never read); "the foreign-pointer AC7 test would pass with
+`endStroke(false)`" (mutation-checked — Story 2.6's own AC7 test reddens); "the eraser describe never
+asserts painted colour" (neither does the placement describe; the LUT is pinned in
+`refToFillGroup.test.ts`).
+
 ## Dev Notes
 
 ### Decisions this story is forced to make (flag each in the Dev Agent Record)
@@ -550,7 +610,10 @@ asking. Merging is always Sidiar's call.
 
 ### Agent Model Used
 
-Claude Opus 5 (claude-opus-5), via the `bmad-dev-story` skill
+sonnet (Claude Sonnet 5) — as designated in the story's Dev Model line, via the `bmad-dev-story`
+skill. (Corrected in code review 2026-08-27: this line read "Claude Opus 5", contradicting both the
+Dev Model line at the foot of this file and the orchestration that ran it. Opus reviewed; Sonnet
+implemented.)
 
 ### Debug Log References
 

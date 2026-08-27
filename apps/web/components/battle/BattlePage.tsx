@@ -2,13 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
-import {
-  CONWAYS_CLASSIC_ID,
-  DEFAULT_SETTINGS,
-  type Battle,
-  type Organism,
-  type Settings,
-} from '@gol/domain';
+import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { useAsyncResource } from '@/lib/useAsyncResource';
@@ -16,6 +10,7 @@ import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft'
 import { buildRefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import { toRenderableGrid, type RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { readGridColors } from '@/lib/canvas/themeColors';
+import { DEFAULT_TOOL } from '@/lib/tool';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
 import BattleEditorView from './BattleEditorView';
@@ -180,12 +175,14 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // render. Nothing sets it in this story — Story 2.9 (add from library) and 2.13 (save + H.1
   // prune) are its writers. ❌ Not persisted here: H.1 prunes at save, which is 2.13's story.
   //
-  // `CONWAYS_CLASSIC_ID` directly, not `DEFAULT_TOOL.organismId` (Story 2.7): `DEFAULT_TOOL`'s
-  // declared type is `Tool`, which is a two-arm union as of this story, so TypeScript no longer
-  // narrows it to the `{ kind: 'organism' }` arm at this call site even though the value always
-  // is one — `DEFAULT_TOOL.organismId` stopped compiling the moment `Tool` widened. The constant
-  // it wraps is the actual invariant this line depends on.
-  const [sessionRoster] = useState<readonly string[]>(() => [CONWAYS_CLASSIC_ID]);
+  // review (2026-08-27): back to `DEFAULT_TOOL.organismId`. Widening `Tool` did break this line,
+  // but the cause was `DEFAULT_TOOL`'s own `: Tool` annotation, not the union — narrowing the
+  // annotation to the organism arm (`lib/tool.ts`) restores the property access AND the coupling
+  // that matters here: the seeded roster must contain whatever the DEFAULT TOOL resolves against.
+  // Reading `CONWAYS_CLASSIC_ID` directly made them two independent constants, so changing the
+  // default tool would leave `refForTool` returning null and the dish silently unpaintable at
+  // every press — the exact trap `lib/tool.ts`'s own comment warns about.
+  const [sessionRoster] = useState<readonly string[]>(() => [DEFAULT_TOOL.organismId]);
 
   // `draft.organismIds` first — their ORDER is the dense encoding's own (RFC-006 Decision 2: cell
   // value = roster index + 1), so a session entry may only ever be APPENDED. Re-ordering, or
