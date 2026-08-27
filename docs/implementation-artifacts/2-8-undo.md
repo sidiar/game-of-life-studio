@@ -209,6 +209,63 @@ independently check.
         over, record the measurement and the options (forced decision 1's plain-`<button>` variant
         is the zero-import one) and stop for Sidiar.
 
+### Review Findings
+
+Reviewed by **Sonnet** — deliberately the complementary model to the Opus implementation — via
+three parallel layers (Blind Hunter: diff only; Edge Case Hunter: diff + full repo access, path
+enumeration; Acceptance Auditor: diff + this story file + RFC-005/component-tree, independently
+re-running `npm run ci` rather than trusting the Dev Agent Record). AC1–AC9 independently
+re-verified against the code, not taken on the Dev Agent Record's word: `canUndo`'s reactive
+boolean, forced decision 4's derived `size`, forced decision 5's `endStroke(false)`, the
+`position: relative` removal, the `lastSeedRef` → state-based re-seed, and the AR-30 memory
+arithmetic (175.8 KB ≤ 180 KB, `age` genuinely excluded) all check out exactly as recorded — no AC
+violation, no silent-failure trap triggered, no spec conflict silently resolved.
+
+- [ ] [Review][Decision] **Forced decision 5 (`endStroke(false)`) silently discards a user's
+      mid-stroke paint with no visible feedback — confirm this is acceptable UX, not just correct
+      engineering.** [apps/web/components/PetriDishCanvas.tsx, grid effect] The engineering
+      analysis is sound and independently re-verified: the story's own literally-recommended
+      option (a) ("commit what it painted") is *logically impossible* to combine with Task 6's own
+      requirement that "the external change survives" — committing a working buffer sliced from
+      the pre-change grid necessarily reverts that change. Discard is the only self-consistent
+      choice between the two, and it is pinned by tests proving the external change survives and
+      the discarded stroke does not. What was **not** put to a human: a user who is mid-drag when
+      an UNDO lands (today reachable only by continuing to hold the mouse down on the canvas while
+      a *separate* input, e.g. Tab+Enter, activates the UNDO button — mechanically rare, not
+      reachable from a single mouse) loses that paint with zero toast, flash, or other affordance
+      telling them it happened. Stories 2.14 (resize) and 2.15 (Clear) inherit this policy
+      unchanged per the Dev Agent Record, so a "yes, silent discard is fine" or "no, add feedback"
+      answer now avoids relitigating it three more times. **Question for Sidiar:** is silent
+      discard acceptable here, or does this need a visible signal before 2.14/2.15 build on it?
+
+- [x] [Review][Patch] Strengthen `useUndoableGrid.test.ts`'s restore-copy claim so it actually
+      distinguishes `restore()`'s own defensive copy from `commit()`'s
+      [apps/web/lib/useUndoableGrid.test.ts:122-153] — the existing "hands back a grid whose buffer
+      is not the ring entry" test compares `restored.occupant` against `seed.occupant`, but the
+      ring entry is *already* a copy of `seed.occupant` (made by `commit()`'s own `snapshot()`), so
+      the assertion holds whether or not `restore()` makes a second copy — mutation-testing away
+      `restore()`'s `.slice()` left it (and all 15 other hook tests) green. Fixed by adding a
+      call-count spy on `Uint8Array.prototype.slice`, the one primitive both copies go through:
+      asserts a strictly higher call count after `undo()` than after `commit()`. Mutation-checked
+      both ways — reddens alone when `restore()`'s `.slice()` is removed, passes with the real
+      code. Not a production bug (the popped entry is discarded from `past` the same tick, so
+      nothing internal could observe the aliasing either way); this closes a "claim not actually
+      mutation-checked" gap of exactly the kind this project's own review discipline (Story 2.7)
+      calls out elsewhere in this story.
+
+- [x] [Review][Defer] Bundle headroom (2.1–2.8 KB across `/battle`, `/battle/new`, and home) is
+      thin heading into Stories 2.9–2.13, which all add UI weight — deferred, pre-existing
+      trajectory, already tracked with Sidiar's call flagged in `deferred-work.md` (the
+      story's own re-measurement entry). Not this story's problem to fix; flagged for planning
+      before 2.9 starts.
+
+**Patches applied (own commit):** one — the `useUndoableGrid.test.ts` mutation-check gap above.
+
+**Deferred:** one — the bundle-headroom trajectory, already tracked.
+
+**Decision-needed:** one — forced decision 5's silent-discard UX, above. **Story left in
+`review`** pending Sidiar's answer (`sprint-status.yaml` unchanged).
+
 ## Dev Notes
 
 ### Decisions this story is forced to make (flag each in the Dev Agent Record)

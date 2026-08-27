@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { emptyGrid } from '@gol/test-utils';
 import { toRenderableGrid, type RenderableGrid } from '@/lib/canvas/renderableGrid';
@@ -129,6 +129,29 @@ describe('useUndoableGrid', () => {
     const restored = result.current[0].value;
     expect(restored).not.toBeNull();
     expect(restored?.occupant).not.toBe(seed.occupant);
+  });
+
+  // Review finding: the test above cannot actually distinguish `restore()` copying its own
+  // popped entry from `restore()` handing that entry's buffer straight back — `entry.occupant` is
+  // ALREADY a copy `commit()`'s own `snapshot()` made, so `restored.occupant !== seed.occupant`
+  // holds either way, and mutation-testing away `restore()`'s `.slice()` left every test above
+  // green. `past` drops the entry the moment `undo()` pops it, so nothing later can observe the
+  // aliasing through the ring itself — a call-count spy on the one primitive both copies go
+  // through is the only vantage point that can tell the two apart.
+  it('restore() makes its OWN copy of the popped entry, not just commit()’s (trap 3)', () => {
+    const seed = SEED();
+    const first = gridWith(4, 3, 0, 1);
+    const { result } = renderHook(() => useUndoableGrid(seed));
+    const sliceSpy = vi.spyOn(Uint8Array.prototype, 'slice');
+
+    act(() => result.current[0].commit(first)); // commit()'s snapshot() copy.
+    const afterCommit = sliceSpy.mock.calls.length;
+    expect(afterCommit).toBeGreaterThan(0);
+
+    act(() => result.current[1].undo()); // restore()'s own copy — reddens if it is dropped.
+    expect(sliceSpy.mock.calls.length).toBeGreaterThan(afterCommit);
+
+    sliceSpy.mockRestore();
   });
 
   // Trap 5: `EditDish`'s grid effect skips when `paintedGridRef.current === grid`, so a restored
