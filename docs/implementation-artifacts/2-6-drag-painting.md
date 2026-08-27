@@ -755,3 +755,18 @@ headroom), e2e **160 passed, 4 skipped** across chromium/firefox/webkit/tablet.
 | 2026-08-27 | Code review (opus, fresh context): 7 patches applied in a separate commit, 12 items deferred, 0 decisions outstanding. `npm run ci` green after the patches. Status -> done. |
 
 Dev Model: sonnet   # extends the pointer/commit path Story 2.5 already established — the seam, the mapper, the Tool model and the dirty-paint discipline all exist; this adds a ref-held stroke and a pure interpolation unit on top of them, shaping nothing new for 2.7+
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 26s | 22 | 2,616 | 12,687 | 434,173 | 449,498 |
+| Step 1 — create-story | opus-5 | 1 | 8m 48s | 162 | 33,887 | 301,836 | 7,489,338 | 7,825,223 |
+| Step 2 — dev-story | sonnet-5 | 1 | 43m 24s | 552 | 36,134 | 1,666,447 | 51,214,228 | 52,917,361 |
+| Step 3 — code review + PR | opus-5 | 6 | 53m 39s | 704 | 89,211 | 2,156,697 | 36,570,203 | 38,816,815 |
+| _of which the orchestrator_ | opus-5 | — | — | 78 | 15,086 | 48,810 | 1,886,401 | 1,950,375 |
+| **Total (create-story → PR ready)** | | 8 | **1h 46m** | 1,440 | 161,848 | 4,137,667 | 95,707,942 | **100,008,897** |
+
+Run started 2026-08-27 08:22 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
