@@ -39,18 +39,19 @@ export type PetriDishCanvasProps = PetriDishCanvasSharedProps &
         variant: 'edit';
         grid: RenderableGrid;
         // component-tree-battle-page.md#3.10's own shape for the edit member. `tool` is accepted
-        // and deliberately NOT read here yet: this story's only arm is `{ kind: 'organism' }` and
-        // the ref it resolves to arrives pre-resolved as `toolRef` (forced decision 2), so
-        // branching on `tool.kind` would be a branch with one reachable case. Story 2.7's eraser
-        // is what makes it load-bearing — declaring it now keeps the seam at §3.10's shape so 2.7
-        // widens a union rather than adding a prop.
+        // and deliberately NOT read here — AC6 (Story 2.7) keeps this canvas tool-agnostic on
+        // purpose: it paints `stroke.ref`, whatever number that is, with no `tool.kind` branch
+        // anywhere in this file, eraser included. The pre-resolved `toolRef` below is what it
+        // actually paints with (forced decision 2); `tool` stays declared for §3.10's shape and
+        // for a future variant that genuinely needs the organism id, not this one.
         tool: Tool;
         // The ONE additive prop beyond §3.10 — same deviation, same justification, as `colors`
         // (Story 1.11) and `size`: a `Tool` carries an organism ID and the grid buffer stores a
         // numeric OrganismRef, and the roster that translates between them belongs to
         // <BattleEditorView> / <BattlePage> (Decision H.2), not to a rendering surface. `null`
         // means "this tool resolves to no organism in this battle's roster" — the click is then a
-        // no-op, never a write of ref 0 (which means EMPTY, and is Story 2.7's eraser).
+        // no-op. `0` means "erase" (Story 2.7 AC4, RFC-006 Decision 2's reserved empty ref) and is
+        // written like any other ref — `=== null`, never falsy, is the only correct check on it.
         toolRef: number | null;
         onStrokeCommit(next: RenderableGrid): void;
       }
@@ -203,10 +204,14 @@ interface StrokeGeometry {
 interface Stroke {
   readonly pointerId: number;
   readonly geometry: StrokeGeometry;
-  /** The resolved `OrganismRef` this stroke paints, fixed for the whole gesture at pointer-down —
-   *  there is no roster UI to change the tool mid-drag in this story, and pinning it here (rather
-   *  than re-reading the `toolRef` prop per move) keeps `toolRef`'s `number | null` type out of
-   *  every per-move call. */
+  /** The resolved `OrganismRef` this stroke paints, fixed for the whole gesture at pointer-down.
+   *  Story 2.7's toggle IS keyboard-operable mid-drag, which falsifies the earlier justification
+   *  ("no roster UI to change the tool mid-drag") — the pin is kept anyway, on the reasoning that
+   *  survives it: a gesture is ONE undo entry (RFC-005 Decision 6), and an entry that is half
+   *  paint and half erase has no coherent meaning, so the tool a stroke started with is the tool
+   *  it finishes with (Story 2.7 forced decision 4). Re-reading `toolRef` per move is not simply
+   *  "more responsive" — it changes what one undo entry contains. Pinning here also keeps
+   *  `toolRef`'s `number | null` type out of every per-move call. */
   readonly ref: number;
   /** Mutated in place for the life of the stroke; a NEW object every pointer-down (Task 3). */
   readonly workingGrid: RenderableGrid;
@@ -484,7 +489,19 @@ function EditDish({
     if (toolRef === null) return;
     // AC7: a second pointer going down while a stroke is already active must not hijack or start
     // a second stroke. Checked BEFORE any geometry work, same reason as the move handler's guard.
-    if (strokeRef.current !== null) return;
+    //
+    // Story 2.7 Task 5 (deferred-work.md, taken): a pointerdown carrying the OPEN stroke's OWN
+    // pointerId means its terminating event was never delivered — a tab backgrounded mid-touch,
+    // or an OS gesture swallowing the up/cancel — and the `buttons === 0` self-heal on
+    // `pointermove` cannot rescue it, because touch and pen emit no hover moves at all (trap 8).
+    // Left as an unconditional reject, this pointer could never paint again for the life of the
+    // mount, with no error and no visual cue. Reclaim instead: end the stale stroke (committing
+    // whatever it already painted, same as any other termination) and fall through to open a
+    // fresh one. A genuinely DIFFERENT pointer is still rejected outright — AC7 stays intact.
+    if (strokeRef.current !== null) {
+      if (strokeRef.current.pointerId !== event.pointerId) return;
+      endStroke(true);
+    }
 
     const canvas = canvasRef.current;
     if (canvas === null) return;

@@ -294,13 +294,17 @@ describe('BattlePage', () => {
     expect(screen.queryByText(/stored data may be damaged/i)).not.toBeInTheDocument();
   });
 
-  // AC2/NFR-4.1 on the create route specifically, mirroring the loaded-route assertion below:
-  // zero buttons and exactly one <h1>, the same shape a canvas-free skeleton must hold.
-  it('renders zero buttons and exactly one heading on the "new" route', async () => {
+  // AC2/NFR-4.1 on the create route specifically, mirroring the loaded-route assertion below.
+  // Story 2.7 adds the first real buttons on this route (the provisional tool toggle's Draw/
+  // Erase pair) — updated from "zero buttons" to "exactly those two, nothing else", the same
+  // shape a canvas-free skeleton must hold.
+  it('renders exactly the tool toggle’s two buttons and one heading on the "new" route', async () => {
     render(<BattlePage repositories={seeded()} battleId="new" />);
     await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
 
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('button')).toHaveLength(2);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -318,13 +322,15 @@ describe('BattlePage', () => {
 
   // AC2 / NFR-4.1 as a COUNT, not a presence check: `queryByRole('button', { name: /run/i })`
   // being null still passes after someone adds a dead RUN button labelled differently, or a
-  // fullscreen button beside it. The whole route ships zero buttons in Epic 2.
-  it('renders no Run, fullscreen, or any other button on the loaded route', async () => {
+  // fullscreen button beside it. Story 2.7 puts the route's first two buttons on it (the
+  // provisional tool toggle's Draw/Erase) — the claim updates to "exactly those two", not back
+  // to zero, so a THIRD button (Run, fullscreen, or anything else) still fails this test.
+  it('renders no Run, fullscreen, or any other button beyond the tool toggle on the loaded route', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
     expect(screen.queryByRole('button', { name: /run/i })).not.toBeInTheDocument();
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryAllByRole('button')).toHaveLength(2);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
