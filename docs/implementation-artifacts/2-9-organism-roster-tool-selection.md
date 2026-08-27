@@ -4,7 +4,7 @@ baseline_commit: ffa50fc2d76eb7947aa8ceab4961d7de0d021dcb
 
 # Story 2.9: Organism Roster & Tool Selection
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -253,10 +253,12 @@ derivation, the 255-cap guard, the append-only test, all seven `deferred-work.md
 
 Two **decision-needed** findings surfaced from the Edge Case Hunter layer, both rooted in the same
 mechanism (an organism id that cannot be resolved against the loaded library) and requiring a product
-call rather than an unambiguous code fix. They are left unresolved for Sidiar; `sprint-status.yaml` is
-**not** advanced to `done` while they stand.
+call rather than an unambiguous code fix.
 
-- [ ] [Review][Decision] **A successfully-empty (not failed) organism library seeds a fake,
+**Both were answered by Sidiar on 2026-08-27: option (a) for the first, option (b) for the second.**
+Each is implemented in its own commit, with the resolution recorded inline below.
+
+- [x] [Review][Decision — RESOLVED, option (a)] **A successfully-empty (not failed) organism library seeds a fake,
       selectable "Unknown organism" roster row instead of an honest empty roster.**
       [apps/web/components/battle/BattlePage.tsx, the `rosterIds` memo: `return union.length > 0 ?
       union : buildRosterIds(union, [DEFAULT_TOOL.organismId]);`] `libraryUnavailable`
@@ -281,7 +283,19 @@ call rather than an unambiguous code fix. They are left unresolved for Sidiar; `
       route can reach a paintable state, which is out of this story's scope. **Question for Sidiar:**
       which of these (or another option) should this story (or a fast-follow) take?
 
-- [ ] [Review][Decision] **The dangling-id colour fallback reuses `DEFAULT_COLOR_TOKEN`, which is
+      **✅ Sidiar's answer (2026-08-27): option (a).** The seed in `<BattlePage>`'s `rosterIds` memo
+      is now conditional on `DEFAULT_TOOL.organismId` actually being present in the resolved
+      `organisms` array; when it is not, `rosterIds` stays empty and `resolveSelectedTool` falls
+      through to the eraser (spec §3.3's "eraser when the roster is empty"). The trade-off named in
+      the finding is accepted deliberately: in that narrow window `/battle/new` is honestly
+      unpaintable until Story 2.10's add dropdown ships, and an empty list is preferred to a
+      fictional organism. Note this does NOT show AC7's degraded notice — the library did not fail,
+      so claiming it did would be its own lie. Three tests pin it in `BattlePage.test.tsx`: no
+      seeded row and no notice on an empty library; the eraser as the single remaining selection
+      (AC2 still holds); and the seed still firing when the library DOES contain the default, so
+      "stop seeding a fiction" cannot be satisfied by never seeding at all.
+
+- [x] [Review][Decision — RESOLVED, option (b)] **The dangling-id colour fallback reuses `DEFAULT_COLOR_TOKEN`, which is
       also Conway's Classic's REAL token — so an unresolvable roster id can produce a false "Shared
       colour" warning against a legitimately sky-blue organism.**
       [apps/web/lib/palette/paletteRegistry.ts:63 — `DEFAULT_COLOR_TOKEN = 'sky-blue'; // token #1,
@@ -303,6 +317,21 @@ call rather than an unambiguous code fix. They are left unresolved for Sidiar; `
       the same colour; (c) accept the false positive as an edge case of an already-rare condition.
       **Question for Sidiar:** which option, and does it change the fallback's `color`/`colorToken`
       contract that other callers (e.g. the Gallery tile) also rely on?
+
+      **✅ Sidiar's answer (2026-08-27): option (b).** `DisplayOrganism` gains an optional
+      `unresolved?: boolean`, set only on the dangling-id branch of `resolveDisplayOrganisms`, and
+      `findDuplicateColorIds` filters those entries out of both the count and the result. **The
+      fallback's `color`/`colorToken` contract is unchanged** — which answers the second half of the
+      question: `colorToken` still reports the token the entry is actually painted in, so
+      `<BattleTile>` and Story 4.9's CVD work read exactly what they read before, and the new flag is
+      ignorable by every consumer that does not run the FR-3.3 comparison. That is the specific
+      reason option (a) was not taken: a sentinel token would have pushed a non-palette value into a
+      field two other consumers read, and would still have left the two-dangler pair warning about
+      each other — equally unactionable, since neither has a record to recolour. Four tests pin it:
+      the flag itself and its absence on a resolved entry (`displayOrganisms.test.ts`), and in
+      `BattleEditorView.test.tsx` no warning against a real sky-blue organism, none between two
+      danglers, and a real colliding pair still warning with a dangler present (so the exclusion
+      cannot be implemented as "skip the derivation entirely").
 
 **Patch applied (own commit):**
 
@@ -676,8 +705,12 @@ shared-chunk weight.
    (`TileOrganism` → `DisplayOrganism`, `resolveTileOrganisms` → `resolveDisplayOrganisms`), which
    the story explicitly preferred over forking once a second, non-tile caller existed. Widened with
    **`colorToken`** so AC4 compares tokens rather than resolved hexes (trap 4); the dangling-id
-   fallback reports `DEFAULT_COLOR_TOKEN`, the token it is actually painted in, so the same-colour
-   warning stays truthful about corrupt ids instead of treating them as colourless. **On
+   fallback reports `DEFAULT_COLOR_TOKEN`, the token it is actually painted in. ⚠️ **Superseded in
+   part by the review:** that token is also Conway's Classic's own, so it is reported but no longer
+   COMPARED — the fallback carries `unresolved: true` and `findDuplicateColorIds` excludes it (review
+   decision 2, option (b), above). The claim that this "stays truthful about corrupt ids" was the
+   half that did not survive: it warned a healthy sky-blue organism about a record that does not
+   exist. **On
    `OrganismSummary`:** it does not exist in `@gol/domain` and was NOT added — `DisplayOrganism` is
    that shape and stays in `apps/web`, because a resolved hex and a fallback NAME are presentation
    concerns. Epic 4 reads the same spec line and should reuse this type.
@@ -696,6 +729,12 @@ shared-chunk weight.
    `useState` seeded from the first roster would keep pointing at an organism the new battle has
    never heard of. `lib/tool.ts`'s and `<BattlePage>`'s comments about the seed were REWRITTEN to
    describe what it now means, not left describing the old behaviour.
+   ⚠️ **Narrowed again by the review (decision 1, option (a)).** "The union would otherwise be
+   empty" was still not a tight enough condition: it fired even when the library had loaded
+   successfully and was EMPTY, seeding an id with no record behind it and rendering a fake
+   "Unknown organism" row. The seed now additionally requires `DEFAULT_TOOL.organismId` to be
+   present in the loaded library; otherwise the roster is empty and `resolveSelectedTool`'s eraser
+   fallback — already written for exactly this shape — carries it.
 
 **Traps navigated (the ones that changed the code):**
 
