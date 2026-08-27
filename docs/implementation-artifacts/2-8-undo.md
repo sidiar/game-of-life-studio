@@ -4,7 +4,7 @@ baseline_commit: 6e7edd43b65ee18974720b41eb51d71649b2312e
 
 # Story 2.8: Undo
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -221,7 +221,7 @@ boolean, forced decision 4's derived `size`, forced decision 5's `endStroke(fals
 arithmetic (175.8 KB ≤ 180 KB, `age` genuinely excluded) all check out exactly as recorded — no AC
 violation, no silent-failure trap triggered, no spec conflict silently resolved.
 
-- [ ] [Review][Decision] **Forced decision 5 (`endStroke(false)`) silently discards a user's
+- [x] [Review][Decision] **Forced decision 5 (`endStroke(false)`) silently discards a user's
       mid-stroke paint with no visible feedback — confirm this is acceptable UX, not just correct
       engineering.** [apps/web/components/PetriDishCanvas.tsx, grid effect] The engineering
       analysis is sound and independently re-verified: the story's own literally-recommended
@@ -237,6 +237,18 @@ violation, no silent-failure trap triggered, no spec conflict silently resolved.
       unchanged per the Dev Agent Record, so a "yes, silent discard is fine" or "no, add feedback"
       answer now avoids relitigating it three more times. **Question for Sidiar:** is silent
       discard acceptable here, or does this need a visible signal before 2.14/2.15 build on it?
+      **Resolution (Sidiar, 2026-08-27): silent discard is accepted. Ships as implemented, with no
+      visible signal.** The engineering constraint stands on its own — option (a) is provably
+      incompatible with Task 6's "the external change survives" requirement, so discard is the only
+      self-consistent behaviour — and the UX cost of leaving it silent is judged acceptable at the
+      reachability this race actually has: today it requires holding a mouse button down on the
+      canvas while a *separate* input activates UNDO, which no single-pointer interaction produces.
+      Adding a toast or flash would put a user-visible affordance on a path a user is not expected
+      to reach, and would need its own placement, wording and dismissal decisions that no AC asks
+      for. **This is a policy decision, not a per-story one: Stories 2.14 (resize) and 2.15 (Clear)
+      inherit silent discard unchanged and must not relitigate it.** Revisit only if a later story
+      makes the race reachable from a single pointer — that changes the premise this call rests on.
+      No code change from this decision.
 
 - [x] [Review][Patch] Strengthen `useUndoableGrid.test.ts`'s restore-copy claim so it actually
       distinguishes `restore()`'s own defensive copy from `commit()`'s
@@ -815,6 +827,8 @@ now say what is true rather than promising a future that already happened differ
 |---|---|---|---|
 | 2026-08-27 | 0.1 | Story created | create-story |
 | 2026-08-27 | 1.0 | Implemented: `useUndoableGrid` (30-entry ring), `<EditorStatusBar>` with UNDO, `size` derived from the grid, and the three owned deferred-work items closed (plus two more). Full `npm run ci` green. | dev-story |
+| 2026-08-27 | 1.1 | Code review (sonnet, complement of the opus dev agent): 1 patch applied, 1 deferred, 1 decision-needed. Review commit `a04999d`. | code-review |
+| 2026-08-27 | 1.2 | Decision-needed resolved by Sidiar: silent discard accepted, no visible signal; 2.14/2.15 inherit it. No code change. Status → done. | Sidiar |
 
 Dev Model: opus   # architecture-shaping: establishes `useUndoableGrid` — the commit/history seam every later editor mutation story (2.14 resize, 2.15 Clear, 2.16 reset) inherits — moves grid ownership out of `useState`, and must settle three decisions with downstream inheritance (ring container vs. reactive `canUndo`, the single source of grid dimensions, and mid-stroke external-change policy) while resolving two live RFC-005-vs-component-tree conflicts the RFC's own snippet cannot satisfy
 
