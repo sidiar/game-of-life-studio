@@ -17,6 +17,13 @@ const RosterList = styled('ul')({
   padding: 0,
   display: 'flex',
   flexDirection: 'column',
+  // Review (2026-08-27): this was `Row`'s own `&:last-of-type`, which never matched — each `Row`
+  // is the ONLY `<button>` inside its own `<li>` (see `RosterListItem` below), so it was trivially
+  // "last of its type" on every single row, and no row ever showed the mockup's separator. Scoped
+  // here instead, against the true last `<li>` in the list.
+  '& > li:last-child > button': {
+    borderBottom: 'none',
+  },
 });
 
 const RosterListItem = styled('li')({
@@ -52,9 +59,6 @@ const Row = styled('button')({
   textAlign: 'left',
   cursor: 'pointer',
   transition: 'background-color 0.2s, border-color 0.2s',
-  '&:last-of-type': {
-    borderBottom: 'none',
-  },
   '&:hover': {
     background: 'var(--gol-bg-hover)',
   },

@@ -238,6 +238,127 @@ Story 2.9 as owner — they are not extra scope, they are this story's inherited
         verification commands with their real output summary, and the File List.
   - [x] `sprint-status.yaml`: `2-9-organism-roster-tool-selection: review` when the work is done.
 
+### Review Findings
+
+Reviewed by **Sonnet** — deliberately the complementary model to the Opus implementation — via
+three parallel layers (Blind Hunter: diff only; Edge Case Hunter: diff + full repo access; Acceptance
+Auditor: diff + this story file + `component-tree-battle-page.md` §3.3/§3.4/§6/§9.8, `architecture.md`
+Decision H/M6/G.3, `deferred-work.md`, `themes.css`). AC1–AC10 independently re-verified against the
+code, not taken on the Dev Agent Record's word: the WCAG contrast figure (recomputed independently:
+4.484:1 on `#222222`, 5.58:1 on `#0a0a0a` — matches the claim), the `resolveSelectedTool` derivation
+closing the `toolRef === null` trap by construction (confirmed `PetriDishCanvas.tsx` has zero diff
+entries and the guard-before-reclaim ordering is unchanged), the `colorToken`-based duplicate
+derivation, the 255-cap guard, the append-only test, all seven `deferred-work.md` entries, and
+`mockWorkspace.ts` being untouched all check out exactly as recorded — no AC violation found.
+
+Two **decision-needed** findings surfaced from the Edge Case Hunter layer, both rooted in the same
+mechanism (an organism id that cannot be resolved against the loaded library) and requiring a product
+call rather than an unambiguous code fix. They are left unresolved for Sidiar; `sprint-status.yaml` is
+**not** advanced to `done` while they stand.
+
+- [ ] [Review][Decision] **A successfully-empty (not failed) organism library seeds a fake,
+      selectable "Unknown organism" roster row instead of an honest empty roster.**
+      [apps/web/components/battle/BattlePage.tsx, the `rosterIds` memo: `return union.length > 0 ?
+      union : buildRosterIds(union, [DEFAULT_TOOL.organismId]);`] `libraryUnavailable`
+      (`organismsResource.status === 'error'`) only covers a *failed* load — `organisms.list()`
+      resolving to `[]` is a distinct, real, reachable state (a fresh browser profile / cleared
+      storage / a bookmarked or shared `/battle/new` or `/battle?id=…` link opened before ever
+      visiting the Gallery, since `useWorkspaceSeed` — which seeds Conway's Classic and persists it
+      — runs only from `app/(gallery)/page.tsx`). In that state the empty-union fallback still
+      unconditionally seeds `DEFAULT_TOOL.organismId`; `resolveDisplayOrganisms`
+      (`apps/web/lib/displayOrganisms.ts`) can't find it in the (empty) library and falls back to
+      `{ name: 'Unknown organism', colorToken: DEFAULT_COLOR_TOKEN }`; and because `roster.length >
+      0`, `<OrganismRoster>` renders it as a normal, pre-selected, clickable row — no notice that
+      anything is wrong, unlike AC7's genuine-failure path. **Options:** (a) guard the seed to only
+      inject `DEFAULT_TOOL.organismId` when it is actually present in the resolved `organisms`
+      array, otherwise leave `rosterIds` empty so the existing "eraser when the roster is empty"
+      default applies (spec §3.3's own suggested behaviour for a truly empty roster) — trade-off:
+      `/battle/new` becomes honestly unpaintable in this narrow case until the library has actually
+      seeded, which is exactly the regression forced decision 4 was written to avoid, just triggered
+      by a missing library rather than a missing selection; (b) accept the mislabeled row as a
+      self-correcting stand-in (it disappears the moment the workspace seed has run once); (c)
+      something broader — e.g. `<BattlePage>` itself ensuring the workspace seed has run before this
+      route can reach a paintable state, which is out of this story's scope. **Question for Sidiar:**
+      which of these (or another option) should this story (or a fast-follow) take?
+
+- [ ] [Review][Decision] **The dangling-id colour fallback reuses `DEFAULT_COLOR_TOKEN`, which is
+      also Conway's Classic's REAL token — so an unresolvable roster id can produce a false "Shared
+      colour" warning against a legitimately sky-blue organism.**
+      [apps/web/lib/palette/paletteRegistry.ts:63 — `DEFAULT_COLOR_TOKEN = 'sky-blue'; // token #1,
+      and Conway's Classic's token`; apps/web/lib/displayOrganisms.ts's dangling-id branch;
+      `findDuplicateColorIds` in apps/web/components/battle/BattleEditorView.tsx, which compares
+      purely on `colorToken`] The code's own comment on the fallback already reasons through "two
+      dangling ids colliding with each other" as intentional ("two unknown ids really do render in
+      one colour... the warning doing its job") — but does not address a dangling id colliding with a
+      REAL, correctly-sky-blue organism, which is the common case given `DEFAULT_COLOR_TOKEN` IS
+      Conway's Classic's token. Any battle with one corrupt/dangling roster id (reachable per the
+      code's own citation of "Story 5.11's territory") alongside Conway's Classic (or any other
+      genuinely sky-blue organism) would show both as "Shared colour" for no real reason. Related to
+      the finding above — same root cause, different symptom. **Options:** (a) give the dangling-id
+      fallback a dedicated sentinel `colorToken` that can never equal a real palette token, so it
+      cannot collide with a legitimately-coloured organism (special-case dangling-vs-dangling
+      separately if that signal is still wanted); (b) exclude fallback/dangling entries from
+      `findDuplicateColorIds` entirely — a corrupt reference is a different problem class from a
+      genuine colour collision, and AC4/M6's warning is about organisms someone actually placed in
+      the same colour; (c) accept the false positive as an edge case of an already-rare condition.
+      **Question for Sidiar:** which option, and does it change the fallback's `color`/`colorToken`
+      contract that other callers (e.g. the Gallery tile) also rely on?
+
+**Patch applied (own commit):**
+
+- [x] [Review][Patch] **The roster's bottom-border separator never renders on any row —
+      `Row`'s `&:last-of-type` is trivially true for every row.** [apps/web/components/battle/OrganismRoster.tsx]
+      Each `<Row>` button is the *only* `<button>` inside its own `<RosterListItem>` (`<li>`), so it is
+      "last of its type" under every `<li>`, every time — the rule fired on every row, not just the
+      final one, and the mockup's inter-row separator silently never painted. No test can catch a CSS
+      pseudo-class logic error like this (jsdom performs no layout and the project deliberately runs
+      no pixel/snapshot tests), so it shipped invisibly. Fixed by moving the rule to
+      `RosterList`, scoped against the true last `<li>`: `'& > li:last-child > button': { borderBottom:
+      'none' }`. Verified: `OrganismRoster.test.tsx` (28 tests), `BattleEditorView.test.tsx`,
+      `BattlePage.test.tsx` — 84 tests total, all still pass; `tsc --noEmit` and `eslint` clean on the
+      file.
+
+**Deferred (added to `deferred-work.md`):**
+
+- [x] [Review][Defer] **`<BattleEditorView>`'s `chosenTool` state has no reset tied to battle
+      identity, unlike `useUndoableGrid`'s ring.** [apps/web/components/battle/BattleEditorView.tsx —
+      `const [chosenTool, setChosenTool] = useState<Tool | null>(null);`] — currently **unreachable**
+      through any exposed UI path (no in-app navigation swaps `battleId` on an already-mounted
+      `<BattlePage>` without a full route/page change today), so not a live bug; deferred,
+      pre-existing pattern (`sessionRoster` already has the identical gap, tracked separately).
+- [x] [Review][Defer] **`BattleEditorView.test.tsx` grows a second, near-duplicate mount harness
+      (`mount` beside the existing `mountEditor`) in the same commit whose own comments warn against
+      hand-copied setup.** [apps/web/components/battle/BattleEditorView.test.tsx:178,393] — cosmetic
+      DRY debt, not a functional issue; `mountEditor` is scoped inside the first `describe` block so
+      reuse needs hoisting it to module scope, a small refactor left for whoever next touches this
+      file.
+- [x] [Review][Defer] **The e2e AC2 test's first click lands on `/battle/new`'s only (already
+      default-selected) roster row, so it doesn't itself prove a click CHANGES the selection between
+      two organisms — only that the default selection paints and that switching to/from the eraser
+      works.** [apps/web/e2e/battleRoute.spec.ts:330] — the organism-to-different-organism switch IS
+      proven, just at the unit level (`BattleEditorView.test.tsx`'s "roster selection reaches the
+      painted ref" describe), not end-to-end. Minor coverage gap, no known bug.
+- [x] [Review][Defer] **No test exercises `battleResource` and `organismsResource` both failing at
+      once**, the one scenario that most directly stresses AC6's "structurally independent" claim.
+      [apps/web/components/battle/BattlePage.test.tsx] — manually traced: the code correctly falls
+      through to the battle's own failure body regardless of organism status
+      (`BattlePage.tsx`'s `if (draft === null)` branch checks `battleResource.status === 'error'`
+      first), so this is an untested path, not a known bug.
+
+**Dismissed as noise:**
+- No name-collision warning, only colour — AC4/M6 explicitly scope the warning to `colorToken`
+  collisions; two organisms sharing a display NAME is a different, un-asked-for concern.
+- `DisplayOrganism.colorToken` being mandatory for a consumer (`<BattleTile>`) that ignores it — the
+  documented, deliberate trade-off of forced decision 3 (one resolver, never two), not an oversight.
+- `resolveSelectedTool`'s roster scan lacking a cited benchmark — 255 entries max, `Array.some`,
+  re-run only on selection/roster change, not per render or per pointer-move; already recorded in
+  `deferred-work.md` with the honest "not a measured problem, revisit only if roster gains a
+  per-render derivation" framing, which is the correct level of rigor for a bound this small.
+
+**Decision-needed: two, both above — story left in `review` pending Sidiar's answers**
+(`sprint-status.yaml` unchanged). **Patches applied: one** (the CSS separator fix). **Deferred:
+four**, written to `deferred-work.md`. **Dismissed: three.**
+
 ## Dev Notes
 
 ### Decisions this story is forced to make (flag each in the Dev Agent Record)
