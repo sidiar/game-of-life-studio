@@ -240,8 +240,33 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     // against, so it is read off that constant rather than `CONWAYS_CLASSIC_ID` directly (lib/
     // tool.ts's own trap — two independent constants would drift and leave `refForTool` returning
     // null at every press).
-    return union.length > 0 ? union : buildRosterIds(union, [DEFAULT_TOOL.organismId]);
-  }, [draft, sessionRoster, rosterSettled]);
+    if (union.length > 0) return union;
+
+    // Story 2.9 review, decision 1 (Sidiar's option (a)): and ONLY when that organism is actually
+    // in the library that just loaded.
+    //
+    // `libraryUnavailable` covers a FAILED `organisms.list()`. A SUCCESSFUL EMPTY one is a
+    // different, reachable state — a fresh browser profile, cleared storage, or a bookmarked
+    // `/battle/new` opened before the Gallery has ever run the workspace seed (`useWorkspaceSeed`
+    // is mounted by the Gallery page, not by this route). Seeding unconditionally there put an id
+    // in the roster with no record behind it, so `resolveDisplayOrganisms` fell back and the
+    // sidebar rendered a normal, pre-selected, clickable row reading "Unknown organism" — a page
+    // reporting no problem while offering a tool that cannot place anything, which is precisely
+    // what AC7's degraded notice exists to avoid saying by accident.
+    //
+    // The trade-off Sidiar accepted: in that narrow window the roster is honestly EMPTY and the
+    // dish is honestly unpaintable — `resolveSelectedTool` falls through to the eraser (spec §3.3:
+    // "first roster row; eraser when the roster is empty"), and Story 2.10's add dropdown is what
+    // makes it paintable again. Better an empty list than a fictional organism.
+    //
+    // ⚠️ `organisms`, not `roster`: this memo FEEDS `roster`, so reading the resolved list here
+    // would be a cycle. `rosterSettled` above already guarantees the resource is not in flight, so
+    // `organisms ?? []` is an EMPTY LIBRARY here, never an unarrived one.
+    const defaultInLibrary = (organisms ?? []).some(
+      (organism) => organism.id === DEFAULT_TOOL.organismId,
+    );
+    return defaultInLibrary ? buildRosterIds(union, [DEFAULT_TOOL.organismId]) : NO_ROSTER;
+  }, [draft, sessionRoster, rosterSettled, organisms]);
 
   // The roster resolved for DISPLAY — names and identity-shade colours — through the same
   // `displayColor` LUT the dish's own cells go through, which is what keeps a sidebar chip from

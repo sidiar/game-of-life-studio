@@ -351,6 +351,66 @@ describe('BattlePage', () => {
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
+  // Story 2.9 review, decision 1 (Sidiar's option (a)). `libraryUnavailable` covers a FAILED
+  // organisms.list(); a SUCCESSFUL EMPTY one is a separate, reachable state — a fresh profile,
+  // cleared storage, or a bookmarked /battle/new opened before the Gallery has ever run the
+  // workspace seed. The seed used to fire there regardless, putting an id in the roster with no
+  // record behind it, and the sidebar rendered a normal, pre-selected, clickable row reading
+  // "Unknown organism": a page reporting no problem while offering a tool that places nothing.
+  //
+  // ⚠️ Note what this does NOT assert: the AC7 degraded notice. The library did not fail, so
+  // claiming it did would be its own lie — the honest state is simply an empty roster.
+  it('seeds NO roster row when the library loads successfully but is empty', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: [] })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(screen.queryByText('Unknown organism')).toBeNull();
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.queryByText(/organism library could not be read/i)).toBeNull();
+  });
+
+  // The other half of decision 1: an empty roster is only acceptable because the selection has
+  // somewhere honest to fall to. `resolveSelectedTool` yields the eraser (spec §3.3: "first roster
+  // row; eraser when the roster is empty"), so exactly one control is still pressed — AC2 holds
+  // even here — and Story 2.10's add dropdown is what makes the dish paintable again.
+  it('falls back to the eraser, still exactly one selection, when the library is empty', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: [] })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.queryAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true'),
+    ).toHaveLength(1);
+  });
+
+  // The seed must still fire in the case it exists for — otherwise "stop seeding a fictional
+  // organism" is trivially satisfiable by never seeding at all, which would leave /battle/new
+  // unpaintable until Story 2.10 for every ordinary user.
+  it('still seeds the default tool’s organism when the library DOES contain it', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(screen.getByRole('button', { name: CONWAYS_CLASSIC.name })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
   // Story 2.9 AC6, INVERTING what this test asserted through Story 2.8 (deferred-work.md, owned
   // by this story). While one `Promise.all` loaded both, a corrupt ORGANISM record rendered the
   // BATTLE's failure body — the wrong fact about the wrong record — and that was accepted only
