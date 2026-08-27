@@ -87,6 +87,48 @@ async function distinctColorCount(canvas: Locator): Promise<number> {
   });
 }
 
+/**
+ * Story 2.6 Task 8: a distinct-colour count alone (`distinctColorCount` above) rises identically
+ * for a single painted cell and for a hundred, so it cannot distinguish this story's drag from
+ * Story 2.5's click — only AREA can. This pair tallies painted pixels by diffing the canvas's
+ * OWN pixel buffer against a snapshot taken before any gesture, entirely inside the page (the
+ * snapshot lives on `window`, never crosses back over the CDP boundary as a giant JSON array).
+ * `snapshotBaseline` must be called once, before the gesture; `countChangedPixels` reads it back.
+ */
+async function snapshotBaseline(canvas: Locator): Promise<void> {
+  await canvas.evaluate((el) => {
+    const canvasEl = el as HTMLCanvasElement;
+    const ctx = canvasEl.getContext('2d');
+    if (ctx === null) return;
+    const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+    (window as unknown as { __golBaseline?: Uint8ClampedArray }).__golBaseline =
+      new Uint8ClampedArray(data);
+  });
+}
+
+async function countChangedPixels(canvas: Locator): Promise<number> {
+  return canvas.evaluate((el) => {
+    const canvasEl = el as HTMLCanvasElement;
+    const ctx = canvasEl.getContext('2d');
+    if (ctx === null) return 0;
+    const baseline = (window as unknown as { __golBaseline?: Uint8ClampedArray }).__golBaseline;
+    if (baseline === undefined) return 0;
+    const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+    let changed = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (
+        data[i] !== baseline[i] ||
+        data[i + 1] !== baseline[i + 1] ||
+        data[i + 2] !== baseline[i + 2] ||
+        data[i + 3] !== baseline[i + 3]
+      ) {
+        changed++;
+      }
+    }
+    return changed;
+  });
+}
+
 // The e2e serves the PRODUCTION static export (playwright.config.ts), which is the only place
 // Architecture Decision K can actually be proven: `/battle/[id]` does not merely misbehave under
 // `output: 'export'`, it fails the build — and a route shape that *builds* can still 404 on a
@@ -287,6 +329,75 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
 
     await page.getByRole('img', { name: /petri dish/i }).click();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  // Story 2.6 (AC1, AC4, AC5, AC8): THE end-to-end claim — a click-and-drag paints STRICTLY MORE
+  // area than a click, which only real geometry, real pointer capture, and the interpolation unit
+  // (cellLine.ts) together can produce. Two independent fresh drafts (Story 2.8's undo does not
+  // exist yet, so a reload is the only way back to an empty dish between the two gestures).
+  test('dragging across the dish paints strictly more area than a single click (AC1, AC4)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+    const clickCanvas = page.getByRole('img', { name: /petri dish/i });
+    await expect(clickCanvas).toBeAttached();
+    const clickBox = await clickCanvas.boundingBox();
+    if (clickBox === null) throw new Error('dish has no layout box');
+    await snapshotBaseline(clickCanvas);
+
+    await page.mouse.move(clickBox.x + clickBox.width * 0.3, clickBox.y + clickBox.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.up();
+    const clickPixels = await countChangedPixels(clickCanvas);
+    expect(clickPixels).toBeGreaterThan(0); // the click itself must have painted something.
+
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+    const dragCanvas = page.getByRole('img', { name: /petri dish/i });
+    await expect(dragCanvas).toBeAttached();
+    const dragBox = await dragCanvas.boundingBox();
+    if (dragBox === null) throw new Error('dish has no layout box');
+    await snapshotBaseline(dragCanvas);
+
+    await page.mouse.move(dragBox.x + dragBox.width * 0.2, dragBox.y + dragBox.height * 0.5);
+    await page.mouse.down();
+    // ⚠️ NO `steps` option — Playwright's mouse.move with none sends exactly ONE `pointermove`,
+    // which is the only way this exercises AC4's interpolation (cellsBetween) rather than the
+    // browser's own pointermove sampling density filling the gap on its own.
+    await page.mouse.move(dragBox.x + dragBox.width * 0.8, dragBox.y + dragBox.height * 0.5);
+    await page.mouse.up();
+    const dragPixels = await countChangedPixels(dragCanvas);
+
+    expect(dragPixels).toBeGreaterThan(clickPixels);
+    expect(errors).toEqual([]);
+  });
+
+  // Same pattern as the click-placement axe check above — the dish's role="img"/aria-label are
+  // unchanged by this story, so this is the regression check, not a new accessibility claim.
+  test('has no axe accessibility violations on /battle/new after a drag', async ({ page }) => {
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    const box = await canvas.boundingBox();
+    if (box === null) throw new Error('dish has no layout box');
+
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5);
+    await page.mouse.up();
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);

@@ -6,8 +6,10 @@ import {
   GridRendererContextError,
   type GridRendererColors,
 } from '@/lib/canvas/gridRenderer';
-import { computeGridLayout } from '@/lib/canvas/gridLayout';
+import { cellsBetween } from '@/lib/canvas/cellLine';
+import { computeGridLayout, type GridLayout } from '@/lib/canvas/gridLayout';
 import { pointerToCell } from '@/lib/canvas/pointerToCell';
+import type { CellCoord } from '@/lib/canvas/dirtyCells';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { Tool } from '@/lib/tool';
@@ -174,6 +176,49 @@ type EditDishProps = PetriDishCanvasSharedProps & {
 };
 
 /**
+ * Geometry an in-progress stroke reads on every `pointermove` — resolved ONCE at pointer-down
+ * (Task 4, AC2) rather than per move. `getBoundingClientRect()` forces a style/layout flush, and
+ * a `pointermove` can arrive at the display's full refresh rate; doing either per move puts a
+ * forced reflow on the hot path this story exists to keep cheap.
+ *
+ * Staleness this buys, named rather than left implicit (Task 4): the cached box is wrong if the
+ * canvas is re-laid-out MID-STROKE (the resize effect's `renderer.resize(size)`). Forced decision
+ * 3: the resize path ENDS the stroke (committing whatever was painted) rather than recomputing
+ * this geometry — simpler, and a resize mid-drag is vanishingly rare.
+ */
+interface StrokeGeometry {
+  readonly rect: { left: number; top: number; width: number; height: number };
+  readonly canvasWidth: number;
+  readonly canvasHeight: number;
+  readonly layout: GridLayout;
+}
+
+/**
+ * The in-progress stroke — ONE ref, never React state (AC2, project-context "hot simulation
+ * state lives in refs"). Everything the gesture needs across its `pointermove` calls lives here:
+ * the pointer that owns it (AC7), the working grid it paints into (Task 3), the interpolation
+ * anchor (Task 6), whether anything actually changed (AC6), and the geometry cached at stroke
+ * start (Task 4).
+ */
+interface Stroke {
+  readonly pointerId: number;
+  readonly geometry: StrokeGeometry;
+  /** The resolved `OrganismRef` this stroke paints, fixed for the whole gesture at pointer-down —
+   *  there is no roster UI to change the tool mid-drag in this story, and pinning it here (rather
+   *  than re-reading the `toolRef` prop per move) keeps `toolRef`'s `number | null` type out of
+   *  every per-move call. */
+  readonly ref: number;
+  /** Mutated in place for the life of the stroke; a NEW object every pointer-down (Task 3). */
+  readonly workingGrid: RenderableGrid;
+  /** The last painted cell — the interpolation anchor. `null` when the pointer is currently over
+   *  no cell (Task 6: re-entry paints just the new cell, never a bridge across the outside gap). */
+  anchor: CellCoord | null;
+  /** True once at least one cell's occupant actually changed — AC6's "no-op stroke commits
+   *  nothing", generalised from Story 2.5's single-cell redundant-click guard. */
+  changed: boolean;
+}
+
+/**
  * The editor's retained-renderer lifecycle (Story 2.4, AC6). Unlike `StaticDish`, this surface
  * holds ONE `GridRenderer` for the life of the mount and repaints through it — never reconstructs
  * per paint. The two lifecycles cannot share one effect: the static path's contract is "construct,
@@ -203,6 +248,9 @@ function EditDish({
   // full paint: the construction effect paints, then the grid effect below reads this and skips
   // the grid it has already seen painted (review 2026-08-26 — see both effects).
   const paintedGridRef = useRef<RenderableGrid | null>(null);
+  // The in-progress drag stroke (Task 2) — a ref, never React state, which is the whole point of
+  // AC2: zero React state updates between pointer-down and pointer-up.
+  const strokeRef = useRef<Stroke | null>(null);
   // Routes a resize()-time repaint failure into React's own error channel, mirroring StaticDish.
   const [, setPaintError] = useState<null>(null);
 
@@ -239,6 +287,10 @@ function EditDish({
     return () => {
       rendererRef.current = null;
       paintedGridRef.current = null;
+      // Hygiene, not a commit path: an unmount mid-stroke drops the in-progress edit rather than
+      // firing onStrokeCommit into a component that is going away. No AC in this story covers an
+      // unmount-mid-drag; this only stops a stale ref outliving the mount.
+      strokeRef.current = null;
     };
     // `grid` and `showGridLines` are read above but deliberately absent from deps. Neither is a
     // GridRenderer constructor argument without a setter, and listing either would reconstruct
@@ -296,6 +348,12 @@ function EditDish({
 
       const renderer = rendererRef.current;
       if (renderer === null) return;
+      // Task 4 forced decision: a mid-stroke re-layout ENDS the stroke rather than recomputing
+      // the cached geometry (StrokeGeometry's doc comment). Ending it here — before resize() —
+      // commits whatever was painted so far through the SAME `renderer.draw` calls the stroke
+      // already made, so `renderer`'s own `lastGrid` is already the working grid resize() is
+      // about to repaint: no flicker, no stale rect surviving into the next move.
+      if (strokeRef.current !== null) endStroke(true);
       try {
         // `resize()` — NOT reconstruction. Reconstructing here throws away the dirty baseline
         // 2.5 depends on, and this retained instance is one of exactly two surfaces where
@@ -315,16 +373,87 @@ function EditDish({
     observer.observe(target);
 
     return () => observer.disconnect();
+    // `endStroke` is a plain function value rebuilt every render, not a dependency with its own
+    // identity worth tracking — same reasoning as the construction effect's `grid`/`showGridLines`
+    // omission above. Listing it would re-register the ResizeObserver on every render instead of
+    // only when `size` actually changes, which is the retention this effect exists to protect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size]);
 
   /**
-   * Click placement (Story 2.5, FR-3.4). ONE commit per click, carrying a NEW grid value.
+   * Paints `cells` into the ACTIVE stroke's working buffer (Task 3). Writes every cell in the
+   * segment — including ones already correct, cheaply — rather than pre-filtering the list: the
+   * filtering already happens once, correctly, inside `renderer.draw`'s colour-state diff
+   * (`selectDirtyCells`), and a second dedupe layer here would just be redundant work
+   * (dirtyCells.ts / gridRenderer.ts `draw` doc comments — "do not add a second dedupe layer").
    *
-   * `onPointerDown`, not `onClick` (RFC-002 Risk 5: "use pointer events API for unified
-   * handling"): painting on press is what keeps the visible feedback inside NFR-4.2's 100 ms —
-   * a click event does not fire until pointer-up — and it is what makes Story 2.6's drag an
-   * extension of this path rather than a rewrite of it. ❌ No `setPointerCapture` here: a single
-   * press needs none, and adding it pre-empts 2.6's "pointer-up outside the canvas" AC.
+   * Writes to `stroke.workingGrid.occupant` unconditionally on a real change even when no
+   * renderer exists (trap 12: `getContext('2d')` is `null` under jsdom, always) — the model is
+   * not the view, so the stroke's buffer and its `changed` flag stay correct regardless of
+   * whether anything got painted on screen.
+   */
+  function paintStrokeCells(stroke: Stroke, cells: readonly CellCoord[]): void {
+    if (cells.length === 0) return;
+    const { workingGrid, ref } = stroke;
+    let anyChanged = false;
+    for (const cell of cells) {
+      const index = cell.row * workingGrid.width + cell.col;
+      if (workingGrid.occupant[index] !== ref) {
+        workingGrid.occupant[index] = ref;
+        anyChanged = true;
+      }
+    }
+    // AC6's "no-op stroke commits nothing", generalised: a segment that changed nothing gets no
+    // markDirty/draw call at all — mirroring Story 2.5's single-cell redundant-click guard, which
+    // the existing AC7 test asserts by spying on both. A cell the pointer re-crosses inside a
+    // segment that DID change something elsewhere still costs nothing extra: `draw`'s own
+    // colour-state diff filters it out.
+    if (!anyChanged) return;
+    stroke.changed = true;
+    const renderer = rendererRef.current;
+    if (renderer !== null) {
+      // AC2: the dirty path, never `drawFull`. Repaints only the cells this segment touched.
+      renderer.markDirty(cells);
+      renderer.draw(workingGrid);
+    }
+  }
+
+  /**
+   * The one shared terminate path (Task 2) for pointer-up, pointer-cancel, lost-capture, and a
+   * mid-stroke re-layout (the resize effect above) — so "end the active stroke" exists exactly
+   * once. IDEMPOTENT by construction: `strokeRef.current` is cleared FIRST, so a second call for
+   * the same gesture (pointer-up AND lostpointercapture both fire in real browsers — AC5) finds
+   * no stroke and does nothing.
+   *
+   * `commit` names the decision at the CALL SITE, not a runtime branch here that ever chooses
+   * false today: every terminate reason in this story — up, cancel, lost capture, a mid-stroke
+   * resize — commits (forced decision 2: "the user did draw those cells; discarding leaves the
+   * dish showing paint no state holds"). The parameter stays because "does this termination
+   * commit" is a real per-site decision this story was forced to make, not a foregone one — a
+   * future terminate reason (an Escape-to-cancel, say) is exactly the kind of call site that would
+   * pass `false`.
+   */
+  function endStroke(commit: boolean): void {
+    const stroke = strokeRef.current;
+    if (stroke === null) return;
+    strokeRef.current = null;
+
+    // Guarded — jsdom 30 has `PointerEvent` but not `releasePointerCapture` (trap 1). Capture is
+    // released even on a commit=false path (none exists today, but the release must not depend on
+    // a decision orthogonal to it).
+    canvasRef.current?.releasePointerCapture?.(stroke.pointerId);
+
+    if (!commit || !stroke.changed) return; // AC6: a no-op stroke commits nothing.
+
+    paintedGridRef.current = stroke.workingGrid;
+    onStrokeCommit(stroke.workingGrid);
+  }
+
+  /**
+   * Stroke start (Story 2.5 -> 2.6, FR-3.4/FR-3.5). Paints the first cell on pointer-DOWN, same
+   * as Story 2.5 (AC2's < 100 ms feedback budget — a click event does not fire until pointer-up),
+   * and opens the stroke that subsequent moves extend. A press-release with no movement is the
+   * degenerate one-cell stroke (AC6); pointer-up still fires and still commits exactly once.
    */
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>): void {
     // A right-click, a middle-click, or a secondary touch point must never paint. `button === 0`
@@ -335,80 +464,152 @@ function EditDish({
     // instead would ERASE the cell (that is Story 2.7's eraser), which is not what a failed
     // lookup means.
     if (toolRef === null) return;
+    // AC7: a second pointer going down while a stroke is already active must not hijack or start
+    // a second stroke. Checked BEFORE any geometry work, same reason as the move handler's guard.
+    if (strokeRef.current !== null) return;
 
     const canvas = canvasRef.current;
     if (canvas === null) return;
 
-    // Forced decision 1(b): the layout is RECOMPUTED here rather than read off the renderer.
-    // `GridRenderer.layout` is private and adding an accessor would change the frozen contract
-    // (component-tree-battle-page.md#5), which no story since Epic 1 has done. `computeGridLayout`
-    // is pure and reads `canvas.width`/`height` live, so given the same three inputs it re-derives
-    // exactly what the renderer derived — including after a `resize()`. The one input that can
-    // legitimately differ is `showGridLines`, and that changes only `gridLinesVisible`, never
-    // `cellSize`/`originX`/`originY` (gridLayout.ts) — so the mapping stays correct either way.
-    // Do not "fix" this into a renderer accessor.
-    const layout = computeGridLayout(canvas, size, showGridLines);
-    const cell = pointerToCell({
-      rect: canvas.getBoundingClientRect(),
+    // review (2026-08-26, carried into this story): fail closed at STROKE START, the same guard
+    // Story 2.5 applied per click. The working grid's dimensions are then fixed for the whole
+    // gesture (Task 3) — trap 12's no-renderer path builds no renderer and calls no
+    // `assertGridMatchesSize`, so this is the only guard against an out-of-bounds write reaching
+    // `grid.occupant` that way.
+    if (grid.width !== size.cols || grid.height !== size.rows) return;
+
+    // Task 4: geometry resolved ONCE here and cached on the stroke — never recomputed per move.
+    // Forced decision 1(b) is unchanged from Story 2.5: `computeGridLayout` is pure and re-derives
+    // exactly what the renderer derived from the same three inputs, so this still does not need a
+    // `GridRenderer.layout` accessor (the frozen contract, component-tree-battle-page.md#5).
+    const rect = canvas.getBoundingClientRect();
+    const geometry: StrokeGeometry = {
+      rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
-      layout,
+      layout: computeGridLayout(canvas, size, showGridLines),
+    };
+
+    const cell = pointerToCell({
+      rect: geometry.rect,
+      canvasWidth: geometry.canvasWidth,
+      canvasHeight: geometry.canvasHeight,
+      layout: geometry.layout,
       size,
       clientX: event.clientX,
       clientY: event.clientY,
     });
-    // The centring margin, the far-edge boundary, and a degenerate box all land here. `null` is a
-    // normal outcome — the user pointed at no cell — and it is also what keeps `markDirty`'s
-    // `DirtyCellRangeError` (dirtyCells.ts) unreachable from inside this handler.
-    if (cell === null) return;
-    // review (2026-08-26): `cell.col`/`cell.row` are only vouched for against `size` — the prop
-    // pointerToCell/computeGridLayout were given — while the flat index below is computed against
-    // `grid.width`/`grid.height`. `GridRenderer.assertGridMatchesSize` already throws loudly for
-    // the CONSTRUCTED-renderer path (drawFull validates on every mount, before a click is
-    // possible), but trap 12's no-context path builds no renderer and calls no drawFull, so a
-    // desync reaching the handler that way would go straight to a wrong-cell write or an
-    // out-of-bounds Uint8Array assignment (silently dropped, not thrown) while `onStrokeCommit`
-    // still fires with a "changed" grid. Fail closed here too, rather than rely on a guard that
-    // only fires on one of the two paths.
-    if (grid.width !== size.cols || grid.height !== size.rows) return;
 
-    const index = cell.row * grid.width + cell.col;
-    // AC7: the cell already holds this organism. No copy, no mark, no draw, no commit — a
-    // redundant click must not create a Story 2.8 undo entry or flip Story 2.11's isDirty.
-    if (grid.occupant[index] === toolRef) return;
-
-    const occupant = grid.occupant.slice();
-    occupant[index] = toolRef;
-    const nextGrid: RenderableGrid = {
+    // Task 3: ONE working-grid allocation per stroke, sliced off the CURRENT prop grid — never a
+    // fresh copy per move (the allocation churn NFR-4.2 will not survive). `age` is carried by
+    // reference, unchanged from Story 2.5: every edit-mode grid is age-zero everywhere and
+    // nothing in Epic 2 writes age.
+    const workingGrid: RenderableGrid = {
       width: grid.width,
       height: grid.height,
-      occupant,
-      // Carried by REFERENCE, on purpose. Every edit-mode grid is age-zero everywhere (RFC-005's
-      // "Representation note"; `toRenderableGrid` allocates a zero-filled buffer) and nothing in
-      // Epic 2 writes age, so copying 12 KB per click at 100x60 would buy nothing. The instinct
-      // is to `slice()` both — don't, until something actually mutates age.
+      occupant: grid.occupant.slice(),
       age: grid.age,
     };
 
-    const renderer = rendererRef.current;
-    if (renderer !== null) {
-      // AC2: the dirty path, never `drawFull`. One click repaints one cell.
-      renderer.markDirty([cell]);
-      renderer.draw(nextGrid);
-      // ⚠️ THE trap this story is most likely to fall into. `onStrokeCommit` sends `nextGrid`
-      // up to <BattlePage>, which puts it in state and hands it straight back down as a NEW
-      // `grid` prop identity — and the grid effect above repaints whatever it has not already
-      // seen. Without this line that round trip full-repaints all 6,000 cells and re-primes the
-      // whole colour-state baseline on every single click, while every test still passes and the
-      // dish still looks perfect.
-      paintedGridRef.current = nextGrid;
+    const stroke: Stroke = {
+      pointerId: event.pointerId,
+      geometry,
+      ref: toolRef,
+      workingGrid,
+      anchor: null,
+      changed: false,
+    };
+    strokeRef.current = stroke;
+
+    // Task 5: the native mechanism that keeps every subsequent pointermove/pointerup targeting
+    // this canvas once the pointer leaves it (AC5), so React's own onPointerMove/onPointerUp props
+    // keep firing unchanged. Guarded — jsdom 30 has no `setPointerCapture` (trap 1); an unguarded
+    // call throws TypeError from inside this handler and takes every edit-variant test with it.
+    canvas.setPointerCapture?.(event.pointerId);
+
+    // The centring margin, the far-edge boundary, and a degenerate box all land here as `null` —
+    // a normal outcome (the user pressed on no cell), not an error. The stroke stays open with no
+    // anchor; a move back onto the dish paints just the re-entry cell (Task 6), never a bridge
+    // across the outside gap.
+    if (cell === null) return;
+
+    paintStrokeCells(stroke, [cell]);
+    stroke.anchor = cell;
+  }
+
+  /**
+   * The drag itself (AC1, AC4). Fires on every hover move for the life of the mount, not just
+   * during a stroke (trap 6) — the no-stroke early return below does NO work at all: no
+   * `getBoundingClientRect()`, no `computeGridLayout`, no allocation.
+   */
+  function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>): void {
+    const stroke = strokeRef.current;
+    // Cheapest checks first, before any geometry work: no active stroke, or a DIFFERENT pointer
+    // (AC7 — a second finger's moves must not paint through the primary stroke).
+    if (stroke === null || event.pointerId !== stroke.pointerId) return;
+
+    // Trap 5's self-heal: `event.button` is -1 on a move (no button "changed state" on this
+    // event) and must NEVER gate painting — the `buttons` BITMASK is the move-time equivalent.
+    // Forced decision 5: treat the primary button reading as released (capture lost silently
+    // somewhere the canvas never heard about) as a terminate-and-commit, same as any other
+    // termination.
+    if ((event.buttons & 1) === 0) {
+      endStroke(true);
+      return;
     }
-    // The commit fires even when the renderer is absent (a missing 2D context — always, under
-    // jsdom). The model is not the view: a canvas that cannot paint must not silently swallow the
-    // user's edit. `paintedGridRef` is deliberately NOT set in that case — there is nothing
-    // painted for it to describe, and the construction effect will paint the current grid if a
-    // context ever becomes available.
-    onStrokeCommit(nextGrid);
+
+    const { geometry } = stroke;
+    const cell = pointerToCell({
+      rect: geometry.rect,
+      canvasWidth: geometry.canvasWidth,
+      canvasHeight: geometry.canvasHeight,
+      layout: geometry.layout,
+      size,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+
+    if (cell === null) {
+      // AC5: the pointer left the dish. The stroke stays OPEN (leaving and re-entering is one
+      // gesture) and the anchor is dropped so a later re-entry does not bridge a line across the
+      // outside path — cells the pointer went AROUND, never through.
+      stroke.anchor = null;
+      return;
+    }
+
+    if (stroke.anchor === null) {
+      // Stroke start, or a re-entry after the pointer left the dish: paint just this cell.
+      paintStrokeCells(stroke, [cell]);
+    } else {
+      // AC4: interpolate the gap a fast drag's widely-spaced samples would otherwise leave.
+      paintStrokeCells(stroke, cellsBetween(stroke.anchor, cell));
+    }
+    stroke.anchor = cell;
+  }
+
+  // handlePointerUp / handlePointerCancel / handleLostPointerCapture (AC3, AC5, AC7): the three
+  // browser-native ways a gesture ends, all routed through the ONE shared `endStroke`. Each
+  // ignores a pointerId that is not the active stroke's own — a second pointer's up/cancel must
+  // not terminate the primary stroke it never started (AC7).
+  function handlePointerUp(event: ReactPointerEvent<HTMLCanvasElement>): void {
+    const stroke = strokeRef.current;
+    if (stroke === null || event.pointerId !== stroke.pointerId) return;
+    endStroke(true);
+  }
+
+  function handlePointerCancel(event: ReactPointerEvent<HTMLCanvasElement>): void {
+    const stroke = strokeRef.current;
+    if (stroke === null || event.pointerId !== stroke.pointerId) return;
+    // Forced decision 2: commit the cells already painted rather than discard them — discarding
+    // is only defensible alongside a `drawFull` repaint from the prop grid, which is exactly the
+    // AC2-forbidden path this story exists to avoid.
+    endStroke(true);
+  }
+
+  function handleLostPointerCapture(event: ReactPointerEvent<HTMLCanvasElement>): void {
+    const stroke = strokeRef.current;
+    if (stroke === null || event.pointerId !== stroke.pointerId) return;
+    endStroke(true);
   }
 
   // role="img" + aria-label, deliberately the INVERSE of the static tile's aria-hidden (Story
@@ -427,6 +628,10 @@ function EditDish({
       aria-label={`Petri dish, ${size.cols} by ${size.rows} cells`}
       className={className}
       onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={handleLostPointerCapture}
     />
   );
 }

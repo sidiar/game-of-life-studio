@@ -169,7 +169,14 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
     const onCommitGrid = vi.fn();
     const canvas = mountEditor(onCommitGrid);
 
+    // Story 2.6: the commit lands on pointer-up, not pointer-down (trap 2).
     fireEvent.pointerDown(canvas, {
+      clientX: 3 * CELL + CELL / 2,
+      clientY: 4 * CELL + CELL / 2,
+      button: 0,
+      isPrimary: true,
+    });
+    fireEvent.pointerUp(canvas, {
       clientX: 3 * CELL + CELL / 2,
       clientY: 4 * CELL + CELL / 2,
       button: 0,
@@ -218,5 +225,24 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
     );
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
     expect(getComputedStyle(canvas).cursor).toBe('crosshair');
+  });
+
+  // Story 2.6 AC8 / deferred-work.md (this story's owner): touch must paint, not scroll the
+  // page, and a mouse drag must not start a native selection.
+  it('gives the editor dish touch-action: none and user-select: none (AC8)', () => {
+    const { container } = render(
+      <BattleEditorView
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        rosterIds={ROSTER}
+        onCommitGrid={() => {}}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    expect(getComputedStyle(canvas).touchAction).toBe('none');
+    expect(getComputedStyle(canvas).userSelect).toBe('none');
   });
 });

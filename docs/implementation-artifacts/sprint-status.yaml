@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-08-26
+# last_updated: 2026-08-27
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-08-26
+last_updated: 2026-08-27
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -70,7 +70,7 @@ development_status:
   2-3-renderer-dirty-region-editing-paths: done
   2-4-edit-canvas-display: done
   2-5-click-placement: done
-  2-6-drag-painting: backlog
+  2-6-drag-painting: review
   2-7-eraser: backlog
   2-8-undo: backlog
   2-9-organism-roster-tool-selection: backlog
