@@ -4,7 +4,7 @@ baseline_commit: 0f346d06c310aad28725da9fbb4bafe2c840f362
 
 # Story 2.10: Add Organisms from Library
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -239,7 +239,7 @@ file + `architecture.md` G.3/H.1/H.2/M6/B.2/I.4, `component-tree-battle-page.md`
 `epics.md`, `deferred-work.md`, `themes.css`, the mockup). 26 raw findings → 6 patched, 9 deferred,
 2 decision-needed, 9 dismissed as noise.
 
-- [ ] [Review][Decision] **The native `<select>` adds an organism on every Arrow-key press in
+- [x] [Review][Decision] **The native `<select>` adds an organism on every Arrow-key press in
       Firefox and Windows Chrome** — on a CLOSED `<select>`, those engines move the selection with
       Up/Down and fire `change` per option rather than opening a popup. `onChange` here IS the add,
       so a keyboard user browsing the list adds organisms they never chose — one per keypress, each
@@ -248,7 +248,12 @@ file + `architecture.md` G.3/H.1/H.2/M6/B.2/I.4, `component-tree-battle-page.md`
       every test uses `user.selectOptions`, which sets the value directly. Fixing it means departing
       from forced decision 2's mockup-faithful "`<select>` whose selection IS the action", so it is
       Sidiar's call — see the PR body for the options.
-- [ ] [Review][Decision] **A palette change mid-stroke is reachable, and the story recorded it as
+      **✅ Decided (Sidiar, 2026-08-27): option (c) — accept it.** The mockup's shape wins and
+      the blast radius is one session's roster (not persisted per H.2; unpainted extras vanish
+      on reload and H.1's prune drops them at save). Recorded in `deferred-work.md` under this
+      story's review block so it is not re-raised as a bug; revisit only if a custom listbox
+      ever replaces the `<select>`, which would remove the behaviour as a side effect.
+- [x] [Review][Decision] **A palette change mid-stroke is reachable, and the story recorded it as
       unreachable** [`apps/web/components/PetriDishCanvas.tsx`:313-319] — the Dev Agent Record and
       `deferred-work.md` both close the `setPalette` entry with the residual "the cleanup nulls
       `strokeRef` — unreachable via the UI today because the add control lives in the sidebar, not
@@ -259,6 +264,17 @@ file + `architecture.md` G.3/H.1/H.2/M6/B.2/I.4, `component-tree-battle-page.md`
       `releasePointerCapture` never runs. The two sibling paths already disagree deliberately — the
       resize effect commits (`endStroke(true)`), the grid effect discards (`endStroke(false)`) — so
       which one a palette change should follow is a policy call that Stories 2.14/2.15 inherit.
+      **✅ Decided (Sidiar, 2026-08-27): option (b) — discard, properly.** The cleanup now calls
+      the shared `endStrokeRef.current(false)` instead of nulling `strokeRef` by hand: the same
+      discard as before (so it stays consistent with the grid effect's mid-stroke policy, and
+      option (a)'s commit — the resize effect's arm — was NOT taken, since a resize does not
+      change grid CONTENT) but through the one shared terminate, so `releasePointerCapture`
+      runs and the rest of the gesture is no longer swallowed by a canvas holding capture for a
+      stroke that no longer exists. Via `endStrokeRef`, not `endStroke` — the cleanup outlives
+      the render that registered it. Pinned by `PetriDishCanvas.test.tsx`'s "a palette change
+      mid-stroke (Story 2.10)" describe, mutation-checked. This also closes the older
+      `deferred-work.md` entry that owned the same cleanup for Story 2.14, which now inherits
+      the decision rather than the question.
 - [x] [Review][Patch] **`/battle/new`'s seeded organism was evicted from index 0 by the first add,
       silently repainting its cells** [`apps/web/components/battle/BattlePage.tsx`:244-290]
 - [x] [Review][Patch] **The new input and select painted their control boundary with the decorative
@@ -615,7 +631,10 @@ multi-touch reaches it (one finger holding the dish, a second operating the side
 `strokeRef` **directly** rather than through `endStroke`, so the in-progress cells are discarded with
 no undo entry and `releasePointerCapture` never runs. Commit-vs-discard for a palette change is a
 policy Stories 2.14/2.15 inherit, so it went to Sidiar as a decision-needed finding rather than being
-patched here.
+patched here. **Decided by Sidiar (2026-08-27): discard, properly — the cleanup goes through the shared
+`endStrokeRef.current(false)`, releasing pointer capture, rather than nulling `strokeRef` itself.** Both
+residuals are therefore settled: the first (one full `drawFull` repaint per add) stands as a cost, not a
+defect; the second is fixed. Stories 2.14/2.15 inherit the decision, not the question.
 
 **Forced decision 1 (add-and-select) — option (b) taken.** Selecting an entry both adds it to
 `sessionRoster` AND selects it (`<BattleEditorView>`'s `handleAddToRoster` wraps `<BattlePage>`'s
