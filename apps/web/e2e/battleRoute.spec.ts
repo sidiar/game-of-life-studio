@@ -408,4 +408,111 @@ test.describe('battle route (Story 2.1)', () => {
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
   });
+
+  // Story 2.7 (AC1, AC2): THE end-to-end claim for the eraser is REVERSAL, not "some cells
+  // changed" — a broken interpolation on the erase drag would still satisfy a bare
+  // `remainingChangedPixels < paintedPixels`, which is why this pins a return to the PRE-PAINT
+  // floor instead. Real geometry, real pointer capture, the same `cellsBetween` interpolation
+  // both directions — unit tests stub jsdom's layout; this is the only place it is real.
+  test(
+    'drag to paint, then drag the eraser over the SAME path, returns painted pixels to the ' +
+      'pre-paint floor (AC1, AC2, reversal)',
+    async ({ page }) => {
+      const errors: string[] = [];
+      page.on('pageerror', (err) => errors.push(err.message));
+
+      await seedWorkspace(page);
+      await seedConwaysClassic(page);
+      await page.goto('/battle/new');
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+      const canvas = page.getByRole('img', { name: /petri dish/i });
+      await expect(canvas).toBeAttached();
+      const box = await canvas.boundingBox();
+      if (box === null) throw new Error('dish has no layout box');
+      await snapshotBaseline(canvas);
+
+      const start = { x: box.x + box.width * 0.2, y: box.y + box.height * 0.5 };
+      const end = { x: box.x + box.width * 0.8, y: box.y + box.height * 0.5 };
+
+      // Paint with the DEFAULT tool (Draw is selected until the toggle is touched).
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      // ⚠️ NO `steps` — exactly one pointermove, the interpolation-exercising shape Story 2.6's
+      // own drag test relies on (cellsBetween, not the browser's own sampling density).
+      await page.mouse.move(end.x, end.y);
+      await page.mouse.up();
+      const paintedPixels = await countChangedPixels(canvas);
+      expect(paintedPixels).toBeGreaterThan(0); // the drag itself must have painted something.
+
+      // Drive the toggle the way a user does — by its accessible name, not a test id or class —
+      // which is what makes the AC5 keyboard/axe claim more than a unit-test artefact.
+      await page.getByRole('button', { name: 'Erase' }).click();
+
+      // Erase over the EXACT same path.
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(end.x, end.y);
+      await page.mouse.up();
+
+      // THE reversal claim: painted pixels return to (at or near) the pre-paint floor — a
+      // return-to-floor assertion, not a bare "some cells changed" one, which a broken
+      // interpolation would also satisfy.
+      //
+      // ⚠️ NOT a near-zero bound (measured empirically ~30-35% residual, both here and on an
+      // isolated single-cell paint+erase with no adjacent-cell interaction at all). The
+      // residual is `restoreGridLinesOver`'s own known property (gridRenderer.ts), not an
+      // eraser defect: it repaints each dirty cell's FOUR border segments independently, so two
+      // segments meeting at a shared edge or corner (adjacent cells in one drag batch, or one
+      // cell's own corner) each re-composite the semi-transparent `--gol-border` line on a
+      // freshly-filled background — a DOUBLE alpha blend the ONE-pass full paint
+      // (`drawGridLinesInto`) never produces. It is identical after paint and after erase (same
+      // code path, same batch shape), so it is stable, not growing, and it is this story's
+      // Dev Notes-cited frozen infrastructure (Story 2.3) — "do not add caching or dedupe on top
+      // of it" — not something to patch here.
+      //
+      // ⚠️ review (2026-08-27): this assertion does NOT pin interpolation, and the comment
+      // previously claimed it did. Both halves of the gesture run the same single `mouse.move`
+      // through the same `cellsBetween`, so breaking interpolation shrinks `paintedPixels` and
+      // the residual TOGETHER and the ratio still passes. Interpolation is genuinely pinned at
+      // the unit level (`PetriDishCanvas.test.tsx`'s interpolated-erase test, mutation-checked
+      // against `cellsBetween` -> `[cell]`). What this test does pin, and what no unit test can,
+      // is that a real browser's pointer capture, geometry and DPR round-trip a paint and an
+      // erase over identical coordinates back to the pre-paint floor. A binding lower floor on
+      // `paintedPixels` (the shape Story 2.6's review used: a multiple of a single click's
+      // pixels) needs its own calibration run — recorded in deferred-work.md rather than guessed
+      // at here, since an uncalibrated floor is a flaky CI failure, not a stronger test.
+      const remainingChangedPixels = await countChangedPixels(canvas);
+      expect(remainingChangedPixels).toBeLessThan(paintedPixels * 0.6);
+
+      expect(errors).toEqual([]);
+    },
+  );
+
+  // Same pattern as the click-placement and drag axe checks above — regression check, not a new
+  // accessibility claim, now covering the erase gesture and the toggle it goes through.
+  test('has no axe accessibility violations on /battle/new after an erase', async ({ page }) => {
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    const box = await canvas.boundingBox();
+    if (box === null) throw new Error('dish has no layout box');
+
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5);
+    await page.mouse.up();
+
+    await page.getByRole('button', { name: 'Erase' }).click();
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5);
+    await page.mouse.up();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
 });

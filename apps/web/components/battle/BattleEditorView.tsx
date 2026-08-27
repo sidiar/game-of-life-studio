@@ -1,11 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { styled } from '@mui/material/styles';
+// Per-component imports only (AR-35) — no `@mui/x-*`, and the barrel is never imported.
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
-import { DEFAULT_TOOL, refForTool, type Tool } from '@/lib/tool';
+import { DEFAULT_TOOL, ERASER_TOOL, refForTool, type Tool } from '@/lib/tool';
 import PetriDishCanvas from '../PetriDishCanvas';
 
 // This story's slice of spec §3.3's ~13-prop interface: seven props, the ones this story can
@@ -43,6 +46,7 @@ export interface BattleEditorViewProps {
 type EditorMainProps = Omit<BattleEditorViewProps, 'rosterIds'> & {
   tool: Tool;
   toolRef: number | null;
+  onSelectTool(tool: Tool): void;
 };
 
 // Mockup: .main-content (clinical-lab-theme/petri-dish-lab-mode.html:434-441). The mockup's
@@ -56,6 +60,14 @@ const MainContent = styled('div')({
   flexDirection: 'column',
   background: 'var(--gol-bg-primary)',
   position: 'relative',
+});
+
+// Story 2.7's provisional tool toggle (forced decision 1(a) — see the toggle's own comment
+// below). No mockup row backs this exact strip; it is a placeholder, not a reproduction.
+const ToolbarRow = styled('div')({
+  display: 'flex',
+  justifyContent: 'center',
+  padding: '16px 30px 0',
 });
 
 // Mockup: .grid-container (:443-450). The mockup's padding-bottom: 80px reserves space for the
@@ -124,9 +136,46 @@ function EditorMain({
   tool,
   toolRef,
   onCommitGrid,
+  onSelectTool,
 }: EditorMainProps) {
+  // MUI's exclusive ToggleButtonGroup fires onChange with `value === null` when the user clicks
+  // the ALREADY-selected option (Dev Notes "Latest technical information") — ignored rather than
+  // clearing the tool, which an unhandled null would do. `selectedTool` stays the single source of
+  // truth either way: this only ever forwards one of the two real `Tool` values to it, never a
+  // second "is the eraser on" boolean living beside the union (trap 7).
+  const handleToolKindChange = useCallback(
+    (_event: ReactMouseEvent<HTMLElement>, value: 'organism' | 'eraser' | null) => {
+      if (value === null) return;
+      onSelectTool(value === 'eraser' ? ERASER_TOOL : DEFAULT_TOOL);
+    },
+    [onSelectTool],
+  );
+
   return (
     <MainContent>
+      {/* Story 2.7 AC5's provisional toggle — forced decision 1(a): a two-option
+          `ToggleButtonGroup` rather than a stub `<EditorSidebar>` (Story 2.4 already declined to
+          ship a half-built panel) or a hand-rolled single toggle button (a group renders the
+          selection's actual two-state shape and gives keyboard operation + `aria-pressed` for
+          free). PROVISIONAL: Story 2.9's `<OrganismRoster>` replaces this whole block — roster
+          rows plus a pinned eraser row — in one commit; nothing here is a down payment on that
+          component, so deleting this block deletes the feature cleanly. */}
+      <ToolbarRow>
+        <ToggleButtonGroup
+          value={tool.kind}
+          exclusive
+          onChange={handleToolKindChange}
+          aria-label="Editing tool"
+          size="small"
+        >
+          <ToggleButton value="organism" aria-label="Draw">
+            Draw
+          </ToggleButton>
+          <ToggleButton value="eraser" aria-label="Erase">
+            Erase
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </ToolbarRow>
       <GridContainer>
         <PetriDishBox>
           {/* `readGridColors` returns null when the token layer is absent (always under jsdom,
@@ -169,10 +218,11 @@ function EditorMain({
  * the stronger claim and was corrected rather than obeyed.
  */
 export default function BattleEditorView({ rosterIds, ...rest }: BattleEditorViewProps) {
-  // AC5: Conway's Classic until Story 2.9's roster UI can change it. The setter is deliberately
-  // unread — a rendered-but-inert tool control is the dead affordance NFR-4.1 forbids, so the
-  // selection is real state with no UI on it yet rather than a UI with nothing behind it.
-  const [selectedTool] = useState<Tool>(DEFAULT_TOOL);
+  // AC5: Conway's Classic until Story 2.9's roster UI replaces this whole selection with a real
+  // one. Story 2.7 is the one that reads the setter — `<EditorMain>`'s provisional toggle both
+  // DISPLAYS this state and SETS it, and nothing else does: no second "is the eraser on" boolean
+  // beside the union (trap 7), which is how the two would silently disagree.
+  const [selectedTool, setSelectedTool] = useState<Tool>(DEFAULT_TOOL);
 
   // Forced decision 2 (Story 2.5): the tool -> ref resolution lives HERE, not in the canvas.
   // This component already owns `selectedTool` and will own the roster wiring in 2.9, and the
@@ -180,5 +230,7 @@ export default function BattleEditorView({ rosterIds, ...rest }: BattleEditorVie
   // the canvas's `toolRef` identity is stable across unrelated renders.
   const toolRef = useMemo(() => refForTool(selectedTool, rosterIds), [selectedTool, rosterIds]);
 
-  return <EditorMain {...rest} tool={selectedTool} toolRef={toolRef} />;
+  return (
+    <EditorMain {...rest} tool={selectedTool} toolRef={toolRef} onSelectTool={setSelectedTool} />
+  );
 }

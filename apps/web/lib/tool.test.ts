@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
-import { DEFAULT_TOOL, refForTool, type Tool } from './tool';
+import { DEFAULT_TOOL, ERASER_TOOL, refForTool, type Tool } from './tool';
 
 const ORGANISM_A = 'organism-a';
 const ORGANISM_B = 'organism-b';
@@ -66,5 +66,18 @@ describe('refForTool', () => {
     const roster = [ORGANISM_A, ORGANISM_B];
     refForTool(organismTool(ORGANISM_B), roster);
     expect(roster).toEqual([ORGANISM_A, ORGANISM_B]);
+  });
+
+  // Story 2.7 AC4: the eraser resolves to `0` — the reserved "empty" ref (RFC-006 Decision 2) —
+  // regardless of the roster, including an empty one (an empty roster must still erase; trap 1).
+  // Mutation-check the load-bearing claim rather than trust it: flip the eraser's arm to `null`
+  // and this test must redden.
+  it('resolves the eraser tool to ref 0, as a number, for any roster including an empty one', () => {
+    for (const roster of [[], [ORGANISM_A], [ORGANISM_A, ORGANISM_B, CONWAYS_CLASSIC_ID]]) {
+      const ref = refForTool(ERASER_TOOL, roster);
+      expect(ref).toBe(0);
+      expect(typeof ref).toBe('number');
+      expect(ref).not.toBeNull();
+    }
   });
 });

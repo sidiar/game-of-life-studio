@@ -174,6 +174,14 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // array, and a conditional seed would depend on a `draft` that does not exist on the first
   // render. Nothing sets it in this story — Story 2.9 (add from library) and 2.13 (save + H.1
   // prune) are its writers. ❌ Not persisted here: H.1 prunes at save, which is 2.13's story.
+  //
+  // review (2026-08-27): back to `DEFAULT_TOOL.organismId`. Widening `Tool` did break this line,
+  // but the cause was `DEFAULT_TOOL`'s own `: Tool` annotation, not the union — narrowing the
+  // annotation to the organism arm (`lib/tool.ts`) restores the property access AND the coupling
+  // that matters here: the seeded roster must contain whatever the DEFAULT TOOL resolves against.
+  // Reading `CONWAYS_CLASSIC_ID` directly made them two independent constants, so changing the
+  // default tool would leave `refForTool` returning null and the dish silently unpaintable at
+  // every press — the exact trap `lib/tool.ts`'s own comment warns about.
   const [sessionRoster] = useState<readonly string[]>(() => [DEFAULT_TOOL.organismId]);
 
   // `draft.organismIds` first — their ORDER is the dense encoding's own (RFC-006 Decision 2: cell

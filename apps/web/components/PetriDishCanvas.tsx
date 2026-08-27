@@ -39,18 +39,19 @@ export type PetriDishCanvasProps = PetriDishCanvasSharedProps &
         variant: 'edit';
         grid: RenderableGrid;
         // component-tree-battle-page.md#3.10's own shape for the edit member. `tool` is accepted
-        // and deliberately NOT read here yet: this story's only arm is `{ kind: 'organism' }` and
-        // the ref it resolves to arrives pre-resolved as `toolRef` (forced decision 2), so
-        // branching on `tool.kind` would be a branch with one reachable case. Story 2.7's eraser
-        // is what makes it load-bearing — declaring it now keeps the seam at §3.10's shape so 2.7
-        // widens a union rather than adding a prop.
+        // and deliberately NOT read here — AC6 (Story 2.7) keeps this canvas tool-agnostic on
+        // purpose: it paints `stroke.ref`, whatever number that is, with no `tool.kind` branch
+        // anywhere in this file, eraser included. The pre-resolved `toolRef` below is what it
+        // actually paints with (forced decision 2); `tool` stays declared for §3.10's shape and
+        // for a future variant that genuinely needs the organism id, not this one.
         tool: Tool;
         // The ONE additive prop beyond §3.10 — same deviation, same justification, as `colors`
         // (Story 1.11) and `size`: a `Tool` carries an organism ID and the grid buffer stores a
         // numeric OrganismRef, and the roster that translates between them belongs to
         // <BattleEditorView> / <BattlePage> (Decision H.2), not to a rendering surface. `null`
         // means "this tool resolves to no organism in this battle's roster" — the click is then a
-        // no-op, never a write of ref 0 (which means EMPTY, and is Story 2.7's eraser).
+        // no-op. `0` means "erase" (Story 2.7 AC4, RFC-006 Decision 2's reserved empty ref) and is
+        // written like any other ref — `=== null`, never falsy, is the only correct check on it.
         toolRef: number | null;
         onStrokeCommit(next: RenderableGrid): void;
       }
@@ -203,10 +204,14 @@ interface StrokeGeometry {
 interface Stroke {
   readonly pointerId: number;
   readonly geometry: StrokeGeometry;
-  /** The resolved `OrganismRef` this stroke paints, fixed for the whole gesture at pointer-down —
-   *  there is no roster UI to change the tool mid-drag in this story, and pinning it here (rather
-   *  than re-reading the `toolRef` prop per move) keeps `toolRef`'s `number | null` type out of
-   *  every per-move call. */
+  /** The resolved `OrganismRef` this stroke paints, fixed for the whole gesture at pointer-down.
+   *  Story 2.7's toggle IS keyboard-operable mid-drag, which falsifies the earlier justification
+   *  ("no roster UI to change the tool mid-drag") — the pin is kept anyway, on the reasoning that
+   *  survives it: a gesture is ONE undo entry (RFC-005 Decision 6), and an entry that is half
+   *  paint and half erase has no coherent meaning, so the tool a stroke started with is the tool
+   *  it finishes with (Story 2.7 forced decision 4). Re-reading `toolRef` per move is not simply
+   *  "more responsive" — it changes what one undo entry contains. Pinning here also keeps
+   *  `toolRef`'s `number | null` type out of every per-move call. */
   readonly ref: number;
   /** Mutated in place for the life of the stroke; a NEW object every pointer-down (Task 3). */
   readonly workingGrid: RenderableGrid;
@@ -482,9 +487,6 @@ function EditDish({
     // instead would ERASE the cell (that is Story 2.7's eraser), which is not what a failed
     // lookup means.
     if (toolRef === null) return;
-    // AC7: a second pointer going down while a stroke is already active must not hijack or start
-    // a second stroke. Checked BEFORE any geometry work, same reason as the move handler's guard.
-    if (strokeRef.current !== null) return;
 
     const canvas = canvasRef.current;
     if (canvas === null) return;
@@ -494,7 +496,42 @@ function EditDish({
     // gesture (Task 3) — trap 12's no-renderer path builds no renderer and calls no
     // `assertGridMatchesSize`, so this is the only guard against an out-of-bounds write reaching
     // `grid.occupant` that way.
+    //
+    // review (2026-08-27): both cheap guards moved ABOVE the reclaim below, which COMMITS. Left
+    // underneath it, a mid-stroke `size` change (Story 2.14) would push a stale-shaped grid into
+    // `editedGrid` and only then bail here, leaving the next draw to throw `assertGridMatchesSize`
+    // out of the grid effect. Nothing that can abandon the handler may run after a commit.
     if (grid.width !== size.cols || grid.height !== size.rows) return;
+
+    // AC7: a second pointer going down while a stroke is already active must not hijack or start
+    // a second stroke. Checked BEFORE any geometry work, same reason as the move handler's guard.
+    //
+    // Story 2.7 Task 5 (deferred-work.md, taken): a pointerdown carrying the OPEN stroke's OWN
+    // pointerId means its terminating event was never delivered — a tab backgrounded mid-touch,
+    // or an OS gesture swallowing the up/cancel — and the `buttons === 0` self-heal on
+    // `pointermove` cannot rescue it, because touch and pen emit no hover moves at all (trap 8).
+    // Left as an unconditional reject, this pointer could never paint again for the life of the
+    // mount, with no error and no visual cue. Reclaim instead: end the stale stroke (committing
+    // whatever it already painted, same as any other termination) and fall through to open a
+    // fresh one. A genuinely DIFFERENT pointer is still rejected outright — AC7 stays intact.
+    //
+    // ⚠️ Reclaim only rescues a pointer that kept its id — in practice the MOUSE, which is also
+    // the one pointer type the `buttons === 0` self-heal already covers. Touch and pen allocate a
+    // fresh id per contact, so the orphaned-touch deadlock this clause was taken for is NOT closed
+    // by it; see deferred-work.md, which records the open question rather than claiming otherwise.
+    let baseGrid = grid;
+    if (strokeRef.current !== null) {
+      if (strokeRef.current.pointerId !== event.pointerId) return;
+      // review (2026-08-27): the fresh stroke is based on the RECLAIMED stroke's own buffer, not
+      // on the `grid` prop. `endStroke` commits synchronously, but React batches the resulting
+      // state update, so the `grid` this closure holds is still the PRE-reclaim value for the rest
+      // of this handler — slicing it would silently revert every cell the reclaimed stroke just
+      // committed, the moment the fresh stroke commits, while `paintedGridRef` suppresses the
+      // repaint that would have made the divergence visible. Read-only here: the buffer is copied
+      // below and never written through, so trap 6's "committed buffer is radioactive" holds.
+      baseGrid = strokeRef.current.workingGrid;
+      endStroke(true);
+    }
 
     // Task 4: geometry resolved ONCE here and cached on the stroke — never recomputed per move.
     // Forced decision 1(b) is unchanged from Story 2.5: `computeGridLayout` is pure and re-derives
@@ -523,10 +560,10 @@ function EditDish({
     // reference, unchanged from Story 2.5: every edit-mode grid is age-zero everywhere and
     // nothing in Epic 2 writes age.
     const workingGrid: RenderableGrid = {
-      width: grid.width,
-      height: grid.height,
-      occupant: grid.occupant.slice(),
-      age: grid.age,
+      width: baseGrid.width,
+      height: baseGrid.height,
+      occupant: baseGrid.occupant.slice(),
+      age: baseGrid.age,
     };
 
     const stroke: Stroke = {
