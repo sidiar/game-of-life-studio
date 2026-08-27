@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC, DEFAULT_SETTINGS, type Battle, type Organism } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
@@ -41,6 +42,36 @@ function installPerCanvasRecording(): Map<HTMLCanvasElement, RecordingContext2D>
     return ctx as unknown as CanvasRenderingContext2D;
   });
   return contextsByCanvas;
+}
+
+/**
+ * The heading resolving does NOT mean the editor's construction effect has flushed — the canvas
+ * mounts in the same commit, but its passive effect (the `getContext` call that registers a
+ * recording double) runs afterwards, and under CPU contention the gap is observable.
+ *
+ * deferred-work.md (Story 2.7 review) measured the resulting flake at ~1 failure in 6-10 parallel
+ * runs, on `main` as well as on the branch, and named the fix: drop the unsafe `as` casts and
+ * `waitFor` the context to be registered. The casts were the reason the flake surfaced as
+ * `TypeError: Cannot read properties of undefined` rather than a legible failure. The entry
+ * assigned this to "the next story that touches BattlePage.test.tsx"; Story 2.8 is that story.
+ */
+async function findEditorCanvas(container: HTMLElement): Promise<HTMLCanvasElement> {
+  return await waitFor(() => {
+    const canvas = container.querySelector('canvas');
+    if (canvas === null) throw new Error('no canvas mounted yet');
+    return canvas;
+  });
+}
+
+async function findRecording(
+  contextsByCanvas: Map<HTMLCanvasElement, RecordingContext2D>,
+  canvas: HTMLCanvasElement,
+): Promise<RecordingContext2D> {
+  return await waitFor(() => {
+    const recording = contextsByCanvas.get(canvas);
+    if (recording === undefined) throw new Error('the construction effect has not run yet');
+    return recording;
+  });
 }
 
 afterEach(() => {
@@ -295,16 +326,20 @@ describe('BattlePage', () => {
   });
 
   // AC2/NFR-4.1 on the create route specifically, mirroring the loaded-route assertion below.
-  // Story 2.7 adds the first real buttons on this route (the provisional tool toggle's Draw/
-  // Erase pair) — updated from "zero buttons" to "exactly those two, nothing else", the same
-  // shape a canvas-free skeleton must hold.
-  it('renders exactly the tool toggle’s two buttons and one heading on the "new" route', async () => {
+  // Story 2.7 added the first real buttons on this route (the provisional tool toggle's Draw/
+  // Erase pair); Story 2.8 adds the status bar's UNDO as the third — "exactly these three,
+  // nothing else", the same shape a canvas-free skeleton must hold. The status bar sits OUTSIDE
+  // the `colors !== null` guard, so it renders here even though no canvas does: undo acts on grid
+  // state, and a missing theme token layer is no reason to withhold it.
+  it('renders exactly the tool toggle, UNDO, and one heading on the "new" route', async () => {
     render(<BattlePage repositories={seeded()} battleId="new" />);
     await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
 
     expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
-    expect(screen.queryAllByRole('button')).toHaveLength(2);
+    // A freshly seeded battle has nothing to undo (AC8: the seed is not a ring entry).
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(3);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -322,20 +357,23 @@ describe('BattlePage', () => {
 
   // AC2 / NFR-4.1 as a COUNT, not a presence check: `queryByRole('button', { name: /run/i })`
   // being null still passes after someone adds a dead RUN button labelled differently, or a
-  // fullscreen button beside it. Story 2.7 puts the route's first two buttons on it (the
-  // provisional tool toggle's Draw/Erase) — the claim updates to "exactly those two", not back
-  // to zero, so a THIRD button (Run, fullscreen, or anything else) still fails this test.
-  it('renders no Run, fullscreen, or any other button beyond the tool toggle on the loaded route', async () => {
+  // fullscreen button beside it. Story 2.7 put the route's first two buttons on it (the
+  // provisional tool toggle's Draw/Erase) and 2.8 adds UNDO — the claim updates to "exactly those
+  // three", not back to zero, so a FOURTH button (Run, fullscreen, 2.13's SAVE arriving early, or
+  // anything else) still fails this test.
+  it('renders no Run, fullscreen, or any other button beyond the toggle and UNDO on the loaded route', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
     expect(screen.queryByRole('button', { name: /run/i })).not.toBeInTheDocument();
-    // review (2026-08-27): the two expected buttons are NAMED here, matching the sibling "new"
-    // route test above. A bare length-2 check is satisfied by a dead control replacing one of
+    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+    // review (2026-08-27): the expected buttons are NAMED here, matching the sibling "new"
+    // route test above. A bare length check is satisfied by a dead control replacing one of
     // them, which is exactly the substitution this count was written to catch.
     expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
-    expect(screen.queryAllByRole('button')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('button')).toHaveLength(3);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
@@ -419,8 +457,8 @@ describe('BattlePage', () => {
       />,
     );
     await linesOn.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
-    const canvasOn = linesOn.container.querySelector('canvas') as HTMLCanvasElement;
-    const recordingOn = contextsByCanvas.get(canvasOn);
+    const canvasOn = await findEditorCanvas(linesOn.container);
+    const recordingOn = await findRecording(contextsByCanvas, canvasOn);
     linesOn.unmount();
 
     const linesOff = render(
@@ -434,15 +472,15 @@ describe('BattlePage', () => {
       />,
     );
     await linesOff.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
-    const canvasOff = linesOff.container.querySelector('canvas') as HTMLCanvasElement;
-    const recordingOff = contextsByCanvas.get(canvasOff);
+    const canvasOff = await findEditorCanvas(linesOff.container);
+    const recordingOff = await findRecording(contextsByCanvas, canvasOff);
 
     // paintGridLines() draws the overlay via drawImage on the MAIN canvas's context whenever the
     // layout says lines are visible, and is a total no-op (no drawImage call at all) when they are
     // not — GridRenderer never falls back to direct fillRect line-drawing here because the
     // recording double makes the offscreen overlay canvas succeed, unlike real jsdom.
-    expect(recordingOn?.calls.some((c) => c.op === 'drawImage')).toBe(true);
-    expect(recordingOff?.calls.some((c) => c.op === 'drawImage')).toBe(false);
+    expect(recordingOn.calls.some((c) => c.op === 'drawImage')).toBe(true);
+    expect(recordingOff.calls.some((c) => c.op === 'drawImage')).toBe(false);
   });
 
   // AC7 / deferred-work.md:179: the grid the canvas is given must be HELD state with one stable
@@ -457,8 +495,11 @@ describe('BattlePage', () => {
 
     const { rerender } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    // waitFor, not a bare read: the construction effect flushes AFTER the heading resolves, so a
+    // straight `expect(...).toBeGreaterThan(0)` here is the same load-dependent flake the two
+    // helpers above fix (deferred-work.md, Story 2.7 review).
+    await waitFor(() => expect(getContextSpy.mock.calls.length).toBeGreaterThan(0));
     const callsAfterMount = getContextSpy.mock.calls.length;
-    expect(callsAfterMount).toBeGreaterThan(0); // the construction effect attempted at least once
 
     // Same repositories reference, same battleId — nothing that should change the seeded draft,
     // the grid, or the palette. React still re-invokes the component body (it is not memoized).
@@ -495,8 +536,8 @@ describe('BattlePage', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Loading battle…');
 
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
-    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
-    const recording = contextsByCanvas.get(canvas) as RecordingContext2D;
+    const canvas = await findEditorCanvas(container);
+    const recording = await findRecording(contextsByCanvas, canvas);
 
     // Three-Way Skirmish places three organisms, so a grid that actually arrived paints more than
     // the background. An all-empty grid (the captured-null failure) writes exactly one fillStyle.
@@ -537,30 +578,34 @@ describe('BattlePage', () => {
   });
 });
 
+// Conway's Classic is absent from createMockWorkspace() (trap 6) while production always has it
+// (M9: protected, re-seeded after import). Seeded explicitly so these tests exercise the real
+// colour path rather than buildRefToFillGroup's dangling-id fallback.
+//
+// Story 2.8: hoisted to module scope from inside the placement describe, so the undo describe
+// below reuses the same mount wiring rather than hand-copying a second near-identical one — the
+// duplicated-test-helper finding that keeps recurring in this project's reviews.
+const ORGANISMS_WITH_CONWAY: readonly Organism[] = [...organisms, CONWAYS_CLASSIC];
+const NEW_ROUTE_SIZE = DEFAULT_SETTINGS.defaultGridSize;
+
+async function renderNewRoute() {
+  const contextsByCanvas = installPerCanvasRecording();
+  enableCanvasRendering();
+  const view = render(
+    <BattlePage
+      repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
+      battleId="new"
+    />,
+  );
+  await view.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+  const canvas = await findEditorCanvas(view.container);
+  stubCanvasRect(canvas);
+  return { ...view, canvas, recording: await findRecording(contextsByCanvas, canvas) };
+}
+
 // Click placement wiring (Story 2.5, AC1/AC4/AC6). <BattlePage> holds the grid, owns the roster
 // union, and builds the palette over it — the three things that make a click actually land.
 describe('BattlePage — click placement wiring (Story 2.5)', () => {
-  // Conway's Classic is absent from createMockWorkspace() (trap 6) while production always has it
-  // (M9: protected, re-seeded after import). Seed it explicitly so these tests exercise the real
-  // colour path rather than buildRefToFillGroup's dangling-id fallback.
-  const ORGANISMS_WITH_CONWAY: readonly Organism[] = [...organisms, CONWAYS_CLASSIC];
-  const NEW_ROUTE_SIZE = DEFAULT_SETTINGS.defaultGridSize;
-
-  async function renderNewRoute() {
-    const contextsByCanvas = installPerCanvasRecording();
-    enableCanvasRendering();
-    const view = render(
-      <BattlePage
-        repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
-        battleId="new"
-      />,
-    );
-    await view.findByRole('heading', { level: 1, name: 'Untitled Battle' });
-    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
-    stubCanvasRect(canvas);
-    return { ...view, canvas, recording: contextsByCanvas.get(canvas) as RecordingContext2D };
-  }
-
   // ⚠️ Trap 3, and the reason AC6 exists. On /battle/new `draft.organismIds` is EMPTY. A palette
   // built from it has size 1, so the ref 1 the click writes is out of range — `colourStateAt`
   // folds it to EMPTY_COLOUR_STATE with only a warn-once, `selectDirtyCells` finds nothing
@@ -643,7 +688,7 @@ describe('BattlePage — click placement wiring (Story 2.5)', () => {
   // Skirmish's own roster does not contain Conway, so the union appends it — placing at ref
   // organismIds.length + 1, a ref the palette must also cover.
   it('appends the session organism to the roster union rather than reusing an existing ref', async () => {
-    installPerCanvasRecording();
+    const contexts = installPerCanvasRecording();
     enableCanvasRendering();
     const withoutConway = SKIRMISH.organismIds.filter((id) => id !== CONWAYS_CLASSIC.id);
     const battle: Battle = { ...SKIRMISH, organismIds: withoutConway };
@@ -658,14 +703,9 @@ describe('BattlePage — click placement wiring (Story 2.5)', () => {
       />,
     );
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
-    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    const canvas = await findEditorCanvas(container);
     stubCanvasRect(canvas);
-
-    const recording = (
-      vi.mocked(HTMLCanvasElement.prototype.getContext).mock.results[0] as {
-        value: RecordingContext2D;
-      }
-    ).value;
+    const recording = await findRecording(contexts, canvas);
 
     // A cell that is empty in the stored grid, so the placement definitely changes it.
     const emptyCell = findEmptyCell(battle.gridState);
@@ -683,6 +723,186 @@ describe('BattlePage — click placement wiring (Story 2.5)', () => {
     // Re-clicking is a no-op only if the first click actually placed the session organism there.
     click(canvas, at);
     expect(recording.calls.length).toBe(afterFirst);
+  });
+});
+
+// Undo (Story 2.8). <BattlePage> owns `useUndoableGrid`, so this is the only level at which the
+// whole loop is observable: a gesture commits, the ring grows, UNDO reverts it, and the dish
+// repaints. The hook's own units live in lib/useUndoableGrid.test.ts; what is tested here is the
+// WIRING — that `canUndo` reaches the button's `disabled` live (trap 1), and that the restored
+// grid actually reaches the canvas (trap 5).
+describe('BattlePage — undo wiring (Story 2.8)', () => {
+  const undoButton = () => screen.getByRole('button', { name: 'Undo' });
+
+  /** The occupied cells of whatever the canvas last full-painted, read off the recording. */
+  function paintedCellCount(recording: RecordingContext2D, backgroundFills: Set<string>): number {
+    return recording.fillStyleWrites.filter((fill) => !backgroundFills.has(String(fill))).length;
+  }
+
+  function backgroundFills(): Set<string> {
+    return new Set([
+      document.documentElement.style.getPropertyValue('--gol-bg-primary'),
+      document.documentElement.style.getPropertyValue('--gol-grid-line'),
+    ]);
+  }
+
+  // AC5's three transitions in one test, each read off the DOM rather than off the hook: disabled
+  // with an empty ring, enabled after one commit, disabled again once the ring is consumed — with
+  // NO other interaction between them. A `canUndo` read out of a ref (trap 1) passes every unit
+  // test of the hook and fails right here.
+  it('drives the UNDO button’s disabled state through the whole cycle (AC5)', async () => {
+    const user = userEvent.setup();
+    const { canvas } = await renderNewRoute();
+
+    expect(undoButton()).toBeDisabled();
+
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 10, 10));
+    expect(undoButton()).toBeEnabled();
+
+    await user.click(undoButton());
+    expect(undoButton()).toBeDisabled();
+  });
+
+  // AC3 + AC4: one entry per committed gesture, and each undo reverts exactly one of them.
+  it('accumulates one undo level per gesture and consumes them one at a time (AC3, AC4)', async () => {
+    const user = userEvent.setup();
+    const { canvas } = await renderNewRoute();
+
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 4, 4));
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 5, 5));
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 6, 6));
+
+    await user.click(undoButton());
+    expect(undoButton()).toBeEnabled();
+    await user.click(undoButton());
+    expect(undoButton()).toBeEnabled();
+    await user.click(undoButton());
+    expect(undoButton()).toBeDisabled(); // back at the seed — three gestures, three undos
+  });
+
+  // AC3's other half: a gesture that changed NOTHING never reaches `commit`, so it creates no
+  // entry and does not move `canUndo`. The redundant re-click is the cheapest instance of it.
+  it('creates no undo level for a gesture that changed nothing (AC3)', async () => {
+    const user = userEvent.setup();
+    const { canvas } = await renderNewRoute();
+    const at = centreOfCell(canvas, NEW_ROUTE_SIZE, 7, 7);
+
+    click(canvas, at);
+    click(canvas, at); // the same cell, already occupied — no commit fires at all.
+
+    await user.click(undoButton());
+    expect(undoButton()).toBeDisabled(); // one entry existed, not two.
+  });
+
+  // AC3 / AC4 with a REAL drag — press, move, move, release. Story 2.6's review specifically
+  // rejected "a click with a pointerUp bolted on" as a stand-in for this: the coalescing claim is
+  // about the cells BETWEEN the endpoints, and one undo has to take all of them back together.
+  it('reverts a whole press-drag-release stroke as ONE undo (AC3, AC4)', async () => {
+    const user = userEvent.setup();
+    const { canvas, recording } = await renderNewRoute();
+    const background = backgroundFills();
+    const at = (col: number, row: number) => centreOfCell(canvas, NEW_ROUTE_SIZE, col, row);
+
+    fireEvent.pointerDown(canvas, at(3, 3));
+    // `buttons: 1` is the move-time bitmask — a move reporting no primary button self-terminates.
+    fireEvent.pointerMove(canvas, { ...at(6, 3), buttons: 1 });
+    fireEvent.pointerMove(canvas, { ...at(10, 3), buttons: 1 });
+    fireEvent.pointerUp(canvas, { ...at(10, 3), buttons: 0 });
+
+    expect(undoButton()).toBeEnabled();
+
+    const beforeUndo = recording.fillStyleWrites.length;
+    await user.click(undoButton());
+
+    // ONE undo empties the whole stroke: the repaint that follows writes only background fills.
+    const afterUndo = recording.fillStyleWrites.slice(beforeUndo);
+    expect(afterUndo.length).toBeGreaterThan(0); // it did repaint (AC4)
+    expect(afterUndo.filter((fill) => !background.has(String(fill)))).toHaveLength(0);
+    // And the stroke was one entry, not eight: the ring is empty after a single undo.
+    expect(undoButton()).toBeDisabled();
+  });
+
+  // AC4's repaint half, at the level the model half cannot reach. Mutation-checked by swallowing
+  // the grid effect's `drawFull` — this test reddens, the model-side ones stay green, which is the
+  // split trap 13 describes (jsdom has no 2D context, so "the dish repainted" can only ever be a
+  // claim about a recording double).
+  //
+  // ⚠️ What this does NOT prove is trap 5's identity skip. `paintedGridRef.current` holds the
+  // CURRENT grid and `restore()` returns a PREVIOUS one, so the two are never equal in any flow
+  // reachable from here — an implementation that stored whole `RenderableGrid`s and handed the
+  // identity back still passes this. That claim is pinned where it is falsifiable instead:
+  // `lib/useUndoableGrid.test.ts`'s "builds a NEW grid object on restore", which reddens under
+  // exactly that mutation.
+  it('repaints the dish with the restored grid, not the identity it already painted (AC4)', async () => {
+    const user = userEvent.setup();
+    const { canvas, recording } = await renderNewRoute();
+    const background = backgroundFills();
+
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 12, 8));
+    const beforeUndo = recording.fillStyleWrites.length;
+    expect(paintedCellCount(recording, background)).toBeGreaterThan(0); // something was painted
+
+    await user.click(undoButton());
+
+    const afterUndo = recording.fillStyleWrites.slice(beforeUndo);
+    // A skipped repaint writes NOTHING here — that is the whole failure mode.
+    expect(afterUndo.length).toBeGreaterThan(0);
+    expect(afterUndo.filter((fill) => !background.has(String(fill)))).toHaveLength(0);
+  });
+
+  // AC7 / trap 8: a new seed is a DIFFERENT battle. Carrying the ring across would let UNDO
+  // restore the previous battle's grid into this one.
+  it('resets the ring when the route switches to another battle (AC7)', async () => {
+    const user = userEvent.setup();
+    const contextsByCanvas = installPerCanvasRecording();
+    enableCanvasRendering();
+    const repositories = createFakeRepositories({
+      battles: [SKIRMISH],
+      organisms: ORGANISMS_WITH_CONWAY,
+    });
+
+    const view = render(<BattlePage repositories={repositories} battleId="new" />);
+    await view.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+    const canvas = await findEditorCanvas(view.container);
+    await findRecording(contextsByCanvas, canvas);
+    stubCanvasRect(canvas);
+
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 9, 9));
+    expect(undoButton()).toBeEnabled();
+
+    view.rerender(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await view.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await waitFor(() => expect(undoButton()).toBeDisabled());
+    // review guard: the button must not merely be disabled — pressing it must not resurrect the
+    // other battle's grid either. With the ring gone there is nothing to press.
+    await user.click(undoButton());
+    expect(undoButton()).toBeDisabled();
+  });
+
+  // AC7: nothing about the ring is persisted. The repository is a fake with real method identities,
+  // so any write at all would show up here.
+  it('never writes the undo ring to a repository (AC7)', async () => {
+    const user = userEvent.setup();
+    installPerCanvasRecording();
+    enableCanvasRendering();
+    const repositories = createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY });
+    const saveSpy = vi.spyOn(repositories.battles, 'save');
+    const settingsSaveSpy = vi.spyOn(repositories.settings, 'save');
+
+    const view = render(<BattlePage repositories={repositories} battleId="new" />);
+    await view.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+    const canvas = await findEditorCanvas(view.container);
+    stubCanvasRect(canvas);
+
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 2, 2));
+    await user.click(undoButton());
+
+    expect(saveSpy).not.toHaveBeenCalled();
+    expect(settingsSaveSpy).not.toHaveBeenCalled();
+    // localStorage is untouched too — the fakes are in-memory, so this pins the absence of a
+    // second, direct write path (AR-2: a component never reaches a concrete repository anyway).
+    expect(localStorage.length).toBe(0);
   });
 });
 

@@ -10,12 +10,13 @@ import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { DEFAULT_TOOL, ERASER_TOOL, refForTool, type Tool } from '@/lib/tool';
 import PetriDishCanvas from '../PetriDishCanvas';
+import EditorStatusBar from './EditorStatusBar';
 
-// This story's slice of spec §3.3's ~13-prop interface: seven props, the ones this story can
+// This story's slice of spec §3.3's ~13-prop interface: nine props, the ones this story can
 // actually wire and verify. The sidebar (<OrganismRoster> 2.9, <BattleNameField> 2.11,
-// <GridSettingsSection> 2.14, <EditorToolsSection> 2.15, <SidebarFooter> 2.16) and
-// <EditorStatusBar> (2.12) bring the rest with them — declaring their props now would be an
-// unverifiable claim this story cannot back up.
+// <GridSettingsSection> 2.14, <EditorToolsSection> 2.15, <SidebarFooter> 2.16) and the REST of
+// <EditorStatusBar>'s interface (stats 2.12, SAVE 2.13) bring the rest with them — declaring their
+// props now would be an unverifiable claim this story cannot back up.
 export interface BattleEditorViewProps {
   grid: RenderableGrid;
   size: { cols: number; rows: number };
@@ -36,6 +37,14 @@ export interface BattleEditorViewProps {
    * per gesture, carrying a new grid value (RFC-005 Decision 6).
    */
   onCommitGrid(next: RenderableGrid): void;
+  /**
+   * Spec §3.3's `onUndo(): void; canUndo: boolean` line (FR-3.8), forwarded straight to
+   * `<EditorStatusBar>`. `canUndo` is a BOOLEAN, not RFC-005 Decision 6's `() => boolean` snippet:
+   * a function over a ref never re-renders, so the button's `disabled` would freeze at its mount
+   * value — see `useUndoableGrid.ts` and the Story 2.8 Dev Agent Record.
+   */
+  onUndo(): void;
+  canUndo: boolean;
 }
 
 /**
@@ -52,14 +61,18 @@ type EditorMainProps = Omit<BattleEditorViewProps, 'rosterIds'> & {
 // Mockup: .main-content (clinical-lab-theme/petri-dish-lab-mode.html:434-441). The mockup's
 // margin-top: 64px offsets a position: fixed header this app deliberately does not pin
 // (BattleHeader.tsx) — reproducing the offset without the pin would leave a 64px gap under a
-// header that never moved. `position: relative` is the future containing block for 2.12's
-// <EditorStatusBar> overlay; nothing positions against it yet.
+// header that never moved.
+//
+// Story 2.8: `position: relative` is GONE. Story 2.5 kept it as the containing block <EditorStatusBar>
+// would one day position against; the status bar has now arrived and does not position at all — it
+// is the last row of this flex column (EditorStatusBar.tsx records why the mockup's
+// `position: fixed; left: 320px` is not reproduced). A retained property whose only justification
+// is a future that already happened differently is dead CSS with a comment vouching for it.
 const MainContent = styled('div')({
   flex: 1,
   display: 'flex',
   flexDirection: 'column',
   background: 'var(--gol-bg-primary)',
-  position: 'relative',
 });
 
 // Story 2.7's provisional tool toggle (forced decision 1(a) — see the toggle's own comment
@@ -70,9 +83,10 @@ const ToolbarRow = styled('div')({
   padding: '16px 30px 0',
 });
 
-// Mockup: .grid-container (:443-450). The mockup's padding-bottom: 80px reserves space for the
-// status bar — Story 2.12 restores it; 80px of empty reserve under nothing today would not match
-// the mockup's own picture, only its literal CSS.
+// Mockup: .grid-container (:443-450). The mockup's padding-bottom: 80px reserves space for its
+// `position: fixed` status bar. Story 2.8's <EditorStatusBar> is IN FLOW below this box instead,
+// so `flex: 1` yields it the bar's real height and there is nothing left to reserve — the 80px
+// stays unreproduced permanently, not "until 2.12".
 const GridContainer = styled('div')({
   flex: 1,
   display: 'flex',
@@ -137,6 +151,8 @@ function EditorMain({
   toolRef,
   onCommitGrid,
   onSelectTool,
+  onUndo,
+  canUndo,
 }: EditorMainProps) {
   // MUI's exclusive ToggleButtonGroup fires onChange with `value === null` when the user clicks
   // the ALREADY-selected option (Dev Notes "Latest technical information") — ignored rather than
@@ -202,14 +218,19 @@ function EditorMain({
           )}
         </PetriDishBox>
       </GridContainer>
+      {/* Spec §3.8 / FR-3.8. Forwarded, never interpreted: the undo ring lives in <BattlePage>
+          (RFC-005 Decision 6), so this component holds no history state of its own. */}
+      <EditorStatusBar onUndo={onUndo} canUndo={canUndo} />
     </MainContent>
   );
 }
 
 /**
- * The Lab-mode composition root (component-tree-battle-page.md §3.3, §2). Today composes ONLY
- * `<EditorMain>` — the sidebar and `<EditorStatusBar>` are later stories (2.9-2.16) and must not
- * be stubbed here: an empty rendered panel is a dead affordance NFR-4.1 forbids.
+ * The Lab-mode composition root (component-tree-battle-page.md §3.3, §2). Composes `<EditorMain>`,
+ * which now carries `<EditorStatusBar>` (Story 2.8) — the SIDEBAR is still later stories
+ * (2.9-2.16) and must not be stubbed here: an empty rendered panel is a dead affordance NFR-4.1
+ * forbids. The status bar is not that: it ships one real, complete responsibility (UNDO), and
+ * 2.12/2.13 add stats and SAVE to it rather than unpicking it.
  *
  * ⚠️ §3.3's "instantiates no hooks" line is about the GRID and UNDO hooks, which live in
  * `<BattlePage>` (`useUndoableGrid`, Story 2.8) — the same section's State line explicitly

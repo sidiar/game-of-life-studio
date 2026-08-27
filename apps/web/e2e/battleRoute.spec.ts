@@ -489,6 +489,62 @@ test.describe('battle route (Story 2.1)', () => {
     },
   );
 
+  // Story 2.8 (AC3, AC4, AC5): UNDO, end to end, with real layout and a real pointer. Structured
+  // as the eraser reversal test above is, and for the same reason — "some pixels changed" would
+  // pass against an undo that reverted the wrong gesture, or none.
+  test('painting then pressing UNDO returns painted pixels toward the pre-paint floor (AC4)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    await expect(canvas).toBeAttached();
+    const box = await canvas.boundingBox();
+    if (box === null) throw new Error('dish has no layout box');
+    await snapshotBaseline(canvas);
+
+    // AC5: a freshly seeded battle has nothing to undo, and the button says so.
+    const undo = page.getByRole('button', { name: 'Undo' });
+    await expect(undo).toBeDisabled();
+
+    const start = { x: box.x + box.width * 0.2, y: box.y + box.height * 0.5 };
+    const end = { x: box.x + box.width * 0.8, y: box.y + box.height * 0.5 };
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    // ⚠️ NO `steps` — one pointermove, so the stroke's own `cellsBetween` interpolation is what
+    // fills the span, exactly as the paint/erase drags above do.
+    await page.mouse.move(end.x, end.y);
+    await page.mouse.up();
+
+    const paintedPixels = await countChangedPixels(canvas);
+    expect(paintedPixels).toBeGreaterThan(0);
+    await expect(undo).toBeEnabled(); // AC5: one committed gesture, one undo level.
+
+    await undo.click();
+
+    // ⚠️ The SAME generous threshold as the eraser reversal above, and for the identical reason:
+    // `restoreGridLinesOver` double-composites the translucent grid line at shared cell edges and
+    // corners, so ~30-35% of the painted pixels legitimately differ from the baseline after a
+    // PERFECT reversal (deferred-work.md, Story 2.7). The canvas is not pixel-reversible even
+    // though the grid state is exactly reversible — an e2e demanding near-zero residual fails
+    // against correct code. Undo repaints via `drawFull` rather than the eraser's dirty path, so
+    // if anything the residual here is smaller; the bound is kept identical rather than tightened
+    // on one uncalibrated observation.
+    const remaining = await countChangedPixels(canvas);
+    expect(remaining).toBeLessThan(paintedPixels * 0.6);
+
+    // AC3/AC8: the whole drag was ONE entry, so one press consumed the ring.
+    await expect(undo).toBeDisabled();
+
+    expect(errors).toEqual([]);
+  });
+
   // Same pattern as the click-placement and drag axe checks above — regression check, not a new
   // accessibility claim, now covering the erase gesture and the toggle it goes through.
   test('has no axe accessibility violations on /battle/new after an erase', async ({ page }) => {

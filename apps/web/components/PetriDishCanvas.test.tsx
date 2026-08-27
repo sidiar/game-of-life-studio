@@ -854,22 +854,47 @@ function mount(
   const size = overrides.size ?? PLACE_SIZE;
   const tool = overrides.tool ?? TOOL;
   const onStrokeCommit = overrides.onStrokeCommit ?? vi.fn();
-  const view = render(
-    <PetriDishCanvas
-      variant="edit"
-      grid={grid}
-      size={size}
-      palette={PALETTE}
-      showGridLines
-      colors={COLORS}
-      tool={tool}
-      toolRef={overrides.toolRef === undefined ? 1 : overrides.toolRef}
-      onStrokeCommit={onStrokeCommit}
-    />,
-  );
+  const toolRef = overrides.toolRef === undefined ? 1 : overrides.toolRef;
+
+  // Story 2.8: ONE element factory serving both the initial render and `rerenderWith` below,
+  // rather than a second hand-copied JSX block — the same parameterise-don't-duplicate discipline
+  // this helper was itself extracted for.
+  function element(props: { grid: RenderableGrid; tool: Tool; toolRef: number | null }) {
+    return (
+      <PetriDishCanvas
+        variant="edit"
+        grid={props.grid}
+        size={size}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        tool={props.tool}
+        toolRef={props.toolRef}
+        onStrokeCommit={onStrokeCommit}
+      />
+    );
+  }
+
+  const view = render(element({ grid, tool, toolRef }));
   const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
   stubRect(canvas);
-  return { ...view, canvas, contexts, grid, size, onStrokeCommit };
+
+  /**
+   * Stands in for `<BattlePage>` pushing a new value down MID-GESTURE — an undo (Story 2.8), a
+   * resize (2.14) or a Clear (2.15) — or for `<BattleEditorView>` resolving a new `toolRef` from
+   * a tool the user switched with the keyboard while dragging.
+   */
+  function rerenderWith(next: { grid?: RenderableGrid; tool?: Tool; toolRef?: number | null }) {
+    view.rerender(
+      element({
+        grid: next.grid ?? grid,
+        tool: next.tool ?? tool,
+        toolRef: next.toolRef === undefined ? toolRef : next.toolRef,
+      }),
+    );
+  }
+
+  return { ...view, canvas, contexts, grid, size, onStrokeCommit, rerenderWith };
 }
 
 /** The client coordinate of the centre of cell (col, row) under the stubbed geometry. */
@@ -1540,6 +1565,239 @@ describe('PetriDishCanvas (edit variant) — stroke reclaim (Story 2.7 Task 5)',
 
     expect(onStrokeCommit).not.toHaveBeenCalled(); // no reclaim, no commit.
     expect(drawSpy.mock.calls.length).toBe(drawCallsAfterFirstDown); // and nothing painted either.
+  });
+});
+
+// An EXTERNAL `grid` change landing mid-stroke (Story 2.8 Task 6, closing the deferred-work.md
+// entry that named this story). Undo is the first thing that can push a new grid down while a
+// pointer is held; 2.14's resize and 2.15's Clear inherit whatever is decided here.
+//
+// Policy (forced decision 5): the stroke ENDS and its paint is DISCARDED — `endStroke(false)`. The
+// alternative, committing what the stroke painted, reverts the external change wholesale, which is
+// precisely the defect the deferred entry describes.
+describe('PetriDishCanvas (edit variant) — an external grid change mid-stroke (Story 2.8)', () => {
+  /** A grid with a single organism cell at (col, row); the stand-in for "an undo restored this". */
+  function gridWithOccupant(col: number, row: number, ref = 1): RenderableGrid {
+    const occupant = new Array(200).fill(0) as number[];
+    occupant[flatIndex(col, row)] = ref;
+    return makeGrid(20, 10, occupant);
+  }
+
+  it('ends the open stroke without committing, so the external change survives', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas, rerenderWith } = mount({ onStrokeCommit });
+    const external = gridWithOccupant(9, 9);
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2)); // a stroke is now open and has painted (2,2).
+    rerenderWith({ grid: external });
+
+    // The stroke is gone, and nothing was committed on the way out: committing would have handed
+    // <BattlePage> a buffer sliced off the PRE-change grid, silently undoing the undo.
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+
+    // The pointer is still physically down. Its release must find no stroke and do nothing —
+    // `endStroke`'s idempotence, exercised through a terminate reason that is not pointer-up.
+    fireEvent.pointerUp(canvas, centreOf(2, 2));
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+
+  it('lets the NEXT gesture build on the external value, not on the discarded stroke', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas, rerenderWith } = mount({ onStrokeCommit });
+    const external = gridWithOccupant(9, 9);
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    rerenderWith({ grid: external });
+    fireEvent.pointerUp(canvas, centreOf(2, 2));
+
+    // A fresh press-release AFTER the change.
+    fireEvent.pointerDown(canvas, centreOf(5, 5));
+    fireEvent.pointerUp(canvas, centreOf(5, 5));
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    expect(committed.occupant[flatIndex(5, 5)]).toBe(1); // what this gesture painted
+    expect(committed.occupant[flatIndex(9, 9)]).toBe(1); // the external change, still there
+    expect(committed.occupant[flatIndex(2, 2)]).toBe(0); // the discarded stroke, gone for good
+  });
+
+  it('repaints the external grid in full, and does not repaint a grid it committed itself', () => {
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const onStrokeCommit = vi.fn();
+    const { canvas, rerenderWith } = mount({ onStrokeCommit });
+    const afterMount = drawFullSpy.mock.calls.length;
+
+    // A completed gesture whose committed grid comes straight back down: `paintedGridRef` already
+    // holds that identity, so the grid effect skips — and, critically, the skip runs BEFORE the
+    // terminate, which is what keeps `handlePointerDown`'s reclaim path from killing its own
+    // fresh stroke.
+    fireEvent.pointerDown(canvas, centreOf(1, 1));
+    fireEvent.pointerUp(canvas, centreOf(1, 1));
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    rerenderWith({ grid: committed });
+    expect(drawFullSpy.mock.calls.length).toBe(afterMount);
+
+    // An identity the canvas has never painted is external and gets the FULL repaint (AC4's
+    // "the dish repaints to match" — a dirty repaint would leave the colour-state baseline stale).
+    const external = gridWithOccupant(9, 9);
+    rerenderWith({ grid: external });
+    expect(drawFullSpy.mock.calls.length).toBe(afterMount + 1);
+    expect(drawFullSpy.mock.calls.at(-1)?.[0]).toBe(external);
+  });
+
+  it('discards the stroke even when the renderer was never constructed (trap 12)', () => {
+    // No recording double: real jsdom `getContext('2d')` returns null, so construction fails and
+    // `rendererRef` stays null. The MODEL half must still behave — the stroke still writes into
+    // its working buffer and would still commit, so the terminate cannot be gated on a renderer.
+    const onStrokeCommit = vi.fn();
+    const external = gridWithOccupant(9, 9);
+    const view = render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={EMPTY_GRID}
+        size={PLACE_SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={onStrokeCommit}
+      />,
+    );
+    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    view.rerender(
+      <PetriDishCanvas
+        variant="edit"
+        grid={external}
+        size={PLACE_SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={onStrokeCommit}
+      />,
+    );
+    fireEvent.pointerUp(canvas, centreOf(2, 2));
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+});
+
+// The resize effect's STALE `endStroke` closure (Story 2.8 Task 5, closing the first
+// deferred-work.md entry that named this story). The effect's deps are `[size]` with an
+// exhaustive-deps disable, so its `ResizeObserver` callback holds the closure from whichever
+// render last changed `size` — usually the mount — and used to commit through THAT render's
+// `onStrokeCommit`. Inert while `<BattlePage>` passed a bare `useState` setter (the stale function
+// and the live one were the same object); this pins the fix independently of that, because
+// `useUndoableGrid.commit` being stable too is not what makes it correct.
+describe('PetriDishCanvas (edit variant) — the resize effect reads the LATEST endStroke (Story 2.8)', () => {
+  class FakeResizeObserver implements ResizeObserver {
+    static instances: FakeResizeObserver[] = [];
+    readonly observe = vi.fn();
+    readonly unobserve = vi.fn();
+    readonly disconnect = vi.fn();
+    constructor(private readonly callback: ResizeObserverCallback) {
+      FakeResizeObserver.instances.push(this);
+    }
+    trigger(width: number, height: number): void {
+      this.callback([{ contentRect: { width, height } } as ResizeObserverEntry], this);
+    }
+  }
+
+  afterEach(() => {
+    FakeResizeObserver.instances = [];
+    vi.unstubAllGlobals();
+  });
+
+  it('commits a mid-stroke re-layout through the CURRENT onStrokeCommit, not the mount-time one', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    const atMount = vi.fn();
+    const current = vi.fn();
+
+    function element(onStrokeCommit: (next: RenderableGrid) => void) {
+      return (
+        <PetriDishCanvas
+          variant="edit"
+          grid={EMPTY_GRID}
+          size={PLACE_SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={onStrokeCommit}
+        />
+      );
+    }
+
+    const view = render(element(atMount));
+    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+
+    // A NEW handler identity, on a render that does NOT change `size` — so the resize effect is
+    // deliberately not re-registered and its closure stays the mount's.
+    view.rerender(element(current));
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2)); // a stroke that has actually painted something
+    const observer = FakeResizeObserver.instances.at(-1);
+    expect(observer).toBeDefined();
+    observer?.trigger(400, 240); // a changed box: "a mid-stroke re-layout ENDS the stroke"
+
+    expect(current).toHaveBeenCalledTimes(1);
+    expect(atMount).not.toHaveBeenCalled();
+  });
+});
+
+// Mid-drag tool switching (Story 2.8 Task 7, closing the third deferred-work.md entry that named
+// this story). Story 2.7 rewrote `Stroke.ref`'s doc comment because its keyboard-operable toggle
+// falsified the old "nothing can change the tool mid-drag" premise, but shipped no test. This is
+// the story where a wrong answer starts corrupting the undo ring: an entry that is half paint and
+// half erase has no coherent meaning (Story 2.7 forced decision 4).
+describe('PetriDishCanvas (edit variant) — mid-drag tool switching (Story 2.8)', () => {
+  it('keeps painting the ref the stroke STARTED with when toolRef changes mid-gesture', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas, rerenderWith } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 4)); // opened with toolRef 1 (an organism)
+    fireEvent.pointerMove(canvas, moveTo(3, 4));
+
+    // The user hits the eraser toggle without lifting the pointer. `<BattleEditorView>` resolves
+    // the new tool and pushes toolRef 0 down mid-stroke.
+    rerenderWith({ tool: ERASER_TOOL, toolRef: 0 });
+
+    fireEvent.pointerMove(canvas, moveTo(4, 4));
+    fireEvent.pointerUp(canvas, { ...centreOf(4, 4), buttons: 0 });
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1); // still exactly ONE undo entry
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    // Every cell of the gesture carries the PINNED ref — including the two painted after the
+    // switch. A stroke that re-read `toolRef` per move would leave (4,4) at 0.
+    for (const col of [2, 3, 4]) expect(committed.occupant[flatIndex(col, 4)]).toBe(1);
+  });
+
+  it('applies the new tool from the NEXT gesture onward', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas, rerenderWith } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 4));
+    rerenderWith({ tool: ERASER_TOOL, toolRef: 0 });
+    fireEvent.pointerUp(canvas, centreOf(2, 4));
+
+    // A fresh gesture on the cell the first one painted: the eraser is now in force, so this
+    // commits a 0 there. Without the switch taking effect at all, this stroke would be a no-op
+    // (the cell already holds 1) and would commit nothing.
+    const painted = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    rerenderWith({ grid: painted, tool: ERASER_TOOL, toolRef: 0 });
+    fireEvent.pointerDown(canvas, centreOf(2, 4));
+    fireEvent.pointerUp(canvas, centreOf(2, 4));
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(2);
+    const erased = onStrokeCommit.mock.calls[1][0] as RenderableGrid;
+    expect(erased.occupant[flatIndex(2, 4)]).toBe(0);
   });
 });
 

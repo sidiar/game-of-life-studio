@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -35,19 +36,29 @@ const PALETTE = makeLut([0, 0], [0, 0]);
 // to ref 1 — the same `index + 1` encoding the palette LUT above is built on.
 const ROSTER = [CONWAYS_CLASSIC_ID];
 
+// Story 2.8: the prop set every bare render below supplies identically, in ONE place. Four call
+// sites had hand-copied it, so this story's two new props would have meant four identical edits —
+// the duplicated-test-helper finding this file's own `mountEditor` comment already records.
+function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>> = {}) {
+  return render(
+    <BattleEditorView
+      grid={GRID}
+      size={SIZE}
+      palette={PALETTE}
+      showGridLines
+      colors={COLORS}
+      rosterIds={ROSTER}
+      onCommitGrid={() => {}}
+      onUndo={() => {}}
+      canUndo={false}
+      {...overrides}
+    />,
+  );
+}
+
 describe('BattleEditorView', () => {
   it('renders the dish box and its canvas (AC1)', () => {
-    const { container } = render(
-      <BattleEditorView
-        grid={GRID}
-        size={SIZE}
-        palette={PALETTE}
-        showGridLines
-        colors={COLORS}
-        rosterIds={ROSTER}
-        onCommitGrid={() => {}}
-      />,
-    );
+    const { container } = renderEditor();
 
     const canvas = container.querySelector('canvas');
     expect(canvas).not.toBeNull();
@@ -59,17 +70,7 @@ describe('BattleEditorView', () => {
   // Same "unavailable -> blank dish, same box" degradation BattleTile uses (Task 6): never
   // substitute a literal colour (AR-46, and it would silently paint the wrong theme).
   it('renders the box WITHOUT a canvas when colors is null', () => {
-    const { container } = render(
-      <BattleEditorView
-        grid={GRID}
-        size={SIZE}
-        palette={PALETTE}
-        showGridLines
-        colors={null}
-        rosterIds={ROSTER}
-        onCommitGrid={() => {}}
-      />,
-    );
+    const { container } = renderEditor({ colors: null });
 
     expect(container.querySelector('canvas')).toBeNull();
   });
@@ -81,31 +82,27 @@ describe('BattleEditorView', () => {
   // sidebar, no status bar, no textbox. Assert the ABSENCE, the way BattleHeader.test.tsx asserts
   // the mode toggle's absence — a presence-only check elsewhere would still pass once a dead
   // placeholder is added beside the canvas.
-  it('renders no sidebar, status bar, or textbox — only the provisional tool toggle (AC5)', () => {
-    render(
-      <BattleEditorView
-        grid={GRID}
-        size={SIZE}
-        palette={PALETTE}
-        showGridLines
-        colors={COLORS}
-        rosterIds={ROSTER}
-        onCommitGrid={() => {}}
-      />,
-    );
+  it('renders no sidebar or textbox — only the tool toggle and the status bar’s UNDO (AC5)', () => {
+    renderEditor();
 
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
     expect(screen.queryAllByRole('complementary')).toHaveLength(0);
     expect(screen.queryAllByRole('status')).toHaveLength(0);
     // The toggle's own group carries the accessible name; nothing else claims 'toolbar'.
     expect(screen.queryAllByRole('toolbar')).toHaveLength(0);
-    // Exactly the toggle's two buttons — Draw and Erase — nothing more (Story 2.9's roster rows
-    // are a different story). review (2026-08-27): named, not merely counted. A bare length-2
-    // check passes if one of the two is swapped for a dead control, which is the failure the
-    // surrounding NFR-4.1 claim is about.
+    // Exactly three buttons — Draw, Erase and Undo — nothing more. Story 2.8 added the third:
+    // <EditorStatusBar> ships with UNDO ALONE, so the SAVE button (2.13) and the stats row (2.12)
+    // must still be absent, which is what the count pins. review (2026-08-27): named, not merely
+    // counted — a bare length check passes if one control is swapped for a dead one, the exact
+    // failure the surrounding NFR-4.1 claim is about.
     expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
+    // 2.12's stats row: no Generation / Living Cells text anywhere yet (NFR-4.1).
+    expect(screen.queryByText(/generation/i)).toBeNull();
+    expect(screen.queryByText(/living cells/i)).toBeNull();
   });
 });
 
@@ -136,10 +133,15 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   // needs to prove an erase actually empties a cell the PRIOR commit painted. review (2026-08-27):
   // the three pre-existing call sites were updated to destructure `{ canvas }` in this same change
   // — the previous wording here claimed they were untouched.
+  //
+  // Story 2.8: `onUndo` / `canUndo` are parameters here for the same reason `rosterIds` is one —
+  // the undo forwarding tests need to vary them without a second hand-copied mount.
   function mountEditor(
     onCommitGrid: (next: RenderableGrid) => void,
     rosterIds: readonly string[] = ROSTER_WITH_CONWAY_SECOND,
+    undo: { onUndo?: () => void; canUndo?: boolean } = {},
   ) {
+    const { onUndo = () => {}, canUndo = false } = undo;
     const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
       this: HTMLCanvasElement,
@@ -161,6 +163,8 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
         colors={COLORS}
         rosterIds={rosterIds}
         onCommitGrid={onCommitGrid}
+        onUndo={onUndo}
+        canUndo={canUndo}
       />,
     );
     const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
@@ -177,7 +181,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
       toJSON: () => ({}),
     } as DOMRect);
 
-    function rerenderWithGrid(grid: RenderableGrid) {
+    function rerenderWithGrid(grid: RenderableGrid, nextCanUndo: boolean = canUndo) {
       view.rerender(
         <BattleEditorView
           grid={grid}
@@ -187,6 +191,8 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
           colors={COLORS}
           rosterIds={rosterIds}
           onCommitGrid={onCommitGrid}
+          onUndo={onUndo}
+          canUndo={nextCanUndo}
         />,
       );
     }
@@ -280,17 +286,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   // Forced decision 6: a paintable surface that keeps the default arrow reads as inert. Styled on
   // the EDIT wrapper only — the Gallery's static tiles must not advertise interaction.
   it('gives the editor dish a placement cursor', () => {
-    const { container } = render(
-      <BattleEditorView
-        grid={GRID}
-        size={SIZE}
-        palette={PALETTE}
-        showGridLines
-        colors={COLORS}
-        rosterIds={ROSTER}
-        onCommitGrid={() => {}}
-      />,
-    );
+    const { container } = renderEditor();
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
     expect(getComputedStyle(canvas).cursor).toBe('crosshair');
   });
@@ -298,17 +294,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   // Story 2.6 AC8 / deferred-work.md (this story's owner): touch must paint, not scroll the
   // page, and a mouse drag must not start a native selection.
   it('gives the editor dish touch-action: none and user-select: none (AC8)', () => {
-    const { container } = render(
-      <BattleEditorView
-        grid={GRID}
-        size={SIZE}
-        palette={PALETTE}
-        showGridLines
-        colors={COLORS}
-        rosterIds={ROSTER}
-        onCommitGrid={() => {}}
-      />,
-    );
+    const { container } = renderEditor();
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
     expect(getComputedStyle(canvas).touchAction).toBe('none');
     expect(getComputedStyle(canvas).userSelect).toBe('none');
@@ -451,10 +437,42 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
     expect((onCommitGrid.mock.calls[0][0] as RenderableGrid).occupant[index]).toBe(0);
   });
 
+  // Story 2.8 AC5 / spec §3.3's `onUndo(): void; canUndo: boolean`. Forwarded, never interpreted —
+  // this component holds no history state, so the only claim available here is that both props
+  // reach the status bar's button intact. The button is NAMED, not merely counted (a Story 2.7
+  // review finding, twice).
+  it('forwards onUndo to the status bar’s UNDO button (AC5)', async () => {
+    const user = userEvent.setup();
+    const onUndo = vi.fn();
+    mountEditor(vi.fn(), ROSTER_WITH_CONWAY_SECOND, { onUndo, canUndo: true });
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards canUndo to the UNDO button’s disabled state, live (AC5)', () => {
+    const onUndo = vi.fn();
+    const { rerenderWithGrid } = mountEditor(vi.fn(), ROSTER_WITH_CONWAY_SECOND, {
+      onUndo,
+      canUndo: false,
+    });
+
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+
+    // A `canUndo` change alone — no other interaction — must re-render the button (trap 1: a
+    // `canUndo` read out of a ref satisfies the type and never gets here).
+    rerenderWithGrid(EMPTY_GRID, true);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+
+    rerenderWithGrid(EMPTY_GRID, false);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
   // AC5 says "passes axe" in as many words. Scoped to `container`, the established pattern for a
   // bare-component render (BattleTile.test.tsx, GalleryEmptyState.test.tsx) — nothing here
   // portals outside it, unlike DeleteBattleDialog's document.body scan.
-  it('the toggle has no axe violations', async () => {
+  it('the toggle and the status bar have no axe violations', async () => {
     const { container } = mountEditor(vi.fn());
     const results = await axe(container);
     expect(results.violations).toEqual([]);
