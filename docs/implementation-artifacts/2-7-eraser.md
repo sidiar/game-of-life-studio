@@ -781,3 +781,18 @@ snapshots anywhere. All four required mutations run and confirmed reddening (Deb
 | 2026-08-27 | Implemented (dev-story): Tool widened, provisional toggle, stroke-reclaim guard, fixture extraction, full test suite, e2e reversal check. Status → review. |
 
 Dev Model: sonnet   # follows the editing-interaction pattern 2-5/2-6 already established — the stroke pipeline, the tool→ref seam and the commit-once discipline all exist; this adds one union arm, one provisional control, and tests
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 30s | 26 | 2,848 | 13,004 | 514,767 | 530,645 |
+| Step 1 — create-story | opus-5 | 4 | 1h 36m | 456 | 58,906 | 1,220,655 | 15,815,829 | 17,095,846 |
+| Step 2 — dev-story | sonnet-5 | 1 | 28m 27s | 724 | 28,256 | 657,367 | 80,257,555 | 80,943,902 |
+| Step 3 — code review + PR | opus-5 | 4 | 24m 53s | 622 | 91,361 | 1,872,428 | 33,051,027 | 35,015,438 |
+| _of which the orchestrator_ | opus-5 | — | — | 122 | 29,962 | 50,806 | 3,085,631 | 3,166,521 |
+| **Total (create-story → PR ready)** | | 9 | **2h 30m** | 1,828 | 181,371 | 3,763,454 | 129,639,178 | **133,585,831** |
+
+Run started 2026-08-27 10:17 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
