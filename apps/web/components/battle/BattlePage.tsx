@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft';
-import { buildRefToFillGroup } from '@/lib/canvas/refToFillGroup';
+import { buildRefToFillGroup, MAX_ROSTER_SIZE } from '@/lib/canvas/refToFillGroup';
 import { toRenderableGrid, type RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { readGridColors } from '@/lib/canvas/themeColors';
 import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
@@ -194,8 +194,9 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   );
 
   // Decision H.2's session roster: organisms added to the Lab roster this session but not yet
-  // painted. Starts EMPTY — Story 2.10's add-from-library dropdown is its first writer, and 2.13
-  // (save + the H.1 prune) is the other. ❌ Never persisted: H.1 prunes at save, which is 2.13's.
+  // painted. Starts EMPTY; the add-from-library dropdown (Story 2.10, below) is its first writer,
+  // and 2.13 (save + the H.1 prune) is the other. ❌ Never persisted: H.1 prunes at save, which is
+  // 2.13's.
   //
   // Story 2.9 forced decision 4: the `DEFAULT_TOOL.organismId` seed is NO LONGER in here. It was
   // seeded unconditionally so the first click resolved to a ref — invisible plumbing while nothing
@@ -203,7 +204,22 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // "Three-Way Skirmish" would list a fourth organism, Conway's Classic, that the user never added
   // and that Decision H says is not part of that battle. It now applies only where it is actually
   // needed — see the union below.
-  const [sessionRoster] = useState<readonly string[]>(() => NO_ROSTER);
+  const [sessionRoster, setSessionRoster] = useState<readonly string[]>(() => NO_ROSTER);
+
+  // Story 2.10 (AC3, trap 4): the ONLY writer. Append-only, and a no-op — returning the SAME array
+  // — when the id is already present, rather than a new array that would happen to be equal.
+  // `sessionRoster` feeds the `rosterIds` memo below, which feeds `palette`, which is one of
+  // `EditDish`'s three construction dependencies (PetriDishCanvas.tsx): a fresh identity on every
+  // render would tear down the retained renderer on every render, not just on a real add.
+  //
+  // `useCallback` because this is handed to `<BattleEditorView>` as a prop that itself feeds a
+  // `useCallback` there (the add-and-select wrapper, forced decision 1) — a fresh identity here
+  // would churn that wrapper's identity too, on a path that already rebuilds the palette on change.
+  const onAddToRoster = useCallback((organismId: string) => {
+    setSessionRoster((previous) =>
+      previous.includes(organismId) ? previous : [...previous, organismId],
+    );
+  }, []);
 
   // ⚠️ Withheld entirely until the ORGANISM resource has settled (Story 2.9 trap 6). This gate used
   // to key on the BATTLE resource, which was the same thing while one `Promise.all` settled both;
@@ -279,6 +295,33 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     () => resolveDisplayOrganisms(rosterIds, organisms ?? []),
     [rosterIds, organisms],
   );
+
+  // Story 2.10 (AC1, forced decision 4): the addable library — spec §3.4's "full shared library
+  // minus roster" — chosen to live HERE rather than in `<BattleEditorView>` beside
+  // `duplicateColorIds`. `<BattlePage>` already owns `organisms` and already resolves `roster`
+  // through `resolveDisplayOrganisms` immediately above; computing `library` the same way, in the
+  // same place, keeps the raw `Organism[]` from ever needing to reach `<BattleEditorView>` at all
+  // (one more prop this story does NOT have to add) and keeps "resolve against the library once"
+  // a single rule rather than one kept in two components.
+  //
+  // A `Set` over `rosterIds`, not `.includes` per organism: the workspace library is uncapped
+  // (Decision G.3/M6), so this is an O(library) scan per change rather than O(library * roster).
+  //
+  // ⚠️ Subtracts `rosterIds` (the session-inclusive union), never `draft.organismIds` (trap 8) —
+  // subtracting only the battle's placed set would keep offering an organism the user just added.
+  const library = useMemo(() => {
+    const rosterSet = new Set(rosterIds);
+    const addableIds = (organisms ?? [])
+      .filter((organism) => !rosterSet.has(organism.id))
+      .map((organism) => organism.id);
+    return resolveDisplayOrganisms(addableIds, organisms ?? []);
+  }, [organisms, rosterIds]);
+
+  // Story 2.10 (AC5, trap 2): measured on the IDENTITY array's length, never `roster.length` —
+  // `resolveDisplayOrganisms` de-duplicates, so the display list can be shorter than the number of
+  // refs the encoding has actually spent. `MAX_ROSTER_SIZE` is imported, never re-declared, so this
+  // cannot drift from the cap `buildRefToFillGroup` throws above.
+  const atCap = rosterIds.length >= MAX_ROSTER_SIZE;
 
   // Built over `rosterIds`, NOT `draft.organismIds` (trap 3). On /battle/new the draft's roster is
   // empty, so a LUT built from it would have `size === 1` while placement writes ref 1 —
@@ -392,6 +435,9 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
           rosterIds={rosterIds}
           roster={roster}
           libraryUnavailable={libraryUnavailable}
+          library={library}
+          onAddToRoster={onAddToRoster}
+          atCap={atCap}
           /* The hook's `commit` IS the commit handler (Story 2.8) — a stable identity, exactly as
              the bare `useState` setter it replaced was, which is what lets the canvas's resize
              effect keep holding it in a closure it does not re-register. ❌ No `isDirty` here —

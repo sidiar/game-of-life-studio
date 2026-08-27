@@ -2,6 +2,7 @@ import { Profiler, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { GridRenderer } from '@/lib/canvas/gridRenderer';
+import { resetColourStateWarnings } from '@/lib/canvas/colourStateGroups';
 import { installRecordingContext2d, RecordingContext2D } from '@/lib/recordingContext2d';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
@@ -635,6 +636,90 @@ describe('PetriDishCanvas (edit variant)', () => {
     );
     expect(drawFullSpy).toHaveBeenCalledTimes(1);
     expect(renderStaticSpy).not.toHaveBeenCalled();
+  });
+
+  // Story 2.10 Task 5 / AC6 — the deferred-work.md `setPalette` entry, PROVEN rather than
+  // assumed. `<BattlePage>`'s `palette` memo depends on `[rosterIds, organisms]`, so an add mints
+  // a NEW `RefToFillGroup` identity; this construction effect lists `palette` among its three
+  // deps, so that new identity reconstructs the renderer and repaints. This test builds exactly
+  // that shape: a grid cell already carries ref 2 before its organism exists in the roster (the
+  // order an append-only session add takes for one render — the committed grid and the rebuilt
+  // palette do not arrive in the same tick), so the FIRST paint treats it as out-of-range and
+  // warns; the SECOND palette identity resolves ref 2 to its own colour token, with no code
+  // change to `GridRenderer` — closing the entry on evidence, per the Dev Notes.
+  it('repaints a ref that was out-of-range in its OWN colour once a roster mutation gives palette a new identity (AC6)', () => {
+    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      let context = contexts.get(this);
+      if (context === undefined) {
+        context = new RecordingContext2D();
+        contexts.set(this, context);
+      }
+      return context as unknown as CanvasRenderingContext2D;
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    resetColourStateWarnings();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+
+    // ref 2 painted before its organism exists in a 1-organism roster (size 2: only refs 0/1 are
+    // in range) — the out-of-range shape `groupByColourState` degrades-and-warns rather than
+    // throws (Decision I.4).
+    const gridWithRef2 = makeGrid(2, 2, [2, 0, 0, 0]);
+    const initialPalette = makeLut([0, 0], [0, 0]);
+
+    const { container, rerender } = render(
+      <PetriDishCanvas
+        variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
+        grid={gridWithRef2}
+        size={SIZE}
+        palette={initialPalette}
+        showGridLines={false}
+        colors={COLORS}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    const recording = contexts.get(canvas) as RecordingContext2D;
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('outside the palette LUT'));
+    warnSpy.mockClear();
+
+    const fillsBefore = recording.fillStyleWrites.length;
+
+    // The NEW identity <BattlePage>'s palette memo mints for an add — THREE slots now (ref 0
+    // pad, ref 1, ref 2), so ref 2 is finally in range, resolving to token index 1, distinct
+    // from ref 1's token index 0.
+    const paletteAfterAdd = makeLut([0, 0, 1], [0, 0, 0]);
+    rerender(
+      <PetriDishCanvas
+        variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
+        grid={gridWithRef2}
+        size={SIZE}
+        palette={paletteAfterAdd}
+        showGridLines={false}
+        colors={COLORS}
+      />,
+    );
+
+    // Reconstruction, not a stale renderer: a SECOND drawFull for the SAME grid identity.
+    expect(drawFullSpy).toHaveBeenCalledTimes(2);
+    const newFills = recording.fillStyleWrites.slice(fillsBefore);
+    // The newly-addable organism's OWN colour (tokenIndex 1, non-aging -> shade 7) — not the
+    // background, and not ref 1's colour (tokenIndex 0).
+    expect(newFills).toContain(displayColorAt(1, 7));
+    expect(newFills).not.toContain(displayColorAt(0, 7));
+    // And the out-of-range warning does not fire again — the ref is valid now.
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    // Residual this story records rather than fixes (Dev Notes): a full repaint per add, and the
+    // dirty baseline is re-primed by it — `drawFull`, not the dirty `draw` path, painted the newly
+    // valid ref.
   });
 
   // ResizeObserver is absent in jsdom — stub it to prove AC3's immediate (never debounced)

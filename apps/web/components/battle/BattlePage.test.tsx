@@ -1055,6 +1055,143 @@ describe('BattlePage — undo wiring (Story 2.8)', () => {
   });
 });
 
+// Story 2.10: adding organisms from the shared library. <BattlePage> is the only level at which
+// the whole chain — the addable-library derivation, the sessionRoster write, the resolved row,
+// and the repository-write absence — is observable in one place.
+describe('BattlePage — adding organisms from the library (Story 2.10)', () => {
+  // AC1 + AC3 in one flow: the add control offers exactly the library minus this battle's own
+  // roster, and choosing the one option appends a fourth row under its real name.
+  it('offers the library minus the roster, and adding appends a row with the organism’s real name (AC1, AC3)', async () => {
+    const user = userEvent.setup();
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [SKIRMISH],
+          organisms: ORGANISMS_WITH_CONWAY,
+        })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const sidebar = screen.getByRole('complementary');
+    // SKIRMISH places the three mock organisms; Conway is the only one of the four NOT placed.
+    const select = within(sidebar).getByRole('combobox', { name: /add organism/i });
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['+ ADD ORGANISM', CONWAYS_CLASSIC.name]);
+
+    await user.selectOptions(select, CONWAYS_CLASSIC.id);
+
+    const rows = within(screen.getByRole('list')).getAllByRole('button');
+    expect(rows.map((row) => row.textContent)).toEqual([
+      ...organisms.map((organism) => organism.name),
+      CONWAYS_CLASSIC.name,
+    ]);
+    // AC1's own exclusion is derived from the same union: nothing left to add now that all four
+    // are in the roster (AC8's stated-empty state, not a dead dropdown).
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText(/already in this battle/i)).toBeInTheDocument();
+  });
+
+  // AC4: nothing this story writes may reach a repository. Asserted against the fake repos' own
+  // call counts, not by inspecting storage (AC4's own instruction) — the fakes are in-memory, so a
+  // real write would show up on the spy regardless of backing store.
+  it('writes to no repository when an organism is added (AC4)', async () => {
+    const user = userEvent.setup();
+    const repositories = createFakeRepositories({
+      battles: [SKIRMISH],
+      organisms: ORGANISMS_WITH_CONWAY,
+    });
+    const battleSaveSpy = vi.spyOn(repositories.battles, 'save');
+    const organismSaveSpy = vi.spyOn(repositories.organisms, 'save');
+    const settingsSaveSpy = vi.spyOn(repositories.settings, 'save');
+
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      CONWAYS_CLASSIC.id,
+    );
+    // The new row is proof the add actually happened, not merely that the control was operated.
+    expect(screen.getByRole('button', { name: CONWAYS_CLASSIC.name })).toBeInTheDocument();
+
+    expect(battleSaveSpy).not.toHaveBeenCalled();
+    expect(organismSaveSpy).not.toHaveBeenCalled();
+    expect(settingsSaveSpy).not.toHaveBeenCalled();
+    expect(localStorage.length).toBe(0);
+  });
+
+  // Forced decision 1 (option b): choosing an entry both adds AND selects it, immediately
+  // paintable — the same claim BattleEditorView.test.tsx pins in isolation, proven here through
+  // the real sessionRoster round trip rather than a simulated rerender.
+  it('selects the newly-added organism, immediately (forced decision 1)', async () => {
+    const user = userEvent.setup();
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [SKIRMISH],
+          organisms: ORGANISMS_WITH_CONWAY,
+        })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      CONWAYS_CLASSIC.id,
+    );
+
+    expect(screen.getByRole('button', { name: CONWAYS_CLASSIC.name })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  // AC5 / Decision G.3, reusing rosterUnion.test.ts's approach: 255 distinct SYNTHETIC ids rather
+  // than 255 schema-valid Organism library records (disproportionate for what this test needs to
+  // prove — the arithmetic wiring, not the palette resolution of each one). BattleSchema's H.1
+  // refinement still demands every id be PLACED, so all 255 are painted, one cell each, on a grid
+  // large enough to hold them.
+  it('blocks the add with a stated message at the 255-organism cap (AC5)', async () => {
+    const CAP_SIZE = { cols: 50, rows: 30 } as const; // 1500 cells — comfortably over 255.
+    const organismIds = Array.from({ length: 255 }, (_, i) => `cap-organism-${i}`);
+    const gridState: number[][] = Array.from({ length: CAP_SIZE.rows }, () =>
+      new Array(CAP_SIZE.cols).fill(0),
+    );
+    organismIds.forEach((_, i) => {
+      gridState[Math.floor(i / CAP_SIZE.cols)][i % CAP_SIZE.cols] = i + 1;
+    });
+    const fullBattle: Battle = {
+      id: SKIRMISH.id,
+      name: 'Full Roster',
+      organismIds,
+      gridSize: CAP_SIZE,
+      gridState,
+      createdAt: SKIRMISH.createdAt,
+      updatedAt: SKIRMISH.updatedAt,
+    };
+
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [fullBattle], organisms: [] })}
+        battleId={fullBattle.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Full Roster' });
+
+    const sidebar = screen.getByRole('complementary');
+    expect(within(sidebar).queryByRole('textbox')).toBeNull();
+    expect(within(sidebar).queryByRole('combobox')).toBeNull();
+    expect(within(sidebar).getByText(/roster is full/i)).toBeInTheDocument();
+    expect(within(sidebar).getByText(/255/)).toBeInTheDocument();
+  });
+});
+
 function findEmptyCell(gridState: readonly (readonly number[])[]): { col: number; row: number } {
   for (let row = 0; row < gridState.length; row++) {
     for (let col = 0; col < gridState[row].length; col++) {

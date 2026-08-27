@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
@@ -45,6 +45,25 @@ export interface BattleEditorViewProps {
   /** AC7: `organisms.list()` failed. The roster's ids survive; its names and colours do not. */
   libraryUnavailable?: boolean;
   /**
+   * Story 2.10 (FR-7.15, spec §3.4): the full shared library minus `rosterIds` — resolved for
+   * display exactly like `roster` above, by the same `<BattlePage>` call so a dropdown entry can
+   * never disagree with the row it becomes. `<OrganismRoster>`'s add control renders this list;
+   * this component does not touch it beyond forwarding.
+   */
+  library: readonly DisplayOrganism[];
+  /**
+   * Story 2.10 (AC3): "+ ADD ORGANISM" -> `sessionRoster` (Decision H.2). `<BattlePage>` owns the
+   * write; this component wraps it with forced decision 1's add-AND-select policy before handing
+   * it to `<OrganismRoster>` — see `handleAddToRoster` below.
+   */
+  onAddToRoster(organismId: string): void;
+  /**
+   * Story 2.10 (AC5, Decision G.3): `rosterIds.length >= MAX_ROSTER_SIZE`, computed by
+   * `<BattlePage>` off the IDENTITY array — never `roster.length` (trap 2). The add control
+   * disables itself and states the limit rather than letting a 256th ref be spent.
+   */
+  atCap: boolean;
+  /**
    * THE undoable-commit seam (spec §3.3: "the one undoable-commit seam"). Story 2.6's stroke,
    * 2.7's erase, 2.8's undo source, 2.14's resize and 2.15's Clear all arrive here — one commit
    * per gesture, carrying a new grid value (RFC-005 Decision 6).
@@ -67,7 +86,7 @@ export interface BattleEditorViewProps {
  */
 type EditorMainProps = Omit<
   BattleEditorViewProps,
-  'rosterIds' | 'roster' | 'libraryUnavailable'
+  'rosterIds' | 'roster' | 'libraryUnavailable' | 'library' | 'onAddToRoster' | 'atCap'
 > & {
   tool: Tool;
   toolRef: number | null;
@@ -379,12 +398,34 @@ export default function BattleEditorView({
   rosterIds,
   roster,
   libraryUnavailable = false,
+  library,
+  onAddToRoster,
+  atCap,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
   // different fact from any particular tool and is why it is not seeded with one — see
   // `resolveSelectedTool`.
   const [chosenTool, setChosenTool] = useState<Tool | null>(null);
+
+  // Forced decision 1 (Story 2.10), option (b): add AND select — one intent, one outcome. Wired
+  // HERE rather than in `<OrganismRoster>` because the selection (`setChosenTool`) is this
+  // component's own state (spec §3.3); `<OrganismRoster>` only ever gets the single callback it
+  // already has a slot for. `<BattlePage>`'s `onAddToRoster` and this component's `setChosenTool`
+  // both fire inside the same event handler, so React batches them into ONE commit — `roster` and
+  // `rosterIds` already include the new id by the time `resolveSelectedTool` re-validates the
+  // choice below, so the new row renders selected on the very same paint, never a flash of the old
+  // selection first.
+  //
+  // This is a UX commitment Epic 4's create-from-battle (Story 4.25) inherits: an organism reached
+  // via this sidebar becomes both present AND selected in one action.
+  const handleAddToRoster = useCallback(
+    (organismId: string) => {
+      onAddToRoster(organismId);
+      setChosenTool({ kind: 'organism', organismId });
+    },
+    [onAddToRoster],
+  );
 
   const selectedTool = useMemo(
     () => resolveSelectedTool(chosenTool, roster, libraryUnavailable),
@@ -420,6 +461,9 @@ export default function BattleEditorView({
               onSelectTool={setChosenTool}
               duplicateColorIds={duplicateColorIds}
               libraryUnavailable={libraryUnavailable}
+              library={library}
+              onAddToRoster={handleAddToRoster}
+              atCap={atCap}
             />
           </SidebarSection>
         </SidebarContent>

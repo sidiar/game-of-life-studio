@@ -293,9 +293,13 @@ test.describe('battle route (Story 2.1)', () => {
     // matches the eraser row's own "Eraser" and this assertion would fail against correct code.
     await expect(page.getByRole('button', { name: 'Draw', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Erase', exact: true })).toHaveCount(0);
-    // AC5: none of the later stories' controls rendered inert beside the real ones.
-    await expect(sidebar.getByRole('textbox')).toHaveCount(0);
-    await expect(sidebar.getByRole('combobox')).toHaveCount(0);
+    // AC5/AC8: this story's own search + add control DOES render now — Conway's Classic is in
+    // the seeded library but not placed here, so it is the add control's one option. Epic 4's
+    // per-row pencil and CREATE button remain the only later-story controls still absent.
+    await expect(sidebar.getByRole('textbox', { name: /search organisms/i })).toHaveCount(1);
+    await expect(sidebar.getByRole('combobox', { name: /add organism/i })).toHaveCount(1);
+    await expect(page.getByText('✎')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /create/i })).toHaveCount(0);
     // AC2: exactly one row selected, and it is the first.
     await expect(sidebar.getByRole('button', { name: 'Aggressive Colonizer' })).toHaveAttribute(
       'aria-pressed',
@@ -346,6 +350,112 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(row).toHaveAttribute('aria-pressed', 'false');
 
     expect(errors).toEqual([]);
+  });
+
+  // Story 2.10 (AC1, AC3, AC4, AC6): the whole add-from-library chain, end to end. Three-Way
+  // Skirmish places 3 organisms; seedConwaysClassic layers Conway into the library WITHOUT
+  // placing it, so the dropdown's one option, the fourth sidebar row it becomes, the immediate
+  // selection (forced decision 1) and the reload-drops-it AC4 claim are all provable on one
+  // fixture without hand-building a battle.
+  test('adds an organism from the library, paints it, and loses the add on reload (AC1, AC3, AC4, AC6)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const sidebar = page.getByRole('complementary');
+    // AC1: the dropdown offers exactly Conway's Classic — the one organism in the library but
+    // not in this battle's own placed set.
+    const addSelect = sidebar.getByRole('combobox', { name: /add organism/i });
+    await expect(addSelect.getByRole('option')).toHaveText(['+ ADD ORGANISM', "Conway's Classic"]);
+
+    // AC3: choosing it puts a FOURTH row in the sidebar, under its real name.
+    await addSelect.selectOption({ label: "Conway's Classic" });
+    await expect(sidebar.getByRole('listitem')).toHaveText([
+      'Aggressive Colonizer',
+      'Patient Defender',
+      'Chaotic Spreader',
+      "Conway's Classic",
+    ]);
+
+    // Forced decision 1: the add also SELECTS — no further click needed.
+    const newRow = sidebar.getByRole('button', { name: "Conway's Classic" });
+    await expect(newRow).toHaveAttribute('aria-pressed', 'true');
+
+    // AC6: painting with it produces its OWN colour on the dish, not the empty background — the
+    // reviewable claim the setPalette investigation (Task 5) exists to back up.
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    const box = await canvas.boundingBox();
+    if (box === null) throw new Error('dish has no layout box');
+    const before = await distinctColorCount(canvas);
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await expect
+      .poll(async () => distinctColorCount(canvas), { timeout: 2000 })
+      .toBeGreaterThan(before);
+
+    // AC8: nothing left to add now that all four are in the roster — a stated empty state, not
+    // an empty dropdown.
+    await expect(sidebar.getByRole('combobox')).toHaveCount(0);
+    await expect(sidebar.getByText(/already in this battle/i)).toBeVisible();
+
+    // AC4: a session add is never written through a repository — a reload shows the battle's own
+    // roster again, with the added organism gone.
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.getByRole('complementary').getByRole('listitem')).toHaveText([
+      'Aggressive Colonizer',
+      'Patient Defender',
+      'Chaotic Spreader',
+    ]);
+    await expect(
+      page.getByRole('complementary').getByRole('button', { name: "Conway's Classic" }),
+    ).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  // AC8's other stated state: "Grand Colony War" places all four fixture organisms
+  // (createMockBattles), so once Conway is seeded into the library there is nothing left the
+  // add control could ever offer — the free fixture for this, per the story's own Dev Notes.
+  test('states nothing is left to add when the library is a subset of the roster (AC8)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleB}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
+
+    const sidebar = page.getByRole('complementary');
+    await expect(sidebar.getByRole('textbox')).toHaveCount(0);
+    await expect(sidebar.getByRole('combobox')).toHaveCount(0);
+    await expect(sidebar.getByText(/already in this battle/i)).toBeVisible();
+  });
+
+  // Same pattern as every other post-interaction axe check in this file — a regression check on
+  // the add control's own accessible names and states, not a new claim.
+  test('has no axe accessibility violations after adding an organism from the library', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page
+      .getByRole('complementary')
+      .getByRole('combobox', { name: /add organism/i })
+      .selectOption({ label: "Conway's Classic" });
+    await expect(
+      page.getByRole('complementary').getByRole('button', { name: "Conway's Classic" }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
   });
 
   // Story 2.4 AC1/AC6: the SAME AR-42-permitted smoke check gallery.spec.ts:163-196 uses for
