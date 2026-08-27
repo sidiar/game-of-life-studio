@@ -286,13 +286,31 @@ function EditorMain({
  * colour's identity: comparing resolved hexes happens to give the same answer today only because
  * every palette hex is distinct, which quietly makes an FR-3.3 rule depend on the `displayColor`
  * LUT staying collision-free forever.
+ *
+ * ⚠️ DANGLING ids are excluded from the comparison entirely, on BOTH sides — they are not counted
+ * and they are never returned (Story 2.9 review, decision 2, Sidiar's option (b)).
+ *
+ * The reason is that `resolveDisplayOrganisms`' fallback paints in `DEFAULT_COLOR_TOKEN`, and that
+ * token is 'sky-blue' — which is Conway's Classic's OWN token, not a spare. Counting the fallback
+ * therefore made the commonest corrupt shape (one dangling id in a battle that also places Conway's
+ * Classic) mark a perfectly healthy organism as sharing a colour with a record that does not
+ * exist. A user cannot act on that: there is no second organism to recolour.
+ *
+ * ❌ NOT solved with a sentinel `colorToken` that no palette entry can equal (the review's option
+ * (a)). That would keep the pair of danglers warning about each other — which is just as
+ * unactionable — and it would push a non-palette token into `DisplayOrganism.colorToken`, a field
+ * `<BattleTile>` also reads and Story 4.9's CVD work will read again. Excluding here keeps the
+ * fallback's contract honest (`colorToken` remains the token it is actually PAINTED in) and
+ * confines the judgement to the one rule that cannot use it.
  */
 function findDuplicateColorIds(roster: readonly DisplayOrganism[]): readonly string[] {
+  const comparable = roster.filter((organism) => organism.unresolved !== true);
+
   const countByToken = new Map<string, number>();
-  for (const organism of roster) {
+  for (const organism of comparable) {
     countByToken.set(organism.colorToken, (countByToken.get(organism.colorToken) ?? 0) + 1);
   }
-  return roster
+  return comparable
     .filter((organism) => (countByToken.get(organism.colorToken) ?? 0) > 1)
     .map((organism) => organism.id);
 }

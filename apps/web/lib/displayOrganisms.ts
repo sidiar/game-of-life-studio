@@ -28,6 +28,20 @@ export interface DisplayOrganism {
    * firing with nothing to show for it.
    */
   colorToken: string;
+  /**
+   * Sidiar's call on the Story 2.9 review (decision 2, option b): this id had NO organism behind
+   * it, so `name`, `color` and `colorToken` below are all the fallback's, not a record's.
+   *
+   * It exists because `DEFAULT_COLOR_TOKEN` is ALSO Conway's Classic's own token
+   * (`paletteRegistry.ts` says so in its own comment) — so the fallback cannot be compared for the
+   * FR-3.3 same-colour warning without accusing a legitimately sky-blue organism of sharing with a
+   * record that does not exist. `findDuplicateColorIds` (`BattleEditorView.tsx`) excludes these
+   * entries outright; see there for why that is preferred over a sentinel token.
+   *
+   * Absent (rather than `false`) on a resolved entry: the flag marks an exceptional record, and
+   * every consumer that does not care about danglers should be able to ignore it entirely.
+   */
+  unresolved?: boolean;
 }
 
 // FR-1.4's delete guard makes a dangling id unreachable in normal use — an imported or
@@ -80,15 +94,22 @@ export function resolveDisplayOrganisms(
     .map((id) => {
       const organism = byId.get(id);
       if (organism === undefined) {
-        // The token reported here is the token this entry is actually PAINTED in, so the AC4
-        // same-colour warning stays truthful about dangling ids too: two unknown ids really do
-        // render in one colour, and saying so is the warning doing its job rather than a false
-        // positive.
+        // The token reported here is the token this entry is actually PAINTED in — that much is
+        // unchanged, and it is why `colorToken` is still populated rather than left blank.
+        //
+        // ⚠️ It is NOT comparable for the AC4 same-colour warning, which is what `unresolved`
+        // above is for. This originally read "two unknown ids really do render in one colour, and
+        // saying so is the warning doing its job" — true, but it missed the commoner pair:
+        // `DEFAULT_COLOR_TOKEN` is 'sky-blue', which is Conway's Classic's REAL token, so one
+        // dangling id in a battle alongside Conway's Classic accused an entirely healthy organism
+        // of sharing a colour with a record that does not exist. Sidiar chose exclusion over a
+        // sentinel token (Story 2.9 review, decision 2) — see `findDuplicateColorIds`.
         return {
           id,
           name: FALLBACK_NAME,
           color: displayColor(DEFAULT_COLOR_TOKEN, MAX_AGE_SHADE),
           colorToken: DEFAULT_COLOR_TOKEN,
+          unresolved: true,
         };
       }
       return {

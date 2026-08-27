@@ -550,6 +550,81 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
     );
   });
 
+  // Story 2.9 review, decision 2 (Sidiar's option (b)). `resolveDisplayOrganisms`' dangling-id
+  // fallback paints in DEFAULT_COLOR_TOKEN — which is 'sky-blue', Conway's Classic's OWN token,
+  // not a spare. So the commonest corrupt shape (one dangling id in a battle that also places
+  // Conway's Classic) used to mark a perfectly healthy organism as sharing a colour with a record
+  // that does not exist, and there was no second organism for the user to recolour.
+  it('does not warn a real organism about sharing a colour with a DANGLING id', () => {
+    const roster: readonly DisplayOrganism[] = [
+      {
+        id: CONWAYS_CLASSIC_ID,
+        name: "Conway's Classic",
+        color: '#56B4E9',
+        colorToken: 'sky-blue',
+      },
+      // What the fallback produces verbatim: same token as the row above, because that token IS
+      // the default. `unresolved` is the only thing separating them.
+      {
+        id: 'ghost-organism',
+        name: 'Unknown organism',
+        color: '#56B4E9',
+        colorToken: 'sky-blue',
+        unresolved: true,
+      },
+    ];
+    renderEditor({ roster, rosterIds: roster.map((organism) => organism.id) });
+
+    expect(screen.queryAllByText('Shared colour')).toHaveLength(0);
+  });
+
+  // The other half of the exclusion, and the half a sentinel token (the review's option (a)) would
+  // NOT have fixed: two danglers genuinely do render in one colour, but "recolour one of them" is
+  // not an action either — neither has a record to recolour.
+  it('does not warn two dangling ids about each other', () => {
+    const roster: readonly DisplayOrganism[] = [
+      {
+        id: 'ghost-1',
+        name: 'Unknown organism',
+        color: '#56B4E9',
+        colorToken: 'sky-blue',
+        unresolved: true,
+      },
+      {
+        id: 'ghost-2',
+        name: 'Unknown organism',
+        color: '#56B4E9',
+        colorToken: 'sky-blue',
+        unresolved: true,
+      },
+    ];
+    renderEditor({ roster, rosterIds: roster.map((organism) => organism.id) });
+
+    expect(screen.queryAllByText('Shared colour')).toHaveLength(0);
+  });
+
+  // The exclusion is scoped to the dangling entries themselves — a real collision sitting BESIDE
+  // one must still warn, both rows. Without this, "exclude danglers" could be implemented as
+  // "skip the whole derivation when any entry is unresolved" and stay green.
+  it('still warns a real colliding pair when a dangling id is also present', () => {
+    const roster: readonly DisplayOrganism[] = [
+      { id: 'twin-1', name: 'First Twin', color: '#D55E00', colorToken: 'vermillion' },
+      {
+        id: 'ghost',
+        name: 'Unknown organism',
+        color: '#56B4E9',
+        colorToken: 'sky-blue',
+        unresolved: true,
+      },
+      { id: 'twin-2', name: 'Second Twin', color: '#D55E00', colorToken: 'vermillion' },
+    ];
+    renderEditor({ roster, rosterIds: roster.map((organism) => organism.id) });
+
+    expect(screen.getAllByText('Shared colour')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /First Twin/ })).toHaveTextContent('Shared colour');
+    expect(screen.getByRole('button', { name: /Second Twin/ })).toHaveTextContent('Shared colour');
+  });
+
   // AC7: a failed organism library reaches the roster as a FACT it can state, and the selection
   // degrades with it — an organism tool would resolve against names and colours that do not exist.
   it('degrades to the eraser and states the failure when the library is unavailable (AC7)', () => {

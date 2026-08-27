@@ -32,9 +32,27 @@ describe('resolveDisplayOrganisms', () => {
     expect(resolved.id).toBe('ghost-organism');
     expect(resolved.name).toBe('Unknown organism');
     expect(resolved.color).toBe(displayColor(DEFAULT_COLOR_TOKEN, MAX_AGE_SHADE));
-    // The reported token is the one this entry is actually painted in — so AC4's warning stays
-    // truthful about dangling ids rather than treating them as colourless.
+    // The reported token is the one this entry is actually painted in, so it is not left blank.
+    // It is NOT comparable for AC4's warning, though — see the `unresolved` test below.
     expect(resolved.colorToken).toBe(DEFAULT_COLOR_TOKEN);
+  });
+
+  // Story 2.9 review, decision 1/2 (Sidiar). `DEFAULT_COLOR_TOKEN` is 'sky-blue', which is also
+  // Conway's Classic's REAL token — so the fallback is indistinguishable from a healthy sky-blue
+  // organism by `colorToken` alone, and `findDuplicateColorIds` accused one of sharing a colour
+  // with a record that does not exist. This flag is the only thing that separates them, so it is
+  // pinned here rather than left to the consumer's test: drop it and this file stays green while
+  // the false warning comes back.
+  it('flags a dangling id as unresolved, so its fallback token is never compared', () => {
+    const [resolved] = resolveDisplayOrganisms(['ghost-organism'], []);
+
+    expect(resolved.unresolved).toBe(true);
+  });
+
+  it('leaves a genuinely resolved organism unflagged', () => {
+    const [resolved] = resolveDisplayOrganisms([CONWAYS_CLASSIC.id], [CONWAYS_CLASSIC]);
+
+    expect(resolved.unresolved).toBeUndefined();
   });
 
   it('preserves organismIds order, one entry per id', () => {
