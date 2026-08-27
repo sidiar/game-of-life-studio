@@ -2,6 +2,7 @@ import { Profiler, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { GridRenderer } from '@/lib/canvas/gridRenderer';
+import { resetColourStateWarnings } from '@/lib/canvas/colourStateGroups';
 import { installRecordingContext2d, RecordingContext2D } from '@/lib/recordingContext2d';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
@@ -637,6 +638,90 @@ describe('PetriDishCanvas (edit variant)', () => {
     expect(renderStaticSpy).not.toHaveBeenCalled();
   });
 
+  // Story 2.10 Task 5 / AC6 — the deferred-work.md `setPalette` entry, PROVEN rather than
+  // assumed. `<BattlePage>`'s `palette` memo depends on `[rosterIds, organisms]`, so an add mints
+  // a NEW `RefToFillGroup` identity; this construction effect lists `palette` among its three
+  // deps, so that new identity reconstructs the renderer and repaints. This test builds exactly
+  // that shape: a grid cell already carries ref 2 before its organism exists in the roster (the
+  // order an append-only session add takes for one render — the committed grid and the rebuilt
+  // palette do not arrive in the same tick), so the FIRST paint treats it as out-of-range and
+  // warns; the SECOND palette identity resolves ref 2 to its own colour token, with no code
+  // change to `GridRenderer` — closing the entry on evidence, per the Dev Notes.
+  it('repaints a ref that was out-of-range in its OWN colour once a roster mutation gives palette a new identity (AC6)', () => {
+    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      let context = contexts.get(this);
+      if (context === undefined) {
+        context = new RecordingContext2D();
+        contexts.set(this, context);
+      }
+      return context as unknown as CanvasRenderingContext2D;
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    resetColourStateWarnings();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+
+    // ref 2 painted before its organism exists in a 1-organism roster (size 2: only refs 0/1 are
+    // in range) — the out-of-range shape `groupByColourState` degrades-and-warns rather than
+    // throws (Decision I.4).
+    const gridWithRef2 = makeGrid(2, 2, [2, 0, 0, 0]);
+    const initialPalette = makeLut([0, 0], [0, 0]);
+
+    const { container, rerender } = render(
+      <PetriDishCanvas
+        variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
+        grid={gridWithRef2}
+        size={SIZE}
+        palette={initialPalette}
+        showGridLines={false}
+        colors={COLORS}
+      />,
+    );
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    const recording = contexts.get(canvas) as RecordingContext2D;
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('outside the palette LUT'));
+    warnSpy.mockClear();
+
+    const fillsBefore = recording.fillStyleWrites.length;
+
+    // The NEW identity <BattlePage>'s palette memo mints for an add — THREE slots now (ref 0
+    // pad, ref 1, ref 2), so ref 2 is finally in range, resolving to token index 1, distinct
+    // from ref 1's token index 0.
+    const paletteAfterAdd = makeLut([0, 0, 1], [0, 0, 0]);
+    rerender(
+      <PetriDishCanvas
+        variant="edit"
+        tool={TOOL}
+        toolRef={1}
+        onStrokeCommit={noopCommit}
+        grid={gridWithRef2}
+        size={SIZE}
+        palette={paletteAfterAdd}
+        showGridLines={false}
+        colors={COLORS}
+      />,
+    );
+
+    // Reconstruction, not a stale renderer: a SECOND drawFull for the SAME grid identity.
+    expect(drawFullSpy).toHaveBeenCalledTimes(2);
+    const newFills = recording.fillStyleWrites.slice(fillsBefore);
+    // The newly-addable organism's OWN colour (tokenIndex 1, non-aging -> shade 7) — not the
+    // background, and not ref 1's colour (tokenIndex 0).
+    expect(newFills).toContain(displayColorAt(1, 7));
+    expect(newFills).not.toContain(displayColorAt(0, 7));
+    // And the out-of-range warning does not fire again — the ref is valid now.
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    // Residual this story records rather than fixes (Dev Notes): a full repaint per add, and the
+    // dirty baseline is re-primed by it — `drawFull`, not the dirty `draw` path, painted the newly
+    // valid ref.
+  });
+
   // ResizeObserver is absent in jsdom — stub it to prove AC3's immediate (never debounced)
   // re-fit, and the cleanup contract.
   describe('immediate re-fit (ResizeObserver feature-detected, AC3)', () => {
@@ -859,13 +944,18 @@ function mount(
   // Story 2.8: ONE element factory serving both the initial render and `rerenderWith` below,
   // rather than a second hand-copied JSX block — the same parameterise-don't-duplicate discipline
   // this helper was itself extracted for.
-  function element(props: { grid: RenderableGrid; tool: Tool; toolRef: number | null }) {
+  function element(props: {
+    grid: RenderableGrid;
+    tool: Tool;
+    toolRef: number | null;
+    palette: RefToFillGroup;
+  }) {
     return (
       <PetriDishCanvas
         variant="edit"
         grid={props.grid}
         size={size}
-        palette={PALETTE}
+        palette={props.palette}
         showGridLines
         colors={COLORS}
         tool={props.tool}
@@ -875,21 +965,28 @@ function mount(
     );
   }
 
-  const view = render(element({ grid, tool, toolRef }));
+  const view = render(element({ grid, tool, toolRef, palette: PALETTE }));
   const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
   stubRect(canvas);
 
   /**
    * Stands in for `<BattlePage>` pushing a new value down MID-GESTURE — an undo (Story 2.8), a
    * resize (2.14) or a Clear (2.15) — or for `<BattleEditorView>` resolving a new `toolRef` from
-   * a tool the user switched with the keyboard while dragging.
+   * a tool the user switched with the keyboard while dragging. `palette` joins them in Story 2.10:
+   * an add mints a new `RefToFillGroup` identity, which reconstructs the renderer.
    */
-  function rerenderWith(next: { grid?: RenderableGrid; tool?: Tool; toolRef?: number | null }) {
+  function rerenderWith(next: {
+    grid?: RenderableGrid;
+    tool?: Tool;
+    toolRef?: number | null;
+    palette?: RefToFillGroup;
+  }) {
     view.rerender(
       element({
         grid: next.grid ?? grid,
         tool: next.tool ?? tool,
         toolRef: next.toolRef === undefined ? toolRef : next.toolRef,
+        palette: next.palette ?? PALETTE,
       }),
     );
   }
@@ -1684,6 +1781,78 @@ describe('PetriDishCanvas (edit variant) — an external grid change mid-stroke 
     fireEvent.pointerUp(canvas, centreOf(2, 2));
 
     expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+});
+
+// A PALETTE change landing mid-stroke (Story 2.10, Sidiar's decision 2(b)). An add mints a new
+// `RefToFillGroup` identity, which is a dep of the construction effect, so the effect tears down
+// and rebuilds the renderer — and its CLEANUP is what meets the open stroke.
+//
+// Reachable via multi-touch: one finger holds the dish (pointer capture is on the canvas,
+// `touchAction: 'none'`), a second works the sidebar's add control. `handlePointerDown`'s
+// second-pointer reject only guards the canvas element itself, so it does not cover this.
+//
+// Policy 2(b): DISCARD, like the grid effect's terminate — but through the shared `endStroke(false)`
+// rather than by nulling `strokeRef` by hand. Nulling it directly dropped the cells (correct) and
+// skipped `releasePointerCapture` (not correct), leaving the rest of that gesture inert.
+describe('PetriDishCanvas (edit variant) — a palette change mid-stroke (Story 2.10)', () => {
+  /** A second `RefToFillGroup` identity — same contents, new object, which is all a dep compares. */
+  function nextPalette(): RefToFillGroup {
+    return makeLut([0, 0], [0, 0]);
+  }
+
+  it('ends the open stroke without committing, and RELEASES pointer capture on the way out', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas, rerenderWith } = mount({ onStrokeCommit });
+    // jsdom 30 has `PointerEvent` but neither capture method (trap 1), so the component's
+    // optional calls are no-ops by default and a spy is the only way to see the release at all.
+    const release = vi.fn();
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = release;
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2)); // a stroke is open and has painted (2,2).
+    rerenderWith({ palette: nextPalette() });
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+    // The assertion the hand-nulled ref could never satisfy: capture is handed back, so the rest
+    // of this gesture reaches the page normally instead of being swallowed by a dead canvas.
+    expect(release).toHaveBeenCalledWith(0);
+
+    // The pointer is still physically down; its release must find no stroke (idempotence).
+    fireEvent.pointerUp(canvas, centreOf(2, 2));
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+
+  it('lets the NEXT gesture paint normally, on the grid the discarded stroke never reached', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas, rerenderWith } = mount({ onStrokeCommit });
+    const palette = nextPalette();
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    rerenderWith({ palette });
+    fireEvent.pointerUp(canvas, centreOf(2, 2));
+
+    // A fresh press-release AFTER the add. `rerenderWith` keeps the new palette identity so this
+    // gesture runs against the rebuilt renderer, the way it would after a real add.
+    fireEvent.pointerDown(canvas, centreOf(5, 5));
+    fireEvent.pointerUp(canvas, centreOf(5, 5));
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    expect(committed.occupant[flatIndex(5, 5)]).toBe(1); // what this gesture painted
+    expect(committed.occupant[flatIndex(2, 2)]).toBe(0); // the discarded stroke, gone for good
+  });
+
+  it('leaves a completed stroke alone — the add only meets a stroke that is still open', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas, rerenderWith } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    fireEvent.pointerUp(canvas, centreOf(2, 2)); // committed BEFORE the add
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+
+    rerenderWith({ palette: nextPalette() });
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1); // no second commit, no discard
   });
 });
 

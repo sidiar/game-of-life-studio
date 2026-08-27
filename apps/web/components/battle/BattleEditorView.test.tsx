@@ -48,6 +48,9 @@ const ROSTER_IDS = ROSTER.map((organism) => organism.id);
 // Story 2.8: the prop set every bare render below supplies identically, in ONE place. Four call
 // sites had hand-copied it, so this story's two new props would have meant four identical edits —
 // the duplicated-test-helper finding this file's own `mountEditor` comment already records.
+// Story 2.10: EMPTY by default, same reasoning as OrganismRoster.test.tsx's own default — most of
+// the suite below predates the add control, and an empty library renders none of it, so the
+// pre-existing assertions stay true unless a test overrides it.
 function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>> = {}) {
   return render(
     <BattleEditorView
@@ -58,6 +61,9 @@ function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>
       colors={COLORS}
       rosterIds={ROSTER_IDS}
       roster={ROSTER}
+      library={[]}
+      onAddToRoster={() => {}}
+      atCap={false}
       onCommitGrid={() => {}}
       onUndo={() => {}}
       canUndo={false}
@@ -203,6 +209,9 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
         colors={COLORS}
         rosterIds={rosterIds}
         roster={roster}
+        library={[]}
+        onAddToRoster={() => {}}
+        atCap={false}
         onCommitGrid={onCommitGrid}
         onUndo={onUndo}
         canUndo={canUndo}
@@ -232,6 +241,9 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
           colors={COLORS}
           rosterIds={rosterIds}
           roster={roster}
+          library={[]}
+          onAddToRoster={() => {}}
+          atCap={false}
           onCommitGrid={onCommitGrid}
           onUndo={onUndo}
           canUndo={nextCanUndo}
@@ -390,7 +402,10 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
     vi.restoreAllMocks();
   });
 
-  function mount(onCommitGrid: (next: RenderableGrid) => void) {
+  function mount(
+    onCommitGrid: (next: RenderableGrid) => void,
+    overrides: Partial<ComponentProps<typeof BattleEditorView>> = {},
+  ) {
     const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
       this: HTMLCanvasElement,
@@ -410,9 +425,13 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
       colors: COLORS,
       rosterIds: TWO_ORGANISMS.map((organism) => organism.id),
       roster: TWO_ORGANISMS,
+      library: [] as readonly DisplayOrganism[],
+      onAddToRoster: () => {},
+      atCap: false,
       onCommitGrid,
       onUndo: () => {},
       canUndo: false,
+      ...overrides,
     };
     const view = render(<BattleEditorView grid={EMPTY_GRID} {...props} />);
     const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
@@ -527,20 +546,11 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
       // colour instead of the token would find no collision here and silently stop warning.
       { id: 'twin-2', name: 'Second Twin', color: '#D55E01', colorToken: 'vermillion' },
     ];
-    render(
-      <BattleEditorView
-        grid={GRID}
-        size={SIZE}
-        palette={PALETTE}
-        showGridLines
-        colors={null}
-        rosterIds={twins.map((organism) => organism.id)}
-        roster={twins}
-        onCommitGrid={() => {}}
-        onUndo={() => {}}
-        canUndo={false}
-      />,
-    );
+    renderEditor({
+      colors: null,
+      rosterIds: twins.map((organism) => organism.id),
+      roster: twins,
+    });
 
     expect(screen.getAllByText('Shared colour')).toHaveLength(2);
     expect(screen.getByRole('button', { name: /First Twin/ })).toHaveTextContent('Shared colour');
@@ -628,21 +638,12 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
   // AC7: a failed organism library reaches the roster as a FACT it can state, and the selection
   // degrades with it — an organism tool would resolve against names and colours that do not exist.
   it('degrades to the eraser and states the failure when the library is unavailable (AC7)', () => {
-    render(
-      <BattleEditorView
-        grid={GRID}
-        size={SIZE}
-        palette={PALETTE}
-        showGridLines
-        colors={null}
-        rosterIds={TWO_ORGANISMS.map((organism) => organism.id)}
-        roster={TWO_ORGANISMS}
-        libraryUnavailable
-        onCommitGrid={() => {}}
-        onUndo={() => {}}
-        canUndo={false}
-      />,
-    );
+    renderEditor({
+      colors: null,
+      rosterIds: TWO_ORGANISMS.map((organism) => organism.id),
+      roster: TWO_ORGANISMS,
+      libraryUnavailable: true,
+    });
 
     expect(screen.getByText(/organism library could not be read/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Other Organism' })).toBeNull();
@@ -656,5 +657,77 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
     const { container } = mount(vi.fn());
 
     expect((await axe(container)).violations).toEqual([]);
+  });
+});
+
+// Story 2.10 (AC3, AC7, forced decision 1). `library` and `onAddToRoster` are threaded straight
+// through to `<OrganismRoster>` (Task 4); the one thing THIS component adds is the add-AND-select
+// wrapper, since the selection this story wires an add into is this component's own state.
+describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', () => {
+  const ADD_LIBRARY: readonly DisplayOrganism[] = [
+    { id: 'lib-new', name: 'New Arrival', color: '#D55E00', colorToken: 'vermillion' },
+  ];
+
+  // Wiring: choosing an option in the roster's add control calls the `onAddToRoster` THIS
+  // component was given, with the organism's id — proving `library`/`onAddToRoster` actually
+  // reach `<OrganismRoster>` rather than being declared and dropped.
+  it('threads library and onAddToRoster down to the roster’s add control', async () => {
+    const user = userEvent.setup();
+    const onAddToRoster = vi.fn();
+    renderEditor({ library: ADD_LIBRARY, onAddToRoster });
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /add organism/i }), 'lib-new');
+
+    expect(onAddToRoster).toHaveBeenCalledTimes(1);
+    expect(onAddToRoster).toHaveBeenCalledWith('lib-new');
+  });
+
+  // Forced decision 1, option (b): add AND select. `<BattlePage>`'s real `onAddToRoster` and this
+  // component's `setChosenTool` both fire inside the ADD event handler, so the parent's next
+  // render already carries the new id in `roster`/`rosterIds` by the time React re-validates the
+  // selection — simulated here with a rerender standing in for that round trip, the same pattern
+  // `mountEditor`'s `rerenderWithGrid` uses for <BattlePage>'s committed-grid round trip.
+  it('selects the newly-added organism once the parent hands back the updated roster', async () => {
+    const user = userEvent.setup();
+    const onAddToRoster = vi.fn();
+    const { rerender } = renderEditor({
+      rosterIds: [],
+      roster: [],
+      library: ADD_LIBRARY,
+      onAddToRoster,
+    });
+
+    // Nothing chosen yet on an empty roster: the eraser (spec §3.3).
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /add organism/i }), 'lib-new');
+    expect(onAddToRoster).toHaveBeenCalledWith('lib-new');
+
+    // The parent's response: the new organism now IN the roster, and no longer in the library.
+    const updatedRoster = [...ADD_LIBRARY];
+    rerender(
+      <BattleEditorView
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        rosterIds={updatedRoster.map((organism) => organism.id)}
+        roster={updatedRoster}
+        library={[]}
+        onAddToRoster={onAddToRoster}
+        atCap={false}
+        onCommitGrid={() => {}}
+        onUndo={() => {}}
+        canUndo={false}
+      />,
+    );
+
+    // Selected WITHOUT a further click — the add itself carried the selection along.
+    expect(screen.getByRole('button', { name: 'New Arrival' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'false');
   });
 });

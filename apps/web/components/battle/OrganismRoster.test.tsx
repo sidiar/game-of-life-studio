@@ -32,12 +32,27 @@ const ROSTER: readonly DisplayOrganism[] = [
 
 const ORGANISM_TOOL: Tool = { kind: 'organism', organismId: 'org-c' };
 
+// Story 2.10's addable library. Deliberately EMPTY as the default: most of the suite below
+// predates the add control, and an empty library renders none of it (AC8's "nothing left to add"
+// state) — so the pre-existing assertions in this file stay true unless a test overrides it.
+const LIBRARY: readonly DisplayOrganism[] = [
+  organism({ id: 'lib-gold', name: 'Gold Glider', color: '#E69F00', colorToken: 'gold' }),
+  organism({
+    id: 'lib-magenta',
+    name: 'Magenta Mutant',
+    color: '#CC79A7',
+    colorToken: 'reddish-purple',
+  }),
+];
+
 function renderRoster(overrides: Partial<ComponentProps<typeof OrganismRoster>> = {}) {
   return render(
     <OrganismRoster
       roster={ROSTER}
       selectedTool={ORGANISM_TOOL}
       onSelectTool={() => {}}
+      library={[]}
+      onAddToRoster={() => {}}
       {...overrides}
     />,
   );
@@ -269,12 +284,13 @@ describe('OrganismRoster — the degraded roster (AC7)', () => {
 });
 
 describe('OrganismRoster — what this story does NOT build (AC5)', () => {
-  it('renders no per-row edit pencil, search box, add dropdown or create button', () => {
+  it('renders no per-row edit pencil or create button, with an empty library (AC8)', () => {
     renderRoster();
 
-    // ✎ is Story 4.24; the search/add/create trio is Story 2.10 + Epic 4. The mockup carries all
-    // four in this same section, so building a SUBSET of it is expected — and rendering any of
-    // them inert would be the dead affordance NFR-4.1 forbids.
+    // ✎ and the create button are Story 4.24/Epic 4. The search box and the "+ ADD ORGANISM"
+    // dropdown are THIS story — see "the add control" describe block below — but with the default
+    // EMPTY library there is nothing to search or add, so neither renders here either (AC8's
+    // stated-empty-state, not a dead affordance).
     expect(screen.queryByText('✎')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
@@ -288,6 +304,181 @@ describe('OrganismRoster — what this story does NOT build (AC5)', () => {
     renderRoster();
 
     expect(screen.queryByRole('button', { name: /remove|delete/i })).toBeNull();
+  });
+});
+
+describe('OrganismRoster — the add control (AC1, AC2, AC3, AC5, AC8)', () => {
+  it('lists exactly the library prop as add options, not the roster', () => {
+    renderRoster({ library: LIBRARY });
+
+    const select = screen.getByRole('combobox', { name: /add organism/i });
+    const optionNames = within(select)
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+    expect(optionNames).toEqual(['+ ADD ORGANISM', 'Gold Glider', 'Magenta Mutant']);
+  });
+
+  // AC2: the search box filters the DROPDOWN, and only the dropdown — the roster list above it is
+  // never filtered, hidden, reordered or re-indexed.
+  it('narrows the add list when typing, and leaves the roster list untouched', async () => {
+    const user = userEvent.setup();
+    renderRoster({ library: LIBRARY });
+
+    await user.type(screen.getByRole('textbox', { name: /search organisms/i }), 'gold');
+
+    const select = screen.getByRole('combobox', { name: /add organism/i });
+    const optionNames = within(select)
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+    expect(optionNames).toEqual(['+ ADD ORGANISM', 'Gold Glider']);
+
+    // The roster list above is untouched: still all three rows, unfiltered, unreordered.
+    const rosterNames = within(screen.getByRole('list'))
+      .getAllByRole('button')
+      .map((button) => button.textContent);
+    expect(rosterNames).toEqual(['Chaotic Spreader', 'Aggressive Colonizer', 'Patient Defender']);
+  });
+
+  // AC2's predicate: case-insensitive substring on the name.
+  it('matches case-insensitively, anywhere in the name', async () => {
+    const user = userEvent.setup();
+    renderRoster({ library: LIBRARY });
+
+    await user.type(screen.getByRole('textbox', { name: /search organisms/i }), 'MUTA');
+
+    const select = screen.getByRole('combobox', { name: /add organism/i });
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['+ ADD ORGANISM', 'Magenta Mutant']);
+  });
+
+  // AC3: choosing an entry calls onAddToRoster with the chosen organism's id.
+  it('calls onAddToRoster with the chosen organism’s id', async () => {
+    const user = userEvent.setup();
+    const onAddToRoster = vi.fn();
+    renderRoster({ library: LIBRARY, onAddToRoster });
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /add organism/i }),
+      'lib-magenta',
+    );
+
+    expect(onAddToRoster).toHaveBeenCalledTimes(1);
+    expect(onAddToRoster).toHaveBeenCalledWith('lib-magenta');
+  });
+
+  // AC5 / Decision G.3: at the cap the control is disabled/unavailable and states the limit —
+  // measured off `atCap`, never derived from `library` here (that derivation is the caller's).
+  it('replaces the search and select with a stated limit at the cap', () => {
+    renderRoster({ library: LIBRARY, atCap: true });
+
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText(/roster is full/i)).toBeInTheDocument();
+    expect(screen.getByText(/255/)).toBeInTheDocument();
+  });
+
+  // AC8: an empty library is a STATED state, not a dead dropdown with only its placeholder.
+  it('states that nothing is left to add, rather than rendering an empty dropdown', () => {
+    renderRoster({ library: [] });
+
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText(/already in this battle/i)).toBeInTheDocument();
+  });
+
+  // AC8: a DIFFERENT fact from the library being empty — the search input stays rendered so the
+  // user can see and clear what they typed, but the select is replaced by a message.
+  it('states that the search matched nothing, keeping the search box rendered', async () => {
+    const user = userEvent.setup();
+    renderRoster({ library: LIBRARY });
+
+    await user.type(screen.getByRole('textbox', { name: /search organisms/i }), 'zzz-no-match');
+
+    expect(screen.getByRole('textbox', { name: /search organisms/i })).toHaveValue('zzz-no-match');
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText(/no organisms match/i)).toBeInTheDocument();
+  });
+
+  // AC8's third state: a failed library means nothing to add and nothing to say about it beyond
+  // the notice already rendered — the add control must not render at all.
+  it('renders no add control at all when the library is unavailable', () => {
+    renderRoster({
+      roster: [],
+      selectedTool: ERASER_TOOL,
+      libraryUnavailable: true,
+      library: LIBRARY,
+    });
+
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  // The cap takes priority over the library's own content — a full roster still says so even
+  // when the broader workspace library has room (a fact `library.length === 0` cannot capture).
+  it('shows the cap message even when the library itself is non-empty', () => {
+    renderRoster({ library: LIBRARY, atCap: true });
+
+    expect(screen.queryByText(/already in this battle/i)).toBeNull();
+    expect(screen.getByText(/roster is full/i)).toBeInTheDocument();
+  });
+
+  // Code review (AC5): the cap message used to end "Remove an organism to add another" — an
+  // instruction pointing at an affordance that exists in neither this story nor the app (the
+  // story's own "What NOT to build": no row removal; Decision H.1's prune is Story 2.13's save).
+  it('does not tell the user to remove an organism at the cap — there is no such control', () => {
+    renderRoster({ library: LIBRARY, atCap: true });
+
+    expect(screen.queryByText(/remove an organism/i)).toBeNull();
+  });
+
+  // Code review (AC8, trap 7): `library` is a DIFFERENCE, so it reads empty both when the roster
+  // consumed the workspace and when the workspace itself is empty. Only the first is "already in
+  // this battle"; asserting the pair keeps one message from being reused for the other fact.
+  it('distinguishes an empty WORKSPACE from a roster that consumed the library', () => {
+    const consumed = renderRoster({ library: [], workspaceEmpty: false });
+    expect(screen.getByText(/already in this battle/i)).toBeInTheDocument();
+    expect(screen.queryByText(/your organism library is empty/i)).toBeNull();
+    consumed.unmount();
+
+    renderRoster({ library: [], workspaceEmpty: true });
+    expect(screen.getByText(/your organism library is empty/i)).toBeInTheDocument();
+    expect(screen.queryByText(/already in this battle/i)).toBeNull();
+  });
+
+  // Code review (AC2): the predicate is trimmed. Mobile keyboards append a space after an accepted
+  // word and pasted names carry their own, and untrimmed that reported "No organisms match" with
+  // the organism sitting right there — with the offending character invisible in the message.
+  it('ignores surrounding whitespace in the search query', async () => {
+    const user = userEvent.setup();
+    renderRoster({ library: LIBRARY });
+
+    await user.type(screen.getByRole('textbox', { name: /search organisms/i }), '  gold  ');
+
+    expect(
+      within(screen.getByRole('combobox', { name: /add organism/i }))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['+ ADD ORGANISM', 'Gold Glider']);
+    expect(screen.queryByText(/no organisms match/i)).toBeNull();
+  });
+
+  // The other half of the same predicate: a query of nothing but spaces is an EMPTY query, so it
+  // matches everything — which is what the pre-trim comment claimed was already true and was not
+  // (it is false for any single-word name).
+  it('treats an all-whitespace query as an empty one', async () => {
+    const user = userEvent.setup();
+    renderRoster({ library: LIBRARY });
+
+    await user.type(screen.getByRole('textbox', { name: /search organisms/i }), '   ');
+
+    expect(
+      within(screen.getByRole('combobox', { name: /add organism/i }))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['+ ADD ORGANISM', 'Gold Glider', 'Magenta Mutant']);
   });
 });
 
@@ -314,6 +505,27 @@ describe('OrganismRoster — keyboard and axe (AC5)', () => {
     expect(onSelectTool).toHaveBeenLastCalledWith({ kind: 'organism', organismId: 'org-p' });
   });
 
+  // AC9: the search input and the add control are reachable by keyboard alone too — tabbed to
+  // AFTER the roster rows, matching DOM order (between the list and the pinned eraser).
+  it('reaches the search input and the add control by keyboard, after the roster rows', async () => {
+    const user = userEvent.setup();
+    renderRoster({ library: LIBRARY });
+
+    for (const name of ['Chaotic Spreader', 'Aggressive Colonizer', 'Patient Defender']) {
+      await user.tab();
+      expect(screen.getByRole('button', { name })).toHaveFocus();
+    }
+
+    await user.tab();
+    expect(screen.getByRole('textbox', { name: 'Search organisms' })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole('combobox', { name: 'Add organism to roster' })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveFocus();
+  });
+
   it('has no axe violations', async () => {
     const { container } = renderRoster();
 
@@ -334,5 +546,18 @@ describe('OrganismRoster — keyboard and axe (AC5)', () => {
     });
 
     expect((await axe(container)).violations).toEqual([]);
+  });
+
+  it('has no axe violations with the add control rendered (library, cap and empty states)', async () => {
+    const withLibrary = renderRoster({ library: LIBRARY });
+    expect((await axe(withLibrary.container)).violations).toEqual([]);
+    withLibrary.unmount();
+
+    const atCap = renderRoster({ library: LIBRARY, atCap: true });
+    expect((await axe(atCap.container)).violations).toEqual([]);
+    atCap.unmount();
+
+    const empty = renderRoster({ library: [] });
+    expect((await axe(empty.container)).violations).toEqual([]);
   });
 });

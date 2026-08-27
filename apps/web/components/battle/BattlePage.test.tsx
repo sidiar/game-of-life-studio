@@ -1055,6 +1055,238 @@ describe('BattlePage — undo wiring (Story 2.8)', () => {
   });
 });
 
+// Story 2.10: adding organisms from the shared library. <BattlePage> is the only level at which
+// the whole chain — the addable-library derivation, the sessionRoster write, the resolved row,
+// and the repository-write absence — is observable in one place.
+describe('BattlePage — adding organisms from the library (Story 2.10)', () => {
+  // AC1 + AC3 in one flow: the add control offers exactly the library minus this battle's own
+  // roster, and choosing the one option appends a fourth row under its real name.
+  it('offers the library minus the roster, and adding appends a row with the organism’s real name (AC1, AC3)', async () => {
+    const user = userEvent.setup();
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [SKIRMISH],
+          organisms: ORGANISMS_WITH_CONWAY,
+        })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const sidebar = screen.getByRole('complementary');
+    // SKIRMISH places the three mock organisms; Conway is the only one of the four NOT placed.
+    const select = within(sidebar).getByRole('combobox', { name: /add organism/i });
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['+ ADD ORGANISM', CONWAYS_CLASSIC.name]);
+
+    await user.selectOptions(select, CONWAYS_CLASSIC.id);
+
+    const rows = within(screen.getByRole('list')).getAllByRole('button');
+    expect(rows.map((row) => row.textContent)).toEqual([
+      ...organisms.map((organism) => organism.name),
+      CONWAYS_CLASSIC.name,
+    ]);
+    // AC1's own exclusion is derived from the same union: nothing left to add now that all four
+    // are in the roster (AC8's stated-empty state, not a dead dropdown).
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText(/already in this battle/i)).toBeInTheDocument();
+  });
+
+  // AC4: nothing this story writes may reach a repository. Asserted against the fake repos' own
+  // call counts, not by inspecting storage (AC4's own instruction) — the fakes are in-memory, so a
+  // real write would show up on the spy regardless of backing store.
+  it('writes to no repository when an organism is added (AC4)', async () => {
+    const user = userEvent.setup();
+    const repositories = createFakeRepositories({
+      battles: [SKIRMISH],
+      organisms: ORGANISMS_WITH_CONWAY,
+    });
+    const battleSaveSpy = vi.spyOn(repositories.battles, 'save');
+    const organismSaveSpy = vi.spyOn(repositories.organisms, 'save');
+    const settingsSaveSpy = vi.spyOn(repositories.settings, 'save');
+
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      CONWAYS_CLASSIC.id,
+    );
+    // The new row is proof the add actually happened, not merely that the control was operated.
+    expect(screen.getByRole('button', { name: CONWAYS_CLASSIC.name })).toBeInTheDocument();
+
+    expect(battleSaveSpy).not.toHaveBeenCalled();
+    expect(organismSaveSpy).not.toHaveBeenCalled();
+    expect(settingsSaveSpy).not.toHaveBeenCalled();
+    expect(localStorage.length).toBe(0);
+  });
+
+  // Forced decision 1 (option b): choosing an entry both adds AND selects it, immediately
+  // paintable — the same claim BattleEditorView.test.tsx pins in isolation, proven here through
+  // the real sessionRoster round trip rather than a simulated rerender.
+  it('selects the newly-added organism, immediately (forced decision 1)', async () => {
+    const user = userEvent.setup();
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [SKIRMISH],
+          organisms: ORGANISMS_WITH_CONWAY,
+        })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      CONWAYS_CLASSIC.id,
+    );
+
+    expect(screen.getByRole('button', { name: CONWAYS_CLASSIC.name })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  // AC5 / Decision G.3, reusing rosterUnion.test.ts's approach: 255 distinct SYNTHETIC ids rather
+  // than 255 schema-valid Organism library records (disproportionate for what this test needs to
+  // prove — the arithmetic wiring, not the palette resolution of each one). BattleSchema's H.1
+  // refinement still demands every id be PLACED, so all 255 are painted, one cell each, on a grid
+  // large enough to hold them.
+  it('blocks the add with a stated message at the 255-organism cap (AC5)', async () => {
+    const CAP_SIZE = { cols: 50, rows: 30 } as const; // 1500 cells — comfortably over 255.
+    const organismIds = Array.from({ length: 255 }, (_, i) => `cap-organism-${i}`);
+    const gridState: number[][] = Array.from({ length: CAP_SIZE.rows }, () =>
+      new Array(CAP_SIZE.cols).fill(0),
+    );
+    organismIds.forEach((_, i) => {
+      gridState[Math.floor(i / CAP_SIZE.cols)][i % CAP_SIZE.cols] = i + 1;
+    });
+    const fullBattle: Battle = {
+      id: SKIRMISH.id,
+      name: 'Full Roster',
+      organismIds,
+      gridSize: CAP_SIZE,
+      gridState,
+      createdAt: SKIRMISH.createdAt,
+      updatedAt: SKIRMISH.updatedAt,
+    };
+
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [fullBattle], organisms: [] })}
+        battleId={fullBattle.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Full Roster' });
+
+    const sidebar = screen.getByRole('complementary');
+    expect(within(sidebar).queryByRole('textbox')).toBeNull();
+    expect(within(sidebar).queryByRole('combobox')).toBeNull();
+    expect(within(sidebar).getByText(/roster is full/i)).toBeInTheDocument();
+    expect(within(sidebar).getByText(/255/)).toBeInTheDocument();
+  });
+
+  // ⚠️ Story 2.10 CODE REVIEW regression (2026-08-27) — trap 1, the append-only invariant, and the
+  // one failure this story shipped. The `rosterIds` memo applied the `DEFAULT_TOOL` seed only while
+  // the UNION (placed + session) was empty. This story gave `sessionRoster` its first writer, which
+  // made that condition falsifiable by an add: the seeded organism was silently evicted from index
+  // 0 and the added one took its place, so `cell = roster index + 1` (RFC-006 Decision 2)
+  // reinterpreted every cell painted with the seed. No throw, no warning — the whole 660-test suite
+  // stayed green. The seed now lives in the union's BASE, so a session add can only ever append.
+  it('keeps the seeded organism at index 0 when an add lands on /battle/new (trap 1)', async () => {
+    const user = userEvent.setup();
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    // The seed, before the add: one row, and it is the default tool's organism.
+    expect(
+      within(screen.getByRole('list'))
+        .getAllByRole('button')
+        .map((row) => row.textContent),
+    ).toEqual([CONWAYS_CLASSIC.name]);
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      organisms[0].id,
+    );
+
+    // APPENDED, never substituted: the seed keeps index 0, so every cell already painted as ref 1
+    // still means the seeded organism.
+    expect(
+      within(screen.getByRole('list'))
+        .getAllByRole('button')
+        .map((row) => row.textContent),
+    ).toEqual([CONWAYS_CLASSIC.name, organisms[0].name]);
+    // And the seeded organism is still NOT offered again (AC1's exclusion is the same union).
+    expect(
+      within(screen.getByRole('complementary'))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).not.toContain(CONWAYS_CLASSIC.name);
+  });
+
+  // AC7, which the story required a test for and did not have: the window Story 2.9's decision 1
+  // deliberately left open — a library that HOLDS organisms but not Conway's Classic, on
+  // /battle/new. The seed does not fire, so the roster is honestly empty and the eraser carries the
+  // selection; the add control is what makes the dish paintable again, and this is the assertion
+  // that says so.
+  it('makes /battle/new paintable again when the library lacks the default organism (AC7)', async () => {
+    const user = userEvent.setup();
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    // Story 2.9's accepted trade-off, still true: no roster, no organism tool, the eraser selected.
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      organisms[0].id,
+    );
+
+    // Paid back: a real roster row, selected, so `refForTool` resolves and the dish is paintable.
+    const row = screen.getByRole('button', { name: organisms[0].name });
+    expect(row).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  // AC8 / trap 7, code review: `library` is a DIFFERENCE, so it reads empty for two unrelated
+  // reasons. In the empty-WORKSPACE window (a fresh profile, or a bookmarked /battle/new opened
+  // before the Gallery ever ran the workspace seed) the roster is empty and nothing is in this
+  // battle — so the "already in this battle" copy was a plain falsehood, in the exact state where
+  // this message is the user's only signpost.
+  it('says the library is empty, not that the battle already holds it all (AC8)', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: [] })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    const sidebar = screen.getByRole('complementary');
+    expect(within(sidebar).getByText(/your organism library is empty/i)).toBeInTheDocument();
+    expect(within(sidebar).queryByText(/already in this battle/i)).toBeNull();
+    // Still not the AC7 degraded notice — the list loaded fine, it is simply empty.
+    expect(screen.queryByText(/organism library could not be read/i)).toBeNull();
+  });
+});
+
 function findEmptyCell(gridState: readonly (readonly number[])[]): { col: number; row: number } {
   for (let row = 0; row < gridState.length; row++) {
     for (let col = 0; col < gridState[row].length; col++) {

@@ -312,10 +312,20 @@ function EditDish({
     return () => {
       rendererRef.current = null;
       paintedGridRef.current = null;
-      // Hygiene, not a commit path: an unmount mid-stroke drops the in-progress edit rather than
-      // firing onStrokeCommit into a component that is going away. No AC in this story covers an
-      // unmount-mid-drag; this only stops a stale ref outliving the mount.
-      strokeRef.current = null;
+      // Not a commit path: an unmount mid-stroke drops the in-progress edit rather than firing
+      // onStrokeCommit into a component that is going away, and so does a mid-stroke palette
+      // change (Story 2.10, Sidiar's decision 2(b)) — the same policy the grid effect's terminate
+      // records, for the same reason: the working buffer was sliced off a state this cleanup is
+      // tearing down.
+      //
+      // Goes through the SHARED `endStroke(false)` rather than nulling `strokeRef` by hand.
+      // Nulling it directly discarded the cells (correct) but skipped `releasePointerCapture`,
+      // leaving the rest of that gesture inert on the canvas. Story 2.10's review found the path
+      // is reachable via multi-touch — one finger holds the dish, a second works the sidebar's add
+      // control — which is why this stopped being the unreachable hygiene line it was written as.
+      // ⚠️ `endStrokeRef`, not `endStroke`: this cleanup outlives the render that registered it
+      // (deps are `[size, palette, colors]`), which is the whole reason the ref exists.
+      if (strokeRef.current !== null) endStrokeRef.current(false);
     };
     // `grid` and `showGridLines` are read above but deliberately absent from deps. Neither is a
     // GridRenderer constructor argument without a setter, and listing either would reconstruct
