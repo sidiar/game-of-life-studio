@@ -7,7 +7,7 @@ import type { BattleRepository, OrganismRepository, SettingsRepository } from '@
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import type { WorkspaceSeedStatus } from '@/lib/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallerySort';
-import { resolveTileOrganisms } from '@/lib/tileOrganisms';
+import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
 import { readGridColors } from '@/lib/canvas/themeColors';
 import BattleTile from './BattleTile';
 import CreateBattleLink from './CreateBattleLink';
@@ -212,7 +212,7 @@ export default function BattleGallery({
       Promise.all([
         battles.list(),
         // A corrupt gol:organisms must not blank a Gallery whose battles are all readable —
-        // readCollection throws CorruptDataError for the whole key, and resolveTileOrganisms
+        // readCollection throws CorruptDataError for the whole key, and resolveDisplayOrganisms
         // already degrades an unresolved id to a neutral fallback dot. Without this catch the
         // Promise.all couples the two and discards the persistence layer's deliberate "one bad
         // record must not blank the view" stance (Story 1.4 review). Only battles.list() rejecting
@@ -252,7 +252,7 @@ export default function BattleGallery({
         ? { kind: 'loading' }
         : loadState.status;
 
-  // Memoised because resolveTileOrganisms builds a Map over the whole roster per tile: done in the
+  // Memoised because resolveDisplayOrganisms builds a Map over the whole roster per tile: done in the
   // render body it is O(tiles x roster) on every render, and it mints a fresh array identity per
   // tile, which would defeat any later memo() on BattleTile.
   const tiles = useMemo(() => {
@@ -272,7 +272,7 @@ export default function BattleGallery({
       })
       .map((summary) => ({
         summary,
-        organisms: resolveTileOrganisms(summary.organismIds, roster),
+        organisms: resolveDisplayOrganisms(summary.organismIds, roster),
       }));
   }, [state]);
 

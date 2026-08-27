@@ -12,7 +12,7 @@ import { toThumbnailSource } from '@/lib/canvas/battleThumbnail';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
-import type { TileOrganism } from '@/lib/tileOrganisms';
+import type { DisplayOrganism } from '@/lib/displayOrganisms';
 import { useInView } from '@/lib/useInView';
 import PetriDishCanvas from '../PetriDishCanvas';
 
@@ -27,7 +27,7 @@ export interface BattleTileProps {
   name: string;
   gridSize: { cols: number; rows: number };
   updatedAt: Date;
-  organisms: readonly TileOrganism[];
+  organisms: readonly DisplayOrganism[];
   // The thumbnail's own inputs (Story 1.11, AC1/M4). battles/roster are typed to the interfaces
   // (AR-2/27) — this component never imports a concrete repository.
   battles: BattleRepository;

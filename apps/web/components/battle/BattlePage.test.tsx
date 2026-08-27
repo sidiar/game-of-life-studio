@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC, DEFAULT_SETTINGS, type Battle, type Organism } from '@gol/domain';
@@ -147,9 +147,10 @@ function withFailingBattleLoad(): AppRepositories {
   };
 }
 
-// A repository whose ORGANISM list rejects while the battle itself is perfectly readable. The
-// page loads both through one Promise.all, so this is the only way to reach the error status
-// without the battle being at fault.
+// A repository whose ORGANISM list rejects while the battle itself is perfectly readable — the
+// only way to reach the organism resource's error status without the battle being at fault.
+// Story 2.9: the two are separate `useAsyncResource` calls now, so this no longer takes the
+// battle down with it (AC6) and instead drives the degraded roster (AC7).
 function withFailingOrganismList(): AppRepositories {
   const repositories = seeded();
   return {
@@ -326,57 +327,205 @@ describe('BattlePage', () => {
   });
 
   // AC2/NFR-4.1 on the create route specifically, mirroring the loaded-route assertion below.
-  // Story 2.7 added the first real buttons on this route (the provisional tool toggle's Draw/
-  // Erase pair); Story 2.8 adds the status bar's UNDO as the third — "exactly these three,
-  // nothing else", the same shape a canvas-free skeleton must hold. The status bar sits OUTSIDE
-  // the `colors !== null` guard, so it renders here even though no canvas does: undo acts on grid
-  // state, and a missing theme token layer is no reason to withhold it.
-  it('renders exactly the tool toggle, UNDO, and one heading on the "new" route', async () => {
-    render(<BattlePage repositories={seeded()} battleId="new" />);
+  // Story 2.9: the provisional Draw/Erase toggle is gone (AC3) and the sidebar's roster is what
+  // replaced it — a battle with nothing placed seeds the default tool's organism (forced decision
+  // 4), so the create route carries exactly one roster row, the eraser, and UNDO. The status bar
+  // sits OUTSIDE the `colors !== null` guard, so it renders here even though no canvas does: undo
+  // acts on grid state, and a missing theme token layer is no reason to withhold it.
+  it('renders exactly the roster row, the eraser, UNDO, and one heading on the "new" route', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
+        battleId="new"
+      />,
+    );
     await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
 
-    expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Erase' })).toBeNull();
+    expect(screen.getByRole('button', { name: CONWAYS_CLASSIC.name })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
     // A freshly seeded battle has nothing to undo (AC8: the seed is not a ring entry).
     expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
     expect(screen.queryAllByRole('button')).toHaveLength(3);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
-  // The other half of the same ordering: a real battle id with a corrupt organism library DOES
-  // still reach the failure body. Deliberate for this story (AC4 wants one distinct failure
-  // state; nothing renders the roster yet) and tracked in deferred-work.md for Story 2.9 — pinned
-  // here so the deferral is visible rather than assumed.
-  it('still shows the failure body when a real battle id meets a corrupt organism library', async () => {
+  // Story 2.9 review, decision 1 (Sidiar's option (a)). `libraryUnavailable` covers a FAILED
+  // organisms.list(); a SUCCESSFUL EMPTY one is a separate, reachable state — a fresh profile,
+  // cleared storage, or a bookmarked /battle/new opened before the Gallery has ever run the
+  // workspace seed. The seed used to fire there regardless, putting an id in the roster with no
+  // record behind it, and the sidebar rendered a normal, pre-selected, clickable row reading
+  // "Unknown organism": a page reporting no problem while offering a tool that places nothing.
+  //
+  // ⚠️ Note what this does NOT assert: the AC7 degraded notice. The library did not fail, so
+  // claiming it did would be its own lie — the honest state is simply an empty roster.
+  it('seeds NO roster row when the library loads successfully but is empty', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: [] })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(screen.queryByText('Unknown organism')).toBeNull();
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.queryByText(/organism library could not be read/i)).toBeNull();
+  });
+
+  // The other half of decision 1: an empty roster is only acceptable because the selection has
+  // somewhere honest to fall to. `resolveSelectedTool` yields the eraser (spec §3.3: "first roster
+  // row; eraser when the roster is empty"), so exactly one control is still pressed — AC2 holds
+  // even here — and Story 2.10's add dropdown is what makes the dish paintable again.
+  it('falls back to the eraser, still exactly one selection, when the library is empty', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: [] })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.queryAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true'),
+    ).toHaveLength(1);
+  });
+
+  // The seed must still fire in the case it exists for — otherwise "stop seeding a fictional
+  // organism" is trivially satisfiable by never seeding at all, which would leave /battle/new
+  // unpaintable until Story 2.10 for every ordinary user.
+  it('still seeds the default tool’s organism when the library DOES contain it', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
+        battleId="new"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(screen.getByRole('button', { name: CONWAYS_CLASSIC.name })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  // Story 2.9 AC6, INVERTING what this test asserted through Story 2.8 (deferred-work.md, owned
+  // by this story). While one `Promise.all` loaded both, a corrupt ORGANISM record rendered the
+  // BATTLE's failure body — the wrong fact about the wrong record — and that was accepted only
+  // because nothing rendered the roster yet. The two resources settle independently now: a battle
+  // that loaded perfectly renders, and the roster section is where the library's failure is
+  // reported (AC7).
+  it('renders the battle when the organism library is corrupt but the battle loaded (AC6)', async () => {
     render(<BattlePage repositories={withFailingOrganismList()} battleId={SKIRMISH.id} />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/stored data may be damaged/i)).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Something Went Wrong' })).toBeNull();
+  });
+
+  // AC7 (deferred-work.md, owned by this story): the other half. Rendering the battle is only
+  // correct if the roster's failure is STATED — an empty list on a page reporting no problem is
+  // the state that entry was filed about.
+  it('states the roster failure instead of silently rendering an empty roster (AC7)', async () => {
+    render(<BattlePage repositories={withFailingOrganismList()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(screen.getByText(/organism library could not be read/i)).toBeInTheDocument();
+    expect(screen.getByText(/placing organisms is unavailable/i)).toBeInTheDocument();
+    // No list of unnameable rows, and no organism tool that could resolve against them.
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // AC6's reverse, which still holds: the BATTLE failing is a different fact and keeps its own
+  // failure body. A fix that made both resources non-blanking would silently take this with it.
+  it('still renders the failure body when the BATTLE load rejects (AC6)', async () => {
+    render(<BattlePage repositories={withFailingBattleLoad()} battleId={SKIRMISH.id} />);
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Something Went Wrong' }),
     ).toBeInTheDocument();
   });
 
+  // The independence runs both ways: a healthy library must not rescue a broken battle, and a
+  // broken battle must not suppress a healthy library. Pinned because "settle independently" is
+  // easy to half-implement.
+  it('renders the battle’s failure body even though the organism library loaded fine', async () => {
+    const repositories = withFailingBattleLoad();
+    const listSpy = vi.spyOn(repositories.organisms, 'list');
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+
+    await screen.findByRole('heading', { level: 1, name: 'Something Went Wrong' });
+    expect(listSpy).toHaveBeenCalled();
+    expect(screen.queryByText(/organism library could not be read/i)).toBeNull();
+  });
+
   // AC2 / NFR-4.1 as a COUNT, not a presence check: `queryByRole('button', { name: /run/i })`
   // being null still passes after someone adds a dead RUN button labelled differently, or a
-  // fullscreen button beside it. Story 2.7 put the route's first two buttons on it (the
-  // provisional tool toggle's Draw/Erase) and 2.8 adds UNDO — the claim updates to "exactly those
-  // three", not back to zero, so a FOURTH button (Run, fullscreen, 2.13's SAVE arriving early, or
-  // anything else) still fails this test.
-  it('renders no Run, fullscreen, or any other button beyond the toggle and UNDO on the loaded route', async () => {
+  // fullscreen button beside it. Story 2.9 replaces the provisional Draw/Erase pair with the real
+  // roster, so the claim becomes "this battle's three organisms, the eraser, and UNDO — nothing
+  // else"; a SIXTH button (Run, fullscreen, 2.13's SAVE arriving early, 2.16's Back, or Epic 4's
+  // per-row pencil) still fails here.
+  it('renders no Run, fullscreen, or any other button beyond the roster and UNDO on the loaded route', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
     expect(screen.queryByRole('button', { name: /run/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
-    // review (2026-08-27): the expected buttons are NAMED here, matching the sibling "new"
-    // route test above. A bare length check is satisfied by a dead control replacing one of
-    // them, which is exactly the substitution this count was written to catch.
-    expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
+    // AC3: the deleted toggle, named rather than merely counted — a bare length check is
+    // satisfied by a dead control replacing one of them, which is what this count exists to catch.
+    expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Erase' })).toBeNull();
+    for (const organism of organisms) {
+      expect(screen.getByRole('button', { name: organism.name })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
-    expect(screen.queryAllByRole('button')).toHaveLength(3);
+    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 2);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  // Forced decision 4, the load-bearing half. Before Story 2.9 `sessionRoster` seeded
+  // `DEFAULT_TOOL.organismId` UNCONDITIONALLY — invisible while nothing rendered the roster, and a
+  // fourth row the moment it did: opening "Three-Way Skirmish" would list Conway's Classic, which
+  // the user never added and which Decision H says is not part of that battle.
+  it('lists exactly the battle’s OWN placed organisms — no seeded Conway’s Classic (AC1)', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({
+          battles: [SKIRMISH],
+          organisms: ORGANISMS_WITH_CONWAY,
+        })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const rows = within(screen.getByRole('list')).getAllByRole('button');
+    // Decision H.1: "used by a battle" means PLACED — and in roster order, which is the dense
+    // encoding's own (RFC-006 Decision 2), never sorted for display.
+    expect(rows.map((row) => row.textContent)).toEqual(organisms.map((organism) => organism.name));
+    expect(screen.queryByRole('button', { name: CONWAYS_CLASSIC.name })).toBeNull();
+  });
+
+  // AC2 / spec §3.3's "suggest: first roster row". The seed is conditional now, so `DEFAULT_TOOL`
+  // is NOT in a loaded battle's roster — an initial selection that still pointed at it would
+  // resolve to no ref, leaving the dish unpaintable and NO row selected.
+  it('selects the FIRST roster row on a loaded battle (AC2)', async () => {
+    render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const pressed = screen
+      .getAllByRole('button')
+      .filter((button) => button.getAttribute('aria-pressed') === 'true');
+    expect(pressed).toHaveLength(1);
+    expect(pressed[0]).toHaveAccessibleName(organisms[0].name);
   });
 
   // App Router enables StrictMode in dev, so double-invoked effects are the default environment.
