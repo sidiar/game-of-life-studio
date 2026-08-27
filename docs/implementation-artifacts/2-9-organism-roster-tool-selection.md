@@ -777,3 +777,18 @@ the `OrganismSummary` gap is recorded under forced decision 3.
 | 2026-08-27 | 1.0 | Implemented: Lab sidebar chassis + `<OrganismRoster>`, Story 2.7's provisional toggle deleted, `<BattlePage>` resources split, seven `deferred-work.md` entries settled. `npm run ci` green. | dev-story |
 
 Dev Model: opus   # architecture-shaping: establishes the Lab sidebar chassis and section frame that Stories 2.10/2.11/2.14/2.15/2.16 all mount into plus the `OrganismRosterItem` styling Epic 4 reuses, and must settle three decisions with downstream inheritance (the `DEFAULT_TOOL` session-roster seed and what a loaded battle's roster shows, the single-selection ARIA contract, the eraser's missing colour token) while restructuring `<BattlePage>`'s resource loading and closing seven inherited `deferred-work.md` entries
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 24s | 22 | 2,454 | 13,372 | 439,950 | 455,798 |
+| Step 1 — create-story | opus-5 | 1 | 8m 33s | 196 | 27,463 | 480,535 | 9,210,805 | 9,718,999 |
+| Step 2 — dev-story | opus-5 | 1 | 29m 22s | 410 | 55,028 | 518,140 | 34,687,413 | 35,260,991 |
+| Step 3 — code review + PR | sonnet-5 | 4 | 22m 35s | 588 | 32,041 | 1,592,515 | 30,171,241 | 31,796,385 |
+| _of which the orchestrator_ | opus-5 | — | — | 78 | 13,274 | 51,762 | 1,952,844 | 2,017,958 |
+| **Total (create-story → PR ready)** | | 6 | **1h 00m** | 1,216 | 116,986 | 2,604,562 | 74,509,409 | **77,232,173** |
+
+Run started 2026-08-27 14:35 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
