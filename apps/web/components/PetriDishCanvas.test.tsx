@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { Profiler, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { GridRenderer } from '@/lib/canvas/gridRenderer';
@@ -880,9 +880,13 @@ describe('PetriDishCanvas (edit variant) — click placement', () => {
     const { canvas, grid } = mount({ onStrokeCommit });
     const before = Uint8Array.from(grid.occupant);
 
+    // Story 2.6: the commit lands on pointer-UP, not pointer-down (trap 2). A click is the
+    // degenerate stroke — press then release with no movement in between.
     fireEvent.pointerDown(canvas, centreOf(3, 4));
+    expect(onStrokeCommit).not.toHaveBeenCalled(); // AC2's <100ms paint fires on down alone…
+    fireEvent.pointerUp(canvas, centreOf(3, 4));
 
-    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1); // …but the commit waits for up (AC3).
     const next = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
 
     // A NEW value, not the same object mutated — Story 2.8's snapshot ring needs the previous
@@ -931,6 +935,7 @@ describe('PetriDishCanvas (edit variant) — click placement', () => {
     stubRect(canvas);
 
     fireEvent.pointerDown(canvas, centreOf(5, 1)); // index 1 * 20 + 5 = 25
+    fireEvent.pointerUp(canvas, centreOf(5, 1)); // Story 2.6: commit lands on pointer-up.
 
     expect(onStrokeCommit).toHaveBeenCalledTimes(1);
     expect((onStrokeCommit.mock.calls[0][0] as RenderableGrid).occupant[25]).toBe(2);
@@ -950,6 +955,8 @@ describe('PetriDishCanvas (edit variant) — click placement', () => {
     const { canvas } = mount({ grid: already, onStrokeCommit });
 
     fireEvent.pointerDown(canvas, centreOf(5, 1));
+    // AC6: a no-op stroke commits nothing — pin the full gesture, not just the down phase.
+    fireEvent.pointerUp(canvas, centreOf(5, 1));
 
     expect(onStrokeCommit).not.toHaveBeenCalled();
     expect(markDirtySpy).not.toHaveBeenCalled();
@@ -1070,6 +1077,11 @@ describe('PetriDishCanvas (edit variant) — click placement', () => {
     expect(clickOps).toBeGreaterThan(0);
     expect(clickOps).toBeLessThan(PLACE_SIZE.cols * PLACE_SIZE.rows);
 
+    // Story 2.6: the commit itself waits for pointer-up (trap 2) — the paint above already
+    // happened on down, but `onStrokeCommit` has not fired yet.
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+    fireEvent.pointerUp(canvas, centreOf(3, 4));
+
     // THE round trip. <BattlePage> puts the committed grid in state and hands it straight back
     // down; without `paintedGridRef` being set at commit time the grid effect full-repaints all
     // 200 cells and re-primes the whole colour-state baseline, on every single click.
@@ -1113,6 +1125,8 @@ describe('PetriDishCanvas (edit variant) — click placement', () => {
     stubRect(canvas);
 
     expect(() => fireEvent.pointerDown(canvas, centreOf(3, 4))).not.toThrow();
+    expect(onStrokeCommit).not.toHaveBeenCalled(); // Story 2.6: commit waits for pointer-up.
+    expect(() => fireEvent.pointerUp(canvas, centreOf(3, 4))).not.toThrow();
     expect(onStrokeCommit).toHaveBeenCalledTimes(1);
   });
 
@@ -1137,5 +1151,395 @@ describe('PetriDishCanvas (edit variant) — click placement', () => {
     fireEvent.pointerDown(canvas, centreOf(3, 4));
 
     expect(drawSpy).not.toHaveBeenCalled();
+  });
+});
+
+// Drag painting (Story 2.6, AC1-AC8). Each `describe` in this file is a sibling at module scope,
+// so the click-placement describe's `mount`/`centreOf`/`stubRect`/`installContexts` are private to
+// it and are re-declared here; only `PALETTE`, `TOOL`, `COLORS` and `makeGrid` come off module
+// scope. Folding the two fixture sets into one shared, parameterised helper is deferred work
+// (review 2026-08-27) rather than a rewrite of Story 2.5's describe from inside this story.
+describe('PetriDishCanvas (edit variant) — drag painting (Story 2.6)', () => {
+  const PLACE_SIZE = { cols: 20, rows: 10 };
+  const CELL = 15;
+  const RECT = { left: 0, top: 0, width: 300, height: 150 };
+  const EMPTY_GRID = makeGrid(20, 10, new Array(200).fill(0));
+
+  function installContexts(): Map<HTMLCanvasElement, RecordingContext2D> {
+    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      let context = contexts.get(this);
+      if (context === undefined) {
+        context = new RecordingContext2D();
+        contexts.set(this, context);
+      }
+      return context as unknown as CanvasRenderingContext2D;
+    });
+    return contexts;
+  }
+
+  function stubRect(canvas: HTMLCanvasElement): void {
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      ...RECT,
+      right: RECT.left + RECT.width,
+      bottom: RECT.top + RECT.height,
+      x: RECT.left,
+      y: RECT.top,
+      toJSON: () => ({}),
+    } as DOMRect);
+  }
+
+  function mount(
+    overrides: {
+      grid?: RenderableGrid;
+      toolRef?: number | null;
+      onStrokeCommit?: (next: RenderableGrid) => void;
+    } = {},
+  ) {
+    const contexts = installContexts();
+    const grid = overrides.grid ?? EMPTY_GRID;
+    const onStrokeCommit = overrides.onStrokeCommit ?? vi.fn();
+    const view = render(
+      <PetriDishCanvas
+        variant="edit"
+        grid={grid}
+        size={PLACE_SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        tool={TOOL}
+        toolRef={overrides.toolRef === undefined ? 1 : overrides.toolRef}
+        onStrokeCommit={onStrokeCommit}
+      />,
+    );
+    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+    return { ...view, canvas, contexts, grid, onStrokeCommit };
+  }
+
+  /** The client coordinate of the centre of cell (col, row) under the stubbed geometry. */
+  function centreOf(col: number, row: number) {
+    return {
+      clientX: RECT.left + col * CELL + CELL / 2,
+      clientY: RECT.top + row * CELL + CELL / 2,
+      button: 0,
+      isPrimary: true,
+    };
+  }
+
+  /** Same coordinate, shaped for a `pointermove` mid-drag: `buttons` is the bitmask (trap 5) —
+   *  jsdom's synthetic PointerEvent defaults it to 0, which would self-terminate every move if
+   *  this helper did not set it. */
+  function moveTo(col: number, row: number) {
+    return { ...centreOf(col, row), buttons: 1 };
+  }
+
+  function flatIndex(col: number, row: number): number {
+    return row * PLACE_SIZE.cols + col;
+  }
+
+  it(
+    'down -> 3 moves -> up commits exactly once, and the committed grid differs from the prop ' +
+      'grid at every traversed cell and nowhere else (AC1, AC3)',
+    () => {
+      const onStrokeCommit = vi.fn();
+      const { canvas, grid } = mount({ onStrokeCommit });
+      const before = Uint8Array.from(grid.occupant);
+
+      fireEvent.pointerDown(canvas, centreOf(2, 2));
+      fireEvent.pointerMove(canvas, moveTo(3, 2));
+      fireEvent.pointerMove(canvas, moveTo(4, 2));
+      fireEvent.pointerMove(canvas, moveTo(5, 2));
+      expect(onStrokeCommit).not.toHaveBeenCalled(); // still one gesture, no commit yet.
+      fireEvent.pointerUp(canvas, moveTo(5, 2));
+
+      expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+      const next = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+      expect(next).not.toBe(grid);
+      expect(next.occupant).not.toBe(grid.occupant);
+
+      const changed = [...next.occupant].flatMap((value, index) =>
+        value === before[index] ? [] : [index],
+      );
+      const expected = [2, 3, 4, 5].map((col) => flatIndex(col, 2));
+      expect(changed.sort((a, b) => a - b)).toEqual(expected);
+      for (const index of expected) expect(next.occupant[index]).toBe(1);
+
+      // AC3: the PROP grid is never mutated — Story 2.8's ring needs the previous value intact.
+      expect(grid.occupant).toEqual(before);
+    },
+  );
+
+  it('no React re-render occurs between down and up (AC2)', () => {
+    const onStrokeCommit = vi.fn();
+    const renderSpy = vi.fn();
+    installContexts();
+    const view = render(
+      <Profiler id="dish" onRender={renderSpy}>
+        <PetriDishCanvas
+          variant="edit"
+          grid={EMPTY_GRID}
+          size={PLACE_SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={onStrokeCommit}
+        />
+      </Profiler>,
+    );
+    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
+    stubRect(canvas);
+    renderSpy.mockClear(); // drop the mount's own commit(s); only the GESTURE matters here.
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    fireEvent.pointerMove(canvas, moveTo(3, 2));
+    fireEvent.pointerMove(canvas, moveTo(4, 2));
+
+    // AC2's whole claim: the in-progress stroke is refs only, so NOTHING re-renders this subtree
+    // while it is live.
+    expect(renderSpy).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(canvas, moveTo(4, 2));
+
+    // `onStrokeCommit` here is a bare vi.fn() — in the real app the PARENT re-renders on commit
+    // and hands a new `grid` prop back down, but nothing about firing the callback itself forces
+    // a re-render of THIS subtree.
+    expect(renderSpy).not.toHaveBeenCalled();
+  });
+
+  it('a move that jumps several cells paints the intervening cells (AC4)', () => {
+    const onStrokeCommit = vi.fn();
+    const markDirtySpy = vi.spyOn(GridRenderer.prototype, 'markDirty');
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(0, 0));
+    // ONE big jump — Playwright's mouse.move with no `steps` sends exactly one pointermove, and
+    // this is that same shape at the unit level.
+    fireEvent.pointerMove(canvas, moveTo(10, 0));
+    fireEvent.pointerUp(canvas, moveTo(10, 0));
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    // Every cell from the anchor to the jump target, not just the endpoints — a dotted line would
+    // leave cols 1-9 empty.
+    for (let col = 0; col <= 10; col++) {
+      expect(committed.occupant[flatIndex(col, 0)]).toBe(1);
+    }
+    expect(markDirtySpy.mock.calls.at(-1)?.[0]).toEqual(
+      Array.from({ length: 10 }, (_, i) => ({ col: i + 1, row: 0 })),
+    );
+  });
+
+  it(
+    'drawFull is never called during the stroke, and the round trip after the commit does not ' +
+      'trigger it either (AC2 + the paintedGridRef trap)',
+    () => {
+      // review (2026-08-27): the describe's own `installContexts()`, not a third inline copy of
+      // the same spy — this test renders directly rather than through `mount()` only because it
+      // needs the `rerender` handle for the commit round trip.
+      installContexts();
+      const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+      const onStrokeCommit = vi.fn();
+
+      const { rerender } = render(
+        <PetriDishCanvas
+          variant="edit"
+          grid={EMPTY_GRID}
+          size={PLACE_SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={onStrokeCommit}
+        />,
+      );
+      expect(drawFullSpy).toHaveBeenCalledTimes(1); // the mount's one full paint.
+
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+      stubRect(canvas);
+
+      fireEvent.pointerDown(canvas, centreOf(2, 2));
+      fireEvent.pointerMove(canvas, moveTo(3, 2));
+      fireEvent.pointerMove(canvas, moveTo(4, 2));
+      expect(drawFullSpy).toHaveBeenCalledTimes(1); // still just the mount's, mid-stroke.
+      fireEvent.pointerUp(canvas, moveTo(4, 2));
+      expect(drawFullSpy).toHaveBeenCalledTimes(1); // and after the commit fires.
+
+      const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+      rerender(
+        <PetriDishCanvas
+          variant="edit"
+          grid={committed}
+          size={PLACE_SIZE}
+          palette={PALETTE}
+          showGridLines
+          colors={COLORS}
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={onStrokeCommit}
+        />,
+      );
+
+      // THE round trip: the committed grid comes back down as a new prop identity, and
+      // `paintedGridRef` must keep the grid effect from full-repainting it.
+      expect(drawFullSpy).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('a move to a point outside the box, then back in, paints no intervening cells (AC5)', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    // Outside the 300x150 box entirely — pointerToCell maps this to `null`.
+    fireEvent.pointerMove(canvas, { clientX: RECT.width + 50, clientY: 50, buttons: 1 });
+    fireEvent.pointerMove(canvas, moveTo(15, 8));
+    fireEvent.pointerUp(canvas, moveTo(15, 8));
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    const changed = [...committed.occupant].flatMap((value, index) => (value === 0 ? [] : [index]));
+    // Only the two cells the pointer was ACTUALLY over inside the dish — no bridged line across
+    // the outside path between (2,2) and (15,8).
+    expect(changed.sort((a, b) => a - b)).toEqual(
+      [flatIndex(2, 2), flatIndex(15, 8)].sort((a, b) => a - b),
+    );
+  });
+
+  it('pointerUp fired outside the canvas element still commits once (AC5)', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    fireEvent.pointerMove(canvas, moveTo(3, 2));
+    // Real `setPointerCapture` retargets the native up event to the CANVAS even though the
+    // pointer is physically outside its box — this fires it at the canvas (the element capture
+    // would retarget to) with coordinates outside the box, which is what that retargeted event
+    // looks like. `endStroke` never reads clientX/Y, so position cannot gate the commit.
+    fireEvent.pointerUp(canvas, { clientX: RECT.width + 200, clientY: 400, pointerId: 0 });
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('pointerCancel mid-stroke terminates once, and a subsequent pointerUp commits nothing (idempotence)', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    fireEvent.pointerMove(canvas, moveTo(3, 2));
+    // Forced decision 2: pointercancel COMMITS the cells already painted.
+    fireEvent.pointerCancel(canvas, { pointerId: 0 });
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+
+    // `endStroke` is idempotent — a pointer-up for the same (already-ended) gesture must not
+    // double-commit. Real browsers fire pointerup AND lostpointercapture for one gesture; this is
+    // the cancel/up pairing's version of the same guarantee.
+    fireEvent.pointerUp(canvas, moveTo(3, 2));
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a lostpointercapture after pointerup does not double-commit (idempotence)', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    fireEvent.pointerUp(canvas, centreOf(2, 2));
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+
+    fireEvent.lostPointerCapture(canvas, { pointerId: 0 });
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second pointerDown with a different pointerId mid-stroke is ignored (AC7)', () => {
+    const onStrokeCommit = vi.fn();
+    const drawSpy = vi.spyOn(GridRenderer.prototype, 'draw');
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    const drawCallsAfterFirstDown = drawSpy.mock.calls.length;
+
+    // A second finger touching down mid-drag — must not hijack the stroke or paint.
+    fireEvent.pointerDown(canvas, { ...centreOf(8, 8), pointerId: 2 });
+    expect(drawSpy.mock.calls.length).toBe(drawCallsAfterFirstDown);
+    fireEvent.pointerMove(canvas, { ...moveTo(9, 8), pointerId: 2 });
+    expect(drawSpy.mock.calls.length).toBe(drawCallsAfterFirstDown);
+
+    // review (2026-08-27): the second pointer's UP must not terminate the stroke it never
+    // started either — the guard the AC7 test above only covered for `pointerdown`/`pointermove`.
+    fireEvent.pointerUp(canvas, { ...centreOf(9, 8), pointerId: 2 });
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+
+    // review (2026-08-27): and neither must a SECONDARY button's release. A mouse reports every
+    // button on one pointerId, so a right-click during a left-drag arrives here as a `pointerup`
+    // with `button === 2` and the left button still held (`buttons === 1`).
+    fireEvent.pointerUp(canvas, { ...centreOf(3, 2), button: 2, buttons: 1 });
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+
+    // The PRIMARY stroke is unaffected and completes normally.
+    fireEvent.pointerMove(canvas, moveTo(3, 2));
+    fireEvent.pointerUp(canvas, moveTo(3, 2));
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    expect(committed.occupant[flatIndex(8, 8)]).toBe(0); // the rejected pointer painted nothing.
+    expect(committed.occupant[flatIndex(9, 8)]).toBe(0);
+  });
+
+  it('a move with no active stroke paints nothing and commits nothing', () => {
+    const onStrokeCommit = vi.fn();
+    const drawSpy = vi.spyOn(GridRenderer.prototype, 'draw');
+    const markDirtySpy = vi.spyOn(GridRenderer.prototype, 'markDirty');
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerMove(canvas, moveTo(5, 5));
+
+    expect(drawSpy).not.toHaveBeenCalled();
+    expect(markDirtySpy).not.toHaveBeenCalled();
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+  });
+
+  it('a drag entirely over cells that already hold the tool’s ref commits nothing (AC6)', () => {
+    const occupant = new Array(200).fill(0) as number[];
+    for (let col = 2; col <= 5; col++) occupant[flatIndex(col, 2)] = 1;
+    const filled = makeGrid(20, 10, occupant);
+
+    const drawSpy = vi.spyOn(GridRenderer.prototype, 'draw');
+    const markDirtySpy = vi.spyOn(GridRenderer.prototype, 'markDirty');
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ grid: filled, onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    fireEvent.pointerMove(canvas, moveTo(5, 2)); // interpolates cols 3-5, already ref 1.
+    fireEvent.pointerUp(canvas, moveTo(5, 2));
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+    expect(markDirtySpy).not.toHaveBeenCalled();
+    expect(drawSpy).not.toHaveBeenCalled();
+  });
+
+  // Trap 5's self-heal, taken (forced decision 5): a move reporting the primary button already
+  // released — capture lost somewhere the canvas never heard about — terminates AND commits, the
+  // same as any other termination reason.
+  it('a pointerMove with event.buttons === 0 self-terminates and commits what was painted so far (trap 5)', () => {
+    const onStrokeCommit = vi.fn();
+    const { canvas } = mount({ onStrokeCommit });
+
+    fireEvent.pointerDown(canvas, centreOf(2, 2));
+    fireEvent.pointerMove(canvas, { ...centreOf(6, 2), buttons: 0 });
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    const committed = onStrokeCommit.mock.calls[0][0] as RenderableGrid;
+    expect(committed.occupant[flatIndex(2, 2)]).toBe(1); // the down-painted cell only.
+    expect(committed.occupant[flatIndex(6, 2)]).toBe(0); // the move itself never painted.
+
+    // The stroke already ended — a later up for the same pointer must not double-commit.
+    fireEvent.pointerUp(canvas, centreOf(6, 2));
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
   });
 });

@@ -93,6 +93,21 @@ const DishCanvas = styled(PetriDishCanvas)({
   // reversible. Styled HERE, not in <PetriDishCanvas>, because only the EDIT variant is
   // paintable and this styled wrapper is edit-only.
   cursor: 'crosshair',
+  // Story 2.6 forced decision 4 / AC8, closing the deferred-work.md entry this story owns.
+  // `touch-action: none` is the declarative, capture-friendly form RFC-002 Risk 5's whole
+  // rationale for Pointer Events (touch support) actually needs: it must be CSS on the element
+  // receiving the pointer, set BEFORE the gesture starts — setting it from inside a handler is
+  // too late for the gesture already in progress. Without it, a touch drag on the dish scrolls
+  // the page instead of painting, fighting `<PetriDishCanvas>`'s stroke for the same input.
+  // `userSelect: 'none'` is the narrower mouse-side counterpart: a fast mouse drag across the
+  // dish would otherwise start a native text/image selection, the same "browser fighting the
+  // gesture" AC8 names for touch. Neither of these calls `event.preventDefault()` on
+  // pointer-down — both are declarative CSS the UA reads before the gesture starts, which is
+  // sufficient for what AC8 actually asks (no scroll, no selection); `preventDefault()` would
+  // additionally suppress native drag-and-drop, which nothing here needs and which cannot be
+  // expressed as CSS, so it stays unused rather than added "for completeness".
+  touchAction: 'none',
+  userSelect: 'none',
 });
 
 /**

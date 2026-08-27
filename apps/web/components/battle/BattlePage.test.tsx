@@ -86,6 +86,17 @@ function centreOfCell(
   };
 }
 
+/**
+ * Story 2.6: a click is the degenerate stroke — pointer-DOWN paints, pointer-UP commits (trap 2).
+ * Every "click" fixture below now needs both events, at the SAME point, to close the gesture:
+ * without the up, `strokeRef` stays open and a later pointer-down at a DIFFERENT cell would be
+ * rejected outright by AC7's "one stroke at a time" guard, rather than opening a new click.
+ */
+function click(canvas: HTMLCanvasElement, at: ReturnType<typeof centreOfCell>): void {
+  fireEvent.pointerDown(canvas, at);
+  fireEvent.pointerUp(canvas, at);
+}
+
 // Always the real factory from @gol/test-utils — a hand-rolled fake in a test file is what the
 // shared fixtures exist to prevent (project-context, Testing rules).
 function seeded(overrides: readonly Battle[] = battles): AppRepositories {
@@ -451,7 +462,7 @@ describe('BattlePage', () => {
     // full-repaints. A second construction is a second getContext() call.
     const canvas = document.querySelector('canvas') as HTMLCanvasElement;
     stubCanvasRect(canvas);
-    fireEvent.pointerDown(canvas, centreOfCell(canvas, SKIRMISH.gridSize, 2, 2));
+    click(canvas, centreOfCell(canvas, SKIRMISH.gridSize, 2, 2));
     rerender(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
 
     expect(getContextSpy.mock.calls.length).toBe(callsAfterMount);
@@ -549,7 +560,7 @@ describe('BattlePage — click placement wiring (Story 2.5)', () => {
     const opsBefore = recording.calls.length;
     const fillsBefore = recording.fillStyleWrites.length;
 
-    fireEvent.pointerDown(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 10, 10));
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 10, 10));
 
     expect(recording.calls.length).toBeGreaterThan(opsBefore);
     const clickFills = recording.fillStyleWrites.slice(fillsBefore);
@@ -570,20 +581,20 @@ describe('BattlePage — click placement wiring (Story 2.5)', () => {
     const first = centreOfCell(canvas, NEW_ROUTE_SIZE, 10, 10);
     const second = centreOfCell(canvas, NEW_ROUTE_SIZE, 20, 12);
 
-    fireEvent.pointerDown(canvas, first);
+    click(canvas, first);
     const afterFirst = recording.calls.length;
     expect(afterFirst).toBeGreaterThan(0);
 
-    fireEvent.pointerDown(canvas, first); // redundant — AC7, all the way through the page
+    click(canvas, first); // redundant — AC7, all the way through the page
     expect(recording.calls.length).toBe(afterFirst);
 
-    fireEvent.pointerDown(canvas, second);
+    click(canvas, second);
     const afterSecond = recording.calls.length;
     expect(afterSecond).toBeGreaterThan(afterFirst);
 
     // …and the FIRST cell is still occupied after the second commit: re-clicking it is still a
     // no-op. A commit that replaced rather than accumulated would have cleared it.
-    fireEvent.pointerDown(canvas, first);
+    click(canvas, first);
     expect(recording.calls.length).toBe(afterSecond);
   });
 
@@ -610,7 +621,7 @@ describe('BattlePage — click placement wiring (Story 2.5)', () => {
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
     stubCanvasRect(canvas);
 
-    fireEvent.pointerDown(canvas, centreOfCell(canvas, SKIRMISH.gridSize, 4, 4));
+    click(canvas, centreOfCell(canvas, SKIRMISH.gridSize, 4, 4));
 
     expect(JSON.stringify(storedGridState)).toBe(beforeGrid);
     expect([...storedRoster]).toEqual(beforeRoster);
@@ -654,12 +665,12 @@ describe('BattlePage — click placement wiring (Story 2.5)', () => {
     // `battle.organismIds` alone leaves the appended session ref out of range, `colourStateAt`
     // folds it to EMPTY, and this delta is 0.
     const beforeClick = recording.calls.length;
-    fireEvent.pointerDown(canvas, at);
+    click(canvas, at);
     const afterFirst = recording.calls.length;
     expect(afterFirst).toBeGreaterThan(beforeClick);
 
     // Re-clicking is a no-op only if the first click actually placed the session organism there.
-    fireEvent.pointerDown(canvas, at);
+    click(canvas, at);
     expect(recording.calls.length).toBe(afterFirst);
   });
 });
