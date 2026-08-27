@@ -721,3 +721,18 @@ change. ❌ No renderer contract change (AC6's preferred answer).
 | 2026-08-27 | 1.0 | Implemented: add-from-library search + dropdown, sessionRoster writer, addable-library and cap derivations, add-and-select wiring; `setPalette` deferred entry closed on evidence; full `npm run ci` green | dev-story |
 
 Dev Model: sonnet   # follows the chassis, roster component, resolver and selection contract Story 2.9 already established — this adds two controls and one state cell into an existing section, and its one open architectural question (the deferred `setPalette` entry) is pre-analysed here down to a verify-and-close
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 27s | 24 | 2,275 | 12,603 | 480,054 | 494,956 |
+| Step 1 — create-story | opus-5 | 1 | 7m 17s | 166 | 7,181 | 469,200 | 8,300,780 | 8,777,327 |
+| Step 2 — dev-story | sonnet-5 | 1 | 23m 40s | 590 | 31,486 | 722,072 | 77,199,796 | 77,953,944 |
+| Step 3 — code review + PR | opus-5 | 4 | 33m 15s | 1,448 | 99,609 | 1,016,350 | 135,033,009 | 136,150,416 |
+| _of which the orchestrator_ | opus-5 | — | — | 52 | 8,139 | 29,743 | 1,150,577 | 1,188,511 |
+| **Total (create-story → PR ready)** | | 6 | **1h 04m** | 2,228 | 140,551 | 2,220,225 | 221,013,639 | **223,376,643** |
+
+Run started 2026-08-27 16:10 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
