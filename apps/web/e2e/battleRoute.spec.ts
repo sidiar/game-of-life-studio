@@ -1,6 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { CURRENT_FORMAT_VERSION } from '@gol/domain';
+import { CONWAYS_CLASSIC, CURRENT_FORMAT_VERSION } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 import { createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
 
@@ -41,6 +41,50 @@ async function seedWorkspace(page: Page) {
     },
     [STORAGE_KEYS, CURRENT_FORMAT_VERSION, payload] as const,
   );
+}
+
+/**
+ * Adds Conway's Classic to the seeded organism library, as a SEPARATE init script layered on top
+ * of seedWorkspace().
+ *
+ * WARNING: `createMockWorkspace()` returns three fixtures and no Conway, while seedWorkspace()
+ * stamps `gol:schema` specifically so the default seed will not add it — so in an e2e-seeded
+ * workspace the editor's default tool points at a DANGLING roster id: `buildRefToFillGroup` warns
+ * once and falls back to DEFAULT_COLOR_TOKEN (Decision I.4). The dish still paints, so a smoke
+ * check still passes; seeding the organism makes the placement test exercise the real colour path
+ * instead. In production Conway's Classic is always present (M9: protected, re-seeded on import).
+ *
+ * Deliberately NOT folded into buildSeedPayload/seedWorkspace: those two are hand-synced copies
+ * across three spec files (deferred-work.md), and editing one of them here would create exactly
+ * the silent divergence that entry warns about. Init scripts run in registration order, so this
+ * reads back what seedWorkspace wrote and merges into it.
+ */
+async function seedConwaysClassic(page: Page) {
+  await page.addInitScript(
+    ([keys, organism]) => {
+      const key = (keys as Record<string, string>).organisms;
+      const stored = localStorage.getItem(key);
+      const record = stored === null ? {} : (JSON.parse(stored) as Record<string, unknown>);
+      record[(organism as { id: string }).id] = organism;
+      localStorage.setItem(key, JSON.stringify(record));
+    },
+    [STORAGE_KEYS, JSON.parse(JSON.stringify(CONWAYS_CLASSIC)) as unknown] as const,
+  );
+}
+
+/** Distinct RGBA values actually rasterised on a canvas — the AR-42-permitted smoke check. */
+async function distinctColorCount(canvas: Locator): Promise<number> {
+  return canvas.evaluate((el) => {
+    const canvasEl = el as HTMLCanvasElement;
+    const ctx = canvasEl.getContext('2d');
+    if (ctx === null) return 0;
+    const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+    const seen = new Set<string>();
+    for (let i = 0; i < data.length; i += 4) {
+      seen.add([data[i], data[i + 1], data[i + 2], data[i + 3]].join(','));
+    }
+    return seen.size;
+  });
 }
 
 // The e2e serves the PRODUCTION static export (playwright.config.ts), which is the only place
@@ -186,21 +230,65 @@ test.describe('battle route (Story 2.1)', () => {
     const canvas = page.getByRole('img', { name: /petri dish/i });
     await expect(canvas).toBeAttached();
 
-    const distinctColorCount = await canvas.evaluate((el) => {
-      const canvasEl = el as HTMLCanvasElement;
-      const ctx = canvasEl.getContext('2d');
-      if (ctx === null) return 0;
-      const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
-      const seen = new Set<string>();
-      for (let i = 0; i < data.length; i += 4) {
-        seen.add(`${data[i]},${data[i + 1]},${data[i + 2]},${data[i + 3]}`);
-      }
-      return seen.size;
-    });
+    // review (2026-08-26): was an inline duplicate of Story 2.5's `distinctColorCount` helper
+    // (below), added to this same file for the click-placement smoke check. One copy, not two.
+    const count = await distinctColorCount(canvas);
 
     // > 2, not > 1: background + grid lines are already two distinct colours before a single
     // organism cell is drawn. Three distinct colours cannot be reached without at least one
     // organism actually painted.
-    expect(distinctColorCount).toBeGreaterThan(2);
+    expect(count).toBeGreaterThan(2);
+  });
+
+  // Story 2.5 (AC1, AC3, AC6): THE test that proves the whole chain end to end — real DPR, real
+  // layout, real getBoundingClientRect, real roster-union ref allocation. jsdom has no layout at
+  // all, so every unit test stubs the canvas box; this is the only place the pointer -> cell
+  // mapping meets geometry the browser actually produced.
+  test('clicking the dish places an organism on /battle/new (AC1, AC3, AC6)', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    await expect(canvas).toBeAttached();
+
+    // A fresh draft is an all-empty grid, so every colour on screen belongs to the dish surface
+    // and its grid lines. The exact count is NOT the claim — the semi-transparent line colour
+    // composites, and the closing bars at the far edge overlap — so this pins the floor and the
+    // RISE below is what proves a cell was painted.
+    const before = await distinctColorCount(canvas);
+    expect(before).toBeGreaterThanOrEqual(2);
+
+    // Dead centre of the dish — comfortably inside the grid at either editable preset, so this
+    // does not depend on which default the seeded settings carry.
+    await canvas.click();
+
+    // A third colour cannot appear unless a cell was actually painted in an organism's colour,
+    // which needs the mapping, the roster union's ref allocation AND the palette built over that
+    // union to all be right (trap 3: an out-of-range ref paints as EMPTY, silently).
+    await expect
+      .poll(async () => distinctColorCount(canvas), { timeout: 2000 })
+      .toBeGreaterThan(before);
+
+    expect(errors).toEqual([]);
+  });
+
+  // The dish gained pointer handling; role="img" and its accessible name are unchanged (Story 2.4
+  // forced decision, Story 2.5 forced decision 5 — still no tabIndex, and the keyboard-placement
+  // gap is recorded as deferred work rather than invented here).
+  test('has no axe accessibility violations on /battle/new after a placement', async ({ page }) => {
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    await page.getByRole('img', { name: /petri dish/i }).click();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
   });
 });
