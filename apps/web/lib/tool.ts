@@ -1,8 +1,8 @@
 /**
  * The editor's tool model (component-tree-battle-page.md#3.4). Lives in `lib/` rather than inside
  * any one component because three of them need it: `<PetriDishCanvas>` (`components/`),
- * `<BattleEditorView>` (`components/battle/`) and, from Story 2.9, `<OrganismRoster>` — declaring
- * it inside any one of those would make the other two import from a sibling component file. Not
+ * `<BattleEditorView>` (`components/battle/`) and `<OrganismRoster>` (Story 2.9) — declaring it
+ * inside any one of those would make the other two import from a sibling component file. Not
  * `lib/canvas/`: a tool is an editor concept, not a rendering one.
  *
  * Spec §3.4's TWO-arm union, verbatim (Story 2.7): `{ kind: 'organism'; organismId } | { kind:
@@ -14,12 +14,24 @@ import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 export type Tool = { kind: 'organism'; organismId: string } | { kind: 'eraser' };
 
 /**
- * The selection until the roster UI exists (Story 2.9). A module-level constant, not a fresh
- * literal per render: it seeds `<BattleEditorView>`'s `selectedTool` state and feeds a memo, and a
- * churning identity there would rebuild the resolved ref on every render.
+ * The FALLBACK organism a battle with nothing placed is made paintable with.
+ *
+ * ⚠️ Story 2.9 narrowed what this means, and the old reading is the trap. It is no longer "the
+ * editor's initial selection": `<BattleEditorView>` now selects the FIRST ROSTER ROW (spec §3.3,
+ * Story 2.9 forced decision 4), because a roster the user can see must not contain an organism the
+ * user never added — opening a battle with three organisms and finding Conway's Classic listed
+ * fourth contradicts Decision H.1's "used by a battle means PLACED".
+ *
+ * What it still is: the id `<BattlePage>` seeds the roster union with when that union would
+ * otherwise be EMPTY (`/battle/new`, or a battle H.1 pruned to nothing). Without it there would be
+ * no first row to select and the dish would be unpaintable until Story 2.10 ships the add-from-
+ * library dropdown.
+ *
+ * A module-level constant, not a fresh literal per render: it feeds a memo, and a churning
+ * identity would rebuild the resolved ref on every render.
  *
  * Conway's Classic is always present in a production workspace (M9: protected, re-seeded after
- * import), so this id always resolves against the session roster union `<BattlePage>` builds.
+ * import), so the seeded id always resolves to a real organism.
  */
 export const DEFAULT_TOOL: Extract<Tool, { kind: 'organism' }> = Object.freeze({
   kind: 'organism',

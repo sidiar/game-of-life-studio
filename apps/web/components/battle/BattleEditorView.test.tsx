@@ -8,6 +8,7 @@ import { fireEvent } from '@testing-library/react';
 import { RecordingContext2D } from '@/lib/recordingContext2d';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
+import type { DisplayOrganism } from '@/lib/displayOrganisms';
 import BattleEditorView from './BattleEditorView';
 
 const COLORS = { background: '#0a0a0a', gridLine: 'rgb(51 51 51 / 0.3)' };
@@ -32,9 +33,17 @@ function makeLut(tokenIndex: number[], aging: number[]): RefToFillGroup {
 
 const GRID = makeGrid(2, 2, [1, 0, 0, 1]);
 const PALETTE = makeLut([0, 0], [0, 0]);
-// The roster union <BattlePage> owns. Conway's Classic is index 0, so the default tool resolves
+// The roster union <BattlePage> owns. Conway's Classic is index 0, so a tool selecting it resolves
 // to ref 1 — the same `index + 1` encoding the palette LUT above is built on.
-const ROSTER = [CONWAYS_CLASSIC_ID];
+const ROSTER: readonly DisplayOrganism[] = [
+  {
+    id: CONWAYS_CLASSIC_ID,
+    name: "Conway's Classic",
+    color: '#56B4E9',
+    colorToken: 'sky-blue',
+  },
+];
+const ROSTER_IDS = ROSTER.map((organism) => organism.id);
 
 // Story 2.8: the prop set every bare render below supplies identically, in ONE place. Four call
 // sites had hand-copied it, so this story's two new props would have meant four identical edits —
@@ -47,7 +56,8 @@ function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>
       palette={PALETTE}
       showGridLines
       colors={COLORS}
-      rosterIds={ROSTER}
+      rosterIds={ROSTER_IDS}
+      roster={ROSTER}
       onCommitGrid={() => {}}
       onUndo={() => {}}
       canUndo={false}
@@ -75,34 +85,52 @@ describe('BattleEditorView', () => {
     expect(container.querySelector('canvas')).toBeNull();
   });
 
-  // AC5 (Story 2.5) — this story shipped display-only: no sidebar, no status bar, no button, and
-  // no inert placeholder standing in for any of them (NFR-4.1). Story 2.7 adds the FIRST working
-  // control (the provisional tool toggle below), so "no button" is no longer the claim — updated
-  // rather than left asserting something now false. What still does not exist is unchanged: no
-  // sidebar, no status bar, no textbox. Assert the ABSENCE, the way BattleHeader.test.tsx asserts
-  // the mode toggle's absence — a presence-only check elsewhere would still pass once a dead
-  // placeholder is added beside the canvas.
-  it('renders no sidebar or textbox — only the tool toggle and the status bar’s UNDO (AC5)', () => {
+  // Story 2.9 AC1: the sidebar arrives, and "renders no sidebar" — true from Story 2.5 through
+  // 2.8 — is now false by design. What replaces it is the same claim in its new shape: exactly
+  // ONE section, and nothing standing in for the four that belong to later stories.
+  it('renders the Lab sidebar with Organisms as its only section (AC1)', () => {
     renderEditor();
 
+    const sidebar = screen.getByRole('complementary');
+    expect(sidebar).toBeInTheDocument();
+    const headings = screen.getAllByRole('heading', { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual(['Organisms']);
+  });
+
+  // NFR-4.1, asserted as ABSENCE — a presence-only check elsewhere still passes once a dead
+  // placeholder is added beside the canvas.
+  it('renders no other sidebar section, no footer, and no textbox (AC5)', () => {
+    renderEditor();
+
+    // Battle Name (2.11) is the textbox; Grid Info (2.14), Tools (2.15) and the Back button
+    // (2.16) are the rest of the mockup's sidebar.
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
-    expect(screen.queryAllByRole('complementary')).toHaveLength(0);
+    expect(screen.queryByText(/battle name/i)).toBeNull();
+    expect(screen.queryByText(/grid size/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /back/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /clear/i })).toBeNull();
     expect(screen.queryAllByRole('status')).toHaveLength(0);
-    // The toggle's own group carries the accessible name; nothing else claims 'toolbar'.
     expect(screen.queryAllByRole('toolbar')).toHaveLength(0);
-    // Exactly three buttons — Draw, Erase and Undo — nothing more. Story 2.8 added the third:
-    // <EditorStatusBar> ships with UNDO ALONE, so the SAVE button (2.13) and the stats row (2.12)
-    // must still be absent, which is what the count pins. review (2026-08-27): named, not merely
-    // counted — a bare length check passes if one control is swapped for a dead one, the exact
-    // failure the surrounding NFR-4.1 claim is about.
-    expect(screen.getByRole('button', { name: 'Draw' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Erase' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(3);
-    expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
-    // 2.12's stats row: no Generation / Living Cells text anywhere yet (NFR-4.1).
+    // 2.12's stats row: no Generation / Living Cells text anywhere yet.
     expect(screen.queryByText(/generation/i)).toBeNull();
     expect(screen.queryByText(/living cells/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
+  });
+
+  // AC3: Story 2.7's provisional toggle is DELETED, in the commit that ships its replacement. A
+  // route carrying two live tool pickers is the worst form of the dead affordance NFR-4.1 forbids.
+  // Named, not merely counted: a count alone passes if the toggle is renamed rather than removed.
+  it('renders NO Draw/Erase toggle — the roster replaced it (AC3)', () => {
+    renderEditor();
+
+    expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Erase' })).toBeNull();
+    expect(screen.queryByRole('group', { name: /editing tool/i })).toBeNull();
+    // Exactly the roster's one row, the eraser and UNDO — nothing more.
+    expect(screen.getByRole('button', { name: "Conway's Classic" })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 });
 
@@ -114,9 +142,20 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   const PLACE_SIZE = { cols: 20, rows: 10 };
   const CELL = 15;
   const EMPTY_GRID = makeGrid(20, 10, new Array(200).fill(0));
-  // Conway's Classic deliberately SECOND: a default tool that resolved to "whatever is first"
-  // would give ref 1 here and the assertion below could not tell the two apart.
-  const ROSTER_WITH_CONWAY_SECOND = ['some-other-organism', CONWAYS_CLASSIC_ID];
+  // Conway's Classic deliberately SECOND. Story 2.9 inverted what this pins: the initial selection
+  // is now the FIRST ROSTER ROW (forced decision 4), not `DEFAULT_TOOL`, so an unclicked editor
+  // must paint ref 1 here — and clicking Conway's own row must paint ref 2. A roster with Conway
+  // first could not tell those two rules apart.
+  const TWO_ORGANISMS: readonly DisplayOrganism[] = [
+    {
+      id: 'some-other-organism',
+      name: 'Other Organism',
+      color: '#D55E00',
+      colorToken: 'vermillion',
+    },
+    { id: CONWAYS_CLASSIC_ID, name: "Conway's Classic", color: '#56B4E9', colorToken: 'sky-blue' },
+  ];
+  const ROSTER_WITH_CONWAY_SECOND = TWO_ORGANISMS.map((organism) => organism.id);
   const PALETTE_3 = makeLut([0, 0, 0], [0, 0, 0]);
 
   afterEach(() => {
@@ -130,18 +169,19 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   //
   // Story 2.7: also returns `rerenderWithGrid`, standing in for <BattlePage> feeding a committed
   // grid back down as the next `grid` prop — the round trip the "switches tool ref" test below
-  // needs to prove an erase actually empties a cell the PRIOR commit painted. review (2026-08-27):
-  // the three pre-existing call sites were updated to destructure `{ canvas }` in this same change
-  // — the previous wording here claimed they were untouched.
+  // needs to prove an erase actually empties a cell the PRIOR commit painted.
   //
-  // Story 2.8: `onUndo` / `canUndo` are parameters here for the same reason `rosterIds` is one —
-  // the undo forwarding tests need to vary them without a second hand-copied mount.
+  // Story 2.8: `onUndo` / `canUndo` are parameters here for the same reason `rosterIds` is one.
+  //
+  // Story 2.9: the roster is now a pair — the DISPLAY list and the IDENTITY ids (trap 2) — and
+  // they are passed as one parameter so a test cannot accidentally desynchronise them.
   function mountEditor(
     onCommitGrid: (next: RenderableGrid) => void,
-    rosterIds: readonly string[] = ROSTER_WITH_CONWAY_SECOND,
+    roster: readonly DisplayOrganism[] = TWO_ORGANISMS,
     undo: { onUndo?: () => void; canUndo?: boolean } = {},
   ) {
     const { onUndo = () => {}, canUndo = false } = undo;
+    const rosterIds = roster.map((organism) => organism.id);
     const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
       this: HTMLCanvasElement,
@@ -162,6 +202,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
         showGridLines
         colors={COLORS}
         rosterIds={rosterIds}
+        roster={roster}
         onCommitGrid={onCommitGrid}
         onUndo={onUndo}
         canUndo={canUndo}
@@ -190,6 +231,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
           showGridLines
           colors={COLORS}
           rosterIds={rosterIds}
+          roster={roster}
           onCommitGrid={onCommitGrid}
           onUndo={onUndo}
           canUndo={nextCanUndo}
@@ -200,34 +242,33 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
     return { canvas, container: view.container, rerenderWithGrid };
   }
 
+  const at = (col: number, row: number) => ({
+    clientX: col * CELL + CELL / 2,
+    clientY: row * CELL + CELL / 2,
+    button: 0,
+    isPrimary: true,
+  });
+
+  function paint(canvas: HTMLCanvasElement, col: number, row: number): void {
+    fireEvent.pointerDown(canvas, at(col, row));
+    fireEvent.pointerUp(canvas, at(col, row));
+  }
+
   // AC4 + AC5 in one falsifiable assertion. The committed cell's value is `index + 1` into the
-  // roster (RFC-006 Decision 2), so ref 2 proves BOTH that the canvas's onStrokeCommit reached
-  // onCommitGrid unchanged AND that the selected tool is Conway's Classic rather than "the first
-  // roster entry".
-  it('forwards the canvas commit to onCommitGrid, carrying the DEFAULT tool’s ref (AC4, AC5)', () => {
+  // roster (RFC-006 Decision 2), so ref 1 proves BOTH that the canvas's onStrokeCommit reached
+  // onCommitGrid unchanged AND that the selection defaults to the FIRST ROSTER ROW rather than to
+  // Conway's Classic, which sits at index 1 here.
+  it('forwards the canvas commit to onCommitGrid, carrying the FIRST roster row’s ref (AC4, AC5)', () => {
     const onCommitGrid = vi.fn();
     const { canvas } = mountEditor(onCommitGrid);
 
     // Story 2.6: the commit lands on pointer-up, not pointer-down (trap 2).
-    fireEvent.pointerDown(canvas, {
-      clientX: 3 * CELL + CELL / 2,
-      clientY: 4 * CELL + CELL / 2,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerUp(canvas, {
-      clientX: 3 * CELL + CELL / 2,
-      clientY: 4 * CELL + CELL / 2,
-      button: 0,
-      isPrimary: true,
-    });
+    paint(canvas, 3, 4);
 
     expect(onCommitGrid).toHaveBeenCalledTimes(1);
     const next = onCommitGrid.mock.calls[0][0] as RenderableGrid;
     expect(next).not.toBe(EMPTY_GRID);
-    expect(next.occupant[4 * PLACE_SIZE.cols + 3]).toBe(
-      ROSTER_WITH_CONWAY_SECOND.indexOf(CONWAYS_CLASSIC_ID) + 1,
-    );
+    expect(next.occupant[4 * PLACE_SIZE.cols + 3]).toBe(1);
     // Nothing is transformed on the way through: every other cell is untouched.
     expect([...next.occupant].filter((v) => v !== 0)).toHaveLength(1);
   });
@@ -240,12 +281,6 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   it('coalesces a whole drag into ONE onCommitGrid call carrying every traversed cell (AC4, AC5)', () => {
     const onCommitGrid = vi.fn();
     const { canvas } = mountEditor(onCommitGrid);
-    const at = (col: number, row: number) => ({
-      clientX: col * CELL + CELL / 2,
-      clientY: row * CELL + CELL / 2,
-      button: 0,
-      isPrimary: true,
-    });
 
     fireEvent.pointerDown(canvas, at(2, 4));
     // `buttons: 1` is the move-time bitmask — `button` is -1 on a pointermove, and a move
@@ -259,32 +294,32 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
 
     expect(onCommitGrid).toHaveBeenCalledTimes(1);
     const next = onCommitGrid.mock.calls[0][0] as RenderableGrid;
-    const ref = ROSTER_WITH_CONWAY_SECOND.indexOf(CONWAYS_CLASSIC_ID) + 1;
     const painted = [...next.occupant].flatMap((value, index) => (value === 0 ? [] : [index]));
     expect(painted).toEqual(
       Array.from({ length: 7 }, (_, i) => 4 * PLACE_SIZE.cols + (i + 2)), // cols 2..8 on row 4
     );
-    for (const index of painted) expect(next.occupant[index]).toBe(ref);
+    for (const index of painted) expect(next.occupant[index]).toBe(1);
   });
 
-  // The tool resolves against the roster it is GIVEN. An empty roster means no ref, and a click
-  // must then place nothing rather than writing ref 0 — which means EMPTY (Story 2.7's eraser).
-  it('commits nothing when the roster contains no match for the selected tool', () => {
+  // Forced decision 4 / spec §3.3: "eraser when the roster is empty". Before Story 2.9 this case
+  // selected an organism tool that resolved to NO ref, and the click placed nothing because the
+  // lookup failed. Now the selection itself degrades to the eraser, so nothing is placed because
+  // nothing is selected to place — a different mechanism reaching the same visible outcome, and
+  // the assertion says which.
+  it('falls back to the eraser — never a dangling organism tool — for an empty roster (AC2)', () => {
     const onCommitGrid = vi.fn();
     const { canvas } = mountEditor(onCommitGrid, []);
 
-    fireEvent.pointerDown(canvas, {
-      clientX: 3 * CELL + CELL / 2,
-      clientY: 4 * CELL + CELL / 2,
-      button: 0,
-      isPrimary: true,
-    });
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
 
+    paint(canvas, 3, 4);
+    // Erasing an already-empty cell changes nothing, so no gesture crosses the seam.
     expect(onCommitGrid).not.toHaveBeenCalled();
   });
 
-  // Forced decision 6: a paintable surface that keeps the default arrow reads as inert. Styled on
-  // the EDIT wrapper only — the Gallery's static tiles must not advertise interaction.
+  // Forced decision 6 (Story 2.5): a paintable surface that keeps the default arrow reads as
+  // inert. Styled on the EDIT wrapper only — the Gallery's static tiles must not advertise
+  // interaction.
   it('gives the editor dish a placement cursor', () => {
     const { container } = renderEditor();
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
@@ -300,143 +335,6 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
     expect(getComputedStyle(canvas).userSelect).toBe('none');
   });
 
-  // Story 2.7 AC5: the provisional toggle is reachable and operable by keyboard, and its selected
-  // state is exposed to assistive tech — not by colour alone.
-  it('the tool toggle is keyboard-operable and exposes its selected state via aria-pressed (AC5)', async () => {
-    const user = userEvent.setup();
-    mountEditor(vi.fn());
-
-    const drawButton = screen.getByRole('button', { name: 'Draw' });
-    const eraseButton = screen.getByRole('button', { name: 'Erase' });
-
-    // DEFAULT_TOOL is Conway's Classic (the 'organism' arm) before any interaction.
-    expect(drawButton).toHaveAttribute('aria-pressed', 'true');
-    expect(eraseButton).toHaveAttribute('aria-pressed', 'false');
-
-    // The dish carries no tabIndex (deferred-work.md, unchanged by this story), so Draw — the
-    // group's roving tabIndex=0 member, being selected — is the FIRST (and only) tab stop into
-    // the group; ArrowRight is the roving-tabindex pattern's own way to reach a sibling button
-    // (MUI's ToggleButtonGroup, not a second Tab stop — the non-selected button carries
-    // tabIndex=-1 exactly as WAI-ARIA's toolbar/radiogroup pattern specifies).
-    await user.tab();
-    expect(drawButton).toHaveFocus();
-    await user.keyboard('{ArrowRight}');
-    expect(eraseButton).toHaveFocus();
-    await user.keyboard('{Enter}');
-
-    expect(eraseButton).toHaveAttribute('aria-pressed', 'true');
-    expect(drawButton).toHaveAttribute('aria-pressed', 'false');
-  });
-
-  // Dev Notes "Latest technical information": MUI's exclusive ToggleButtonGroup fires onChange
-  // with `value === null` when the already-selected option is clicked again — unhandled, that
-  // would set the tool to nothing (an unresolvable `tool.kind`). Pin that it is ignored instead.
-  // review (2026-08-27): this asserted on the already-selected DRAW button, which is the one case
-  // the guard cannot affect — without `if (value === null) return;` the ternary sends null to
-  // DEFAULT_TOOL, i.e. Draw, and the test stayed green. Deleting the guard reddened nothing. The
-  // discriminating case is the already-selected ERASE button: unguarded, null falls through to
-  // DEFAULT_TOOL and the tool silently snaps back to Draw under the user's finger.
-  it('clicking the already-selected toggle option leaves the tool unchanged', async () => {
-    const user = userEvent.setup();
-    mountEditor(vi.fn());
-    const drawButton = screen.getByRole('button', { name: 'Draw' });
-    const eraseButton = screen.getByRole('button', { name: 'Erase' });
-
-    await user.click(eraseButton);
-    expect(eraseButton).toHaveAttribute('aria-pressed', 'true');
-
-    // Clicking Erase AGAIN is MUI's `value === null` path. The eraser must stay selected.
-    await user.click(eraseButton);
-    expect(eraseButton).toHaveAttribute('aria-pressed', 'true');
-    expect(drawButton).toHaveAttribute('aria-pressed', 'false');
-
-    // And the same for Draw, the case that was already covered.
-    await user.click(drawButton);
-    await user.click(drawButton);
-    expect(drawButton).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  // Story 2.7 Task 6: the toggle SWITCHES `toolRef` — from the default tool's roster ref to the
-  // eraser's 0 and back — and a gesture after switching still crosses the commit seam exactly
-  // once. `rerenderWithGrid` stands in for <BattlePage> feeding the committed grid back down,
-  // which is what lets the erase click below land on a cell a PRIOR commit actually painted.
-  it(
-    'switches the paint ref from the default tool’s roster ref to the eraser’s 0 and back, one ' +
-      'commit per gesture (AC4, AC5)',
-    async () => {
-      const user = userEvent.setup();
-      const onCommitGrid = vi.fn();
-      // ROSTER_WITH_CONWAY_SECOND resolves Conway's Classic to ref 2 (index 1 + 1).
-      const { canvas, rerenderWithGrid } = mountEditor(onCommitGrid);
-      const index = (col: number, row: number) => row * PLACE_SIZE.cols + col;
-      const paint = (col: number, row: number) => {
-        const at = {
-          clientX: col * CELL + CELL / 2,
-          clientY: row * CELL + CELL / 2,
-          button: 0,
-          isPrimary: true,
-        };
-        fireEvent.pointerDown(canvas, at);
-        fireEvent.pointerUp(canvas, at);
-      };
-
-      paint(3, 4);
-      expect(onCommitGrid).toHaveBeenCalledTimes(1);
-      const painted = onCommitGrid.mock.calls[0][0] as RenderableGrid;
-      expect(painted.occupant[index(3, 4)]).toBe(2);
-      rerenderWithGrid(painted); // the real round trip: the committed grid becomes the new prop.
-
-      await user.click(screen.getByRole('button', { name: 'Erase' }));
-      paint(3, 4); // the SAME cell, now occupied — the eraser must actually commit here.
-
-      expect(onCommitGrid).toHaveBeenCalledTimes(2);
-      const erased = onCommitGrid.mock.calls[1][0] as RenderableGrid;
-      expect(erased.occupant[index(3, 4)]).toBe(0);
-      rerenderWithGrid(erased);
-
-      await user.click(screen.getByRole('button', { name: 'Draw' }));
-      paint(6, 7);
-
-      expect(onCommitGrid).toHaveBeenCalledTimes(3);
-      const backToDraw = onCommitGrid.mock.calls[2][0] as RenderableGrid;
-      expect(backToDraw.occupant[index(6, 7)]).toBe(2);
-    },
-  );
-
-  // review (2026-08-27): the claim Task 3's last bullet actually asks for, at the level where it
-  // is observable. `PetriDishCanvas.test.tsx`'s "empty roster" eraser test cannot make it — the
-  // canvas never receives `rosterIds`, so it is handed `toolRef={0}` either way. Only here does a
-  // real `refForTool(ERASER_TOOL, [])` resolution reach the commit seam, which is the one case
-  // where the eraser and the organism tool legitimately differ: the organism tool commits nothing
-  // against an empty roster (test above), the eraser still erases.
-  it('erases through the commit seam even when the roster is EMPTY (AC4, Task 3)', async () => {
-    const user = userEvent.setup();
-    const onCommitGrid = vi.fn();
-    const painted = new Uint8Array(PLACE_SIZE.cols * PLACE_SIZE.rows);
-    const index = 4 * PLACE_SIZE.cols + 3;
-    painted[index] = 1;
-    const { canvas, rerenderWithGrid } = mountEditor(onCommitGrid, []);
-    rerenderWithGrid({
-      width: PLACE_SIZE.cols,
-      height: PLACE_SIZE.rows,
-      occupant: painted,
-      age: EMPTY_GRID.age,
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Erase' }));
-    const at = {
-      clientX: 3 * CELL + CELL / 2,
-      clientY: 4 * CELL + CELL / 2,
-      button: 0,
-      isPrimary: true,
-    };
-    fireEvent.pointerDown(canvas, at);
-    fireEvent.pointerUp(canvas, at);
-
-    expect(onCommitGrid).toHaveBeenCalledTimes(1);
-    expect((onCommitGrid.mock.calls[0][0] as RenderableGrid).occupant[index]).toBe(0);
-  });
-
   // Story 2.8 AC5 / spec §3.3's `onUndo(): void; canUndo: boolean`. Forwarded, never interpreted —
   // this component holds no history state, so the only claim available here is that both props
   // reach the status bar's button intact. The button is NAMED, not merely counted (a Story 2.7
@@ -444,7 +342,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
   it('forwards onUndo to the status bar’s UNDO button (AC5)', async () => {
     const user = userEvent.setup();
     const onUndo = vi.fn();
-    mountEditor(vi.fn(), ROSTER_WITH_CONWAY_SECOND, { onUndo, canUndo: true });
+    mountEditor(vi.fn(), TWO_ORGANISMS, { onUndo, canUndo: true });
 
     await user.click(screen.getByRole('button', { name: 'Undo' }));
 
@@ -453,7 +351,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
 
   it('forwards canUndo to the UNDO button’s disabled state, live (AC5)', () => {
     const onUndo = vi.fn();
-    const { rerenderWithGrid } = mountEditor(vi.fn(), ROSTER_WITH_CONWAY_SECOND, {
+    const { rerenderWithGrid } = mountEditor(vi.fn(), TWO_ORGANISMS, {
       onUndo,
       canUndo: false,
     });
@@ -468,13 +366,220 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
     rerenderWithGrid(EMPTY_GRID, false);
     expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
   });
+});
+
+// Story 2.9 AC2: the roster IS the tool picker now. These extend the commit-seam harness above
+// rather than duplicating it — the claim is that a click on a sidebar row changes the ref the
+// canvas actually paints, which is only observable end to end.
+describe('BattleEditorView — roster selection reaches the painted ref (AC2)', () => {
+  const PLACE_SIZE = { cols: 20, rows: 10 };
+  const CELL = 15;
+  const EMPTY_GRID = makeGrid(20, 10, new Array(200).fill(0));
+  const TWO_ORGANISMS: readonly DisplayOrganism[] = [
+    {
+      id: 'some-other-organism',
+      name: 'Other Organism',
+      color: '#D55E00',
+      colorToken: 'vermillion',
+    },
+    { id: CONWAYS_CLASSIC_ID, name: "Conway's Classic", color: '#56B4E9', colorToken: 'sky-blue' },
+  ];
+  const PALETTE_3 = makeLut([0, 0, 0], [0, 0, 0]);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mount(onCommitGrid: (next: RenderableGrid) => void) {
+    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      let context = contexts.get(this);
+      if (context === undefined) {
+        context = new RecordingContext2D();
+        contexts.set(this, context);
+      }
+      return context as unknown as CanvasRenderingContext2D;
+    });
+
+    const props = {
+      size: PLACE_SIZE,
+      palette: PALETTE_3,
+      showGridLines: true,
+      colors: COLORS,
+      rosterIds: TWO_ORGANISMS.map((organism) => organism.id),
+      roster: TWO_ORGANISMS,
+      onCommitGrid,
+      onUndo: () => {},
+      canUndo: false,
+    };
+    const view = render(<BattleEditorView grid={EMPTY_GRID} {...props} />);
+    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 150,
+      right: 300,
+      bottom: 150,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    const rerenderWithGrid = (grid: RenderableGrid) =>
+      view.rerender(<BattleEditorView grid={grid} {...props} />);
+
+    return { canvas, container: view.container, rerenderWithGrid };
+  }
+
+  const index = (col: number, row: number) => row * PLACE_SIZE.cols + col;
+
+  function paint(canvas: HTMLCanvasElement, col: number, row: number): void {
+    const point = {
+      clientX: col * CELL + CELL / 2,
+      clientY: row * CELL + CELL / 2,
+      button: 0,
+      isPrimary: true,
+    };
+    fireEvent.pointerDown(canvas, point);
+    fireEvent.pointerUp(canvas, point);
+  }
+
+  // The whole of AC2 in one assertion chain: selecting the SECOND row must paint ref 2, the
+  // eraser must erase what it painted, and selecting back must paint ref 2 again — one commit per
+  // gesture throughout. `rerenderWithGrid` stands in for <BattlePage> feeding each committed grid
+  // back down, which is what lets the erase land on a cell a prior commit actually painted.
+  it('paints the SELECTED row’s ref, erases via the eraser row, and switches back (AC2)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    const { canvas, rerenderWithGrid } = mount(onCommitGrid);
+
+    await user.click(screen.getByRole('button', { name: "Conway's Classic" }));
+    paint(canvas, 3, 4);
+
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
+    const painted = onCommitGrid.mock.calls[0][0] as RenderableGrid;
+    expect(painted.occupant[index(3, 4)]).toBe(2);
+    rerenderWithGrid(painted);
+
+    await user.click(screen.getByRole('button', { name: 'Eraser' }));
+    paint(canvas, 3, 4); // the SAME cell, now occupied — the eraser must actually commit here.
+
+    expect(onCommitGrid).toHaveBeenCalledTimes(2);
+    const erased = onCommitGrid.mock.calls[1][0] as RenderableGrid;
+    expect(erased.occupant[index(3, 4)]).toBe(0);
+    rerenderWithGrid(erased);
+
+    await user.click(screen.getByRole('button', { name: 'Other Organism' }));
+    paint(canvas, 6, 7);
+
+    expect(onCommitGrid).toHaveBeenCalledTimes(3);
+    const backToDraw = onCommitGrid.mock.calls[2][0] as RenderableGrid;
+    expect(backToDraw.occupant[index(6, 7)]).toBe(1);
+  });
+
+  // AC2: exactly one row selected at any time, the eraser included, and the selected state
+  // follows the click rather than a local mirror inside the roster.
+  it('moves the selected state as the user picks, including onto the eraser (AC2)', async () => {
+    const user = userEvent.setup();
+    mount(vi.fn());
+    const pressedNames = () =>
+      screen
+        .getAllByRole('button')
+        .filter((button) => button.getAttribute('aria-pressed') === 'true')
+        .map((button) => button.textContent);
+
+    // The default: the first roster row, before any interaction.
+    expect(pressedNames()).toEqual(['Other Organism']);
+
+    await user.click(screen.getByRole('button', { name: "Conway's Classic" }));
+    expect(pressedNames()).toEqual(["Conway's Classic"]);
+
+    await user.click(screen.getByRole('button', { name: 'Eraser' }));
+    expect(pressedNames()).toEqual(['✕Eraser']);
+  });
+
+  // Clicking the already-selected row must be a no-op, not a deselection. The deleted
+  // ToggleButtonGroup needed an explicit `value === null` guard for this; plain `aria-pressed`
+  // buttons get it for free, and this pins that the free version actually holds.
+  it('leaves the selection unchanged when the already-selected row is clicked again', async () => {
+    const user = userEvent.setup();
+    mount(vi.fn());
+
+    await user.click(screen.getByRole('button', { name: 'Eraser' }));
+    await user.click(screen.getByRole('button', { name: 'Eraser' }));
+
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Other Organism' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  // AC4: the derivation lives HERE (spec §6) and compares colorTokens, not names or hexes.
+  it('derives the same-colour warning from colorToken and marks BOTH rows (AC4)', () => {
+    const twins: readonly DisplayOrganism[] = [
+      { id: 'twin-1', name: 'First Twin', color: '#D55E00', colorToken: 'vermillion' },
+      { id: 'lone', name: 'Lone Wolf', color: '#3B82F6', colorToken: 'azure' },
+      // Same TOKEN, deliberately a different resolved hex: a derivation comparing the rendered
+      // colour instead of the token would find no collision here and silently stop warning.
+      { id: 'twin-2', name: 'Second Twin', color: '#D55E01', colorToken: 'vermillion' },
+    ];
+    render(
+      <BattleEditorView
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={null}
+        rosterIds={twins.map((organism) => organism.id)}
+        roster={twins}
+        onCommitGrid={() => {}}
+        onUndo={() => {}}
+        canUndo={false}
+      />,
+    );
+
+    expect(screen.getAllByText('Shared colour')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /First Twin/ })).toHaveTextContent('Shared colour');
+    expect(screen.getByRole('button', { name: /Second Twin/ })).toHaveTextContent('Shared colour');
+    expect(screen.getByRole('button', { name: 'Lone Wolf' })).not.toHaveTextContent(
+      'Shared colour',
+    );
+  });
+
+  // AC7: a failed organism library reaches the roster as a FACT it can state, and the selection
+  // degrades with it — an organism tool would resolve against names and colours that do not exist.
+  it('degrades to the eraser and states the failure when the library is unavailable (AC7)', () => {
+    render(
+      <BattleEditorView
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={null}
+        rosterIds={TWO_ORGANISMS.map((organism) => organism.id)}
+        roster={TWO_ORGANISMS}
+        libraryUnavailable
+        onCommitGrid={() => {}}
+        onUndo={() => {}}
+        canUndo={false}
+      />,
+    );
+
+    expect(screen.getByText(/organism library could not be read/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Other Organism' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+  });
 
   // AC5 says "passes axe" in as many words. Scoped to `container`, the established pattern for a
   // bare-component render (BattleTile.test.tsx, GalleryEmptyState.test.tsx) — nothing here
   // portals outside it, unlike DeleteBattleDialog's document.body scan.
-  it('the toggle and the status bar have no axe violations', async () => {
-    const { container } = mountEditor(vi.fn());
-    const results = await axe(container);
-    expect(results.violations).toEqual([]);
+  it('the sidebar, roster and status bar have no axe violations (AC5)', async () => {
+    const { container } = mount(vi.fn());
+
+    expect((await axe(container)).violations).toEqual([]);
   });
 });

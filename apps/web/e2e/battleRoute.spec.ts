@@ -258,6 +258,96 @@ test.describe('battle route (Story 2.1)', () => {
     expect(violations).toEqual([]);
   });
 
+  // Story 2.9 (AC1, AC2, AC3): the roster is the route's tool picker now. Only the composed route
+  // can prove that a battle's OWN organisms — the three the fixture places — reach the sidebar
+  // under their real names, in roster order, with no fourth row for the default tool's organism
+  // (forced decision 4) and no leftover Draw/Erase toggle (AC3).
+  test('lists the battle’s own organisms in the sidebar, and no tool toggle (AC1, AC3)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const sidebar = page.getByRole('complementary');
+    await expect(sidebar.getByRole('heading', { level: 2 })).toHaveText('Organisms');
+    // Roster ORDER, not merely presence: the dense encoding is `cell = roster index + 1`, so a
+    // sidebar that sorted for display would be the first visible symptom of a reordering bug.
+    await expect(sidebar.getByRole('listitem')).toHaveText([
+      'Aggressive Colonizer',
+      'Patient Defender',
+      'Chaotic Spreader',
+    ]);
+    // Decision H.1: Conway's Classic is in the LIBRARY (seedConwaysClassic) but placed in no cell
+    // of this battle, so it must not appear in its roster.
+    await expect(sidebar.getByRole('button', { name: "Conway's Classic" })).toHaveCount(0);
+    // AC3: the provisional toggle is gone, not merely hidden. ⚠️ `exact: true` — Playwright's
+    // accessible-name option is a case-insensitive SUBSTRING match by default, so a bare 'Erase'
+    // matches the eraser row's own "Eraser" and this assertion would fail against correct code.
+    await expect(page.getByRole('button', { name: 'Draw', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Erase', exact: true })).toHaveCount(0);
+    // AC5: none of the later stories' controls rendered inert beside the real ones.
+    await expect(sidebar.getByRole('textbox')).toHaveCount(0);
+    await expect(sidebar.getByRole('combobox')).toHaveCount(0);
+    // AC2: exactly one row selected, and it is the first.
+    await expect(sidebar.getByRole('button', { name: 'Aggressive Colonizer' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    // ⚠️ The clean-console assertion trap 6 is about: a `rosterSettled` gate keyed on the wrong
+    // resource prints buildRefToFillGroup's dangling-id warning on every load, and only an e2e
+    // catches it.
+    expect(errors).toEqual([]);
+  });
+
+  // Story 2.9 AC2, end to end: selecting a NON-DEFAULT roster row must change the ref the dish
+  // actually paints. Real geometry, real pointer — and a colour count is the only observable that
+  // does not depend on reading the canvas's internals.
+  test('selecting a roster row then painting places THAT organism (AC2)', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    await expect(canvas).toBeAttached();
+    const box = await canvas.boundingBox();
+    if (box === null) throw new Error('dish has no layout box');
+
+    // /battle/new seeds exactly one roster row (the default tool's organism), so selecting it and
+    // painting proves the row -> ref path without needing a second organism placed first.
+    const row = page.getByRole('complementary').getByRole('button').first();
+    await row.click();
+    await expect(row).toHaveAttribute('aria-pressed', 'true');
+
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.5);
+    await page.mouse.up();
+
+    // background + grid lines is two; a third colour means an organism cell was really painted.
+    expect(await distinctColorCount(canvas)).toBeGreaterThan(2);
+
+    // Then the eraser row, which is the OTHER half of the same exclusive selection (AC2).
+    const eraser = page.getByRole('button', { name: 'Eraser' });
+    await eraser.click();
+    await expect(eraser).toHaveAttribute('aria-pressed', 'true');
+    await expect(row).toHaveAttribute('aria-pressed', 'false');
+
+    expect(errors).toEqual([]);
+  });
+
   // Story 2.4 AC1/AC6: the SAME AR-42-permitted smoke check gallery.spec.ts:163-196 uses for
   // <PetriDishCanvas variant="static"> — never a pixel or image snapshot (project-context, "Never
   // pixel/snapshot-test the Canvas"). Three-Way Skirmish places three organisms on a 50x30 grid,
@@ -435,7 +525,8 @@ test.describe('battle route (Story 2.1)', () => {
       const start = { x: box.x + box.width * 0.2, y: box.y + box.height * 0.5 };
       const end = { x: box.x + box.width * 0.8, y: box.y + box.height * 0.5 };
 
-      // Paint with the DEFAULT tool (Draw is selected until the toggle is touched).
+      // Paint with the default selection — Story 2.9 makes that the FIRST ROSTER ROW, which on
+      // /battle/new is the seeded default-tool organism (forced decision 4).
       await page.mouse.move(start.x, start.y);
       await page.mouse.down();
       // ⚠️ NO `steps` — exactly one pointermove, the interpolation-exercising shape Story 2.6's
@@ -445,9 +536,10 @@ test.describe('battle route (Story 2.1)', () => {
       const paintedPixels = await countChangedPixels(canvas);
       expect(paintedPixels).toBeGreaterThan(0); // the drag itself must have painted something.
 
-      // Drive the toggle the way a user does — by its accessible name, not a test id or class —
-      // which is what makes the AC5 keyboard/axe claim more than a unit-test artefact.
-      await page.getByRole('button', { name: 'Erase' }).click();
+      // Drive the SIDEBAR ROW the way a user does — by its accessible name, not a test id or
+      // class — which is what makes the AC5 keyboard/axe claim more than a unit-test artefact.
+      // Story 2.9 replaced the provisional 'Erase' toggle with the roster's pinned eraser row.
+      await page.getByRole('button', { name: 'Eraser' }).click();
 
       // Erase over the EXACT same path.
       await page.mouse.move(start.x, start.y);
@@ -546,7 +638,7 @@ test.describe('battle route (Story 2.1)', () => {
   });
 
   // Same pattern as the click-placement and drag axe checks above — regression check, not a new
-  // accessibility claim, now covering the erase gesture and the toggle it goes through.
+  // accessibility claim, now covering the erase gesture and the sidebar row it goes through.
   test('has no axe accessibility violations on /battle/new after an erase', async ({ page }) => {
     await seedWorkspace(page);
     await seedConwaysClassic(page);
@@ -562,7 +654,7 @@ test.describe('battle route (Story 2.1)', () => {
     await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5);
     await page.mouse.up();
 
-    await page.getByRole('button', { name: 'Erase' }).click();
+    await page.getByRole('button', { name: 'Eraser' }).click();
     await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.5);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5);

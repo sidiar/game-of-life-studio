@@ -20,7 +20,12 @@ export interface RefToFillGroup {
 
 // Uint8Array occupant values top out at 255 (Decision G.3). A larger roster would silently
 // truncate the LUT's allocation instead of the caller's schema-level bug surfacing here.
-const MAX_ROSTER_SIZE = 255;
+//
+// Story 2.9 (AC8): EXPORTED so `rosterUnion.ts` can stop the union short of the number that makes
+// the throw below fire. A second `255` literal over there would be free to drift from this one,
+// and the drift's symptom is this function throwing inside a render-phase `useMemo` — an uncaught
+// teardown of the editor, not a degrade.
+export const MAX_ROSTER_SIZE = 255;
 
 const warnedMissingOrganismIds = new Set<string>();
 

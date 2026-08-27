@@ -10,6 +10,8 @@ import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft'
 import { buildRefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import { toRenderableGrid, type RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { readGridColors } from '@/lib/canvas/themeColors';
+import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
+import { buildRosterIds } from '@/lib/rosterUnion';
 import { DEFAULT_TOOL } from '@/lib/tool';
 import { useUndoableGrid } from '@/lib/useUndoableGrid';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
@@ -21,10 +23,13 @@ const Body = styled('div')({
   color: 'var(--gol-text-secondary)',
 });
 
-// The composition root's own flex column (mockup's `.app-container`, minus the sidebar row this
-// story has no content for yet). `<BattleHeader>` is NOT `position: fixed` here (BattleHeader.tsx
-// forced decision), so `<BattleEditorView>`'s `flex: 1` needs an actual flex-column ancestor to
-// fill the remaining height against, rather than the mockup's `margin-top` offset trick.
+// The composition root's own flex column (mockup's `.app-container`). The header is this column's
+// first row; Story 2.9's sidebar+main row is the second, and it is declared inside
+// `<BattleEditorView>` rather than here — the chassis belongs to the Lab view, not to the route.
+//
+// `<BattleHeader>` is NOT `position: fixed` here (BattleHeader.tsx forced decision), so
+// `<BattleEditorView>`'s `flex: 1` needs an actual flex-column ancestor to fill the remaining
+// height against, rather than the mockup's `margin-top` offset trick.
 const Root = styled('div')({
   display: 'flex',
   flexDirection: 'column',
@@ -54,10 +59,14 @@ export interface BattlePageProps {
   battleId: string | 'new';
 }
 
-interface BattleResource {
-  battle: Battle | null;
-  organisms: readonly Organism[];
-}
+// Story 2.9 (AC6): the battle and the organism library are two SEPARATE resources now, so this
+// combined shape is gone. A `{ battle, organisms }` pair is exactly what forced the `Promise.all`
+// that collapsed a corrupt organism record into "this battle is broken".
+//
+// A stable empty array for the pre-settled roster: `rosterIds` feeds the `palette` memo, which is
+// one of `EditDish`'s three construction dependencies, and a fresh `[]` per render would tear the
+// retained renderer down on every render (Story 2.5 trap 7).
+const NO_ROSTER: readonly string[] = [];
 
 // Converts a loaded Battle to the SAME shape createNewBattleDraft seeds, so the render below reads
 // one shape instead of branching on battleId === 'new' forever (Task 3, Story 2.2).
@@ -91,18 +100,29 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // as a plain miss and return null — indistinguishable from a stale/deleted id, which would make
   // /battle/new render "this battle is gone" for a page whose whole purpose is that it does not
   // exist yet. Story 2.2 short-circuits and seeds a fresh draft for the branch instead (below).
+  const battleResource = useAsyncResource<Battle | null>(
+    () => (battleId === 'new' ? Promise.resolve(null) : repositories.battles.load(battleId)),
+    [repositories, battleId],
+  );
+
+  // Story 2.9 AC6 (deferred-work.md, owned by this story): the organism library is its OWN
+  // resource. It used to ride inside the battle's `Promise.all`, which rejects on the FIRST
+  // rejection — so one corrupt ORGANISM record rendered the battle's "Something Went Wrong" body
+  // even when the battle itself loaded perfectly, telling the user the wrong thing about the wrong
+  // record. That was accepted while nothing rendered the roster; `<OrganismRoster>` makes a
+  // partially-usable page worth rendering, so the two failures are now structurally independent —
+  // the same shape `settingsResource` below has demonstrated since Story 2.5.
   //
-  // ⚠️ Promise.all rejects on the FIRST rejection, so one corrupt ORGANISM record blanks the page
-  // with "something went wrong" even when the battle itself loaded fine. Accepted for this story
-  // — AC4 asks only for a distinct failure state — and recorded rather than discovered in review
-  // (deferred-work.md, owned by Story 2.9).
-  const battleResource = useAsyncResource<BattleResource>(async () => {
-    const [battle, organisms] = await Promise.all([
-      battleId === 'new' ? Promise.resolve(null) : repositories.battles.load(battleId),
-      repositories.organisms.list(),
-    ]);
-    return { battle, organisms };
-  }, [repositories, battleId]);
+  // ❌ NOT given settings' `.catch(() => fallback)` treatment: a missing organism library is not
+  // silently substitutable the way a missing settings record is. Its 'error' status is the fact
+  // AC7's degraded roster is built on, so it must survive to the render.
+  //
+  // ⚠️ Deps stay a FIXED-LENGTH array of referentially stable elements — read `useAsyncResource`'s
+  // header before touching any call site here; growing one spins the page forever.
+  const organismsResource = useAsyncResource<readonly Organism[]>(
+    () => repositories.organisms.list(),
+    [repositories],
+  );
 
   // Task 7 (deferred-work.md:183): LIFTED OUT of the battle/organisms Promise.all entirely,
   // rather than riding inside it with its own `.catch`. Before this story that `.catch` prevented
@@ -133,7 +153,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     () => (battleId === 'new' ? createNewBattleDraft(settings.defaultGridSize) : null),
     [battleId, settings],
   );
-  const loadedBattle = battleResource.data?.battle ?? null;
+  const loadedBattle = battleResource.data ?? null;
   const loadedDraft = useMemo<NewBattleDraft | null>(
     () => (loadedBattle === null ? null : toDraft(loadedBattle)),
     [loadedBattle],
@@ -154,7 +174,12 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     [],
   );
 
-  const organisms = battleResource.data?.organisms;
+  const organisms = organismsResource.data;
+  // AC7 (deferred-work.md, owned by this story): the library genuinely failed. Distinct from
+  // `organisms === undefined`, which is also true while it is still in flight — collapsing the two
+  // is what let `/battle/new` render a fully successful page over a resource in the `error` state,
+  // with no alert, no retry and no log.
+  const libraryUnavailable = organismsResource.status === 'error';
 
   // Story 2.5 Task 5: the grid and the palette no longer share one memo. Until this story they
   // came from a single `toThumbnailSource(draft, organisms)` call, which was right while both
@@ -168,46 +193,67 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     [draft],
   );
 
-  // Decision H.2's session roster. Seeded ONCE, in a lazy initialiser, with the default tool's
-  // organism — the union must already contain it before the FIRST click, or `refForTool` resolves
-  // to null and the click silently places nothing. Unconditional rather than conditional on
-  // `draft.organismIds`: the union below de-duplicates, so seeding it either way produces the same
-  // array, and a conditional seed would depend on a `draft` that does not exist on the first
-  // render. Nothing sets it in this story — Story 2.9 (add from library) and 2.13 (save + H.1
-  // prune) are its writers. ❌ Not persisted here: H.1 prunes at save, which is 2.13's story.
+  // Decision H.2's session roster: organisms added to the Lab roster this session but not yet
+  // painted. Starts EMPTY — Story 2.10's add-from-library dropdown is its first writer, and 2.13
+  // (save + the H.1 prune) is the other. ❌ Never persisted: H.1 prunes at save, which is 2.13's.
   //
-  // review (2026-08-27): back to `DEFAULT_TOOL.organismId`. Widening `Tool` did break this line,
-  // but the cause was `DEFAULT_TOOL`'s own `: Tool` annotation, not the union — narrowing the
-  // annotation to the organism arm (`lib/tool.ts`) restores the property access AND the coupling
-  // that matters here: the seeded roster must contain whatever the DEFAULT TOOL resolves against.
-  // Reading `CONWAYS_CLASSIC_ID` directly made them two independent constants, so changing the
-  // default tool would leave `refForTool` returning null and the dish silently unpaintable at
-  // every press — the exact trap `lib/tool.ts`'s own comment warns about.
-  const [sessionRoster] = useState<readonly string[]>(() => [DEFAULT_TOOL.organismId]);
+  // Story 2.9 forced decision 4: the `DEFAULT_TOOL.organismId` seed is NO LONGER in here. It was
+  // seeded unconditionally so the first click resolved to a ref — invisible plumbing while nothing
+  // rendered the roster, but a visible, wrong ROW the moment `<OrganismRoster>` ships: opening
+  // "Three-Way Skirmish" would list a fourth organism, Conway's Classic, that the user never added
+  // and that Decision H says is not part of that battle. It now applies only where it is actually
+  // needed — see the union below.
+  const [sessionRoster] = useState<readonly string[]>(() => NO_ROSTER);
+
+  // ⚠️ Withheld entirely until the ORGANISM resource has settled (Story 2.9 trap 6). This gate used
+  // to key on the BATTLE resource, which was the same thing while one `Promise.all` settled both;
+  // splitting them moved its meaning. `buildRefToFillGroup` warns once per roster id with no
+  // matching organism (Decision I.4), so a battle that resolves BEFORE the library would otherwise
+  // print that diagnostic for every one of its organisms, on every load and on the static export's
+  // prerender, about a library that simply had not arrived yet. The e2e's clean-console assertions
+  // catch this and the unit tests do not.
+  //
+  // A settled-but-FAILED library is different: it genuinely is broken, the ids go in, and the
+  // degrade-and-warn is the correct, informative behaviour. Nothing renders the canvas before both
+  // resources settle (the loading guard below), so the editor never sees the withheld union.
+  const rosterSettled = organismsResource.status !== 'loading';
 
   // `draft.organismIds` first — their ORDER is the dense encoding's own (RFC-006 Decision 2: cell
-  // value = roster index + 1), so a session entry may only ever be APPENDED. Re-ordering, or
-  // building the union the other way round, would silently repaint every already-placed cell as a
-  // different organism.
+  // value = roster index + 1), so a session entry may only ever be APPENDED, and the cap keeps the
+  // union from reaching a 256th entry `buildRefToFillGroup` would throw on. Both invariants live
+  // in `buildRosterIds` with tests of their own (AC8, AC9) rather than inline here, because their
+  // failure mode is a silently repainted grid rather than an error.
   //
   // ⚠️ A NEW array, never a push onto `draft.organismIds` — see toDraft above.
-  //
-  // ⚠️ The session seed is withheld until the battle resource has SETTLED. `buildRefToFillGroup`
-  // warns once for a roster id with no matching organism (Decision I.4) — and while the resource
-  // is still in flight there is no organism library to match against yet, so seeding early prints
-  // that diagnostic on every load, and on the static export's prerender, about nothing at all. A
-  // settled-but-failed resource is different: the library genuinely IS broken there, the seed goes
-  // in, and the degrade-and-warn is the correct, informative behaviour. Nothing renders the canvas
-  // before the resource settles (the loading guard below), so the editor never sees the unseeded
-  // union.
-  const rosterSettled = battleResource.status !== 'loading';
   const rosterIds = useMemo<readonly string[]>(() => {
-    const ids = draft === null ? [] : [...draft.organismIds];
-    if (rosterSettled) {
-      for (const id of sessionRoster) if (!ids.includes(id)) ids.push(id);
-    }
-    return ids;
+    if (!rosterSettled) return NO_ROSTER;
+    const union = buildRosterIds(draft?.organismIds ?? NO_ROSTER, sessionRoster);
+
+    // Forced decision 4, option (b): seed the default tool's organism ONLY when the union would
+    // otherwise be empty. That is the one case where the seed still earns its keep — a battle with
+    // nothing placed (`/battle/new`, or a saved battle H.1 pruned to nothing) has no first row for
+    // `<BattleEditorView>` to select, so without this the dish would be unpaintable until Story
+    // 2.10 ships the add dropdown: a user-visible regression this story must not introduce.
+    // A battle that places anything keeps a roster of exactly its own placed set (Decision H.1).
+    //
+    // ⚠️ The coupling this preserves: the seeded id must be whatever `DEFAULT_TOOL` resolves
+    // against, so it is read off that constant rather than `CONWAYS_CLASSIC_ID` directly (lib/
+    // tool.ts's own trap — two independent constants would drift and leave `refForTool` returning
+    // null at every press).
+    return union.length > 0 ? union : buildRosterIds(union, [DEFAULT_TOOL.organismId]);
   }, [draft, sessionRoster, rosterSettled]);
+
+  // The roster resolved for DISPLAY — names and identity-shade colours — through the same
+  // `displayColor` LUT the dish's own cells go through, which is what keeps a sidebar chip from
+  // ever disagreeing with the cells it describes. Resolved once here rather than per consumer
+  // (Story 2.9 forced decision 3: one resolver, never two).
+  //
+  // ⚠️ This is for RENDERING only. `rosterIds` above stays the identity array `refForTool` indexes
+  // — `resolveDisplayOrganisms` de-duplicates, so the two can differ in length (trap 2).
+  const roster = useMemo(
+    () => resolveDisplayOrganisms(rosterIds, organisms ?? []),
+    [rosterIds, organisms],
+  );
 
   // Built over `rosterIds`, NOT `draft.organismIds` (trap 3). On /battle/new the draft's roster is
   // empty, so a LUT built from it would have `size === 1` while placement writes ref 1 —
@@ -252,11 +298,21 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   const gridRows = grid?.height ?? 0;
   const size = useMemo(() => ({ cols: gridCols, rows: gridRows }), [gridCols, gridRows]);
 
-  // Both resources must settle before anything renders — not just battleResource. Without this,
-  // a battle that resolves before settings would briefly seed /battle/new at the DEFAULT_SETTINGS
-  // fallback grid size before correcting itself the moment settings arrives, which is the exact
-  // flash Task 7 exists to prevent, just moved one tick later instead of removed.
-  if (battleResource.status === 'loading' || settingsResource.status === 'loading') {
+  // ALL THREE resources must settle before anything renders. Without this, a battle that resolves
+  // before settings would briefly seed /battle/new at the DEFAULT_SETTINGS fallback grid size
+  // before correcting itself the moment settings arrives, which is the exact flash Task 7 exists
+  // to prevent, just moved one tick later instead of removed — and (Story 2.9) a battle that
+  // resolves before the organism library would flash an empty sidebar before its roster appears.
+  //
+  // ⚠️ 'loading', never 'error' (AC6). A FAILED organism library must fall through to the render
+  // below: the battle loaded, the grid is editable, and the roster section says what went wrong
+  // (AC7). Gating on anything but 'loading' here would restore the very blanking this story exists
+  // to remove.
+  if (
+    battleResource.status === 'loading' ||
+    organismsResource.status === 'loading' ||
+    settingsResource.status === 'loading'
+  ) {
     return <BattleLoading />;
   }
 
@@ -295,8 +351,8 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // `grid` is non-null here too: it is null only when `draft` is, and that branch already
   // returned above.
   return (
-    // mode is read here so the state cell is not merely declared: the sidebar and
-    // <EditorStatusBar> are Stories 2.9+, and this is the skeleton they mount into.
+    // mode is read here so the state cell is not merely declared, and so Epic 3's Run mode has a
+    // switch to flip on the chassis the Lab sidebar and status bar now hang off.
     <Root data-mode={mode}>
       <BattleHeader battleTitle={battleDisplayName(draft.name)} />
       {/* `grid` is non-null whenever draft is (the seed memo above) — the check exists for
@@ -309,6 +365,8 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
           showGridLines={settings.gridLines}
           colors={colors}
           rosterIds={rosterIds}
+          roster={roster}
+          libraryUnavailable={libraryUnavailable}
           /* The hook's `commit` IS the commit handler (Story 2.8) — a stable identity, exactly as
              the bare `useState` setter it replaced was, which is what lets the canvas's resize
              effect keep holding it in a closure it does not re-register. ❌ No `isDirty` here —

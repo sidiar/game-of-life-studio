@@ -3,11 +3,14 @@ import { render, screen, waitFor, waitForElementToBeRemoved } from '@testing-lib
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
-import type { TileOrganism } from '@/lib/tileOrganisms';
+import type { DisplayOrganism } from '@/lib/displayOrganisms';
 import BattleTile from './BattleTile';
 
-function organism(overrides: Partial<TileOrganism> & { id: string }): TileOrganism {
-  return { name: 'Organism', color: 'hsl(200, 80%, 50%)', ...overrides };
+function organism(overrides: Partial<DisplayOrganism> & { id: string }): DisplayOrganism {
+  // `colorToken` is Story 2.9's addition (the roster's same-colour warning compares tokens, not
+  // hexes). The tile ignores it — it paints `color` — so a single default keeps these fixtures
+  // about what they were always about.
+  return { name: 'Organism', color: 'hsl(200, 80%, 50%)', colorToken: 'sky-blue', ...overrides };
 }
 
 // gridColors: null keeps the thumbnail load effect permanently idle (Task 5's degradation
@@ -22,7 +25,7 @@ const BASE_PROPS = {
     organism({ id: 'a', name: 'Aggressive Colonizer' }),
     organism({ id: 'b', name: 'Patient Defender' }),
     organism({ id: 'c', name: 'Chaotic Spreader' }),
-  ] as TileOrganism[],
+  ] as DisplayOrganism[],
   battles: createFakeRepositories().battles,
   roster: [],
   showGridLines: true,
