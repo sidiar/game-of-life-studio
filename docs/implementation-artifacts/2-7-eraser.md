@@ -4,7 +4,7 @@ baseline_commit: 636c89a2b4ee54f2c20bcd299fe5970146e9a59f
 
 # Story 2.7: Eraser
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -224,9 +224,10 @@ Code review 2026-08-27 (Opus, fresh context; three parallel adversarial layers �
 Edge Case Hunter, Acceptance Auditor — plus an independent pass). Every claim below was verified
 against the code; the Dev Agent Record was treated as a claim, not as evidence.
 
-**decision-needed (1) — unresolved, for Sidiar:**
+**decision-needed (1) — RESOLVED by Sidiar 2026-08-27: option 3, accept mouse-only reclaim and
+re-defer the touch/pen deadlock:**
 
-- [ ] [Review][Decision] **Task 5's reclaim clause does not close the deadlock it was taken for, and
+- [x] [Review][Decision] **Task 5's reclaim clause does not close the deadlock it was taken for, and
       closing it properly trades against AC7** — the clause only reclaims a `pointerdown` whose
       `pointerId` equals the orphaned stroke's. That is the mouse, which the `buttons === 0`
       self-heal on hover moves already rescued. Touch and pen allocate a fresh `pointerId` per
@@ -236,6 +237,15 @@ against the code; the Dev Agent Record was treated as a claim, not as evidence.
       fix needs a staleness signal that does not exist today (pointer-type match, a timestamp, or
       relaxing AC7's "a second pointer must not hijack"), which is a policy call. `deferred-work.md`
       has been corrected from "✅ Resolved" to "PARTIALLY addressed" and the entry reopened.
+      **Resolution (Sidiar, 2026-08-27): option 3 — the mouse-only reclaim ships as-is, and the
+      touch/pen deadlock is re-deferred explicitly rather than fixed here.** Rationale: options 1
+      and 2 both buy a touch fix with something worse — option 1 relaxes AC7 (a genuine second
+      finger becomes indistinguishable from a recovery), option 2 invents a staleness constant no
+      spec answers. Neither can be pinned today: jsdom implements no pointer capture and no e2e
+      drives a real touch gesture, so either fix would ship unverified against the very failure it
+      targets. The reclaim clause is kept because it is correct for the pointer type it covers, and
+      the code comment at `PetriDishCanvas.tsx:518-521` states the limitation in place rather than
+      overclaiming. No code change from this decision; `deferred-work.md` carries the re-deferral.
 
 **patch (9) — all applied in the review commit:**
 
@@ -779,7 +789,8 @@ snapshots anywhere. All four required mutations run and confirmed reddening (Deb
 | ---------- | --------------------------------------------------- |
 | 2026-08-27 | Story created (create-story), ready-for-dev         |
 | 2026-08-27 | Implemented (dev-story): Tool widened, provisional toggle, stroke-reclaim guard, fixture extraction, full test suite, e2e reversal check. Status → review. |
-
+| 2026-08-27 | Code review (opus, complement of the sonnet dev agent): 9 patches applied, 10 deferred, 1 decision-needed, 3 dismissed. Review commit `3d84511`. |
+| 2026-08-27 | Decision-needed resolved by Sidiar: option 3 — accept mouse-only stroke reclaim, re-defer the touch/pen deadlock. No code change. Status → done. |
 Dev Model: sonnet   # follows the editing-interaction pattern 2-5/2-6 already established — the stroke pipeline, the tool→ref seam and the commit-once discipline all exist; this adds one union arm, one provisional control, and tests
 
 ---
