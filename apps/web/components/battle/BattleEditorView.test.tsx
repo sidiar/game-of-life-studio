@@ -51,6 +51,9 @@ const ROSTER_IDS = ROSTER.map((organism) => organism.id);
 // Story 2.10: EMPTY by default, same reasoning as OrganismRoster.test.tsx's own default — most of
 // the suite below predates the add control, and an empty library renders none of it, so the
 // pre-existing assertions stay true unless a test overrides it.
+// Story 2.11: `battleName` defaults to '' and `onNameChange` to a no-op — the same "extend the
+// existing default props rather than hand-copying a new prop set into four call sites" lesson
+// Story 2.8's own comment above already records, applied to this story's two new props.
 function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>> = {}) {
   return render(
     <BattleEditorView
@@ -64,6 +67,8 @@ function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>
       library={[]}
       onAddToRoster={() => {}}
       atCap={false}
+      battleName=""
+      onNameChange={() => {}}
       onCommitGrid={() => {}}
       onUndo={() => {}}
       canUndo={false}
@@ -91,27 +96,34 @@ describe('BattleEditorView', () => {
     expect(container.querySelector('canvas')).toBeNull();
   });
 
-  // Story 2.9 AC1: the sidebar arrives, and "renders no sidebar" — true from Story 2.5 through
-  // 2.8 — is now false by design. What replaces it is the same claim in its new shape: exactly
-  // ONE section, and nothing standing in for the four that belong to later stories.
-  it('renders the Lab sidebar with Organisms as its only section (AC1)', () => {
+  // Story 2.9 AC1 / Story 2.11 AC7: the sidebar arrives, and "renders no sidebar" — true from
+  // Story 2.5 through 2.8 — is now false by design. Story 2.11 is the shell's second consumer
+  // (forced decision 2), so what replaces "exactly one section" is the mockup's own order:
+  // Organisms, THEN Battle Name — both real `<h2>`s, siblings of each other, never a skipped level
+  // under the header's single `<h1>` (the heading-order prediction `<BattleEditorView>`'s own
+  // comment used to carry, now settled rather than merely trusted — AC7).
+  it('renders the Lab sidebar with Organisms then Battle Name, in order (AC1, AC7)', () => {
     renderEditor();
 
     const sidebar = screen.getByRole('complementary');
     expect(sidebar).toBeInTheDocument();
     const headings = screen.getAllByRole('heading', { level: 2 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(['Organisms']);
+    expect(headings.map((heading) => heading.textContent)).toEqual(['Organisms', 'Battle Name']);
   });
 
   // NFR-4.1, asserted as ABSENCE — a presence-only check elsewhere still passes once a dead
   // placeholder is added beside the canvas.
-  it('renders no other sidebar section, no footer, and no textbox (AC5)', () => {
+  it('renders no other sidebar section and no footer (AC5)', () => {
     renderEditor();
 
-    // Battle Name (2.11) is the textbox; Grid Info (2.14), Tools (2.15) and the Back button
-    // (2.16) are the rest of the mockup's sidebar.
-    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
-    expect(screen.queryByText(/battle name/i)).toBeNull();
+    // Grid Info (2.14), Tools (2.15) and the Back button (2.16) are the rest of the mockup's
+    // sidebar; Battle Name (2.11) is now real and deliberately NOT asserted absent here. Scoped by
+    // ACCESSIBLE NAME rather than counted: a bare `toHaveLength(1)` passes when the one textbox is
+    // the WRONG one — Battle Name gone and 2.14's Grid Size input arrived — which is the precise
+    // regression this NFR-4.1 absence guard exists to catch. The same re-scoping the roster's
+    // search box got in this diff, applied to its sibling.
+    expect(screen.getAllByRole('textbox', { name: /battle name/i })).toHaveLength(1);
+    expect(screen.queryByRole('textbox', { name: /grid size/i })).toBeNull();
     expect(screen.queryByText(/grid size/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /back/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /clear/i })).toBeNull();
@@ -212,6 +224,8 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
         library={[]}
         onAddToRoster={() => {}}
         atCap={false}
+        battleName=""
+        onNameChange={() => {}}
         onCommitGrid={onCommitGrid}
         onUndo={onUndo}
         canUndo={canUndo}
@@ -244,6 +258,8 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
           library={[]}
           onAddToRoster={() => {}}
           atCap={false}
+          battleName=""
+          onNameChange={() => {}}
           onCommitGrid={onCommitGrid}
           onUndo={onUndo}
           canUndo={nextCanUndo}
@@ -428,6 +444,8 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
       library: [] as readonly DisplayOrganism[],
       onAddToRoster: () => {},
       atCap: false,
+      battleName: '',
+      onNameChange: () => {},
       onCommitGrid,
       onUndo: () => {},
       canUndo: false,
@@ -717,6 +735,8 @@ describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', (
         library={[]}
         onAddToRoster={onAddToRoster}
         atCap={false}
+        battleName=""
+        onNameChange={() => {}}
         onCommitGrid={() => {}}
         onUndo={() => {}}
         canUndo={false}
@@ -729,5 +749,33 @@ describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', (
       'true',
     );
     expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'false');
+  });
+});
+
+// Story 2.11 (AC1, AC7, Task 5). The heading-order claim (Organisms THEN Battle Name) is pinned
+// in the first `describe` block above, alongside the rest of that block's structural assertions —
+// this one covers the wiring: the live value renders, edits reach the parent unchanged, and the
+// two new props go nowhere but `<BattleNameField>`.
+describe('BattleEditorView — the Battle Name section (Story 2.11)', () => {
+  // `battleName`/`onNameChange` are destructured OUT of props before `...rest` is spread onto
+  // `<EditorMain>` (Task 5's "extend the Omit<…> list"), so this is unreachable by construction —
+  // asserted here anyway, the same "test the identity, not just the flag" discipline AC4's commit
+  // seam gets: `<EditorMain>` renders no textbox of its own, so a leak would show up as a SECOND
+  // element carrying this value.
+  it('renders battleName exactly once, in the sidebar’s field, and it does not leak into <EditorMain>', () => {
+    renderEditor({ battleName: 'Marker Value' });
+
+    expect(screen.getAllByDisplayValue('Marker Value')).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: /battle name/i })).toHaveValue('Marker Value');
+  });
+
+  it('threads onNameChange from BattleNameField up to the caller unchanged (AC1, AC3)', async () => {
+    const user = userEvent.setup();
+    const onNameChange = vi.fn();
+    renderEditor({ battleName: 'Old Name', onNameChange });
+
+    await user.type(screen.getByRole('textbox', { name: /battle name/i }), '!');
+
+    expect(onNameChange).toHaveBeenCalledWith('Old Name!');
   });
 });

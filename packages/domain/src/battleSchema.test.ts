@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BattleSchema, BattleSummarySchema } from './battleSchema';
+import { BattleSchema, BattleSummarySchema, MAX_BATTLE_NAME_LENGTH } from './battleSchema';
 
 const PRESET = { cols: 50, rows: 30 } as const;
 
@@ -140,6 +140,21 @@ describe('BattleSchema', () => {
 
   it('rejects a name over 100 characters', () => {
     expectSoleIssue({ ...validBattle(), name: 'x'.repeat(101) }, ['name'], '100');
+  });
+
+  // Story 2.11 (Task 2): the exported cap is the value BOTH schemas enforce — a one-character-over
+  // name fails both, and the boundary itself (exactly the cap) is accepted by both. A literal `100`
+  // re-typed at either `.max()` site could drift from this constant with the suite staying green;
+  // deriving the fixture length FROM the export is what makes drift here a failing test rather than
+  // a silent divergence.
+  it('MAX_BATTLE_NAME_LENGTH is exactly the boundary both schemas enforce', () => {
+    const atCap = 'x'.repeat(MAX_BATTLE_NAME_LENGTH);
+    const overCap = 'x'.repeat(MAX_BATTLE_NAME_LENGTH + 1);
+
+    expect(BattleSchema.safeParse({ ...validBattle(), name: atCap }).success).toBe(true);
+    expect(BattleSchema.safeParse({ ...validBattle(), name: overCap }).success).toBe(false);
+    expect(BattleSummarySchema.safeParse({ ...validBattle(), name: atCap }).success).toBe(true);
+    expect(BattleSummarySchema.safeParse({ ...validBattle(), name: overCap }).success).toBe(false);
   });
 
   it('rejects a non-uuid id', () => {

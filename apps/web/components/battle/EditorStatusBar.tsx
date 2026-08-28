@@ -94,8 +94,14 @@ export interface EditorStatusBarProps {
 export default function EditorStatusBar({ onUndo, canUndo }: EditorStatusBarProps) {
   return (
     <Bar>
-      {/* `type="button"` explicitly: a bare <button> inside a future <form> (Story 2.11's battle
-          name field) defaults to type="submit" and would submit it. */}
+      {/* `type="button"` explicitly: a bare <button> inside a <form> defaults to type="submit" and
+          would submit it on click. Story 2.11's battle name field is the `<form>` this comment
+          used to anticipate — it never arrived (forced decision 5): a `<form>` around a single
+          text input triggers IMPLICIT submission on Enter too, which under `output: 'export'` is a
+          full page reload that discards the grid, the undo ring and the session roster. The field
+          is a plain `<div>`, live-bound through `onChange` alone. Kept explicit anyway — cheap,
+          and correct regardless of what future story adds a `<form>` somewhere else on this
+          route. */}
       <UndoButton type="button" onClick={onUndo} disabled={!canUndo}>
         Undo
       </UndoButton>

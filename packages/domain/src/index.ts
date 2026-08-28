@@ -4,7 +4,7 @@ export type { Condition, SurvivalRule, SurvivalRules } from './survivalRuleSchem
 export { OrganismSchema, EditableGridPresetSchema } from './organismSchema';
 export type { Organism, EditableGridPreset } from './organismSchema';
 
-export { BattleSchema, BattleSummarySchema } from './battleSchema';
+export { BattleSchema, BattleSummarySchema, MAX_BATTLE_NAME_LENGTH } from './battleSchema';
 export type { Battle, BattleSummary } from './battleSchema';
 
 export { CURRENT_FORMAT_VERSION, DEFAULT_SETTINGS, SettingsSchema } from './settingsSchema';

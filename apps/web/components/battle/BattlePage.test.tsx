@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { CONWAYS_CLASSIC, DEFAULT_SETTINGS, type Battle, type Organism } from '@gol/domain';
+import {
+  CONWAYS_CLASSIC,
+  DEFAULT_SETTINGS,
+  MAX_BATTLE_NAME_LENGTH,
+  type Battle,
+  type Organism,
+} from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
 import { RecordingContext2D } from '@/lib/recordingContext2d';
@@ -1122,7 +1128,10 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
     expect(battleSaveSpy).not.toHaveBeenCalled();
     expect(organismSaveSpy).not.toHaveBeenCalled();
     expect(settingsSaveSpy).not.toHaveBeenCalled();
-    expect(localStorage.length).toBe(0);
+    // ❌ No `expect(localStorage.length).toBe(0)` here. `createFakeRepositories()` is in-memory, so
+    // that assertion is green no matter what the component does — a permanently-passing line in the
+    // one test AC5 rests on. Task 7 says so outright: assert the fake repos' CALL COUNTS, "not by
+    // inspecting storage".
   });
 
   // Forced decision 1 (option b): choosing an entry both adds AND selects it, immediately
@@ -1185,7 +1194,9 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
     await screen.findByRole('heading', { level: 1, name: 'Full Roster' });
 
     const sidebar = screen.getByRole('complementary');
-    expect(within(sidebar).queryByRole('textbox')).toBeNull();
+    // The roster's OWN search box, named — not `textbox` in general, which now also matches
+    // Story 2.11's always-present Battle Name field (a different control, unaffected by the cap).
+    expect(within(sidebar).queryByRole('textbox', { name: /search organisms/i })).toBeNull();
     expect(within(sidebar).queryByRole('combobox')).toBeNull();
     expect(within(sidebar).getByText(/roster is full/i)).toBeInTheDocument();
     expect(within(sidebar).getByText(/255/)).toBeInTheDocument();
@@ -1284,6 +1295,213 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
     expect(within(sidebar).queryByText(/already in this battle/i)).toBeNull();
     // Still not the AC7 degraded notice — the list loaded fine, it is simply empty.
     expect(screen.queryByText(/organism library could not be read/i)).toBeNull();
+  });
+});
+
+// Story 2.11 (AC1-AC6). `<BattlePage>` owns `battleName` and `isDirty`; this is the only level at
+// which the seed-adoption trap, the live header binding, the dirty flag and the tab title are all
+// observable together.
+describe('BattlePage — battle name & dirty tracking (Story 2.11)', () => {
+  /** `data-dirty` lives on `<Root>`, which carries no role — queried by its own attribute, the
+   * same way this file would query `data-mode` if anything needed to. */
+  function dirtyValue(container: HTMLElement): string | null {
+    const root = container.querySelector('[data-dirty]');
+    if (root === null) throw new Error('Root (data-dirty) not found');
+    return root.getAttribute('data-dirty');
+  }
+
+  function nameField(): HTMLElement {
+    return screen.getByRole('textbox', { name: /battle name/i });
+  }
+
+  // ⚠️ THE seed trap (Dev Notes → *Seeding the name*). A plain `useState(draft?.name ?? '')`
+  // passes a /battle/new-only suite perfectly and still leaves every LOADED battle's field blank
+  // forever — so this fixture is deliberately Three-Way Skirmish, never /battle/new alone.
+  it('pre-fills the sidebar field from a LOADED battle’s stored name (AC1, seed trap)', async () => {
+    render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(nameField()).toHaveValue(SKIRMISH.name);
+    expect(nameField()).toHaveAttribute('maxlength', String(MAX_BATTLE_NAME_LENGTH));
+  });
+
+  it('updates the header live as the field is typed, with no save, blur or debounce (AC2)', async () => {
+    const user = userEvent.setup();
+    render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+
+    // No blur, no wait — the SAME paint the keystroke landed on already shows the new title.
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Three-Way Skirmish!' }),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to "Untitled Battle" in the header when the field is cleared (AC2)', async () => {
+    const user = userEvent.setup();
+    render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.clear(nameField());
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Untitled Battle' })).toBeInTheDocument();
+  });
+
+  it('starts clean on both a loaded battle and /battle/new (AC5)', async () => {
+    const loaded = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    expect(dirtyValue(loaded.container)).toBe('false');
+    // Unmounted before the second mount — never TWO <BattlePage> instances live at once (the real
+    // app never has two either, and each owns a tab-title `MutationObserver`; two live instances
+    // fight over `document.title` forever, which is a test-harness artefact, not a product bug).
+    loaded.unmount();
+
+    const fresh = render(<BattlePage repositories={seeded()} battleId="new" />);
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+    expect(dirtyValue(fresh.container)).toBe('false');
+  });
+
+  it('goes dirty on a name edit, and never back, within this story (AC3)', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(dirtyValue(container)).toBe('false');
+    await user.type(nameField(), '!');
+    expect(dirtyValue(container)).toBe('true');
+
+    // Nothing in this story clears it — not even retyping the exact original name back.
+    await user.clear(nameField());
+    await user.type(nameField(), SKIRMISH.name);
+    expect(dirtyValue(container)).toBe('true');
+  });
+
+  it('goes dirty on a painted cell (AC4)', async () => {
+    const { container, canvas } = await renderNewRoute();
+    expect(dirtyValue(container)).toBe('false');
+
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 10, 10));
+
+    expect(dirtyValue(container)).toBe('true');
+  });
+
+  // AC5: nothing this story writes reaches a repository — asserted against the fake repos' own
+  // call counts (the Story 2.10 precedent), for BOTH triggers in one test.
+  it('writes to no repository for a name edit or a painted cell (AC5)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    const battleSaveSpy = vi.spyOn(repositories.battles, 'save');
+    const organismSaveSpy = vi.spyOn(repositories.organisms, 'save');
+    const settingsSaveSpy = vi.spyOn(repositories.settings, 'save');
+    installPerCanvasRecording();
+    enableCanvasRendering();
+
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    const canvas = await findEditorCanvas(container);
+    stubCanvasRect(canvas);
+    click(canvas, centreOfCell(canvas, SKIRMISH.gridSize, 4, 4));
+
+    expect(battleSaveSpy).not.toHaveBeenCalled();
+    expect(organismSaveSpy).not.toHaveBeenCalled();
+    expect(settingsSaveSpy).not.toHaveBeenCalled();
+    // ❌ No `expect(localStorage.length).toBe(0)` here. `createFakeRepositories()` is in-memory, so
+    // that assertion is green no matter what the component does — a permanently-passing line in the
+    // one test AC5 rests on. Task 7 says so outright: assert the fake repos' CALL COUNTS, "not by
+    // inspecting storage".
+  });
+
+  // AC4's real risk (Dev Notes): a churning `onCommitGrid` identity, not a missing flag. The
+  // identity itself is not observable from outside `<BattlePage>` (it is never rendered into the
+  // DOM), so this proves the OUTWARD consequence instead — the commit seam keeps working exactly
+  // as before across an UNRELATED re-render (a name edit): a cell painted before the edit is still
+  // held afterward (re-clicking it is still a no-op), and painting a new cell still works. A
+  // wrapper rebuilt with a fresh identity per render is still guarded structurally by
+  // `useCallback(fn, [commitGrid])` (BattlePage.tsx) — this test is the regression net around that
+  // guarantee, not a replacement for it.
+  it('keeps the commit seam working across an unrelated re-render (AC4, identity stability)', async () => {
+    const user = userEvent.setup();
+    const { canvas, recording } = await renderNewRoute();
+    const at = centreOfCell(canvas, NEW_ROUTE_SIZE, 8, 8);
+
+    click(canvas, at);
+    const afterFirstClick = recording.calls.length;
+    expect(afterFirstClick).toBeGreaterThan(0);
+
+    // The unrelated re-render: typing in the name field flips `battleName` and `isDirty`, neither
+    // of which the grid depends on.
+    await user.type(nameField(), 'x');
+
+    // Re-clicking the SAME cell is still a no-op — the held grid survived the re-render.
+    click(canvas, at);
+    expect(recording.calls.length).toBe(afterFirstClick);
+
+    // A NEW cell still paints.
+    const another = centreOfCell(canvas, NEW_ROUTE_SIZE, 20, 3);
+    click(canvas, another);
+    expect(recording.calls.length).toBeGreaterThan(afterFirstClick);
+  });
+
+  it('does not wrap undo — a bare undo never clears isDirty (Dev Notes)', async () => {
+    const user = userEvent.setup();
+    const { container, canvas } = await renderNewRoute();
+
+    click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 5, 5));
+    expect(dirtyValue(container)).toBe('true');
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+
+    // Undoing to the seed is not the same as being saved (Dev Notes → *Undo and the dirty flag*).
+    expect(dirtyValue(container)).toBe('true');
+  });
+
+  describe('the browser tab title (AC6)', () => {
+    it('is set to the loaded battle’s display name, suffixed with the app name', async () => {
+      render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+      await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+      expect(document.title).toBe('Three-Way Skirmish · Game of Life Studio');
+    });
+
+    it('tracks typing, live', async () => {
+      const user = userEvent.setup();
+      render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+      await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+      await user.type(nameField(), '!');
+
+      expect(document.title).toBe('Three-Way Skirmish! · Game of Life Studio');
+    });
+
+    // AC6: the not-found body must not claim a battle name it does not have.
+    it('is not set to a battle name in the not-found branch', async () => {
+      document.title = 'Battle Gallery · Game of Life Studio';
+
+      render(
+        <BattlePage repositories={seeded()} battleId="ffffffff-0000-4000-8000-000000000000" />,
+      );
+      await screen.findByRole('heading', { level: 1, name: 'Battle Not Found' });
+
+      expect(document.title).toBe('Battle Gallery · Game of Life Studio');
+    });
+
+    // AC6 / Dev Notes: a client navigation back to the Gallery must not keep reading the last
+    // battle's name — the cleanup restores whatever title preceded this mount, not a hardcoded
+    // fallback (which could itself go stale against a future root layout rename).
+    it('is restored to the pre-mount title on unmount', async () => {
+      document.title = 'Battle Gallery · Game of Life Studio';
+
+      const { unmount } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+      await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+      expect(document.title).toBe('Three-Way Skirmish · Game of Life Studio');
+
+      unmount();
+
+      expect(document.title).toBe('Battle Gallery · Game of Life Studio');
+    });
   });
 });
 
