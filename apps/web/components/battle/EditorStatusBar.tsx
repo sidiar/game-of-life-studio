@@ -175,13 +175,23 @@ const UndoButton = styled('button')({
   border: '1px solid var(--gol-border-control)',
   color: 'var(--gol-text-primary)',
   padding: '8px 16px',
-  // Enumerated, never the mockup's `all 0.2s` — with `all`, any property added to this block later
-  // starts animating by accident, including a layout-affecting one (BattleTile's recorded reason).
+  // ⚠️ **No `transition`** — removed 2026-08-28, and the claim that used to sit here ("safe on UNDO
+  // because both states paint dark-on-dark, unlike SAVE") was simply WRONG. The disabled pair is
+  // `--gol-action-disabled` on `--gol-action-disabled-bg`, i.e. white@30% on white@12%, which
+  // resolves to **#727272 on #353535 — 2.54:1**. That never showed up because axe EXEMPTS disabled
+  // controls from `color-contrast` (WCAG 1.4.3 does not apply to inactive components), so the
+  // settled state is never scanned. The cross-fade is: on the disabled→enabled edge the button is
+  // already `enabled` in the DOM while its colours still sit near the disabled endpoint, and a scan
+  // landing in that window measures an ENABLED control at 2.54:1. Caught by
+  // `battleRoute.spec.ts:601` ("no axe violations on /battle/new after a drag") — the same failure
+  // SAVE's own comment below records at 3.76:1, from the same cause, found the same way.
   //
-  // Safe HERE and not on SAVE (see below): both of UNDO's states paint dark-on-dark — transparent
-  // or `--gol-bg-hover` behind `--gol-text-primary`, `--gol-action-disabled-bg` behind
-  // `--gol-action-disabled` — so every intermediate frame of a cross-fade stays legible.
-  transition: 'background-color 0.2s, border-color 0.2s, color 0.2s',
+  // ❌ Do not restore it, on either button. The `:disabled` colours are only ever legitimate while
+  // the control is genuinely disabled; any animation between that pair and an enabled one paints
+  // frames nobody validated, and `themeTokens.test.ts` cannot see intermediate frames.
+  //
+  // (The rule this replaces was enumerated rather than the mockup's `all 0.2s`, for the reason
+  // `BattleTile` records: with `all`, any property added later starts animating by accident.)
   // Review (2026-08-28): the forced-decision-5 `barButtonBase` extraction dropped this rule
   // entirely — `barButtonBase` only carries the treatment SAVE and UNDO share, and UNDO's hover
   // (unlike its focus/disabled states) is NOT one of those, so it needs restating here.
@@ -189,9 +199,8 @@ const UndoButton = styled('button')({
     background: 'var(--gol-bg-hover)',
     borderColor: 'var(--gol-text-secondary)',
   },
-  '@media (prefers-reduced-motion: reduce)': {
-    transition: 'none',
-  },
+  // ❌ No `prefers-reduced-motion` block: there is no transition left for it to switch off, and an
+  // empty escape hatch reads as though one still exists.
 });
 
 /**
@@ -212,8 +221,12 @@ const UndoButton = styled('button')({
  * them animates through pairs nobody validated, and `themeTokens.test.ts` cannot see intermediate
  * frames. Measured: with a 0.2s fade, the axe scan that runs right after a placement enables this
  * button caught it mid-transition at **3.76:1** (fg `#214147` on bg `#10a5c3`) and failed on all
- * four Playwright projects. UNDO cross-fades within ONE pair (dark on dark) and keeps its
- * transition. Do not "restore consistency" by adding one back here.
+ * four Playwright projects. Do not "restore consistency" by adding one back here.
+ *
+ * ⚠️ Updated 2026-08-28: this used to add "UNDO cross-fades within ONE pair (dark on dark) and
+ * keeps its transition" — untrue, and UNDO has since lost its transition to the SAME failure at
+ * 2.54:1. See `UndoButton` above. NEITHER button animates between a disabled and an enabled
+ * palette; that is now the rule for this bar, not a SAVE-specific exception.
  */
 const SaveButton = styled('button')({
   ...barButtonBase,
@@ -369,7 +382,14 @@ export default function EditorStatusBar({
             is a plain `<div>`, live-bound through `onChange` alone. Kept explicit anyway — cheap,
             and correct regardless of what future story adds a `<form>` somewhere else on this
             route. */}
-        <UndoButton type="button" onClick={onUndo} disabled={!canUndo}>
+        {/* `isSaving` disables UNDO alongside SAVE (Sidiar's call, 2026-08-28): an undo landing
+            mid-write rewinds the grid away from the record being saved, which `<BattlePage>`'s
+            edit lock refuses outright. This is the visible half of that refusal — without it the
+            control advertises an availability it does not have, the same reasoning `isSaving`'s
+            own prop comment gives for SAVE. ⚠️ Composed HERE, not folded into `canUndo` by the
+            caller: there IS still history to undo during a write, so a `canUndo && !isSaving`
+            prop would make the prop's name false for the duration. */}
+        <UndoButton type="button" onClick={onUndo} disabled={!canUndo || isSaving}>
           Undo
         </UndoButton>
         {/* AFTER Undo in DOM order, which IS the tab order (AC8) — the mockup's own order

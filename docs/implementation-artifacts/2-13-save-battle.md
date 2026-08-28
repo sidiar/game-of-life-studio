@@ -337,7 +337,27 @@ layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus direct verifica
 prune / E.2 remap against the Dev Notes' worked example — confirmed correct, no findings against
 the load-bearing projection logic.
 
-- [ ] [Review][Decision] `handleSave` clears `isDirty` unconditionally on success, even if the
+- [x] [Review][Decision] **SETTLED by Sidiar, 2026-08-28: "Block all edits while `isSaving`."**
+      Implemented as an EDIT LOCK on `savingRef` — the ref that already existed for save
+      re-entrancy, now read by `handleNameChange`, `handleCommitGrid` and a new `handleUndo`
+      wrapper, each returning early while a write is in flight. A ref rather than `isSaving` state
+      is structural, not stylistic: `handleCommitGrid` must keep the stable identity `EditDish`'s
+      resize effect closes over, and reading state would put `isSaving` in its dep list. The
+      user-facing half is a real `disabled` attribute on SAVE (already present), UNDO
+      (`!canUndo || isSaving`) and the name field (`<BattleNameField disabled>`, new prop);
+      the canvas has no `disabled` attribute, so `handleCommitGrid`'s guard is the ONLY thing
+      standing between a mid-write stroke and a falsely cleared dirty flag.
+      Covered by five tests in `BattlePage.test.tsx` ("refuses every editor mutation while a write
+      is in flight"), including that the lock LIFTS on both a resolved and a REFUSED write — a
+      guard that never released would be worse than the bug it fixes. Mutation-checked: stripping
+      the three guards fails the name and canvas tests. ⚠️ The undo test asserts the `disabled`
+      attribute rather than bypassing it, because that IS the block for undo today; `handleUndo`'s
+      own guard is belt-to-that-brace for Story 3.19's hotkeys, which bypass the button, and is
+      NOT covered by a test — stated plainly rather than implied.
+      Not chosen: snapshot-compare-before-clearing. It keeps the editor live during the write but
+      leaves the user's edit in a state the store does not have, which is the same class of lie in
+      a quieter form; blocking keeps `isDirty === false` a true statement about what is on disk.
+      ~~Original finding:~~ `handleSave` clears `isDirty` unconditionally on success, even if the
       grid/roster/name were edited during the in-flight `await` — `BattlePage.tsx:608-655`. `grid`,
       `rosterIds`, `battleName` are captured by closure at call time; nothing besides the SAVE
       button is disabled while `isSaving` is true, so the canvas and name field stay editable
@@ -349,6 +369,27 @@ the load-bearing projection logic.
       saving), each with different UX cost — needs Sidiar's call, not a reviewer's guess.
       Independently found by both the Blind Hunter and Edge Case Hunter layers; confirmed by
       direct code reading.
+- [x] [Post-review][Fix] `UndoButton`'s `transition` REMOVED, and the comment justifying it
+      corrected — it claimed UNDO could safely cross-fade "because both states paint dark-on-dark,
+      unlike SAVE". That is false: the disabled pair is `--gol-action-disabled` on
+      `--gol-action-disabled-bg`, i.e. white@30% on white@12%, resolving to **#727272 on #353535 —
+      2.54:1**. It never surfaced because axe EXEMPTS disabled controls from `color-contrast`, so
+      the settled state is never scanned; on the disabled→enabled edge the button is already
+      `enabled` in the DOM while its colours still sit near the disabled endpoint, and a scan
+      landing there measures an ENABLED control at 2.54:1. Observed as a red
+      `battleRoute.spec.ts:601` ("no axe violations on /battle/new after a drag") in a local full
+      `npm run ci`, reporting exactly those two colours — the identical failure, from the identical
+      cause, that cost SAVE its transition earlier in this story at 3.76:1.
+      ⚠️ **Pre-existing, not introduced here** — that test involves no save, so
+      `disabled={!canUndo || isSaving}` is a no-op in it. But this change makes UNDO's disabled
+      state toggle on EVERY save rather than once at session start, which multiplies exposure to
+      the hazard, so it is fixed here rather than deferred. ⚠️ Causation could not be proven by
+      reproduction: 24 repeat-runs across all four Playwright projects pass both with and without
+      the transition — it only surfaces under full-suite parallel load. The argument is
+      arithmetic (the two animated endpoints are 2.54:1) plus the observed colours matching them
+      exactly; removing the transition removes the hazard structurally rather than statistically.
+      The rule for this bar is now that NEITHER button animates between a disabled and an enabled
+      palette.
 - [ ] [Review][Decision] "Reconciliation #3" spec conflict, surfaced by the dev in the Dev Agent
       Record — not resolved by this review per the run's own instructions. The epic AC's citation
       resolves to no section in this repo (`epics.md:692`, `component-tree-battle-page.md:112`,
@@ -901,6 +942,12 @@ Bundle movement against Story 2.12's baseline: `/battle` and `/battle/new` **300
   dense-at-rest conversion and save orchestration (`apps/web`), the SAVE button, the non-destructive
   save-failure alert, and six inherited `deferred-work.md` entries settled (three fixed, three
   re-deferred with corrected reasoning). Status → review.
+- 2026-08-28 — Post-review: the concurrent-edit-during-save `decision-needed` finding settled by
+  Sidiar ("block all edits while `isSaving`") and implemented as an edit lock on `savingRef`, with
+  five regression tests. `UndoButton`'s transition removed alongside it — a latent 2.54:1 mid-fade
+  the lock's more frequent disabled↔enabled toggling would have exposed far more often. Status
+  UNCHANGED at review: the "Reconciliation #3" citation conflict is still open, and it is the
+  remaining `decision-needed`.
 
 Dev Model: opus   # first write path from the editor: the H.1 prune + E.2 ref-remap silently persists corruption when wrong, and the projection's package placement, new-battle identity, and save-failure surface are patterns 2.14/2.16/5.8/6.10 all inherit
 

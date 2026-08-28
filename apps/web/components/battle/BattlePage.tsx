@@ -219,10 +219,37 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // (the unsaved-changes guard that will read it in earnest is Story 2.16).
   const [isDirty, setIsDirty] = useState(false);
 
+  // THE EDIT LOCK (Sidiar's call, 2026-08-28, settling the code review's decision-needed finding).
+  //
+  // Two jobs, one ref. (a) Save re-entrancy: `setIsSaving(true)` does not take effect until the
+  // next render, so two activations dispatched in the same tick (a double-click, or a click racing
+  // the Enter key) would both read `isSaving === false` and both write. (b) Every editor mutation
+  // is refused for the duration of a write — the three handlers below (`handleNameChange`,
+  // `handleCommitGrid`, `handleUndo`) each return early on it.
+  //
+  // ⚠️ Why (b) exists: `handleSave` clears `isDirty` when the write RESOLVES, and it writes the
+  // record it projected BEFORE the await. An edit landing inside that window is therefore reported
+  // saved and never written — a silent loss of exactly the data this story exists to persist.
+  // Blocking the edit keeps the flag honest: what `isDirty === false` claims is on disk, is.
+  //
+  // ⚠️ A REF, not `isSaving` state, and that is structural rather than stylistic. `handleCommitGrid`
+  // must keep its stable identity (see its own comment — `EditDish`'s resize effect closes over it
+  // and deliberately does not re-register); reading state instead would put `isSaving` in the dep
+  // list and rebuild the callback on every save, breaking that guarantee with no test to catch it.
+  // The ref also cannot be raced by a mutation dispatched in the same tick as the save.
+  //
+  // The `disabled` attributes on SAVE, UNDO and the name field are the user-facing half of the same
+  // lock; this is the half that cannot be bypassed. Neither is sufficient alone — the canvas has no
+  // `disabled` attribute to set, so pointer edits are refused HERE and nowhere else.
+  const savingRef = useRef(false);
+
   // AC3: one handler sets BOTH the value and the flag, so React batches them into one commit — the
   // seed (`nameState.seed`) is carried through unchanged, which is what keeps a same-render
   // in-render adjust (above) from mistaking this edit for a new battle loading.
   const handleNameChange = useCallback((name: string) => {
+    // The edit lock (see `savingRef`). Refused mid-write, so the name cannot change out from under
+    // the record `handleSave` already projected and is about to report saved.
+    if (savingRef.current) return;
     setNameState((previous) => ({ value: name, seed: previous.seed }));
     setIsDirty(true);
   }, []);
@@ -556,11 +583,25 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // the seed is not the same as being saved) — see Dev Notes → *Undo and the dirty flag*.
   const handleCommitGrid = useCallback(
     (next: RenderableGrid) => {
+      // The edit lock (see `savingRef`). This is the ONLY place a pointer edit can be refused —
+      // a canvas has no `disabled` attribute, so unlike SAVE, UNDO and the name field there is no
+      // user-facing half here. Reading the REF rather than `isSaving` state is what keeps this
+      // callback's identity stable, which the comment above requires.
+      if (savingRef.current) return;
       commitGrid(next);
       setIsDirty(true);
     },
     [commitGrid],
   );
+
+  // The edit lock over UNDO. `undo` is NOT wrapped for the dirty flag (see above) but IS wrapped
+  // here: an undo mid-write rewinds the grid away from the record being saved, and `handleSave`
+  // would then clear `isDirty` over a grid that no longer matches what reached the store. Stable
+  // by construction — `useUndoableGrid` returns a `useCallback([])` for `undo`.
+  const handleUndo = useCallback(() => {
+    if (savingRef.current) return;
+    undo();
+  }, [undo]);
 
   // Story 2.13 (AC2): the identity a save stamps, remembered across saves.
   //
@@ -587,12 +628,6 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // AC5 / NFR-7.2: a refused save's message, rendered as a `role="alert"` line above the status bar
   // (forced decision 4b). `null` is "no failure to report" — never `''`.
   const [saveError, setSaveError] = useState<string | null>(null);
-  // The re-entrancy guard, in a REF as well as in state: `setIsSaving(true)` does not take effect
-  // until the next render, so two activations dispatched in the same tick (a double-click, or a
-  // click racing the Enter key) would both read `isSaving === false` and both write. The disabled
-  // attribute is the user-facing half; this is the one that cannot be raced.
-  const savingRef = useRef(false);
-
   // AC2, AC3, AC4, AC5 — the whole save. Declared before the four early returns below like every
   // other hook here.
   //
@@ -740,7 +775,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
           /* AC4: the WRAPPED seam — see handleCommitGrid's own comment above for why it, and not
              `commitGrid` directly, is what has to reach the canvas from here on. */
           onCommitGrid={handleCommitGrid}
-          onUndo={undo}
+          onUndo={handleUndo}
           canUndo={canUndo}
           /* Story 2.13 (AC1, AC4, AC5): inputs to the view, not derivations — spec §3.3 lists both
              as props, and `<BattlePage>` owns the dirty flag (AR-27/28) and the save itself. */

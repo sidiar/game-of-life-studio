@@ -750,15 +750,18 @@ describe('BattlePage', () => {
 const ORGANISMS_WITH_CONWAY: readonly Organism[] = [...organisms, CONWAYS_CLASSIC];
 const NEW_ROUTE_SIZE = DEFAULT_SETTINGS.defaultGridSize;
 
-async function renderNewRoute() {
+// `repositories` is optional and defaults to the standard /battle/new fixture. It exists for the
+// Story 2.13 edit-lock tests, which have to spy on `battles.save` and therefore need a reference to
+// the very object this helper used to construct privately.
+async function renderNewRoute(
+  repositories: AppRepositories = createFakeRepositories({
+    battles: [],
+    organisms: ORGANISMS_WITH_CONWAY,
+  }),
+) {
   const contextsByCanvas = installPerCanvasRecording();
   enableCanvasRendering();
-  const view = render(
-    <BattlePage
-      repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
-      battleId="new"
-    />,
-  );
+  const view = render(<BattlePage repositories={repositories} battleId="new" />);
   await view.findByRole('heading', { level: 1, name: 'Untitled Battle' });
   const canvas = await findEditorCanvas(view.container);
   stubCanvasRect(canvas);
@@ -1685,6 +1688,183 @@ describe('BattlePage — saving (Story 2.13)', () => {
 
     release?.();
     await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+  });
+
+  /**
+   * THE EDIT LOCK (Sidiar's call, 2026-08-28, settling the code review's decision-needed finding).
+   *
+   * `handleSave` projects its record BEFORE the await and clears `isDirty` when the write RESOLVES.
+   * Anything the user changed in between is therefore reported saved and never written — the one
+   * failure mode this story cannot tolerate, and invisible in every other test here because they
+   * all resolve the write before touching the editor again. The fix refuses the edit instead, so
+   * these tests assert the REFUSAL: state unchanged during the window, and the record that reaches
+   * the repository unaffected by what was attempted.
+   *
+   * ⚠️ Each of the three mutation seams is covered separately. They are guarded independently in
+   * `<BattlePage>` (`handleNameChange`, `handleCommitGrid`, `handleUndo`), so one test passing says
+   * nothing about the other two — and the canvas seam is the one with no `disabled` attribute to
+   * fall back on.
+   */
+  describe('refuses every editor mutation while a write is in flight', () => {
+    /** Story 2.12's live readout, which is the only view of the grid a unit test can read back.
+     * `role="group"` with an `aria-label` of `Living Cells: N` (`<EditorStatusBar>`) — parsed
+     * rather than matched against an expected string, so the assertion states a NUMBER. */
+    function livingCells(): number {
+      const label = screen
+        .getByRole('group', { name: /^Living Cells: \d+$/ })
+        .getAttribute('aria-label');
+      return Number(label?.replace('Living Cells: ', ''));
+    }
+
+    /** A save that hangs until released, so the in-flight window can be inspected. */
+    function hangingSave(repositories: AppRepositories) {
+      let release: (() => void) | undefined;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const spy = vi.spyOn(repositories.battles, 'save').mockReturnValue(pending);
+      return { spy, release: () => release?.() };
+    }
+
+    it('refuses a name edit, and the released save still reports the name it projected', async () => {
+      const user = userEvent.setup();
+      const repositories = seeded();
+      const { spy, release } = hangingSave(repositories);
+      render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+      await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+      await user.type(nameField(), '!');
+      await user.click(saveButton());
+      await waitFor(() => expect(saveButton()).toBeDisabled());
+
+      // The visible half: the field is genuinely unavailable, not merely ignored.
+      expect(nameField()).toBeDisabled();
+
+      // The authoritative half. `user.type` on a disabled field is already a no-op, so the guard
+      // is exercised directly through the same prop the field calls — otherwise this test would
+      // pass with `handleNameChange` unguarded, proving only that `disabled` works.
+      fireEvent.change(nameField(), { target: { value: 'Renamed Mid-Write' } });
+      expect(nameField()).toHaveValue('Three-Way Skirmish!');
+
+      release();
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+      // The record is the one projected before the await, and the refused edit never reached it.
+      expect(savedRecord(spy).name).toBe('Three-Way Skirmish!');
+    });
+
+    // The seam with no user-facing half: a canvas has no `disabled` attribute, so `handleCommitGrid`
+    // is the only thing standing between a mid-write stroke and a falsely cleared dirty flag.
+    it('refuses a canvas edit, leaving the grid it saved intact', async () => {
+      const user = userEvent.setup();
+      // The /battle/new fixture, not `seeded()`: a click only lands when `DEFAULT_TOOL` resolves
+      // against the roster (trap 3 above), and it is built here rather than inside `renderNewRoute`
+      // only so `battles.save` can be spied on.
+      const repositories = createFakeRepositories({
+        battles: [],
+        organisms: ORGANISMS_WITH_CONWAY,
+      });
+      const { spy, release } = hangingSave(repositories);
+      const { container, canvas } = await renderNewRoute(repositories);
+
+      click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 5, 5));
+      expect(dirtyValue(container)).toBe('true');
+
+      await user.click(saveButton());
+      await waitFor(() => expect(saveButton()).toBeDisabled());
+
+      // A second, different cell, attempted mid-write.
+      click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 6, 6));
+
+      // ⚠️ THE assertion — read through Story 2.12's live "Living Cells" readout, because the
+      // saved RECORD cannot show this: it was projected before the await and reads 1 either way.
+      // Without the guard the stroke commits, this says 2, and the release below then clears
+      // `isDirty` over a grid holding a cell that never reached the store.
+      expect(livingCells()).toBe(1);
+
+      release();
+      await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+
+      // `isDirty === false` is now a true statement about the grid on screen: one cell, and it is
+      // the one in the record.
+      expect(livingCells()).toBe(1);
+      expect(savedRecord(spy).gridState[5]?.[5]).toBeGreaterThan(0);
+    });
+
+    it('refuses an undo, so the dirty flag never clears over a rewound grid', async () => {
+      const user = userEvent.setup();
+      const repositories = createFakeRepositories({
+        battles: [],
+        organisms: ORGANISMS_WITH_CONWAY,
+      });
+      const { spy, release } = hangingSave(repositories);
+      const { container, canvas } = await renderNewRoute(repositories);
+
+      click(canvas, centreOfCell(canvas, NEW_ROUTE_SIZE, 5, 5));
+      await user.click(saveButton());
+      await waitFor(() => expect(saveButton()).toBeDisabled());
+
+      // The `disabled` attribute IS the block for undo, and it is asserted rather than bypassed:
+      // there is no other undo path in the app today (3.19's hotkeys are the first, and are why
+      // `handleUndo` carries a guard of its own — belt to this brace, not covered here).
+      // ⚠️ Disabled even though `canUndo` is TRUE: there is history, so this can only be `isSaving`.
+      expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+
+      release();
+      await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+
+      // Nothing was rewound: the ring still holds its one commit (so UNDO is available again) and
+      // the cell that reached the store is still on the grid.
+      expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+      expect(livingCells()).toBe(1);
+      expect(savedRecord(spy).gridState[5]?.[5]).toBeGreaterThan(0);
+    });
+
+    // The lock LIFTS. A guard that never released would be a worse bug than the one it fixes.
+    it('accepts edits again once the write has resolved', async () => {
+      const user = userEvent.setup();
+      const repositories = seeded();
+      const { release } = hangingSave(repositories);
+      const { container } = render(
+        <BattlePage repositories={repositories} battleId={SKIRMISH.id} />,
+      );
+      await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+      await user.type(nameField(), '!');
+      await user.click(saveButton());
+      await waitFor(() => expect(saveButton()).toBeDisabled());
+      release();
+      await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+
+      expect(nameField()).toBeEnabled();
+      await user.type(nameField(), '?');
+
+      expect(nameField()).toHaveValue('Three-Way Skirmish!?');
+      expect(dirtyValue(container)).toBe('true');
+    });
+
+    // A REFUSED write must also lift the lock, or a user who hit quota could never edit their way
+    // out of it — the `finally` block is what guarantees this, and nothing else asserted it.
+    it('accepts edits again after a write that FAILED', async () => {
+      const user = userEvent.setup();
+      const repositories = seeded();
+      vi.spyOn(repositories.battles, 'save').mockRejectedValue(
+        new QuotaExceededError('gol:battles'),
+      );
+      const { container } = render(
+        <BattlePage repositories={repositories} battleId={SKIRMISH.id} />,
+      );
+      await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+      await user.type(nameField(), '!');
+      await user.click(saveButton());
+      await screen.findByRole('alert');
+
+      expect(nameField()).toBeEnabled();
+      await user.type(nameField(), '?');
+
+      expect(nameField()).toHaveValue('Three-Way Skirmish!?');
+      expect(dirtyValue(container)).toBe('true');
+    });
   });
 
   /**

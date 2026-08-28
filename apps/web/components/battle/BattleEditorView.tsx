@@ -524,6 +524,10 @@ export default function BattleEditorView({
   atCap,
   battleName,
   onNameChange,
+  // Story 2.13 (Sidiar's call, 2026-08-28): pulled out of `...rest` for the SAME reason as `grid`
+  // below — the name field needs it directly. Still forwarded to `<EditorMain>` explicitly, which
+  // is what keeps `<EditorStatusBar>`'s two buttons receiving it.
+  isSaving,
   // Story 2.12 (Task 3): destructured explicitly rather than left inside `...rest`, because the
   // stats memo below needs it directly. Forwarded to `<EditorMain>` explicitly further down —
   // pulling it out of the destructure does not remove it from what that component receives.
@@ -625,11 +629,22 @@ export default function BattleEditorView({
               value={battleName}
               onChange={onNameChange}
               maxLength={MAX_BATTLE_NAME_LENGTH}
+              /* The visible half of `<BattlePage>`'s edit lock — see that component's `savingRef`.
+                 The lock refuses the change either way; this stops the field from accepting
+                 keystrokes it has already decided to discard. */
+              disabled={isSaving}
             />
           </SidebarSection>
         </SidebarContent>
       </EditorSidebar>
-      <EditorMain {...rest} grid={grid} tool={selectedTool} toolRef={toolRef} stats={stats} />
+      <EditorMain
+        {...rest}
+        grid={grid}
+        isSaving={isSaving}
+        tool={selectedTool}
+        toolRef={toolRef}
+        stats={stats}
+      />
     </EditorLayout>
   );
 }
