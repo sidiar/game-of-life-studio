@@ -4,7 +4,7 @@ baseline_commit: 84ddb6ae6ac9f61afa2037c06d4ba807d22f296c
 
 # Story 2.12: Editor Status Bar Stats
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -545,6 +545,9 @@ claude-sonnet-5 (Sonnet 5)
     accessible-naming markup.
   - `/battle/new` 300.4 KB gzip, 9.6 KB headroom (310 KB budget) — same shape, +0.5 KB.
   - No budget exceeded; none raised.
+- ⚠️ **Superseded by code review (2026-08-28) — see "Unresolved / flagged for Sidiar" below.** The
+  regression analysis in this bullet is incorrect: the failures were caused by this story, and the
+  scratch-worktree comparison it cites was invalidated by a stale server on port 4173.
 - `npm run e2e` — **20/228 tests fail**, all with the identical shape: a pre-existing
   `"ResizeObserver loop completed with undelivered notifications."` browser console entry trips
   the suite's `expect(errors).toEqual([])` clean-console assertions (chromium 2, firefox 2, webkit
@@ -616,15 +619,59 @@ claude-sonnet-5 (Sonnet 5)
 
 ### Unresolved / flagged for Sidiar
 
-- `npm run e2e` (and therefore `npm run ci`) is locally red on this branch, but **for a
-  confirmed-pre-existing reason** (see Debug Log): a benign `"ResizeObserver loop completed with
-  undelivered notifications."` console message, reproduced independently on `main` at `84ddb6a`
-  before any of this story's changes. No code in this story was changed to chase it, since doing so
-  risked masking a real signal for a message multiple sources document as non-actionable browser
-  noise. Flagging rather than deciding unilaterally: **should this be silenced (e.g. a narrow
-  `pageerror`/`console` filter for this exact message text, or `ignoreHTTPSErrors`-style
-  suppression), or left red until a dedicated story investigates it?** Left AS-IS pending Sidiar's
-  call — this story's own two new e2e tests pass cleanly in every run.
+- ~~`npm run e2e` (and therefore `npm run ci`) is locally red on this branch, but **for a
+  confirmed-pre-existing reason**~~ — **❌ WITHDRAWN in code review (2026-08-28). The claim was
+  wrong and there is nothing here for Sidiar to decide.** The `"ResizeObserver loop completed with
+  undelivered notifications."` failures were a **regression introduced by this story**, not
+  pre-existing flake. Measured on one machine, same spec file, same command:
+  `main`@`84ddb6a` → **104 passed, 0 failed**; `story/2-12`@`7f9ffa8` → **96 passed, 20 failed**,
+  every failure that message. (`main`'s own CI run for `84ddb6a`, `33167150151`, is likewise green
+  through the full e2e stage.) The cause was forced decision 4's `width: 'auto'` on
+  `<PetriDishBox>`: `<PetriDishCanvas>` observes `canvas.parentElement` — that box — and its
+  `observe()` comment states the feedback loop is "broken by construction" *because* "the parent's
+  box is never written by `paint()`". An `auto` width makes the box content-derived, and its only
+  content is the canvas whose intrinsic `width`/`height` `paint()` writes. Reverting to a definite
+  `width: '100%'` returns the suite to **116 passed, 0 failed**. See the review commit.
+
+  ⚠️ **Why the original verification missed it:** `playwright.config.ts` sets
+  `reuseExistingServer: !process.env.CI`, so a scratch-worktree run started while a `serve out`
+  from the branch was still bound to port 4173 silently tests the BRANCH's build, whatever the
+  worktree contains. A stale `serve` on 4173 was in fact still running when this review began. Any
+  future "reproduced it on main" check must kill port 4173 first — or the comparison proves
+  nothing.
+
+### Code Review Record (Opus, 2026-08-28)
+
+Reviewed against `main`@`84ddb6a` with three parallel layers (Blind Hunter, Edge Case Hunter,
+Acceptance Auditor). **7 patches applied, 7 items deferred, 0 decisions outstanding.** The two
+load-bearing findings both concern AC6, and both were confirmed by measurement rather than reading:
+
+1. **The ResizeObserver failures were this story's regression, not pre-existing flake.** Same
+   machine, same spec, same command: `main` 104 passed / 0 failed vs. the story branch 96 / 20.
+   Cause: `width: 'auto'` on `<PetriDishBox>`, the element `<PetriDishCanvas>` observes — see the
+   corrected "Unresolved" section above. Reverted to a definite `width: '100%'` (+ `minWidth: 0`).
+2. **AC6's overflow fix was inert as shipped.** `maxHeight: '100%'` resolves against the parent's
+   height, and every ancestor up to `<Root>` was height-indefinite, so the cap clamped nothing:
+   measured at 1400x420, the dish still rendered 600px tall with `scrollHeight` 784 against a 420px
+   viewport — geometry identical to the pre-story code. Fixed by making the chain definite:
+   `<Root>` gains `height: '100vh'` (the mockup's own `.app-container` value, `:29`, under a
+   `body { overflow: hidden }` — `min-height` was the deviation), and `<MainContent>` +
+   `<GridContainer>` each gain `minHeight: 0`. Re-measured at 1600x400, 1400x420, 1280x720 and
+   700x500: `scrollHeight === clientHeight` at every one.
+
+Also patched: the stats row overflowed the bar horizontally and pushed UNDO off-screen (measured
+`document.scrollWidth` 823 vs a 700px viewport with only three organisms, onset ~10 organisms at
+1280px) — `minWidth: 0` on `<Bar>`/`<StatsGroup>`, `overflowX: 'auto'` on the latter,
+`flexShrink: 0` on `<RightGroup>`; the AC6 e2e gained lower bounds (every prior assertion was an
+upper bound, all of which a 0x0 dish satisfies) plus a second test at 1400x420, since 700x500 is
+width-bound and passes against the unfixed code; and `deferred-work.md`'s three closure notes were
+rewritten, one of which had been struck through on a claim that was false until this commit.
+
+`npm run ci` is green end to end: 717 unit tests, **232 e2e passed / 0 failed**, zero
+ResizeObserver messages, all three bundle budgets unchanged (`/` 326.6, `/battle` 300.5,
+`/battle/new` 300.4 KB gzip).
+
+Seven items deferred with owners — see `deferred-work.md`'s 2-12 section.
 
 ### File List
 

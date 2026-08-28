@@ -187,6 +187,11 @@ const MainContent = styled('div')({
   // to shrink below its own intrinsic size and pushes the sidebar off-screen instead (Story 2.9 —
   // the first story where anything competes with the dish for width).
   minWidth: 0,
+  // review (2026-08-28): the HEIGHT counterpart, and the other half of AC6. `min-height: auto` is
+  // the same content floor in the block direction; without this, this column grows to its
+  // content's height instead of being bounded by `<EditorLayout>`'s row, and every percentage
+  // height below it resolves against a container that has already expanded to fit.
+  minHeight: 0,
   display: 'flex',
   flexDirection: 'column',
   background: 'var(--gol-bg-primary)',
@@ -198,14 +203,25 @@ const MainContent = styled('div')({
 // stays unreproduced permanently, not "until 2.12".
 //
 // ⚠️ A `display: 'grid'` + `placeItems: 'center'` version of this container was tried during
-// Story 2.12 and reverted: an implicit auto-sized grid track does not bound `<PetriDishBox>`'s
-// `aspect-ratio`-derived width to the track's available space the way a flex row's default
-// `flex-shrink: 1` does, so the box grew toward its `max-width: 1000px` ceiling regardless of the
-// actual (narrower) container — reintroducing exactly the overflow AC6 exists to remove. Flex,
-// unchanged in kind from before this story, is what makes the narrow-viewport half of forced
-// decision 4 hold.
+// Story 2.12 and reverted. That experiment was paired with a `width: 'auto'` `<PetriDishBox>`,
+// which the review then reverted as well (see that component's own ⚠️ note — an auto width
+// re-broke `<PetriDishCanvas>`'s ResizeObserver invariant). Flex is kept here regardless: it is
+// unchanged in kind from before this story, `align-items: center` is what the dish-overflow
+// entry describes, and the shipped `<PetriDishBox>` bounds itself on BOTH axes
+// (`maxHeight: '100%'` + `minWidth: 0`) rather than relying on the container's display mode to
+// do it. Changing this container is not required by AC6 and would put the narrow-viewport
+// regression test (e2e, 700x500) at risk for no gain.
 const GridContainer = styled('div')({
   flex: 1,
+  // review (2026-08-28) — AC6's load-bearing line, and the reason the story's first commit did not
+  // actually fix the overflow it set out to fix. `flex: 1` alone does NOT bound this box: a flex
+  // item's `min-height: auto` floor is its CONTENT height, so this container silently grew to
+  // whatever `<PetriDishBox>` asked for, and the child's `maxHeight: '100%'` then resolved against
+  // that already-expanded height — a cap that can never bind. Measured before this line at
+  // 1400x420: `documentElement.scrollHeight` 784 vs `clientHeight` 420, i.e. the dish still ran
+  // 278px past the fold, exactly the defect deferred-work.md describes. With `minHeight: 0` the
+  // container is bounded by the column instead, and the child's cap becomes real.
+  minHeight: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -216,23 +232,35 @@ const GridContainer = styled('div')({
 // (rendered only when `colors` resolves) fills it via DishCanvas below; the degraded state leaves
 // it empty, matching BattleTile's PetriDish pattern.
 //
-// Story 2.12 (AC6, forced decision 4, option b): `width: 'auto'` + `maxHeight: '100%'`, not the
-// previous `width: '100%'` with no height cap. The old pair let a wide-but-short viewport (a
-// laptop, once Story 2.9's 320px sidebar and this story's own in-flow status bar both take their
-// share) compute a height taller than `<GridContainer>`'s available space — a centred flex item's
-// TOP overflow is unreachable by scrolling, so part of the dish was genuinely unviewable
-// (deferred-work.md). `maxHeight: '100%'` bounds the box's ratio-derived height to whatever
-// `<GridContainer>` actually has, and `width: 'auto'` lets `aspect-ratio` derive the width from
-// THAT instead of the other way around; `maxWidth: '1000px'` is kept so the box still stops
-// growing past its historical ceiling on a tall, wide viewport. `<GridContainer>`'s default
-// `flex-shrink: 1` covers the other direction (a narrow viewport where even the height-bounded
-// width would be too wide): the browser's flexbox + `aspect-ratio` sizing algorithm shrinks the
-// whole box proportionally, keeping the ratio, rather than clipping one axis. This is FR-3.2's
-// actual promise ("the whole grid visible") — and `<PetriDishCanvas>`'s `ResizeObserver` re-fits
-// on the resulting box change with no extra wiring, since both editable presets are exactly 5:3
-// against a 5:3 box (`computeGridLayout` letterboxes by zero either way).
+// Story 2.12 (AC6, forced decision 4, option b): `maxHeight: '100%'` is the whole fix — the width
+// stays DEFINITE. The pre-2.12 pair (`width: '100%'` with no height cap) let a wide-but-short
+// viewport (a laptop, once Story 2.9's 320px sidebar and this story's own in-flow status bar both
+// take their share) compute a height taller than `<GridContainer>`'s available space; a centred
+// flex item's TOP overflow is unreachable by scrolling, so part of the dish was genuinely
+// unviewable (deferred-work.md). `maxHeight: '100%'` bounds the ratio-derived height to whatever
+// `<GridContainer>` actually has, and `minWidth: 0` lets this flex item shrink below its
+// content's min-content width on a narrow viewport instead of forcing the container wider.
+// `maxWidth: '1000px'` is kept so the box still stops growing past its historical ceiling.
+//
+// ⚠️ DO NOT change `width` to `auto` here. It was shipped that way in this story's first commit
+// and reverted in review (2026-08-28), because `<PetriDishBox>` is the element
+// `<PetriDishCanvas>`'s `ResizeObserver` OBSERVES (it observes `canvas.parentElement` — see that
+// file's Task 4 comment, which states the loop is "broken by construction" precisely because
+// "the parent's box is never written by paint()"). An `auto` width makes this box's width
+// CONTENT-derived, and its only content is the canvas whose intrinsic `width`/`height` attributes
+// `paint()` writes — so paint -> canvas intrinsic size -> parent's auto width -> observer ->
+// paint. That re-broke the invariant and produced 20 e2e failures across all four Playwright
+// projects, every one of them the browser's `"ResizeObserver loop completed with undelivered
+// notifications."` error tripping this suite's clean-console assertions. A definite width
+// (`100%`, resolved against the container, never against the canvas) breaks the cycle.
+//
+// When `maxHeight` binds, the box is no longer exactly 5:3 and `aspect-ratio` yields to the cap.
+// That is fine and is not a fallback: `computeGridLayout` takes `Math.min` of the per-axis cell
+// sizes and centres the result, so the whole grid stays visible (FR-3.2) — letterboxed inside the
+// box rather than clipped by it.
 const PetriDishBox = styled('div')({
-  width: 'auto',
+  width: '100%',
+  minWidth: 0,
   maxWidth: '1000px',
   maxHeight: '100%',
   aspectRatio: '5 / 3',

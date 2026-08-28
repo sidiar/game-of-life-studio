@@ -957,5 +957,62 @@ test.describe('battle route (Story 2.1)', () => {
     expect(canvasBox.y).toBeGreaterThanOrEqual(0);
     expect(canvasBox.x + canvasBox.width).toBeLessThanOrEqual(viewport.width);
     expect(canvasBox.y + canvasBox.height).toBeLessThanOrEqual(viewport.height);
+
+    // review (2026-08-28): the four bounds above are all UPPER bounds, and a 0x0 box satisfies
+    // every one of them — so a dish that collapsed instead of fitting would pass the test written
+    // to prove it fits. A collapse is not hypothetical here: the sizing this AC changes is
+    // exactly what a circular width/height dependency would zero out. Assert the dish still has
+    // real area, and still fills the space actually left to it beside the 320px sidebar.
+    expect(canvasBox.width).toBeGreaterThan(100);
+    expect(canvasBox.height).toBeGreaterThan(60);
+    expect(canvasBox.width).toBeGreaterThan((viewport.width - sidebarBox.width) / 2);
+
+    // review (2026-08-28): the status bar's new stats row is the other thing that can widen this
+    // route. Measured before the fix, at this very viewport and with only the fixture's three
+    // organisms: `document.scrollWidth` 823 against a 700px viewport, with UNDO's right edge at
+    // 864 — i.e. the bar's one control rendered off-screen. Assert the DOCUMENT, not just the
+    // dish's box, or the row can push the page wide while every box-level check stays green.
+    const docWidth = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(docWidth.scrollWidth).toBeLessThanOrEqual(docWidth.clientWidth);
+
+    const undoBox = await page.getByRole('button', { name: 'Undo' }).boundingBox();
+    if (undoBox === null) throw new Error('undo has no layout box');
+    expect(undoBox.x + undoBox.width).toBeLessThanOrEqual(viewport.width);
+  });
+
+  // Story 2.12 AC6, the half the 700x500 test above does NOT cover (review, 2026-08-28). At
+  // 700x500 the dish's width-driven height (188px) already fits the ~376px available, so every
+  // assertion there passes against the UNFIXED code — it guards the narrow/sidebar half only.
+  // A WIDE-but-SHORT viewport is the shape `deferred-work.md`'s entry actually describes, and it
+  // is where the defect was measurable: before the fix, 1400x420 rendered a 600px-tall dish and
+  // left `documentElement.scrollHeight` at 784 against a 420px viewport — 278px of it below the
+  // fold, and (being a centred flex item) unreachable overflow above it too.
+  test('does not overflow the fold at a WIDE but SHORT viewport (AC6)', async ({ page }) => {
+    await seedWorkspace(page);
+    const viewport = { width: 1400, height: 420 };
+    await page.setViewportSize(viewport);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const canvasBox = await page.getByRole('img', { name: /petri dish/i }).boundingBox();
+    if (canvasBox === null) throw new Error('dish has no layout box');
+    expect(canvasBox.y).toBeGreaterThanOrEqual(0);
+    expect(canvasBox.y + canvasBox.height).toBeLessThanOrEqual(viewport.height);
+    // Still a real dish, not a collapsed one.
+    expect(canvasBox.width).toBeGreaterThan(100);
+    expect(canvasBox.height).toBeGreaterThan(60);
+
+    // ⚠️ THE assertion this test exists for, and the one the box-only checks above cannot make:
+    // the ROUTE does not scroll. `<PetriDishBox>`'s `maxHeight: '100%'` is inert unless every
+    // ancestor up to `<Root>` has a definite height, and a box that fits while the PAGE scrolls
+    // is the exact state the first commit shipped.
+    const doc = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    expect(doc.scrollHeight).toBeLessThanOrEqual(doc.clientHeight);
   });
 });

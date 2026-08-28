@@ -25,6 +25,12 @@ const Bar = styled('div')({
   justifyContent: 'space-between',
   gap: '20px',
   padding: '12px 25px',
+  // review (2026-08-28): a flex item's `min-width: auto` floor is its CONTENT width, so without
+  // this the bar refuses to shrink below the stats row's natural width and widens the whole route
+  // instead — measured at 700x500 with only three organisms as `document.scrollWidth` 823 against
+  // a 700px viewport, and reached at ~10 organisms even at 1280px (a Playwright project viewport).
+  // `MAX_ROSTER_SIZE` is 255, so the row's width has no upper bound of its own.
+  minWidth: 0,
   background: 'var(--gol-bg-secondary)',
   borderTop: '1px solid var(--gol-border)',
 });
@@ -42,6 +48,13 @@ const StatsGroup = styled('section')({
   display: 'flex',
   gap: '25px',
   alignItems: 'center',
+  // review (2026-08-28): this is the half that gives ground. `minWidth: 0` lets it shrink past its
+  // content width (see `<Bar>`), and `overflowX: 'auto'` keeps the surplus INSIDE the bar as a
+  // contained scroll rather than letting it widen the document — the route's premise is that
+  // nothing scrolls, and a bar that grows the page breaks it for every element, not just itself.
+  // Paired with `flexShrink: 0` on `<RightGroup>` so UNDO is never the control pushed off-screen.
+  minWidth: 0,
+  overflowX: 'auto',
 });
 
 /**
@@ -172,6 +185,11 @@ const RightGroup = styled('div')({
   display: 'flex',
   alignItems: 'center',
   gap: '20px',
+  // review (2026-08-28): never the side that shrinks. UNDO is the bar's only control, and a
+  // growing stats row must not be able to push it out of the viewport (measured before this line:
+  // `button.right` 864 at a 700px viewport). Story 2.13's SAVE lands here and inherits the same
+  // protection.
+  flexShrink: 0,
 });
 
 /**
