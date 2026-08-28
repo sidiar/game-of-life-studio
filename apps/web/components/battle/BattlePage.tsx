@@ -33,6 +33,22 @@ const Body = styled('div')({
 const Root = styled('div')({
   display: 'flex',
   flexDirection: 'column',
+  // review (2026-08-28), Story 2.12 AC6: a DEFINITE height, not `min-height` alone. This is the
+  // top of the chain every percentage height below it resolves against — `<PetriDishBox>`'s
+  // `maxHeight: '100%'` (the actual dish-overflow fix) computes to `none` unless this box, and
+  // every flex item between it and the dish, has a definite height. That is why the story's first
+  // commit shipped a cap that measurably never bound: at 1400x420 the dish still ran 278px past
+  // the fold with `max-height: 100%` set.
+  //
+  // This is the MOCKUP's own value, not a new design call: `.app-container` is `height: 100vh`
+  // under a `body { overflow: hidden }` (clinical-lab-theme/petri-dish-lab-mode.html:23,:27-30).
+  // `min-height` was the deviation. It is also the model the rest of this layout was already built
+  // for: `<EditorSidebar>` carries its own `overflow-y: auto`, which Story 2.9's comment notes
+  // "never engages — the whole page scrolls instead" without a bound like this one.
+  //
+  // Scoped to the editor branch by construction — the loading and not-found branches return their
+  // own markup above and never reach this element, so neither can be clipped by it.
+  height: '100vh',
   minHeight: '100vh',
 });
 

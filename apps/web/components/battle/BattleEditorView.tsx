@@ -7,10 +7,11 @@ import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
+import { computeEditorGridStats } from '@/lib/gridStats';
 import { ERASER_TOOL, refForTool, type Tool } from '@/lib/tool';
 import PetriDishCanvas from '../PetriDishCanvas';
 import BattleNameField from './BattleNameField';
-import EditorStatusBar from './EditorStatusBar';
+import EditorStatusBar, { type EditorStatusBarStats } from './EditorStatusBar';
 import OrganismRoster from './OrganismRoster';
 import SidebarSection from './SidebarSection';
 
@@ -118,6 +119,13 @@ type EditorMainProps = Omit<
 > & {
   tool: Tool;
   toolRef: number | null;
+  /**
+   * Story 2.12 (spec §6, trap 5): `<BattleEditorView>` DERIVES the stats; they are not an input
+   * to it, so this lives on `EditorMainProps`, never on `BattleEditorViewProps`. Adding it there
+   * would force `<BattlePage>` to supply a value it does not compute and would move the
+   * derivation up a level.
+   */
+  stats: EditorStatusBarStats;
 };
 
 /**
@@ -179,6 +187,11 @@ const MainContent = styled('div')({
   // to shrink below its own intrinsic size and pushes the sidebar off-screen instead (Story 2.9 —
   // the first story where anything competes with the dish for width).
   minWidth: 0,
+  // review (2026-08-28): the HEIGHT counterpart, and the other half of AC6. `min-height: auto` is
+  // the same content floor in the block direction; without this, this column grows to its
+  // content's height instead of being bounded by `<EditorLayout>`'s row, and every percentage
+  // height below it resolves against a container that has already expanded to fit.
+  minHeight: 0,
   display: 'flex',
   flexDirection: 'column',
   background: 'var(--gol-bg-primary)',
@@ -188,8 +201,27 @@ const MainContent = styled('div')({
 // `position: fixed` status bar. Story 2.8's <EditorStatusBar> is IN FLOW below this box instead,
 // so `flex: 1` yields it the bar's real height and there is nothing left to reserve — the 80px
 // stays unreproduced permanently, not "until 2.12".
+//
+// ⚠️ A `display: 'grid'` + `placeItems: 'center'` version of this container was tried during
+// Story 2.12 and reverted. That experiment was paired with a `width: 'auto'` `<PetriDishBox>`,
+// which the review then reverted as well (see that component's own ⚠️ note — an auto width
+// re-broke `<PetriDishCanvas>`'s ResizeObserver invariant). Flex is kept here regardless: it is
+// unchanged in kind from before this story, `align-items: center` is what the dish-overflow
+// entry describes, and the shipped `<PetriDishBox>` bounds itself on BOTH axes
+// (`maxHeight: '100%'` + `minWidth: 0`) rather than relying on the container's display mode to
+// do it. Changing this container is not required by AC6 and would put the narrow-viewport
+// regression test (e2e, 700x500) at risk for no gain.
 const GridContainer = styled('div')({
   flex: 1,
+  // review (2026-08-28) — AC6's load-bearing line, and the reason the story's first commit did not
+  // actually fix the overflow it set out to fix. `flex: 1` alone does NOT bound this box: a flex
+  // item's `min-height: auto` floor is its CONTENT height, so this container silently grew to
+  // whatever `<PetriDishBox>` asked for, and the child's `maxHeight: '100%'` then resolved against
+  // that already-expanded height — a cap that can never bind. Measured before this line at
+  // 1400x420: `documentElement.scrollHeight` 784 vs `clientHeight` 420, i.e. the dish still ran
+  // 278px past the fold, exactly the defect deferred-work.md describes. With `minHeight: 0` the
+  // container is bounded by the column instead, and the child's cap becomes real.
+  minHeight: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -199,9 +231,38 @@ const GridContainer = styled('div')({
 // Mockup: .petri-dish-grid (:452-459). Same box in every colour-availability state — the canvas
 // (rendered only when `colors` resolves) fills it via DishCanvas below; the degraded state leaves
 // it empty, matching BattleTile's PetriDish pattern.
+//
+// Story 2.12 (AC6, forced decision 4, option b): `maxHeight: '100%'` is the whole fix — the width
+// stays DEFINITE. The pre-2.12 pair (`width: '100%'` with no height cap) let a wide-but-short
+// viewport (a laptop, once Story 2.9's 320px sidebar and this story's own in-flow status bar both
+// take their share) compute a height taller than `<GridContainer>`'s available space; a centred
+// flex item's TOP overflow is unreachable by scrolling, so part of the dish was genuinely
+// unviewable (deferred-work.md). `maxHeight: '100%'` bounds the ratio-derived height to whatever
+// `<GridContainer>` actually has, and `minWidth: 0` lets this flex item shrink below its
+// content's min-content width on a narrow viewport instead of forcing the container wider.
+// `maxWidth: '1000px'` is kept so the box still stops growing past its historical ceiling.
+//
+// ⚠️ DO NOT change `width` to `auto` here. It was shipped that way in this story's first commit
+// and reverted in review (2026-08-28), because `<PetriDishBox>` is the element
+// `<PetriDishCanvas>`'s `ResizeObserver` OBSERVES (it observes `canvas.parentElement` — see that
+// file's Task 4 comment, which states the loop is "broken by construction" precisely because
+// "the parent's box is never written by paint()"). An `auto` width makes this box's width
+// CONTENT-derived, and its only content is the canvas whose intrinsic `width`/`height` attributes
+// `paint()` writes — so paint -> canvas intrinsic size -> parent's auto width -> observer ->
+// paint. That re-broke the invariant and produced 20 e2e failures across all four Playwright
+// projects, every one of them the browser's `"ResizeObserver loop completed with undelivered
+// notifications."` error tripping this suite's clean-console assertions. A definite width
+// (`100%`, resolved against the container, never against the canvas) breaks the cycle.
+//
+// When `maxHeight` binds, the box is no longer exactly 5:3 and `aspect-ratio` yields to the cap.
+// That is fine and is not a fallback: `computeGridLayout` takes `Math.min` of the per-axis cell
+// sizes and centres the result, so the whole grid stays visible (FR-3.2) — letterboxed inside the
+// box rather than clipped by it.
 const PetriDishBox = styled('div')({
   width: '100%',
+  minWidth: 0,
   maxWidth: '1000px',
+  maxHeight: '100%',
   aspectRatio: '5 / 3',
   background: 'var(--gol-bg-primary)',
   border: '2px solid var(--gol-border)',
@@ -256,6 +317,7 @@ function EditorMain({
   colors,
   tool,
   toolRef,
+  stats,
   onCommitGrid,
   onUndo,
   canUndo,
@@ -289,8 +351,9 @@ function EditorMain({
         </PetriDishBox>
       </GridContainer>
       {/* Spec §3.8 / FR-3.8. Forwarded, never interpreted: the undo ring lives in <BattlePage>
-          (RFC-005 Decision 6), so this component holds no history state of its own. */}
-      <EditorStatusBar onUndo={onUndo} canUndo={canUndo} />
+          (RFC-005 Decision 6), so this component holds no history state of its own. `stats` is
+          Story 2.12's derivation (below), forwarded the same way. */}
+      <EditorStatusBar onUndo={onUndo} canUndo={canUndo} stats={stats} />
     </MainContent>
   );
 }
@@ -402,6 +465,10 @@ export default function BattleEditorView({
   atCap,
   battleName,
   onNameChange,
+  // Story 2.12 (Task 3): destructured explicitly rather than left inside `...rest`, because the
+  // stats memo below needs it directly. Forwarded to `<EditorMain>` explicitly further down —
+  // pulling it out of the destructure does not remove it from what that component receives.
+  grid,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
@@ -447,6 +514,30 @@ export default function BattleEditorView({
   // render.
   const duplicateColorIds = useMemo(() => findDuplicateColorIds(roster), [roster]);
 
+  // AC4 / spec §3.3, §6: "derived per commit … memoized on grid/roster identity — recomputed per
+  // committed gesture, never per pointer-move (NFR-4.2)". `useUndoableGrid`'s `commit` AND `undo`
+  // both hand back a NEW `grid` object (trap 3), and an in-progress stroke never touches it (the
+  // stroke lives in `<PetriDishCanvas>`'s own refs — RFC-005 Decision 6), so this recomputes
+  // exactly once per committed gesture and not once per pointer-move.
+  const stats = useMemo<EditorStatusBarStats>(() => {
+    const gridStats = computeEditorGridStats(grid, rosterIds);
+
+    // Join to display data BY ID (trap 1), never by index: `roster` is `rosterIds` de-duplicated
+    // by `resolveDisplayOrganisms`, so `roster[ref - 1]` shifts after any duplicate.
+    const byId = new Map(roster.map((organism) => [organism.id, organism] as const));
+
+    return {
+      livingCells: gridStats.livingCells,
+      perOrganism: gridStats.perOrganism.flatMap(({ organismId, count }) => {
+        const organism = byId.get(organismId);
+        // `roster` is resolved from this SAME `rosterIds`, so every id `computeEditorGridStats`
+        // produces has a matching entry here — this is defensive, not an expected branch.
+        if (organism === undefined) return [];
+        return [{ organismId, name: organism.name, color: organism.color, count }];
+      }),
+    };
+  }, [grid, rosterIds, roster]);
+
   return (
     <EditorLayout>
       <EditorSidebar>
@@ -479,7 +570,7 @@ export default function BattleEditorView({
           </SidebarSection>
         </SidebarContent>
       </EditorSidebar>
-      <EditorMain {...rest} tool={selectedTool} toolRef={toolRef} />
+      <EditorMain {...rest} grid={grid} tool={selectedTool} toolRef={toolRef} stats={stats} />
     </EditorLayout>
   );
 }
