@@ -7,10 +7,11 @@ import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
+import { computeEditorGridStats } from '@/lib/gridStats';
 import { ERASER_TOOL, refForTool, type Tool } from '@/lib/tool';
 import PetriDishCanvas from '../PetriDishCanvas';
 import BattleNameField from './BattleNameField';
-import EditorStatusBar from './EditorStatusBar';
+import EditorStatusBar, { type EditorStatusBarStats } from './EditorStatusBar';
 import OrganismRoster from './OrganismRoster';
 import SidebarSection from './SidebarSection';
 
@@ -118,6 +119,13 @@ type EditorMainProps = Omit<
 > & {
   tool: Tool;
   toolRef: number | null;
+  /**
+   * Story 2.12 (spec §6, trap 5): `<BattleEditorView>` DERIVES the stats; they are not an input
+   * to it, so this lives on `EditorMainProps`, never on `BattleEditorViewProps`. Adding it there
+   * would force `<BattlePage>` to supply a value it does not compute and would move the
+   * derivation up a level.
+   */
+  stats: EditorStatusBarStats;
 };
 
 /**
@@ -188,6 +196,14 @@ const MainContent = styled('div')({
 // `position: fixed` status bar. Story 2.8's <EditorStatusBar> is IN FLOW below this box instead,
 // so `flex: 1` yields it the bar's real height and there is nothing left to reserve — the 80px
 // stays unreproduced permanently, not "until 2.12".
+//
+// ⚠️ A `display: 'grid'` + `placeItems: 'center'` version of this container was tried during
+// Story 2.12 and reverted: an implicit auto-sized grid track does not bound `<PetriDishBox>`'s
+// `aspect-ratio`-derived width to the track's available space the way a flex row's default
+// `flex-shrink: 1` does, so the box grew toward its `max-width: 1000px` ceiling regardless of the
+// actual (narrower) container — reintroducing exactly the overflow AC6 exists to remove. Flex,
+// unchanged in kind from before this story, is what makes the narrow-viewport half of forced
+// decision 4 hold.
 const GridContainer = styled('div')({
   flex: 1,
   display: 'flex',
@@ -199,9 +215,26 @@ const GridContainer = styled('div')({
 // Mockup: .petri-dish-grid (:452-459). Same box in every colour-availability state — the canvas
 // (rendered only when `colors` resolves) fills it via DishCanvas below; the degraded state leaves
 // it empty, matching BattleTile's PetriDish pattern.
+//
+// Story 2.12 (AC6, forced decision 4, option b): `width: 'auto'` + `maxHeight: '100%'`, not the
+// previous `width: '100%'` with no height cap. The old pair let a wide-but-short viewport (a
+// laptop, once Story 2.9's 320px sidebar and this story's own in-flow status bar both take their
+// share) compute a height taller than `<GridContainer>`'s available space — a centred flex item's
+// TOP overflow is unreachable by scrolling, so part of the dish was genuinely unviewable
+// (deferred-work.md). `maxHeight: '100%'` bounds the box's ratio-derived height to whatever
+// `<GridContainer>` actually has, and `width: 'auto'` lets `aspect-ratio` derive the width from
+// THAT instead of the other way around; `maxWidth: '1000px'` is kept so the box still stops
+// growing past its historical ceiling on a tall, wide viewport. `<GridContainer>`'s default
+// `flex-shrink: 1` covers the other direction (a narrow viewport where even the height-bounded
+// width would be too wide): the browser's flexbox + `aspect-ratio` sizing algorithm shrinks the
+// whole box proportionally, keeping the ratio, rather than clipping one axis. This is FR-3.2's
+// actual promise ("the whole grid visible") — and `<PetriDishCanvas>`'s `ResizeObserver` re-fits
+// on the resulting box change with no extra wiring, since both editable presets are exactly 5:3
+// against a 5:3 box (`computeGridLayout` letterboxes by zero either way).
 const PetriDishBox = styled('div')({
-  width: '100%',
+  width: 'auto',
   maxWidth: '1000px',
+  maxHeight: '100%',
   aspectRatio: '5 / 3',
   background: 'var(--gol-bg-primary)',
   border: '2px solid var(--gol-border)',
@@ -256,6 +289,7 @@ function EditorMain({
   colors,
   tool,
   toolRef,
+  stats,
   onCommitGrid,
   onUndo,
   canUndo,
@@ -289,8 +323,9 @@ function EditorMain({
         </PetriDishBox>
       </GridContainer>
       {/* Spec §3.8 / FR-3.8. Forwarded, never interpreted: the undo ring lives in <BattlePage>
-          (RFC-005 Decision 6), so this component holds no history state of its own. */}
-      <EditorStatusBar onUndo={onUndo} canUndo={canUndo} />
+          (RFC-005 Decision 6), so this component holds no history state of its own. `stats` is
+          Story 2.12's derivation (below), forwarded the same way. */}
+      <EditorStatusBar onUndo={onUndo} canUndo={canUndo} stats={stats} />
     </MainContent>
   );
 }
@@ -402,6 +437,10 @@ export default function BattleEditorView({
   atCap,
   battleName,
   onNameChange,
+  // Story 2.12 (Task 3): destructured explicitly rather than left inside `...rest`, because the
+  // stats memo below needs it directly. Forwarded to `<EditorMain>` explicitly further down —
+  // pulling it out of the destructure does not remove it from what that component receives.
+  grid,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
@@ -447,6 +486,30 @@ export default function BattleEditorView({
   // render.
   const duplicateColorIds = useMemo(() => findDuplicateColorIds(roster), [roster]);
 
+  // AC4 / spec §3.3, §6: "derived per commit … memoized on grid/roster identity — recomputed per
+  // committed gesture, never per pointer-move (NFR-4.2)". `useUndoableGrid`'s `commit` AND `undo`
+  // both hand back a NEW `grid` object (trap 3), and an in-progress stroke never touches it (the
+  // stroke lives in `<PetriDishCanvas>`'s own refs — RFC-005 Decision 6), so this recomputes
+  // exactly once per committed gesture and not once per pointer-move.
+  const stats = useMemo<EditorStatusBarStats>(() => {
+    const gridStats = computeEditorGridStats(grid, rosterIds);
+
+    // Join to display data BY ID (trap 1), never by index: `roster` is `rosterIds` de-duplicated
+    // by `resolveDisplayOrganisms`, so `roster[ref - 1]` shifts after any duplicate.
+    const byId = new Map(roster.map((organism) => [organism.id, organism] as const));
+
+    return {
+      livingCells: gridStats.livingCells,
+      perOrganism: gridStats.perOrganism.flatMap(({ organismId, count }) => {
+        const organism = byId.get(organismId);
+        // `roster` is resolved from this SAME `rosterIds`, so every id `computeEditorGridStats`
+        // produces has a matching entry here — this is defensive, not an expected branch.
+        if (organism === undefined) return [];
+        return [{ organismId, name: organism.name, color: organism.color, count }];
+      }),
+    };
+  }, [grid, rosterIds, roster]);
+
   return (
     <EditorLayout>
       <EditorSidebar>
@@ -479,7 +542,7 @@ export default function BattleEditorView({
           </SidebarSection>
         </SidebarContent>
       </EditorSidebar>
-      <EditorMain {...rest} tool={selectedTool} toolRef={toolRef} />
+      <EditorMain {...rest} grid={grid} tool={selectedTool} toolRef={toolRef} stats={stats} />
     </EditorLayout>
   );
 }

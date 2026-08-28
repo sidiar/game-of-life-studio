@@ -894,4 +894,68 @@ test.describe('battle route (Story 2.1)', () => {
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
   });
+
+  // Story 2.12 (AC1, AC3, AC7): the composed route is the only place the real roster's names and
+  // the real grid's contents can be proven to reach the bar TOGETHER — unit tests stub both.
+  // Three-Way Skirmish places three organisms under their real names (component-tree-battle-
+  // page.md's own fixture), so this is provable without hand-building a battle.
+  test('shows real per-organism population counts, labelled by name, in the status bar (AC1, AC3)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await expect(page.getByRole('group', { name: 'Generation: 0' })).toBeVisible();
+    // Living Cells is a `role="group"` combined name too, so this also proves the value is a real
+    // (non-zero) number rather than merely present.
+    await expect(page.getByRole('group', { name: /^Living Cells: [1-9]\d*$/ })).toBeVisible();
+    await expect(page.getByRole('img', { name: /^Aggressive Colonizer: \d+$/ })).toBeVisible();
+    await expect(page.getByRole('img', { name: /^Patient Defender: \d+$/ })).toBeVisible();
+    await expect(page.getByRole('img', { name: /^Chaotic Spreader: \d+$/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Battle statistics' })).toBeVisible();
+  });
+
+  test('has no axe accessibility violations on the status bar’s stats row', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.getByRole('region', { name: 'Battle statistics' })).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  // Story 2.12 (AC6, Task 6): a deliberately short AND narrow viewport, the shape both
+  // deferred-work.md entries this story owns describe — a wide-but-short window makes the dish
+  // taller than `<GridContainer>`, and Story 2.9's 320px sidebar makes it narrower besides. A
+  // one-off `setViewportSize` here rather than a fifth Playwright project (four projects × a
+  // fifth is real CI time, per the story's own Task 6).
+  test('keeps the dish fully within the viewport and the sidebar at its full width, at a short/narrow viewport (AC6)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    const viewport = { width: 700, height: 500 };
+    await page.setViewportSize(viewport);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    // (b) The 320px sidebar is intact — `flexShrink: 0` (EditorSidebar) means the DISH is the
+    // element that gives ground, never the sidebar.
+    const sidebarBox = await page.getByRole('complementary').boundingBox();
+    if (sidebarBox === null) throw new Error('sidebar has no layout box');
+    expect(sidebarBox.width).toBeCloseTo(320, 0);
+
+    // (a) The dish box is fully within its container — bounded by the viewport itself, since
+    // nothing on this route scrolls (forced decision 4's whole point: "the whole grid visible").
+    // The pre-fix defect (deferred-work.md) was a centred-flex item TALLER than its container,
+    // whose top overflow is unreachable by scrolling — this would show up here as `canvasBox.y`
+    // reading negative or `canvasBox.y + canvasBox.height` exceeding the viewport height.
+    const canvasBox = await page.getByRole('img', { name: /petri dish/i }).boundingBox();
+    if (canvasBox === null) throw new Error('dish has no layout box');
+    expect(canvasBox.x).toBeGreaterThanOrEqual(sidebarBox.x + sidebarBox.width);
+    expect(canvasBox.y).toBeGreaterThanOrEqual(0);
+    expect(canvasBox.x + canvasBox.width).toBeLessThanOrEqual(viewport.width);
+    expect(canvasBox.y + canvasBox.height).toBeLessThanOrEqual(viewport.height);
+  });
 });

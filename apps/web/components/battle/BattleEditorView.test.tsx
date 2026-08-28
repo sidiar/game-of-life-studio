@@ -127,11 +127,16 @@ describe('BattleEditorView', () => {
     expect(screen.queryByText(/grid size/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /back/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /clear/i })).toBeNull();
+    // Forced decision 3 (Story 2.12, AC5): a NAMED REGION, not a live region — `queryAllByRole
+    // ('status')` stays true even now that the bar's content exists, because the stats never took
+    // option (a)/(c). If a future story adds a live region here, this line must be updated with a
+    // comment saying why, not deleted (trap 4).
     expect(screen.queryAllByRole('status')).toHaveLength(0);
     expect(screen.queryAllByRole('toolbar')).toHaveLength(0);
-    // 2.12's stats row: no Generation / Living Cells text anywhere yet.
-    expect(screen.queryByText(/generation/i)).toBeNull();
-    expect(screen.queryByText(/living cells/i)).toBeNull();
+    // Story 2.12: the stats row's own content now exists (converted from an absence assertion —
+    // trap 4). Full coverage of the row lives in the dedicated describe block below.
+    expect(screen.getByText(/generation/i)).toBeInTheDocument();
+    expect(screen.getByText(/living cells/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
   });
 
@@ -777,5 +782,74 @@ describe('BattleEditorView — the Battle Name section (Story 2.11)', () => {
     await user.type(screen.getByRole('textbox', { name: /battle name/i }), '!');
 
     expect(onNameChange).toHaveBeenCalledWith('Old Name!');
+  });
+});
+
+// Story 2.12 (AC3, AC4). `gridStats.test.ts` already pins the counting math itself; these two
+// prove it actually reaches `<EditorStatusBar>` through the memo and updates when the grid a user
+// is editing changes. The "does not rerun on an unrelated re-render" claim (Task 3) needs a spy on
+// the exported derivation, which is module-scoped (`vi.mock`) — kept in its own file
+// (`BattleEditorView.statsMemo.test.tsx`), the same split `BattlePage.seedPreset.test.tsx` uses
+// for exactly the same reason (a module mock there would otherwise apply to every test in this
+// file).
+describe('BattleEditorView — the stats derivation (Story 2.12, AC3, AC4)', () => {
+  const STATS_ROSTER: readonly DisplayOrganism[] = [
+    {
+      id: 'organism-a',
+      name: 'Aggressive Colonizer',
+      color: '#D55E00',
+      colorToken: 'vermillion',
+    },
+    { id: 'organism-b', name: 'Patient Defender', color: '#56B4E9', colorToken: 'sky-blue' },
+  ];
+  const STATS_ROSTER_IDS = STATS_ROSTER.map((organism) => organism.id);
+
+  it('shows livingCells and one population entry per organism, from the grid’s real contents', () => {
+    // 2x2: refs 1, 2, 0, 1 -> organism-a: 2, organism-b: 1, livingCells: 3.
+    const grid = makeGrid(2, 2, [1, 2, 0, 1]);
+    renderEditor({ grid, rosterIds: STATS_ROSTER_IDS, roster: STATS_ROSTER });
+
+    expect(screen.getByRole('group', { name: 'Living Cells: 3' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Aggressive Colonizer: 2' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Patient Defender: 1' })).toBeInTheDocument();
+  });
+
+  it('updates the stats when a committed grid replaces the old one (AC4)', () => {
+    const initialGrid = makeGrid(2, 2, [0, 0, 0, 0]);
+    const { rerender } = renderEditor({
+      grid: initialGrid,
+      rosterIds: STATS_ROSTER_IDS,
+      roster: STATS_ROSTER,
+    });
+
+    expect(screen.getByRole('group', { name: 'Living Cells: 0' })).toBeInTheDocument();
+    // AC3: an all-empty grid still carries one entry PER ROSTER ORGANISM, reading 0 — "Population:
+    // none" is reserved for an EMPTY ROSTER, a different fact (see EditorStatusBar.test.tsx).
+    expect(screen.getByRole('img', { name: 'Aggressive Colonizer: 0' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Patient Defender: 0' })).toBeInTheDocument();
+
+    const committedGrid = makeGrid(2, 2, [1, 1, 0, 0]);
+    rerender(
+      <BattleEditorView
+        grid={committedGrid}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        rosterIds={STATS_ROSTER_IDS}
+        roster={STATS_ROSTER}
+        library={[]}
+        onAddToRoster={() => {}}
+        atCap={false}
+        battleName=""
+        onNameChange={() => {}}
+        onCommitGrid={() => {}}
+        onUndo={() => {}}
+        canUndo={false}
+      />,
+    );
+
+    expect(screen.getByRole('group', { name: 'Living Cells: 2' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Aggressive Colonizer: 2' })).toBeInTheDocument();
   });
 });
