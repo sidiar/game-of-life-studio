@@ -28,6 +28,15 @@ describe('battleDisplayName', () => {
     ['U+200E LEFT-TO-RIGHT MARK', '\u200E'],
     ['U+200F RIGHT-TO-LEFT MARK', '\u200F'],
     ['U+2060 WORD JOINER', '\u2060'],
+    ['U+2066 LEFT-TO-RIGHT ISOLATE', '\u2066'],
+    ['U+2067 RIGHT-TO-LEFT ISOLATE', '\u2067'],
+    ['U+2068 FIRST STRONG ISOLATE', '\u2068'],
+    ['U+2069 POP DIRECTIONAL ISOLATE', '\u2069'],
+    ['U+202A LEFT-TO-RIGHT EMBEDDING', '\u202A'],
+    ['U+202B RIGHT-TO-LEFT EMBEDDING', '\u202B'],
+    ['U+202C POP DIRECTIONAL FORMATTING', '\u202C'],
+    ['U+202D LEFT-TO-RIGHT OVERRIDE', '\u202D'],
+    ['U+202E RIGHT-TO-LEFT OVERRIDE', '\u202E'],
     ['U+FEFF ZERO WIDTH NO-BREAK SPACE', '\uFEFF'],
   ])('treats a name made only of %s as empty', (_label, character) => {
     expect(battleDisplayName(character.repeat(3))).toBe('Untitled Battle');

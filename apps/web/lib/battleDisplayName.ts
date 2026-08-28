@@ -20,7 +20,15 @@ const UNTITLED_BATTLE = 'Untitled Battle';
  * ECMAScript `WhiteSpace` — and that render as nothing:
  *
  *   U+00AD SOFT HYPHEN · U+200B ZERO WIDTH SPACE · U+200C ZWNJ · U+200D ZWJ · U+200E LRM ·
- *   U+200F RLM · U+2060 WORD JOINER · U+FEFF ZERO WIDTH NO-BREAK SPACE
+ *   U+200F RLM · U+2060 WORD JOINER · U+FEFF ZERO WIDTH NO-BREAK SPACE · U+2066–U+2069 the bidi
+ *   ISOLATE controls (LRI/RLI/FSI/PDI) · U+202A–U+202E the bidi EMBEDDING/OVERRIDE controls
+ *   (LRE/RLE/PDF/LRO/RLO)
+ *
+ * Review (2026-08-28): the bidi ranges were added after the initial cut missed them — a name built
+ * purely from e.g. U+2066 LRI still renders as nothing but was not being treated as empty,
+ * reproducing the exact bug this helper exists to prevent. Not exhaustive of every Unicode
+ * format/invisible character (e.g. Mongolian vowel separator, variation selectors, tag
+ * characters) — widen further if one is found to actually reach this path.
  *
  * Story 2.13 settles `deferred-work.md`'s ":349" entry, which named this story as "the first that
  * persists a name the user typed and therefore the first with a reason to decide what an invisible
@@ -40,7 +48,7 @@ const UNTITLED_BATTLE = 'Untitled Battle';
  * rewriting a user's data at the boundary between "what is stored" and "what is shown" is a much
  * larger claim than choosing a fallback title.
  */
-const INVISIBLE_CHARACTERS = /[\u00AD\u200B-\u200F\u2060\uFEFF]/gu;
+const INVISIBLE_CHARACTERS = /[\u00AD\u200B-\u200F\u2060\u2066-\u2069\u202A-\u202E\uFEFF]/gu;
 
 export function battleDisplayName(name: string): string {
   return name.replace(INVISIBLE_CHARACTERS, '').trim() === '' ? UNTITLED_BATTLE : name;

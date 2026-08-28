@@ -30,9 +30,14 @@ export function saveFailureMessage(error: unknown): string {
     // (`localStorageBattleRepository.ts`), so an unparseable `gol:battles` fails the save at the
     // READ. A different fact from a full store, and it needs different copy: there is no space to
     // free, and nothing the user does in this editor will fix it.
+    //
+    // Review (2026-08-28): the copy used to suggest the user "start a fresh workspace" — no such
+    // affordance is reachable from the shipped app (Settings / Clear-workspace is Story 5.10 and
+    // does not exist yet), the exact class of mistake the Quota message above already avoids by
+    // not naming Export. Trimmed to match that discipline.
     return (
       'Saved battle data could not be read, so this battle was not saved. Nothing already ' +
-      'stored was changed. Your work is still here — try again, or start a fresh workspace.'
+      'stored was changed. Your work is still here — try again.'
     );
   }
   return (

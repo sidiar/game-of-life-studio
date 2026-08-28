@@ -330,6 +330,73 @@ button.
         out-of-range-ref call from Task 2, the verification output, the File List.
   - [x] `docs/implementation-artifacts/sprint-status.yaml` → `2-13-save-battle: review`.
 
+### Review Findings
+
+Code review run 2026-08-28 (Sonnet, second pair of eyes on the Opus implementation). Three parallel
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus direct verification of the H.1
+prune / E.2 remap against the Dev Notes' worked example — confirmed correct, no findings against
+the load-bearing projection logic.
+
+- [ ] [Review][Decision] `handleSave` clears `isDirty` unconditionally on success, even if the
+      grid/roster/name were edited during the in-flight `await` — `BattlePage.tsx:608-655`. `grid`,
+      `rosterIds`, `battleName` are captured by closure at call time; nothing besides the SAVE
+      button is disabled while `isSaving` is true, so the canvas and name field stay editable
+      during a save. An edit made during the `await` sets `isDirty(true)` via
+      `handleCommitGrid`/`handleNameChange`; the resolving save's `setIsDirty(false)` then clobbers
+      it, reporting "saved" for an edit that was never written. Not covered by any AC (AC4 only
+      requires that a SECOND SAVE can't fire while one is in flight) and has more than one
+      defensible fix (snapshot-compare identity before clearing vs. blocking all editing while
+      saving), each with different UX cost — needs Sidiar's call, not a reviewer's guess.
+      Independently found by both the Blind Hunter and Edge Case Hunter layers; confirmed by
+      direct code reading.
+- [ ] [Review][Decision] "Reconciliation #3" spec conflict, surfaced by the dev in the Dev Agent
+      Record — not resolved by this review per the run's own instructions. The epic AC's citation
+      resolves to no section in this repo (`epics.md:692`, `component-tree-battle-page.md:112`,
+      `RFC-006:268`, `RFC-001:399`). The substance is implemented (AR-9 / RFC-006 Decision 2: dense
+      at rest, conversion in `apps/web`, repository port unchanged). Sidiar's call: correct the
+      four citations to `AR-9` / `RFC-006 Decision 2`, or write the missing "Cross-RFC
+      Reconciliations" section.
+- [x] [Review][Patch] `UndoButton` silently lost its `&:hover:not(:disabled)` rule in the
+      forced-decision-5 `barButtonBase` extraction [`EditorStatusBar.tsx:170-186`] — confirmed
+      against `main` (which has the hover rule) and restored.
+- [x] [Review][Patch] `battleDisplayName`'s `INVISIBLE_CHARACTERS` regex omits bidi isolates and
+      embeddings (U+2066–U+2069, U+202A–U+202E) — a name built purely from those characters still
+      renders blank but is not treated as empty, reproducing the bug `:349` exists to fix
+      [`apps/web/lib/battleDisplayName.ts`]. Regex widened.
+- [x] [Review][Patch] `saveFailureMessage`'s `CorruptDataError` copy told the user to "start a
+      fresh workspace," an affordance that does not exist in the shipped app (no Settings/Clear UI)
+      — the same category of issue the dev explicitly avoided for the Quota message
+      [`apps/web/lib/saveFailureMessage.ts`]. Copy trimmed to match that discipline.
+- [x] [Review][Patch] `deferred-work.md`'s new `/battle/new` reload entry understated the
+      consequence — a reload resets `saveStamp` to `null` while `battleId` stays `'new'`, so the
+      NEXT save after a reload mints a fresh uuid and writes a SECOND, independent battle to the
+      Gallery, not just lost editor-session UI state [`deferred-work.md:376`]. Entry corrected.
+- [x] [Review][Defer] `saveStamp` not reset when `battleId` changes on an already-mounted
+      `<BattlePage>` — deferred, pre-existing family (already disclosed in `deferred-work.md`
+      with corrected severity).
+- [x] [Review][Defer] `projectBattleForSave`/`pruneAndRemapBattleGrid` double-allocate the dense
+      grid per save — deferred, pre-existing (already disclosed in `deferred-work.md` with an
+      explicit revisit trigger).
+- [x] [Review][Defer] `computeEditorGridStats`'s fold and `pruneAndRemapBattleGrid`'s are mirrored
+      rather than shared/called, a real deviation from forced decision 3's literal instruction —
+      deferred, disclosed and reasoned, tracked with an explicit revisit trigger ("a THIRD fold").
+- [x] [Review][Defer] No multi-tab / concurrent-write protection on `gol:battles` — deferred,
+      pre-existing systemic localStorage limitation across the whole app, not introduced by this
+      diff.
+- [x] [Review][Defer] No test exercises `crypto.randomUUID()` being unavailable (non-secure
+      context) — deferred, a deliberately-chosen documented tradeoff (forced decision 2) for a rare
+      deployment condition.
+
+Dismissed as noise (6): SAVE hover-state contrast already gated by the pre-existing
+`themeTokens.test.ts` accentStates loop; two new e2e tests without console/pageerror tracking match
+the file's own pre-existing convention (axe-only tests throughout skip this); the generic
+save-failure fallback message for the randomUUID-unavailable path is a deliberate, documented
+tradeoff; importing the `CorruptDataError`/`QuotaExceededError` error classes from `@gol/persistence`
+into `apps/web` is explicitly permitted by AR-2/27 (which governs implementations, not error-class
+taxonomies); `handleSave`'s `grid === null` guard is defensively unreachable (SAVE only renders
+after the four early returns that gate on a loaded grid); `deferred-work.md`'s strikethrough-based
+accumulation of corrections is a documentation-hygiene opinion, not an actionable defect.
+
 ## Dev Notes
 
 ### The one thing that makes this story dangerous: the prune shifts refs

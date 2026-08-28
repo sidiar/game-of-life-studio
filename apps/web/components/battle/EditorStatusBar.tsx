@@ -182,6 +182,13 @@ const UndoButton = styled('button')({
   // or `--gol-bg-hover` behind `--gol-text-primary`, `--gol-action-disabled-bg` behind
   // `--gol-action-disabled` — so every intermediate frame of a cross-fade stays legible.
   transition: 'background-color 0.2s, border-color 0.2s, color 0.2s',
+  // Review (2026-08-28): the forced-decision-5 `barButtonBase` extraction dropped this rule
+  // entirely — `barButtonBase` only carries the treatment SAVE and UNDO share, and UNDO's hover
+  // (unlike its focus/disabled states) is NOT one of those, so it needs restating here.
+  '&:hover:not(:disabled)': {
+    background: 'var(--gol-bg-hover)',
+    borderColor: 'var(--gol-text-secondary)',
+  },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
   },
