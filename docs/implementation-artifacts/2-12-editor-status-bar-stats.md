@@ -692,3 +692,18 @@ Updated:
   Tasks/Subtasks, Status)
 
 Dev Model: sonnet   # a memoized derivation, a styled stats row and two inherited layout/a11y fixes, all following patterns Stories 2.8-2.11 already established; no new architecture
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 36s | 30 | 2,797 | 11,454 | 608,806 | 623,087 |
+| Step 1 — create-story | opus-5 | 1 | 8m 58s | 190 | 29,863 | 426,527 | 9,006,258 | 9,462,838 |
+| Step 2 — dev-story | sonnet-5 | 1 | 35m 55s | 448 | 43,403 | 622,065 | 44,154,216 | 44,820,132 |
+| Step 3 — code review + PR | opus-5 | 4 | 40m 38s | 926 | 114,362 | 1,327,900 | 49,389,766 | 50,832,954 |
+| _of which the orchestrator_ | opus-5 | — | — | 76 | 10,998 | 44,978 | 1,799,815 | 1,855,867 |
+| **Total (create-story → PR ready)** | | 6 | **1h 26m** | 1,594 | 190,425 | 2,387,946 | 103,159,046 | **105,739,011** |
+
+Run started 2026-08-28 13:28 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
