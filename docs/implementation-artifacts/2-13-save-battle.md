@@ -903,3 +903,18 @@ Bundle movement against Story 2.12's baseline: `/battle` and `/battle/new` **300
   re-deferred with corrected reasoning). Status → review.
 
 Dev Model: opus   # first write path from the editor: the H.1 prune + E.2 ref-remap silently persists corruption when wrong, and the projection's package placement, new-battle identity, and save-failure surface are patterns 2.14/2.16/5.8/6.10 all inherit
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 26s | 26 | 2,740 | 15,362 | 522,309 | 540,437 |
+| Step 1 — create-story | opus-5 | 1 | 10m 08s | 224 | 35,226 | 626,906 | 12,775,255 | 13,437,611 |
+| Step 2 — dev-story | opus-5 | 1 | 35m 11s | 414 | 59,846 | 463,471 | 39,305,294 | 39,829,025 |
+| Step 3 — code review + PR | sonnet-5 | 4 | 39m 19s | 1,058 | 47,387 | 1,402,610 | 64,861,307 | 66,312,362 |
+| _of which the orchestrator_ | opus-5 | — | — | 70 | 11,466 | 53,942 | 1,646,720 | 1,712,198 |
+| **Total (create-story → PR ready)** | | 6 | **1h 25m** | 1,722 | 145,199 | 2,508,349 | 117,464,165 | **120,119,435** |
+
+Run started 2026-08-28 17:05 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
