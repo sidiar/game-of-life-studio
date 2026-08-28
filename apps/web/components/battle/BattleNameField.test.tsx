@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { MAX_BATTLE_NAME_LENGTH } from '@gol/domain';
@@ -92,13 +92,46 @@ describe('BattleNameField', () => {
     expect(screen.getByText('3 / 3')).toBeInTheDocument();
   });
 
-  it('calls onChange with the raw new value on a keystroke (AC1)', async () => {
+  // Forced decision 6, option (b) — Sidiar's call, reversing the story's recorded (a). The native
+  // `maxLength` attribute covers ordinary typing only; an IME commit, voice dictation,
+  // `execCommand('insertText')` and a password-manager write each deliver an `input` event whose
+  // value is ALREADY over the cap. `fireEvent.change` is the faithful stand-in for all four: like
+  // them, it sets the value without the UA's per-keystroke truncation, which is exactly why
+  // `user.type` (which honours the attribute) cannot cover this path.
+  it('clamps an over-cap value the browser never truncated (forced decision 6b)', () => {
+    const handleChange = vi.fn();
+    render(<BattleNameField value="" onChange={handleChange} maxLength={5} />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: /battle name/i }), {
+      target: { value: 'abcdefghij' },
+    });
+
+    expect(handleChange).toHaveBeenCalledWith('abcde');
+  });
+
+  // The user-visible consequence of the clamp, and the reason it was worth reversing (a): the
+  // counter is now STRUCTURALLY unable to read "10 / 5" — there is no value it can be handed that
+  // exceeds its own denominator, so the "over the cap with no error state" window is closed rather
+  // than merely narrowed.
+  it('never lets the counter exceed its denominator (forced decision 6b)', () => {
+    render(<ControlledHarness maxLength={5} />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: /battle name/i }), {
+      target: { value: 'abcdefghij' },
+    });
+
+    expect(screen.getByRole('textbox', { name: /battle name/i })).toHaveValue('abcde');
+    expect(screen.getByText('5 / 5')).toBeInTheDocument();
+  });
+
+  it('calls onChange with the full new value on a keystroke (AC1)', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
     render(<BattleNameField value="Battle" onChange={handleChange} />);
 
     // A single keystroke against a value already supplied by the caller: `onChange` receives the
-    // FULL resulting string (`event.target.value`), not a delta.
+    // FULL resulting string (`event.target.value`), not a delta. Under the cap the forced-decision-6b
+    // clamp is a no-op, which is the point — it changes nothing about ordinary typing.
     await user.type(screen.getByRole('textbox', { name: /battle name/i }), '!', {
       initialSelectionStart: 6,
       initialSelectionEnd: 6,

@@ -56,7 +56,10 @@ export interface BattleNameFieldProps {
   /** FR-3.9 / `BattleSchema.name`'s cap. Defaults to `@gol/domain`'s `MAX_BATTLE_NAME_LENGTH`,
    * the schema's OWN constant — never a re-typed literal (Task 2). A `100` written here would be a
    * second source for a number `BattleSchema` already owns, and the drift it allows ends as a
-   * `ZodError` from Story 2.13's write path with the counter still reading "/ 100". */
+   * `ZodError` from Story 2.13's write path with the counter still reading "/ 100".
+   *
+   * Enforced twice, deliberately: the native `maxLength` attribute stops ordinary typing at the
+   * UA, and the change handler clamps whatever still arrives over the cap (forced decision 6b). */
   maxLength?: number;
 }
 
@@ -90,7 +93,16 @@ export default function BattleNameField({
       <Input
         type="text"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        // Forced decision 6, reversed to option (b) on Sidiar's call (2026-08-28). The native
+        // `maxLength` attribute below is a UA guarantee for ORDINARY TYPING ONLY — it is not applied
+        // to text committed by an active IME, nor to `document.execCommand('insertText')`, browser
+        // voice dictation, or a password-manager/autofill write. Each of those fires an `input`
+        // event whose `event.target.value` is ALREADY over the cap; without this clamp it flows
+        // through to `battleName` and the counter reads "104 / 100" with no error state, over a name
+        // `BattleSchema.name`'s `.max()` rejects at Story 2.13's save. The clamp makes the counter
+        // structurally unable to exceed its denominator. Accepted cost, flagged when the decision
+        // was taken: an over-long paste is silently truncated rather than shown and refused.
+        onChange={(event) => onChange(event.target.value.slice(0, maxLength))}
         maxLength={maxLength}
         placeholder="Untitled Battle"
         // Forced decision 4, name (a): `aria-label`, the `<OrganismRoster>` `SearchInput` precedent
