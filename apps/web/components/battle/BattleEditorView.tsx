@@ -98,6 +98,24 @@ export interface BattleEditorViewProps {
   /** Story 2.11 (AC1, AC3): fires on every keystroke; `<BattlePage>` sets both the name and
    * `isDirty` in the same handler. */
   onNameChange(name: string): void;
+  /**
+   * Story 2.13 (FR-7.8, spec §3.3 lists both as PROPS): forwarded to `<EditorStatusBar>`
+   * untouched. ⚠️ Unlike `stats` these are INPUTS, not derivations — `<BattlePage>` owns the dirty
+   * flag (AR-27/28) and owns what a save means, so this component neither computes nor interprets
+   * either one.
+   */
+  isDirty: boolean;
+  onSave(): void;
+  /**
+   * Story 2.13 (AC5 / NFR-7.2, forced decision 4b): a refused save's message, or `null`. Rendered
+   * as a `role="alert"` line ABOVE the status bar, in flow — not inside the bar, whose right group
+   * is `flexShrink: 0` and whose overflow the 2026-08-28 review had to fix; and not a modal, which
+   * over an editor whose state is fully intact would be a worse answer than a line of text.
+   */
+  saveError: string | null;
+  /** Story 2.13 (AC4): a write is in flight, so SAVE is unavailable — see its prop comment on
+   * `EditorStatusBarProps`. */
+  isSaving: boolean;
 }
 
 /**
@@ -299,6 +317,32 @@ const DishCanvas = styled(PetriDishCanvas)({
 });
 
 /**
+ * Story 2.13 (AC5, forced decision 4b): a refused save, reported in flow directly above the status
+ * bar. There is no mockup for this — the mockup draws no failure state at all — so the styling
+ * borrows the bar's own surface (`--gol-bg-secondary`, matching `<EditorStatusBar>`'s `Bar`) and
+ * reads as the same piece of bottom chrome rather than as a floating panel.
+ *
+ * ⚠️ `--gol-danger` on `--gol-bg-secondary` specifically: that pair is gated at ≥4.5:1
+ * (`themeTokens.test.ts`), while `--gol-danger` on `--gol-bg-hover` measures 4.48 and is
+ * deliberately excluded there. Do not restyle this onto a hover surface.
+ *
+ * `role="alert"` (assertive) is right here in a way it was NOT for Story 2.12's stats: a failed
+ * save is an event the user caused and must not miss, not a passive summary of a surface they are
+ * looking at. Rendered CONDITIONALLY (the element appears when the message does), which is what
+ * makes an assertive region announce — a permanently mounted one whose text changes announces too,
+ * but leaves an empty, named, focusable-by-screen-reader landmark on the page at all other times.
+ */
+const SaveErrorLine = styled('p')({
+  margin: 0,
+  padding: '10px 25px',
+  fontSize: '12px',
+  lineHeight: 1.5,
+  color: 'var(--gol-danger)',
+  background: 'var(--gol-bg-secondary)',
+  borderTop: '1px solid var(--gol-border)',
+});
+
+/**
  * `<EditorMain>` is a private layout child (component-tree-battle-page.md §3.3: "`<EditorSidebar>`
  * / `<EditorMain>` are private layout children, not shared") — declared here rather than exported,
  * exactly as `<BattleHeader>`'s file keeps no private siblings public.
@@ -321,6 +365,10 @@ function EditorMain({
   onCommitGrid,
   onUndo,
   canUndo,
+  onSave,
+  isDirty,
+  isSaving,
+  saveError,
 }: EditorMainProps) {
   return (
     <MainContent>
@@ -350,10 +398,21 @@ function EditorMain({
           )}
         </PetriDishBox>
       </GridContainer>
-      {/* Spec §3.8 / FR-3.8. Forwarded, never interpreted: the undo ring lives in <BattlePage>
-          (RFC-005 Decision 6), so this component holds no history state of its own. `stats` is
-          Story 2.12's derivation (below), forwarded the same way. */}
-      <EditorStatusBar onUndo={onUndo} canUndo={canUndo} stats={stats} />
+      {/* AC5: above the bar, in flow — so the bar's own layout is untouched and an
+          arbitrary-length message cannot push UNDO/SAVE off the `flexShrink: 0` side. */}
+      {saveError !== null && <SaveErrorLine role="alert">{saveError}</SaveErrorLine>}
+      {/* Spec §3.8 / FR-3.8 / FR-7.8. Forwarded, never interpreted: the undo ring lives in
+          <BattlePage> (RFC-005 Decision 6) and so does everything a save means (AR-27/28), so this
+          component holds neither history nor save state of its own. `stats` is Story 2.12's
+          derivation (below), forwarded the same way. */}
+      <EditorStatusBar
+        onUndo={onUndo}
+        canUndo={canUndo}
+        stats={stats}
+        onSave={onSave}
+        isDirty={isDirty}
+        isSaving={isSaving}
+      />
     </MainContent>
   );
 }

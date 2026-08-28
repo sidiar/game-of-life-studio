@@ -4,13 +4,14 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import {
+  BattleSchema,
   CONWAYS_CLASSIC,
   DEFAULT_SETTINGS,
   MAX_BATTLE_NAME_LENGTH,
   type Battle,
   type Organism,
 } from '@gol/domain';
-import type { AppRepositories } from '@gol/persistence';
+import { CorruptDataError, QuotaExceededError, type AppRepositories } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
 import { RecordingContext2D } from '@/lib/recordingContext2d';
 import { computeGridLayout } from '@/lib/canvas/gridLayout';
@@ -338,7 +339,7 @@ describe('BattlePage', () => {
   // 4), so the create route carries exactly one roster row, the eraser, and UNDO. The status bar
   // sits OUTSIDE the `colors !== null` guard, so it renders here even though no canvas does: undo
   // acts on grid state, and a missing theme token layer is no reason to withhold it.
-  it('renders exactly the roster row, the eraser, UNDO, and one heading on the "new" route', async () => {
+  it('renders exactly the roster row, the eraser, UNDO, SAVE, and one heading on the "new" route', async () => {
     render(
       <BattlePage
         repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
@@ -353,7 +354,11 @@ describe('BattlePage', () => {
     expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
     // A freshly seeded battle has nothing to undo (AC8: the seed is not a ring entry).
     expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(3);
+    // Story 2.13: and nothing to save either — `/battle/new` starts CLEAN. A draft the user has
+    // not touched is not unsaved work, and offering to write it would put an "Untitled Battle"
+    // with an empty grid in the Gallery for every visit to this route.
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(4);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -472,16 +477,15 @@ describe('BattlePage', () => {
 
   // AC2 / NFR-4.1 as a COUNT, not a presence check: `queryByRole('button', { name: /run/i })`
   // being null still passes after someone adds a dead RUN button labelled differently, or a
-  // fullscreen button beside it. Story 2.9 replaces the provisional Draw/Erase pair with the real
-  // roster, so the claim becomes "this battle's three organisms, the eraser, and UNDO — nothing
-  // else"; a SIXTH button (Run, fullscreen, 2.13's SAVE arriving early, 2.16's Back, or Epic 4's
+  // fullscreen button beside it. Story 2.9 replaced the provisional Draw/Erase pair with the real
+  // roster; Story 2.13 adds SAVE, so the claim is now "this battle's three organisms, the eraser,
+  // UNDO and SAVE — nothing else". A SEVENTH button (Run, fullscreen, 2.16's Back, or Epic 4's
   // per-row pencil) still fails here.
-  it('renders no Run, fullscreen, or any other button beyond the roster and UNDO on the loaded route', async () => {
+  it('renders no Run, fullscreen, or any other button beyond the roster, UNDO and SAVE on the loaded route', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
     expect(screen.queryByRole('button', { name: /run/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
     // AC3: the deleted toggle, named rather than merely counted — a bare length check is
     // satisfied by a dead control replacing one of them, which is what this count exists to catch.
     expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
@@ -491,7 +495,10 @@ describe('BattlePage', () => {
     }
     expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
-    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 2);
+    // Story 2.13: converted from an absence assertion (trap 5) — SAVE has arrived, disabled on a
+    // freshly loaded battle because nothing has been edited yet.
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 3);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
@@ -1502,6 +1509,274 @@ describe('BattlePage — battle name & dirty tracking (Story 2.11)', () => {
 
       expect(document.title).toBe('Battle Gallery · Game of Life Studio');
     });
+  });
+});
+
+/**
+ * Story 2.13 (AC2, AC3, AC4, AC5). This is the first code in the app that WRITES a battle —
+ * `battles.save` had exactly one kind of assertion against it before this story, that it is NOT
+ * called — so what is pinned here is the whole write: which entity is created, which is updated,
+ * what the record contains, and what happens when the write is refused.
+ */
+describe('BattlePage — saving (Story 2.13)', () => {
+  function dirtyValue(container: HTMLElement): string | null {
+    const root = container.querySelector('[data-dirty]');
+    if (root === null) throw new Error('Root (data-dirty) not found');
+    return root.getAttribute('data-dirty');
+  }
+
+  const nameField = () => screen.getByRole('textbox', { name: /battle name/i });
+  const saveButton = () => screen.getByRole('button', { name: 'Save' });
+
+  /** The record handed to `battles.save`, parsed through the REAL schema (AC7) rather than
+   * duck-typed — `superRefine` already encodes every invariant the projection has to satisfy, and
+   * re-stating them here is how the two drift apart. */
+  function savedRecord(spy: ReturnType<typeof vi.spyOn>, call = 0): Battle {
+    const argument: unknown = (spy.mock.calls[call] as unknown[])[0];
+    const parsed = BattleSchema.safeParse(JSON.parse(JSON.stringify(argument)));
+    if (!parsed.success) {
+      throw new Error(`saved record failed BattleSchema: ${JSON.stringify(parsed.error.issues)}`);
+    }
+    return parsed.data;
+  }
+
+  // AC2: `/battle/new` carries no id (newBattleDraft.ts), so the first save MINTS one. The record
+  // has to be schema-valid on the way in or `battles.load()` throws CorruptDataError on the way
+  // back out — which is why `savedRecord` parses rather than asserts fields.
+  it('creates a battle with a fresh uuid on the first save from /battle/new (AC2, AC3)', async () => {
+    const user = userEvent.setup();
+    const repositories = createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY });
+    const saveSpy = vi.spyOn(repositories.battles, 'save');
+    const { container } = render(<BattlePage repositories={repositories} battleId="new" />);
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    expect(saveButton()).toBeDisabled();
+    await user.type(nameField(), 'Fresh Battle');
+    expect(saveButton()).toBeEnabled();
+    await user.click(saveButton());
+
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    const record = savedRecord(saveSpy);
+    expect(record.name).toBe('Fresh Battle');
+    expect(record.gridSize).toEqual(NEW_ROUTE_SIZE);
+    expect(record.organismIds).toEqual([]); // nothing placed — the H.1 prune's degenerate case
+    // AC4: the flag clears only once the promise has RESOLVED.
+    await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+    expect(saveButton()).toBeDisabled();
+    // The battle is genuinely retrievable under the id that was minted, which is the only thing
+    // that makes the Gallery tile (and its thumbnail) possible.
+    await expect(repositories.battles.load(record.id)).resolves.not.toBeNull();
+  });
+
+  // AC2: "every save after that UPDATES the same entity". A second `crypto.randomUUID()` would
+  // leave two "Fresh Battle" tiles in the Gallery and no way to tell which one the editor is on.
+  it('reuses the minted id on a second save rather than creating a second battle (AC2)', async () => {
+    const user = userEvent.setup();
+    const repositories = createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY });
+    const saveSpy = vi.spyOn(repositories.battles, 'save');
+    render(<BattlePage repositories={repositories} battleId="new" />);
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    await user.type(nameField(), 'First');
+    await user.click(saveButton());
+    await waitFor(() => expect(saveButton()).toBeDisabled());
+    await user.type(nameField(), ' Then Second');
+    await user.click(saveButton());
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
+
+    const first = savedRecord(saveSpy, 0);
+    const second = savedRecord(saveSpy, 1);
+    expect(second.id).toBe(first.id);
+    expect(second.name).toBe('First Then Second');
+    // trap 3: `createdAt` survives the update — it is absent from `BattleSummarySchema`, so
+    // overwriting it here would be invisible in the UI and wrong in every future export.
+    expect(second.createdAt.getTime()).toBe(first.createdAt.getTime());
+    // trap 4: two saves inside one millisecond produce EQUAL timestamps, so this is `>=`, not `>`.
+    // The claim that matters is the one below it — one entity, not two.
+    expect(second.updatedAt.getTime()).toBeGreaterThanOrEqual(first.updatedAt.getTime());
+    await expect(repositories.battles.list()).resolves.toHaveLength(1);
+  });
+
+  // trap 3 again, from the other direction: a LOADED battle already has a `createdAt`, and the
+  // only place to read it is the loaded record (`BattleSummarySchema` omits it).
+  it('preserves a loaded battle’s createdAt and bumps only updatedAt (AC3)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    const saveSpy = vi.spyOn(repositories.battles, 'save');
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    await user.click(saveButton());
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+
+    const record = savedRecord(saveSpy);
+    expect(record.id).toBe(SKIRMISH.id);
+    expect(record.createdAt.getTime()).toBe(SKIRMISH.createdAt.getTime());
+    expect(record.updatedAt.getTime()).toBeGreaterThanOrEqual(SKIRMISH.updatedAt.getTime());
+    expect(record.name).toBe(`${SKIRMISH.name}!`);
+  });
+
+  /**
+   * AC3 / Decision H.2, end to end: an organism added from the sidebar dropdown this session but
+   * never painted is session state, and the prune drops it from the RECORD.
+   *
+   * The other half is just as load-bearing and is asserted here too: `organismIds` and `gridState`
+   * come back BYTE-IDENTICAL to the loaded battle's. Every roster entry is still placed, so the
+   * Decision E.2 remap is the identity — and a projection that shifted refs anyway (or that
+   * appended the session id to `organismIds`) would show up right here as a reordered roster over
+   * an unreordered grid.
+   */
+  it('prunes a session-added organism out of the saved record, leaving the placed set untouched (AC3)', async () => {
+    const user = userEvent.setup();
+    const repositories = createFakeRepositories({
+      battles: [SKIRMISH],
+      organisms: ORGANISMS_WITH_CONWAY,
+    });
+    const saveSpy = vi.spyOn(repositories.battles, 'save');
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.selectOptions(
+      within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
+      CONWAYS_CLASSIC.id,
+    );
+    // The add is visible in the SESSION — the row is in the sidebar — and must not be in the record.
+    expect(
+      within(screen.getByRole('complementary')).getByRole('button', { name: CONWAYS_CLASSIC.name }),
+    ).toBeInTheDocument();
+
+    await user.type(nameField(), '!');
+    await user.click(saveButton());
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+
+    const record = savedRecord(saveSpy);
+    expect(record.organismIds).not.toContain(CONWAYS_CLASSIC.id);
+    expect(record.organismIds).toEqual(SKIRMISH.organismIds);
+    expect(record.gridState).toEqual(SKIRMISH.gridState);
+    // ...and the SESSION still has it afterwards. A save is a projection, not a state transition:
+    // clearing `sessionRoster` would take an organism the user just added out of their sidebar and
+    // put it back in the add dropdown (Dev Notes → *what a save does NOT do*).
+    expect(
+      within(screen.getByRole('complementary')).getByRole('button', { name: CONWAYS_CLASSIC.name }),
+    ).toBeInTheDocument();
+  });
+
+  // AC4: never optimistically. Clearing before the await would report success for a write that
+  // then throws — RFC-006 Decision 7 ties the dirty-flag clear to the write succeeding.
+  it('keeps isDirty true for the whole in-flight write, and clears it only on resolve (AC4)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    let release: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(repositories.battles, 'save').mockReturnValue(pending);
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    await user.click(saveButton());
+
+    // Still dirty, and SAVE is unavailable — a second interleaved read-modify-write over the one
+    // `gol:battles` key can lose one of the two (AC4, trap 7).
+    expect(dirtyValue(container)).toBe('true');
+    await waitFor(() => expect(saveButton()).toBeDisabled());
+
+    release?.();
+    await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+  });
+
+  /**
+   * AC5 / NFR-7.2 / AR-14: a refused write is non-destructive, says so, and leaves the editor
+   * exactly as it was. The candidate-string-then-`setItem` half is already proven by Story 1.4
+   * (`writeKey`); this is the UI half.
+   *
+   * ⚠️ The fixture replaces ONE method on a real fake (the established pattern in this file) —
+   * `mockWorkspace.ts` is never edited for a fixture; its battles are asserted by that package's
+   * own tests and by the gallery e2e.
+   */
+  it('reports a quota failure non-destructively and leaves the battle dirty (AC5)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    vi.spyOn(repositories.battles, 'save').mockRejectedValue(new QuotaExceededError('gol:battles'));
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    await user.click(saveButton());
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/storage is full/i);
+    expect(alert).toHaveTextContent(/unchanged/i);
+    // The indicator the user relies on survives the failure (RFC-006 Decision 7: the failed write
+    // "also fails the dirty-flag clear").
+    expect(dirtyValue(container)).toBe('true');
+    // ...and SAVE is available again, so the user can retry once they have freed space.
+    await waitFor(() => expect(saveButton()).toBeEnabled());
+    // Nothing about the editor moved: the name they typed, the roster and the heading are intact.
+    expect(nameField()).toHaveValue(`${SKIRMISH.name}!`);
+    for (const organism of organisms) {
+      expect(screen.getByRole('button', { name: organism.name })).toBeInTheDocument();
+    }
+  });
+
+  // A different fact needing different copy: `battles.save()` READS the whole collection first,
+  // so an unparseable `gol:battles` fails the save before any write is attempted. There is no
+  // space to free and nothing the editor can do about it.
+  it('reports an unreadable store with its own copy, not the storage-full copy (AC5)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    vi.spyOn(repositories.battles, 'save').mockRejectedValue(
+      new CorruptDataError('gol:battles', 'not valid JSON'),
+    );
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    await user.click(saveButton());
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not be read/i);
+    expect(alert).not.toHaveTextContent(/storage is full/i);
+  });
+
+  // ❌ Never swallowed: an unreported save failure is the worst outcome available to this story,
+  // so an error with no class of its own still reaches the user.
+  it('reports an unrecognised failure with a generic non-destructive message (AC5)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    vi.spyOn(repositories.battles, 'save').mockRejectedValue(new Error('something else entirely'));
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    await user.click(saveButton());
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not be saved/i);
+    expect(alert).toHaveTextContent(/nothing already stored was changed/i);
+    expect(dirtyValue(container)).toBe('true');
+  });
+
+  // ❌ No organism writes anywhere in this story — a save writes battles and nothing else
+  // (`organisms.save` is already asserted un-called elsewhere in this file; this pins it across
+  // the one action that could plausibly have reached for it).
+  it('writes no organism and no settings record when saving a battle', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    const organismSaveSpy = vi.spyOn(repositories.organisms, 'save');
+    const settingsSaveSpy = vi.spyOn(repositories.settings, 'save');
+    const battleSaveSpy = vi.spyOn(repositories.battles, 'save');
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    await user.click(saveButton());
+    await waitFor(() => expect(battleSaveSpy).toHaveBeenCalledTimes(1));
+
+    expect(organismSaveSpy).not.toHaveBeenCalled();
+    expect(settingsSaveSpy).not.toHaveBeenCalled();
   });
 });
 
