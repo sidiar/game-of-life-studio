@@ -390,13 +390,36 @@ the load-bearing projection logic.
       exactly; removing the transition removes the hazard structurally rather than statistically.
       The rule for this bar is now that NEITHER button animates between a disabled and an enabled
       palette.
-- [ ] [Review][Decision] "Reconciliation #3" spec conflict, surfaced by the dev in the Dev Agent
-      Record — not resolved by this review per the run's own instructions. The epic AC's citation
-      resolves to no section in this repo (`epics.md:692`, `component-tree-battle-page.md:112`,
-      `RFC-006:268`, `RFC-001:399`). The substance is implemented (AR-9 / RFC-006 Decision 2: dense
-      at rest, conversion in `apps/web`, repository port unchanged). Sidiar's call: correct the
-      four citations to `AR-9` / `RFC-006 Decision 2`, or write the missing "Cross-RFC
-      Reconciliations" section.
+- [x] [Review][Decision] **SETTLED by Sidiar, 2026-08-29** — and the finding's own premise was
+      wrong, which changed what settling it meant. It was reported as "the citation resolves to no
+      section in this repo." It does resolve: `architecture.md` has carried all six reconciliations
+      since 2026-06-23; what it had LOST is the `### Cross-RFC Reconciliations` heading above them,
+      so the block read as a continuation of Decision K. Restoring one heading line makes every
+      `Reconciliation #N` citation resolve again.
+      That reframes the real conflict. Read directly, #3's third sentence says "the battle
+      repository converts dense↔typed at load/save" — so `epics.md:692` and
+      `component-tree-battle-page.md:112` were quoting it FAITHFULLY rather than embellishing. Both
+      are reworded to "the dense `gridState` is written as-is," which is what the code does and
+      what the rest of #3 already says. ⚠️ `RFC-001:399` was mis-attributed by this review: it
+      cites Reconciliation **#4** (App Router), not #3, and needed no change.
+      The clause itself is left STANDING and deferred to **Story 3.3**: the typed-array `Grid` is
+      `packages/simulation`'s, `packages/persistence` depends on `@gol/domain` alone, and honouring
+      the clause means a `@gol/persistence` → `@gol/simulation` dependency that reverses the DI
+      seam (AR-2/27). Settling that from inside an Epic 2 save story would be deciding Epic 3's
+      layering on a boundary that does not exist yet. Recorded in `deferred-work.md`.
+- [x] [Post-review][Fix] `spec:check` now gates this class. `scripts/check-spec-ids.mjs` gained a
+      second pass over `Reconciliation #N`, resolved against the numbered items under the restored
+      heading — it fails loudly if the heading goes missing again, and on any citation of a
+      reconciliation that does not exist. Two things it deliberately does NOT do, both measured
+      rather than assumed: it does not tokenise reconciliations into `SPEC_ID` (that pass reads
+      code only, and all four citations are docs citing docs), and it does not check all ids
+      doc→doc — running the existing regex over the authority docs as both citers and definers
+      resolves 305 ids with 0 failures, because for prose ids the citation and declaration forms
+      are the same string. ⚠️ Verifying the new gate actually bites found a bug in the gate
+      itself: `file.endsWith('architecture.md')` also matches
+      `RFC-001-multi-mode-architecture.md`, silently excusing that whole file — now
+      `basename(file) === 'architecture.md'`. The same substring-vs-token trap the script's own
+      `AR-4`/`AR-46` comment documents.
 - [x] [Review][Patch] `UndoButton` silently lost its `&:hover:not(:disabled)` rule in the
       forced-decision-5 `barButtonBase` extraction [`EditorStatusBar.tsx:170-186`] — confirmed
       against `main` (which has the hover rule) and restored.
@@ -932,6 +955,10 @@ Bundle movement against Story 2.12's baseline: `/battle` and `/battle/new` **300
 - `apps/web/components/battle/EditorStatusBar.test.tsx`
 - `apps/web/components/battle/BattleNameField.test.tsx`
 - `apps/web/e2e/battleRoute.spec.ts`
+- `docs/planning-artifacts/architecture.md`
+- `docs/planning-artifacts/epics.md`
+- `docs/planning-artifacts/component-tree-battle-page.md`
+- `scripts/check-spec-ids.mjs`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
 - `docs/implementation-artifacts/2-13-save-battle.md`
@@ -942,12 +969,17 @@ Bundle movement against Story 2.12's baseline: `/battle` and `/battle/new` **300
   dense-at-rest conversion and save orchestration (`apps/web`), the SAVE button, the non-destructive
   save-failure alert, and six inherited `deferred-work.md` entries settled (three fixed, three
   re-deferred with corrected reasoning). Status → review.
+- 2026-08-29 — Post-review: the "Reconciliation #3" `decision-needed` finding settled by Sidiar.
+  The section was never missing — only its `###` heading was; restoring it makes all
+  `Reconciliation #N` citations resolve. `epics.md:692` and `component-tree-battle-page.md:112`
+  reworded off the "inside the repository" claim they were faithfully quoting; #3's clause itself
+  deferred to Story 3.3. `spec:check` extended to gate the class. **No `decision-needed` findings
+  remain — status → done.**
 - 2026-08-28 — Post-review: the concurrent-edit-during-save `decision-needed` finding settled by
   Sidiar ("block all edits while `isSaving`") and implemented as an edit lock on `savingRef`, with
   five regression tests. `UndoButton`'s transition removed alongside it — a latent 2.54:1 mid-fade
   the lock's more frequent disabled↔enabled toggling would have exposed far more often. Status
-  UNCHANGED at review: the "Reconciliation #3" citation conflict is still open, and it is the
-  remaining `decision-needed`.
+  UNCHANGED at review at that point: the "Reconciliation #3" citation conflict was still open.
 
 Dev Model: opus   # first write path from the editor: the H.1 prune + E.2 ref-remap silently persists corruption when wrong, and the projection's package placement, new-battle identity, and save-failure surface are patterns 2.14/2.16/5.8/6.10 all inherit
 

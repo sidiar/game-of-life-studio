@@ -24,7 +24,7 @@
 //     nearby"). The `RFC-00n` half of `RFC-006 Decision 7` IS checked; pinning
 //     the number to the right RFC would need prose parsing, not tokenising.
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join, extname, basename } from 'node:path';
 
 const CODE_ROOTS = ['packages', 'apps'];
 
@@ -64,6 +64,65 @@ const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', '.git', 'coverage'
 // `M11` can and will. Adding a Minor Resolution beyond M10 means widening this.
 const SPEC_ID =
   /(?<![\w.-])(AR-\d+|RFC-00\d|NFR-\d+(?:\.\d+)*|FR-\d+(?:\.\d+)*|M(?:[1-9]|10)|Decision [A-Z](?:\.\d+)?|Story \d+\.\d+)(?![\w.-])/g;
+
+// ─── Cross-RFC Reconciliations (added 2026-08-29, Sidiar's call) ───────────────
+//
+// WHY THIS NEEDS ITS OWN PASS. Story 2.13 surfaced four citations of "Reconciliation
+// #3" that appeared to resolve to nothing: architecture.md carried the six numbered
+// reconciliations but had LOST the `### Cross-RFC Reconciliations` heading above
+// them, so the block read as a continuation of Decision K. The gate above never saw
+// it, for two independent reasons — and BOTH have to be fixed or the class stays
+// invisible:
+//
+//   1. SPEC_ID does not tokenise `Reconciliation #N`, so it was never a cited id.
+//   2. The gate scans CODE for citations (CODE_ROOTS, `.ts`/`.tsx`). Every one of
+//      these four citations lives in a DOC citing another DOC, which the gate does
+//      not read as a citer at all.
+//
+// ⚠️ The obvious generalisation — "also scan docs as citers" — is VACUOUS and was
+// measured to be so before this was written: run the existing SPEC_ID over the
+// authority docs as both citers and definers and 305 distinct ids resolve, 0 fail.
+// That is not integrity, it is a tautology: for prose ids the citation form and the
+// declaration form are the SAME STRING, so any doc mentioning `FR-8.2` also
+// "defines" it. Checking doc→doc citations is only meaningful for an id whose
+// declaration is structurally distinct from its citation — which is exactly what
+// makes reconciliations checkable and prose ids not.
+//
+// A reconciliation is CITED as `Reconciliation #3` (often "Cross-RFC Reconciliation
+// #3", and once as "Cross-RFC Reconciliations §6" — the `§` form is deliberately
+// matched too, because it means the same thing and would otherwise rot unwatched).
+// It is DECLARED as a top-level numbered item inside the section:
+//
+//     ### Cross-RFC Reconciliations
+//     …
+//     3. **Battle grid shape — dense at rest, sparse on the wire.** …
+//
+// So the number is bounded by how many items that section actually has, and a
+// citation of `#7` — or of anything at all once the heading goes missing again —
+// fails loudly instead of rotting for two months.
+const RECONCILIATION_CITATION = /Reconciliations?\s*(?:#|§)\s*(\d+)/g;
+
+/**
+ * The reconciliations declared in architecture.md, as a set of `Reconciliation #N`.
+ *
+ * Anchored on the HEADING, not merely on "a numbered list somewhere in the file":
+ * the heading's absence is the precise failure this exists to catch, so a parse that
+ * still succeeded without it would defeat the point. Returns an empty set when the
+ * heading is gone, which turns every citation red — the intended outcome.
+ */
+function collectReconciliationDeclarations(text) {
+  const declared = new Set();
+  const heading = /^###\s+Cross-RFC Reconciliations\s*$/m.exec(text);
+  if (heading === null) return declared;
+  // The section runs to the next heading of the same or higher level.
+  const rest = text.slice(heading.index + heading[0].length);
+  const end = /^#{1,3}\s+/m.exec(rest);
+  const section = end === null ? rest : rest.slice(0, end.index);
+  for (const [, n] of section.matchAll(/^(\d+)\.\s+\*\*/gm)) {
+    declared.add(`Reconciliation #${n}`);
+  }
+  return declared;
+}
 
 // Sub-decisions are DECLARED in a different shape from how they are CITED. Code
 // writes `(Decision I.4)`; architecture.md writes the list item
@@ -139,6 +198,42 @@ for (const file of docFiles) {
   }
 }
 
+// ─── Reconciliation citations, checked across code AND docs ───────────────────
+//
+// Docs are read as citers HERE and nowhere else, for the reason the comment on
+// RECONCILIATION_CITATION gives: this is the one id whose declaration form differs
+// from its citation form, so the check is real rather than tautological. The four
+// citations that motivated this all live in docs, so a code-only pass would still
+// report a clean build over a dangling id.
+const reconciliationDeclared = collectReconciliationDeclarations(
+  readFileSync('docs/planning-artifacts/architecture.md', 'utf8'),
+);
+
+const reconciliationCited = new Map();
+for (const file of [...codeFiles, ...docFiles]) {
+  // architecture.md DECLARES these; its own numbered list must not read as citations
+  // of itself. Other docs citing it are exactly what we want to check.
+  //
+  // ⚠️ `basename(...) === `, never `file.endsWith('architecture.md')` — which also matches
+  // `RFC-001-multi-mode-architecture.md` and silently excused that file from the gate entirely.
+  // Caught while verifying this check bites: a deliberately bogus `Reconciliation #9` appended to
+  // RFC-001 was NOT reported, and RFC-001:399's real `#4` citation was missing from the scan too.
+  // The same substring-vs-token trap the SPEC_ID comment above documents for `AR-4`/`AR-46`.
+  if (basename(file) === 'architecture.md') continue;
+  const lines = readFileSync(file, 'utf8').split('\n');
+  lines.forEach((line, i) => {
+    for (const [, n] of line.matchAll(RECONCILIATION_CITATION)) {
+      const id = `Reconciliation #${n}`;
+      if (!reconciliationCited.has(id)) reconciliationCited.set(id, []);
+      reconciliationCited.get(id).push(`${file}:${i + 1}`);
+    }
+  });
+}
+
+const reconciliationUnresolved = [...reconciliationCited.keys()]
+  .filter((id) => !reconciliationDeclared.has(id))
+  .sort();
+
 // A gate that silently stops matching is worse than no gate: it goes green forever.
 // The workspace cites ~119 distinct ids; a collapse to near-zero means the regex or
 // the walk broke, not that the citations disappeared.
@@ -161,6 +256,33 @@ console.log(`  source files scanned:  ${codeFiles.length}`);
 console.log(`  authority docs scanned: ${docFiles.length}`);
 console.log(`  distinct ids cited:    ${cited.size}`);
 console.log(`  distinct ids defined:  ${defined.size}`);
+console.log(`  reconciliations declared: ${reconciliationDeclared.size}`);
+console.log(`  reconciliations cited:    ${reconciliationCited.size}`);
+
+if (reconciliationDeclared.size === 0) {
+  console.error(
+    `\n✖ spec-ids: architecture.md declares NO Cross-RFC Reconciliations. The ` +
+      `"### Cross-RFC Reconciliations" heading is missing or was renamed — the six numbered ` +
+      `items are parsed relative to it, and without it every "Reconciliation #N" citation below ` +
+      `is dangling. (This is the exact state Story 2.13 found: the items were present, the ` +
+      `heading was not, and nothing noticed for two months.)`,
+  );
+  process.exit(1);
+}
+
+if (reconciliationUnresolved.length > 0) {
+  console.error(
+    `\n✖ spec-ids: ${reconciliationUnresolved.length} "Reconciliation #N" citation(s) resolve to ` +
+      `nothing in architecture.md's Cross-RFC Reconciliations (${reconciliationDeclared.size} declared):`,
+  );
+  for (const id of reconciliationUnresolved) {
+    const sites = reconciliationCited.get(id);
+    console.error(`\n  ${id}  — cited at ${sites.length} site(s):`);
+    for (const site of sites.slice(0, 5)) console.error(`      ${site}`);
+    if (sites.length > 5) console.error(`      … and ${sites.length - 5} more`);
+  }
+  process.exit(1);
+}
 
 if (unresolved.length > 0) {
   console.error(
@@ -181,4 +303,7 @@ if (unresolved.length > 0) {
   process.exit(1);
 }
 
-console.log(`\n✓ spec-ids: all ${cited.size} cited ids resolve.`);
+console.log(
+  `\n✓ spec-ids: all ${cited.size} cited ids resolve, and all ${reconciliationCited.size} ` +
+    `reconciliation citations resolve against ${reconciliationDeclared.size} declared.`,
+);

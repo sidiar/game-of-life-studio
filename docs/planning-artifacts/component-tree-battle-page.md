@@ -109,7 +109,7 @@ Format: **Responsibility** (single) · **State** (category per RFC-005) · **API
     battleId: string | 'new'             // 'new' seeds an empty grid at the FR-8.10 default preset (FR-7.4)
   }
   ```
-  Internal wiring: `useAsyncResource` loads (battle, organisms); save handler → `repositories.battles.save` (dense conversion inside the repository — Reconciliation #3; roster pruned to the placed set on save — H.1); Back handler runs the FR-7.9 guard then navigates.
+  Internal wiring: `useAsyncResource` loads (battle, organisms); save handler → `repositories.battles.save` (the dense `gridState` is written as-is — Reconciliation #3; roster pruned to the placed set on save — H.1); Back handler runs the FR-7.9 guard then navigates.
 - **FRs:** FR-7.4/7.5 (entry), FR-7.8 (save orchestration), FR-7.9 (dirty + guard), FR-3.10/4.8 (mode transitions: entering Run clones `initialGrid`; leaving Run discards the live grid by unmounting the Run view).
 - **Epic:** 2 (skeleton + lab); 3 (run branch).
 
