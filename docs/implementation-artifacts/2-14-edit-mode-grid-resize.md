@@ -828,3 +828,18 @@ no change to `battleRecord.ts` or `<BattlePage>`.
 | 2026-08-29 | Story 2.14 implemented: `resizeGrid`/`countClippedLivingCells`, `<GridSettingsSection>`, `<ResizeClipWarningDialog>` behind `next/dynamic`, the confirm flow in `<BattleEditorView>`, six deferred-work entries settled, five new ones recorded. No bundle budget raised. Status → review. |
 
 Dev Model: opus   # establishes AR-17's `resizeGrid` primitive (Story 3.3/3.16 inherit it) and settles the dialog/bundle strategy Story 2.16 reuses
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 23s | 24 | 2,424 | 15,533 | 483,542 | 501,523 |
+| Step 1 — create-story | opus-5 | 1 | 10m 50s | 252 | 36,888 | 607,572 | 14,480,597 | 15,125,309 |
+| Step 2 — dev-story | opus-5 | 1 | 38m 16s | 446 | 83,109 | 607,509 | 46,332,619 | 47,023,683 |
+| Step 3 — code review + PR | sonnet-5 | 4 | 35m 19s | 866 | 48,852 | 2,388,826 | 48,085,026 | 50,523,570 |
+| _of which the orchestrator_ | opus-5 | — | — | 104 | 16,590 | 63,785 | 2,772,232 | 2,852,711 |
+| **Total (create-story → PR ready)** | | 6 | **1h 24m** | 1,588 | 171,273 | 3,619,440 | 109,381,784 | **113,174,085** |
+
+Run started 2026-08-29 18:24 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
