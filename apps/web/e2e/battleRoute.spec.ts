@@ -1016,3 +1016,148 @@ test.describe('battle route (Story 2.1)', () => {
     expect(doc.scrollHeight).toBeLessThanOrEqual(doc.clientHeight);
   });
 });
+
+/**
+ * Story 2.13 only. `seedWorkspace()` above registers an init script that runs before EVERY document
+ * load and overwrites `gol:battles` unconditionally — correct for every test that only READS, and
+ * fatal here: `page.goto('/')` after a save would wipe the battle that was just written and the
+ * Gallery would show the two fixtures again, with no failure that names the cause. This variant
+ * writes the identical payload only when the workspace has never been stamped, so the second
+ * document load leaves the saved record alone.
+ *
+ * ⚠️ A separate helper rather than a conditional inside `seedWorkspace`: those three
+ * `buildSeedPayload`/`seedWorkspace` copies are hand-synced across spec files (deferred-work.md),
+ * and adding a branch only this story needs is exactly the silent divergence that entry warns
+ * about. Same reasoning `seedConwaysClassic` above already records.
+ */
+async function seedWorkspaceIfFresh(page: Page) {
+  const payload = buildSeedPayload();
+
+  await page.addInitScript(
+    ([keys, formatVersion, data]) => {
+      const storageKeys = keys as Record<string, string>;
+      if (localStorage.getItem(storageKeys.schema) !== null) return;
+      localStorage.setItem(storageKeys.schema, JSON.stringify({ formatVersion }));
+      localStorage.setItem(
+        storageKeys.battles,
+        JSON.stringify((data as { battles: unknown }).battles),
+      );
+      localStorage.setItem(
+        storageKeys.organisms,
+        JSON.stringify((data as { organisms: unknown }).organisms),
+      );
+    },
+    [STORAGE_KEYS, CURRENT_FORMAT_VERSION, payload] as const,
+  );
+}
+
+/**
+ * Story 2.13 (AC2, AC4). The composed route is the only place the save can be proven END TO END:
+ * a projection bug that violates `BattleSchema` stores fine, and then surfaces as an `unavailable`
+ * Gallery tile and nowhere else — `battles.load()` throws `CorruptDataError` rather than returning
+ * a record, `<BattleTile>` catches it, and no unit test in this repo would notice.
+ */
+test.describe('saving a battle (Story 2.13)', () => {
+  test('saves a new battle, and the Gallery shows it with a live thumbnail (AC2, AC4)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspaceIfFresh(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    // Nothing edited yet, so there is nothing to save — a draft the user has not touched must not
+    // be writable, or every visit to this route could leave an empty battle in the Gallery.
+    const save = page.getByRole('button', { name: 'Save' });
+    await expect(save).toBeDisabled();
+
+    // Paint a real cell so the record has placed content: an all-empty grid would still store and
+    // still render a thumbnail, and would prove nothing about the H.1 prune or the E.2 remap.
+    await page.getByRole('img', { name: /petri dish/i }).click();
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Saved From The Lab');
+    await expect(save).toBeEnabled();
+
+    await save.click();
+
+    // AC4: the dirty flag clears only once the write resolved, so this is the observable signal
+    // that `battles.save` actually completed rather than merely being called.
+    await expect(save).toBeDisabled();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    await page.goto('/');
+    // Two seeded fixtures plus the one just saved.
+    await expect(page.getByRole('article')).toHaveCount(3);
+    const tile = page.getByRole('article').filter({ hasText: 'Saved From The Lab' });
+    await expect(tile).toHaveCount(1);
+    // FR-7.3: `updatedAt` was stamped now, so the freshest battle sorts first.
+    await expect(page.getByRole('article').first()).toContainText('Saved From The Lab');
+
+    // ⚠️ THE assertion this test exists for. `<BattleTile>` only mounts a canvas in its 'ready'
+    // state, which it reaches by `battles.load(id)` succeeding — i.e. by the saved record parsing
+    // through `BattleSchema` — and then painting it through the real renderer (M4: thumbnails are
+    // rendered on demand, never stored). A pruned roster with un-remapped cells fails that parse
+    // and leaves an empty box here, with no error anywhere else.
+    await expect(tile.locator('canvas')).toBeAttached();
+
+    expect(errors).toEqual([]);
+  });
+
+  test('re-opening the saved battle restores its name and its painted grid (AC2, AC4)', async ({
+    page,
+  }) => {
+    await seedWorkspaceIfFresh(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    const emptyColours = await distinctColorCount(dish);
+    await dish.click();
+    await expect
+      .poll(async () => distinctColorCount(dish), { timeout: 2000 })
+      .toBeGreaterThan(emptyColours);
+
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Reopened Battle');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    // Back to the Gallery and in again by its own tile — the same route a user takes, and the only
+    // one that proves the minted id is reachable from outside the editor session that made it.
+    await page.goto('/');
+    await page.getByRole('link', { name: 'Reopened Battle' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Reopened Battle');
+    await expect(page.getByRole('textbox', { name: /battle name/i })).toHaveValue(
+      'Reopened Battle',
+    );
+
+    // The reloaded dish paints the same number of distinct colours as the saved one did: the cell
+    // is back, in an organism's colour, which is what a correct roster + remap round trip produces.
+    const reopened = page.getByRole('img', { name: /petri dish/i });
+    await expect
+      .poll(async () => distinctColorCount(reopened), { timeout: 2000 })
+      .toBeGreaterThan(emptyColours);
+    // And a freshly loaded battle is CLEAN — the save is what made it so, not the navigation.
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+    await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  test('has no axe accessibility violations after a save', async ({ page }) => {
+    await seedWorkspaceIfFresh(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Axe Scan Battle');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

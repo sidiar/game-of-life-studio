@@ -188,4 +188,63 @@ describe('BattleNameField', () => {
 
     expect((await axe(container)).violations).toEqual([]);
   });
+
+  /**
+   * Story 2.13 (AC6), settling `deferred-work.md`'s ":353" entry — "hitting the 100-character cap
+   * is silent in every modality". The shape that entry itself proposed: one polite live region
+   * rendered only AT the cap, so it announces once on arrival and stays silent otherwise.
+   */
+  describe('the character cap is announced once, on arrival (Story 2.13)', () => {
+    it('renders nothing below the cap', () => {
+      render(<BattleNameField value="abcd" onChange={() => {}} maxLength={5} />);
+
+      expect(screen.queryByRole('status')).toBeNull();
+      expect(screen.queryByText(/limit reached/i)).toBeNull();
+    });
+
+    it('renders a polite live region at the cap, naming the limit', () => {
+      render(<BattleNameField value="abcde" onChange={() => {}} maxLength={5} />);
+
+      const notice = screen.getByRole('status');
+      expect(notice).toHaveTextContent(/limit reached/i);
+      expect(notice).toHaveTextContent('5');
+      // ⚠️ NOT assertive: reaching a limit while typing must not interrupt. The save-failure line
+      // in `<BattleEditorView>` is the assertive one, and deliberately so.
+      expect(notice).not.toHaveAttribute('aria-live', 'assertive');
+    });
+
+    // Forced decision 4 (Story 2.11) is unchanged by this: the COUNTER stays silent while typing.
+    // The two are separate elements precisely so the boundary can be announced without the
+    // per-keystroke chatter that decision rejected.
+    it('leaves the counter itself silent', () => {
+      render(<BattleNameField value="abcde" onChange={() => {}} maxLength={5} />);
+
+      const input = screen.getByRole('textbox', { name: /battle name/i });
+      const counter = document.getElementById(input.getAttribute('aria-describedby') as string);
+      expect(counter).toHaveTextContent('5 / 5');
+      expect(counter).not.toHaveAttribute('aria-live');
+      expect(counter).not.toHaveAttribute('role', 'status');
+    });
+
+    it('appears when typing reaches the cap and disappears on deletion', async () => {
+      const user = userEvent.setup();
+      render(<ControlledHarness maxLength={3} />);
+      const input = screen.getByRole('textbox', { name: /battle name/i });
+
+      await user.type(input, 'ab');
+      expect(screen.queryByRole('status')).toBeNull();
+      await user.type(input, 'c');
+      expect(screen.getByRole('status')).toBeInTheDocument();
+      await user.keyboard('{Backspace}');
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('has no axe accessibility violations at the cap', async () => {
+      const { container } = render(
+        <BattleNameField value="abcde" onChange={() => {}} maxLength={5} />,
+      );
+
+      expect((await axe(container)).violations).toEqual([]);
+    });
+  });
 });

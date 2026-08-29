@@ -5,6 +5,8 @@ import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
+import { projectBattleForSave } from '@/lib/battleRecord';
+import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft';
 import { buildRefToFillGroup, MAX_ROSTER_SIZE } from '@/lib/canvas/refToFillGroup';
@@ -211,15 +213,43 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   }
   const battleName = nameState.value;
 
-  // AC3, AC5: starts false, and nothing in this story ever clears it — clearing is Story 2.13's
-  // (a successful save). Forced decision 3: observed via `data-dirty` on `Root` below, this
-  // story's only consumer (SAVE is 2.13; the unsaved-changes guard is 2.16).
+  // Story 2.11 (AC3, AC5): starts false; a name edit or a grid commit sets it, and exactly one
+  // thing clears it — a save that RESOLVED (Story 2.13, `handleSave` below). Also observed via
+  // `data-dirty` on `Root`, which is how both the unit tests and the e2e watch a save land
+  // (the unsaved-changes guard that will read it in earnest is Story 2.16).
   const [isDirty, setIsDirty] = useState(false);
+
+  // THE EDIT LOCK (Sidiar's call, 2026-08-28, settling the code review's decision-needed finding).
+  //
+  // Two jobs, one ref. (a) Save re-entrancy: `setIsSaving(true)` does not take effect until the
+  // next render, so two activations dispatched in the same tick (a double-click, or a click racing
+  // the Enter key) would both read `isSaving === false` and both write. (b) Every editor mutation
+  // is refused for the duration of a write — the three handlers below (`handleNameChange`,
+  // `handleCommitGrid`, `handleUndo`) each return early on it.
+  //
+  // ⚠️ Why (b) exists: `handleSave` clears `isDirty` when the write RESOLVES, and it writes the
+  // record it projected BEFORE the await. An edit landing inside that window is therefore reported
+  // saved and never written — a silent loss of exactly the data this story exists to persist.
+  // Blocking the edit keeps the flag honest: what `isDirty === false` claims is on disk, is.
+  //
+  // ⚠️ A REF, not `isSaving` state, and that is structural rather than stylistic. `handleCommitGrid`
+  // must keep its stable identity (see its own comment — `EditDish`'s resize effect closes over it
+  // and deliberately does not re-register); reading state instead would put `isSaving` in the dep
+  // list and rebuild the callback on every save, breaking that guarantee with no test to catch it.
+  // The ref also cannot be raced by a mutation dispatched in the same tick as the save.
+  //
+  // The `disabled` attributes on SAVE, UNDO and the name field are the user-facing half of the same
+  // lock; this is the half that cannot be bypassed. Neither is sufficient alone — the canvas has no
+  // `disabled` attribute to set, so pointer edits are refused HERE and nowhere else.
+  const savingRef = useRef(false);
 
   // AC3: one handler sets BOTH the value and the flag, so React batches them into one commit — the
   // seed (`nameState.seed`) is carried through unchanged, which is what keeps a same-render
   // in-render adjust (above) from mistaking this edit for a new battle loading.
   const handleNameChange = useCallback((name: string) => {
+    // The edit lock (see `savingRef`). Refused mid-write, so the name cannot change out from under
+    // the record `handleSave` already projected and is about to report saved.
+    if (savingRef.current) return;
     setNameState((previous) => ({ value: name, seed: previous.seed }));
     setIsDirty(true);
   }, []);
@@ -553,11 +583,111 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // the seed is not the same as being saved) — see Dev Notes → *Undo and the dirty flag*.
   const handleCommitGrid = useCallback(
     (next: RenderableGrid) => {
+      // The edit lock (see `savingRef`). This is the ONLY place a pointer edit can be refused —
+      // a canvas has no `disabled` attribute, so unlike SAVE, UNDO and the name field there is no
+      // user-facing half here. Reading the REF rather than `isSaving` state is what keeps this
+      // callback's identity stable, which the comment above requires.
+      if (savingRef.current) return;
       commitGrid(next);
       setIsDirty(true);
     },
     [commitGrid],
   );
+
+  // The edit lock over UNDO. `undo` is NOT wrapped for the dirty flag (see above) but IS wrapped
+  // here: an undo mid-write rewinds the grid away from the record being saved, and `handleSave`
+  // would then clear `isDirty` over a grid that no longer matches what reached the store. Stable
+  // by construction — `useUndoableGrid` returns a `useCallback([])` for `undo`.
+  const handleUndo = useCallback(() => {
+    if (savingRef.current) return;
+    undo();
+  }, [undo]);
+
+  // Story 2.13 (AC2): the identity a save stamps, remembered across saves.
+  //
+  // `/battle/new` carries no id — `NewBattleDraft` deliberately has none (newBattleDraft.ts: minting
+  // one before a save "would be a lie the moment the user leaves /battle/new without saving"), so
+  // the FIRST save mints it here. Remembering it is what makes the SECOND save an update rather
+  // than a second battle in the Gallery.
+  //
+  // `createdAt` rides in the same cell because the two are stamped together and must stay together:
+  // `BattleSummarySchema` deliberately omits `createdAt` (battleSchema.ts), so it is not on the
+  // summary the Gallery holds — the only sources are the loaded record and this stamp. Overwriting
+  // it with `new Date()` on every save is invisible in the UI (FR-7.3 renders `updatedAt` only) and
+  // silently wrong in every future export.
+  //
+  // ⚠️ Not reset when `battleId` changes on an already-mounted page — the same family as
+  // `sessionRoster`/`chosenTool`/`battleName` (deferred-work.md), unreachable for the same reason
+  // (nothing navigates battle-to-battle without a full load) and to be fixed with them, together.
+  const [saveStamp, setSaveStamp] = useState<{ id: string; createdAt: Date } | null>(null);
+
+  // AC4: a real `disabled` on SAVE for the duration of a write. `battles.save()` is a
+  // whole-collection read-modify-write over one `gol:battles` key, so two interleaved saves can
+  // lose one outright.
+  const [isSaving, setIsSaving] = useState(false);
+  // AC5 / NFR-7.2: a refused save's message, rendered as a `role="alert"` line above the status bar
+  // (forced decision 4b). `null` is "no failure to report" — never `''`.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // AC2, AC3, AC4, AC5 — the whole save. Declared before the four early returns below like every
+  // other hook here.
+  //
+  // ⚠️ This handler READS the editor and writes nothing back to it (trap 1). No refetch (re-running
+  // battles.load() would rebuild `draft` -> `seedGrid`, and `useUndoableGrid` resets its ring when
+  // the seed changes — thirty levels of undo destroyed to learn something the app already knows);
+  // no re-seed of `rosterIds` (the saved roster is PRUNED and the live one is not, so adopting the
+  // pruned order mid-session would shift every live ref and repaint the dish); no `sessionRoster`
+  // clear (Decision H.2 entries are excluded from the RECORD, not from the SESSION — a user who
+  // added an organism, saved, then went to paint with it would find it gone from the sidebar and
+  // back in the add dropdown). After this resolves, exactly two things have changed: `isDirty` is
+  // false and, on a first save, `saveStamp` is set.
+  const handleSave = useCallback(async () => {
+    if (savingRef.current || grid === null) return;
+    savingRef.current = true;
+    setIsSaving(true);
+    // Cleared at the START of the attempt, not only on success: an identical message re-rendered
+    // in place would not re-announce through `role="alert"`, so a second failure would be silent.
+    // Unmounting the line first makes every attempt's outcome audible.
+    setSaveError(null);
+
+    const now = new Date();
+    // The loaded record is the fallback SOURCE for both fields, never a thing to write back to.
+    const existing =
+      saveStamp ??
+      (loadedBattle === null ? null : { id: loadedBattle.id, createdAt: loadedBattle.createdAt });
+    // Forced decision 2, option (a): bare `crypto.randomUUID()`, no fallback. It requires a SECURE
+    // CONTEXT — `localhost`, `https` and Playwright all are, so dev, CI and any real deployment are
+    // fine; a static export opened over plain `http://` on a LAN IP is not, and there `crypto
+    // .randomUUID` is `undefined`. The honest failure (a TypeError surfacing through AC5's generic
+    // message below) beats a hand-rolled generator nothing tests, whose output `BattleSchema.id`'s
+    // `z.uuid()` would reject on the NEXT load — i.e. a save that appears to succeed and produces
+    // an unopenable battle.
+    const id = existing?.id ?? crypto.randomUUID();
+    const createdAt = existing?.createdAt ?? now;
+
+    try {
+      // ⚠️ `battleName` raw, including `''` — `battleDisplayName`'s "Untitled Battle" is a DISPLAY
+      // fallback and is never stored (createNewBattleDraft records why).
+      const record = projectBattleForSave(grid, rosterIds, {
+        id,
+        name: battleName,
+        createdAt,
+        updatedAt: now,
+      });
+      await repositories.battles.save(record);
+      setSaveStamp({ id, createdAt });
+      // AC4: only after the promise RESOLVES. Clearing optimistically before the await would report
+      // success for a write that then throws — and RFC-006 Decision 7 says a failed write "also
+      // fails the dirty-flag clear, so the user keeps their unsaved indicator" in as many words.
+      setIsDirty(false);
+    } catch (error) {
+      // ❌ Never swallowed: an unreported save failure is the worst outcome in this story. `isDirty`
+      // is deliberately left TRUE.
+      setSaveError(saveFailureMessage(error));
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
+  }, [grid, rosterIds, battleName, repositories, saveStamp, loadedBattle]);
 
   // ALL THREE resources must settle before anything renders. Without this, a battle that resolves
   // before settings would briefly seed /battle/new at the DEFAULT_SETTINGS fallback grid size
@@ -645,8 +775,14 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
           /* AC4: the WRAPPED seam — see handleCommitGrid's own comment above for why it, and not
              `commitGrid` directly, is what has to reach the canvas from here on. */
           onCommitGrid={handleCommitGrid}
-          onUndo={undo}
+          onUndo={handleUndo}
           canUndo={canUndo}
+          /* Story 2.13 (AC1, AC4, AC5): inputs to the view, not derivations — spec §3.3 lists both
+             as props, and `<BattlePage>` owns the dirty flag (AR-27/28) and the save itself. */
+          isDirty={isDirty}
+          onSave={handleSave}
+          isSaving={isSaving}
+          saveError={saveError}
         />
       )}
     </Root>

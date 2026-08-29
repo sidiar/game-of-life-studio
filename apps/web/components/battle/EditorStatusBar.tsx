@@ -145,26 +145,20 @@ const ColorChip = styled('span')({
  * below is an existing `--gol-*` token, or (the chips) an already-resolved runtime hex passed
  * through inline `style` — the same mechanism `<ColorChip>` already used in `<OrganismRoster>`.
  */
-const UndoButton = styled('button')({
-  background: 'transparent',
-  border: '1px solid var(--gol-border-control)',
-  color: 'var(--gol-text-primary)',
-  padding: '8px 16px',
+const barButtonBase = {
   fontSize: '11px',
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
   fontFamily: 'inherit',
   cursor: 'pointer',
-  // Enumerated, never the mockup's `all 0.2s` — with `all`, any property added to this block later
-  // starts animating by accident, including a layout-affecting one (BattleTile's recorded reason).
-  transition: 'background-color 0.2s, border-color 0.2s, color 0.2s',
-  '&:hover:not(:disabled)': {
-    background: 'var(--gol-bg-hover)',
-    borderColor: 'var(--gol-text-secondary)',
-  },
   '&:focus-visible': {
     outline: '2px solid var(--gol-accent)',
+    // Deliberately OUTSIDE the box, and load-bearing for SAVE specifically: SAVE is filled in
+    // `--gol-accent`, so a ring of the same colour drawn AT the edge (offset 0, or the negative
+    // offset `<BattleNameField>`'s inset ring uses) would be invisible against its own fill. At
+    // +2px the ring is separated from the fill by a band of `--gol-bg-secondary` and reads on
+    // both buttons.
     outlineOffset: '2px',
   },
   '&:disabled': {
@@ -173,8 +167,76 @@ const UndoButton = styled('button')({
     color: 'var(--gol-action-disabled)',
     cursor: 'not-allowed',
   },
-  '@media (prefers-reduced-motion: reduce)': {
-    transition: 'none',
+} as const;
+
+const UndoButton = styled('button')({
+  ...barButtonBase,
+  background: 'transparent',
+  border: '1px solid var(--gol-border-control)',
+  color: 'var(--gol-text-primary)',
+  padding: '8px 16px',
+  // ⚠️ **No `transition`** — removed 2026-08-28, and the claim that used to sit here ("safe on UNDO
+  // because both states paint dark-on-dark, unlike SAVE") was simply WRONG. The disabled pair is
+  // `--gol-action-disabled` on `--gol-action-disabled-bg`, i.e. white@30% on white@12%, which
+  // resolves to **#727272 on #353535 — 2.54:1**. That never showed up because axe EXEMPTS disabled
+  // controls from `color-contrast` (WCAG 1.4.3 does not apply to inactive components), so the
+  // settled state is never scanned. The cross-fade is: on the disabled→enabled edge the button is
+  // already `enabled` in the DOM while its colours still sit near the disabled endpoint, and a scan
+  // landing in that window measures an ENABLED control at 2.54:1. Caught by
+  // `battleRoute.spec.ts:601` ("no axe violations on /battle/new after a drag") — the same failure
+  // SAVE's own comment below records at 3.76:1, from the same cause, found the same way.
+  //
+  // ❌ Do not restore it, on either button. The `:disabled` colours are only ever legitimate while
+  // the control is genuinely disabled; any animation between that pair and an enabled one paints
+  // frames nobody validated, and `themeTokens.test.ts` cannot see intermediate frames.
+  //
+  // (The rule this replaces was enumerated rather than the mockup's `all 0.2s`, for the reason
+  // `BattleTile` records: with `all`, any property added later starts animating by accident.)
+  // Review (2026-08-28): the forced-decision-5 `barButtonBase` extraction dropped this rule
+  // entirely — `barButtonBase` only carries the treatment SAVE and UNDO share, and UNDO's hover
+  // (unlike its focus/disabled states) is NOT one of those, so it needs restating here.
+  '&:hover:not(:disabled)': {
+    background: 'var(--gol-bg-hover)',
+    borderColor: 'var(--gol-text-secondary)',
+  },
+  // ❌ No `prefers-reduced-motion` block: there is no transition left for it to switch off, and an
+  // empty escape hatch reads as though one still exists.
+});
+
+/**
+ * Mockup: `.save-btn` (clinical-lab-theme/petri-dish-lab-mode.html:608-624) — the SOLID accent
+ * button beside UNDO's outline one. The mockup's `#00b8e0` hover is `var(--gol-accent-hover)`;
+ * ❌ no raw hex (AR-46 is a live lint rule on `apps/web`).
+ *
+ * Story 2.13 forced decision 5, option (c): the two buttons share `barButtonBase` — a plain style
+ * OBJECT, not a base component. (a) would duplicate the type/focus/disabled treatment and let the
+ * two drift; (b), a `variant` prop, is indirection a two-instance component cannot justify; a
+ * `styled(BaseButton)` composition would add a real wrapper component to a chunk with 9.5 KB of
+ * headroom. A spread object costs nothing at runtime and still leaves exactly one definition of
+ * the shared behaviour.
+ *
+ * ⚠️ **No `transition`, deliberately — the one thing this button does NOT share with UNDO.** SAVE's
+ * two states are two DIFFERENT validated colour pairs: `--gol-on-accent` on `--gol-accent` when
+ * enabled, `--gol-action-disabled` on `--gol-action-disabled-bg` when not. A cross-fade between
+ * them animates through pairs nobody validated, and `themeTokens.test.ts` cannot see intermediate
+ * frames. Measured: with a 0.2s fade, the axe scan that runs right after a placement enables this
+ * button caught it mid-transition at **3.76:1** (fg `#214147` on bg `#10a5c3`) and failed on all
+ * four Playwright projects. Do not "restore consistency" by adding one back here.
+ *
+ * ⚠️ Updated 2026-08-28: this used to add "UNDO cross-fades within ONE pair (dark on dark) and
+ * keeps its transition" — untrue, and UNDO has since lost its transition to the SAME failure at
+ * 2.54:1. See `UndoButton` above. NEITHER button animates between a disabled and an enabled
+ * palette; that is now the rule for this bar, not a SAVE-specific exception.
+ */
+const SaveButton = styled('button')({
+  ...barButtonBase,
+  background: 'var(--gol-accent)',
+  border: '1px solid var(--gol-accent)',
+  color: 'var(--gol-on-accent)',
+  padding: '8px 20px',
+  '&:hover:not(:disabled)': {
+    background: 'var(--gol-accent-hover)',
+    borderColor: 'var(--gol-accent-hover)',
   },
 });
 
@@ -219,22 +281,47 @@ export interface EditorStatusBarStats {
 }
 
 /**
- * This story's slice of spec §3.8's `EditorStatusBarProps`: the UNDO pair plus the stats row
- * (Story 2.12).
+ * Spec §3.8's `EditorStatusBarProps`, complete as of Story 2.13: the UNDO pair, the stats row
+ * (Story 2.12) and the SAVE pair. The bar shipped with each responsibility complete rather than as
+ * a placeholder for the rest, which is why it was a real component in Story 2.8 and not the
+ * half-built panel Story 2.4 declined.
  *
- * ❌ No `onSave` / `isDirty` and no SAVE button — Story 2.13. ❌ No Grid Zoom slider — superseded
- * (§9.1, whole-grid auto-fit replaced the viewport model). The bar ships with each responsibility
- * complete rather than a placeholder for the rest; 2.13 ADDS to it, which is why it is a real
- * component here and not the half-built panel Story 2.4 declined.
+ * ❌ No Grid Zoom slider — superseded (§9.1, whole-grid auto-fit replaced the viewport model), and
+ * the one thing §3.8 lists that this bar will never grow. ❌ No "saved" toast: the disabled SAVE
+ * button IS the success signal in the mockup, and a save FAILURE is reported above the bar rather
+ * than inside it (Story 2.13 forced decision 4 — an arbitrary-length message on the
+ * `flexShrink: 0` side would reopen the horizontal overflow the 2026-08-28 review measured).
  */
 export interface EditorStatusBarProps {
   onUndo(): void;
   /** FR-3.8: "the button is disabled when `canUndo` is false". A boolean, so it re-renders. */
   canUndo: boolean;
   stats: EditorStatusBarStats;
+  /** FR-7.8 (spec §3.8). Fires the save; `<BattlePage>` owns everything a save MEANS. */
+  onSave(): void;
+  /** FR-7.8 (spec §3.8): SAVE is enabled exactly when there is something to save. */
+  isDirty: boolean;
+  /**
+   * A third prop beyond spec §3.8's two, and deliberate. `battles.save()` is a whole-collection
+   * read-modify-write (`localStorageBattleRepository.ts`), so two interleaved saves can lose one —
+   * SAVE has to be genuinely unavailable while a write is in flight, not merely re-entrancy-guarded
+   * inside the handler, or the control advertises an availability it does not have.
+   *
+   * ❌ NOT folded into `isDirty` by the caller: the battle IS still dirty during the write — that
+   * is what `data-dirty` on the page root reports — so passing `isDirty && !isSaving` would make
+   * the prop's name false for the duration.
+   */
+  isSaving: boolean;
 }
 
-export default function EditorStatusBar({ onUndo, canUndo, stats }: EditorStatusBarProps) {
+export default function EditorStatusBar({
+  onUndo,
+  canUndo,
+  stats,
+  onSave,
+  isDirty,
+  isSaving,
+}: EditorStatusBarProps) {
   const hasPopulation = stats.perOrganism.length > 0;
 
   return (
@@ -295,9 +382,24 @@ export default function EditorStatusBar({ onUndo, canUndo, stats }: EditorStatus
             is a plain `<div>`, live-bound through `onChange` alone. Kept explicit anyway — cheap,
             and correct regardless of what future story adds a `<form>` somewhere else on this
             route. */}
-        <UndoButton type="button" onClick={onUndo} disabled={!canUndo}>
+        {/* `isSaving` disables UNDO alongside SAVE (Sidiar's call, 2026-08-28): an undo landing
+            mid-write rewinds the grid away from the record being saved, which `<BattlePage>`'s
+            edit lock refuses outright. This is the visible half of that refusal — without it the
+            control advertises an availability it does not have, the same reasoning `isSaving`'s
+            own prop comment gives for SAVE. ⚠️ Composed HERE, not folded into `canUndo` by the
+            caller: there IS still history to undo during a write, so a `canUndo && !isSaving`
+            prop would make the prop's name false for the duration. */}
+        <UndoButton type="button" onClick={onUndo} disabled={!canUndo || isSaving}>
           Undo
         </UndoButton>
+        {/* AFTER Undo in DOM order, which IS the tab order (AC8) — the mockup's own order
+            (:823-824), and neither button carries a `tabIndex`, so nothing else decides it.
+            `disabled` is the real attribute on both, never a CSS-only grey: assistive technology
+            reads the attribute, and `!isDirty || isSaving` is the complete condition (AC1/AC4 —
+            see `isSaving`'s prop comment for why the two are separate booleans). */}
+        <SaveButton type="button" onClick={onSave} disabled={!isDirty || isSaving}>
+          Save
+        </SaveButton>
       </RightGroup>
     </Bar>
   );

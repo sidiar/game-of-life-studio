@@ -689,7 +689,7 @@ So that my work persists across sessions.
 **Acceptance Criteria:**
 
 **Given** the SAVE button in the status bar, **When** `isDirty` is true, **Then** it is enabled; saving a `'new'` battle creates the entity, subsequent saves update it (FR-7.8)
-**Given** a save, **When** executed, **Then** persisted `organismIds` is pruned to exactly the placed set — session-added-but-unpainted entries are excluded (Decision H.1), dense `gridState` conversion happens inside the repository (Reconciliation #3), and `updatedAt` bumps so the Gallery re-sorts
+**Given** a save, **When** executed, **Then** persisted `organismIds` is pruned to exactly the placed set — session-added-but-unpainted entries are excluded (Decision H.1), the dense `gridState` is written as-is (Reconciliation #3), and `updatedAt` bumps so the Gallery re-sorts
 **And** after a successful save `isDirty` clears and the battle appears in the Gallery with a live thumbnail
 **Given** a save that exceeds the storage quota, **When** it fails, **Then** a non-destructive error explains the situation, existing stored data is untouched, and the editor keeps the unsaved state (AR-14, NFR-7.2)
 

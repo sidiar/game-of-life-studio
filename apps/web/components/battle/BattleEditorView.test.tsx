@@ -69,6 +69,10 @@ function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>
       atCap={false}
       battleName=""
       onNameChange={() => {}}
+      isDirty={false}
+      onSave={() => {}}
+      isSaving={false}
+      saveError={null}
       onCommitGrid={() => {}}
       onUndo={() => {}}
       canUndo={false}
@@ -137,7 +141,11 @@ describe('BattleEditorView', () => {
     // trap 4). Full coverage of the row lives in the dedicated describe block below.
     expect(screen.getByText(/generation/i)).toBeInTheDocument();
     expect(screen.getByText(/living cells/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
+    // Story 2.13: SAVE's absence assertion INVERTED, not deleted (trap 5) — it is the bar's
+    // second real control now. `renderEditor`'s default is a CLEAN battle, so it renders disabled.
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    // ...and still no failure line, because nothing has failed (AC5's alert is conditional).
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   // AC3: Story 2.7's provisional toggle is DELETED, in the commit that ships its replacement. A
@@ -149,11 +157,63 @@ describe('BattleEditorView', () => {
     expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Erase' })).toBeNull();
     expect(screen.queryByRole('group', { name: /editing tool/i })).toBeNull();
-    // Exactly the roster's one row, the eraser and UNDO — nothing more.
+    // Exactly the roster's one row, the eraser, UNDO and (Story 2.13) SAVE — nothing more.
     expect(screen.getByRole('button', { name: "Conway's Classic" })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(4);
+  });
+});
+
+/**
+ * Story 2.13 (AC1, AC5): `isDirty`/`onSave`/`isSaving` are INPUTS to this view — spec §3.3 lists
+ * them as props, unlike `stats`, which this component derives. What is worth pinning here is that
+ * they reach the bar untransformed, and that the failure line lands ABOVE the bar rather than
+ * inside it (forced decision 4b).
+ */
+describe('BattleEditorView — the save affordance (Story 2.13)', () => {
+  it('forwards isDirty to the bar untouched', () => {
+    renderEditor({ isDirty: true });
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('forwards onSave to the bar untouched', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderEditor({ isDirty: true, onSave });
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards isSaving to the bar untouched', () => {
+    renderEditor({ isDirty: true, isSaving: true });
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  // AC5 / NFR-7.2: assertive, because a refused save is an event the user caused and must not
+  // miss — unlike Story 2.12's stats, which are a passive summary and deliberately are NOT a live
+  // region. The message states that existing data is untouched; that claim is a property of
+  // `writeKey`'s candidate-string-then-`setItem` shape (AR-14), not a reassurance.
+  it('renders a refused save as an assertive alert, above the status bar', () => {
+    renderEditor({ saveError: 'Storage is full, so this battle was not saved.' });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/storage is full/i);
+    // DOM order is what a screen reader and a sighted user both read: the alert precedes the bar's
+    // stats region. `compareDocumentPosition` returns FOLLOWING (4) when the argument comes after.
+    const stats = screen.getByRole('region', { name: 'Battle statistics' });
+    expect(alert.compareDocumentPosition(stats) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders no alert element at all when there is no failure to report', () => {
+    renderEditor({ saveError: null });
+
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
@@ -231,6 +291,10 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving={false}
+        saveError={null}
         onCommitGrid={onCommitGrid}
         onUndo={onUndo}
         canUndo={canUndo}
@@ -265,6 +329,10 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
           atCap={false}
           battleName=""
           onNameChange={() => {}}
+          isDirty={false}
+          onSave={() => {}}
+          isSaving={false}
+          saveError={null}
           onCommitGrid={onCommitGrid}
           onUndo={onUndo}
           canUndo={nextCanUndo}
@@ -454,6 +522,10 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
       onCommitGrid,
       onUndo: () => {},
       canUndo: false,
+      isDirty: false,
+      onSave: () => {},
+      isSaving: false,
+      saveError: null,
       ...overrides,
     };
     const view = render(<BattleEditorView grid={EMPTY_GRID} {...props} />);
@@ -742,6 +814,10 @@ describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', (
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving={false}
+        saveError={null}
         onCommitGrid={() => {}}
         onUndo={() => {}}
         canUndo={false}
@@ -843,6 +919,10 @@ describe('BattleEditorView — the stats derivation (Story 2.12, AC3, AC4)', () 
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving={false}
+        saveError={null}
         onCommitGrid={() => {}}
         onUndo={() => {}}
         canUndo={false}

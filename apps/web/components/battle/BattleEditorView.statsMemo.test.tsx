@@ -72,6 +72,10 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving={false}
+        saveError={null}
         onCommitGrid={() => {}}
         onUndo={() => {}}
         canUndo={false}
@@ -97,6 +101,10 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving={false}
+        saveError={null}
         onCommitGrid={() => {}}
         onUndo={() => {}}
         canUndo // changed
@@ -121,6 +129,10 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving={false}
+        saveError={null}
         onCommitGrid={() => {}}
         onUndo={() => {}}
         canUndo

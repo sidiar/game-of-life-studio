@@ -35,6 +35,16 @@ const Input = styled('input')({
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '-2px',
   },
+  // The `disabled` state (Story 2.13's edit lock). The same pre-validated token PAIR
+  // `<EditorStatusBar>`'s buttons use — `--gol-action-disabled` on `--gol-action-disabled-bg` —
+  // rather than a new one. ⚠️ Safe to leave the `transition` above in place because it enumerates
+  // `border-color` ONLY: neither of the two properties changing here is animated, so there is no
+  // mid-fade frame for an axe scan to measure (the trap that cost SAVE its transition this story).
+  '&:disabled': {
+    background: 'var(--gol-action-disabled-bg)',
+    color: 'var(--gol-action-disabled)',
+    cursor: 'not-allowed',
+  },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
   },
@@ -50,6 +60,15 @@ const CharCount = styled('div')({
   textAlign: 'right',
 });
 
+// The cap notice (Story 2.13). Same 11px scale as the counter it sits under, in `--gol-text-
+// secondary` rather than `--gol-danger`: the cap is a limit the field enforced, not an error the
+// user has to fix — nothing is broken and nothing was lost that they can still act on.
+const CapNotice = styled('div')({
+  fontSize: '11px',
+  color: 'var(--gol-text-secondary)',
+  textAlign: 'right',
+});
+
 export interface BattleNameFieldProps {
   value: string;
   onChange(name: string): void;
@@ -61,6 +80,10 @@ export interface BattleNameFieldProps {
    * Enforced twice, deliberately: the native `maxLength` attribute stops ordinary typing at the
    * UA, and the change handler clamps whatever still arrives over the cap (forced decision 6b). */
   maxLength?: number;
+  /** Story 2.13 (Sidiar's call, 2026-08-28): true while a save is in flight. `<BattlePage>`'s edit
+   * lock refuses a name change for that window regardless — this is the VISIBLE half, so the field
+   * does not silently swallow keystrokes it has already decided to discard. */
+  disabled?: boolean;
 }
 
 /**
@@ -82,6 +105,7 @@ export default function BattleNameField({
   value,
   onChange,
   maxLength = MAX_BATTLE_NAME_LENGTH,
+  disabled = false,
 }: BattleNameFieldProps) {
   // Forced decision 4: `useId()`, not a hardcoded string — this is a statically exported, hydrated
   // page, so a hand-rolled id risks a server/client mismatch, and a hardcoded one breaks the moment
@@ -114,6 +138,9 @@ export default function BattleNameField({
         // which is noise) and never unassociated (a stray number no screen-reader user can
         // attribute to the field).
         aria-describedby={counterId}
+        // A REAL `disabled` attribute, never a CSS-only grey — the same rule `<EditorStatusBar>`'s
+        // two buttons follow: assistive technology reads the attribute.
+        disabled={disabled}
       />
       {/* ⚠️ `value.length` — UTF-16 code units, which is what BOTH the DOM `maxLength` attribute
           and Zod's `.max()` count. `[...value].length` (code points) or `Intl.Segmenter` graphemes
@@ -122,6 +149,24 @@ export default function BattleNameField({
       <CharCount id={counterId}>
         {value.length} / {maxLength}
       </CharCount>
+      {/* Story 2.13 (AC6), settling `deferred-work.md`'s ":353" entry — "hitting the 100-character
+          cap is silent in every modality". Native `maxLength` truncation swallows keystrokes with
+          no feedback, and the counter above is `aria-describedby`-only by Story 2.11's forced
+          decision 4, which is right for per-keystroke chatter and leaves the BOUNDARY itself
+          unannounced.
+
+          This is the shape that entry proposed and the only one that does not reintroduce the
+          noise decision 4 rejected: ONE polite live region, rendered only at the cap. It announces
+          once on arrival and is silent for the other 100 keystrokes, because the element does not
+          exist until `value.length` reaches `maxLength`.
+
+          ⚠️ `polite`, never `assertive`: reaching a limit while typing is not an event that may
+          interrupt — unlike a refused save (`<BattleEditorView>`'s save-failure line), which is.
+          ⚠️ Visible text, not `aria-live` on a visually-hidden node: sighted users get no feedback
+          from the truncation either, which is what "silent in every modality" meant. */}
+      {value.length >= maxLength && (
+        <CapNotice role="status">Name limit reached — {maxLength} characters.</CapNotice>
+      )}
     </div>
   );
 }

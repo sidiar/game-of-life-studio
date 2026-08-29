@@ -329,6 +329,8 @@ Battle ids are `z.uuid()` values minted **in the browser** (`packages/domain/src
 - **K.4 — Why not drop static export.** Keeping `/battle/[id]` literally means reversing NFR-6 and the $0-hosting constraint, ruling out GitHub Pages and requiring a Node host plus a deploy pipeline — a far larger architectural change than the URL spelling it would buy back.
 - **K.5 — Standing rule for later routes.** **Every route this app adds must be statically prerenderable.** Entity-scoped pages take the id as a query parameter (`/battle?id=`), never as a dynamic segment. This binds Epic 4's `/organisms` and Epic 5's `/settings` too — both are static paths and already comply.
 
+### Cross-RFC Reconciliations
+
 These resolve spec-vs-spec drift surfaced in review — mostly RFC-001 (the oldest doc) going stale against the newer authorities (RFC-004 for rules, RFC-006 for persistence). They are alignments, not new product decisions, except #5/#6 which the product owner decided.
 
 1. **Repository interface (RFC-001 ← RFC-006).** RFC-001 already uses `SettingsRepository`; added the bulk methods the serializer needs — `listFull()`, `replaceAll()`, and a **data-only** `clearAll()` (FR-8.5: battles + organisms, never `gol:settings` — Decision F).
