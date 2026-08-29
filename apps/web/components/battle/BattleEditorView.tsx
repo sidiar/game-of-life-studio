@@ -42,7 +42,7 @@ import SidebarSection from './SidebarSection';
  * **Measured, all three variants, same tree (Story 2.14 Task 8):**
  * static import 320.8 KB — **over the 310 budget by 10.8 KB**, i.e. option (a) does not fit and
  * would need a raise only Sidiar can give; `React.lazy` + `<Suspense>` 303.0 KB; this
- * (`next/dynamic`) **304.0 KB**. The 1.0 KB `next/dynamic` costs over bare `React.lazy` buys the
+ * (`next/dynamic`) **304.1 KB**. The 1.1 KB `next/dynamic` costs over bare `React.lazy` buys the
  * convention AR-35 names and the Suspense boundary it manages itself, on a route that has 6.0 KB
  * of headroom either way.
  */
@@ -743,11 +743,20 @@ export default function BattleEditorView({
 
   // AC4: ONE `onCommitGrid` call, therefore one ring entry, therefore one undo — and the dirty
   // flag comes free through `<BattlePage>`'s `handleCommitGrid`. ❌ No second commit seam.
+  //
+  // review (2026-08-29): `isSaving` is checked HERE too, not only on the control that opens the
+  // dialog. `<GridSettingsSection>`'s `disabled={isSaving}` stops a NEW resize from starting
+  // while a save is in flight, but it cannot stop a save that STARTS after the dialog is already
+  // open — and `<BattlePage>`'s `handleCommitGrid` silently no-ops under `savingRef` (Trap 8).
+  // Without this guard, confirming in that window would close the dialog exactly as it does on
+  // success while the grid silently stayed at its old dimensions — a false-success UI, not the
+  // "click that appears to do nothing" Trap 8 calls the accepted failure mode for a control left
+  // enabled during a save. Guarding here keeps the dialog open instead, matching that convention.
   const handleConfirmResize = useCallback(() => {
-    if (pendingResize === null) return;
+    if (pendingResize === null || isSaving) return;
     onCommitGrid(resizeGrid(grid, pendingResize.preset));
     setResizeDialogOpen(false);
-  }, [grid, onCommitGrid, pendingResize]);
+  }, [grid, isSaving, onCommitGrid, pendingResize]);
 
   // AC3: cancel — and Escape, and a backdrop click, which MUI routes through the same callback —
   // change NOTHING. No commit, no undo entry, no dirty flag; the preset control still reads the

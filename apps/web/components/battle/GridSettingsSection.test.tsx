@@ -59,7 +59,7 @@ describe('GridSettingsSection', () => {
     expect(screen.queryByRole('radio', { name: /150 by 90|200 by 120/ })).toBeNull();
   });
 
-  it('exposes selection through more than colour: aria-checked AND a rendered mark (AC8)', () => {
+  it('exposes selection through more than colour: the native checked state AND a rendered mark (AC8)', () => {
     renderSection();
 
     const selected = screen.getByRole('radio', { name: '100 by 60' });

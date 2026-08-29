@@ -1058,6 +1058,53 @@ describe('BattleEditorView — edit-mode grid resize (Story 2.14)', () => {
     expect(Array.from(committed.occupant).filter((cell) => cell !== 0)).toHaveLength(4);
   });
 
+  /**
+   * review (2026-08-29): `<GridSettingsSection disabled={isSaving}>` stops a NEW resize from
+   * being OPENED while a save is in flight, but cannot stop a save that STARTS after the dialog
+   * is already open. Without a matching guard in `handleConfirmResize`, confirming in that window
+   * closed the dialog exactly as it does on success while `onCommitGrid` (and therefore
+   * `<BattlePage>`'s `handleCommitGrid`, silently no-op'd by `savingRef`) never actually committed
+   * — a false-success UI. `isSaving` flips WHILE the dialog is open here to reach that window
+   * directly, rather than relying on the (also fixed) inertness timing to reach it via a click.
+   */
+  it('confirm does NOTHING while a save starts after the dialog is already open', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    const { rerender } = renderEditor({ grid: OCCUPIED_EDGES, onCommitGrid });
+
+    await user.click(preset('50 by 30'));
+    await screen.findByRole('dialog', { name: 'Cells Will Be Discarded' });
+
+    rerender(
+      <BattleEditorView
+        grid={OCCUPIED_EDGES}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        rosterIds={ROSTER_IDS}
+        roster={ROSTER}
+        library={[]}
+        onAddToRoster={() => {}}
+        atCap={false}
+        battleName=""
+        onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving
+        saveError={null}
+        onCommitGrid={onCommitGrid}
+        onUndo={() => {}}
+        canUndo={false}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Resize Grid' }));
+
+    expect(onCommitGrid).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Cells Will Be Discarded' })).toBeInTheDocument();
+  });
+
   it('cancel changes NOTHING — no commit, and the control still reads the current size (AC3)', async () => {
     const user = userEvent.setup();
     const onCommitGrid = vi.fn();
