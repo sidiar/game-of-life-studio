@@ -1209,7 +1209,10 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
     expect(within(sidebar).queryByRole('textbox', { name: /search organisms/i })).toBeNull();
     expect(within(sidebar).queryByRole('combobox')).toBeNull();
     expect(within(sidebar).getByText(/roster is full/i)).toBeInTheDocument();
-    expect(within(sidebar).getByText(/255/)).toBeInTheDocument();
+    // ⚠️ Scoped to the cap NOTICE, not to the sidebar: from Story 2.14 the sidebar also carries
+    // Grid Info, and a 255-organism roster on this fixture puts a bare "255" in its Living Cells
+    // row too. The number that matters is the one inside the sentence that states the limit.
+    expect(within(sidebar).getByText(/roster is full/i)).toHaveTextContent(/255/);
   });
 
   // ⚠️ Story 2.10 CODE REVIEW regression (2026-08-27) — trap 1, the append-only invariant, and the
@@ -1708,9 +1711,13 @@ describe('BattlePage — saving (Story 2.13)', () => {
   describe('refuses every editor mutation while a write is in flight', () => {
     /** Story 2.12's live readout, which is the only view of the grid a unit test can read back.
      * `role="group"` with an `aria-label` of `Living Cells: N` (`<EditorStatusBar>`) — parsed
-     * rather than matched against an expected string, so the assertion states a NUMBER. */
+     * rather than matched against an expected string, so the assertion states a NUMBER.
+     *
+     * ⚠️ Scoped to the status bar's own named region (Story 2.14): the sidebar's Grid Info section
+     * carries a second `Living Cells: N` group, by the mockup's own design, so an unscoped lookup
+     * is ambiguous rather than wrong. */
     function livingCells(): number {
-      const label = screen
+      const label = within(screen.getByRole('region', { name: 'Battle statistics' }))
         .getByRole('group', { name: /^Living Cells: \d+$/ })
         .getAttribute('aria-label');
       return Number(label?.replace('Living Cells: ', ''));
@@ -1968,3 +1975,195 @@ function findEmptyCell(gridState: readonly (readonly number[])[]): { col: number
   }
   throw new Error('fixture has no empty cell');
 }
+
+/**
+ * Story 2.14 — edit-mode grid resize (AC2, AC4, AC5, AC7).
+ *
+ * `<BattlePage>` is the only level at which the resize, the undo ring, the dirty flag and the save
+ * projection are all observable together — and the level at which a resize is a LIVE `size` change
+ * on a mounted canvas, which is the thing the story is actually risky about.
+ *
+ * ⚠️ There is no `<BattlePage>` change in this story: the resize arrives at the existing
+ * `handleCommitGrid` and `size` re-derives from `grid` in the same commit. These tests exist to
+ * prove that, not to cover something new here.
+ */
+describe('BattlePage — edit-mode grid resize (Story 2.14)', () => {
+  /**
+   * A 100 x 60 battle with one cell in the FAR corner (99, 59).
+   *
+   * ⚠️ Built rather than reused: the mock workspace's own 100 x 60 battle places its roster in the
+   * middle of the grid, so shrinking it to 50 x 30 clips nothing and applies silently — a fixture
+   * that makes the shrink tests below pass for the wrong reason. The corner cell is what makes the
+   * warning reachable at all.
+   */
+  const CLIPPING_BATTLE: Battle = (() => {
+    const source = battles.find((b) => b.id === MOCK_BATTLE_IDS.battleB) as Battle;
+    const gridState = source.gridState.map((row) => [...row]);
+    gridState[59][99] = 1; // ref 1 -> the first roster id, so nothing dangles.
+    return { ...source, gridState };
+  })();
+
+  function dirtyValue(container: HTMLElement): string | null {
+    const root = container.querySelector('[data-dirty]');
+    if (root === null) throw new Error('Root (data-dirty) not found');
+    return root.getAttribute('data-dirty');
+  }
+
+  function gridSizeFact(): string {
+    const group = within(screen.getByRole('complementary')).getByRole('group', {
+      name: /^Grid Size: /,
+    });
+    return group.getAttribute('aria-label') ?? '';
+  }
+
+  // AC2 + AC4 + AC7 in one journey: a GROW commits with no dialog, marks the battle dirty, and the
+  // canvas survives the live `size` change (an unmounted editor would take every later query with
+  // it).
+  it('grows the grid in ONE undoable commit, marks it dirty, and keeps the editor mounted', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(gridSizeFact()).toBe('Grid Size: 50 by 30');
+    expect(dirtyValue(container)).toBe('false');
+
+    await user.click(screen.getByRole('radio', { name: '100 by 60' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(gridSizeFact()).toBe('Grid Size: 100 by 60');
+    expect(dirtyValue(container)).toBe('true');
+    expect(await findEditorCanvas(container)).toBeInTheDocument();
+    // ONE commit, therefore ONE ring entry: UNDO is available exactly once.
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+  });
+
+  // AC4, and the one genuinely new consequence of this story: UNDO now changes `size` too. The
+  // groundwork is `useUndoableGrid`'s dimension-carrying snapshot — this VERIFIES it end to end
+  // rather than rebuilding it, including the renderer reconstruction the reverse change triggers.
+  it('undo restores BOTH the previous dimensions and the previous content (AC4)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const livingBefore = within(screen.getByRole('region', { name: 'Battle statistics' }))
+      .getByRole('group', { name: /^Living Cells: \d+$/ })
+      .getAttribute('aria-label');
+
+    await user.click(screen.getByRole('radio', { name: '100 by 60' }));
+    expect(gridSizeFact()).toBe('Grid Size: 100 by 60');
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+
+    expect(gridSizeFact()).toBe('Grid Size: 50 by 30');
+    // Content, not just dimensions: a grow adds only empty cells, so the population is identical
+    // on the way out and on the way back.
+    expect(
+      within(screen.getByRole('region', { name: 'Battle statistics' }))
+        .getByRole('group', { name: /^Living Cells: \d+$/ })
+        .getAttribute('aria-label'),
+    ).toBe(livingBefore);
+    // The dish repainted at the old size rather than throwing out of a passive effect (AC7).
+    expect(await findEditorCanvas(container)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  // AC3 at the page level: the warning fires on a real battle whose cells reach past the smaller
+  // preset, and cancelling leaves the battle CLEAN — no commit, no ring entry, no dirty flag.
+  it('warns before a shrink that clips, and a cancel leaves the battle untouched (AC3)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const { container } = render(
+      <BattlePage repositories={seeded([CLIPPING_BATTLE])} battleId={CLIPPING_BATTLE.id} />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Grand Colony War' });
+
+    await user.click(screen.getByRole('radio', { name: '50 by 30' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(gridSizeFact()).toBe('Grid Size: 100 by 60');
+    expect(dirtyValue(container)).toBe('false');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  it('a confirmed shrink commits once, at the smaller size, and is undoable (AC3, AC4)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const { container } = render(
+      <BattlePage repositories={seeded([CLIPPING_BATTLE])} battleId={CLIPPING_BATTLE.id} />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Grand Colony War' });
+
+    await user.click(screen.getByRole('radio', { name: '50 by 30' }));
+    await user.click(await screen.findByRole('button', { name: 'Resize Grid' }));
+
+    await waitFor(() => expect(gridSizeFact()).toBe('Grid Size: 50 by 30'));
+    expect(dirtyValue(container)).toBe('true');
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+
+    expect(gridSizeFact()).toBe('Grid Size: 100 by 60');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  /**
+   * AC5. `projectBattleForSave` reads `gridSize` off the LIVE grid, and its own comment says Story
+   * 2.14 "then needs no change here" — this is the test that claim was owed, at the unit level.
+   * ⚠️ A TEST, not an edit: if this ever needs a change in the save path, that comment is wrong.
+   */
+  it('persists the NEW size on save, from the live grid (AC5)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const repositories = seeded();
+    const save = vi.spyOn(repositories.battles, 'save');
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.click(screen.getByRole('radio', { name: '100 by 60' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const record = save.mock.calls[0][0];
+    expect(record.gridSize).toEqual({ cols: 100, rows: 60 });
+    // The stored grid itself carries the new dimensions too — a record whose `gridSize` and
+    // `gridState` disagreed would fail `BattleSchema`'s own superRefine on the next load.
+    // (❌ Not `BattleSchema.safeParse(record)` here: the schema parses the SERIALISED shape, whose
+    // timestamps are ISO strings, so it rejects an in-memory record for a reason unrelated to
+    // this story. The round trip through the store is covered end to end in `battleRoute.spec.ts`.)
+    expect(record.gridState).toHaveLength(60);
+    expect(record.gridState[0]).toHaveLength(100);
+  });
+
+  // Trap 8 / the edit lock: the resize control is genuinely unavailable during a write, not merely
+  // refused by `handleCommitGrid` after the click has already looked like it did something.
+  it('disables the preset control while a save is in flight (trap 8)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const repositories = seeded();
+    let release = () => {};
+    vi.spyOn(repositories.battles, 'save').mockImplementation(
+      () => new Promise<void>((resolve) => (release = () => resolve())),
+    );
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    // Something to save.
+    await user.type(screen.getByRole('textbox', { name: /battle name/i }), '!');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(screen.getByRole('radio', { name: '100 by 60' })).toBeDisabled());
+    expect(gridSizeFact()).toBe('Grid Size: 50 by 30');
+
+    release();
+    await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+    expect(screen.getByRole('radio', { name: '100 by 60' })).toBeEnabled();
+  });
+});

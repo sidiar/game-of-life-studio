@@ -2190,3 +2190,225 @@ describe('PetriDishCanvas (edit variant) — eraser (Story 2.7)', () => {
     expect((onStrokeCommit.mock.calls[0][0] as RenderableGrid).occupant[flatIndex(3, 4)]).toBe(0);
   });
 });
+
+/**
+ * Story 2.14 (AC7) — a live GRID-DIMENSION change, and the mid-stroke re-layout pin
+ * `deferred-work.md` has been holding since Story 2.4.
+ *
+ * Four mechanisms in this file were written for this moment and had never once executed: the
+ * construction effect's `[size, …]` dependency, its `endStrokeRef.current(false)` cleanup,
+ * `handlePointerDown`'s dimension guard, and (indirectly) `useUndoableGrid`'s dimension-carrying
+ * snapshot. They were each reviewed as individually correct; what had never been checked is that
+ * they COMPOSE.
+ */
+describe('PetriDishCanvas (edit variant) — a live grid-dimension change (Story 2.14, AC7)', () => {
+  const BIG = { cols: 4, rows: 4 };
+  const SMALL = { cols: 2, rows: 2 };
+  const BIG_GRID = makeGrid(4, 4, [1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+  const SMALL_GRID = makeGrid(2, 2, [1, 1, 1, 1]);
+
+  /**
+   * The centre of a BIG-grid cell under the stubbed 300x150 box. `computeGridLayout` gives
+   * cellSize = min(300/4, 150/4) = 37.5 with a 75px centring margin on x — so a coordinate picked
+   * by eye lands in the MARGIN, where `pointerToCell` correctly returns null and the stroke opens
+   * with nothing painted. That is the difference between a commit assertion that means something
+   * and one that reads 0 for the wrong reason.
+   */
+  function centreOfBigCell(col: number, row: number) {
+    const cellSize = Math.min(300 / BIG.cols, 150 / BIG.rows);
+    const originX = (300 - cellSize * BIG.cols) / 2;
+    const originY = (150 - cellSize * BIG.rows) / 2;
+    return {
+      clientX: originX + col * cellSize + cellSize / 2,
+      clientY: originY + row * cellSize + cellSize / 2,
+      button: 0,
+      isPrimary: true,
+    };
+  }
+
+  class FakeResizeObserver implements ResizeObserver {
+    static instances: FakeResizeObserver[] = [];
+    readonly observe = vi.fn();
+    readonly unobserve = vi.fn();
+    readonly disconnect = vi.fn();
+    constructor(private readonly callback: ResizeObserverCallback) {
+      FakeResizeObserver.instances.push(this);
+    }
+    trigger(width: number, height: number): void {
+      this.callback([{ contentRect: { width, height } } as ResizeObserverEntry], this);
+    }
+  }
+
+  afterEach(() => {
+    FakeResizeObserver.instances = [];
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * Own mount, rather than the shared `mount` above, for one reason: this describe needs to count
+   * RENDERER CONSTRUCTIONS, and the only observable proxy is `getContext('2d')` — one call per
+   * `new GridRenderer(…)` on a canvas element React reuses across rerenders. It also parameterises
+   * `showGridLines`, which the shared helper pins.
+   */
+  function mountResizable(initial: { grid: RenderableGrid; size: { cols: number; rows: number } }) {
+    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(function (this: HTMLCanvasElement) {
+        let context = contexts.get(this);
+        if (context === undefined) {
+          context = new RecordingContext2D();
+          contexts.set(this, context);
+        }
+        return context as unknown as CanvasRenderingContext2D;
+      });
+
+    const onStrokeCommit = vi.fn();
+    function element(props: {
+      grid: RenderableGrid;
+      size: { cols: number; rows: number };
+      showGridLines: boolean;
+    }) {
+      return (
+        <PetriDishCanvas
+          variant="edit"
+          grid={props.grid}
+          size={props.size}
+          palette={PALETTE}
+          showGridLines={props.showGridLines}
+          colors={COLORS}
+          tool={TOOL}
+          toolRef={1}
+          onStrokeCommit={onStrokeCommit}
+        />
+      );
+    }
+
+    const view = render(element({ ...initial, showGridLines: false }));
+    const canvas = view.container.querySelector('canvas') as HTMLCanvasElement;
+    // jsdom 30 has neither method (trap 1); the component guards both with `?.`, so they have to
+    // exist here for the capture half of a stroke's lifecycle to be observable at all.
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 150,
+      right: 300,
+      bottom: 150,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    function rerenderWith(next: {
+      grid: RenderableGrid;
+      size: { cols: number; rows: number };
+      showGridLines?: boolean;
+    }) {
+      view.rerender(element({ showGridLines: false, ...next }));
+    }
+
+    return { ...view, canvas, getContext, onStrokeCommit, rerenderWith };
+  }
+
+  // Trap 11: a resize lands on TWO effects, not one. The construction effect paints and records
+  // `paintedGridRef`, so the grid effect SKIPS — but only because construction is declared first.
+  // Reordering those declarations reintroduces a double repaint, and ONLY a call-count assertion
+  // catches it.
+  it('reconstructs the renderer ONCE and full-repaints ONCE (trap 11)', () => {
+    const drawFull = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const resize = vi.spyOn(GridRenderer.prototype, 'resize');
+    const { getContext, rerenderWith } = mountResizable({ grid: BIG_GRID, size: BIG });
+
+    const constructionsAtMount = getContext.mock.calls.length;
+    expect(drawFull).toHaveBeenCalledTimes(1);
+
+    // ⚠️ `grid` and `size` change in the SAME commit — the invariant `<BattlePage>`'s derived
+    // `size` memo guarantees, and trap 2's "single most expensive mistake available in this story".
+    rerenderWith({ grid: SMALL_GRID, size: SMALL });
+
+    expect(getContext.mock.calls.length).toBe(constructionsAtMount + 1);
+    expect(drawFull).toHaveBeenCalledTimes(2);
+    expect(drawFull).toHaveBeenLastCalledWith(SMALL_GRID);
+    // Reconstruction, NOT `resize()`: the construction effect's cleanup drops the renderer, so
+    // there is no retained instance for a dimension-changing `resize()` call to reach.
+    expect(resize).not.toHaveBeenCalled();
+  });
+
+  // AC7: nothing throws `GridRendererDimensionMismatchError` out of a passive effect. That is the
+  // failure `<BattlePage>`'s derived-`size` comment predicts by name, and its symptom is an
+  // unmounted editor rather than a red test somewhere legible.
+  it('throws no dimension mismatch on the resize path, in EITHER direction', () => {
+    const { rerenderWith } = mountResizable({ grid: BIG_GRID, size: BIG });
+
+    expect(() => rerenderWith({ grid: SMALL_GRID, size: SMALL })).not.toThrow();
+    // ...and back, which is what an UNDO of a resize does (`useUndoableGrid.restore()` rebuilds at
+    // the SNAPSHOT's dimensions).
+    expect(() => rerenderWith({ grid: BIG_GRID, size: BIG })).not.toThrow();
+  });
+
+  // Trap 12: `resize()` drops `lastGrid` when the shape changed precisely so an FR-8.7 toggle
+  // cannot throw out of a UI event handler. That guard is on a REACHABLE path from this story on.
+  it('survives an FR-8.7 grid-lines toggle taken right after a resize (trap 12)', () => {
+    const { rerenderWith } = mountResizable({ grid: BIG_GRID, size: BIG });
+
+    rerenderWith({ grid: SMALL_GRID, size: SMALL });
+
+    expect(() =>
+      rerenderWith({ grid: SMALL_GRID, size: SMALL, showGridLines: true }),
+    ).not.toThrow();
+  });
+
+  /**
+   * The mid-stroke policy this story INHERITS and must not relitigate: a `size` change lands on
+   * the construction effect's cleanup, which discards through the shared `endStrokeRef.current
+   * (false)` — no commit, and pointer capture released (deferred-work.md, Sidiar's decision 2(b),
+   * 2026-08-27). Silent: no toast, no flash (the same entry, ratified).
+   */
+  it('discards an in-progress stroke on a live size change, silently, releasing capture', () => {
+    const { canvas, rerenderWith, onStrokeCommit } = mountResizable({ grid: BIG_GRID, size: BIG });
+
+    // (2, 0) is EMPTY in BIG_GRID, so this pointer-down genuinely paints — a stroke that changed
+    // nothing commits nothing anyway (AC6, Story 2.6), which would make the assertion below pass
+    // for the wrong reason.
+    fireEvent.pointerDown(canvas, centreOfBigCell(2, 0));
+    expect(canvas.setPointerCapture).toHaveBeenCalledTimes(1);
+
+    rerenderWith({ grid: SMALL_GRID, size: SMALL });
+
+    expect(onStrokeCommit).not.toHaveBeenCalled();
+    expect(canvas.releasePointerCapture).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * deferred-work.md, **closed by Story 2.14**: Story 2.4's forced decision — a mid-stroke
+   * RE-LAYOUT ends the stroke — shipped untested, because jsdom has no `ResizeObserver` and
+   * deleting the line broke nothing.
+   *
+   * ⚠️ Scoped to this describe with `vi.stubGlobal`, NOT added to `apps/web/vitest.setup.ts`. A
+   * global fake changes every test that relies on `typeof ResizeObserver === 'undefined'` taking
+   * the early-return branch — of which this file alone has many — and the two describes above
+   * already establish the per-describe fake as this file's own idiom.
+   *
+   * ⚠️ This terminate COMMITS (`endStroke(true)`), unlike the size-change one above. The two are
+   * deliberately different and both are settled: a canvas-BOX change does not change grid content,
+   * so the cells the user drew are still theirs; a grid-DIMENSION change tears down the state the
+   * working buffer was sliced from.
+   */
+  it('ends and COMMITS an in-progress stroke on a mid-stroke re-layout (deferred-work, Story 2.4)', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    const { canvas, onStrokeCommit } = mountResizable({ grid: BIG_GRID, size: BIG });
+
+    // A pointer-down on an EMPTY cell, so the stroke really has something to commit.
+    fireEvent.pointerDown(canvas, centreOfBigCell(2, 0));
+
+    const observer = FakeResizeObserver.instances.at(-1);
+    expect(observer).toBeDefined();
+    observer?.trigger(400, 240);
+
+    expect(onStrokeCommit).toHaveBeenCalledTimes(1);
+    expect(canvas.releasePointerCapture).toHaveBeenCalledTimes(1);
+  });
+});

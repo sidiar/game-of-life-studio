@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-08-28
+# last_updated: 2026-08-29
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-08-28
+last_updated: 2026-08-29
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -78,7 +78,7 @@ development_status:
   2-11-battle-name-dirty-tracking: done
   2-12-editor-status-bar-stats: done
   2-13-save-battle: done
-  2-14-edit-mode-grid-resize: backlog
+  2-14-edit-mode-grid-resize: review
   2-15-clear-petri-dish: backlog
   2-16-back-navigation-unsaved-changes-guard: backlog
   epic-2-retrospective: optional

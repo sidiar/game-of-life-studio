@@ -108,4 +108,22 @@ describe('computeEditorGridStats', () => {
     expect(stats.livingCells).toBe(10);
     expect(stats.perOrganism).toEqual([{ organismId: 'organism-a', count: 10 }]);
   });
+
+  // deferred-work.md, closed by Story 2.14: the loop bound is `width * height`, not
+  // `occupant.length`. Every producer allocates exactly that today, so this grid is deliberately
+  // one `RenderableGrid` cannot promise it is not — reverting the bound counts the trailing cells
+  // and reports 4 living cells in a 2 x 2 grid that holds 2.
+  it('counts only the cells inside width * height, never a trailing over-allocation', () => {
+    const grid: RenderableGrid = {
+      width: 2,
+      height: 2,
+      occupant: Uint8Array.from([1, 1, 0, 0, 1, 1]),
+      age: new Uint16Array(6),
+    };
+
+    const stats = computeEditorGridStats(grid, ['organism-a']);
+
+    expect(stats.livingCells).toBe(2);
+    expect(stats.perOrganism).toEqual([{ organismId: 'organism-a', count: 2 }]);
+  });
 });

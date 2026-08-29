@@ -51,7 +51,14 @@ export function computeEditorGridStats(
   const tally = new Uint32Array(rosterIds.length + 1);
   let livingCells = 0;
 
-  for (let i = 0; i < grid.occupant.length; i++) {
+  // `width * height`, never `occupant.length` (deferred-work.md, closed by Story 2.14). Every
+  // producer allocates the buffer to exactly that today — `toRenderableGrid`, `restore()`,
+  // `resizeGrid`, the canvas's working-grid slice — but `RenderableGrid` does not GUARANTEE it,
+  // and a producer that ever over-allocates would silently count cells outside the visible grid
+  // into `livingCells` and into a per-organism total, with every test still green.
+  const cells = grid.width * grid.height;
+
+  for (let i = 0; i < cells; i++) {
     const ref = grid.occupant[i];
     if (ref === 0) continue;
     livingCells++;
