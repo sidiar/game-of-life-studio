@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
@@ -81,6 +81,18 @@ function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>
   );
 }
 
+/**
+ * Story 2.14 (AC1): "Living Cells" now renders in TWO places — `<EditorStatusBar>` and the
+ * sidebar's Grid Info section. That is the mockup's own design (:790 / :800), so an unscoped
+ * `getByRole('group', { name: 'Living Cells: N' })` is genuinely ambiguous rather than broken.
+ * The status bar's own named region is what scopes it back to one.
+ */
+function statusBarGroup(name: string): HTMLElement {
+  return within(screen.getByRole('region', { name: 'Battle statistics' })).getByRole('group', {
+    name,
+  });
+}
+
 describe('BattleEditorView', () => {
   it('renders the dish box and its canvas (AC1)', () => {
     const { container } = renderEditor();
@@ -100,19 +112,24 @@ describe('BattleEditorView', () => {
     expect(container.querySelector('canvas')).toBeNull();
   });
 
-  // Story 2.9 AC1 / Story 2.11 AC7: the sidebar arrives, and "renders no sidebar" — true from
-  // Story 2.5 through 2.8 — is now false by design. Story 2.11 is the shell's second consumer
-  // (forced decision 2), so what replaces "exactly one section" is the mockup's own order:
-  // Organisms, THEN Battle Name — both real `<h2>`s, siblings of each other, never a skipped level
-  // under the header's single `<h1>` (the heading-order prediction `<BattleEditorView>`'s own
-  // comment used to carry, now settled rather than merely trusted — AC7).
-  it('renders the Lab sidebar with Organisms then Battle Name, in order (AC1, AC7)', () => {
+  // Story 2.9 AC1 / Story 2.11 AC7 / Story 2.14 AC1: the sidebar arrives, and "renders no sidebar"
+  // — true from Story 2.5 through 2.8 — is now false by design. What replaces "exactly one
+  // section" is the mockup's own order: Organisms, Battle Name, THEN Grid Info — all real `<h2>`s,
+  // siblings of each other, never a skipped level under the header's single `<h1>` (the
+  // heading-order prediction `<BattleEditorView>`'s own comment used to carry, now settled rather
+  // than merely trusted). ORDER, not membership: Grid Info is the mockup's third section and a set
+  // comparison would pass with it first.
+  it('renders the Lab sidebar with Organisms, Battle Name then Grid Info, in order (AC1)', () => {
     renderEditor();
 
     const sidebar = screen.getByRole('complementary');
     expect(sidebar).toBeInTheDocument();
     const headings = screen.getAllByRole('heading', { level: 2 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(['Organisms', 'Battle Name']);
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+    ]);
   });
 
   // NFR-4.1, asserted as ABSENCE — a presence-only check elsewhere still passes once a dead
@@ -120,17 +137,21 @@ describe('BattleEditorView', () => {
   it('renders no other sidebar section and no footer (AC5)', () => {
     renderEditor();
 
-    // Grid Info (2.14), Tools (2.15) and the Back button (2.16) are the rest of the mockup's
-    // sidebar; Battle Name (2.11) is now real and deliberately NOT asserted absent here. Scoped by
-    // ACCESSIBLE NAME rather than counted: a bare `toHaveLength(1)` passes when the one textbox is
-    // the WRONG one — Battle Name gone and 2.14's Grid Size input arrived — which is the precise
-    // regression this NFR-4.1 absence guard exists to catch. The same re-scoping the roster's
-    // search box got in this diff, applied to its sibling.
+    // Tools (2.15) and the Back button (2.16) are what is left of the mockup's sidebar; Battle
+    // Name (2.11) and Grid Info (2.14) are now real and deliberately NOT asserted absent here.
+    // Scoped by ACCESSIBLE NAME rather than counted: a bare `toHaveLength(1)` passes when the one
+    // textbox is the WRONG one, which is the precise regression this NFR-4.1 absence guard exists
+    // to catch.
     expect(screen.getAllByRole('textbox', { name: /battle name/i })).toHaveLength(1);
+    // ⚠️ Story 2.14: Grid Size is a radiogroup of two PRESETS, never a free-text field — a textbox
+    // here would be a third editable size arriving by the back door, which
+    // `EditableGridPresetSchema` rejects at save (trap 9).
     expect(screen.queryByRole('textbox', { name: /grid size/i })).toBeNull();
-    expect(screen.queryByText(/grid size/i)).toBeNull();
+    expect(screen.queryByRole('slider')).toBeNull(); // ❌ no Grid Zoom slider — superseded (§9.1).
     expect(screen.queryByRole('button', { name: /back/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /clear/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /reset to saved/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /randomize/i })).toBeNull();
     // Forced decision 3 (Story 2.12, AC5): a NAMED REGION, not a live region — `queryAllByRole
     // ('status')` stays true even now that the bar's content exists, because the stats never took
     // option (a)/(c). If a future story adds a live region here, this line must be updated with a
@@ -140,7 +161,10 @@ describe('BattleEditorView', () => {
     // Story 2.12: the stats row's own content now exists (converted from an absence assertion —
     // trap 4). Full coverage of the row lives in the dedicated describe block below.
     expect(screen.getByText(/generation/i)).toBeInTheDocument();
-    expect(screen.getByText(/living cells/i)).toBeInTheDocument();
+    // ⚠️ `getAllBy`, not `getBy`: Story 2.14 puts a second "Living Cells" label in the sidebar's
+    // Grid Info section, which is the mockup's own design (:790 / :800) and not a duplication to
+    // consolidate. Both are asserted, so this line still fails if EITHER disappears.
+    expect(screen.getAllByText(/living cells/i)).toHaveLength(2);
     // Story 2.13: SAVE's absence assertion INVERTED, not deleted (trap 5) — it is the bar's
     // second real control now. `renderEditor`'s default is a CLEAN battle, so it renders disabled.
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -885,7 +909,7 @@ describe('BattleEditorView — the stats derivation (Story 2.12, AC3, AC4)', () 
     const grid = makeGrid(2, 2, [1, 2, 0, 1]);
     renderEditor({ grid, rosterIds: STATS_ROSTER_IDS, roster: STATS_ROSTER });
 
-    expect(screen.getByRole('group', { name: 'Living Cells: 3' })).toBeInTheDocument();
+    expect(statusBarGroup('Living Cells: 3')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Aggressive Colonizer: 2' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Patient Defender: 1' })).toBeInTheDocument();
   });
@@ -898,7 +922,7 @@ describe('BattleEditorView — the stats derivation (Story 2.12, AC3, AC4)', () 
       roster: STATS_ROSTER,
     });
 
-    expect(screen.getByRole('group', { name: 'Living Cells: 0' })).toBeInTheDocument();
+    expect(statusBarGroup('Living Cells: 0')).toBeInTheDocument();
     // AC3: an all-empty grid still carries one entry PER ROSTER ORGANISM, reading 0 — "Population:
     // none" is reserved for an EMPTY ROSTER, a different fact (see EditorStatusBar.test.tsx).
     expect(screen.getByRole('img', { name: 'Aggressive Colonizer: 0' })).toBeInTheDocument();
@@ -929,7 +953,229 @@ describe('BattleEditorView — the stats derivation (Story 2.12, AC3, AC4)', () 
       />,
     );
 
-    expect(screen.getByRole('group', { name: 'Living Cells: 2' })).toBeInTheDocument();
+    expect(statusBarGroup('Living Cells: 2')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Aggressive Colonizer: 2' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * Story 2.14 — the resize flow (AC1, AC2, AC3, AC4).
+ *
+ * The matrix the story asks for: a grow commits immediately with NO dialog; a shrink that clips
+ * nothing does the same; a shrink that clips living cells commits NOTHING until confirm; confirm
+ * commits exactly once at the new dimensions; cancel and Escape commit zero times.
+ *
+ * ⚠️ `<ResizeClipWarningDialog>` arrives through `next/dynamic`, so every assertion about it is
+ * `find*`, not `get*` — the chunk resolves on a microtask. That is the same asynchrony a real
+ * browser has, and asserting it here is what keeps the lazy boundary from silently breaking.
+ */
+describe('BattleEditorView — edit-mode grid resize (Story 2.14)', () => {
+  /**
+   * Both shrink fixtures are 100 x 60 — the LARGER editable preset — because the two cases only
+   * differ once the target is genuinely smaller. A small ad-hoc grid shrinking "to 50 x 30" is a
+   * GROW on both axes and can never clip, which is a test that passes for the wrong reason.
+   *
+   * Each holds the same 2 x 2 block at the top-left, which the shrink keeps; they differ only in
+   * whether one cell also sits outside the new bounds (trap 6 — living cells, not cells).
+   */
+  function makeLargeGrid(withClippedCell: boolean): RenderableGrid {
+    const grid = makeGrid(100, 60, new Array(6000).fill(0));
+    grid.occupant[0] = 1;
+    grid.occupant[1] = 1;
+    grid.occupant[100] = 1;
+    grid.occupant[101] = 1;
+    // (99, 59): the far corner, outside every 50 x 30 rectangle anchored at the top-left.
+    if (withClippedCell) grid.occupant[6000 - 1] = 1;
+    return grid;
+  }
+
+  const EMPTY_EDGES = makeLargeGrid(false);
+  const OCCUPIED_EDGES = makeLargeGrid(true);
+
+  function preset(name: '50 by 30' | '100 by 60') {
+    return screen.getByRole('radio', { name });
+  }
+
+  it('commits a GROW immediately, with no dialog (AC2, AC3)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    // Currently 50 x 30; the grid is what the section reads its size from, so it has to agree.
+    renderEditor({ grid: makeGrid(50, 30, new Array(1500).fill(0)), onCommitGrid });
+
+    await user.click(preset('100 by 60'));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
+    const committed = onCommitGrid.mock.calls[0][0] as RenderableGrid;
+    expect([committed.width, committed.height]).toEqual([100, 60]);
+    expect(committed.occupant.length).toBe(6000);
+  });
+
+  it('commits a shrink over an EMPTY region silently (trap 6)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: EMPTY_EDGES, onCommitGrid });
+
+    // A real shrink, 100 x 60 -> 50 x 30, over a region that holds nothing.
+    await user.click(preset('50 by 30'));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the warning for a shrink that clips living cells, and commits NOTHING yet (AC3)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: OCCUPIED_EDGES, onCommitGrid });
+
+    await user.click(preset('50 by 30'));
+
+    expect(await screen.findByRole('dialog', { name: 'Cells Will Be Discarded' })).toBeVisible();
+    // The count is the number of LIVING cells outside the new bounds — one, not the ~4,500 cells
+    // the shrink discards.
+    expect(screen.getByText(/discards 1 living cell/i)).toBeInTheDocument();
+    expect(onCommitGrid).not.toHaveBeenCalled();
+  });
+
+  it('confirm commits EXACTLY ONCE, at the new dimensions (AC2, AC4)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: OCCUPIED_EDGES, onCommitGrid });
+
+    await user.click(preset('50 by 30'));
+    await user.click(await screen.findByRole('button', { name: 'Resize Grid' }));
+
+    // ONE call, therefore one undo ring entry, therefore one undo (AC4). A second call here is
+    // the shape of defect that leaves a resize needing two undos to reverse.
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
+    const committed = onCommitGrid.mock.calls[0][0] as RenderableGrid;
+    expect([committed.width, committed.height]).toEqual([50, 30]);
+    // Top-left anchored (AR-17): the 2 x 2 block survives at its own coordinates, and the corner
+    // cell the dialog warned about is gone.
+    expect(committed.occupant[0]).toBe(1);
+    expect(committed.occupant[1]).toBe(1);
+    expect(committed.occupant[50]).toBe(1);
+    expect(Array.from(committed.occupant).filter((cell) => cell !== 0)).toHaveLength(4);
+  });
+
+  /**
+   * review (2026-08-29): `<GridSettingsSection disabled={isSaving}>` stops a NEW resize from
+   * being OPENED while a save is in flight, but cannot stop a save that STARTS after the dialog
+   * is already open. Without a matching guard in `handleConfirmResize`, confirming in that window
+   * closed the dialog exactly as it does on success while `onCommitGrid` (and therefore
+   * `<BattlePage>`'s `handleCommitGrid`, silently no-op'd by `savingRef`) never actually committed
+   * — a false-success UI. `isSaving` flips WHILE the dialog is open here to reach that window
+   * directly, rather than relying on the (also fixed) inertness timing to reach it via a click.
+   */
+  it('confirm does NOTHING while a save starts after the dialog is already open', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    const { rerender } = renderEditor({ grid: OCCUPIED_EDGES, onCommitGrid });
+
+    await user.click(preset('50 by 30'));
+    await screen.findByRole('dialog', { name: 'Cells Will Be Discarded' });
+
+    rerender(
+      <BattleEditorView
+        grid={OCCUPIED_EDGES}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        rosterIds={ROSTER_IDS}
+        roster={ROSTER}
+        library={[]}
+        onAddToRoster={() => {}}
+        atCap={false}
+        battleName=""
+        onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving
+        saveError={null}
+        onCommitGrid={onCommitGrid}
+        onUndo={() => {}}
+        canUndo={false}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Resize Grid' }));
+
+    expect(onCommitGrid).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Cells Will Be Discarded' })).toBeInTheDocument();
+  });
+
+  it('cancel changes NOTHING — no commit, and the control still reads the current size (AC3)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: OCCUPIED_EDGES, onCommitGrid });
+
+    await user.click(preset('50 by 30'));
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(onCommitGrid).not.toHaveBeenCalled();
+    // The section renders from `grid`, which never moved — so the control still reads 100 x 60
+    // and the preset the user pressed is NOT checked. A control holding its own selection state
+    // would be left showing the size the user did not get.
+    // `find*`, because the sidebar is `inert` until the dialog's exit transition finishes
+    // (`useInertBackground`) — which is itself worth asserting: a background left inert after a
+    // cancel is an editor the user can no longer touch.
+    expect(await screen.findByRole('group', { name: 'Grid Size: 100 by 60' })).toBeInTheDocument();
+    expect(preset('100 by 60')).toBeChecked();
+    expect(preset('50 by 30')).not.toBeChecked();
+  });
+
+  it('Escape changes nothing either — the same non-destructive dismissal (AC3)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: OCCUPIED_EDGES, onCommitGrid });
+
+    await user.click(preset('50 by 30'));
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+
+    expect(onCommitGrid).not.toHaveBeenCalled();
+  });
+
+  it('the sidebar’s Grid Info facts come from the grid, and update with it (AC1)', () => {
+    const { rerender } = renderEditor({ grid: makeGrid(4, 4, new Array(16).fill(0)) });
+
+    expect(screen.getByRole('group', { name: 'Total Cells: 16' })).toBeInTheDocument();
+
+    rerender(
+      <BattleEditorView
+        grid={OCCUPIED_EDGES}
+        size={{ cols: 4, rows: 4 }}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        rosterIds={ROSTER_IDS}
+        roster={ROSTER}
+        library={[]}
+        onAddToRoster={() => {}}
+        atCap={false}
+        battleName=""
+        onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        isSaving={false}
+        saveError={null}
+        onCommitGrid={() => {}}
+        onUndo={() => {}}
+        canUndo={false}
+      />,
+    );
+
+    // Grid Info's Living Cells is fed from the SAME `stats` memo `<EditorStatusBar>` reads
+    // (forced decision 6a) — both rows report the new number off one derivation.
+    const sidebar = screen.getByRole('complementary');
+    expect(within(sidebar).getByRole('group', { name: 'Living Cells: 5' })).toBeInTheDocument();
+    expect(statusBarGroup('Living Cells: 5')).toBeInTheDocument();
+  });
+
+  it('disables the preset control while a save is in flight (trap 8)', () => {
+    renderEditor({ isSaving: true });
+
+    for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled();
   });
 });

@@ -1,25 +1,59 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
-import { MAX_BATTLE_NAME_LENGTH } from '@gol/domain';
+import { MAX_BATTLE_NAME_LENGTH, type EditableGridPreset } from '@gol/domain';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
 import { computeEditorGridStats } from '@/lib/gridStats';
+import { countClippedLivingCells, resizeGrid } from '@/lib/resizeGrid';
 import { ERASER_TOOL, refForTool, type Tool } from '@/lib/tool';
+import { useInertBackground } from '@/lib/useInertBackground';
 import PetriDishCanvas from '../PetriDishCanvas';
 import BattleNameField from './BattleNameField';
 import EditorStatusBar, { type EditorStatusBarStats } from './EditorStatusBar';
+import GridSettingsSection, { presetKey } from './GridSettingsSection';
 import OrganismRoster from './OrganismRoster';
 import SidebarSection from './SidebarSection';
 
-// This story's slice of spec §3.3's ~13-prop interface: Story 2.11 adds `battleName` /
-// `onNameChange`. The REST of the sidebar (<GridSettingsSection> 2.14, <EditorToolsSection> 2.15,
-// <SidebarFooter> 2.16) and the rest of <EditorStatusBar>'s interface (stats 2.12, SAVE 2.13)
-// bring the rest with them — declaring their props now would be an unverifiable claim this story
-// cannot back up.
+/**
+ * Forced decision 4, option (b): the resize warning is loaded ON DEMAND, not statically imported.
+ *
+ * `/battle` is the tightest bundle budget in the repo, and the MUI `Dialog` stack is not cheap —
+ * Story 1.13 measured its arrival on the home route at **+18.1 KB gzip** (288.2 -> 306.3) against
+ * the 8.5 KB of headroom Story 2.13 left here. A static import does not fit, and the budget is
+ * never raised without Sidiar's explicit approval (both existing raises in
+ * `scripts/check-bundle-size.mjs` carry his name and the measurement they came from).
+ *
+ * AR-35 already sanctions this shape — "per-component imports for tree-shaking; **dynamic import
+ * for heavy components**" — so this is an established convention arriving early rather than a new
+ * one, and it is the first working example for Epic 4's lazy `<OrganismEditorModal>` (spec §3.15).
+ * The chunk is genuinely rare: it loads only when a shrink would actually clip living cells.
+ *
+ * ⚠️ **Story 2.16's `<UnsavedChangesDialog>` lands on this same route and inherits this call.**
+ *
+ * `ssr: false` because the dialog can never be part of the first paint (`open` is false until a
+ * user gesture) and this app is a static export — prerendering a closed dialog would put the whole
+ * stack back into the route's HTML, which is the cost this avoids.
+ *
+ * **Measured, all three variants, same tree (Story 2.14 Task 8):**
+ * static import 320.8 KB — **over the 310 budget by 10.8 KB**, i.e. option (a) does not fit and
+ * would need a raise only Sidiar can give; `React.lazy` + `<Suspense>` 303.0 KB; this
+ * (`next/dynamic`) **304.1 KB**. The 1.1 KB `next/dynamic` costs over bare `React.lazy` buys the
+ * convention AR-35 names and the Suspense boundary it manages itself, on a route that has 6.0 KB
+ * of headroom either way.
+ */
+const ResizeClipWarningDialog = dynamic(() => import('./ResizeClipWarningDialog'), { ssr: false });
+
+// Spec §3.3's ~13-prop interface. Story 2.14 adds NOTHING to it: the resize is derived from
+// `grid` and committed through the existing `onCommitGrid` seam, so <GridSettingsSection> and its
+// confirm dialog need no new input from <BattlePage> (see the resize handler below, and the ❌ in
+// this component's own doc comment). The remaining sidebar sections (<EditorToolsSection> 2.15,
+// <SidebarFooter> 2.16) bring whatever they need with them — declaring their props now would be an
+// unverifiable claim this story cannot back up.
 export interface BattleEditorViewProps {
   grid: RenderableGrid;
   size: { cols: number; rows: number };
@@ -500,12 +534,20 @@ function resolveSelectedTool(
 
 /**
  * The Lab-mode composition root (component-tree-battle-page.md §3.3, §2). Composes
- * `<EditorSidebar>` — which ships with exactly ONE real section, Organisms — and `<EditorMain>`,
- * which carries `<EditorStatusBar>` (Story 2.8).
+ * `<EditorSidebar>` — which ships with THREE real sections, Organisms,
+ * Battle Name and Grid Info — and `<EditorMain>`, which carries `<EditorStatusBar>` (Story 2.8).
  *
- * ❌ No sidebar footer and no Back button (Story 2.16). ❌ No Grid Info (2.14) or Tools (2.15)
- * section — Story 2.4 declined to ship a half-built sidebar and that call stands: each section
- * arrives complete, not as a panel of placeholders for the rest.
+ * ❌ No sidebar footer and no Back button (Story 2.16). ❌ No Tools section (2.15) — Story 2.4
+ * declined to ship a half-built sidebar and that call stands: each section arrives complete, not
+ * as a panel of placeholders for the rest.
+ *
+ * ❌ **No `gridSize` state, no `pendingSize`, no `draft.gridSize` write** (Story 2.8 forced
+ * decision 4). `size` is DERIVED from `grid` in `<BattlePage>`, so a resize is a grid COMMIT and
+ * nothing else — a second source for the dimensions would be a render in which `size` and `grid`
+ * disagree, and that disagreement is `GridRendererDimensionMismatchError` thrown out of the
+ * canvas's passive effect, unmounting the editor. The pending-confirmation state below is the only
+ * new cell, it holds a REQUEST rather than a size, and it is cleared without ever being applied on
+ * the cancel path.
  *
  * ⚠️ §3.3's "instantiates no hooks" line is about the GRID and UNDO hooks, which live in
  * `<BattlePage>` (`useUndoableGrid`, Story 2.8) — the same section's State line explicitly
@@ -532,6 +574,9 @@ export default function BattleEditorView({
   // stats memo below needs it directly. Forwarded to `<EditorMain>` explicitly further down —
   // pulling it out of the destructure does not remove it from what that component receives.
   grid,
+  // Story 2.14: same treatment, same reason — the resize handlers below call it directly. Still
+  // forwarded to `<EditorMain>`, which is what keeps the canvas's stroke commits arriving.
+  onCommitGrid,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
@@ -601,6 +646,126 @@ export default function BattleEditorView({
     };
   }, [grid, rosterIds, roster]);
 
+  /**
+   * The confirmation in flight, or `null`. Forced decision 5(a): EPHEMERAL LOCAL state in this
+   * component, exactly where spec §3.3's own wiring line puts it ("a shrinking resize that would
+   * clip living cells opens `<ResizeClipWarningDialog>` first, then commits") and beside the
+   * `selectedTool` cell §6 already assigns here. It is not persisted, not undoable and not shared
+   * with Run mode, so putting it in `<BattlePage>` would widen two components' props for nothing.
+   *
+   * ⚠️ Holds the REQUESTED PRESET and the clip count, never a grid: the grid the confirm commits is
+   * built from the CURRENT `grid` at confirm time, so anything that changed under the dialog is
+   * resized rather than reverted.
+   *
+   * Two cells, not one, for the reason `useDeleteBattleDialog` records: the dialog has three
+   * phases, not two. `dialogOpen` drives the fade; `pendingResize` outlives it and is cleared only
+   * once the exit transition has finished, so the copy does not blank mid-fade.
+   */
+  const [pendingResize, setPendingResize] = useState<{
+    preset: EditableGridPreset;
+    clippedLivingCells: number;
+  } | null>(null);
+  const [resizeDialogOpen, setResizeDialogOpen] = useState(false);
+
+  /**
+   * Which preset control to put focus back on once the warning's exit transition has finished
+   * (AC8), or `null` for "no move pending". Held as the preset's KEY and resolved by DOM lookup at
+   * restore time — never as a captured element — exactly as `useDeleteBattleDialog` does.
+   *
+   * ⚠️ This exists because MUI's OWN restore-to-trigger is not enough on WebKit, and the reason is
+   * already recorded in `<DeleteBattleDialog>`: WebKit does not focus a non-text form control on
+   * click, so `document.activeElement` is `<body>` at open time and MUI faithfully restores focus
+   * to `<body>` — the "tab order restarts at the top of the document" failure. Caught by
+   * `battleRoute.spec.ts`'s cancel test on the webkit and tablet projects, and by nothing else.
+   */
+  const restoreFocusPresetRef = useRef<string | null>(null);
+
+  /**
+   * The focus move, run as an EFFECT keyed on the confirmation clearing rather than from the exit
+   * callback directly. Ordering is the point and it has to be guaranteed rather than raced: by the
+   * time this runs, MUI has cleared the background's `aria-hidden` and `useInertBackground`'s
+   * cleanup has released `inert` — React runs every cleanup for a commit before any setup, and
+   * that hook is called ABOVE this one. Focusing any earlier targets a node that is still inert,
+   * where `focus()` is a spec-mandated no-op.
+   */
+  useEffect(() => {
+    if (pendingResize !== null) return;
+
+    const key = restoreFocusPresetRef.current;
+    if (key === null) return;
+    restoreFocusPresetRef.current = null;
+
+    // Do not steal focus the user has already placed somewhere real during the transition.
+    // "Loose" includes "still inside the closing dialog" — on WebKit this effect runs while that
+    // dialog is still mounted, so a body-only check would skip the restore there.
+    const active = document.activeElement;
+    const focusIsLoose =
+      active === null || active === document.body || active.closest('[role="dialog"]') !== null;
+    if (!focusIsLoose) return;
+
+    document.querySelector<HTMLElement>(`[data-grid-preset="${key}"]`)?.focus();
+  }, [pendingResize]);
+
+  // Called from the PARENT of the dialog so it spans the exit transition too, and so MUI's own
+  // focus-trap move (a child effect) has already happened — both reasons are recorded in full on
+  // `useDeleteBattleDialog`'s call. `pendingResize !== null` is exactly the window "a confirmation
+  // is on screen in some form".
+  useInertBackground(pendingResize !== null);
+
+  /**
+   * FR-3.11. A grow, or a shrink that discards nothing, commits IMMEDIATELY; a shrink that would
+   * clip living cells opens the warning first and commits nothing until it is confirmed.
+   *
+   * ⚠️ The already-current preset is refused HERE (trap 7) as well as by the native radio that
+   * cannot fire for it — belt and braces, because an equal-but-new grid is not a harmless no-op:
+   * it pushes an undo entry and sets `isDirty`, which is a user-visible lie about unsaved work.
+   */
+  const handleResize = useCallback(
+    (preset: EditableGridPreset) => {
+      if (grid.width === preset.cols && grid.height === preset.rows) return;
+
+      const clippedLivingCells = countClippedLivingCells(grid, preset);
+      if (clippedLivingCells === 0) {
+        // ⚠️ Trap 6: a shrink over an empty region applies SILENTLY. Warning about discarding
+        // nothing is what teaches a user to dismiss the dialog unread.
+        onCommitGrid(resizeGrid(grid, preset));
+        return;
+      }
+
+      // The control that opened the dialog, so every close path — confirm, cancel, Escape,
+      // backdrop — lands focus back on it (AC8).
+      restoreFocusPresetRef.current = presetKey(preset);
+      setPendingResize({ preset, clippedLivingCells });
+      setResizeDialogOpen(true);
+    },
+    [grid, onCommitGrid],
+  );
+
+  // AC4: ONE `onCommitGrid` call, therefore one ring entry, therefore one undo — and the dirty
+  // flag comes free through `<BattlePage>`'s `handleCommitGrid`. ❌ No second commit seam.
+  //
+  // review (2026-08-29): `isSaving` is checked HERE too, not only on the control that opens the
+  // dialog. `<GridSettingsSection>`'s `disabled={isSaving}` stops a NEW resize from starting
+  // while a save is in flight, but it cannot stop a save that STARTS after the dialog is already
+  // open — and `<BattlePage>`'s `handleCommitGrid` silently no-ops under `savingRef` (Trap 8).
+  // Without this guard, confirming in that window would close the dialog exactly as it does on
+  // success while the grid silently stayed at its old dimensions — a false-success UI, not the
+  // "click that appears to do nothing" Trap 8 calls the accepted failure mode for a control left
+  // enabled during a save. Guarding here keeps the dialog open instead, matching that convention.
+  const handleConfirmResize = useCallback(() => {
+    if (pendingResize === null || isSaving) return;
+    onCommitGrid(resizeGrid(grid, pendingResize.preset));
+    setResizeDialogOpen(false);
+  }, [grid, isSaving, onCommitGrid, pendingResize]);
+
+  // AC3: cancel — and Escape, and a backdrop click, which MUI routes through the same callback —
+  // change NOTHING. No commit, no undo entry, no dirty flag; the preset control still reads the
+  // current grid, because it is rendered from `grid` and `grid` never moved.
+  const handleCancelResize = useCallback(() => setResizeDialogOpen(false), []);
+
+  // Only once the fade has finished is it safe to drop the copy the dialog is still rendering.
+  const handleResizeDialogExited = useCallback(() => setPendingResize(null), []);
+
   return (
     <EditorLayout>
       <EditorSidebar>
@@ -635,16 +800,48 @@ export default function BattleEditorView({
               disabled={isSaving}
             />
           </SidebarSection>
+          {/* AC1: the THIRD section — the mockup's order is Organisms · Battle Name · Grid Info ·
+              Tools (2.15) · Back (2.16). Fed from the SAME `stats` memo `<EditorStatusBar>` reads
+              (forced decision 6a): "Living Cells" renders in both places by the mockup's own
+              design, but the DERIVATION happens once.
+              ⚠️ `totalCells` is `grid.width * grid.height` — from the GRID, never from a stored
+              `gridSize` (trap 1), which is right until the first resize and then stale. */}
+          <SidebarSection title="Grid Info">
+            <GridSettingsSection
+              gridSize={{ cols: grid.width, rows: grid.height }}
+              stats={{ totalCells: grid.width * grid.height, livingCells: stats.livingCells }}
+              onResize={handleResize}
+              /* Trap 8, and the visible half of `<BattlePage>`'s edit lock: `handleCommitGrid`
+                 returns early while a save is in flight, so a live control here would produce a
+                 click that appears to do nothing. Same treatment as `<BattleNameField>`. */
+              disabled={isSaving}
+            />
+          </SidebarSection>
         </SidebarContent>
       </EditorSidebar>
       <EditorMain
         {...rest}
         grid={grid}
+        onCommitGrid={onCommitGrid}
         isSaving={isSaving}
         tool={selectedTool}
         toolRef={toolRef}
         stats={stats}
       />
+      {/* Mounted only while a confirmation is in flight, which is also what keeps the lazy chunk
+          from being requested at all on the overwhelmingly common path (every grow, and every
+          shrink that clips nothing). `targetSize`/`clippedLivingCells` keep their values for the
+          whole exit transition — see `pendingResize`'s own comment. */}
+      {pendingResize !== null && (
+        <ResizeClipWarningDialog
+          open={resizeDialogOpen}
+          targetSize={pendingResize.preset}
+          clippedLivingCells={pendingResize.clippedLivingCells}
+          onCancel={handleCancelResize}
+          onConfirm={handleConfirmResize}
+          onExited={handleResizeDialogExited}
+        />
+      )}
     </EditorLayout>
   );
 }

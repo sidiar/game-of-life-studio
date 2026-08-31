@@ -37,9 +37,23 @@ const ROUTES = [
     // the home route at 317.5 KB gzip — it passed the 320 budget but did not leave the ~12 KB
     // headroom the gate is meant to carry, which is what triggered the move. Same formula:
     // ceil((317.5 + 12) / 5) * 5 = 330.
+    // 330 -> 340 (Story 2.14, Sidiar 2026-08-31): the home route reached 329.5 KB gzip — 0.5 KB
+    // headroom — without importing a line of this story's code. Measured three ways on one tree:
+    // the Story 2.13 baseline was 326.8 KB; with the resize dialog STATICALLY imported `/` is
+    // 328.9 KB; with `next/dynamic` it is 329.5 KB. So ~2.1 KB is a Turbopack chunk-splitting
+    // side effect of adding modules to the graph at all, and only ~0.6 KB is the `next/dynamic`
+    // boundary itself. The alternative considered and not taken was moving `<DeleteBattleDialog>`
+    // behind `next/dynamic` too (which Story 2.14 proved works, and would return the MUI Dialog
+    // stack's ~18 KB to the on-demand path) — still available if the home route needs real relief
+    // rather than a raise.
+    //
+    // NOTE, so the next reader does not re-derive it and find a discrepancy: this is the first
+    // raise NOT produced by the formula above. ceil((329.5 + 12) / 5) * 5 = 345; Sidiar set 340
+    // explicitly, which carries 10.5 KB headroom against the ~12 KB the gate is meant to hold.
+    // A deliberate call, not a miscalculation — the formula remains the default for future raises.
     name: 'home (/)',
     html: 'index.html',
-    budgetGzipKb: 330,
+    budgetGzipKb: 340,
   },
   {
     // New in Story 2.4 (deferred-work.md:149) — the first story to add real weight to the battle

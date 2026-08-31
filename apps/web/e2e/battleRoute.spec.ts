@@ -277,11 +277,12 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
 
     const sidebar = page.getByRole('complementary');
-    // Story 2.11 (AC7): "Organisms" then "Battle Name" — two real `<h2>`s, siblings of each
-    // other, in the mockup's own order.
+    // Story 2.11 (AC7) / Story 2.14 (AC1): "Organisms", "Battle Name", then "Grid Info" — three
+    // real `<h2>`s, siblings of each other, in the mockup's own order.
     await expect(sidebar.getByRole('heading', { level: 2 })).toHaveText([
       'Organisms',
       'Battle Name',
+      'Grid Info',
     ]);
     // Roster ORDER, not merely presence: the dense encoding is `cell = roster index + 1`, so a
     // sidebar that sorted for display would be the first visible symptom of a reordering bug.
@@ -909,7 +910,11 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page.getByRole('group', { name: 'Generation: 0' })).toBeVisible();
     // Living Cells is a `role="group"` combined name too, so this also proves the value is a real
     // (non-zero) number rather than merely present.
-    await expect(page.getByRole('group', { name: /^Living Cells: [1-9]\d*$/ })).toBeVisible();
+    await expect(
+      page
+        .getByRole('region', { name: 'Battle statistics' })
+        .getByRole('group', { name: /^Living Cells: [1-9]\d*$/ }),
+    ).toBeVisible();
     await expect(page.getByRole('img', { name: /^Aggressive Colonizer: \d+$/ })).toBeVisible();
     await expect(page.getByRole('img', { name: /^Patient Defender: \d+$/ })).toBeVisible();
     await expect(page.getByRole('img', { name: /^Chaotic Spreader: \d+$/ })).toBeVisible();
@@ -1156,6 +1161,232 @@ test.describe('saving a battle (Story 2.13)', () => {
     await page.getByRole('textbox', { name: /battle name/i }).fill('Axe Scan Battle');
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});
+
+/**
+ * Story 2.14 — edit-mode grid resize, end to end (AC2, AC3, AC4, AC5, AC7).
+ *
+ * The composed route is the only place the four dormant paths this story wakes up can be proven
+ * together: a live `size` change reconstructs the renderer against REAL layout, `resizeGrid`'s
+ * anchoring is visible in painted pixels, and the saved `gridSize` has to survive a round trip
+ * through `BattleSchema` (a projection that violates it stores fine and surfaces only as an
+ * `unavailable` Gallery tile).
+ */
+test.describe('edit-mode grid resize (Story 2.14)', () => {
+  /**
+   * ⚠️ `.click()`, never `.check()`, on the preset radios. Playwright's `check()` asserts the
+   * control ENDED UP checked — which is exactly what a shrink that opens the warning must NOT do,
+   * because nothing is committed until confirm and the control reads the live grid. `check()`
+   * therefore fails against correct code on every clipping path.
+   */
+
+  /** The Grid Info section's own reading of the live grid's dimensions. */
+  function gridSizeFact(page: Page): Locator {
+    return page.getByRole('complementary').getByRole('group', { name: /^Grid Size: / });
+  }
+
+  test('a GROW commits immediately, with no warning (AC2, AC3, AC7)', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+      // ⚠️ The paint-observe cycle assertion. `ResizeObserver` reports a box change, the effect
+      // repaints, the repaint writes canvas.width/height — observing the wrong element turns that
+      // into a loop the browser reports as a WARNING, never an error, so an error-only filter
+      // would never see it. A live `size` change is the first thing to re-register that observer.
+      if (msg.text().includes('ResizeObserver loop')) errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 50 by 30');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    await page.getByRole('radio', { name: '100 by 60' }).click();
+
+    // ❌ Growing NEVER warns — it discards nothing (Decision A.3).
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 100 by 60');
+    await expect(
+      page.getByRole('complementary').getByRole('group', { name: /^Total Cells: / }),
+    ).toHaveAttribute('aria-label', 'Total Cells: 6,000');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+    // The dish survived the live `size` change and is still painting (AC7).
+    await expect(page.getByRole('img', { name: /petri dish/i })).toBeVisible();
+    expect(
+      await distinctColorCount(page.getByRole('img', { name: /petri dish/i })),
+    ).toBeGreaterThan(1);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('a shrink that clips WARNS, and the confirmed size survives a save and reload (AC3, AC5)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+      if (msg.text().includes('ResizeObserver loop')) errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    // ⚠️ `seedWorkspaceIfFresh`, never `seedWorkspace`: this test SAVES and then navigates, and
+    // the shared seeder runs on every document load — it would overwrite the saved record on the
+    // way back in (Story 2.13 Debug Log 2).
+    await seedWorkspaceIfFresh(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleB}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 100 by 60');
+
+    // Paint in the BOTTOM-RIGHT quadrant, which no 50 x 30 rectangle anchored at the top-left can
+    // contain — the seeded fixture places its roster centrally, so without this the shrink clips
+    // nothing and applies silently (trap 6), and the test would pass for the wrong reason.
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    const box = await dish.boundingBox();
+    if (box === null) throw new Error('the dish has no layout box');
+    await dish.click({ position: { x: box.width * 0.9, y: box.height * 0.9 } });
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+
+    await page.getByRole('radio', { name: '50 by 30' }).click();
+
+    // AC3: the consequence is stated BEFORE the action, and it names LIVING cells.
+    const dialog = page.getByRole('dialog', { name: 'Cells Will Be Discarded' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(/living cell/i);
+    await expect(dialog).toContainText('50 by 30');
+    // Nothing has committed yet — and the editor behind the dialog is genuinely INERT and hidden
+    // from assistive technology while it is open (`useInertBackground` + MUI's own
+    // `ariaHiddenSiblings`), which is why the Grid Info fact is not queryable from here. The
+    // "still reads the current size" half is asserted on the cancel path below, once the
+    // background has been released.
+    await expect(page.getByRole('complementary')).toHaveCount(0);
+
+    await dialog.getByRole('button', { name: 'Resize Grid' }).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 50 by 30');
+
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    // AC5: out and back in through the Gallery — the route a user takes, and the only one that
+    // proves the record parsed back through `BattleSchema` at the new size.
+    await page.goto('/');
+    await page.getByRole('link', { name: 'Grand Colony War' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 50 by 30');
+    await expect(page.getByRole('radio', { name: '50 by 30' })).toBeChecked();
+    // The surviving cells came back with it — a battle that reloads blank would satisfy every
+    // dimension assertion above.
+    expect(
+      await distinctColorCount(page.getByRole('img', { name: /petri dish/i })),
+    ).toBeGreaterThan(1);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('cancelling the warning changes nothing at all (AC3)', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleB}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
+
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    const box = await dish.boundingBox();
+    if (box === null) throw new Error('the dish has no layout box');
+    await dish.click({ position: { x: box.width * 0.9, y: box.height * 0.9 } });
+
+    await page.getByRole('radio', { name: '50 by 30' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Cells Will Be Discarded' });
+    await expect(dialog).toBeVisible();
+
+    // AC8: Escape is the keyboard's Cancel — MUI v9 has no `disableEscapeKeyDown`, so this is
+    // routed through the same `onClose` a backdrop click takes.
+    await page.keyboard.press('Escape');
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 100 by 60');
+    // AC8: focus came back to the control that opened the dialog, not to <body>.
+    await expect(page.getByRole('radio', { name: '50 by 30' })).toBeFocused();
+    await expect(page.getByRole('radio', { name: '100 by 60' })).toBeChecked();
+  });
+
+  test('UNDO after a resize restores the previous dimensions and content (AC4)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+      if (msg.text().includes('ResizeObserver loop')) errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    const coloursBefore = await distinctColorCount(dish);
+    const undo = page.getByRole('button', { name: 'Undo' });
+    await expect(undo).toBeDisabled();
+
+    await page.getByRole('radio', { name: '100 by 60' }).click();
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 100 by 60');
+    // ONE commit, therefore ONE ring entry — a resize that pushed two would need two undos.
+    await expect(undo).toBeEnabled();
+
+    await undo.click();
+
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 50 by 30');
+    await expect(undo).toBeDisabled();
+    // The dish repainted at the OLD size, with the same palette on it — the renderer
+    // reconstruction the undo path now triggers too (AC7).
+    await expect.poll(async () => distinctColorCount(dish), { timeout: 2000 }).toBe(coloursBefore);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('has no axe accessibility violations with the resize warning open (AC8)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleB}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
+
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    const box = await dish.boundingBox();
+    if (box === null) throw new Error('the dish has no layout box');
+    await dish.click({ position: { x: box.width * 0.9, y: box.height * 0.9 } });
+
+    await page.getByRole('radio', { name: '50 by 30' }).click();
+
+    // THREE waits, not one — the pattern `deleteBattle.spec.ts` established and the reason it
+    // gives: `toBeVisible()` passes the instant the element has a box, well before MUI's Fade
+    // settles, and `Button`'s own root `background-color`/`color` transition (duration.short =
+    // 250ms) is UNSYNCHRONISED with that Fade. Scanning between the two settle points makes axe
+    // compute colour-contrast against blended, transitional colours — measured here on WebKit as
+    // 93 violations, including the confirm button at 1.89:1 against a half-faded fill.
+    const dialog = page.getByRole('dialog', { name: 'Cells Will Be Discarded' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveCSS('opacity', '1');
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('has no axe accessibility violations after a resize (AC8)', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('radio', { name: '100 by 60' }).click();
+    await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 100 by 60');
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
