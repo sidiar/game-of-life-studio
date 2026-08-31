@@ -8,6 +8,7 @@ import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
+import { clearGrid } from '@/lib/clearGrid';
 import { computeEditorGridStats } from '@/lib/gridStats';
 import { countClippedLivingCells, resizeGrid } from '@/lib/resizeGrid';
 import { ERASER_TOOL, refForTool, type Tool } from '@/lib/tool';
@@ -15,6 +16,7 @@ import { useInertBackground } from '@/lib/useInertBackground';
 import PetriDishCanvas from '../PetriDishCanvas';
 import BattleNameField from './BattleNameField';
 import EditorStatusBar, { type EditorStatusBarStats } from './EditorStatusBar';
+import EditorToolsSection from './EditorToolsSection';
 import GridSettingsSection, { presetKey } from './GridSettingsSection';
 import OrganismRoster from './OrganismRoster';
 import SidebarSection from './SidebarSection';
@@ -51,9 +53,10 @@ const ResizeClipWarningDialog = dynamic(() => import('./ResizeClipWarningDialog'
 // Spec §3.3's ~13-prop interface. Story 2.14 adds NOTHING to it: the resize is derived from
 // `grid` and committed through the existing `onCommitGrid` seam, so <GridSettingsSection> and its
 // confirm dialog need no new input from <BattlePage> (see the resize handler below, and the ❌ in
-// this component's own doc comment). The remaining sidebar sections (<EditorToolsSection> 2.15,
-// <SidebarFooter> 2.16) bring whatever they need with them — declaring their props now would be an
-// unverifiable claim this story cannot back up.
+// this component's own doc comment). Story 2.15 adds nothing to it either, on the same reasoning:
+// <EditorToolsSection> derives its `disabled` and its guards from `grid` and `isSaving`, both
+// already here. The one remaining sidebar section (<SidebarFooter> 2.16) brings whatever it needs
+// with it — declaring its props now would be an unverifiable claim this story cannot back up.
 export interface BattleEditorViewProps {
   grid: RenderableGrid;
   size: { cols: number; rows: number };
@@ -534,12 +537,12 @@ function resolveSelectedTool(
 
 /**
  * The Lab-mode composition root (component-tree-battle-page.md §3.3, §2). Composes
- * `<EditorSidebar>` — which ships with THREE real sections, Organisms,
- * Battle Name and Grid Info — and `<EditorMain>`, which carries `<EditorStatusBar>` (Story 2.8).
+ * `<EditorSidebar>` — which ships with FOUR real sections, Organisms, Battle Name, Grid Info and
+ * Tools (Story 2.15) — and `<EditorMain>`, which carries `<EditorStatusBar>` (Story 2.8).
  *
- * ❌ No sidebar footer and no Back button (Story 2.16). ❌ No Tools section (2.15) — Story 2.4
- * declined to ship a half-built sidebar and that call stands: each section arrives complete, not
- * as a panel of placeholders for the rest.
+ * ❌ No sidebar footer and no Back button (Story 2.16) — Story 2.4 declined to ship a half-built
+ * sidebar and that call stands: each section arrives complete, not as a panel of placeholders for
+ * the rest.
  *
  * ❌ **No `gridSize` state, no `pendingSize`, no `draft.gridSize` write** (Story 2.8 forced
  * decision 4). `size` is DERIVED from `grid` in `<BattlePage>`, so a resize is a grid COMMIT and
@@ -766,6 +769,33 @@ export default function BattleEditorView({
   // Only once the fade has finished is it safe to drop the copy the dialog is still rendering.
   const handleResizeDialogExited = useCallback(() => setPendingResize(null), []);
 
+  /**
+   * AC2/AC3 (FR-3.7). Spec §3.3 puts Clear here, beside `handleResize` — the same commit seam,
+   * one `onCommitGrid` call, nothing else. ❌ No second seam, no `useState`, no touch to
+   * `sessionRoster` / `chosenTool` / `battleName` / `rosterIds` (traps: What Clear does NOT do).
+   *
+   * Forced decision 1, option (a): the already-empty guard lives HERE too, belt-and-braces with
+   * the control's own `disabled` — an equal-but-new grid is not a harmless no-op (it would push an
+   * undo entry and set `isDirty`, a user-visible lie about unsaved work).
+   *
+   * `isSaving` guarded here for the same reason `handleConfirmResize` carries one (trap 6):
+   * `<BattlePage>`'s `handleCommitGrid` refuses under `savingRef` silently, so without this the
+   * click would look like it worked rather than being genuinely inert.
+   *
+   * ⚠️ Story 2.15 review (2026-08-31): both guards read the SAME render's values the `disabled`
+   * expression below reads, and React never invokes `onClick` on a disabled `<button>` — so
+   * neither guard can be entered through the real control, and neither closes the same-tick
+   * `savingRef`-vs-`isSaving` window `<BattlePage>`'s own ref exists for. They are belt to the
+   * control's braces (forced decision 1), nothing more, and the earlier claim that
+   * `stats.livingCells` could be "raced past" here was wrong. `BattleEditorView.clearGuards.test.tsx`
+   * mocks the control down to an enabled button so this code is reachable, and therefore
+   * falsifiable, at all.
+   */
+  const handleClear = useCallback(() => {
+    if (stats.livingCells === 0 || isSaving) return;
+    onCommitGrid(clearGrid(grid));
+  }, [grid, isSaving, onCommitGrid, stats.livingCells]);
+
   return (
     <EditorLayout>
       <EditorSidebar>
@@ -815,6 +845,16 @@ export default function BattleEditorView({
                  returns early while a save is in flight, so a live control here would produce a
                  click that appears to do nothing. Same treatment as `<BattleNameField>`. */
               disabled={isSaving}
+            />
+          </SidebarSection>
+          {/* AC1: the FOURTH section — the mockup's order is Organisms · Battle Name · Grid Info ·
+              Tools · Back (2.16). Forced decision 1, option (a): `disabled` ties to the SAME
+              `stats.livingCells` the emptiness guard above reads, so the control states WHY
+              nothing would happen rather than staying live and inert (NFR-4.1). */}
+          <SidebarSection title="Tools">
+            <EditorToolsSection
+              onClear={handleClear}
+              disabled={stats.livingCells === 0 || isSaving}
             />
           </SidebarSection>
         </SidebarContent>

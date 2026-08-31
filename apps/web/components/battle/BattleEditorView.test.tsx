@@ -112,14 +112,14 @@ describe('BattleEditorView', () => {
     expect(container.querySelector('canvas')).toBeNull();
   });
 
-  // Story 2.9 AC1 / Story 2.11 AC7 / Story 2.14 AC1: the sidebar arrives, and "renders no sidebar"
-  // — true from Story 2.5 through 2.8 — is now false by design. What replaces "exactly one
-  // section" is the mockup's own order: Organisms, Battle Name, THEN Grid Info — all real `<h2>`s,
-  // siblings of each other, never a skipped level under the header's single `<h1>` (the
-  // heading-order prediction `<BattleEditorView>`'s own comment used to carry, now settled rather
-  // than merely trusted). ORDER, not membership: Grid Info is the mockup's third section and a set
-  // comparison would pass with it first.
-  it('renders the Lab sidebar with Organisms, Battle Name then Grid Info, in order (AC1)', () => {
+  // Story 2.9 AC1 / Story 2.11 AC7 / Story 2.14 AC1 / Story 2.15 AC1: the sidebar arrives, and
+  // "renders no sidebar" — true from Story 2.5 through 2.8 — is now false by design. What
+  // replaces "exactly one section" is the mockup's own order: Organisms, Battle Name, Grid Info,
+  // THEN Tools — all real `<h2>`s, siblings of each other, never a skipped level under the
+  // header's single `<h1>` (the heading-order prediction `<BattleEditorView>`'s own comment used
+  // to carry, now settled rather than merely trusted). ORDER, not membership: Tools is the
+  // mockup's fourth section and a set comparison would pass with it first.
+  it('renders the Lab sidebar with Organisms, Battle Name, Grid Info then Tools, in order (AC1)', () => {
     renderEditor();
 
     const sidebar = screen.getByRole('complementary');
@@ -129,6 +129,7 @@ describe('BattleEditorView', () => {
       'Organisms',
       'Battle Name',
       'Grid Info',
+      'Tools',
     ]);
   });
 
@@ -137,8 +138,8 @@ describe('BattleEditorView', () => {
   it('renders no other sidebar section and no footer (AC5)', () => {
     renderEditor();
 
-    // Tools (2.15) and the Back button (2.16) are what is left of the mockup's sidebar; Battle
-    // Name (2.11) and Grid Info (2.14) are now real and deliberately NOT asserted absent here.
+    // The Back button (2.16) is what is left of the mockup's sidebar; Battle Name (2.11), Grid
+    // Info (2.14) and Tools (2.15) are now real and deliberately NOT asserted absent here.
     // Scoped by ACCESSIBLE NAME rather than counted: a bare `toHaveLength(1)` passes when the one
     // textbox is the WRONG one, which is the precise regression this NFR-4.1 absence guard exists
     // to catch.
@@ -149,9 +150,12 @@ describe('BattleEditorView', () => {
     expect(screen.queryByRole('textbox', { name: /grid size/i })).toBeNull();
     expect(screen.queryByRole('slider')).toBeNull(); // ❌ no Grid Zoom slider — superseded (§9.1).
     expect(screen.queryByRole('button', { name: /back/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /clear/i })).toBeNull();
+    // AC1: Clear IS real now — asserted present, not absent.
+    expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeInTheDocument();
+    // AC4: the mockup's other two Tools buttons have no backing FR and are excluded from the MVP.
     expect(screen.queryByRole('button', { name: /reset to saved/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /randomize/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /export battle/i })).toBeNull();
     // Forced decision 3 (Story 2.12, AC5): a NAMED REGION, not a live region — `queryAllByRole
     // ('status')` stays true even now that the bar's content exists, because the stats never took
     // option (a)/(c). If a future story adds a live region here, this line must be updated with a
@@ -181,12 +185,14 @@ describe('BattleEditorView', () => {
     expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Erase' })).toBeNull();
     expect(screen.queryByRole('group', { name: /editing tool/i })).toBeNull();
-    // Exactly the roster's one row, the eraser, UNDO and (Story 2.13) SAVE — nothing more.
+    // Exactly the roster's one row, the eraser, UNDO, (Story 2.13) SAVE and (Story 2.15) CLEAR —
+    // nothing more.
     expect(screen.getByRole('button', { name: "Conway's Classic" })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(5);
   });
 });
 
@@ -1177,5 +1183,104 @@ describe('BattleEditorView — edit-mode grid resize (Story 2.14)', () => {
     renderEditor({ isSaving: true });
 
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled();
+  });
+});
+
+/**
+ * Story 2.15 — Clear Petri Dish (AC1, AC2, AC3).
+ *
+ * The matrix the story asks for: a populated grid clears in ONE `onCommitGrid` call carrying an
+ * all-zero grid of the SAME dimensions; an already-empty grid calls it ZERO times; the roster,
+ * selection and name field are untouched across a Clear.
+ *
+ * ⚠️ These tests drive the REAL control, so each of them measures the `disabled` expression, not
+ * `handleClear`'s own guards — React never invokes `onClick` on a disabled `<button>`. The guards
+ * themselves are pinned in `BattleEditorView.clearGuards.test.tsx` (Story 2.15 review). AC5's save
+ * projection and AC7's axe pass live in `BattlePage.test.tsx` and `e2e/battleRoute.spec.ts`
+ * respectively — this block does not cover them and no longer claims to.
+ */
+describe('BattleEditorView — Clear Petri Dish (Story 2.15)', () => {
+  function clearButton() {
+    return screen.getByRole('button', { name: /clear petri dish/i });
+  }
+
+  it('clears a populated grid in ONE commit, all-zero, at the SAME dimensions (AC1, AC2)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    const grid = makeGrid(4, 3, [1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1]);
+    renderEditor({ grid, onCommitGrid });
+
+    await user.click(clearButton());
+
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
+    const committed = onCommitGrid.mock.calls[0][0] as RenderableGrid;
+    expect([committed.width, committed.height]).toEqual([4, 3]);
+    expect(Array.from(committed.occupant).every((cell) => cell === 0)).toBe(true);
+    // Trap 2: a NEW grid object — the canvas's grid effect and the stats memo both key on this.
+    expect(committed).not.toBe(grid);
+    expect(committed.occupant).not.toBe(grid.occupant);
+  });
+
+  it('an already-empty grid: clicking does NOTHING — no commit at all (AC3)', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: makeGrid(2, 2, [0, 0, 0, 0]), onCommitGrid });
+
+    await user.click(clearButton());
+
+    expect(onCommitGrid).not.toHaveBeenCalled();
+  });
+
+  // Forced decision 1: the control is ALSO `disabled` on an empty grid — belt-and-braces with the
+  // handler guard above, and what tells the user WHY nothing would happen (NFR-4.1).
+  it('disables the control on an already-empty grid', () => {
+    renderEditor({ grid: makeGrid(2, 2, [0, 0, 0, 0]) });
+
+    expect(clearButton()).toBeDisabled();
+  });
+
+  it('the control is enabled while the grid has living cells', () => {
+    renderEditor({ grid: makeGrid(2, 2, [1, 0, 0, 0]) });
+
+    expect(clearButton()).toBeEnabled();
+  });
+
+  // Trap 6 / the edit lock's visible half — mirrors <GridSettingsSection>'s and
+  // <BattleNameField>'s isSaving treatment.
+  //
+  // ⚠️ Story 2.15 review corrected this comment. It used to claim `fireEvent.click` proved the
+  // HANDLER's `isSaving` guard "independent of the DOM attribute a forced/synthetic dispatch could
+  // bypass". It does not: React's `getListener` returns no `onClick` for a disabled `<button>`, so
+  // a synthetic dispatch is refused exactly like a real one, and deleting `|| isSaving` from
+  // `handleClear` left this test green. What it actually pins is the `disabled` attribute — which
+  // is worth pinning. The handler guard is pinned in `BattleEditorView.clearGuards.test.tsx`.
+  it('disables the control, so a click cannot commit while a save is in flight (trap 6)', () => {
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: makeGrid(2, 2, [1, 0, 0, 0]), onCommitGrid, isSaving: true });
+
+    expect(clearButton()).toBeDisabled();
+    fireEvent.click(clearButton());
+
+    expect(onCommitGrid).not.toHaveBeenCalled();
+  });
+
+  // What Clear does NOT do: the roster, the selection and the name field survive it untouched.
+  it('leaves the roster, selection and battle name UNTOUCHED across a Clear', async () => {
+    const user = userEvent.setup();
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: makeGrid(2, 2, [1, 0, 0, 1]), battleName: 'Petri Party', onCommitGrid });
+
+    await user.click(screen.getByRole('button', { name: "Conway's Classic" }));
+    await user.click(clearButton());
+
+    // ⚠️ Story 2.15 review: without this the test passes on a `handleClear` that does NOTHING —
+    // `<BattleEditorView>` is controlled, so `grid` never changes under it and "untouched" is
+    // vacuously true. The Clear has to have actually happened for the rest to mean anything.
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: "Conway's Classic" })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('textbox', { name: /battle name/i })).toHaveValue('Petri Party');
   });
 });
