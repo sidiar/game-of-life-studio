@@ -277,12 +277,13 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
 
     const sidebar = page.getByRole('complementary');
-    // Story 2.11 (AC7) / Story 2.14 (AC1): "Organisms", "Battle Name", then "Grid Info" — three
-    // real `<h2>`s, siblings of each other, in the mockup's own order.
+    // Story 2.11 (AC7) / Story 2.14 (AC1) / Story 2.15 (AC1): "Organisms", "Battle Name", "Grid
+    // Info", then "Tools" — four real `<h2>`s, siblings of each other, in the mockup's own order.
     await expect(sidebar.getByRole('heading', { level: 2 })).toHaveText([
       'Organisms',
       'Battle Name',
       'Grid Info',
+      'Tools',
     ]);
     // Roster ORDER, not merely presence: the dense encoding is `cell = roster index + 1`, so a
     // sidebar that sorted for display would be the first visible symptom of a reordering bug.
@@ -1390,5 +1391,184 @@ test.describe('edit-mode grid resize (Story 2.14)', () => {
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
+  });
+});
+
+/**
+ * Story 2.15 — Clear Petri Dish, end to end (AC1, AC2, AC3, AC4, AC6, AC7).
+ *
+ * The composed route is where the Clear -> Save -> reload consequence (trap 5: `organismIds: []`
+ * survives the real schema and the roster section really does reach its empty state) is provable
+ * at all — a unit test can assert the projection, but not that the record actually reloads.
+ */
+test.describe('Clear Petri Dish (Story 2.15)', () => {
+  test('CLEAR empties the dish, and UNDO restores the painted cells (AC1, AC2)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    // Baseline is the SKIRMISH battle's own painted state — the same "snapshot before, diff
+    // after" shape Story 2.7's erase and Story 2.8's undo e2e tests use, just starting from a
+    // POPULATED dish rather than an empty one.
+    await snapshotBaseline(dish);
+
+    const clear = page.getByRole('button', { name: /clear petri dish/i });
+    const undo = page.getByRole('button', { name: 'Undo' });
+    await expect(clear).toBeEnabled();
+    await expect(undo).toBeDisabled();
+
+    await clear.click();
+
+    // The dish moved away from the painted baseline — the organisms' cells are gone.
+    const clearedPixels = await countChangedPixels(dish);
+    expect(clearedPixels).toBeGreaterThan(0);
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+    // ONE commit, therefore ONE ring entry.
+    await expect(undo).toBeEnabled();
+    // AC3: nothing left to clear, so the control disables itself.
+    await expect(clear).toBeDisabled();
+
+    await undo.click();
+
+    // Both the Clear and the Undo repaint via the grid effect's `drawFull` (a full repaint from
+    // grid state, not the eraser's incremental dirty-region compositing), so the return to the
+    // painted baseline is exact — no `restoreGridLinesOver` double-blend residual to allow for.
+    await expect
+      .poll(async () => countChangedPixels(dish), { timeout: 2000 })
+      .toBeLessThan(clearedPixels * 0.05);
+    await expect(undo).toBeDisabled();
+    await expect(clear).toBeEnabled();
+
+    expect(errors).toEqual([]);
+  });
+
+  test('clicking CLEAR on an already-empty grid does nothing (AC3)', async ({ page }) => {
+    await seedWorkspaceIfFresh(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const clear = page.getByRole('button', { name: /clear petri dish/i });
+    await expect(clear).toBeDisabled();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  test('Clear -> Save -> reload: the battle opens empty, roster in its empty state (AC5, trap 5)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    // ⚠️ `seedWorkspaceIfFresh`, never `seedWorkspace`: this test SAVES and then navigates, and
+    // the shared seeder runs on every document load — it would overwrite the saved record on the
+    // way back in (Story 2.13 Debug Log 2).
+    await seedWorkspaceIfFresh(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('button', { name: /clear petri dish/i }).click();
+    // The count right after Clear (background + grid lines, at THIS grid's dimensions) is the
+    // "genuinely empty" baseline the reload is checked against below — robust to however many
+    // distinct RGBA values the background/grid-line composite happens to produce, which
+    // `toBe(1)` would assume away.
+    const emptyColours = await distinctColorCount(page.getByRole('img', { name: /petri dish/i }));
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    // Out and back in through the Gallery — the route a user takes, and the only one that proves
+    // the pruned `organismIds: []` record actually parses back through `BattleSchema`.
+    await page.goto('/');
+    await page.getByRole('link', { name: 'Three-Way Skirmish' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    // The dish reopens exactly as empty as it was right after the Clear — nothing survived save.
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    expect(await distinctColorCount(dish)).toBe(emptyColours);
+    // Trap 5's downstream consequence: no placed organisms survived the prune, so the roster
+    // section has nothing to list — no `role="list"` at all — and the tool falls back to the
+    // eraser (spec §3.3: "eraser when the roster is empty").
+    await expect(page.getByRole('list')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Eraser' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    expect(errors).toEqual([]);
+  });
+
+  test('the Tools section renders exactly one button; no other MVP-excluded controls anywhere (AC4)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await expect(page.getByRole('heading', { level: 2, name: 'Tools' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /clear petri dish/i })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /export battle/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /reset to saved/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /randomize/i })).toHaveCount(0);
+  });
+
+  test('has no axe accessibility violations on /battle with the Tools section present (AC7)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.getByRole('button', { name: /clear petri dish/i })).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('has no axe accessibility violations on /battle/new with the Tools section present (AC7)', async ({
+    page,
+  }) => {
+    await seedWorkspaceIfFresh(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+    await expect(page.getByRole('button', { name: /clear petri dish/i })).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  // AC7: keyboard-operable with a visible focus ring — the same convention
+  // `battleRoute.spec.ts`'s other focus-ring assertions use (:focus-visible, not :focus-within —
+  // trap 8).
+  test('CLEAR PETRI DISH is keyboard-reachable and shows a visible focus ring (AC7)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    await snapshotBaseline(dish);
+
+    const clear = page.getByRole('button', { name: /clear petri dish/i });
+    await clear.focus();
+    await expect(clear).toBeFocused();
+    await expect(clear).toHaveCSS('outline-style', 'solid');
+
+    await page.keyboard.press('Enter');
+
+    // Enter on a focused <button> activates it exactly like a click — the dish moved away from
+    // its painted baseline, proving the keypress actually reached `onClear`.
+    await expect.poll(async () => countChangedPixels(dish), { timeout: 2000 }).toBeGreaterThan(0);
   });
 });

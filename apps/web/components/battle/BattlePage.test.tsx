@@ -339,7 +339,7 @@ describe('BattlePage', () => {
   // 4), so the create route carries exactly one roster row, the eraser, and UNDO. The status bar
   // sits OUTSIDE the `colors !== null` guard, so it renders here even though no canvas does: undo
   // acts on grid state, and a missing theme token layer is no reason to withhold it.
-  it('renders exactly the roster row, the eraser, UNDO, SAVE, and one heading on the "new" route', async () => {
+  it('renders exactly the roster row, the eraser, UNDO, SAVE, CLEAR, and one heading on the "new" route', async () => {
     render(
       <BattlePage
         repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
@@ -358,7 +358,9 @@ describe('BattlePage', () => {
     // not touched is not unsaved work, and offering to write it would put an "Untitled Battle"
     // with an empty grid in the Gallery for every visit to this route.
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(4);
+    // Story 2.15 (AC3): the grid is empty, so CLEAR renders but disabled — nothing to clear.
+    expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeDisabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(5);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -478,10 +480,10 @@ describe('BattlePage', () => {
   // AC2 / NFR-4.1 as a COUNT, not a presence check: `queryByRole('button', { name: /run/i })`
   // being null still passes after someone adds a dead RUN button labelled differently, or a
   // fullscreen button beside it. Story 2.9 replaced the provisional Draw/Erase pair with the real
-  // roster; Story 2.13 adds SAVE, so the claim is now "this battle's three organisms, the eraser,
-  // UNDO and SAVE — nothing else". A SEVENTH button (Run, fullscreen, 2.16's Back, or Epic 4's
-  // per-row pencil) still fails here.
-  it('renders no Run, fullscreen, or any other button beyond the roster, UNDO and SAVE on the loaded route', async () => {
+  // roster; Story 2.13 adds SAVE, Story 2.15 adds CLEAR, so the claim is now "this battle's three
+  // organisms, the eraser, UNDO, SAVE and CLEAR — nothing else". An EIGHTH button (Run,
+  // fullscreen, 2.16's Back, or Epic 4's per-row pencil) still fails here.
+  it('renders no Run, fullscreen, or any other button beyond the roster, UNDO, SAVE and CLEAR on the loaded route', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
@@ -498,7 +500,9 @@ describe('BattlePage', () => {
     // Story 2.13: converted from an absence assertion (trap 5) — SAVE has arrived, disabled on a
     // freshly loaded battle because nothing has been edited yet.
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 3);
+    // Story 2.15: SKIRMISH places a roster, so CLEAR renders enabled.
+    expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeEnabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 4);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
@@ -2165,5 +2169,163 @@ describe('BattlePage — edit-mode grid resize (Story 2.14)', () => {
     release();
     await waitFor(() => expect(dirtyValue(container)).toBe('false'));
     expect(screen.getByRole('radio', { name: '100 by 60' })).toBeEnabled();
+  });
+});
+
+/**
+ * Story 2.15 — Clear Petri Dish (AC2, AC3, AC5).
+ *
+ * `<BattlePage>` is the only level at which a Clear's commit, the undo ring, the dirty flag and
+ * the save projection are all observable together. ⚠️ There is no `<BattlePage>` change in this
+ * story: Clear arrives at the existing `handleCommitGrid`, exactly like the resize before it —
+ * these tests exist to prove that, not to cover something new here.
+ */
+describe('BattlePage — Clear Petri Dish (Story 2.15)', () => {
+  function dirtyValue(container: HTMLElement): string | null {
+    const root = container.querySelector('[data-dirty]');
+    if (root === null) throw new Error('Root (data-dirty) not found');
+    return root.getAttribute('data-dirty');
+  }
+
+  function livingCellsFact(): string | null {
+    return within(screen.getByRole('region', { name: 'Battle statistics' }))
+      .getByRole('group', { name: /^Living Cells: \d+$/ })
+      .getAttribute('aria-label');
+  }
+
+  function clearButton() {
+    return screen.getByRole('button', { name: /clear petri dish/i });
+  }
+
+  it('clears in ONE undoable commit and marks the battle dirty (AC2)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    // SKIRMISH places a roster, so there is something to clear.
+    expect(livingCellsFact()).not.toBe('Living Cells: 0');
+    expect(dirtyValue(container)).toBe('false');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+
+    await user.click(clearButton());
+
+    expect(livingCellsFact()).toBe('Living Cells: 0');
+    expect(dirtyValue(container)).toBe('true');
+    // ONE commit, therefore ONE ring entry.
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    expect(await findEditorCanvas(container)).toBeInTheDocument();
+  });
+
+  it('UNDO after a Clear restores the painted cells (AC2)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const livingBefore = livingCellsFact();
+    await user.click(clearButton());
+    expect(livingCellsFact()).toBe('Living Cells: 0');
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+
+    expect(livingCellsFact()).toBe(livingBefore);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(await findEditorCanvas(container)).toBeInTheDocument();
+  });
+
+  it('on an already-empty grid, the control is disabled and Undo stays disabled after a click (AC3)', async () => {
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    // /battle/new is a freshly-seeded, empty grid.
+    const { container } = render(<BattlePage repositories={seeded()} battleId="new" />);
+    await screen.findByRole('heading', { level: 1 });
+
+    expect(livingCellsFact()).toBe('Living Cells: 0');
+    expect(clearButton()).toBeDisabled();
+    expect(dirtyValue(container)).toBe('false');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  // Trap 4: the Population row does NOT collapse to "Population: —" after a Clear — it lists
+  // every roster organism, at 0, because it derives from `rosterIds`, never from placed cells.
+  it('the Population row still lists the roster, at 0, after a Clear (trap 4)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const statsRegion = screen.getByRole('region', { name: 'Battle statistics' });
+    expect(within(statsRegion).queryByText('Population')).toBeInTheDocument();
+
+    await user.click(clearButton());
+
+    // Still a named "Population" group with entries reading 0 — not the empty-roster placeholder.
+    expect(within(statsRegion).getByText('Population')).toBeInTheDocument();
+    expect(within(statsRegion).queryByLabelText(/population: none/i)).toBeNull();
+  });
+
+  /** Mirrors `describe('BattlePage — saving (Story 2.13)')`'s own `savedRecord` — the record
+   * parsed through the REAL schema (AC5) rather than duck-typed, so trap 5's "the superRefine
+   * PASSES on an empty organismIds" claim is proven against the actual schema, not restated. */
+  function savedRecord(spy: ReturnType<typeof vi.spyOn>): Battle {
+    const argument: unknown = (spy.mock.calls[0] as unknown[])[0];
+    const parsed = BattleSchema.safeParse(JSON.parse(JSON.stringify(argument)));
+    if (!parsed.success) {
+      throw new Error(`saved record failed BattleSchema: ${JSON.stringify(parsed.error.issues)}`);
+    }
+    return parsed.data;
+  }
+
+  // Trap 5: Clear -> Save prunes every roster entry with no placed cell (Decision H.1), and the
+  // schema permits the resulting empty array.
+  it('a save after a Clear projects organismIds: [] with a valid gridState (trap 5, AC5)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const repositories = seeded();
+    const save = vi.spyOn(repositories.battles, 'save');
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.click(clearButton());
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const record = savedRecord(save);
+    expect(record.organismIds).toEqual([]);
+    expect(record.gridState).toHaveLength(30);
+    expect(record.gridState[0]).toHaveLength(50);
+    expect(record.gridState.every((row) => row.every((cell) => cell === 0))).toBe(true);
+  });
+
+  // Trap 6 / the edit lock: Clear is genuinely unavailable during a write, not merely refused by
+  // `handleCommitGrid` after the click already looked like it did something.
+  it('disables the Clear control while a save is in flight (trap 6)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const repositories = seeded();
+    let release = () => {};
+    vi.spyOn(repositories.battles, 'save').mockImplementation(
+      () => new Promise<void>((resolve) => (release = () => resolve())),
+    );
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(screen.getByRole('textbox', { name: /battle name/i }), '!');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(clearButton()).toBeDisabled());
+    const livingDuringSave = livingCellsFact();
+
+    release();
+    await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+    expect(clearButton()).toBeEnabled();
+    // Nothing cleared during the window it was disabled.
+    expect(livingCellsFact()).toBe(livingDuringSave);
   });
 });

@@ -8,6 +8,7 @@ import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
+import { clearGrid } from '@/lib/clearGrid';
 import { computeEditorGridStats } from '@/lib/gridStats';
 import { countClippedLivingCells, resizeGrid } from '@/lib/resizeGrid';
 import { ERASER_TOOL, refForTool, type Tool } from '@/lib/tool';
@@ -15,6 +16,7 @@ import { useInertBackground } from '@/lib/useInertBackground';
 import PetriDishCanvas from '../PetriDishCanvas';
 import BattleNameField from './BattleNameField';
 import EditorStatusBar, { type EditorStatusBarStats } from './EditorStatusBar';
+import EditorToolsSection from './EditorToolsSection';
 import GridSettingsSection, { presetKey } from './GridSettingsSection';
 import OrganismRoster from './OrganismRoster';
 import SidebarSection from './SidebarSection';
@@ -534,12 +536,12 @@ function resolveSelectedTool(
 
 /**
  * The Lab-mode composition root (component-tree-battle-page.md §3.3, §2). Composes
- * `<EditorSidebar>` — which ships with THREE real sections, Organisms,
- * Battle Name and Grid Info — and `<EditorMain>`, which carries `<EditorStatusBar>` (Story 2.8).
+ * `<EditorSidebar>` — which ships with FOUR real sections, Organisms, Battle Name, Grid Info and
+ * Tools (Story 2.15) — and `<EditorMain>`, which carries `<EditorStatusBar>` (Story 2.8).
  *
- * ❌ No sidebar footer and no Back button (Story 2.16). ❌ No Tools section (2.15) — Story 2.4
- * declined to ship a half-built sidebar and that call stands: each section arrives complete, not
- * as a panel of placeholders for the rest.
+ * ❌ No sidebar footer and no Back button (Story 2.16) — Story 2.4 declined to ship a half-built
+ * sidebar and that call stands: each section arrives complete, not as a panel of placeholders for
+ * the rest.
  *
  * ❌ **No `gridSize` state, no `pendingSize`, no `draft.gridSize` write** (Story 2.8 forced
  * decision 4). `size` is DERIVED from `grid` in `<BattlePage>`, so a resize is a grid COMMIT and
@@ -766,6 +768,26 @@ export default function BattleEditorView({
   // Only once the fade has finished is it safe to drop the copy the dialog is still rendering.
   const handleResizeDialogExited = useCallback(() => setPendingResize(null), []);
 
+  /**
+   * AC2/AC3 (FR-3.7). Spec §3.3 puts Clear here, beside `handleResize` — the same commit seam,
+   * one `onCommitGrid` call, nothing else. ❌ No second seam, no `useState`, no touch to
+   * `sessionRoster` / `chosenTool` / `battleName` / `rosterIds` (traps: What Clear does NOT do).
+   *
+   * Forced decision 1, option (a): the already-empty guard lives HERE too, belt-and-braces with
+   * the control's own `disabled` — an equal-but-new grid is not a harmless no-op (it would push an
+   * undo entry and set `isDirty`, a user-visible lie about unsaved work), and `stats.livingCells`
+   * is a render-time value a same-tick commit could otherwise race past.
+   *
+   * `isSaving` guarded here for the identical reason `handleConfirmResize` carries one (trap 6): a
+   * save can start after the render that disabled the button, and `<BattlePage>`'s
+   * `handleCommitGrid` would silently no-op under `savingRef` without this — a click that appears
+   * to do nothing rather than one that is genuinely inert.
+   */
+  const handleClear = useCallback(() => {
+    if (stats.livingCells === 0 || isSaving) return;
+    onCommitGrid(clearGrid(grid));
+  }, [grid, isSaving, onCommitGrid, stats.livingCells]);
+
   return (
     <EditorLayout>
       <EditorSidebar>
@@ -815,6 +837,16 @@ export default function BattleEditorView({
                  returns early while a save is in flight, so a live control here would produce a
                  click that appears to do nothing. Same treatment as `<BattleNameField>`. */
               disabled={isSaving}
+            />
+          </SidebarSection>
+          {/* AC1: the FOURTH section — the mockup's order is Organisms · Battle Name · Grid Info ·
+              Tools · Back (2.16). Forced decision 1, option (a): `disabled` ties to the SAME
+              `stats.livingCells` the emptiness guard above reads, so the control states WHY
+              nothing would happen rather than staying live and inert (NFR-4.1). */}
+          <SidebarSection title="Tools">
+            <EditorToolsSection
+              onClear={handleClear}
+              disabled={stats.livingCells === 0 || isSaving}
             />
           </SidebarSection>
         </SidebarContent>
