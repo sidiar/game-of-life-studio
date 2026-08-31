@@ -1471,7 +1471,7 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
   });
 
-  test('Clear -> Save -> reload: the battle opens empty, roster in its empty state (AC5, trap 5)', async ({
+  test('Clear -> Save -> reload: the battle opens empty, roster re-seeded with Conway (AC5, trap 5)', async ({
     page,
   }) => {
     const errors: string[] = [];
@@ -1484,6 +1484,11 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     // the shared seeder runs on every document load — it would overwrite the saved record on the
     // way back in (Story 2.13 Debug Log 2).
     await seedWorkspaceIfFresh(page);
+    // Layered on so the workspace matches PRODUCTION, where M9 guarantees Conway's Classic is
+    // present. Without it the fixture library has no Conway, `rosterIds`' seed branch finds
+    // `defaultInLibrary === false`, and the roster reopens empty — an outcome production cannot
+    // reach. Asserting that emptiness is what this test used to do (review, 2026-08-31).
+    await seedConwaysClassic(page);
     await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
 
@@ -1505,13 +1510,19 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     // The dish reopens exactly as empty as it was right after the Clear — nothing survived save.
     const dish = page.getByRole('img', { name: /petri dish/i });
     expect(await distinctColorCount(dish)).toBe(emptyColours);
-    // Trap 5's downstream consequence: no placed organisms survived the prune, so the roster
-    // section has nothing to list — no `role="list"` at all — and the tool falls back to the
-    // eraser (spec §3.3: "eraser when the roster is empty").
-    await expect(page.getByRole('list')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Eraser' })).toHaveAttribute(
+    // Trap 5's downstream consequence: no placed organisms survived the prune, so the persisted
+    // `organismIds` is empty — and `rosterIds` therefore seeds `[DEFAULT_TOOL.organismId]`. The
+    // battle reopens listing AND pre-selecting Conway's Classic. Intended, and Sidiar's explicit
+    // call (2026-08-31): Conway is the project's inspiration, so a cleared dish hands it back
+    // rather than leaving a dead-empty roster. The eraser is NOT selected here.
+    await expect(page.getByRole('list')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: "Conway's Classic" })).toHaveAttribute(
       'aria-pressed',
       'true',
+    );
+    await expect(page.getByRole('button', { name: 'Eraser' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
     );
     await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
 

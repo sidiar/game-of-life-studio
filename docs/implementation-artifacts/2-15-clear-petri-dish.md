@@ -329,10 +329,17 @@ in `deferred-work.md` rather than shipping it.
 5. **Clear → Save stores `organismIds: []`.** `projectBattleForSave` → `pruneAndRemapBattleGrid`
    removes every entry with no placed cell (Decision H.1). `BattleSchema` allows an empty array and
    the `superRefine` passes (there is no unplaced roster member left to fail on). ⚠️ The visible
-   consequence lands on the **next load** of that battle: `rosterIds` is empty, so
-   `resolveSelectedTool` returns the eraser and the roster section shows its empty state. That is
-   the specified behaviour of Decision H, not a defect — do not add a guard, and do not preserve a
-   phantom roster at save.
+   consequence lands on the **next load** of that battle: the persisted `organismIds` is empty, so
+   `<BattlePage>`'s `rosterIds` memo takes its `placed.length === 0 && defaultInLibrary` branch and
+   seeds `[DEFAULT_TOOL.organismId]` — the reopened battle **lists and pre-selects Conway's
+   Classic** (M9: always present in a production workspace). That is intended, not a leak: Sidiar's
+   call, 2026-08-31 — Conway's Classic is the inspiration for the whole project, so a cleared dish
+   handing it back is onboarding for someone who has never met it, and it is also what keeps a
+   battle with nothing placed paintable. Decision H still governs what is *persisted*
+   (`organismIds: []`); the seed is session state layered on top (H.2). Do not add a guard, and do
+   not preserve a phantom roster at save. Only in an **e2e-seeded** workspace (which has no Conway)
+   would the roster reopen empty with the eraser selected — a fixture artefact, which is why the
+   e2e seeds Conway explicitly rather than asserting an outcome production cannot reach.
 6. **The edit lock has two halves and needs both.** `disabled={… || isSaving}` on the button is the
    visible half; the `isSaving` check inside `handleClear` is the half that cannot be raced — a save
    can start *after* the render that disabled the control (this is exactly the finding the Story
@@ -393,8 +400,9 @@ is to raise a number.
 **E2E (`apps/web/e2e/battleRoute.spec.ts`, the established home for battle-route journeys):**
 - Paint on `/battle` → CLEAR PETRI DISH → the dish repaints empty (`distinctColorCount` /
   `countChangedPixels`, the helpers already in that file) → UNDO restores the painted cells.
-- Clear → SAVE → reload: the battle opens empty, and the roster section shows its empty state
-  (trap 5's downstream consequence, end to end).
+- Clear → SAVE → reload: the battle opens empty, and — with `seedConwaysClassic` layered on so the
+  workspace matches production — the roster lists **and pre-selects Conway's Classic** (trap 5's
+  downstream consequence, end to end).
 - The Tools section renders exactly one button; no "EXPORT BATTLE" / "RESET TO SAVED" / "RANDOMIZE"
   anywhere on the route (AC4).
 - axe-clean on `/battle` and `/battle/new` with the Tools section present, in all four projects.
@@ -504,9 +512,9 @@ independently reached the handler-guard finding below. `npm run ci` re-run from 
 reviewer: **exit 0** (865 unit/component, 296 e2e + 4 pre-existing skips), and the bundle
 independently re-measured at the numbers Debug Log 5 reports.
 
-**decision-needed** — unresolved; this is why the story is not `done`:
+**decision-needed** — **resolved by Sidiar, 2026-08-31 (option a)**; the story is `done`:
 
-- [ ] [Review][Decision] **Clear → Save → reload puts Conway's Classic into a battle that never
+- [x] [Review][Decision] **Clear → Save → reload puts Conway's Classic into a battle that never
   contained it, and the e2e that says otherwise cannot show it** — AC5/trap 5 states the
   downstream consequence as *"`rosterIds` is empty, so `resolveSelectedTool` returns the eraser and
   the roster section shows its empty state."* In a **production** workspace that is false.
@@ -529,6 +537,18 @@ independently re-measured at the numbers Debug Log 5 reports.
   `seedConwaysClassic`. **(b)** The seed should apply to `/battle/new` only; an existing saved
   battle pruned to nothing keeps an honestly empty roster and the eraser, and Story 2.10's add
   dropdown is what makes it paintable again.
+
+  **RESOLVED — (a), Sidiar, 2026-08-31.** The seed stays; the spec text and the e2e were wrong,
+  not the code. Sidiar's reason is broader than the one (a) was argued on: Conway's Classic is the
+  inspiration for the whole project, so a cleared dish handing it back is a **deliberate
+  onboarding affordance** — someone who knows nothing about Conway should meet it — and not merely
+  a fallback that keeps an empty battle paintable. Recorded here in that form so this is not
+  re-opened later as a leaky default: the `tool.ts` comment about *"opening a battle with three
+  organisms and finding Conway's Classic listed"* still stands, because that case has
+  `placed.length > 0` and never reaches the seed branch. Applied: trap 5's statement rewritten
+  above; the AC5 e2e now layers `seedConwaysClassic` and asserts the seeded outcome (roster lists
+  Conway's Classic, pre-selected) instead of an empty roster that only the fixture library
+  produced. No production code changed.
 
 **patch** — applied in this review's own commit:
 
@@ -671,7 +691,7 @@ claude-sonnet-5 (Claude Sonnet 5)
 | AC2 — ONE undoable commit, marks dirty | `handleClear` calls `onCommitGrid(clearGrid(grid))` exactly once. `BattleEditorView.test.tsx`'s Clear describe asserts one call, an all-zero grid, the SAME dimensions, and a NEW identity. `BattlePage.test.tsx` asserts `data-dirty` flips and UNDO becomes enabled exactly once; UNDO restores the painted cells. The e2e journey proves it with a real pointer and real layout. |
 | AC3 — already-empty grid: no-op | `stats.livingCells === 0` guards both the control's `disabled` and the handler. Component test: zero `onCommitGrid` calls on an empty grid. `BattlePage.test.tsx` and the e2e both cover the `/battle/new` case. |
 | AC4 — Export absent, Reset-to-Saved/Randomize excluded | Asserted by NAME in `EditorToolsSection.test.tsx`, `BattleEditorView.test.tsx` and the e2e — one button, nothing else, everywhere the Tools section renders. |
-| AC5 — Clear touches cells only; the canvas survives | `BattleEditorView.test.tsx`: the roster list, the selected row and the battle name unchanged across a Clear (and, after review, that the Clear actually happened). `BattlePage.test.tsx`: trap 4's Population row still lists the SAME roster entries, each at 0, asserted by `aria-label`; a save after a Clear projects `organismIds: []` with a valid `gridState`, parsed through the real `BattleSchema` (trap 5). e2e proves the full Clear → Save → reload round trip, including the roster section's empty state on reopen. |
+| AC5 — Clear touches cells only; the canvas survives | `BattleEditorView.test.tsx`: the roster list, the selected row and the battle name unchanged across a Clear (and, after review, that the Clear actually happened). `BattlePage.test.tsx`: trap 4's Population row still lists the SAME roster entries, each at 0, asserted by `aria-label`; a save after a Clear projects `organismIds: []` with a valid `gridState`, parsed through the real `BattleSchema` (trap 5). e2e proves the full Clear → Save → reload round trip, including the Conway's Classic re-seed on reopen (Sidiar's call, 2026-08-31). |
 | AC6 — the four inherited `deferred-work.md` entries | All four settled with evidence — see Debug Log 4. Two re-affirmed as-is (`:257` ratified, `:400` not this story's), one re-deferred with its premise re-checked (`:239`), one discharged (`:369`). No new entries were generated by this story. |
 | AC7 — keyboard, axe, bundle | Real `<button type="button">`, `:focus-visible` ring (trap 8 avoided — not `:focus-within`), reachable and operable by `Tab`/`Enter` (e2e). axe-clean on `/battle` and `/battle/new` with the Tools section present, across all four Playwright projects. Bundle re-measured — see Debug Log 5. |
 
