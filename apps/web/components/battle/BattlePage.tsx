@@ -726,10 +726,17 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     // message below) beats a hand-rolled generator nothing tests, whose output `BattleSchema.id`'s
     // `z.uuid()` would reject on the NEXT load — i.e. a save that appears to succeed and produces
     // an unopenable battle.
-    const id = existing?.id ?? crypto.randomUUID();
-    const createdAt = existing?.createdAt ?? now;
-
+    //
+    // Story 2.16 review: `crypto.randomUUID()` moved INSIDE `try` (it was above it). Outside, a
+    // throw here skipped the `catch`/`finally` entirely, leaving `savingRef`/`isSaving` stuck
+    // `true` forever — invisible with the old fire-and-forget `handleSave`, but `handleSaveAndLeave`
+    // now `await`s this function, so the same throw left `<UnsavedChangesDialog>` open with all
+    // three buttons `disabled` (guarded by `pending`) and the background `inert` — no escape short
+    // of a reload. The comment's own claim ("surfaces through AC5's generic message") was only true
+    // once the throw was inside `try`.
     try {
+      const id = existing?.id ?? crypto.randomUUID();
+      const createdAt = existing?.createdAt ?? now;
       // ⚠️ `battleName` raw, including `''` — `battleDisplayName`'s "Untitled Battle" is a DISPLAY
       // fallback and is never stored (createNewBattleDraft records why).
       const record = projectBattleForSave(grid, rosterIds, {

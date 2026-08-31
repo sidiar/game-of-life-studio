@@ -4,7 +4,7 @@ baseline_commit: 1548a522c0ef519669475a1479486ad1bf12b10f
 
 # Story 2.16: Back Navigation & Unsaved-Changes Guard
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -250,6 +250,54 @@ made to cover for each other** (trap 1).
         echo `$?`.
   - [x] `npm run bundle:check` — report gzip + headroom for all three routes against AC9.
   - [x] A local green `ci` is not proof CI is green — check `gh run list` after pushing.
+
+### Review Findings
+
+Three parallel adversarial layers (Blind Hunter — diff only; Edge Case Hunter — diff + repo;
+Acceptance Auditor — diff + this spec). Acceptance Auditor found zero AC violations (all nine ACs,
+all seven forced decisions and all eight AC8 deferred-work edits verified against the code, not
+taken on the Dev Agent Record's word). One genuine defect surfaced, fixed, and regression-tested;
+everything else was either an established precedent, an already-recorded and correctly-deferred
+gap, or a concern that did not hold up once checked against the code.
+
+- [x] **[Review][Patch] `crypto.randomUUID()` throwing before `saveBattle`'s `try` permanently
+  strands the edit lock and, via this story's new `handleSaveAndLeave`, the leave dialog itself**
+  [`apps/web/components/battle/BattlePage.tsx:729`] — Edge Case Hunter. Pre-existing placement
+  (Story 2.13): `const id = existing?.id ?? crypto.randomUUID();` sat *above* `saveBattle`'s
+  `try`/`catch`/`finally`, so a throw there (the code's own comment names the real trigger — a
+  static export opened over plain `http://` on a LAN IP is not a secure context) skipped `finally`
+  entirely, leaving `savingRef.current`/`isSaving` stuck `true` forever. Invisible with the old
+  fire-and-forget `handleSave`; newly reachable through this story's `handleSaveAndLeave`, which
+  `await`s the outcome — the throw left `<UnsavedChangesDialog>` open with all three buttons
+  `disabled` (guarded by `pending`) and the background `inert`, no escape short of a reload.
+  **Fixed:** `id`/`createdAt` computed inside `try`, so the existing `catch` → `setSaveError` →
+  `finally` path now runs. **Regression test added**
+  (`BattlePage.test.tsx`, `'a save that THROWS before the write (crypto.randomUUID unavailable)
+  does not strand the dialog'`) and mutation-checked — reverting the fix reddens it with the exact
+  bug shape (unhandled rejection, dialog never closes). Full `npm run ci` green after the fix
+  (919 unit/component tests, 344 e2e passed / 4 skipped, bundle unchanged: `/` 329.6 KB, `/battle`
+  304.8 KB, `/battle/new` 304.7 KB — matching the Dev Agent Record's own measurements exactly).
+
+Dismissed as noise, precedent-matched, or already correctly handled (not written to
+`deferred-work.md` — none rise above a documentation-only note, and re-litigating them there would
+be exactly the coverage-padding / non-actionable churn `docs/project-context.md` warns against):
+
+- Blind Hunter's "refused vs failed" `saveBattle()` ambiguity — already the story's own new
+  `deferred-work.md` entry (`:423`), unreachable today by construction, correctly deferred.
+- Blind Hunter's `useInertBackground` `MutationObserver` scope (`childList`+`subtree` on
+  `document.body`) — deliberate, documented (the fix for `:411`), cost bounded to a 3-child sweep.
+- Blind Hunter's `UnsavedChangesDialog`'s `color="error"` and the focus-restore
+  `closest('[role="dialog"]')` check — both byte-identical to `DeleteBattleDialog`'s established
+  idiom (Story 1.13), not new judgment calls.
+- Blind Hunter's bundle-dedup and "+0.5 KB" claims being unfalsifiable from the diff alone — the
+  Blind Hunter layer has no story-file access by design; independently re-measured above and
+  confirmed exact.
+- Blind Hunter's `BattleEditorView.test.tsx` "disables the footer while a save is in flight" test
+  asserting across two independent `render()` calls rather than one `rerender` — a minor test-style
+  nit, not a correctness gap; left as-is.
+- Edge Case Hunter's and Blind Hunter's speculative "does the App Router ever delay the unmount"
+  concerns on Discard/Save-and-leave — contradicted by Decision K (the battle route is a genuinely
+  separate page file; navigation is a real unmount) and by AC5's own e2e, which would catch it.
 
 ## Dev Notes
 
@@ -836,5 +884,6 @@ lifetime = undo lifetime"), which is what the test would catch if it ever stoppe
 |---|---|
 | 2026-08-31 | Story created (`create-story`). Status → ready-for-dev. |
 | 2026-08-31 | Implemented (`dev-story`): `useDirtyGuard`, `<SidebarFooter>`, `<UnsavedChangesDialog>`, the three leave handlers and the `saveBattle` extraction in `<BattlePage>`. `useInertBackground`'s one-shot snapshot fixed (`deferred-work.md:411`). All seven forced decisions taken as recommended; all seven inherited deferred entries settled; two new ones opened. `npm run ci` green; `/battle` 304.8 KB (5.2 KB headroom), no budget raised. Status → review. |
+| 2026-08-31 | Code review (`bmad-code-review`, three-layer adversarial): zero AC violations, zero decision-needed findings. One patch applied — `crypto.randomUUID()` moved inside `saveBattle`'s `try` so a throw (secure-context loss) no longer strands the edit lock / the new leave dialog; regression test added and mutation-checked. Everything else dismissed as precedent-matched, already correctly deferred, or contradicted by the code. `npm run ci` green post-fix (919 unit/component, 344 e2e / 4 skipped, bundle unchanged). Status → done. |
 
 Dev Model: opus   # architecture-shaping: it introduces the repo's first programmatic navigation (overturning Story 2.2's no-`useRouter` decision, which Epic 3's Run-mode Back and Epics 4/5's routes inherit) and the dirty-guard scope Story 4.23 must mirror, and it re-shapes Story 2.13's save path so a caller can act on the outcome

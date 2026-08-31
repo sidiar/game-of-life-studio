@@ -2541,6 +2541,41 @@ describe('BattlePage — back navigation & the unsaved-changes guard (Story 2.16
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
 
+  // Review regression (Story 2.16): `crypto.randomUUID()` used to sit ABOVE the `try` that
+  // `saveBattle` builds around the write, on `/battle/new` only (a loaded battle's `existing?.id`
+  // short-circuits it). A throw there skipped `catch`/`finally` entirely, leaving `savingRef`/
+  // `isSaving` stuck `true` forever — invisible with the old fire-and-forget `handleSave`, but
+  // `handleSaveAndLeave` now `await`s the outcome, so the same throw left `<UnsavedChangesDialog>`
+  // open with all three buttons `disabled` (guarded by `pending`) and the background `inert` — no
+  // escape short of a reload. This reddens on that placement and stays green with `id`/`createdAt`
+  // computed inside `try`.
+  it('a save that THROWS before the write (crypto.randomUUID unavailable) does not strand the dialog', async () => {
+    const user = userEvent.setup();
+    const repositories = createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY });
+    const randomUUID = vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
+      // The real-world trigger the code comment names: a static export opened over plain `http://`
+      // on a LAN IP is not a secure context, so `crypto.randomUUID` is `undefined` there — calling
+      // it throws a `TypeError`, not a rejection `saveBattle`'s own `await` would catch.
+      throw new TypeError('crypto.randomUUID is not a function');
+    });
+    const { container } = render(<BattlePage repositories={repositories} battleId="new" />);
+    await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
+
+    const dialog = await openGuard(user, container);
+    await user.click(within(dialog).getByRole('button', { name: 'Save & Leave' }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(router.push).not.toHaveBeenCalled();
+    expect(dirtyValue(container)).toBe('true');
+    // The bug shape: without the fix, the dialog stays open forever with every button disabled and
+    // the edit lock never releases.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(backButton()).toBeEnabled();
+
+    randomUUID.mockRestore();
+  });
+
   // Forced decision 3(a): the visible half of the edit lock. The dialog's own Save would be
   // refused by `savingRef` while another write is in flight, and would then close without
   // navigating — a false-success UI. Disabling the control removes the path entirely.
