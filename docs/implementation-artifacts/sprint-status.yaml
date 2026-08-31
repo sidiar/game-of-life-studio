@@ -80,7 +80,7 @@ development_status:
   2-13-save-battle: done
   2-14-edit-mode-grid-resize: done
   2-15-clear-petri-dish: done
-  2-16-back-navigation-unsaved-changes-guard: backlog
+  2-16-back-navigation-unsaved-changes-guard: done
   epic-2-retrospective: optional
 
   # Epic 3: Living Simulations (Play Mode & Engine)

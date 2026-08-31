@@ -1596,3 +1596,345 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     await expect.poll(async () => countChangedPixels(dish), { timeout: 2000 }).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Story 2.16 — back navigation and the unsaved-changes guard, end to end (AC1–AC7, AC9).
+ *
+ * The composed route is the only place the three mechanisms can be told apart: a real client
+ * navigation (which is what unmounts `<BattlePage>` and therefore what AC5's undo reset actually
+ * IS), a real MUI dialog with a real focus trap, and a real `beforeunload` listener.
+ */
+test.describe('back navigation & the unsaved-changes guard (Story 2.16)', () => {
+  const backButton = (page: Page): Locator => page.getByRole('button', { name: 'Back to Battles' });
+  const leaveDialog = (page: Page): Locator =>
+    page.getByRole('dialog', { name: 'Unsaved Changes' });
+
+  /**
+   * Dispatches a cancelable `beforeunload` and reports what the page's own listeners did with it
+   * (trap 3): whether the event was CANCELLED, and whether `preventDefault()` was the thing that
+   * cancelled it.
+   *
+   * ⚠️ Both, not just the first. `dispatchEvent` returning false is the effect a browser actually
+   * acts on, but it cannot mutation-check `preventDefault()` on its own: the legacy
+   * `event.returnValue = ''` the guard also writes (RFC-005 Decision 7's snippet carries both)
+   * cancels a plain `Event` by itself, in every engine in the matrix — measured here, not assumed,
+   * by deleting the `preventDefault()` call and watching all four projects stay green. Wrapping
+   * the method is what makes the modern half falsifiable.
+   *
+   * ❌ It does NOT try to observe the native dialog: a browser will not show one on a page the
+   * user has never interacted with (trap 2), so a test that loads a page, sets state
+   * programmatically and closes it proves nothing either way.
+   */
+  async function dispatchBeforeUnload(
+    page: Page,
+  ): Promise<{ cancelled: boolean; preventDefaultCalled: boolean }> {
+    return page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true });
+      let preventDefaultCalled = false;
+      const original = event.preventDefault.bind(event);
+      event.preventDefault = () => {
+        preventDefaultCalled = true;
+        original();
+      };
+      const cancelled = !window.dispatchEvent(event);
+      return { cancelled, preventDefaultCalled };
+    });
+  }
+
+  // AC2: the overwhelmingly common path.
+  test('a clean battle goes straight to the Gallery, with no dialog (AC1, AC2)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    await backButton(page).click();
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Battle Gallery');
+    await expect(page).toHaveURL('/');
+    // ⚠️ Asserted AFTER the navigation has landed, not immediately after the click: a dialog that
+    // opened and was then torn down by the navigation would slip past an eager check.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  // AC3: Cancel changes NOTHING — including the painted pixels, the dirty flag, and where focus is.
+  test('dirty → Cancel keeps the battle, the paint and the focus exactly where they were (AC3, AC6)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    await snapshotBaseline(dish);
+    const box = await dish.boundingBox();
+    if (box === null) throw new Error('the dish has no layout box');
+    await dish.click({ position: { x: box.width * 0.2, y: box.height * 0.2 } });
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+    const paintedPixels = await countChangedPixels(dish);
+    expect(paintedPixels).toBeGreaterThan(0);
+
+    await backButton(page).click();
+
+    const dialog = leaveDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('You have unsaved changes. Save before leaving?');
+    // Nothing has navigated: the editor is still behind the dialog.
+    await expect(page).toHaveURL(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+    // The paint survived — Cancel is not an undo.
+    expect(await countChangedPixels(dish)).toBe(paintedPixels);
+    // AC6: focus came back to the control that opened the dialog, not to <body>. Caught on the
+    // webkit and tablet projects and by nothing else.
+    await expect(backButton(page)).toBeFocused();
+  });
+
+  // AC6: Escape is Cancel — MUI v9 has no `disableEscapeKeyDown`, so it routes through the same
+  // `onClose` a backdrop click takes.
+  test('Escape closes the guard as a Cancel (AC6)', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Renamed');
+    await backButton(page).click();
+    await expect(leaveDialog(page)).toBeVisible();
+
+    await page.keyboard.press('Escape');
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Renamed');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+    await expect(backButton(page)).toBeFocused();
+  });
+
+  // AC3: Discard navigates and writes NOTHING — the stored record is byte-identical afterwards.
+  test('dirty → Discard leaves, and the stored battle is unchanged (AC3)', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const stored = () => page.evaluate((key) => localStorage.getItem(key), STORAGE_KEYS.battles);
+    const before = await stored();
+
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Discarded Rename');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+    await backButton(page).click();
+    await leaveDialog(page).getByRole('button', { name: 'Discard Changes' }).click();
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Battle Gallery');
+    await expect(page).toHaveURL('/');
+    // ⚠️ THE assertion: the same shape `createBattle.spec.ts` uses. A Discard that quietly saved
+    // would satisfy every navigation assertion above.
+    expect(await stored()).toBe(before);
+    await expect(page.getByRole('article').filter({ hasText: 'Discarded Rename' })).toHaveCount(0);
+  });
+
+  // AC3/AC7: Save & Leave through the guard mints the record on `/battle/new` and lands on a
+  // Gallery that lists it, with a live thumbnail — Story 2.13's path, reached from the dialog.
+  test('dirty → Save & Leave writes the battle and the Gallery lists it (AC3, AC7)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    // ⚠️ `seedWorkspaceIfFresh`, never `seedWorkspace`: this test SAVES and then navigates, and the
+    // shared seeder runs on every document load — it would overwrite the saved record on the way
+    // into the Gallery (Story 2.13 Debug Log 2).
+    await seedWorkspaceIfFresh(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    await page.getByRole('img', { name: /petri dish/i }).click();
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Saved On The Way Out');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+
+    await backButton(page).click();
+    await leaveDialog(page).getByRole('button', { name: 'Save & Leave' }).click();
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Battle Gallery');
+    await expect(page).toHaveURL('/');
+    await expect(page.getByRole('article')).toHaveCount(3);
+    const tile = page.getByRole('article').filter({ hasText: 'Saved On The Way Out' });
+    await expect(tile).toHaveCount(1);
+    // The record parsed back through `BattleSchema` — `<BattleTile>` only mounts a canvas once
+    // `battles.load(id)` has succeeded (M4: thumbnails are rendered on demand, never stored).
+    await expect(tile.locator('canvas')).toBeAttached();
+
+    expect(errors).toEqual([]);
+  });
+
+  /**
+   * AC5 (FR-3.8): "undo history resets when returning to the Battle Gallery". ⚠️ This is an
+   * assertion ABOUT THE NAVIGATION, not a feature: the ring lives in `<BattlePage>`'s state (AR-30,
+   * "component lifetime = undo lifetime") and `router.push('/')` unmounts it. ❌ No reset call
+   * exists anywhere; if this ever fails, the navigation stopped unmounting the page — which is the
+   * bug, not the missing reset.
+   */
+  test('returning to the Gallery resets the undo ring (AC5)', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const undo = page.getByRole('button', { name: 'Undo' });
+    await expect(undo).toBeDisabled();
+
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    const box = await dish.boundingBox();
+    if (box === null) throw new Error('the dish has no layout box');
+    await dish.click({ position: { x: box.width * 0.2, y: box.height * 0.2 } });
+    await expect(undo).toBeEnabled();
+
+    await backButton(page).click();
+    await leaveDialog(page).getByRole('button', { name: 'Discard Changes' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Battle Gallery');
+
+    await page.getByRole('link', { name: 'Three-Way Skirmish' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    // A fresh mount, a fresh ring — and a clean battle, because the paint was discarded.
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+  });
+
+  /**
+   * AC4, in both directions (trap 3). ⚠️ This does NOT try to observe the native dialog: a browser
+   * will not show one on a page the user has never interacted with (trap 2), so a test that loads
+   * a page, sets state programmatically and closes it proves nothing either way. What it observes
+   * is the guard's real effect — a cancelable `beforeunload` that a listener called
+   * `preventDefault()` on makes `dispatchEvent` return false.
+   *
+   * Mutation check: deleting `event.preventDefault()` from `useDirtyGuard` reddens the
+   * `preventDefaultCalled` assertion below; dropping the `!isDirty` early return reddens both
+   * clean halves.
+   */
+  test('beforeunload is guarded while dirty and inert when clean (AC4)', async ({ page }) => {
+    await seedWorkspaceIfFresh(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    // Clean on arrival: no listener, so nothing is cancelled and nothing prevents.
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+    expect(await dispatchBeforeUnload(page)).toEqual({
+      cancelled: false,
+      preventDefaultCalled: false,
+    });
+
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Guarded Battle');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+    expect(await dispatchBeforeUnload(page)).toEqual({
+      cancelled: true,
+      preventDefaultCalled: true,
+    });
+
+    // ...and a save disarms it, which is the half an "is it registered" test alone cannot show.
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+    expect(await dispatchBeforeUnload(page)).toEqual({
+      cancelled: false,
+      preventDefaultCalled: false,
+    });
+  });
+
+  // AC1/trap 9: the footer is not a fifth section. The heading structure is unchanged, and the
+  // "Back to Gallery" LINK is still absent from `/battle/new` — two different controls (trap 14).
+  test('the sidebar still has exactly four headings, and no Back-to-Gallery link (AC1)', async ({
+    page,
+  }) => {
+    await seedWorkspaceIfFresh(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    await expect(page.getByRole('complementary').getByRole('heading', { level: 2 })).toHaveText([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
+    await expect(backButton(page)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to Gallery' })).toHaveCount(0);
+  });
+
+  // AC9: a real `<button>`, keyboard-reachable, with a visible focus ring. ⚠️ Like the Story 2.15
+  // assertion it mirrors, a programmatic `.focus()` matches `:focus`, `:focus-within` and
+  // `:focus-visible` alike, so this cannot tell those apart — see deferred-work.md. What it proves
+  // is that the control takes focus and that Enter reaches the guard.
+  test('BACK TO BATTLES is keyboard-operable and shows a focus ring (AC9)', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const back = backButton(page);
+    await back.focus();
+    await expect(back).toBeFocused();
+    await expect(back).toHaveCSS('outline-style', 'solid');
+
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Battle Gallery');
+  });
+
+  test('has no axe accessibility violations with the footer present, on /battle (AC9)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(backButton(page)).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('has no axe accessibility violations with the footer present, on /battle/new (AC9)', async ({
+    page,
+  }) => {
+    await seedWorkspaceIfFresh(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+    await expect(backButton(page)).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('has no axe accessibility violations with the guard open (AC6)', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Axe Scan');
+    await backButton(page).click();
+
+    // THREE waits, not one — the pattern `deleteBattle.spec.ts` established: `toBeVisible()` passes
+    // the instant the element has a box, well before MUI's Fade settles, and `Button`'s own
+    // background/colour transition is UNSYNCHRONISED with that Fade. Scanning between the two
+    // settle points makes axe compute colour-contrast against blended, transitional colours.
+    const dialog = leaveDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveCSS('opacity', '1');
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});
