@@ -682,7 +682,12 @@ claude-opus-5 (Claude Opus 5)
    effect of adding modules to the graph at all; only ~0.6 KB is the `next/dynamic` boundary.
    Recorded in `deferred-work.md` as a decision for Sidiar (raise to 340, or put
    `<DeleteBattleDialog>` behind the same `next/dynamic` shape this story just proved) rather than
-   acted on unilaterally.
+   acted on unilaterally. **Resolved 2026-08-31: Sidiar raised the home budget 330 -> 340 KB**
+   (`check-bundle-size.mjs`), leaving 10.5 KB headroom. Worth knowing for the next raise: the
+   standing `ceil((measured + 12) / 5) * 5` formula gives **345**, not 340 — the 340 figure
+   originated as an arithmetic slip in the deferred-work entry, and Sidiar then chose it
+   deliberately. The `<DeleteBattleDialog>` option is untaken and still the better lever if the
+   home route needs real relief rather than a larger number.
 
 3. **`deferred-work.md:75`'s premise was wrong, and this story is the evidence.** The entry says
    2.14 is "the first story to call `resize()` with a genuinely new size". It is not, and no such
@@ -788,7 +793,7 @@ no change to `battleRecord.ts` or `<BattlePage>`.
 | `npm run ci` (redirected to a file, `$?` echoed — never piped) | ✅ **exit 0** — typecheck → lint → format:check → spec:check → test:coverage → build:standalone → bundle:check → e2e, all green |
 | unit/component | ✅ **52 files, 839 tests passed** (`apps/web`), plus `@gol/domain` 6, `@gol/persistence` 7, `@gol/test-utils` 5 |
 | e2e | ✅ **268 passed, 4 skipped**, across all four Playwright projects (chromium, firefox, webkit, tablet) |
-| `npm run bundle:check` | `/` **329.5 KB** gzip (0.5 KB headroom, budget 330) · `/battle` **304.1 KB** (5.9 KB, budget 310) · `/battle/new` **304.1 KB** (5.9 KB, budget 310). ⚠️ **No budget raised** — see Debug Log 1 and 2. |
+| `npm run bundle:check` | `/` **329.5 KB** gzip (10.5 KB headroom, budget 340 — raised from 330 by Sidiar 2026-08-31, after the run below measured 0.5 KB against the old budget) · `/battle` **304.1 KB** (5.9 KB, budget 310) · `/battle/new` **304.1 KB** (5.9 KB, budget 310). The `/battle` budget was **not** raised — see Debug Log 1 and 2. |
 | `npm run spec:check` | ✅ all 161 cited ids resolve; 3/6 reconciliation citations resolve |
 
 ⚠️ A local green `ci` is not proof CI is green — check `gh run list` after the push.
