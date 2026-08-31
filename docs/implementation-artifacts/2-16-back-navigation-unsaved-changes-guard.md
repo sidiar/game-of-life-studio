@@ -887,3 +887,18 @@ lifetime = undo lifetime"), which is what the test would catch if it ever stoppe
 | 2026-08-31 | Code review (`bmad-code-review`, three-layer adversarial): zero AC violations, zero decision-needed findings. One patch applied — `crypto.randomUUID()` moved inside `saveBattle`'s `try` so a throw (secure-context loss) no longer strands the edit lock / the new leave dialog; regression test added and mutation-checked. Everything else dismissed as precedent-matched, already correctly deferred, or contradicted by the code. `npm run ci` green post-fix (919 unit/component, 344 e2e / 4 skipped, bundle unchanged). Status → done. |
 
 Dev Model: opus   # architecture-shaping: it introduces the repo's first programmatic navigation (overturning Story 2.2's no-`useRouter` decision, which Epic 3's Run-mode Back and Epics 4/5's routes inherit) and the dirty-guard scope Story 4.23 must mirror, and it re-shapes Story 2.13's save path so a caller can act on the outcome
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 26s | 24 | 2,458 | 9,658 | 487,248 | 499,388 |
+| Step 1 — create-story | opus-5 | 1 | 12m 05s | 254 | 14,179 | 550,296 | 18,057,307 | 18,622,036 |
+| Step 2 — dev-story | opus-5 | 1 | 32m 04s | 408 | 68,594 | 545,076 | 42,644,445 | 43,258,523 |
+| Step 3 — code review + PR | sonnet-5 | 4 | 48m 31s | 764 | 28,087 | 1,159,717 | 39,174,347 | 40,362,915 |
+| _of which the orchestrator_ | opus-5 | — | — | 116 | 23,151 | 48,748 | 2,981,204 | 3,053,219 |
+| **Total (create-story → PR ready)** | | 6 | **1h 33m** | 1,450 | 113,318 | 2,264,747 | 100,363,347 | **102,742,862** |
+
+Run started 2026-08-31 15:27 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
