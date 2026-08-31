@@ -734,3 +734,18 @@ verified with a test rather than assumed unaffected.
 | 2026-08-31 | Code review (`bmad-code-review`, Opus, 3 adversarial layers). 11 patches applied in a second commit — chiefly `BattleEditorView.clearGuards.test.tsx`, which makes `handleClear`'s two guards falsifiable at all (deleting them left the whole suite green). 3 items deferred. **1 `decision-needed` open** (Clear → Save → reload seeds Conway's Classic into a battle that never held it; the e2e that denies it cannot reproduce production). Status stays `review` pending Sidiar's call. |
 
 Dev Model: sonnet   # follows the Epic 2 sidebar-section + one-commit-seam patterns end to end; the dialog/bundle decision that made 2.14 architecture-shaping is absent here (FR-3.7 requires no confirmation), and no later story inherits a new pattern from it
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 29s | 30 | 3,434 | 14,775 | 605,088 | 623,327 |
+| Step 1 — create-story | opus-5 | 1 | 8m 23s | 214 | 16,543 | 543,815 | 10,784,051 | 11,344,623 |
+| Step 2 — dev-story | sonnet-5 | 1 | 32m 51s | 592 | 18,049 | 847,676 | 65,854,365 | 66,720,682 |
+| Step 3 — code review + PR | opus-5 | 4 | 39m 23s | 1,616 | 104,452 | 1,243,021 | 167,667,862 | 169,016,951 |
+| _of which the orchestrator_ | opus-5 | — | — | 80 | 14,035 | 53,310 | 1,923,037 | 1,990,462 |
+| **Total (create-story → PR ready)** | | 6 | **1h 21m** | 2,452 | 142,478 | 2,649,287 | 244,911,366 | **247,705,583** |
+
+Run started 2026-08-31 10:50 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
