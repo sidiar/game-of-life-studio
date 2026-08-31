@@ -1395,7 +1395,7 @@ test.describe('edit-mode grid resize (Story 2.14)', () => {
 });
 
 /**
- * Story 2.15 — Clear Petri Dish, end to end (AC1, AC2, AC3, AC4, AC6, AC7).
+ * Story 2.15 — Clear Petri Dish, end to end (AC1, AC2, AC3, AC4, AC5, AC7).
  *
  * The composed route is where the Clear -> Save -> reload consequence (trap 5: `organismIds: []`
  * survives the real schema and the roster section really does reach its empty state) is provable
@@ -1431,6 +1431,15 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     // The dish moved away from the painted baseline — the organisms' cells are gone.
     const clearedPixels = await countChangedPixels(dish);
     expect(clearedPixels).toBeGreaterThan(0);
+    // ⚠️ Story 2.15 review: `clearedPixels > 0` alone says the dish CHANGED, not that it is empty
+    // — a clear that zeroed only the first row would satisfy it, and the undo check below is
+    // relative to the same number, so it would stay self-consistent under that bug. The status
+    // bar's own count is the assertion that says "empty".
+    await expect(
+      page
+        .getByRole('region', { name: 'Battle statistics' })
+        .getByRole('group', { name: 'Living Cells: 0' }),
+    ).toBeVisible();
     await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
     // ONE commit, therefore ONE ring entry.
     await expect(undo).toBeEnabled();
@@ -1547,9 +1556,13 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     expect(violations).toEqual([]);
   });
 
-  // AC7: keyboard-operable with a visible focus ring — the same convention
-  // `battleRoute.spec.ts`'s other focus-ring assertions use (:focus-visible, not :focus-within —
-  // trap 8).
+  // AC7: keyboard-operable with a visible focus ring.
+  //
+  // ⚠️ Story 2.15 review, on what this does and does NOT prove. A programmatic `.focus()` matches
+  // `:focus`, `:focus-within` and `:focus-visible` alike, so this cannot tell trap 8's substitution
+  // apart — swapping the rule to `:focus-within` leaves it green. It also proves nothing about tab
+  // ORDER. What it does prove is that the control takes focus and that Enter reaches `onClear`.
+  // The modality-sensitive half is recorded in deferred-work.md rather than faked here.
   test('CLEAR PETRI DISH is keyboard-reachable and shows a visible focus ring (AC7)', async ({
     page,
   }) => {

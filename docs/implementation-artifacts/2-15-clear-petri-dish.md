@@ -496,6 +496,106 @@ Conventions that apply and are easy to violate here:
 - [Source: docs/project-context.md] — the load-bearing non-obvious rules (auto-loaded by BMad
   skills; not restated here beyond the ones this story can actually trip).
 
+### Review Findings
+
+Code review, 2026-08-31, on **Opus** against a **Sonnet** implementation — three parallel
+adversarial layers (Blind Hunter · Edge Case Hunter · Acceptance Auditor), all three of which
+independently reached the handler-guard finding below. `npm run ci` re-run from scratch by the
+reviewer: **exit 0** (865 unit/component, 296 e2e + 4 pre-existing skips), and the bundle
+independently re-measured at the numbers Debug Log 5 reports.
+
+**decision-needed** — unresolved; this is why the story is not `done`:
+
+- [ ] [Review][Decision] **Clear → Save → reload puts Conway's Classic into a battle that never
+  contained it, and the e2e that says otherwise cannot show it** — AC5/trap 5 states the
+  downstream consequence as *"`rosterIds` is empty, so `resolveSelectedTool` returns the eraser and
+  the roster section shows its empty state."* In a **production** workspace that is false.
+  `<BattlePage>`'s `rosterIds` memo seeds `[DEFAULT_TOOL.organismId]` whenever
+  `placed.length === 0 && defaultInLibrary`, and `lib/tool.ts` states *"Conway's Classic is always
+  present in a production workspace (M9: protected, re-seeded after import)"* — so reopening a
+  cleared-and-saved battle lists **and pre-selects** Conway's Classic. That is verbatim the symptom
+  `tool.ts`'s own comment was written against (*"opening a battle with three organisms and finding
+  Conway's Classic listed"*) and that Story 2.9 forced decision 4 narrowed the seed to avoid. The
+  seed's own comment does anticipate *"a saved battle H.1 pruned to nothing"* — but until this
+  story that state took erasing every cell by hand; Clear makes it one click, which is what turns
+  an edge case into the normal path. The e2e (`battleRoute.spec.ts`, Clear → Save → reload) asserts
+  `getByRole('list')).toHaveCount(0)` and `Eraser` pressed, and passes **only because the test
+  fixture library has no Conway's Classic** (`buildSeedPayload` → `createMockWorkspace`, and
+  `seedWorkspaceIfFresh` stamps `gol:schema` so the default seed cannot add it) — it proves an
+  outcome production cannot reach. Not auto-resolved: both readings are defensible and the choice
+  is Decision H / Story 2.9 forced decision 4 territory, not a story-level call.
+  **(a)** The production behaviour is right — a battle with nothing placed must stay paintable —
+  so correct trap 5's text and make the e2e assert the seeded outcome by calling
+  `seedConwaysClassic`. **(b)** The seed should apply to `/battle/new` only; an existing saved
+  battle pruned to nothing keeps an honestly empty roster and the eraser, and Story 2.10's add
+  dropdown is what makes it paintable again.
+
+**patch** — applied in this review's own commit:
+
+- [x] [Review][Patch] Neither half of `handleClear`'s guard was covered: deleting
+  `if (stats.livingCells === 0 || isSaving) return;` outright left all 136 `BattleEditorView` +
+  `BattlePage` tests green (verified by mutation, three ways). React never invokes `onClick` on a
+  disabled `<button>`, so every test driving the real control measures the `disabled` expression
+  and never the handler — including the trap-6 test whose comment claimed the opposite about
+  `fireEvent`. New `apps/web/components/battle/BattleEditorView.clearGuards.test.tsx` mocks the
+  control down to an enabled button; each guard now reddens independently. The two false comments
+  are corrected in place, including the "same-tick race" justification, which was wrong — both
+  guards read the same render's values the `disabled` expression reads.
+- [x] [Review][Patch] `'leaves the roster, selection and battle name UNTOUCHED across a Clear'`
+  passed on a `handleClear` that did nothing at all — `<BattleEditorView>` is controlled, so
+  "untouched" was vacuous. Now asserts the commit happened.
+  [apps/web/components/battle/BattleEditorView.test.tsx]
+- [x] [Review][Patch] The `BattlePage` AC3 test promised a click in its title and never dispatched
+  one. [apps/web/components/battle/BattlePage.test.tsx]
+- [x] [Review][Patch] Trap 4's test asserted only that the word "Population" was present —
+  `<EditorStatusBar>` renders that label in **both** branches, so it passed either way. Now reads
+  the entries' `aria-label`s and asserts the same organisms, each at 0.
+  [apps/web/components/battle/BattlePage.test.tsx]
+- [x] [Review][Patch] `clearGrid` allocating from `width * height` rather than
+  `grid.occupant.length` was pinned by nothing — every input, fast-check included, had the two
+  equal. Added an over-allocated-input case; `gridStats.ts`'s comment is explicit that
+  `RenderableGrid` does not guarantee they agree. [apps/web/lib/clearGrid.test.ts]
+- [x] [Review][Patch] The e2e asserted `clearedPixels > 0`, which says the dish CHANGED, not that
+  it is empty — a clear that zeroed one row would pass, and the undo check is relative to the same
+  number. Added the status bar's `Living Cells: 0`. [apps/web/e2e/battleRoute.spec.ts]
+- [x] [Review][Patch] `<EditorToolsSection>`'s style docblock named the enabled pair as
+  `--gol-text-primary`-on-transparent; the resting colour is `--gol-text-secondary` and
+  `--gol-text-primary` is the hover state. [apps/web/components/battle/EditorToolsSection.tsx]
+- [x] [Review][Patch] The same file's header said *"the MVP ships ONE (spec §9.3)"*; §3.7 says the
+  MVP ships **two** of four and §9.3 excludes only the other pair — this STORY ships one.
+  [apps/web/components/battle/EditorToolsSection.tsx]
+- [x] [Review][Patch] `BattleEditorViewProps`' comment still listed `<EditorToolsSection>` among
+  "the remaining sidebar sections" after it landed. [apps/web/components/battle/BattleEditorView.tsx]
+- [x] [Review][Patch] Describe headers advertised ACs they do not test (the unit block claimed AC5
+  and AC7; the e2e block claimed AC6 and not AC5). Trimmed to what each covers.
+- [x] [Review][Patch] Dev Agent Record corrections: AC5's evidence row cited `BattlePage.test.tsx`
+  for assertions that live in `BattleEditorView.test.tsx` and claimed an `isSaving`-unchanged
+  assertion that does not exist; the File List said 7 tests where there are 6, and
+  `ready-for-dev → review` where the tracker went `backlog → review`.
+
+**defer** — recorded in `deferred-work.md` under
+`## Deferred from: code review of 2-15-clear-petri-dish (2026-08-31)`:
+
+- [x] [Review][Defer] CLEAR self-disables on its own activation, blurring focus to `<body>` so the
+  next Tab restarts at the top of the document — deferred, pre-existing route pattern (UNDO and
+  SAVE have had the same shape since 2.8/2.13); worth fixing once for all three, and the
+  `aria-disabled` alternative is a route-wide convention change that is Sidiar's call.
+- [x] [Review][Defer] The focus-ring e2e cannot distinguish `:focus-visible` from `:focus-within`
+  under a programmatic `.focus()`, and proves nothing about tab order — deferred, needs a shared
+  modality-aware helper rather than an inline one-off. (Its comment's claim to follow an existing
+  convention was false and is corrected in place — it is the only `outline-style` assertion in the
+  whole `e2e/` tree.)
+- [x] [Review][Defer] No `<PetriDishCanvas>` test pins a Clear specifically — deferred; the dev's
+  source-agnostic argument holds and was re-checked, but pointer-capture release is asserted only
+  on the palette path and "no renderer reconstruction on a same-dimension identity swap" is pinned
+  nowhere. Gaps in a shared describe, not in this story's code.
+
+**dismissed as noise (5):** the absence of a confirmation dialog (settled — FR-3.7 asks for none);
+"Clear → Save discards the roster silently" (Decision H.1, specified); `EditorToolsSectionProps`
+exported but unimported (file-wide convention, matches `GridSettingsSectionProps`); the header
+docblock not being attached to the component symbol (matches `SidebarSection.tsx`,
+`GridSettingsSection.tsx`); the AC4 e2e absence guard being name-only (the unit tests count).
+
 ## Dev Agent Record
 
 ### Agent Model Used
@@ -571,7 +671,7 @@ claude-sonnet-5 (Claude Sonnet 5)
 | AC2 — ONE undoable commit, marks dirty | `handleClear` calls `onCommitGrid(clearGrid(grid))` exactly once. `BattleEditorView.test.tsx`'s Clear describe asserts one call, an all-zero grid, the SAME dimensions, and a NEW identity. `BattlePage.test.tsx` asserts `data-dirty` flips and UNDO becomes enabled exactly once; UNDO restores the painted cells. The e2e journey proves it with a real pointer and real layout. |
 | AC3 — already-empty grid: no-op | `stats.livingCells === 0` guards both the control's `disabled` and the handler. Component test: zero `onCommitGrid` calls on an empty grid. `BattlePage.test.tsx` and the e2e both cover the `/battle/new` case. |
 | AC4 — Export absent, Reset-to-Saved/Randomize excluded | Asserted by NAME in `EditorToolsSection.test.tsx`, `BattleEditorView.test.tsx` and the e2e — one button, nothing else, everywhere the Tools section renders. |
-| AC5 — Clear touches cells only; the canvas survives | `BattlePage.test.tsx`: `rosterIds`/roster list/selected tool/battle name/`isSaving` all unchanged across a Clear (trap 4's Population row still lists the roster at 0, asserted directly); a save after a Clear projects `organismIds: []` with a valid `gridState`, parsed through the real `BattleSchema` (trap 5). e2e proves the full Clear → Save → reload round trip, including the roster section's empty state on reopen. |
+| AC5 — Clear touches cells only; the canvas survives | `BattleEditorView.test.tsx`: the roster list, the selected row and the battle name unchanged across a Clear (and, after review, that the Clear actually happened). `BattlePage.test.tsx`: trap 4's Population row still lists the SAME roster entries, each at 0, asserted by `aria-label`; a save after a Clear projects `organismIds: []` with a valid `gridState`, parsed through the real `BattleSchema` (trap 5). e2e proves the full Clear → Save → reload round trip, including the roster section's empty state on reopen. |
 | AC6 — the four inherited `deferred-work.md` entries | All four settled with evidence — see Debug Log 4. Two re-affirmed as-is (`:257` ratified, `:400` not this story's), one re-deferred with its premise re-checked (`:239`), one discharged (`:369`). No new entries were generated by this story. |
 | AC7 — keyboard, axe, bundle | Real `<button type="button">`, `:focus-visible` ring (trap 8 avoided — not `:focus-within`), reachable and operable by `Tab`/`Enter` (e2e). axe-clean on `/battle` and `/battle/new` with the Tools section present, across all four Playwright projects. Bundle re-measured — see Debug Log 5. |
 
@@ -614,15 +714,16 @@ verified with a test rather than assumed unaffected.
   (the `❌ No Tools section (2.15)` line deleted).
 - `apps/web/components/battle/BattleEditorView.test.tsx` — the heading-order assertion extended to
   four sections; the two pre-existing button-presence/count assertions updated for the new control;
-  a new "Clear Petri Dish (Story 2.15)" describe block (7 tests).
+  a new "Clear Petri Dish (Story 2.15)" describe block (6 tests — the record said 7).
 - `apps/web/components/battle/BattlePage.test.tsx` — two pre-existing button-count assertions
   updated for the new control; a new "Clear Petri Dish (Story 2.15)" describe block (6 tests).
 - `apps/web/e2e/battleRoute.spec.ts` — the pre-existing sidebar heading-order assertion extended to
   four headings; a new "Clear Petri Dish (Story 2.15)" describe block (7 tests).
 - `docs/implementation-artifacts/deferred-work.md` — the four AC6 entries settled in place (no new
   heading added — nothing new surfaced).
-- `docs/implementation-artifacts/sprint-status.yaml` — `2-15-clear-petri-dish`: `ready-for-dev` →
-  `review`.
+- `docs/implementation-artifacts/sprint-status.yaml` — `2-15-clear-petri-dish`: `backlog` →
+  `review` (the tracker never held `ready-for-dev`; the Change Log row records the story file's
+  own status, not the tracker's).
 
 ### Change Log
 
@@ -630,5 +731,6 @@ verified with a test rather than assumed unaffected.
 |---|---|
 | 2026-08-31 | Story created (`create-story`). Status → ready-for-dev. |
 | 2026-08-31 | Implemented (`dev-story`): `<EditorToolsSection>` + `clearGrid.ts`, wired as the fourth sidebar section; all 4 inherited `deferred-work.md` entries settled; `npm run ci` green (865 unit/component tests, 296 e2e); bundle re-measured, no budget raise. Status → review. |
+| 2026-08-31 | Code review (`bmad-code-review`, Opus, 3 adversarial layers). 11 patches applied in a second commit — chiefly `BattleEditorView.clearGuards.test.tsx`, which makes `handleClear`'s two guards falsifiable at all (deleting them left the whole suite green). 3 items deferred. **1 `decision-needed` open** (Clear → Save → reload seeds Conway's Classic into a battle that never held it; the e2e that denies it cannot reproduce production). Status stays `review` pending Sidiar's call. |
 
 Dev Model: sonnet   # follows the Epic 2 sidebar-section + one-commit-seam patterns end to end; the dialog/bundle decision that made 2.14 architecture-shaping is absent here (FR-3.7 requires no confirmation), and no later story inherits a new pattern from it

@@ -2237,6 +2237,7 @@ describe('BattlePage — Clear Petri Dish (Story 2.15)', () => {
   });
 
   it('on an already-empty grid, the control is disabled and Undo stays disabled after a click (AC3)', async () => {
+    const user = userEvent.setup();
     enableCanvasRendering();
     installPerCanvasRecording();
     // /battle/new is a freshly-seeded, empty grid.
@@ -2245,6 +2246,13 @@ describe('BattlePage — Clear Petri Dish (Story 2.15)', () => {
 
     expect(livingCellsFact()).toBe('Living Cells: 0');
     expect(clearButton()).toBeDisabled();
+
+    // ⚠️ Story 2.15 review: this test's title promised a click and the body never dispatched one.
+    // The click is a no-op against the disabled control by design — but "nothing happened" is the
+    // claim, so something has to be attempted for the assertions below to be about anything.
+    await user.click(clearButton());
+
+    expect(livingCellsFact()).toBe('Living Cells: 0');
     expect(dirtyValue(container)).toBe('false');
     expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
   });
@@ -2260,12 +2268,23 @@ describe('BattlePage — Clear Petri Dish (Story 2.15)', () => {
 
     const statsRegion = screen.getByRole('region', { name: 'Battle statistics' });
     expect(within(statsRegion).queryByText('Population')).toBeInTheDocument();
+    const namesBefore = within(statsRegion)
+      .getAllByRole('img')
+      .map((entry) => entry.getAttribute('aria-label')?.replace(/: \d+$/, ''));
+    expect(namesBefore.length).toBeGreaterThan(0);
 
     await user.click(clearButton());
 
-    // Still a named "Population" group with entries reading 0 — not the empty-roster placeholder.
-    expect(within(statsRegion).getByText('Population')).toBeInTheDocument();
+    // ⚠️ Story 2.15 review: `getByText('Population')` alone passes in BOTH branches —
+    // `<EditorStatusBar>` renders that label for the placeholder too — so the entries themselves
+    // have to be read. THE SAME organisms, each now at 0: that is trap 4's actual claim, and the
+    // thing a later story might "fix" by collapsing the row.
     expect(within(statsRegion).queryByLabelText(/population: none/i)).toBeNull();
+    expect(
+      within(statsRegion)
+        .getAllByRole('img')
+        .map((entry) => entry.getAttribute('aria-label')),
+    ).toEqual(namesBefore.map((name) => `${name}: 0`));
   });
 
   /** Mirrors `describe('BattlePage — saving (Story 2.13)')`'s own `savedRecord` — the record

@@ -53,9 +53,10 @@ const ResizeClipWarningDialog = dynamic(() => import('./ResizeClipWarningDialog'
 // Spec §3.3's ~13-prop interface. Story 2.14 adds NOTHING to it: the resize is derived from
 // `grid` and committed through the existing `onCommitGrid` seam, so <GridSettingsSection> and its
 // confirm dialog need no new input from <BattlePage> (see the resize handler below, and the ❌ in
-// this component's own doc comment). The remaining sidebar sections (<EditorToolsSection> 2.15,
-// <SidebarFooter> 2.16) bring whatever they need with them — declaring their props now would be an
-// unverifiable claim this story cannot back up.
+// this component's own doc comment). Story 2.15 adds nothing to it either, on the same reasoning:
+// <EditorToolsSection> derives its `disabled` and its guards from `grid` and `isSaving`, both
+// already here. The one remaining sidebar section (<SidebarFooter> 2.16) brings whatever it needs
+// with it — declaring its props now would be an unverifiable claim this story cannot back up.
 export interface BattleEditorViewProps {
   grid: RenderableGrid;
   size: { cols: number; rows: number };
@@ -775,13 +776,20 @@ export default function BattleEditorView({
    *
    * Forced decision 1, option (a): the already-empty guard lives HERE too, belt-and-braces with
    * the control's own `disabled` — an equal-but-new grid is not a harmless no-op (it would push an
-   * undo entry and set `isDirty`, a user-visible lie about unsaved work), and `stats.livingCells`
-   * is a render-time value a same-tick commit could otherwise race past.
+   * undo entry and set `isDirty`, a user-visible lie about unsaved work).
    *
-   * `isSaving` guarded here for the identical reason `handleConfirmResize` carries one (trap 6): a
-   * save can start after the render that disabled the button, and `<BattlePage>`'s
-   * `handleCommitGrid` would silently no-op under `savingRef` without this — a click that appears
-   * to do nothing rather than one that is genuinely inert.
+   * `isSaving` guarded here for the same reason `handleConfirmResize` carries one (trap 6):
+   * `<BattlePage>`'s `handleCommitGrid` refuses under `savingRef` silently, so without this the
+   * click would look like it worked rather than being genuinely inert.
+   *
+   * ⚠️ Story 2.15 review (2026-08-31): both guards read the SAME render's values the `disabled`
+   * expression below reads, and React never invokes `onClick` on a disabled `<button>` — so
+   * neither guard can be entered through the real control, and neither closes the same-tick
+   * `savingRef`-vs-`isSaving` window `<BattlePage>`'s own ref exists for. They are belt to the
+   * control's braces (forced decision 1), nothing more, and the earlier claim that
+   * `stats.livingCells` could be "raced past" here was wrong. `BattleEditorView.clearGuards.test.tsx`
+   * mocks the control down to an enabled button so this code is reachable, and therefore
+   * falsifiable, at all.
    */
   const handleClear = useCallback(() => {
     if (stats.livingCells === 0 || isSaving) return;

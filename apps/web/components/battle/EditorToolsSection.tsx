@@ -7,7 +7,8 @@ import { styled } from '@mui/material/styles';
  * derivation of its own — it receives one callback and one flag and renders one button.
  *
  * The mockup's Tools section ships FOUR buttons (`petri-dish-lab-mode.html:407-421`, markup
- * `:727-733`); the MVP ships ONE (spec §9.3):
+ * `:727-733`); spec §3.7 keeps TWO for the MVP and §9.3 excludes the other pair. This story ships
+ * the first of the two:
  * - "EXPORT BATTLE" is Epic 5 (FR-6.1/7.13) — absent → not rendered (NFR-4.1). Forced decision 3:
  *   `onExport?()` is NOT declared on these props yet — Story 5.6 adds it when it has something to
  *   pass, following the precedent Story 2.14 set for the other direction ("the remaining sidebar
@@ -28,10 +29,11 @@ import { styled } from '@mui/material/styles';
  * 1.4.11's 3:1 applies — `themeTokens.test.ts` asserts the split exists precisely so it keeps
  * being used.
  *
- * ❌ **No `transition`** (trap 9). Enabled and disabled are two different validated colour pairs
- * (`--gol-text-primary`-on-transparent vs. `--gol-action-disabled`-on-`--gol-action-disabled-bg`),
- * and Stories 2.13/2.14 each lost a transition here to an axe scan that landed mid-fade and
- * measured an ENABLED control at a ratio no settled state ever has.
+ * ❌ **No `transition`** (trap 9). The three settled states are three different validated colour
+ * pairs — resting `--gol-text-secondary`-on-transparent, hover `--gol-text-primary`-on-
+ * `--gol-bg-hover`, disabled `--gol-action-disabled`-on-`--gol-action-disabled-bg` — and Stories
+ * 2.13/2.14 each lost a transition here to an axe scan that landed mid-fade and measured a control
+ * at a ratio no settled state ever has.
  */
 const ToolButton = styled('button')({
   width: '100%',

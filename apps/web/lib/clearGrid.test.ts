@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { clearGrid } from './clearGrid';
 
-// Grid dimensions are parameters, never constants (project-context) — a size that is neither
-// editable preset, matching resizeGrid.test.ts's own convention for the same reason.
+// Grid dimensions are parameters, never constants (project-context), so most cases below use a
+// size that is NEITHER editable preset — matching resizeGrid.test.ts's own convention, and for the
+// same reason. The two preset sizes get one case of their own further down.
 function makeGrid(width: number, height: number, occupant: readonly number[]): RenderableGrid {
   return {
     width,
@@ -64,6 +65,28 @@ describe('clearGrid', () => {
     expect(cleared).not.toBe(grid);
     expect(cleared.occupant).not.toBe(grid.occupant);
     expect(cleared.age).not.toBe(grid.age);
+  });
+
+  /**
+   * ⚠️ Story 2.15 review. Every other case here builds `occupant` at exactly `width * height`, so
+   * `new Uint8Array(grid.occupant.length)` passed all of them — the allocation was never actually
+   * pinned to the DIMENSIONS. `gridStats.ts`'s own comment is explicit that `RenderableGrid` does
+   * not guarantee the two agree, and a producer that over-allocates would put cells outside the
+   * visible grid into circulation with every test still green. An over-allocated input is the only
+   * shape that tells the two allocations apart.
+   */
+  it('allocates from width * height, NOT from the input buffers lengths', () => {
+    const grid: RenderableGrid = {
+      width: 3,
+      height: 2,
+      occupant: Uint8Array.from([1, 1, 1, 1, 1, 1, 1, 1, 1, 1]), // 10, deliberately not 3 * 2
+      age: Uint16Array.from([1, 1, 1, 1, 1, 1, 1, 1]), // 8, deliberately not 3 * 2
+    };
+
+    const cleared = clearGrid(grid);
+
+    expect(cleared.occupant.length).toBe(6);
+    expect(cleared.age.length).toBe(6);
   });
 
   it('clears both editable preset sizes (Decision A.2)', () => {

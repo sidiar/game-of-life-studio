@@ -1187,11 +1187,17 @@ describe('BattleEditorView — edit-mode grid resize (Story 2.14)', () => {
 });
 
 /**
- * Story 2.15 — Clear Petri Dish (AC1, AC2, AC3, AC5, AC7).
+ * Story 2.15 — Clear Petri Dish (AC1, AC2, AC3).
  *
  * The matrix the story asks for: a populated grid clears in ONE `onCommitGrid` call carrying an
  * all-zero grid of the SAME dimensions; an already-empty grid calls it ZERO times; the roster,
  * selection and name field are untouched across a Clear.
+ *
+ * ⚠️ These tests drive the REAL control, so each of them measures the `disabled` expression, not
+ * `handleClear`'s own guards — React never invokes `onClick` on a disabled `<button>`. The guards
+ * themselves are pinned in `BattleEditorView.clearGuards.test.tsx` (Story 2.15 review). AC5's save
+ * projection and AC7's axe pass live in `BattlePage.test.tsx` and `e2e/battleRoute.spec.ts`
+ * respectively — this block does not cover them and no longer claims to.
  */
 describe('BattleEditorView — Clear Petri Dish (Story 2.15)', () => {
   function clearButton() {
@@ -1240,11 +1246,15 @@ describe('BattleEditorView — Clear Petri Dish (Story 2.15)', () => {
   });
 
   // Trap 6 / the edit lock's visible half — mirrors <GridSettingsSection>'s and
-  // <BattleNameField>'s isSaving treatment. `fireEvent.click` (not `userEvent`), because a real
-  // `disabled` attribute already stops `userEvent` from dispatching at all — this proves the
-  // HANDLER's own `isSaving` guard (trap 6's "not optional" half), independent of the DOM
-  // attribute a forced/synthetic dispatch could bypass.
-  it('disables the control AND refuses the commit while a save is in flight (trap 6)', () => {
+  // <BattleNameField>'s isSaving treatment.
+  //
+  // ⚠️ Story 2.15 review corrected this comment. It used to claim `fireEvent.click` proved the
+  // HANDLER's `isSaving` guard "independent of the DOM attribute a forced/synthetic dispatch could
+  // bypass". It does not: React's `getListener` returns no `onClick` for a disabled `<button>`, so
+  // a synthetic dispatch is refused exactly like a real one, and deleting `|| isSaving` from
+  // `handleClear` left this test green. What it actually pins is the `disabled` attribute — which
+  // is worth pinning. The handler guard is pinned in `BattleEditorView.clearGuards.test.tsx`.
+  it('disables the control, so a click cannot commit while a save is in flight (trap 6)', () => {
     const onCommitGrid = vi.fn();
     renderEditor({ grid: makeGrid(2, 2, [1, 0, 0, 0]), onCommitGrid, isSaving: true });
 
@@ -1257,11 +1267,16 @@ describe('BattleEditorView — Clear Petri Dish (Story 2.15)', () => {
   // What Clear does NOT do: the roster, the selection and the name field survive it untouched.
   it('leaves the roster, selection and battle name UNTOUCHED across a Clear', async () => {
     const user = userEvent.setup();
-    renderEditor({ grid: makeGrid(2, 2, [1, 0, 0, 1]), battleName: 'Petri Party' });
+    const onCommitGrid = vi.fn();
+    renderEditor({ grid: makeGrid(2, 2, [1, 0, 0, 1]), battleName: 'Petri Party', onCommitGrid });
 
     await user.click(screen.getByRole('button', { name: "Conway's Classic" }));
     await user.click(clearButton());
 
+    // ⚠️ Story 2.15 review: without this the test passes on a `handleClear` that does NOTHING —
+    // `<BattleEditorView>` is controlled, so `grid` never changes under it and "untouched" is
+    // vacuously true. The Clear has to have actually happened for the rest to mean anything.
+    expect(onCommitGrid).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: "Conway's Classic" })).toHaveAttribute(
       'aria-pressed',
       'true',
