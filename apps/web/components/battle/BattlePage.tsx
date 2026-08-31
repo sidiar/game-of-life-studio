@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
@@ -15,6 +17,8 @@ import { readGridColors } from '@/lib/canvas/themeColors';
 import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
 import { buildRosterIds } from '@/lib/rosterUnion';
 import { DEFAULT_TOOL } from '@/lib/tool';
+import { useDirtyGuard } from '@/lib/useDirtyGuard';
+import { useInertBackground } from '@/lib/useInertBackground';
 import { useUndoableGrid } from '@/lib/useUndoableGrid';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
@@ -24,6 +28,24 @@ const Body = styled('div')({
   padding: '30px',
   color: 'var(--gol-text-secondary)',
 });
+
+/**
+ * Story 2.16 (trap 8): the unsaved-changes confirmation is loaded ON DEMAND, exactly as
+ * `<BattleEditorView>` already loads `<ResizeClipWarningDialog>` — that call's own doc comment
+ * names this story as the inheritor of the decision, and the reasoning is unchanged: `/battle` is
+ * the tightest bundle budget in the repo and the MUI `Dialog` stack measured **+18.1 KB gzip**
+ * when statically imported (Story 1.13, re-confirmed by 2.14), against 5.7 KB of headroom here.
+ * AR-35 sanctions the shape ("dynamic import for heavy components").
+ *
+ * The chunk this route now has TWO dynamic dialogs is the point: they import the same MUI modules,
+ * so the second one's marginal first-load cost is small — measured in this story's Dev Agent
+ * Record rather than assumed.
+ *
+ * `ssr: false` because the dialog can never be part of the first paint (`open` is false until a
+ * user gesture) and this app is a static export — prerendering a closed dialog would put the whole
+ * stack back into the route's HTML, which is the cost this avoids.
+ */
+const UnsavedChangesDialog = dynamic(() => import('./UnsavedChangesDialog'), { ssr: false });
 
 // The composition root's own flex column (mockup's `.app-container`). The header is this column's
 // first row; Story 2.9's sidebar+main row is the second, and it is declared inside
@@ -113,6 +135,28 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // 'run' branch arrive in Epic 3, and until then the route renders no toggle and no fullscreen
   // affordance at all (NFR-4.1: a rendered-but-inert control is worse than an absent one).
   const [mode] = useState<'lab'>('lab');
+
+  // Story 2.16 forced decision 1, option (a): the repo's FIRST programmatic navigation.
+  //
+  // ⚠️ This deviates from Story 2.2's forced decision 1, which chose `styled(Link)` for the
+  // Gallery CTAs and recorded "this repo has no `useRouter` anywhere" — and the deviation is in
+  // that decision's PREMISE, not its reasoning. Story 2.2's control performs PURE navigation, for
+  // which a link is strictly better (middle-clickable, right-clickable, prefetched for free).
+  // Back-to-Gallery is GUARDED navigation: on the dirty path the control opens a dialog instead of
+  // going anywhere, which is button semantics rather than link semantics, and the dialog's own
+  // Save and Discard both need `router.push` regardless — so a link would ADD a second navigation
+  // mechanism here rather than remove one. FR-7.10 says "Back button"; the mockup renders a
+  // `<button>`. `<CreateBattleLink>` keeps its link, unchanged (trap 22: what is new here is
+  // programmatic navigation, not `next/navigation` — `<AppNav>` has imported `usePathname` since
+  // Story 1.9).
+  //
+  // ❌ Never `window.location` (the route file's own comment warns off exactly that), and never
+  // `'/index.html'` or a relative path (trap 18) — the Gallery is the root route and the App
+  // Router resolves `/` correctly against the static export's `out/index.html`.
+  //
+  // ❌ No `<Suspense>` boundary is added for this: that requirement belongs to `useSearchParams`
+  // (`missing-suspense-with-csr-bailout`), not to `useRouter` (trap 16).
+  const router = useRouter();
 
   // ⚠️ 'new' must never reach battles.load(). It is not a uuid, so the repository would treat it
   // as a plain miss and return null — indistinguishable from a stale/deleted id, which would make
@@ -216,8 +260,14 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // Story 2.11 (AC3, AC5): starts false; a name edit or a grid commit sets it, and exactly one
   // thing clears it — a save that RESOLVED (Story 2.13, `handleSave` below). Also observed via
   // `data-dirty` on `Root`, which is how both the unit tests and the e2e watch a save land
-  // (the unsaved-changes guard that will read it in earnest is Story 2.16).
+  // (the unsaved-changes guard that reads it in earnest is Story 2.16, below).
   const [isDirty, setIsDirty] = useState(false);
+
+  // Story 2.16 (AC4, FR-7.9's second half, RFC-005 Decision 7): the `beforeunload` channel —
+  // registered only while dirty, and covering ONLY a real document unload (tab close, refresh).
+  // ⚠️ It does NOT fire on a client-side route change, which is why the in-app Back path below
+  // needs a dialog of its own; the two mechanisms are independent and cannot cover for each other.
+  useDirtyGuard(isDirty);
 
   // THE EDIT LOCK (Sidiar's call, 2026-08-28, settling the code review's decision-needed finding).
   //
@@ -640,8 +690,23 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // added an organism, saved, then went to paint with it would find it gone from the sidebar and
   // back in the add dropdown). After this resolves, exactly two things have changed: `isDirty` is
   // false and, on a first save, `saveStamp` is set.
-  const handleSave = useCallback(async () => {
-    if (savingRef.current || grid === null) return;
+  //
+  // Story 2.16 forced decision 2, option (a): the body of the save is HOISTED into a function that
+  // reports its OUTCOME, with `handleSave` below staying the fire-and-forget entry point
+  // `<EditorStatusBar>` has always called. One code path, one place the outcome is decided, and
+  // AC5's `role="alert"` surface untouched.
+  //
+  // ⚠️ Why a boolean at all: this function is total (it catches its own rejection into `saveError`
+  // and resolves either way), so `await handleSave()` told a caller NOTHING — and Story 2.16's
+  // Save-and-leave must not navigate over a failed write, which would discard exactly the data
+  // FR-7.9 exists to protect. `isDirty` cannot answer it either: the flag a handler reads is its
+  // render's closed-over value, not the post-save one. ❌ Do not "simplify" this back to a void
+  // promise; `BattlePage.test.tsx`'s rejecting-save test is what reddens if it is.
+  //
+  // `false` covers BOTH "refused" (the edit lock, or no grid) and "threw" — from the caller's
+  // side those are the same fact: nothing was written, so nothing may be left behind.
+  const saveBattle = useCallback(async (): Promise<boolean> => {
+    if (savingRef.current || grid === null) return false;
     savingRef.current = true;
     setIsSaving(true);
     // Cleared at the START of the attempt, not only on success: an identical message re-rendered
@@ -679,15 +744,130 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
       // success for a write that then throws — and RFC-006 Decision 7 says a failed write "also
       // fails the dirty-flag clear, so the user keeps their unsaved indicator" in as many words.
       setIsDirty(false);
+      return true;
     } catch (error) {
       // ❌ Never swallowed: an unreported save failure is the worst outcome in this story. `isDirty`
       // is deliberately left TRUE.
       setSaveError(saveFailureMessage(error));
+      return false;
     } finally {
       savingRef.current = false;
       setIsSaving(false);
     }
   }, [grid, rosterIds, battleName, repositories, saveStamp, loadedBattle]);
+
+  // `<EditorStatusBar>`'s SAVE, unchanged in contract (`onSave(): void`): it fires and forgets,
+  // because the bar has no use for the outcome — the `role="alert"` line and the dirty flag are
+  // how a failure and a success are already reported to that surface.
+  const handleSave = useCallback(() => {
+    void saveBattle();
+  }, [saveBattle]);
+
+  /**
+   * Story 2.16 (AC3): the leave confirmation, in the three-phase shape `useDeleteBattleDialog`
+   * records — open, EXITING, closed. `leaveDialogOpen` drives the fade; `leaveConfirming` outlives
+   * it and is cleared only once the exit transition has finished, so `leaveConfirming` is exactly
+   * the window "a confirmation is on screen in some form" — which is the window the background has
+   * to stay `inert` for.
+   *
+   * ⚠️ Two cells, not one. Releasing `inert` at close time would leave a ~195ms window in which
+   * the background is `aria-hidden` AND tabbable at once (MUI defers its own `aria-hidden` removal
+   * to the transition's end), which is the exact state `useInertBackground` exists to prevent.
+   */
+  const [leaveConfirming, setLeaveConfirming] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+
+  /**
+   * Whether focus is owed back to the Back button once the dialog's exit transition has finished
+   * (AC6), for every close path that STAYS on the page. The paths that navigate need nothing: the
+   * mount is about to die.
+   *
+   * ⚠️ A DOM lookup at restore time, never a captured element — WebKit does not focus a `<button>`
+   * on click, so `document.activeElement` at open time is `<body>` there and MUI's own restore
+   * faithfully puts focus back on it ("the tab order restarts at the top of the document"). The
+   * idiom `<DeleteBattleDialog>` and `<BattleEditorView>` both already use.
+   */
+  const restoreBackFocusRef = useRef(false);
+
+  // Called from the PARENT of the dialog so it spans the exit transition, and so MUI's own
+  // focus-trap move (a child effect) has already happened — inerting a subtree that still holds
+  // the focused element would drop focus to `<body>` instead of landing it on Cancel. Both reasons
+  // are recorded in full on `useDeleteBattleDialog`'s call.
+  useInertBackground(leaveConfirming);
+
+  /**
+   * The focus move, run as an EFFECT keyed on the confirmation clearing rather than from the exit
+   * callback directly. Ordering is the point and it has to be guaranteed rather than raced: by the
+   * time this runs, MUI has cleared the background's `aria-hidden` and `useInertBackground`'s
+   * cleanup has released `inert` — React runs every cleanup for a commit before any setup, and
+   * that hook is called ABOVE this one. Focusing any earlier targets a node that is still inert,
+   * where `focus()` is a spec-mandated no-op.
+   */
+  useEffect(() => {
+    if (leaveConfirming) return;
+    if (!restoreBackFocusRef.current) return;
+    restoreBackFocusRef.current = false;
+
+    // Do not steal focus the user has already placed somewhere real during the transition.
+    // "Loose" includes "still inside the closing dialog" — on WebKit this effect runs while that
+    // dialog is still mounted, so a body-only check would skip the restore there.
+    const active = document.activeElement;
+    const focusIsLoose =
+      active === null || active === document.body || active.closest('[role="dialog"]') !== null;
+    if (!focusIsLoose) return;
+
+    document.querySelector<HTMLElement>('[data-back-to-battles]')?.focus();
+  }, [leaveConfirming]);
+
+  /**
+   * AC2/AC3 (FR-7.9/FR-7.10). Clean → navigate, full stop. Dirty → open the confirmation and
+   * navigate NOTHING. That is the whole of the in-app guard.
+   *
+   * ❌ It does not save, does not clear `isDirty`, does not reset the editor and never reaches
+   * `onCommitGrid` — a Back is not a commit (Dev Notes → *What Back does NOT do*).
+   */
+  const handleBack = useCallback(() => {
+    if (!isDirty) {
+      router.push('/');
+      return;
+    }
+    restoreBackFocusRef.current = true;
+    setLeaveConfirming(true);
+    setLeaveDialogOpen(true);
+  }, [isDirty, router]);
+
+  // AC3: Cancel — and Escape, and a backdrop click, which MUI routes through the same callback —
+  // change NOTHING. No commit, no undo entry, no save, and `isDirty` is still true; the only thing
+  // that moves is the dialog, and focus, which comes back to the Back button once the fade ends.
+  const handleCancelLeave = useCallback(() => setLeaveDialogOpen(false), []);
+
+  // Only once the fade has finished is it safe to unmount the dialog, release `inert` and schedule
+  // the focus restore. Clearing `leaveConfirming` does all three.
+  const handleLeaveDialogExited = useCallback(() => setLeaveConfirming(false), []);
+
+  // AC3: leave, losing the changes. ❌ No write, and no state tidying — `isDirty` stays true and
+  // the component holding it is about to unmount, which are different things; setting the flag
+  // false on the way out would be a lie with a one-frame lifetime.
+  const handleDiscardAndLeave = useCallback(() => {
+    router.push('/');
+  }, [router]);
+
+  /**
+   * AC3, and the trap this story exists around: navigate **only if the save actually succeeded**
+   * (forced decision 2). `await handleSave()` resolving is not success — see `saveBattle` above.
+   *
+   * Forced decision 5, option (a): a FAILED save closes the dialog and stays on the page, where
+   * Story 2.13's existing `role="alert"` line above the status bar reports it (NFR-7.2) — zero new
+   * copy, zero new surface, and the user is exactly where they need to be to retry. `isDirty` is
+   * still true, so the guard is still armed.
+   */
+  const handleSaveAndLeave = useCallback(async () => {
+    if (await saveBattle()) {
+      router.push('/');
+      return;
+    }
+    setLeaveDialogOpen(false);
+  }, [router, saveBattle]);
 
   // ALL THREE resources must settle before anything renders. Without this, a battle that resolves
   // before settings would briefly seed /battle/new at the DEFAULT_SETTINGS fallback grid size
@@ -783,6 +963,25 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
           onSave={handleSave}
           isSaving={isSaving}
           saveError={saveError}
+          /* Story 2.16 (FR-7.10, spec §3.3): the ONLY new prop on this interface. The guard itself
+             runs here — `<BattleEditorView>` forwards the press and interprets nothing. */
+          onBack={handleBack}
+        />
+      )}
+      {/* Mounted only while a confirmation is in flight, which is also what keeps the lazy chunk
+          from being requested at all on the overwhelmingly common path (every Back from a clean
+          battle, which is most of them). */}
+      {leaveConfirming && (
+        <UnsavedChangesDialog
+          open={leaveDialogOpen}
+          /* `isSaving` IS the pending state here: the Back control is `disabled={isSaving}`
+             (forced decision 3a), so this dialog cannot be open when a save started anywhere else
+             is in flight — the only save it can be showing is its own. */
+          pending={isSaving}
+          onCancel={handleCancelLeave}
+          onDiscard={handleDiscardAndLeave}
+          onSaveAndLeave={handleSaveAndLeave}
+          onExited={handleLeaveDialogExited}
         />
       )}
     </Root>

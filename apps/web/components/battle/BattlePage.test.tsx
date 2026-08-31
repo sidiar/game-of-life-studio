@@ -18,6 +18,19 @@ import { computeGridLayout } from '@/lib/canvas/gridLayout';
 import { resetRefToFillGroupWarnings } from '@/lib/canvas/refToFillGroup';
 import BattlePage from './BattlePage';
 
+// ⚠️ MANDATORY once Story 2.16 lands, not merely convenient (trap 21). `useRouter()` throws
+// outside an App Router context under RTL — "invariant expected app router to be mounted" — so
+// every file that renders `<BattlePage>` fails AT RENDER without this, in an error that names
+// React internals rather than the router (the confusion `AppNav.test.tsx`'s own mock comment
+// records from Story 1.9). `<BattlePage>` calls it for the FR-7.10 Back navigation.
+//
+// `vi.hoisted` so `push` is a real spy this file can assert on, rather than an anonymous mock
+// buried in the factory (the idiom `AppNav.test.tsx` established for `usePathname`).
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: router.push }),
+}));
+
 const { battles, organisms } = createMockWorkspace();
 const SKIRMISH = battles.find((b) => b.id === MOCK_BATTLE_IDS.battleA) as Battle;
 
@@ -84,6 +97,12 @@ async function findRecording(
 afterEach(() => {
   document.documentElement.style.cssText = '';
   vi.restoreAllMocks();
+  // The router mock is a module-scoped `vi.fn()` that outlives each test, so without this a Back
+  // assertion reads the PREVIOUS test's navigation. `mockReset`, not `mockClear`: one test below
+  // gives `push` an implementation (to observe save-then-navigate ORDER), and
+  // `vi.restoreAllMocks()` above only restores `vi.spyOn` spies — it leaves a `vi.fn()`'s
+  // implementation in place.
+  router.push.mockReset();
   // The dangling-roster-id registry is a module singleton vi.restoreAllMocks() does not touch —
   // without this, a "warns once" claim silently depends on test order (refToFillGroup.ts).
   resetRefToFillGroupWarnings();
@@ -339,7 +358,7 @@ describe('BattlePage', () => {
   // 4), so the create route carries exactly one roster row, the eraser, and UNDO. The status bar
   // sits OUTSIDE the `colors !== null` guard, so it renders here even though no canvas does: undo
   // acts on grid state, and a missing theme token layer is no reason to withhold it.
-  it('renders exactly the roster row, the eraser, UNDO, SAVE, CLEAR, and one heading on the "new" route', async () => {
+  it('renders exactly the roster row, the eraser, UNDO, SAVE, CLEAR, BACK, and one heading on the "new" route', async () => {
     render(
       <BattlePage
         repositories={createFakeRepositories({ battles: [], organisms: ORGANISMS_WITH_CONWAY })}
@@ -360,7 +379,10 @@ describe('BattlePage', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     // Story 2.15 (AC3): the grid is empty, so CLEAR renders but disabled — nothing to clear.
     expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeDisabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(5);
+    // Story 2.16 (trap 19): the sidebar footer's Back control — ENABLED on a clean draft, because
+    // `disabled` here tracks a save in flight, not the dirty flag. Leaving is always available.
+    expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeEnabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(6);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -480,10 +502,10 @@ describe('BattlePage', () => {
   // AC2 / NFR-4.1 as a COUNT, not a presence check: `queryByRole('button', { name: /run/i })`
   // being null still passes after someone adds a dead RUN button labelled differently, or a
   // fullscreen button beside it. Story 2.9 replaced the provisional Draw/Erase pair with the real
-  // roster; Story 2.13 adds SAVE, Story 2.15 adds CLEAR, so the claim is now "this battle's three
-  // organisms, the eraser, UNDO, SAVE and CLEAR — nothing else". An EIGHTH button (Run,
-  // fullscreen, 2.16's Back, or Epic 4's per-row pencil) still fails here.
-  it('renders no Run, fullscreen, or any other button beyond the roster, UNDO, SAVE and CLEAR on the loaded route', async () => {
+  // roster; 2.13 adds SAVE, 2.15 adds CLEAR and 2.16 adds BACK TO BATTLES, so the claim is now
+  // "this battle's three organisms, the eraser, UNDO, SAVE, CLEAR and BACK — nothing else". A
+  // NINTH button (Run, fullscreen, or Epic 4's per-row pencil) still fails here.
+  it('renders no Run, fullscreen, or any other button beyond the roster, UNDO, SAVE, CLEAR and BACK on the loaded route', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
@@ -502,7 +524,11 @@ describe('BattlePage', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     // Story 2.15: SKIRMISH places a roster, so CLEAR renders enabled.
     expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeEnabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 4);
+    // Story 2.16: converted from this test's own "2.16's Back" prediction — the eighth button IS
+    // Back to Battles, and it is the last one this route expects. A NINTH (Run, fullscreen, or
+    // Epic 4's per-row pencil) still fails here.
+    expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeEnabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 5);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
@@ -2346,5 +2372,261 @@ describe('BattlePage — Clear Petri Dish (Story 2.15)', () => {
     expect(clearButton()).toBeEnabled();
     // Nothing cleared during the window it was disabled.
     expect(livingCellsFact()).toBe(livingDuringSave);
+  });
+});
+
+/**
+ * Story 2.16 — the FR-7.9/FR-7.10 guard matrix. This is where the three mechanisms meet: the
+ * footer's Back press, the confirmation, and the navigation.
+ *
+ * ⚠️ The one test that could not exist before this story is "a save that REJECTS does not
+ * navigate". `handleSave` is total — it catches its own rejection into `saveError` and resolves
+ * either way — so an implementation that simply `await`s and then pushes would pass every other
+ * test in this file while silently discarding the user's work. Forced decision 2's
+ * `saveBattle(): Promise<boolean>` exists for that one assertion.
+ */
+describe('BattlePage — back navigation & the unsaved-changes guard (Story 2.16)', () => {
+  function dirtyValue(container: HTMLElement): string | null {
+    const root = container.querySelector('[data-dirty]');
+    if (root === null) throw new Error('Root (data-dirty) not found');
+    return root.getAttribute('data-dirty');
+  }
+
+  const backButton = () => screen.getByRole('button', { name: 'Back to Battles' });
+  const nameField = () => screen.getByRole('textbox', { name: /battle name/i });
+
+  /** Opens the confirmation from a genuinely dirty loaded battle: type into the name field (the
+   * cheapest real mutation), then press Back. */
+  async function openGuard(user: ReturnType<typeof userEvent.setup>, container: HTMLElement) {
+    await user.type(nameField(), '!');
+    expect(dirtyValue(container)).toBe('true');
+    await user.click(backButton());
+    return await screen.findByRole('dialog', { name: 'Unsaved Changes' });
+  }
+
+  // AC2: the overwhelmingly common path — a battle opened, read, and left.
+  it('a CLEAN battle navigates straight to the Gallery, with no dialog (AC2)', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    expect(dirtyValue(container)).toBe('false');
+
+    await user.click(backButton());
+
+    // The ARGUMENT, not a URL: `/` is the Gallery's route, and the App Router resolves it against
+    // the static export's `out/index.html` (trap 18 — never `/index.html`, never a relative path).
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledWith('/');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('a DIRTY battle opens the confirmation and navigates NOTHING (AC3)', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const dialog = await openGuard(user, container);
+
+    expect(dialog).toBeVisible();
+    expect(dialog).toHaveTextContent('You have unsaved changes. Save before leaving?');
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  // AC3/AC7: Cancel changes NOTHING — the whole point of the option.
+  it('Cancel writes nothing, navigates nowhere, and leaves the editor exactly as it was (AC3, AC7)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    const save = vi.spyOn(repositories.battles, 'save');
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const dialog = await openGuard(user, container);
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(router.push).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    // Still dirty — Cancel is not a save, and the edit survives it.
+    expect(dirtyValue(container)).toBe('true');
+    expect(nameField()).toHaveValue('Three-Way Skirmish!');
+    // AC6: focus comes back to the control that opened the dialog, not to <body>.
+    await waitFor(() => expect(backButton()).toHaveFocus());
+  });
+
+  // Escape is Cancel (AC6) — routed through the same `onClose` a backdrop click takes, because MUI
+  // v9 removed `disableEscapeKeyDown`.
+  it('Escape is Cancel: no navigation, no write, still dirty (AC6)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    const save = vi.spyOn(repositories.battles, 'save');
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await openGuard(user, container);
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(router.push).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(dirtyValue(container)).toBe('true');
+  });
+
+  // AC3: Discard leaves, losing the changes. Nothing is written — that is the whole distinction
+  // from Save & Leave, and a `battles.save` call here would be a silent auto-save.
+  it('Discard navigates and writes nothing at all (AC3)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    const save = vi.spyOn(repositories.battles, 'save');
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const dialog = await openGuard(user, container);
+    await user.click(within(dialog).getByRole('button', { name: 'Discard Changes' }));
+
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledWith('/');
+    expect(save).not.toHaveBeenCalled();
+    // ❌ And the flag is NOT cleared on the way out: `isDirty` stays true and the mount holding it
+    // is about to die. Clearing it would be a lie with a one-frame lifetime.
+    expect(dirtyValue(container)).toBe('true');
+  });
+
+  // AC3: the save lands FIRST, then the navigation — in that order, not merely both.
+  it('Save & Leave persists through the existing save path, THEN navigates (AC3)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    const order: string[] = [];
+    const save = vi
+      .spyOn(repositories.battles, 'save')
+      .mockImplementation(async () => void order.push('save'));
+    router.push.mockImplementation(() => void order.push('push'));
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const dialog = await openGuard(user, container);
+    await user.click(within(dialog).getByRole('button', { name: 'Save & Leave' }));
+
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/'));
+    expect(save).toHaveBeenCalledTimes(1);
+    // ⚠️ ORDER, not membership: navigating first and saving into a dying mount is a real bug shape
+    // that "both were called" cannot see.
+    expect(order).toEqual(['save', 'push']);
+  });
+
+  /**
+   * ⚠️ THE test forced decision 2 exists for. `handleSave` swallows its own rejection into
+   * `saveError` and resolves either way, so an "await and go" implementation navigates over a
+   * failed write — losing exactly the data FR-7.9 protects — and every other test in this file
+   * stays green.
+   *
+   * Forced decision 5(a): the dialog closes, the user stays where they were, and Story 2.13's
+   * existing `role="alert"` line reports the failure. No new copy, no second error surface.
+   */
+  it('a save that REJECTS does not navigate — it reports and stays (AC3, forced decision 2)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    vi.spyOn(repositories.battles, 'save').mockRejectedValue(new QuotaExceededError('gol:battles'));
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const dialog = await openGuard(user, container);
+    await user.click(within(dialog).getByRole('button', { name: 'Save & Leave' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/storage/i);
+    expect(router.push).not.toHaveBeenCalled();
+    // The guard is still armed: the work is still unsaved, and the user is on the page that holds
+    // it, with SAVE live again.
+    expect(dirtyValue(container)).toBe('true');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  // Forced decision 3(a): the visible half of the edit lock. The dialog's own Save would be
+  // refused by `savingRef` while another write is in flight, and would then close without
+  // navigating — a false-success UI. Disabling the control removes the path entirely.
+  it('the Back control is unavailable while a save is in flight (forced decision 3a)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    let release = () => {};
+    vi.spyOn(repositories.battles, 'save').mockImplementation(
+      () => new Promise<void>((resolve) => (release = () => resolve())),
+    );
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(backButton()).toBeDisabled());
+    await user.click(backButton());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(router.push).not.toHaveBeenCalled();
+
+    release();
+    await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+    expect(backButton()).toBeEnabled();
+  });
+
+  // AC7: the guard's ONLY effect is navigation. It never reaches the commit seam, never touches
+  // the roster, the name or the tool — a Back is not a commit.
+  it('opening and cancelling the guard leaves the grid, the roster and the tool untouched (AC7)', async () => {
+    const user = userEvent.setup();
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const repositories = seeded();
+    const save = vi.spyOn(repositories.battles, 'save');
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const rosterBefore = screen
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('aria-pressed'));
+    const livingBefore = within(screen.getByRole('region', { name: 'Battle statistics' }))
+      .getByRole('group', { name: /^Living Cells: \d+$/ })
+      .getAttribute('aria-label');
+    const undoBefore = screen.getByRole('button', { name: 'Undo' }).hasAttribute('disabled');
+
+    const dialog = await openGuard(user, container);
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    expect(
+      within(screen.getByRole('region', { name: 'Battle statistics' }))
+        .getByRole('group', { name: /^Living Cells: \d+$/ })
+        .getAttribute('aria-label'),
+    ).toBe(livingBefore);
+    expect(
+      screen.getAllByRole('button').map((button) => button.getAttribute('aria-pressed')),
+    ).toEqual(rosterBefore);
+    // The undo ring did not gain an entry: the name edit that made the battle dirty is not a grid
+    // commit, and neither is anything the guard did.
+    expect(screen.getByRole('button', { name: 'Undo' }).hasAttribute('disabled')).toBe(undoBefore);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  // AC7: the dialog can never appear on the not-found / error branches — they render before
+  // `<BattleEditorView>` exists, and nothing there can be dirty. Every hook this story adds is
+  // declared ABOVE those early returns (trap 17), which is what keeps this branch from being a
+  // conditional-hook crash rather than a clean notice.
+  it('renders the not-found notice with no footer and no dialog (AC7, trap 17)', async () => {
+    render(<BattlePage repositories={seeded()} battleId="ffffffff-0000-4000-8000-000000000000" />);
+    await screen.findByRole('heading', { level: 1, name: 'Battle Not Found' });
+
+    expect(screen.queryByRole('button', { name: 'Back to Battles' })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // ⚠️ The OTHER back affordance, which this branch has always had and keeps (trap 14).
+    expect(screen.getByRole('link', { name: 'Back to Gallery' })).toBeInTheDocument();
+  });
+
+  it('has no axe violations with the guard open (AC6)', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await openGuard(user, container);
+
+    // `document.body`, not `container`: MUI portals the dialog out of `render()`'s own container,
+    // so scoping this to `container` would silently scan a tree with no dialog in it.
+    expect((await axe(document.body)).violations).toEqual([]);
   });
 });

@@ -71,6 +71,7 @@ function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>
       onNameChange={() => {}}
       isDirty={false}
       onSave={() => {}}
+      onBack={() => {}}
       isSaving={false}
       saveError={null}
       onCommitGrid={() => {}}
@@ -135,11 +136,13 @@ describe('BattleEditorView', () => {
 
   // NFR-4.1, asserted as ABSENCE — a presence-only check elsewhere still passes once a dead
   // placeholder is added beside the canvas.
-  it('renders no other sidebar section and no footer (AC5)', () => {
+  it('renders no sidebar control the mockup does not have (AC5)', () => {
     renderEditor();
 
-    // The Back button (2.16) is what is left of the mockup's sidebar; Battle Name (2.11), Grid
-    // Info (2.14) and Tools (2.15) are now real and deliberately NOT asserted absent here.
+    // Nothing is left of the mockup's sidebar to withhold: Battle Name (2.11), Grid Info (2.14),
+    // Tools (2.15) and now the Back footer (2.16) are all real, and are asserted PRESENT rather
+    // than absent. What this test still guards is everything the mockup draws that the MVP
+    // excludes.
     // Scoped by ACCESSIBLE NAME rather than counted: a bare `toHaveLength(1)` passes when the one
     // textbox is the WRONG one, which is the precise regression this NFR-4.1 absence guard exists
     // to catch.
@@ -149,7 +152,12 @@ describe('BattleEditorView', () => {
     // `EditableGridPresetSchema` rejects at save (trap 9).
     expect(screen.queryByRole('textbox', { name: /grid size/i })).toBeNull();
     expect(screen.queryByRole('slider')).toBeNull(); // ❌ no Grid Zoom slider — superseded (§9.1).
-    expect(screen.queryByRole('button', { name: /back/i })).toBeNull();
+    // Story 2.16 (trap 19): INVERTED, not deleted — the Back affordance has arrived, and the name
+    // is asserted EXACTLY. ⚠️ It is a BUTTON named "Back to Battles"; `<Notice>`'s LINK named
+    // "Back to Gallery" is a different control on a different branch, and two other tests assert
+    // ITS absence on `/battle/new` (trap 14). Neither name may drift into the other.
+    expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Back to Gallery' })).toBeNull();
     // AC1: Clear IS real now — asserted present, not absent.
     expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeInTheDocument();
     // AC4: the mockup's other two Tools buttons have no backing FR and are excluded from the MVP.
@@ -185,14 +193,16 @@ describe('BattleEditorView', () => {
     expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Erase' })).toBeNull();
     expect(screen.queryByRole('group', { name: /editing tool/i })).toBeNull();
-    // Exactly the roster's one row, the eraser, UNDO, (Story 2.13) SAVE and (Story 2.15) CLEAR —
-    // nothing more.
+    // Exactly the roster's one row, the eraser, UNDO, (Story 2.13) SAVE, (Story 2.15) CLEAR and
+    // (Story 2.16) BACK TO BATTLES — nothing more. The count moves with a real control arriving,
+    // never to accommodate one that should not be here.
     expect(screen.getByRole('button', { name: "Conway's Classic" })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(5);
+    expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(6);
   });
 });
 
@@ -323,6 +333,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
         onNameChange={() => {}}
         isDirty={false}
         onSave={() => {}}
+        onBack={() => {}}
         isSaving={false}
         saveError={null}
         onCommitGrid={onCommitGrid}
@@ -361,6 +372,7 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
           onNameChange={() => {}}
           isDirty={false}
           onSave={() => {}}
+          onBack={() => {}}
           isSaving={false}
           saveError={null}
           onCommitGrid={onCommitGrid}
@@ -554,6 +566,7 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
       canUndo: false,
       isDirty: false,
       onSave: () => {},
+      onBack: () => {},
       isSaving: false,
       saveError: null,
       ...overrides,
@@ -846,6 +859,7 @@ describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', (
         onNameChange={() => {}}
         isDirty={false}
         onSave={() => {}}
+        onBack={() => {}}
         isSaving={false}
         saveError={null}
         onCommitGrid={() => {}}
@@ -951,6 +965,7 @@ describe('BattleEditorView — the stats derivation (Story 2.12, AC3, AC4)', () 
         onNameChange={() => {}}
         isDirty={false}
         onSave={() => {}}
+        onBack={() => {}}
         isSaving={false}
         saveError={null}
         onCommitGrid={() => {}}
@@ -1097,6 +1112,7 @@ describe('BattleEditorView — edit-mode grid resize (Story 2.14)', () => {
         onNameChange={() => {}}
         isDirty={false}
         onSave={() => {}}
+        onBack={() => {}}
         isSaving
         saveError={null}
         onCommitGrid={onCommitGrid}
@@ -1164,6 +1180,7 @@ describe('BattleEditorView — edit-mode grid resize (Story 2.14)', () => {
         onNameChange={() => {}}
         isDirty={false}
         onSave={() => {}}
+        onBack={() => {}}
         isSaving={false}
         saveError={null}
         onCommitGrid={() => {}}
@@ -1282,5 +1299,76 @@ describe('BattleEditorView — Clear Petri Dish (Story 2.15)', () => {
       'true',
     );
     expect(screen.getByRole('textbox', { name: /battle name/i })).toHaveValue('Petri Party');
+  });
+});
+
+/**
+ * Story 2.16 (AC1): the sidebar footer. What is worth pinning here is not that a Back button
+ * EXISTS — three other tests already count it — but WHERE it is, because "pinned" is a DOM
+ * relationship and nothing else: a `<SidebarFooter>` mounted inside `<SidebarContent>` renders
+ * identically, passes every presence assertion, and scrolls away with the sections.
+ */
+describe('BattleEditorView — the sidebar footer (Story 2.16)', () => {
+  /** The scrolling region: the element that directly holds the four `<SidebarSection>`s. */
+  function scrollRegion(): HTMLElement {
+    const section = screen.getByRole('heading', { level: 2, name: 'Organisms' }).closest('section');
+    const region = section?.parentElement ?? null;
+    if (region === null) throw new Error('<SidebarContent> not found');
+    return region;
+  }
+
+  it('mounts the footer OUTSIDE the scrolling region, as the sidebar’s last child (AC1)', () => {
+    renderEditor();
+
+    const sidebar = screen.getByRole('complementary');
+    const back = screen.getByRole('button', { name: 'Back to Battles' });
+
+    expect(sidebar).toContainElement(back);
+    // ⚠️ THE assertion. A footer inside this region is not pinned — it scrolls with the sections.
+    expect(scrollRegion()).not.toContainElement(back);
+    // ...and it is the LAST thing in the column, so the four sections are above it.
+    expect(sidebar.lastElementChild).toContainElement(back);
+  });
+
+  // The two CSS facts that make the relationship above mean "pinned" rather than merely "adjacent":
+  // the column itself does not scroll, and the region the sections live in does.
+  it('the sidebar column does not scroll and the section region does (AC1)', () => {
+    renderEditor();
+
+    expect(screen.getByRole('complementary')).toHaveStyle({ overflowY: 'hidden' });
+    expect(scrollRegion()).toHaveStyle({ overflowY: 'auto' });
+  });
+
+  // Trap 9: the footer is not a fifth section. The heading-order test above asserts the same four
+  // headings; this states the claim from the footer's own side, so either one failing names it.
+  it('adds no heading — the column still has exactly four (trap 9)', () => {
+    renderEditor();
+
+    expect(
+      screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(['Organisms', 'Battle Name', 'Grid Info', 'Tools']);
+  });
+
+  it('forwards onBack untouched — this component interprets nothing (AC1)', async () => {
+    const user = userEvent.setup();
+    const onBack = vi.fn();
+    renderEditor({ onBack });
+
+    await user.click(screen.getByRole('button', { name: 'Back to Battles' }));
+
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  // Forced decision 3(a): the same visible half of `<BattlePage>`'s edit lock every other control
+  // in this column wears.
+  it('disables the footer while a save is in flight, and never otherwise', () => {
+    const { rerender } = renderEditor({ isSaving: true });
+    expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeDisabled();
+
+    rerender(<div />);
+    // A DIRTY battle keeps Back available — leaving is exactly what the guard is for, so a
+    // `disabled` tied to `isDirty` would make the whole story unreachable.
+    renderEditor({ isDirty: true });
+    expect(screen.getAllByRole('button', { name: 'Back to Battles' })[0]).toBeEnabled();
   });
 });

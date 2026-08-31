@@ -27,30 +27,62 @@ export function useInertBackground(active: boolean): void {
     if (!active) return;
     if (typeof document === 'undefined') return;
 
-    // Runs from a PLAIN useEffect, not useLayoutEffect — deliberately. MUI's own focus-trap move
-    // (onto the dialog's autoFocus target) must already have happened before this runs; inerting a
-    // subtree that still holds the focused element would drop focus to <body> instead of landing
-    // it on Cancel.
     // Prior value captured per element, not restored to a blanket `false`: ModalManager keeps
     // siblings that were ALREADY aria-hidden before the dialog opened in its hidden set
     // (ModalManager.getHiddenSiblings), so one of them could legitimately have been inert on its
     // own account. Restoring `false` unconditionally would permanently un-inert it after the first
     // dialog cycle.
-    const restore = Array.from(document.body.children)
-      .filter(
-        (el): el is HTMLElement =>
-          el instanceof HTMLElement && el.getAttribute('aria-hidden') === 'true',
-      )
-      .map((el) => ({ el, wasInert: el.inert }));
+    const restore = new Map<HTMLElement, boolean>();
 
-    for (const { el } of restore) el.inert = true;
+    // Runs from a PLAIN useEffect, not useLayoutEffect — deliberately. MUI's own focus-trap move
+    // (onto the dialog's autoFocus target) must already have happened before this runs; inerting a
+    // subtree that still holds the focused element would drop focus to <body> instead of landing
+    // it on Cancel.
+    const sweep = () => {
+      for (const element of document.body.children) {
+        if (!(element instanceof HTMLElement)) continue;
+        if (element.getAttribute('aria-hidden') !== 'true') continue;
+        // Idempotent: an element already swept keeps the value captured the FIRST time, so a
+        // repeated sweep can never record `true` as its "prior" state and strand it inert.
+        if (restore.has(element)) continue;
+        restore.set(element, element.inert);
+        element.inert = true;
+      }
+    };
 
-    // Bound worth knowing: the set is snapshotted once per open, so a body child appended WHILE
-    // the dialog is open is neither swept by MUI's already-run ariaHiddenSiblings pass nor inerted
-    // here. Nothing in the app mounts a second body-level portal today; the day one does (a nested
-    // modal, a toast layer), this needs a MutationObserver rather than a one-shot read.
+    sweep();
+
+    // deferred-work.md (code review of 2-14), CLOSED by Story 2.16. The sweep above used to be the
+    // WHOLE hook — a one-shot read taken in the same commit that decided a dialog should open. For
+    // a statically imported dialog that is fine: MUI mounts the Modal and marks the siblings
+    // aria-hidden in the same commit, so the snapshot sees them. For a `next/dynamic` dialog it is
+    // not: on the first activation in a page session the lazy chunk has not resolved, that commit
+    // renders no Modal at all, the sweep finds nothing aria-hidden, and `[active]` never changes
+    // again — so the background is never inerted for that whole session's first confirmation.
+    // `<ResizeClipWarningDialog>` (Story 2.14) introduced the race and this story's
+    // `<UnsavedChangesDialog>` is the second lazy consumer, which is what makes it worth fixing in
+    // the shared hook rather than at either call site.
+    //
+    // The observer also closes the bound the original comment named: a body child appended WHILE a
+    // dialog is open (a nested modal, a toast layer) is now swept too, rather than being missed by
+    // both MUI's already-run ariaHiddenSiblings pass and this hook.
+    //
+    // `subtree: true` is needed for the ATTRIBUTE half — MUI sets `aria-hidden` on body's own
+    // children, and an attribute observer registered on `document.body` alone would only report
+    // changes to body's attributes. The cost is a callback per DOM mutation while a dialog is
+    // open, and the sweep it runs is a filter over `document.body.children` (three elements on
+    // every page in this app) with an early `continue` for everything already handled.
+    const observer = new MutationObserver(sweep);
+    observer.observe(document.body, {
+      childList: true,
+      attributes: true,
+      attributeFilter: ['aria-hidden'],
+      subtree: true,
+    });
+
     return () => {
-      for (const { el, wasInert } of restore) el.inert = wasInert;
+      observer.disconnect();
+      for (const [element, wasInert] of restore) element.inert = wasInert;
     };
   }, [active]);
 }

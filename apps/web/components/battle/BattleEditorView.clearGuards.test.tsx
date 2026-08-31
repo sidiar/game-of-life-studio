@@ -80,6 +80,7 @@ function renderEditor(
       onNameChange={() => {}}
       isDirty={false}
       onSave={() => {}}
+      onBack={() => {}}
       isSaving={isSaving}
       saveError={null}
       onCommitGrid={onCommitGrid}

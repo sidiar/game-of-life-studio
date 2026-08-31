@@ -6,6 +6,19 @@ import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@g
 import type { BattleEditorViewProps } from './BattleEditorView';
 import BattlePage from './BattlePage';
 
+// ⚠️ MANDATORY once Story 2.16 lands, not merely convenient (trap 21). `useRouter()` throws
+// outside an App Router context under RTL — "invariant expected app router to be mounted" — so
+// every file that renders `<BattlePage>` fails AT RENDER without this, in an error that names
+// React internals rather than the router (the confusion `AppNav.test.tsx`'s own mock comment
+// records from Story 1.9). `<BattlePage>` calls it for the FR-7.10 Back navigation.
+//
+// `vi.hoisted` so `push` is a real spy this file can assert on, rather than an anonymous mock
+// buried in the factory (the idiom `AppNav.test.tsx` established for `usePathname`).
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: router.push }),
+}));
+
 /**
  * deferred-work.md, **closed by Story 2.14**: the direct `onCommitGrid` IDENTITY assertion Story
  * 2.11 Task 3 asked for and never got.

@@ -19,6 +19,7 @@ import EditorStatusBar, { type EditorStatusBarStats } from './EditorStatusBar';
 import EditorToolsSection from './EditorToolsSection';
 import GridSettingsSection, { presetKey } from './GridSettingsSection';
 import OrganismRoster from './OrganismRoster';
+import SidebarFooter from './SidebarFooter';
 import SidebarSection from './SidebarSection';
 
 /**
@@ -35,7 +36,10 @@ import SidebarSection from './SidebarSection';
  * one, and it is the first working example for Epic 4's lazy `<OrganismEditorModal>` (spec §3.15).
  * The chunk is genuinely rare: it loads only when a shrink would actually clip living cells.
  *
- * ⚠️ **Story 2.16's `<UnsavedChangesDialog>` lands on this same route and inherits this call.**
+ * ⚠️ **Story 2.16's `<UnsavedChangesDialog>` inherited this call** — as its own `next/dynamic` in
+ * `<BattlePage>` (which is where spec §2 hangs that dialog), on this same reasoning. Two lazy
+ * dialogs now share this route's MUI `Dialog` chunk; see that call site for the second
+ * measurement.
  *
  * `ssr: false` because the dialog can never be part of the first paint (`open` is false until a
  * user gesture) and this app is a static export — prerendering a closed dialog would put the whole
@@ -55,8 +59,8 @@ const ResizeClipWarningDialog = dynamic(() => import('./ResizeClipWarningDialog'
 // confirm dialog need no new input from <BattlePage> (see the resize handler below, and the ❌ in
 // this component's own doc comment). Story 2.15 adds nothing to it either, on the same reasoning:
 // <EditorToolsSection> derives its `disabled` and its guards from `grid` and `isSaving`, both
-// already here. The one remaining sidebar section (<SidebarFooter> 2.16) brings whatever it needs
-// with it — declaring its props now would be an unverifiable claim this story cannot back up.
+// already here. Story 2.16 adds exactly ONE: `onBack`, which spec §3.3 has always declared — the
+// footer's `disabled` is derived from `isSaving`, already here, like every other control's.
 export interface BattleEditorViewProps {
   grid: RenderableGrid;
   size: { cols: number; rows: number };
@@ -153,6 +157,13 @@ export interface BattleEditorViewProps {
   /** Story 2.13 (AC4): a write is in flight, so SAVE is unavailable — see its prop comment on
    * `EditorStatusBarProps`. */
   isSaving: boolean;
+  /**
+   * Story 2.16 (FR-7.10, spec §3.3's `onBack(): void`): the pinned footer's Back press, forwarded
+   * to `<BattlePage>` untouched. ⚠️ The FR-7.9 unsaved-changes guard runs THERE, not here — this
+   * component neither reads `isDirty` for it nor knows what leaving means, exactly as it neither
+   * interprets `onSave`. ❌ Nothing else new on this interface.
+   */
+  onBack(): void;
 }
 
 /**
@@ -171,6 +182,9 @@ type EditorMainProps = Omit<
   | 'atCap'
   | 'battleName'
   | 'onNameChange'
+  // Story 2.16: the footer lives in the SIDEBAR, so `<EditorMain>` has no use for its callback —
+  // the same treatment the roster props get two lines up.
+  | 'onBack'
 > & {
   tool: Tool;
   toolRef: number | null;
@@ -199,8 +213,12 @@ const EditorLayout = styled('div')({
 });
 
 // Mockup: .sidebar (clinical-lab-theme/petri-dish-lab-mode.html:98-109), minus the margin-top
-// offset above and minus the footer (Story 2.16 — a Back button is the only thing that goes in it,
-// and an empty sticky bar is the dead chrome NFR-4.1 forbids).
+// offset above.
+//
+// `paddingBottom: 0` is the mockup's own value and is what makes room for <SidebarFooter> (Story
+// 2.16), which supplies its own vertical padding and sits here as the LAST CHILD — a sibling of
+// <SidebarContent>, never inside it, which is the whole of "pinned": this column does not scroll
+// (`overflow-y: hidden`), the content region does, and the footer is outside that region.
 //
 // `flexShrink: 0` so the 320px column is a constant the dish can be laid out against rather than
 // a negotiation — paired with `minWidth: 0` on <MainContent>, which is what actually lets the dish
@@ -538,11 +556,14 @@ function resolveSelectedTool(
 /**
  * The Lab-mode composition root (component-tree-battle-page.md §3.3, §2). Composes
  * `<EditorSidebar>` — which ships with FOUR real sections, Organisms, Battle Name, Grid Info and
- * Tools (Story 2.15) — and `<EditorMain>`, which carries `<EditorStatusBar>` (Story 2.8).
+ * Tools (Story 2.15), plus the pinned `<SidebarFooter>` (Story 2.16) BENEATH them — and
+ * `<EditorMain>`, which carries `<EditorStatusBar>` (Story 2.8). That completes the mockup's
+ * column: Organisms · Battle Name · Grid Info · Tools · Back.
  *
- * ❌ No sidebar footer and no Back button (Story 2.16) — Story 2.4 declined to ship a half-built
- * sidebar and that call stands: each section arrives complete, not as a panel of placeholders for
- * the rest.
+ * ⚠️ The footer is NOT a fifth section and carries no `<h2>` (trap 9). The heading-order
+ * assertions — this route's own, and the e2e's — stay at FOUR sidebar headings; a fifth means the
+ * footer was mounted inside `<SidebarContent>` as a `<SidebarSection>`, which would also unpin
+ * it.
  *
  * ❌ **No `gridSize` state, no `pendingSize`, no `draft.gridSize` write** (Story 2.8 forced
  * decision 4). `size` is DERIVED from `grid` in `<BattlePage>`, so a resize is a grid COMMIT and
@@ -580,6 +601,9 @@ export default function BattleEditorView({
   // Story 2.14: same treatment, same reason — the resize handlers below call it directly. Still
   // forwarded to `<EditorMain>`, which is what keeps the canvas's stroke commits arriving.
   onCommitGrid,
+  // Story 2.16: pulled out because it belongs to the SIDEBAR's footer, not to `<EditorMain>` —
+  // `EditorMainProps` omits it for the same reason.
+  onBack,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
@@ -858,6 +882,12 @@ export default function BattleEditorView({
             />
           </SidebarSection>
         </SidebarContent>
+        {/* AC1: the mockup's `.sidebar-footer` — the LAST CHILD of the sidebar and a SIBLING of
+            <SidebarContent>, never inside it. That placement is the whole of "pinned": the four
+            sections scroll within the content region above and this stays put beneath them.
+            `disabled` is forced decision 3(a) — the same visible half of <BattlePage>'s edit lock
+            <BattleNameField>, <GridSettingsSection> and <EditorToolsSection> all wear. */}
+        <SidebarFooter onBack={onBack} disabled={isSaving} />
       </EditorSidebar>
       <EditorMain
         {...rest}

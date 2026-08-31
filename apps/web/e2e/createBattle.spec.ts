@@ -67,10 +67,11 @@ test.describe('create new battle (Story 2.2)', () => {
       battlesBefore,
     );
 
-    // AC3: leave without saving. The route ships no Back-to-Gallery link (forced decision 3, for
-    // symmetry with the loaded battle route) — browser Back is the only way out until Story
-    // 2.16's sidebar footer exists.
-    await page.goBack();
+    // AC3: leave without saving — now through the app's OWN affordance, not the browser's. Story
+    // 2.16 shipped the sidebar footer this comment used to wait on, so this leaves the way a user
+    // does. The draft is untouched, therefore clean, therefore no confirmation appears (that
+    // branch is Story 2.16's own spec) — and it must still write nothing on the way out.
+    await page.getByRole('button', { name: 'Back to Battles' }).click();
 
     await expect(page).toHaveURL('/');
     await expect(page.getByRole('article')).toHaveCount(2);

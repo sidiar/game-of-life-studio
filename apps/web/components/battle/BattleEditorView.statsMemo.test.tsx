@@ -74,6 +74,7 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         onNameChange={() => {}}
         isDirty={false}
         onSave={() => {}}
+        onBack={() => {}}
         isSaving={false}
         saveError={null}
         onCommitGrid={() => {}}
@@ -103,6 +104,7 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         onNameChange={() => {}}
         isDirty={false}
         onSave={() => {}}
+        onBack={() => {}}
         isSaving={false}
         saveError={null}
         onCommitGrid={() => {}}
@@ -131,6 +133,7 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         onNameChange={() => {}}
         isDirty={false}
         onSave={() => {}}
+        onBack={() => {}}
         isSaving={false}
         saveError={null}
         onCommitGrid={() => {}}

@@ -4,6 +4,19 @@ import { DEFAULT_SETTINGS } from '@gol/domain';
 import { createFakeRepositories, createMockWorkspace } from '@gol/test-utils';
 import BattlePage from './BattlePage';
 
+// ⚠️ MANDATORY once Story 2.16 lands, not merely convenient (trap 21). `useRouter()` throws
+// outside an App Router context under RTL — "invariant expected app router to be mounted" — so
+// every file that renders `<BattlePage>` fails AT RENDER without this, in an error that names
+// React internals rather than the router (the confusion `AppNav.test.tsx`'s own mock comment
+// records from Story 1.9). `<BattlePage>` calls it for the FR-7.10 Back navigation.
+//
+// `vi.hoisted` so `push` is a real spy this file can assert on, rather than an anonymous mock
+// buried in the factory (the idiom `AppNav.test.tsx` established for `usePathname`).
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: router.push }),
+}));
+
 // A dedicated file (not BattlePage.test.tsx) because vi.mock is module-scoped: mocking the seed
 // factory there would swap it out under every other test in that suite. Same split, and the same
 // reason, as BattleGallery.gridLines.test.tsx.

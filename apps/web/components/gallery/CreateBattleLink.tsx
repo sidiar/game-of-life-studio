@@ -12,10 +12,18 @@ import { styled } from '@mui/material/styles';
 // block reuses the identical class (biotech-terminal-theme/battle-gallery.html:965), which is what
 // licenses sharing one control across both mount points rather than styling it twice.
 //
-// A `styled(Link)` over next/link, not a <button> + onClick handler (forced decision 1): this repo
-// has no `useRouter` anywhere, both CTAs are pure navigation to a static route, and a link is
-// middle-clickable, right-clickable, and prefetched by the App Router for free — the same pattern
-// `BackLink` (components/layout/Notice.tsx) and `TitleLink` (BattleTile.tsx) already use.
+// A `styled(Link)` over next/link, not a <button> + onClick handler (forced decision 1): both CTAs
+// are PURE navigation to a static route, and a link is middle-clickable, right-clickable, and
+// prefetched by the App Router for free — the same pattern `BackLink`
+// (components/layout/Notice.tsx) and `TitleLink` (BattleTile.tsx) already use.
+//
+// ⚠️ That decision's original wording also cited "this repo has no `useRouter` anywhere", which
+// stopped being true in Story 2.16: `<BattlePage>` calls it for the FR-7.10 Back control. The
+// DECISION is unchanged, because that clause was never the reason — the reason is the word PURE
+// above. Back-to-Gallery is GUARDED navigation (on a dirty battle the control opens a dialog and
+// goes nowhere), which is button semantics; these two CTAs navigate unconditionally, which is
+// link semantics. ❌ Do not "modernise" these into buttons on the strength of the hook now
+// existing.
 //
 // Colours are `var(--gol-*)` tokens only (AR-46 no-raw-hex) — `--gol-accent`/`--gol-on-accent` for
 // the resting state, `--gol-accent-hover` for the mockup's `#00e5ff` hover (app/themes.css:34).
