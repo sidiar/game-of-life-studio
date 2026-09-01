@@ -18,7 +18,7 @@ import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
 import { buildRosterIds } from '@/lib/rosterUnion';
 import { DEFAULT_TOOL } from '@/lib/tool';
 import { useDirtyGuard } from '@/lib/useDirtyGuard';
-import { useInertBackground } from '@/lib/useInertBackground';
+import { useLeaveGuard } from '@/lib/useLeaveGuard';
 import { useUndoableGrid } from '@/lib/useUndoableGrid';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
@@ -729,8 +729,8 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     //
     // Story 2.16 review: `crypto.randomUUID()` moved INSIDE `try` (it was above it). Outside, a
     // throw here skipped the `catch`/`finally` entirely, leaving `savingRef`/`isSaving` stuck
-    // `true` forever — invisible with the old fire-and-forget `handleSave`, but `handleSaveAndLeave`
-    // now `await`s this function, so the same throw left `<UnsavedChangesDialog>` open with all
+    // `true` forever — invisible with the old fire-and-forget `handleSave`, but `useLeaveGuard`'s
+    // save-and-leave path now `await`s this function, so the same throw left `<UnsavedChangesDialog>` open with all
     // three buttons `disabled` (guarded by `pending`) and the background `inert` — no escape short
     // of a reload. The comment's own claim ("surfaces through AC5's generic message") was only true
     // once the throw was inside `try`.
@@ -771,110 +771,25 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   }, [saveBattle]);
 
   /**
-   * Story 2.16 (AC3): the leave confirmation, in the three-phase shape `useDeleteBattleDialog`
-   * records — open, EXITING, closed. `leaveDialogOpen` drives the fade; `leaveConfirming` outlives
-   * it and is cleared only once the exit transition has finished, so `leaveConfirming` is exactly
-   * the window "a confirmation is on screen in some form" — which is the window the background has
-   * to stay `inert` for.
+   * Story 2.16's whole in-app guard — the dialog's three phases, the inert background, and the
+   * focus restoration across the exit transition — lives in `useLeaveGuard` (2026-09-01). What
+   * stays here is what is genuinely this component's: the dirty flag, the save, and the fact that
+   * "leave" means the Gallery.
    *
-   * ⚠️ Two cells, not one. Releasing `inert` at close time would leave a ~195ms window in which
-   * the background is `aria-hidden` AND tabbable at once (MUI defers its own `aria-hidden` removal
-   * to the transition's end), which is the exact state `useInertBackground` exists to prevent.
+   * Called HERE, from the component that renders the dialog, because the hook's effects have to be
+   * the dialog's PARENT effects to order correctly against MUI's focus trap; calling it from
+   * inside `<UnsavedChangesDialog>` would invert that. The hook's own header records why it lives
+   * in `lib/` rather than beside the dialog the way `useDeleteBattleDialog` does — the dynamic
+   * import above is load-bearing and a static import of that module would defeat it.
    */
-  const [leaveConfirming, setLeaveConfirming] = useState(false);
-  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
-
-  /**
-   * Whether focus is owed back to the Back button once the dialog's exit transition has finished
-   * (AC6), for every close path that STAYS on the page. The paths that navigate need nothing: the
-   * mount is about to die.
-   *
-   * ⚠️ A DOM lookup at restore time, never a captured element — WebKit does not focus a `<button>`
-   * on click, so `document.activeElement` at open time is `<body>` there and MUI's own restore
-   * faithfully puts focus back on it ("the tab order restarts at the top of the document"). The
-   * idiom `<DeleteBattleDialog>` and `<BattleEditorView>` both already use.
-   */
-  const restoreBackFocusRef = useRef(false);
-
-  // Called from the PARENT of the dialog so it spans the exit transition, and so MUI's own
-  // focus-trap move (a child effect) has already happened — inerting a subtree that still holds
-  // the focused element would drop focus to `<body>` instead of landing it on Cancel. Both reasons
-  // are recorded in full on `useDeleteBattleDialog`'s call.
-  useInertBackground(leaveConfirming);
-
-  /**
-   * The focus move, run as an EFFECT keyed on the confirmation clearing rather than from the exit
-   * callback directly. Ordering is the point and it has to be guaranteed rather than raced: by the
-   * time this runs, MUI has cleared the background's `aria-hidden` and `useInertBackground`'s
-   * cleanup has released `inert` — React runs every cleanup for a commit before any setup, and
-   * that hook is called ABOVE this one. Focusing any earlier targets a node that is still inert,
-   * where `focus()` is a spec-mandated no-op.
-   */
-  useEffect(() => {
-    if (leaveConfirming) return;
-    if (!restoreBackFocusRef.current) return;
-    restoreBackFocusRef.current = false;
-
-    // Do not steal focus the user has already placed somewhere real during the transition.
-    // "Loose" includes "still inside the closing dialog" — on WebKit this effect runs while that
-    // dialog is still mounted, so a body-only check would skip the restore there.
-    const active = document.activeElement;
-    const focusIsLoose =
-      active === null || active === document.body || active.closest('[role="dialog"]') !== null;
-    if (!focusIsLoose) return;
-
-    document.querySelector<HTMLElement>('[data-back-to-battles]')?.focus();
-  }, [leaveConfirming]);
-
-  /**
-   * AC2/AC3 (FR-7.9/FR-7.10). Clean → navigate, full stop. Dirty → open the confirmation and
-   * navigate NOTHING. That is the whole of the in-app guard.
-   *
-   * ❌ It does not save, does not clear `isDirty`, does not reset the editor and never reaches
-   * `onCommitGrid` — a Back is not a commit (Dev Notes → *What Back does NOT do*).
-   */
-  const handleBack = useCallback(() => {
-    if (!isDirty) {
-      router.push('/');
-      return;
-    }
-    restoreBackFocusRef.current = true;
-    setLeaveConfirming(true);
-    setLeaveDialogOpen(true);
-  }, [isDirty, router]);
-
-  // AC3: Cancel — and Escape, and a backdrop click, which MUI routes through the same callback —
-  // change NOTHING. No commit, no undo entry, no save, and `isDirty` is still true; the only thing
-  // that moves is the dialog, and focus, which comes back to the Back button once the fade ends.
-  const handleCancelLeave = useCallback(() => setLeaveDialogOpen(false), []);
-
-  // Only once the fade has finished is it safe to unmount the dialog, release `inert` and schedule
-  // the focus restore. Clearing `leaveConfirming` does all three.
-  const handleLeaveDialogExited = useCallback(() => setLeaveConfirming(false), []);
-
-  // AC3: leave, losing the changes. ❌ No write, and no state tidying — `isDirty` stays true and
-  // the component holding it is about to unmount, which are different things; setting the flag
-  // false on the way out would be a lie with a one-frame lifetime.
-  const handleDiscardAndLeave = useCallback(() => {
+  const leaveToGallery = useCallback(() => {
     router.push('/');
   }, [router]);
-
-  /**
-   * AC3, and the trap this story exists around: navigate **only if the save actually succeeded**
-   * (forced decision 2). `await handleSave()` resolving is not success — see `saveBattle` above.
-   *
-   * Forced decision 5, option (a): a FAILED save closes the dialog and stays on the page, where
-   * Story 2.13's existing `role="alert"` line above the status bar reports it (NFR-7.2) — zero new
-   * copy, zero new surface, and the user is exactly where they need to be to retry. `isDirty` is
-   * still true, so the guard is still armed.
-   */
-  const handleSaveAndLeave = useCallback(async () => {
-    if (await saveBattle()) {
-      router.push('/');
-      return;
-    }
-    setLeaveDialogOpen(false);
-  }, [router, saveBattle]);
+  const {
+    requestLeave: handleBack,
+    confirming: leaveConfirming,
+    dialogProps: leaveDialogProps,
+  } = useLeaveGuard({ isDirty, saving: isSaving, save: saveBattle, onLeave: leaveToGallery });
 
   // ALL THREE resources must settle before anything renders. Without this, a battle that resolves
   // before settings would briefly seed /battle/new at the DEFAULT_SETTINGS fallback grid size
@@ -979,17 +894,10 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
           from being requested at all on the overwhelmingly common path (every Back from a clean
           battle, which is most of them). */}
       {leaveConfirming && (
-        <UnsavedChangesDialog
-          open={leaveDialogOpen}
-          /* `isSaving` IS the pending state here: the Back control is `disabled={isSaving}`
-             (forced decision 3a), so this dialog cannot be open when a save started anywhere else
-             is in flight — the only save it can be showing is its own. */
-          pending={isSaving}
-          onCancel={handleCancelLeave}
-          onDiscard={handleDiscardAndLeave}
-          onSaveAndLeave={handleSaveAndLeave}
-          onExited={handleLeaveDialogExited}
-        />
+        /* `pending` inside this bundle IS `isSaving`: the Back control is `disabled={isSaving}`
+           (forced decision 3a), so this dialog cannot be open when a save started anywhere else
+           is in flight — the only save it can be showing is its own. */
+        <UnsavedChangesDialog {...leaveDialogProps} />
       )}
     </Root>
   );
