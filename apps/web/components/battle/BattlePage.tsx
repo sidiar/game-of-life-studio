@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
+import { appTitle } from '@/lib/appTitle';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { projectBattleForSave } from '@/lib/battleRecord';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
@@ -18,6 +19,7 @@ import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
 import { buildRosterIds } from '@/lib/rosterUnion';
 import { DEFAULT_TOOL } from '@/lib/tool';
 import { useDirtyGuard } from '@/lib/useDirtyGuard';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useLeaveGuard } from '@/lib/useLeaveGuard';
 import { useUndoableGrid } from '@/lib/useUndoableGrid';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
@@ -304,92 +306,17 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     setIsDirty(true);
   }, []);
 
-  // Task 6 / AC6 (deferred-work.md:167): the tab title. `desiredTitleRef` is what the SECOND
-  // effect below writes on every relevant change; the FIRST effect owns the observer that keeps
-  // that value stuck, for a reason discovered empirically rather than documented anywhere: Next
-  // 16's App Router metadata (the `MetadataBoundary` / `OutletBoundary` machinery behind
-  // `export const metadata` in `app/layout.tsx`) commits the root layout's STATIC `<title>` into
-  // the real DOM once, ASYNCHRONOUSLY, during initial hydration — observed (via a `MutationObserver`
-  // probe against the built static export served from `out/`, never against `next dev`) landing
-  // strictly AFTER this component's own first title write, on every load, on both `/battle` and
-  // `/battle/new`. A plain `document.title = …` effect (what Dev Notes originally prescribed) loses
-  // that one race and leaves the tab reading "Game of Life Studio" at rest until the user's first
-  // keystroke forces a second write — AC6 requires the correct title from the moment the page
-  // settles, not from the moment it is edited. The observer is the fix: it re-asserts
-  // `desiredTitleRef.current` synchronously whenever anything else changes `document.title`,
-  // which defeats this one late race without depending on ITS exact timing (a `requestAnimationFrame`
-  // or `setTimeout` delay would be a guess at a framework internal that owes no stability contract).
-  //
-  // Two effects, not one, is still deliberate: the FIRST owns both the observer's WHOLE lifecycle
-  // (attached once, for the life of the mount) and the pre-existing title's capture-and-restore —
-  // deterministic UNMOUNT ordering matters here (disconnect before restore, in the SAME cleanup),
-  // which is the reason this is not two independent `[]`-deps effects. If cleanup order were
-  // reversed the observer would still be attached when the restore write lands and would fight its
-  // own unmount. A client navigation back to the Gallery must not keep reading the last battle's
-  // name (Next may not rewrite a `<title>` it believes is unchanged between two `'use client'`
-  // routes sharing one static `metadata.title` — see Dev Notes → *The tab title*). The SECOND
-  // effect tracks the live display value on every relevant change; it owns no cleanup of its own.
-  // `useEffect` never runs during the static export's prerender, so — unlike the `colors` memo
-  // above — neither needs a `typeof document` guard.
-  const desiredTitleRef = useRef<string | null>(null);
-  useEffect(() => {
-    const previousTitle = document.title;
-    // ⚠️ The re-assertions are BOUNDED, and that bound is the whole safety story. A
-    // `MutationObserver` callback that writes back what it just observed re-queues itself as a
-    // MICROTASK, so two agents that each insist on their own title never reach a fixed point and
-    // the microtask queue never drains — the event loop starves and the tab freezes hard (no
-    // paint, no timers, no input, no CDP; verified against the built export in review, where the
-    // page never recovered). The whitespace read-back below closes the one instance of this the
-    // dev pass found; the counter closes the CLASS, for every other title writer this component
-    // cannot know about (a second `<BattlePage>` in a test, a browser extension, an analytics
-    // snippet, a later story that prefixes a dirty marker). The race being defended against needs
-    // exactly ONE correction, so a budget this generous cannot be reached by legitimate use:
-    // re-writing the SAME title never spends it, because the equality check short-circuits first.
-    // Losing the tab title is a cosmetic failure; hanging the page is not, so this fights a fixed
-    // number of rounds and then loses loudly rather than wedging the tab.
-    const MAX_TITLE_CORRECTIONS = 10;
-    let corrections = 0;
-    const observer = new MutationObserver(() => {
-      if (desiredTitleRef.current === null || document.title === desiredTitleRef.current) return;
-      if (corrections >= MAX_TITLE_CORRECTIONS) {
-        observer.disconnect();
-        return;
-      }
-      corrections += 1;
-      document.title = desiredTitleRef.current;
-    });
-    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
-    return () => {
-      observer.disconnect();
-      document.title = previousTitle;
-    };
-  }, []);
-  useEffect(() => {
-    // `draft === null` covers BOTH the still-loading first commits (every hook here runs before
-    // the four early returns, so this effect fires while the resources are settling) and the
-    // not-found / error branch. Neither may claim a battle name it does not have (AC6). Nulling
-    // `desiredTitleRef` stops the observer reasserting anything, so the tab keeps reading whatever
-    // the FIRST effect captured (the Gallery's, on a navigation into a bad link) rather than
-    // inventing one. ⚠️ It only stops re-asserting; it does not UNDO a title already written, so a
-    // battle → bad-id transition on a MOUNTED instance would strand the old name in the tab —
-    // deferred-work.md's `battleId`-swap entry, unreachable until something navigates that way.
-    if (draft === null) {
-      desiredTitleRef.current = null;
-      return;
-    }
-    document.title = `${battleDisplayName(battleName)} · Game of Life Studio`;
-    // Read back what the browser actually stored, rather than the template string just assigned.
-    // The HTML spec's `document.title` getter STRIPS AND COLLAPSES ASCII whitespace — a battleName
-    // ending in a space (an entirely normal mid-typing state, e.g. "New ") produces
-    // "New  · Game of Life Studio" (two spaces) going IN, which the browser reports back as "New ·
-    // Game of Life Studio" (one) coming OUT. Storing the un-normalised string here would make the
-    // observer's `document.title !== desiredTitleRef.current` comparison PERMANENTLY TRUE —
-    // browser mutation, observer reassigns, browser normalises again, observer fires again — a
-    // same-tick MutationObserver retrigger loop with no macrotask in between, which starves the
-    // event loop and makes every further keystroke (and, from OUTSIDE the page, every further
-    // Playwright/CDP command) hang indefinitely. Found by an e2e that typed a literal space.
-    desiredTitleRef.current = document.title;
-  }, [draft, battleName]);
+  /**
+   * Story 2.11 AC6, now one line: everything that made the tab title stick — the observer that
+   * defeats Next's async metadata commit, the bounded corrections that keep it from starving the
+   * event loop, the whitespace read-back, the capture-and-restore — lives in `useDocumentTitle`
+   * (2026-09-03). What belongs here is only the DECISION about what the tab should read.
+   *
+   * `null` while `draft` is: that covers BOTH the still-loading first commits (every hook here runs
+   * before the four early returns, so this fires while the resources settle) and the not-found /
+   * error branch. Neither may claim a battle name it does not have.
+   */
+  useDocumentTitle(draft === null ? null : appTitle(battleDisplayName(battleName)));
 
   // Task 6: `colors` resolved ONCE here (getComputedStyle forces a style recalculation) and
   // passed down, never resolved inside the canvas — the same memoised pattern
