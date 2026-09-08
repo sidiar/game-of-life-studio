@@ -16,6 +16,7 @@
     "@gol/domain": "*"
   },
   "devDependencies": {
+    "@gol/test-utils": "*",
     "typescript": "^5.9.3"
   }
 }
