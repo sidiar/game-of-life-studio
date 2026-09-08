@@ -635,14 +635,44 @@ story, so the review is a genuine second pair of eyes rather than the same reaso
 
 None. The story is therefore set to `done` on this branch.
 
-### Coverage gap — read this before trusting the review as exhaustive
+### Second review pass — the boundary was not actually mechanical
+
+The Edge Case Hunter layer returned **after** the PR was opened (its retry ran ~2h 51m) and found
+two live escapes past the boundary rule, both confirmed empirically before being acted on:
+
+- **`import { a } from './../../gol/x'`** — the guard regex was prefix-anchored (`^\.\.($|/)`), so a
+  specifier that *starts* with `./` never matched it, yet it normalises straight out of `src/engine/`
+  into GoL code. Fixed by matching a `..` path **segment** anywhere: `(^|/)\.\.($|/)`.
+- **`import('@gol/domain')`** — `no-restricted-imports` registers listeners only for
+  `ImportDeclaration` / `ExportNamedDeclaration` / `ExportAllDeclaration`; it has **no
+  `ImportExpression` handler**, so no dynamic import in the engine was ever checked. Fixed with a
+  `no-restricted-syntax` rule banning `ImportExpression` outright in this directory — the engine is a
+  synchronous leaf layer, so there is no legitimate `import()` in it.
+
+Both had passed the first pass's "proved the rule fires" evidence, which was real but covered only
+the single shape it tested. That is the actual lesson: a boundary rule proved against one escape
+says nothing about the others.
+
+Hence `scripts/check-engine-boundary.mjs`, a new `ci` stage in the `check-spec-ids.mjs` idiom. It
+lints one in-memory fixture per escape shape and asserts each is rejected, plus two legitimate
+intra-engine imports asserted accepted so the rule cannot be "fixed" into banning everything, plus a
+floor guard so a shrunken case list fails rather than passing vacuously. **The script was itself
+mutation-tested**: reverting the regex to its prefix-anchored form fails it with the two path cases,
+and deleting the `ImportExpression` rule fails it with the two dynamic-import cases.
+
+### Coverage note
 
 The review ran under repeated infrastructure failures (the machine slept mid-response five times;
-the stream watchdog killed the agent on three of them). The Blind Hunter and Edge Case Hunter layers
-completed; the **Acceptance Auditor was killed mid-pass** and its remaining checks were finished
-inline instead. The findings above are the ones that survived, and the applied patch was
-independently re-verified against the working tree afterwards — but this was not a clean run, and
-the review should be treated as good rather than exhaustive.
+the stream watchdog killed the review agent on three). The Blind Hunter completed; the **Acceptance
+Auditor was killed mid-pass** and its remaining checks were finished inline; the **Edge Case Hunter
+completed late**, and its findings are the second pass above.
+
+Its remaining findings were judged **not** blocking for this story and are carried to Story 3.2,
+where real data first flows through the engine: an unrecognised `operator` id invoking `undefined`
+rather than failing the condition; `range` destructuring a non-tuple `pattern`; nullish values
+reaching the comparison operators and coercing via `ToNumber`; `eq` never matching `NaN`; and
+`Props extends string = string` widening `Selectors<S>` to a total `Record<string, …>`, which
+weakens the compile-time selector guarantee when `Props` is left at its default.
 
 ---
 

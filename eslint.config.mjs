@@ -168,12 +168,31 @@ export default tseslint.config(
                 'binding belongs in packages/simulation/src/gol/, which is a CALLER of this layer.',
             },
             {
-              regex: '^\\.\\.($|/)',
+              // Any `..` PATH SEGMENT, not just a `../` prefix: './../../gol/x' starts with
+              // './', so a prefix-anchored pattern never matches it, yet it normalises straight
+              // out of src/engine/ into GoL code. Match the segment wherever it appears.
+              regex: '(^|/)\\.\\.($|/)',
               message:
                 'src/engine/ is a self-contained boundary (AR-40) — a relative path escaping it ' +
                 'reaches GoL code without tripping the @gol/* ban above. Keep the engine leaf-only.',
             },
           ],
+        },
+      ],
+      // no-restricted-imports CANNOT see dynamic imports: the rule registers listeners only for
+      // ImportDeclaration / ExportNamedDeclaration / ExportAllDeclaration, with no ImportExpression
+      // handler — so `import('@gol/domain')` inside the engine lints clean and crosses the AR-16 /
+      // AR-40 boundary the block above exists to make mechanical. The engine is a pure, synchronous
+      // leaf layer, so there is no legitimate `import()` here at all; ban the syntax outright rather
+      // than trying to re-specify the allow-list a second time in a second dialect.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression',
+          message:
+            'No dynamic import() in src/engine/ — no-restricted-imports cannot see it, so it is a ' +
+            'hole straight through the AR-40 boundary. The engine is a synchronous leaf layer; ' +
+            'if you need deferred loading, it belongs in a CALLER under packages/simulation/src/gol/.',
         },
       ],
     },
