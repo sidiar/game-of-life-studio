@@ -168,7 +168,7 @@ export default tseslint.config(
                 'binding belongs in packages/simulation/src/gol/, which is a CALLER of this layer.',
             },
             {
-              regex: '^\\.\\./',
+              regex: '^\\.\\.($|/)',
               message:
                 'src/engine/ is a self-contained boundary (AR-40) — a relative path escaping it ' +
                 'reaches GoL code without tripping the @gol/* ban above. Keep the engine leaf-only.',

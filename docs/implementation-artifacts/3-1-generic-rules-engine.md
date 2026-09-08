@@ -603,6 +603,47 @@ buried — if the helper is ever wanted, it is additive and nothing here blocks 
   `firstSatisfiedBy`. Domain-blindness made mechanical by a directory-scoped ESLint import boundary
   (proved to fire). 19 tests, 100% coverage on the package; `npm run ci` exit 0.
 
+
+## Review Findings (Story 3.1)
+
+Reviewed on **Sonnet** — deliberately the complement of the **Opus** agent that implemented the
+story, so the review is a genuine second pair of eyes rather than the same reasoning re-run.
+
+### Applied (patch bucket)
+
+- **Engine boundary rule missed a bare `..` import.** The `no-restricted-imports` pattern guarding
+  `packages/simulation/src/engine/` was `^\.\./`, which matches `../foo` but *not* a bare `import
+  … from '..'` — the exact shape that reaches the package root, and therefore GoL code, without
+  tripping the `@gol/*` ban above it. Widened to `^\.\.($|/)`. Verified in both directions: a probe
+  file importing from `'..'` now fails lint with the boundary message, and legitimate intra-engine
+  imports (`./operators`) still pass with the repo lint green.
+
+### Confirmed, no change needed
+
+- **AC5** — `SurvivalRules` is assignable to `RuleSet<SurvivalPayload>` with no mapping layer,
+  covered by `domainRuleSetCompatibility.test.ts`.
+- **AC4** — purity is mechanical, not asserted: zero `@gol/domain` imports, no `class`/`this`/module
+  state/DOM, and the ESLint boundary was proved to *fire* rather than merely to pass.
+- **AC6** — tests drive a non-GoL subject and the test file imports nothing from `@gol/domain`.
+- **FD1** — dropping `Condition`'s inert pattern parameter and threading a real `Props` parameter
+  holds up for the 3.2 and 3.5 consumers. `Props` is generic and names no GoL concept, so AC1 stands.
+- **RFC-004 §1.5 `makeRuleSchema` skip** — judged a scope call, not a spec violation: the helper's
+  only intended caller already exists in `@gol/domain` and bypasses it, and building it would pull
+  `zod` into the engine package. Carried to Sidiar in the PR as a note, not as a blocker.
+
+### Decision-needed
+
+None. The story is therefore set to `done` on this branch.
+
+### Coverage gap — read this before trusting the review as exhaustive
+
+The review ran under repeated infrastructure failures (the machine slept mid-response five times;
+the stream watchdog killed the agent on three of them). The Blind Hunter and Edge Case Hunter layers
+completed; the **Acceptance Auditor was killed mid-pass** and its remaining checks were finished
+inline instead. The findings above are the ones that survived, and the applied patch was
+independently re-verified against the working tree afterwards — but this was not a clean run, and
+the review should be treated as good rather than exhaustive.
+
 ---
 
 Dev Model: opus   # architecture-shaping: this is the layer 3.2/3.4/3.5/3.6 all compile against, and it must settle a live RFC-004 ambiguity (the `P` parameter means "pattern" in §1.1 and "payload" in §1.4, and `Condition<P>` is inert as written), the `Selectors<S>` miss-behaviour that decides whether a missing selector is a build error or a per-cell runtime throw, the on-disk boundary plus its lint enforcement that makes AR-40's purity claim mechanical, and the RFC §1.5 schema-helper divergence — nothing precedes it to follow, and every one of those choices is inherited rather than revisited
