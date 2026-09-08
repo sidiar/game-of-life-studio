@@ -10,7 +10,10 @@ import {
   GridRendererContextError,
   GridRendererDimensionMismatchError,
 } from './gridRenderer';
-import { installRecordingContext2d, installRecordingContexts } from '../recordingContext2d';
+import {
+  installRecordingContext2d,
+  installRecordingContexts,
+} from '@/test-support/recordingContext2d';
 import { buildRefToFillGroup, type RefToFillGroup } from './refToFillGroup';
 import { toRenderableGrid, type RenderableGrid } from './renderableGrid';
 

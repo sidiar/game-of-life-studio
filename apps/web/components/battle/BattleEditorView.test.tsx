@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { fireEvent } from '@testing-library/react';
-import { RecordingContext2D } from '@/lib/recordingContext2d';
+import { RecordingContext2D } from '@/test-support/recordingContext2d';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';

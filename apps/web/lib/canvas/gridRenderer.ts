@@ -50,7 +50,7 @@ import type { RenderableGrid } from './renderableGrid';
 export type { CellCoord };
 
 // Narrow structural alias of the canvas members this file actually uses. Declared here (not
-// imported from lib.dom) so the hand-rolled test double in recordingContext2d.ts can satisfy it
+// imported from lib.dom) so the hand-rolled test double in test-support/recordingContext2d.ts can satisfy it
 // structurally, with no cast anywhere except the one spy-return-type coercion the test file names.
 export type Canvas2D = Pick<
   CanvasRenderingContext2D,

@@ -13,7 +13,7 @@ import {
 } from '@gol/domain';
 import { CorruptDataError, QuotaExceededError, type AppRepositories } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
-import { RecordingContext2D } from '@/lib/recordingContext2d';
+import { RecordingContext2D } from '@/test-support/recordingContext2d';
 import { computeGridLayout } from '@/lib/canvas/gridLayout';
 import { resetRefToFillGroupWarnings } from '@/lib/canvas/refToFillGroup';
 import BattlePage from './BattlePage';
@@ -44,7 +44,7 @@ function enableCanvasRendering() {
 }
 
 // Real (unmocked) jsdom's `getContext('2d')` always returns null (no native `canvas` package —
-// recordingContext2d.ts's own doc comment), which is enough to prove a canvas is PRESENT but
+// test-support/recordingContext2d.ts's own doc comment), which is enough to prove a canvas is PRESENT but
 // nothing about what it painted. Gives every canvas its own `RecordingContext2D` (keyed by
 // identity, like `installRecordingContexts`'s `offscreen: true` mode) so the very first mount
 // paints for real — no forced-rerender trick needed, and the MAIN canvas's own recording is

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { GridRenderer } from '@/lib/canvas/gridRenderer';
 import { resetColourStateWarnings } from '@/lib/canvas/colourStateGroups';
-import { installRecordingContext2d, RecordingContext2D } from '@/lib/recordingContext2d';
+import { installRecordingContext2d, RecordingContext2D } from '@/test-support/recordingContext2d';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { displayColorAt } from '@/lib/palette/displayColor';

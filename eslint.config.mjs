@@ -105,6 +105,12 @@ export default tseslint.config(
   // (fake repos, fixtures) — one stray import welds test doubles into the browser
   // bundle. Distinct from AR-46; both live here but enforce different things.
   // Test and e2e files are exempt (they legitimately consume test-utils).
+  //
+  // `@/test-support/**` is banned by the SAME rule for the same reason. It holds the app's own
+  // test doubles — the ones that cannot live in @gol/test-utils because they need DOM types, which
+  // `packages/*` deliberately do not have (project-context: engine purity). `recordingContext2d`
+  // sat in `lib/` until 2026-09-08, where nothing stopped a production module importing it; the
+  // move only means something with this pattern beside it.
   {
     files: ['apps/web/**/*.{ts,tsx}'],
     ignores: ['apps/web/**/*.test.{ts,tsx}', 'apps/web/**/*.spec.{ts,tsx}', 'apps/web/e2e/**'],
@@ -118,6 +124,13 @@ export default tseslint.config(
               message:
                 '@gol/test-utils is test-only — importing it from app code risks bundling ' +
                 'fakes into production. Inject repositories at the page boundary instead (AR-2/27).',
+            },
+            {
+              group: ['@/test-support', '@/test-support/**'],
+              message:
+                'apps/web/test-support holds test doubles — importing one from app code would ' +
+                'bundle it into the browser. It lives outside lib/ precisely so this rule can ' +
+                'catch that.',
             },
           ],
         },
