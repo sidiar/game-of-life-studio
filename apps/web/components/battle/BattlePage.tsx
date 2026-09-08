@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { styled } from '@mui/material/styles';
-import { DEFAULT_SETTINGS, type Battle, type Organism, type Settings } from '@gol/domain';
+import { DEFAULT_SETTINGS, type Organism, type Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { appTitle } from '@/lib/appTitle';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { projectBattleForSave } from '@/lib/battleRecord';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { useAsyncResource } from '@/lib/useAsyncResource';
-import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft';
+import { useBattleDraft } from '@/lib/useBattleDraft';
 import { buildRefToFillGroup, MAX_ROSTER_SIZE } from '@/lib/canvas/refToFillGroup';
 import { toRenderableGrid, type RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { readGridColors } from '@/lib/canvas/themeColors';
@@ -110,28 +110,6 @@ export interface BattlePageProps {
 // retained renderer down on every render (Story 2.5 trap 7).
 const NO_ROSTER: readonly string[] = [];
 
-// Converts a loaded Battle to the SAME shape createNewBattleDraft seeds, so the render below reads
-// one shape instead of branching on battleId === 'new' forever (Task 3, Story 2.2).
-//
-// ⚠️ These two arrays are handed out BY REFERENCE — they are the loaded `Battle` record's own,
-// still held inside `battleResource.data`. `NewBattleDraft` used to declare them mutable, so any
-// story that wrote `draft.gridState[r][c]` or pushed onto `draft.organismIds` would destroy the
-// pristine loaded state in place, leaving nothing to revert to — and it would behave CORRECTLY on
-// /battle/new (fresh arrays from createNewBattleDraft) and INCORRECTLY on /battle?id=…, the
-// hardest possible shape for a bug to take. Story 2.5 closes that (deferred-work.md) by making
-// `NewBattleDraft`'s arrays `readonly` at the TYPE level, so the compiler rejects the write
-// instead of a convention having to catch it. Copying here was the alternative and was rejected:
-// it costs a 6,000-element clone per load to defend against something the type system can rule
-// out for free.
-function toDraft(battle: Battle): NewBattleDraft {
-  return {
-    name: battle.name,
-    gridSize: battle.gridSize,
-    gridState: battle.gridState,
-    organismIds: battle.organismIds,
-  };
-}
-
 export default function BattlePage({ repositories, battleId }: BattlePageProps) {
   // AR-28: modes are local state, not routes. Epic 2 populates only 'lab' — the setter and the
   // 'run' branch arrive in Epic 3, and until then the route renders no toggle and no fullscreen
@@ -159,15 +137,6 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // ❌ No `<Suspense>` boundary is added for this: that requirement belongs to `useSearchParams`
   // (`missing-suspense-with-csr-bailout`), not to `useRouter` (trap 16).
   const router = useRouter();
-
-  // ⚠️ 'new' must never reach battles.load(). It is not a uuid, so the repository would treat it
-  // as a plain miss and return null — indistinguishable from a stale/deleted id, which would make
-  // /battle/new render "this battle is gone" for a page whose whole purpose is that it does not
-  // exist yet. Story 2.2 short-circuits and seeds a fresh draft for the branch instead (below).
-  const battleResource = useAsyncResource<Battle | null>(
-    () => (battleId === 'new' ? Promise.resolve(null) : repositories.battles.load(battleId)),
-    [repositories, battleId],
-  );
 
   // Story 2.9 AC6 (deferred-work.md, owned by this story): the organism library is its OWN
   // resource. It used to ride inside the battle's `Promise.all`, which rejects on the FIRST
@@ -197,36 +166,36 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // get 100x60 on /battle/new the moment an unrelated organism record was corrupt. A fully
   // separate resource makes the two failures structurally independent: this one's own `.catch`
   // means its status is always eventually 'ready', never 'error', so it cannot be blanked by
-  // anything battleResource does.
+  // anything the battle resource does.
   const settingsResource = useAsyncResource<Settings>(
     () => repositories.settings.load().catch(() => DEFAULT_SETTINGS),
     [repositories],
   );
   const settings = settingsResource.data ?? DEFAULT_SETTINGS;
 
-  // Task 6 / deferred-work.md:179 (AC7): the seeded draft used to be rebuilt in the RENDER BODY —
-  // 61 array allocations per render at 100x60, with a fresh identity every time, which would make
-  // the canvas's `[grid]` effect repaint on every unrelated render. Held here instead, in a hook
-  // declared before every early `return` below (the hooks-order trap: `<BattlePage>` returns early
-  // four times, and a hook below any of them is a conditional hook — React's error, not a subtle
-  // one, but the *fix* people reach for, moving the return, is what would break the branch order
-  // the Story 2.1 review fixed). `newDraft` is intentionally unconditional and independent of
-  // `battleResource` — it depends only on `settings`, which is what keeps it correct even when
-  // organisms.list() has failed (see settingsResource above).
-  const newDraft = useMemo<NewBattleDraft | null>(
-    () => (battleId === 'new' ? createNewBattleDraft(settings.defaultGridSize) : null),
-    [battleId, settings],
-  );
-  const loadedBattle = battleResource.data ?? null;
-  const loadedDraft = useMemo<NewBattleDraft | null>(
-    () => (loadedBattle === null ? null : toDraft(loadedBattle)),
-    [loadedBattle],
-  );
-  // The unified shape (Story 2.2's NewBattleDraft) both branches resolve to. For battleId ===
-  // 'new', `newDraft` is always non-null (the memo above always seeds one in that branch); this
-  // is null only for a real battle id with no usable battle in hand yet (a genuine load failure,
-  // or a real not-found) — which is exactly the distinction the render below needs.
-  const draft = battleId === 'new' ? newDraft : loadedDraft;
+  // WHICH BATTLE this page is opening (extracted 2026-09-08). The battle resource, the `'new'`
+  // short-circuit, and the collapse of both branches into one `NewBattleDraft` live in
+  // `useBattleDraft`; what stays here is everything seeded FROM the draft and the copy for the two
+  // failure bodies.
+  //
+  // ⚠️ `settings` is passed IN rather than loaded there, so `settingsResource` above keeps its
+  // structural independence from the battle (Story 2.9 Task 7) — read that hook's header before
+  // moving the resource into it.
+  //
+  // ⚠️ Called before every early `return` below, like every other hook here (the hooks-order trap:
+  // `<BattlePage>` returns early four times, and a hook below any of them is a conditional hook —
+  // React's error, not a subtle one, but the *fix* people reach for, moving the return, is what
+  // would break the branch order the Story 2.1 review fixed).
+  //
+  // `draft` is null ONLY for a real battle id with no usable battle in hand — never for
+  // `battleId === 'new'`, which always seeds. `battleStatus` separates a genuine load failure from
+  // a real not-found, which is exactly the distinction the render below needs. `loadedIdentity`
+  // carries the two fields the draft deliberately drops (`id`, `createdAt`) for `saveBattle`.
+  const {
+    draft,
+    status: battleStatus,
+    loadedIdentity,
+  } = useBattleDraft(repositories, battleId, settings);
 
   // Story 2.11 Task 3 (AC2, AC3): `battleName`, seeded from `draft.name` by the SAME in-render
   // "adjusting state when a prop changes" pattern `useUndoableGrid` uses for its own seed (Dev
@@ -394,7 +363,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // in `buildRosterIds` with tests of their own (AC8, AC9) rather than inline here, because their
   // failure mode is a silently repainted grid rather than an error.
   //
-  // ⚠️ A NEW array, never a push onto `draft.organismIds` — see toDraft above.
+  // ⚠️ A NEW array, never a push onto `draft.organismIds` — see `useBattleDraft`'s `toDraft`.
   const rosterIds = useMemo<readonly string[]>(() => {
     if (!rosterSettled) return NO_ROSTER;
     const placed = draft?.organismIds ?? NO_ROSTER;
@@ -643,9 +612,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
 
     const now = new Date();
     // The loaded record is the fallback SOURCE for both fields, never a thing to write back to.
-    const existing =
-      saveStamp ??
-      (loadedBattle === null ? null : { id: loadedBattle.id, createdAt: loadedBattle.createdAt });
+    const existing = saveStamp ?? loadedIdentity;
     // Forced decision 2, option (a): bare `crypto.randomUUID()`, no fallback. It requires a SECURE
     // CONTEXT — `localhost`, `https` and Playwright all are, so dev, CI and any real deployment are
     // fine; a static export opened over plain `http://` on a LAN IP is not, and there `crypto
@@ -688,7 +655,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
       savingRef.current = false;
       setIsSaving(false);
     }
-  }, [grid, rosterIds, battleName, repositories, saveStamp, loadedBattle]);
+  }, [grid, rosterIds, battleName, repositories, saveStamp, loadedIdentity]);
 
   // `<EditorStatusBar>`'s SAVE, unchanged in contract (`onSave(): void`): it fires and forgets,
   // because the bar has no use for the outcome — the `role="alert"` line and the dirty flag are
@@ -729,7 +696,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // (AC7). Gating on anything but 'loading' here would restore the very blanking this story exists
   // to remove.
   if (
-    battleResource.status === 'loading' ||
+    battleStatus === 'loading' ||
     organismsResource.status === 'loading' ||
     settingsResource.status === 'loading'
   ) {
@@ -742,7 +709,7 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     // 'error') or it succeeded and found nothing (a stale/deleted id, or a hand-typed one). "Gone"
     // and "broken" are different facts and offer the user different next moves, so the copy must
     // differ.
-    if (battleResource.status === 'error') {
+    if (battleStatus === 'error') {
       return (
         <Notice>
           <NoticeTitle>Something Went Wrong</NoticeTitle>
@@ -765,8 +732,8 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // Task 6 (deferred-work.md:189): Task 3 unified the draft TYPE but not the RENDER — this used to
   // be two byte-identical `return`s, each building its own local `draft`. Both arms already
   // resolve to the same `NewBattleDraft` shape, so one render now serves both: the create route
-  // (`draft` is `newDraft`, always non-null), and a loaded battle (`draft` is `loadedDraft`, which
-  // the guard above has already excluded being null for).
+  // (where `useBattleDraft` always seeds), and a loaded battle (where the guard above has already
+  // excluded `draft` being null).
   //
   // `grid` is non-null here too: it is null only when `draft` is, and that branch already
   // returned above.
