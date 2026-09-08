@@ -15,7 +15,19 @@ export function conditionIsSatisfiedBy<S, Props extends string>(
   selectors: Selectors<S, Props>,
 ): boolean {
   const value = selectors[condition.property](subject);
-  return operators[condition.operator](value, condition.pattern);
+  // `Operator` is a COMPILE-TIME union, so this lookup is only total for a Condition that was
+  // freshly type-checked. Anything else — a rule deserialized from an older workspace, an `as` cast,
+  // a future non-GoL caller building Conditions by hand — can carry an operator id outside the six.
+  // This file's own header notes `ne` was a valid operator until Decision C retired it, so a
+  // persisted pre-retirement rule is a concrete path here, not a hypothetical one.
+  //
+  // Unguarded, `operators[...]` is then `undefined` and CALLING it throws
+  // "is not a function" from inside the per-cell hot loop, taking the whole simulation down. One
+  // `undefined` comparison turns that into a rule that does not fire. See operators.ts on why
+  // failing closed is right here and where the eager diagnostic belongs (Story 3.4, compile time).
+  const predicate = operators[condition.operator];
+  if (predicate === undefined) return false;
+  return predicate(value, condition.pattern);
 }
 
 // A rule passes when ALL of its conditions pass (Composite, AND semantics).

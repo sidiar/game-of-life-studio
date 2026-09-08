@@ -667,12 +667,45 @@ the stream watchdog killed the review agent on three). The Blind Hunter complete
 Auditor was killed mid-pass** and its remaining checks were finished inline; the **Edge Case Hunter
 completed late**, and its findings are the second pass above.
 
-Its remaining findings were judged **not** blocking for this story and are carried to Story 3.2,
-where real data first flows through the engine: an unrecognised `operator` id invoking `undefined`
-rather than failing the condition; `range` destructuring a non-tuple `pattern`; nullish values
-reaching the comparison operators and coercing via `ToNumber`; `eq` never matching `NaN`; and
-`Props extends string = string` widening `Selectors<S>` to a total `Record<string, …>`, which
-weakens the compile-time selector guarantee when `Props` is left at its default.
+Its `operators.ts` findings were **folded into this story** at Sidiar's direction rather than
+deferred. Every one was a live crash or a silent wrong answer, and all are now covered by tests:
+
+- **Unrecognised `operator` id.** `Operator` is a compile-time union, so `operators[id]` is only
+  total for a freshly type-checked `Condition`; a rule deserialized from before Decision C retired
+  `ne` carries one. Unguarded the lookup gave `undefined` and **calling it threw out of the per-cell
+  loop**. Now fails the condition.
+- **Prototype-inherited lookups — found by the new test, not by the review.** The `undefined` guard
+  above is *not sufficient*: a plain object literal inherits from `Object.prototype`, so
+  `operators['toString']` resolves to a real function, passes the guard, and gets **called**,
+  returning `"[object Undefined]"` where the signature promises a boolean. The dictionary is now
+  null-prototype, which closes the whole class (`constructor`, `valueOf`, `__proto__`).
+- **`range` on a malformed pattern.** Destructuring a non-iterable threw; a 1-element array gave
+  `high = undefined` and silently never matched. Both are now `false`. A reversed tuple stays
+  unsatisfiable rather than being silently swapped — an inclusive range with low > high is genuinely
+  empty, and normalising it would invent an intent the author never expressed.
+- **Nullish values in `gt`/`lt`/`gte`/`lte`.** The `as number` casts erase at runtime, so JS coerced:
+  `null` → 0, making **`null > -1` silently TRUE**, and `undefined` → NaN, making every comparison
+  silently false. Guarded with `typeof`.
+- **`eq` and `NaN`** — left as `===` deliberately, now documented and tested: `===` is the equality
+  callers expect, and NaN in a rule is an upstream defect to fix there.
+
+The original "never re-parse per cell" rationale still stands and is why there is no Zod work here;
+it was simply too strong, since the casts proved nothing at runtime and this layer is parametric
+over an arbitrary subject that brings no `@gol/domain` guarantee with it. Cost was **measured**, not
+asserted: 6,000 cells x 3 conditions x 200 cycles, identical results both ways — 0.141 ms/cycle
+unguarded vs 0.160 ms/cycle guarded, i.e. **+0.019 ms against the 16.7 ms NFR-1.1 frame budget
+(~0.1%)**. Story 3.7 owns the real harness and should re-measure there.
+
+Failing closed is deliberate but silent, so eager diagnostics belong at rule-**compile** time — one
+pass per battle, not one per cell — which is Story 3.4's evaluator cache.
+
+The `satisfies Record<Operator, Predicate>` on the literal is load-bearing: annotating only the
+null-prototype copy would have dropped the exhaustiveness check that makes a seventh operator a
+build failure. Mutation-tested — adding a seventh arm to `Operator` fails the build.
+
+**Still carried to Story 3.2** (type-level, not `operators.ts`): `Props extends string = string`
+widens `Selectors<S>` to a total `Record<string, …>`, which weakens the compile-time selector
+guarantee whenever `Props` is left at its default.
 
 ---
 

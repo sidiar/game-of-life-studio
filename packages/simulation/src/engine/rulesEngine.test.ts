@@ -115,6 +115,88 @@ describe('conditionIsSatisfiedBy — the six MVP operators', () => {
   });
 });
 
+// Every case here was a live crash or a silent wrong answer before the Story 3.1 review. The engine
+// is parametric over an ARBITRARY subject (AR-16), so it cannot lean on @gol/domain's schemas to
+// have screened its inputs — a future caller brings no such guarantee, and neither does a rule
+// deserialized from an older workspace.
+describe('conditionIsSatisfiedBy — malformed input fails the condition, never the process', () => {
+  // An `unknown` selector may legitimately return null/undefined for an optional field. JS coerces
+  // null to 0 and undefined to NaN, so unguarded these were silently WRONG rather than merely
+  // unhelpful: `null > -1` was true.
+  const nullish: Selectors<LibraryLoan, LoanProperty> = {
+    ...loanSelectors,
+    daysOverdue: () => null,
+  };
+  const undef: Selectors<LibraryLoan, LoanProperty> = {
+    ...loanSelectors,
+    daysOverdue: () => undefined,
+  };
+  const check = (sel: Selectors<LibraryLoan, LoanProperty>, operator: Operator, pattern: unknown) =>
+    conditionIsSatisfiedBy({ property: 'daysOverdue', operator, pattern }, loan(), sel);
+
+  it('a null selector value never satisfies a numeric comparison — it does NOT coerce to 0', () => {
+    // The regression: `null > -1` is true in raw JS. -1 is chosen precisely because 0 beats it.
+    expect(check(nullish, 'gt', -1)).toBe(false);
+    expect(check(nullish, 'gte', 0)).toBe(false);
+    expect(check(nullish, 'lt', 1)).toBe(false);
+    expect(check(nullish, 'lte', 0)).toBe(false);
+    expect(check(nullish, 'range', [-1, 1])).toBe(false);
+  });
+
+  it('an undefined selector value never satisfies a numeric comparison', () => {
+    expect(check(undef, 'gt', -1)).toBe(false);
+    expect(check(undef, 'lte', 99)).toBe(false);
+    expect(check(undef, 'range', [-1, 99])).toBe(false);
+  });
+
+  it('a non-numeric pattern fails the comparison instead of coercing', () => {
+    expect(holds('gt', '1', loan({ daysOverdue: 5 }))).toBe(false);
+    expect(holds('lte', null, loan({ daysOverdue: 0 }))).toBe(false);
+  });
+
+  it('range fails on a pattern that is not a 2-tuple — it must not throw', () => {
+    // Each of these DESTRUCTURED before the fix: a non-iterable threw TypeError out of the hot loop.
+    for (const pattern of [5, null, undefined, {}, 'range', [], [2], [2, 3, 4], [2, 'x']]) {
+      expect(() => holds('range', pattern, loan({ daysOverdue: 3 }))).not.toThrow();
+      expect(holds('range', pattern, loan({ daysOverdue: 3 }))).toBe(false);
+    }
+  });
+
+  it('a reversed range is empty rather than silently swapped', () => {
+    // [5,2] expresses an impossible interval; inventing [2,5] would fabricate an intent.
+    expect(holds('range', [5, 2], loan({ daysOverdue: 3 }))).toBe(false);
+    expect(holds('range', [5, 2], loan({ daysOverdue: 5 }))).toBe(false);
+  });
+
+  it('an operator id outside the six fails the condition instead of throwing', () => {
+    // 'ne' is the concrete case: valid until Decision C retired it, so a rule persisted before that
+    // still carries it. Unguarded, operators['ne'] is undefined and CALLING it took down the loop.
+    for (const operator of ['ne', 'matches', '', 'toString'] as unknown as Operator[]) {
+      expect(() => holds(operator, 0, loan())).not.toThrow();
+      expect(holds(operator, 0, loan())).toBe(false);
+    }
+  });
+
+  it('a malformed condition fails only its own rule, leaving later rules reachable', () => {
+    // The point of failing closed: one bad rule must not blind the whole RuleSet.
+    const broken = rule('broken', [
+      { property: 'daysOverdue', operator: 'ne' as unknown as Operator, pattern: 0 },
+    ]);
+    const good = rule('good', [{ property: 'status', operator: 'eq', pattern: 'on-loan' }]);
+    expect(firstSatisfiedBy([broken, good], loan(), loanSelectors)?.id).toBe('good');
+  });
+
+  it('eq still compares non-numeric values — the guards are numeric-only', () => {
+    expect(holds('eq', 'on-loan', loan(), 'status')).toBe(true);
+    expect(holds('eq', 'returned', loan(), 'status')).toBe(false);
+  });
+
+  it('documents that NaN never satisfies eq, on either side', () => {
+    // Deliberate: `===` is the equality callers expect, and NaN in a rule is an upstream defect.
+    expect(check({ ...loanSelectors, daysOverdue: () => NaN }, 'eq', NaN)).toBe(false);
+  });
+});
+
 describe('ruleIsSatisfiedBy — AND semantics', () => {
   it('passes only when every condition passes', () => {
     const overduePremium = rule('overdue-premium', [
