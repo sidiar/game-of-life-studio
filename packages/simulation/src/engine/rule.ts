@@ -12,7 +12,7 @@ import type { Operator } from './operators';
 export type Selector<S> = (subject: S) => unknown;
 
 // `Props` is the set of property names this dictionary covers, and it is the reason a missing
-// selector is a BUILD failure here rather than a per-cell runtime throw (story FD3, option c).
+// selector is a BUILD failure here rather than a per-cell runtime throw (story FD3 option c; M11).
 // noUncheckedIndexedAccess is off repo-wide, so a plain Record<string, Selector<S>> hands back a
 // Selector the compiler believes in and the runtime does not — a typo'd property then throws
 // "selectors[...] is not a function" from inside the hot path, per cell, with no useful message.
@@ -40,7 +40,8 @@ export type Selectors<S, Props extends string> = Readonly<Record<Props, Selector
 // RFC-004 §1.1 declares this as `Condition<P = unknown>` where P is the PATTERN type, then never
 // supplies it — `Rule.conditions` is a bare `Condition[]` and every §1.4 signature takes a bare
 // `Condition` — while §1.4 reuses the same letter P for the PAYLOAD. One letter, two meanings, and
-// the pattern one inert (story FD1). Resolved here by dropping the pattern parameter entirely:
+// the pattern one inert (story FD1; recorded as M11, and RFC-004 §1.1 is amended to match).
+// Resolved here by dropping the pattern parameter entirely:
 // `pattern: unknown` matches the Predicate contract the operator dictionary already declares, and
 // keeps Condition assignable FROM @gol/domain's concrete Condition, whose patterns are
 // `string | number | [number, number]`. The parameter this type does carry, `Props`, actually

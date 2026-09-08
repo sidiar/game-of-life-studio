@@ -6,13 +6,13 @@ import type { Rule, RuleSet, Condition, Selectors } from './rule';
 // A condition passes when its operator predicate holds for selector(subject) vs. pattern.
 //
 // Selectors<S, Props> names its key set, so for a freshly type-checked Condition<Props> the compiler
-// HAS already proven a selector exists (rule.ts, FD3) — and since Props lost its `string` default,
+// HAS already proven a selector exists (rule.ts, FD3; M11) — and since Props lost its `string` default,
 // that proof can no longer be opted out of by saying nothing. What the type system cannot prove is
 // that a `property` arriving as DATA is one of those keys: a rule deserialized from an older
 // workspace, or built by a future non-GoL caller, carries whatever string it carries. Unguarded that
 // is a `selectors[...] is not a function` throw from inside the per-cell loop.
 //
-// `Object.hasOwn`, NOT a `typeof selector === 'function'` tag test. The cheap test looks sufficient
+// `Object.hasOwn`, NOT a `typeof selector === 'function'` tag test (M12). The cheap test looks sufficient
 // and is not: a caller's selector dictionary is a plain object literal, so it INHERITS
 // Object.prototype. A condition whose property is 'toString', 'valueOf', 'constructor' or
 // 'hasOwnProperty' finds a real function there, passes any typeof check, and gets CALLED — and

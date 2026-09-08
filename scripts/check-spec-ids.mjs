@@ -47,23 +47,31 @@ const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', '.git', 'coverage'
 // as [A-Z] rather than the [A-J] that actually exist — a typo'd `Decision Z` then
 // fails loudly here instead of being silently skipped by a narrow class.
 //
-// Minor Resolutions are bounded to M1–M10, the full set architecture.md declares,
-// rather than an open `M\d+`. Unbounded, this scans SVG path data as spec ids: the
-// icon `d="M12 4 L20 12 M4 12"` yields BOTH `M12` — which fails CI as a stale
-// citation, indistinguishable from a real one — and `M4`, which silently resolves
-// because M4 genuinely exists. Epic 2 is the Battle Editor (tool icons, toolbars),
-// so an inline path is a matter of when, not if (review 2026-08-25). Bounding kills
-// the build-breaking half. An M1–M10 substring inside a path still extracts and
-// still resolves — harmless noise in the cited count, not a failure — and the only
-// way to eliminate that is to scan comments alone, which needs a real TS lexer
-// rather than a regex; not worth it for noise that cannot fail the gate.
+// Minor Resolutions are bounded to the exact set architecture.md declares — now M1–M12
+// (widened from M1–M10 by Story 3.1, which added M11/M12) — rather than an open `M\d+`.
+// Unbounded, this scans SVG path data as spec ids: the icon `d="M12 4 L20 12 M4 12"`
+// yields BOTH `M12` — which would fail CI as a stale citation, indistinguishable from a
+// real one — and `M4`, which silently resolves because M4 genuinely exists. Epic 2 is the
+// Battle Editor (tool icons, toolbars), so an inline path is a matter of when, not if
+// (review 2026-08-25). Bounding kills the build-breaking half. An in-range substring
+// inside a path still extracts and still resolves — harmless noise in the cited count,
+// not a failure — and the only way to eliminate that is to scan comments alone, which
+// needs a real TS lexer rather than a regex; not worth it for noise that cannot fail
+// the gate.
+//
+// ⚠️ M12 IS NOW IN RANGE, and `M12` is one of the most common SVG moveto coordinates
+// there is (a 24x24 icon centred at 12). A path in a .tsx/.md file that happens to write
+// `M12 ` will now extract as a citation of M12 and RESOLVE — noise, not a failure, which
+// is the trade this bound was always making, but the noise floor is higher than it was.
+// If that ever becomes misleading, the fix is a real lexer, not a narrower range.
 //
 // This deliberately trades AWAY the typo detection the `Decision [A-Z]` choice above
-// buys: a mistyped `M11` is now silently skipped, where `M\d+` would have failed it
-// loudly. The two cases are not symmetric — `Decision Z` cannot occur in path data,
-// `M11` can and will. Adding a Minor Resolution beyond M10 means widening this.
+// buys: a mistyped `M13` is silently skipped, where `M\d+` would have failed it loudly.
+// The two cases are not symmetric — `Decision Z` cannot occur in path data, `M13` can.
+// Adding a Minor Resolution beyond M12 means widening this again, in BOTH places: the
+// regex alternation below and the range named in this comment.
 const SPEC_ID =
-  /(?<![\w.-])(AR-\d+|RFC-00\d|NFR-\d+(?:\.\d+)*|FR-\d+(?:\.\d+)*|M(?:[1-9]|10)|Decision [A-Z](?:\.\d+)?|Story \d+\.\d+)(?![\w.-])/g;
+  /(?<![\w.-])(AR-\d+|RFC-00\d|NFR-\d+(?:\.\d+)*|FR-\d+(?:\.\d+)*|M(?:[1-9]|1[0-2])|Decision [A-Z](?:\.\d+)?|Story \d+\.\d+)(?![\w.-])/g;
 
 // ─── Cross-RFC Reconciliations (added 2026-08-29, Sidiar's call) ───────────────
 //

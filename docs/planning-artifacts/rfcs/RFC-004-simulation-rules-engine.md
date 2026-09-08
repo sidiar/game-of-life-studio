@@ -120,7 +120,8 @@ randomly). Plus: Moore neighborhood with **hard edges** (FR-5.8/5.9), **cell agi
 │   depends ↓ on the generic engine                                       │
 ├───────────────────────────────────────────────────────────────────────┤
 │ Part 1 — GENERIC RULES ENGINE (reusable utility)                        │
-│   Condition, Rule<P>, RuleSet<P>, operators, Selectors<S>,              │
+│   Condition<Props>, Rule<Payload,Props>, RuleSet<Payload,Props>,        │
+│   operators, Selectors<S,Props>,                                        │
 │   firstSatisfiedBy() → winning Rule                                      │
 │   depends on: NOTHING domain-specific                                   │
 └───────────────────────────────────────────────────────────────────────┘
@@ -139,30 +140,45 @@ subjects, properties, operators, and patterns, and nothing else.
 
 ```ts
 // ---- Operators (MVP set) ----------------------------------------------------
+// ⚠️ As built (Story 3.1) this is ONE union, not three names: `EqualityOperator = 'eq'` is
+// already an arm of `NumericOperator`, so the split names the same six operators and sends
+// the reader hunting for a distinction that does not exist. Recorded as an observation, not
+// a decision to re-open — the operator SET is unchanged either way.
+//   export type Operator = 'eq' | 'gt' | 'lt' | 'gte' | 'lte' | 'range'
 export type NumericOperator = 'eq' | 'gt' | 'lt' | 'gte' | 'lte' | 'range'
 export type EqualityOperator = 'eq'
 export type Operator = NumericOperator | EqualityOperator
 
 // ---- Condition: the atomic predicate ---------------------------------------
 // The subject's VALUE (resolved via `property`) is tested against this PATTERN.
-export interface Condition<P = unknown> {
-  readonly property: string     // key resolved by a Selectors<S> dictionary (§1.3)
+//
+// ⚠️ AMENDED by M11 (Story 3.1, FD1). This was `Condition<P = unknown>` where `P`
+// was the PATTERN type — but the parameter was never supplied at any call site
+// (`Rule.conditions` was a bare `Condition[]`, and every §1.4 signature took a
+// bare `Condition`), while §1.4 reused the same letter `P` for the PAYLOAD. One
+// letter, two meanings, and the pattern one inert. The pattern parameter is
+// dropped: `pattern: unknown` already matches the `Predicate` contract §1.2
+// declares, and keeps this assignable FROM the concrete §2.4 Condition.
+// The parameter it DOES carry, `Props`, threads through `Rule.conditions`.
+export interface Condition<Props extends string = string> {
+  readonly property: Props      // key resolved by a Selectors<S, Props> dictionary (§1.3)
   readonly operator: Operator
-  readonly pattern: P           // what the subject's value is compared against
+  readonly pattern: unknown     // what the subject's value is compared against
 }
 
 // ---- Rule<Payload>: AND-group of Conditions carrying a generic payload ------
 // The engine NEVER inspects `payload`; it is opaque domain data returned with
 // the winning rule. This is what decouples the engine from "actions".
-export interface Rule<Payload = unknown> {
+export interface Rule<Payload = unknown, Props extends string = string> {
   readonly id: string             // opaque, generated — stable identity (§2.4)
   readonly contentHash: string    // deterministic — content-addressing (§2.4)
-  readonly conditions: readonly Condition[]   // AND semantics
+  readonly conditions: readonly Condition<Props>[]   // AND semantics
   readonly payload: Payload
 }
 
 // ---- RuleSet<Payload>: an ORDERED list of Rules ----------------------------
-export type RuleSet<Payload = unknown> = readonly Rule<Payload>[]
+export type RuleSet<Payload = unknown, Props extends string = string> =
+  readonly Rule<Payload, Props>[]
 
 // ---- (Future) RuleSetCollection: an ordered list of RuleSets ----------------
 // Reserved for a future fourth level (e.g. grouping rule sets). Not in the MVP.
@@ -178,50 +194,98 @@ of the Strategy pattern. Only MVP operators are implemented; adding one is a sin
 ```ts
 type Predicate = (value: unknown, pattern: unknown) => boolean   // value = subject's; pattern = condition's
 
-const operators: Record<Operator, Predicate> = {
-  eq:    (v, p) => v === p,
-  gt:    (v, p) => (v as number) >  (p as number),
-  lt:    (v, p) => (v as number) <  (p as number),
-  gte:   (v, p) => (v as number) >= (p as number),
-  lte:   (v, p) => (v as number) <= (p as number),
-  range: (v, p) => { const [lo, hi] = p as [number, number]; return (v as number) >= lo && (v as number) <= hi },
-}
+// ⚠️ AMENDED by M12 (Story 3.1). The `as number` casts shown in earlier drafts of this
+// RFC are erased at runtime and proved nothing: a Selector<S> returns `unknown` and may
+// legitimately yield null/undefined, which JS then COERCES — `null` to 0 (so `null > -1`
+// was silently TRUE) and `undefined` to NaN (every comparison silently false). `range`
+// destructured its pattern unchecked, so a non-iterable THREW out of the per-cell loop.
+// Each predicate now asks whether the comparison is meaningful and returns `false` when
+// it is not. This is a `typeof` tag test, NOT a per-cell re-parse — the "types are
+// already proven inside the engine, never re-parse per cell" rule stands and there is no
+// schema work here. Measured at +0.019 ms/cycle against the 16.7 ms NFR-1.1 budget.
+const isNumber = (v: unknown): v is number => typeof v === 'number'
+
+const table = {
+  eq:    (v, p) => v === p,                                    // general equality: strings too
+  gt:    (v, p) => isNumber(v) && isNumber(p) && v >  p,
+  lt:    (v, p) => isNumber(v) && isNumber(p) && v <  p,
+  gte:   (v, p) => isNumber(v) && isNumber(p) && v >= p,
+  lte:   (v, p) => isNumber(v) && isNumber(p) && v <= p,
+  range: (v, p) => {
+    if (!isNumber(v) || !Array.isArray(p) || p.length !== 2) return false
+    const [lo, hi] = p as [unknown, unknown]
+    return isNumber(lo) && isNumber(hi) && v >= lo && v <= hi   // INCLUSIVE both ends
+  },
+} satisfies Record<Operator, Predicate>
+
+// ⚠️ NULL PROTOTYPE. A plain object literal inherits Object.prototype, so a lookup by an
+// operator id outside the six can still RESOLVE — `operators['toString']` is a real
+// function — and an `undefined` check in §1.4 does not catch it. `satisfies` above (not an
+// annotation here) keeps the exhaustiveness check that makes a seventh operator a build
+// failure; annotating only this copy would silently drop it.
+const operators: Record<Operator, Predicate> =
+  Object.assign(Object.create(null) as Record<Operator, Predicate>, table)
 ```
 
 #### 1.3 Subjects via injected selectors (Adapter, generic over `S`)
 
-The engine reads a subject's properties through an injected **`Selectors<S>`** dictionary — a record
+The engine reads a subject's properties through an injected **`Selectors<S, Props>`** dictionary — a record
 of pure functions from subject to value. The engine is therefore generic over *any* subject `S`; it
 never imports a concrete subject. (This is the seam that lets Part 2 plug in a `CellSubject`, and a
 future caller plug in a `BattleSubject`.)
 
 ```ts
 export type Selector<S> = (subject: S) => unknown
-export type Selectors<S> = Record<string, Selector<S>>
+
+// ⚠️ AMENDED by M11 (Story 3.1). `Selectors<S> = Record<string, Selector<S>>` is TOTAL over
+// every string key (with `noUncheckedIndexedAccess` off), so a dictionary missing an entry
+// type-checks and the lookup hands back a Selector the runtime does not have. Naming the key
+// set makes a missing selector a BUILD error instead. `Props` takes NO default here — a
+// default would restore the unsafe form for anyone who says nothing. Condition/Rule/RuleSet
+// keep their `string` default: there it widens a property name rather than faking a lookup.
+export type Selectors<S, Props extends string> = Readonly<Record<Props, Selector<S>>>
 ```
 
 #### 1.4 Evaluation — `isSatisfiedBy` (Condition, Rule) and `firstSatisfiedBy` (RuleSet)
 
 ```ts
 // Condition.isSatisfiedBy → boolean (Specification). value vs. pattern.
-export function conditionIsSatisfiedBy<S>(c: Condition, subject: S, selectors: Selectors<S>): boolean {
+// ⚠️ AMENDED by M12 (Story 3.1): both lookups are guarded. Types prove these are total only
+// for a FRESHLY TYPE-CHECKED value; a rule deserialized from an older workspace, or built by
+// a future non-GoL caller, carries whatever it carries. `Operator` is compile-time only, so a
+// retired id (`ne`, valid until Decision C) made `operators[...]` undefined and CALLING it
+// threw. `Object.hasOwn` — not `typeof === 'function'` — because a caller's selector
+// dictionary is a plain literal that INHERITS Object.prototype: 'toString'/'valueOf'/
+// 'hasOwnProperty' resolve to real functions that pass a typeof test and then throw when
+// invoked with `this === undefined`. Measured at +0.091 ms/cycle (~0.5% of the NFR-1.1
+// budget); the zero-per-cell form is a key sweep at evaluator-COMPILE time (§3.5).
+export function conditionIsSatisfiedBy<S, Props extends string>(
+  c: Condition<Props>, subject: S, selectors: Selectors<S, Props>,
+): boolean {
+  if (!Object.hasOwn(selectors, c.property)) return false
   const value = selectors[c.property](subject)
-  return operators[c.operator](value, c.pattern)
+  const predicate = operators[c.operator]
+  if (predicate === undefined) return false
+  return predicate(value, c.pattern)
 }
 
 // Rule.isSatisfiedBy → boolean — all conditions AND'd (Composite; native short-circuit)
-export function ruleIsSatisfiedBy<S>(rule: Rule, subject: S, selectors: Selectors<S>): boolean {
+export function ruleIsSatisfiedBy<S, Props extends string>(
+  rule: Rule<unknown, Props>, subject: S, selectors: Selectors<S, Props>,
+): boolean {
   return rule.conditions.every(c => conditionIsSatisfiedBy(c, subject, selectors))
 }
 
 // RuleSet — returns the FIRST WINNING Rule (or null). Priority = order.
 // Named `firstSatisfiedBy` to make the return type explicit; it generalizes the
 // boolean `isSatisfiedBy`. The engine returns the WINNER — it does not interpret it.
-export function firstSatisfiedBy<S, P>(
-  ruleSet: RuleSet<P>,
+// ⚠️ M11: the payload parameter is named `Payload`, not `P` — §1.1 used `P` for the pattern
+// type and this signature used it for the payload. The pattern `P` is gone; this one stays.
+export function firstSatisfiedBy<S, Props extends string, Payload>(
+  ruleSet: RuleSet<Payload, Props>,
   subject: S,
-  selectors: Selectors<S>,
-): Rule<P> | null {
+  selectors: Selectors<S, Props>,
+): Rule<Payload, Props> | null {
   return ruleSet.find(rule => ruleIsSatisfiedBy(rule, subject, selectors)) ?? null
 }
 ```
@@ -231,15 +295,31 @@ export function firstSatisfiedBy<S, P>(
 > reusable: each caller reads whatever it stored in `payload`. Action resolution is a thin function
 > built *on top* of this primitive (Part 2, §2.3).
 
-#### 1.5 Construction = parsing (no class factory)
+#### 1.5 Construction = parsing (no class factory) — ⚠️ STALE, superseded by M11
+
+> **STALE (Story 3.1, 2026-09-08).** The principle below still holds; the **mechanism does not**.
+> `makeRuleSchema(payloadSchema, conditionSchema)` **was never built and should not be** — its only
+> intended caller already exists and bypasses it. Story 1.3 authored the concrete `ConditionSchema` /
+> `SurvivalRuleSchema` directly in `@gol/domain` from §2.4, so parameterizing a generic helper would
+> mean rewriting working, shipped schemas to call a function with one consumer. Building it would
+> also add a **`zod` dependency to `packages/simulation`**, pulling a parsing library into the engine
+> package that `project-context.md` deliberately keeps at the boundaries — and the engine is
+> otherwise dependency-free (AR-16/AR-40, enforced by the `src/engine/` ESLint import boundary).
+>
+> **What stands:** construction *is* parsing, rules *are* plain data, and validation happens **once
+> at the persistence boundary** (§2.4) rather than inside the engine. **What is retired:** the
+> `makeRuleSchema` helper and the "engine exposes a schema abstraction" framing — the engine exposes
+> **no schema surface at all**, and the DIP bullet below should be read as depending on `Selectors`
+> alone.
 
 Because rules are plain data, "construction" is just **parsing + validating** input into the
-discriminated union. The engine exposes a schema *helper* (`makeRuleSchema(payloadSchema, conditionSchema)`);
-the concrete property/pattern constraints and payload schema are supplied by the domain (Part 2).
+discriminated union. ~~The engine exposes a schema *helper*
+(`makeRuleSchema(payloadSchema, conditionSchema)`)~~; the concrete property/pattern constraints and
+payload schema are supplied by the domain (Part 2) — and are authored there directly.
 
 **SOLID for Part 1:** *SRP* — matching only. *OCP* — operators/properties/subjects are additive.
-*LSP* — any `S` with a valid `Selectors<S>` is substitutable. *DIP* — depends on the `Selectors` and
-`Schema` abstractions, never on concrete domain types.
+*LSP* — any `S` with a valid `Selectors<S, Props>` is substitutable. *DIP* — depends on the
+`Selectors` abstraction alone, never on concrete domain types (the `Schema` half is retired — M11).
 
 ---
 
@@ -282,8 +362,16 @@ export interface CellSubject {
   readonly occupantNeighborCount: number       // other-organism Moore neighbors
 }
 
-// Adapter: the property catalog for the Cell subject (Open/Closed — add a row to extend)
-export const cellSelectors: Selectors<CellSubject> = {
+// The property NAME set, declared as a type so the selector dictionary below can be checked
+// against it. M11 makes this parameter mandatory on `Selectors`: without it the dictionary is
+// `Record<string, …>`, which is total over every key, so omitting a row still type-checks and
+// fails at runtime instead. Naming the set turns a missing row into a build error.
+export type CellProperty =
+  | 'cellState' | 'organismType' | 'age' | 'neighborCount' | 'occupantNeighborCount'
+
+// Adapter: the property catalog for the Cell subject (Open/Closed — add a row here AND to
+// CellProperty above; the compiler then requires the other half).
+export const cellSelectors: Selectors<CellSubject, CellProperty> = {
   cellState:             c => c.state,
   organismType:          c => c.organismType,
   age:                   c => c.age,
@@ -302,7 +390,7 @@ simulation start (Decision E). A `ne` operator is therefore **not required** for
 optional future nicety (e.g. "occupied by someone other than organism X").
 
 > **Adding a new subject later (e.g. Battle).** Define `BattleSubject` + `battleSelectors:
-> Selectors<BattleSubject>` and a battle-level `RuleSet`. The generic engine and all operators are
+> Selectors<BattleSubject, BattleProperty>` and a battle-level `RuleSet`. The generic engine and all operators are
 > reused unchanged — proof the Subject abstraction is genuinely open.
 
 #### 2.2 `SurvivalRules` = a generic `RuleSet` with a Game of Life payload
@@ -666,7 +754,7 @@ rather than via class hierarchies:
 | **Strategy** | `operators` dictionary (Part 1); pluggable `SimulationStrategy` (Part 3) |
 | **Specification** | Composable pure predicates: `conditionIsSatisfiedBy`, `ruleIsSatisfiedBy` |
 | **Composite** | `Rule.conditions.every(...)` (AND); `RuleSet.find(...)` (first winner) |
-| **Adapter** | `Selectors<S>` projection: `cellSelectors`, future `battleSelectors` |
+| **Adapter** | `Selectors<S, Props>` projection: `cellSelectors`, future `battleSelectors` |
 | **Factory** | Schema-validated parsing (`SurvivalRulesSchema.parse`) — data in, typed union out |
 | **Registry** | `operators` — additive `as const` maps (rule migrations live in RFC-006's single chain — arch Decision I) |
 | **Dependency Injection** | Deps as arguments (`Selectors`, `SimulationDeps.resolveAction`, `rng`) — no ambient state |

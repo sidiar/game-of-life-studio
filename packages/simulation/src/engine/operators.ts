@@ -16,7 +16,7 @@ export type Operator = 'eq' | 'gt' | 'lt' | 'gte' | 'lte' | 'range';
 // of neither.
 export type Predicate = (value: unknown, pattern: unknown) => boolean;
 
-// ── On the guards below ────────────────────────────────────────────────────────────────────────
+// ── On the guards below (M12; RFC-004 §1.2 amended to match) ────────────────────────────────────────────────────────────────────────
 //
 // The original version of this file cast (`value as number`) with no check, arguing that patterns
 // are validated once at the persistence boundary by @gol/domain's schemas and that project-context
