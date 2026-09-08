@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { MAX_ROSTER_SIZE } from '@/lib/canvas/refToFillGroup';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
-import { ERASER_TOOL, type Tool } from '@/lib/tool';
+import { ERASER_TOOL, type Tool } from '@/lib/battle/tool';
 
 /**
  * Mockup: `.used-organisms-list` (clinical-lab-theme/petri-dish-lab-mode.html:192-198).

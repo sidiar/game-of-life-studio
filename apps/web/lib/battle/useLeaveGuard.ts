@@ -10,7 +10,7 @@ import { useInertBackground } from '@/lib/useInertBackground';
  * The caller keeps only what is genuinely its own — the dirty flag, the save, and what "leave"
  * actually means.
  *
- * ⚠️ This hook lives in `lib/`, NOT beside `<UnsavedChangesDialog>` the way `useDeleteBattleDialog`
+ * ⚠️ This hook lives in `lib/battle/`, NOT beside `<UnsavedChangesDialog>` the way `useDeleteBattleDialog`
  * lives beside `<DeleteBattleDialog>`. That asymmetry is a bundle constraint, not an oversight.
  * `<BattlePage>` reaches the dialog through `next/dynamic` because the MUI `Dialog` stack measured
  * **+18.1 KB gzip** against ~5.7 KB of headroom on `/battle` (see that call site). A hook exported

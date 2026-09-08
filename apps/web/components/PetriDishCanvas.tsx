@@ -12,7 +12,7 @@ import { pointerToCell } from '@/lib/canvas/pointerToCell';
 import type { CellCoord } from '@/lib/canvas/dirtyCells';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
-import type { Tool } from '@/lib/tool';
+import type { Tool } from '@/lib/battle/tool';
 
 const RESIZE_DEBOUNCE_MS = 150;
 

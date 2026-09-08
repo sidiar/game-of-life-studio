@@ -4,7 +4,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
-import { ERASER_TOOL, type Tool } from '@/lib/tool';
+import { ERASER_TOOL, type Tool } from '@/lib/battle/tool';
 import OrganismRoster from './OrganismRoster';
 
 function organism(overrides: Partial<DisplayOrganism> & { id: string }): DisplayOrganism {

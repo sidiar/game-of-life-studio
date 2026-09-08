@@ -29,8 +29,8 @@ vi.mock('next/navigation', () => ({
 // sight — passes BattlePage.test.tsx in full. `expect(settingsLoadSpy).toHaveBeenCalled()` proves
 // the READ happened, never that the result was USED, and settings.load() sits in the shared
 // Promise.all for both branches, so it is called either way.
-vi.mock('@/lib/newBattleDraft', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/newBattleDraft')>();
+vi.mock('@/lib/battle/newBattleDraft', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/battle/newBattleDraft')>();
   return { ...actual, createNewBattleDraft: vi.fn(actual.createNewBattleDraft) };
 });
 
@@ -39,13 +39,13 @@ const { organisms } = createMockWorkspace();
 beforeEach(async () => {
   // vi.mock is module-scoped and this project's vitest config sets no `clearMocks`, so without
   // this the spy accumulates calls across tests and `.at(-1)` reads the previous render's args.
-  const { createNewBattleDraft } = await import('@/lib/newBattleDraft');
+  const { createNewBattleDraft } = await import('@/lib/battle/newBattleDraft');
   vi.mocked(createNewBattleDraft).mockClear();
 });
 
 describe('BattlePage — the "new" route seeds at settings.defaultGridSize (AC1, Task 1)', () => {
   it('seeds at the NON-default preset when the settings record says 50x30', async () => {
-    const { createNewBattleDraft } = await import('@/lib/newBattleDraft');
+    const { createNewBattleDraft } = await import('@/lib/battle/newBattleDraft');
     const repositories = createFakeRepositories({
       organisms,
       settings: { ...DEFAULT_SETTINGS, defaultGridSize: { cols: 50, rows: 30 } },
@@ -61,7 +61,7 @@ describe('BattlePage — the "new" route seeds at settings.defaultGridSize (AC1,
   });
 
   it('seeds at 100x60 when no settings record exists (the FR-3.1 default, read not hardcoded)', async () => {
-    const { createNewBattleDraft } = await import('@/lib/newBattleDraft');
+    const { createNewBattleDraft } = await import('@/lib/battle/newBattleDraft');
     const repositories = createFakeRepositories({ organisms });
 
     render(<BattlePage repositories={repositories} battleId="new" />);

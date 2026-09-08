@@ -17,7 +17,7 @@ import { toRenderableGrid, type RenderableGrid } from './renderableGrid';
  *
  * Parameter widened from `Battle` to `Pick<Battle, 'gridState' | 'organismIds'>` (Story 2.4 Task
  * 6) — a structural widening, so every existing `Battle` call site (BattleTile) is unaffected.
- * `NewBattleDraft` (`lib/newBattleDraft.ts`) carries the same two fields with the same shapes and
+ * `NewBattleDraft` (`lib/battle/newBattleDraft.ts`) carries the same two fields with the same shapes and
  * so satisfies this without adaptation, which is what lets `<BattlePage>` reuse this conversion
  * for the unsaved-draft path instead of hand-rolling the dense->renderable loop or the LUT a
  * second time. The function's name is now narrower than its signature — a rename candidate,

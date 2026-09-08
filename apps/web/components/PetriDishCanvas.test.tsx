@@ -7,7 +7,7 @@ import { installRecordingContext2d, RecordingContext2D } from '@/lib/recordingCo
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { displayColorAt } from '@/lib/palette/displayColor';
-import { ERASER_TOOL, type Tool } from '@/lib/tool';
+import { ERASER_TOOL, type Tool } from '@/lib/battle/tool';
 import PetriDishCanvas from './PetriDishCanvas';
 
 const COLORS = { background: '#0a0a0a', gridLine: 'rgb(51 51 51 / 0.3)' };
@@ -2176,7 +2176,7 @@ describe('PetriDishCanvas (edit variant) — eraser (Story 2.7)', () => {
   // return;` guard never fires — erasing works even when no organism resolves in this battle's
   // roster, the one case where the eraser and the organism tool legitimately behave differently
   // (an organism tool with no roster match places nothing; the eraser's ref is never null).
-  // `lib/tool.test.ts` pins that `refForTool` returns 0 for an empty roster; this pins what the
+  // `lib/battle/tool.test.ts` pins that `refForTool` returns 0 for an empty roster; this pins what the
   // canvas does with that 0, independent of the roster the canvas never sees.
   it('erases via toolRef 0 — the value an empty roster resolves the eraser to — same as any other roster', () => {
     const grid = gridWithOccupant(3, 4);

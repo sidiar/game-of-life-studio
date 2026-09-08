@@ -923,7 +923,7 @@ describe('BattlePage — click placement wiring (Story 2.5)', () => {
 
 // Undo (Story 2.8). <BattlePage> owns `useUndoableGrid`, so this is the only level at which the
 // whole loop is observable: a gesture commits, the ring grows, UNDO reverts it, and the dish
-// repaints. The hook's own units live in lib/useUndoableGrid.test.ts; what is tested here is the
+// repaints. The hook's own units live in lib/battle/useUndoableGrid.test.ts; what is tested here is the
 // WIRING — that `canUndo` reaches the button's `disabled` live (trap 1), and that the restored
 // grid actually reaches the canvas (trap 5).
 describe('BattlePage — undo wiring (Story 2.8)', () => {
@@ -1026,7 +1026,7 @@ describe('BattlePage — undo wiring (Story 2.8)', () => {
   // CURRENT grid and `restore()` returns a PREVIOUS one, so the two are never equal in any flow
   // reachable from here — an implementation that stored whole `RenderableGrid`s and handed the
   // identity back still passes this. That claim is pinned where it is falsifiable instead:
-  // `lib/useUndoableGrid.test.ts`'s "builds a NEW grid object on restore", which reddens under
+  // `lib/battle/useUndoableGrid.test.ts`'s "builds a NEW grid object on restore", which reddens under
   // exactly that mutation.
   it('repaints the dish with the restored grid, not the identity it already painted (AC4)', async () => {
     const user = userEvent.setup();

@@ -15,8 +15,8 @@ import BattleEditorView from './BattleEditorView';
 // (NFR-4.2)" claim from the OTHER direction than `BattleEditorView.test.tsx`'s
 // "updates on commit" test — that a re-render carrying the SAME `grid`/`rosterIds` identities
 // does NOT call the derivation again, which is the actual memoization guarantee spec §6 asks for.
-vi.mock('@/lib/gridStats', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/gridStats')>();
+vi.mock('@/lib/battle/gridStats', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/battle/gridStats')>();
   return { ...actual, computeEditorGridStats: vi.fn(actual.computeEditorGridStats) };
 });
 
@@ -50,13 +50,13 @@ const ROSTER_IDS = ROSTER.map((organism) => organism.id);
 beforeEach(async () => {
   // `vi.mock` is module-scoped and this project's vitest config sets no `clearMocks`, so without
   // this the spy accumulates calls across tests.
-  const { computeEditorGridStats } = await import('@/lib/gridStats');
+  const { computeEditorGridStats } = await import('@/lib/battle/gridStats');
   vi.mocked(computeEditorGridStats).mockClear();
 });
 
 describe('BattleEditorView — the stats memo does not rerun on an unrelated re-render (Story 2.12, AC4)', () => {
   it('calls computeEditorGridStats once per grid/rosterIds identity, not once per render', async () => {
-    const { computeEditorGridStats } = await import('@/lib/gridStats');
+    const { computeEditorGridStats } = await import('@/lib/battle/gridStats');
 
     const { rerender } = render(
       <BattleEditorView

@@ -1,9 +1,10 @@
 /**
- * The editor's tool model (component-tree-battle-page.md#3.4). Lives in `lib/` rather than inside
+ * The editor's tool model (component-tree-battle-page.md#3.4). Lives in `lib/battle/` rather than inside
  * any one component because three of them need it: `<PetriDishCanvas>` (`components/`),
  * `<BattleEditorView>` (`components/battle/`) and `<OrganismRoster>` (Story 2.9) — declaring it
  * inside any one of those would make the other two import from a sibling component file. Not
- * `lib/canvas/`: a tool is an editor concept, not a rendering one.
+ * `lib/canvas/`: a tool is an editor concept, not a rendering one — which is also why it
+ * sits under `lib/battle/` rather than at the shared root.
  *
  * Spec §3.4's TWO-arm union, verbatim (Story 2.7): `{ kind: 'organism'; organismId } | { kind:
  * 'eraser' }`. The eraser arm carries no payload — there is nothing to select, only a mode — and

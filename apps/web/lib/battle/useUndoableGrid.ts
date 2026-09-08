@@ -106,7 +106,7 @@ function restore(entry: GridSnapshot): RenderableGrid {
  * call, no persistence, no serialisation, and nothing here ever touches a repository.
  *
  * Not in `lib/canvas/`: undo is an editor concept, not a rendering one — the same argument
- * `lib/tool.ts` makes for itself.
+ * `lib/battle/tool.ts` makes for itself.
  *
  * `seed` is `RenderableGrid | null` rather than spec §4's bare `Grid` because `<BattlePage>`'s
  * battle resource settles AFTER the first render, and every hook there precedes four early
@@ -124,7 +124,7 @@ export function useUndoableGrid(
   // separate reactive flag. RFC-005 Decision 6 contradicts itself here — its prose says "a bounded
   // ring … in local state", its snippet puts `past` in a ref — and only the prose can give a
   // `canUndo` that actually re-renders the button. One state cell also means the two can never
-  // disagree, which is the failure shape `lib/tool.ts`'s trap 7 warns about. The cost is one
+  // disagree, which is the failure shape `lib/battle/tool.ts`'s trap 7 warns about. The cost is one
   // ≤30-element array copy per COMMITTED GESTURE (~240 bytes of pointer churn, once per pointer-up
   // — never per pointer-move), which is why the ref version buys nothing worth its second
   // container.

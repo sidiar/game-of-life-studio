@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import type { Battle, Settings } from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { useAsyncResource, type AsyncResourceStatus } from '@/lib/useAsyncResource';
-import { createNewBattleDraft, type NewBattleDraft } from '@/lib/newBattleDraft';
+import { createNewBattleDraft, type NewBattleDraft } from '@/lib/battle/newBattleDraft';
 
 /**
  * "What battle is this page opening?", extracted from `<BattlePage>` (2026-09-08) — the battle
