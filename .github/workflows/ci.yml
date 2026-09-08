@@ -6,7 +6,7 @@
 # real run when its PR opens — `npm run ci` locally is the only gate before that.
 #
 # Stage order (both here and in `npm run ci`):
-#   typecheck -> lint -> format:check -> spec:check -> test:coverage
+#   typecheck -> lint -> format:check -> spec:check -> boundary:check -> test:coverage
 #     -> build:standalone -> bundle:check -> e2e (+axe)
 #
 # Deployment is intentionally NOT part of this workflow: no static host is chosen
@@ -68,6 +68,9 @@ jobs:
 
       - name: Spec-ID integrity
         run: npm run spec:check
+
+      - name: Engine boundary (AR-16/AR-40)
+        run: npm run boundary:check
 
       - name: Unit/component tests + coverage
         run: npm run test:coverage
