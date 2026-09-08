@@ -172,6 +172,118 @@ independently.
   - [x] Record the commands and their real output summary in the Dev Agent Record. Never state a
         step ran when it did not.
 
+### Review Findings
+
+Code review 2026-09-08 (`bmad-code-review`, three layers: Blind Hunter, Edge Case Hunter,
+Acceptance Auditor; implemented on Sonnet, reviewed on Opus). 9 patches applied, 2 decisions open,
+3 deferred, 8 dismissed as noise. Traps 1-12 were all checked and all respected — in particular the
+`organismType` interning gap is **pinned, not fixed**, and nothing under `src/engine/`,
+`eslint.config.mjs`, `scripts/`, `vitest.config.ts`, `packages/domain/**` or `apps/web` was touched.
+
+**Decision needed (Sidiar) — UNRESOLVED, story is not done**
+
+- [ ] [Review][Decision] **`payload` is the one field this story reads without a guard, and M12's
+      fail-closed posture does not reach it.** `resolveCellAction` is
+      `firstSatisfiedBy(...)?.payload.action ?? null` — the `?.` guards only a *null winner*.
+      Verified by executing the shipped code against probe inputs: a matching rule with **no
+      `payload`** throws `TypeError: Cannot read properties of undefined (reading 'action')` from
+      inside the 60 FPS loop; a rule with `payload` but **no `action`** returns `null`, which
+      Trap 7 defines as "no rule matched" and routes to M10 implicit death with no signal; and an
+      `action` outside the union (`'reproduce'`) is **returned as-is, typed `Action`**, which
+      Story 3.5's death/survival partition will classify into neither bucket. A rule with
+      `conditions: []` is vacuously satisfied, so such a rule always wins. Story 3.1's review closed
+      exactly this class for `operator`, `property` and `pattern` (M12) and Sidiar approved folding
+      it in; `payload` is the new read this story adds and was not covered. **The fix direction is
+      genuinely ambiguous, which is why it is here and not in the patch bucket:** (a) guard and
+      return `null` — but that conflates a malformed rule with implicit death, the exact collapse
+      Trap 7 forbids; (b) guard and return a distinct signal, which changes `resolveCellAction`'s
+      signature that 3.5/3.6 compile against; (c) leave the hot path bare and put an eager
+      diagnostic at evaluator-compile time in **Story 3.4**, which is where M12 explicitly says
+      eager diagnostics belong ("one pass per battle, not one per cell"). (c) is defensible and
+      costs nothing per cell, but leaves a live `TypeError` path until 3.4 lands.
+
+- [ ] [Review][Decision] **AC4's "assignable both directions" is unachievable at the container
+      level, and the specs disagree about whether it was ever required.** Verified with `tsc`:
+      engine→domain fails at `RuleSet` (readonly array → mutable array, TS4104) and at `Rule`
+      (same, via `conditions`), and would also fail at `Condition` (flat `pattern: unknown` →
+      discriminated union). Both causes are AR-16 properties of `src/engine/`, which this story may
+      not edit — so the dev's structural claim is **correct at those levels**. But **RFC-004 §2.4
+      only ever claims the forward direction** ("persisted data is fed to the engine without any
+      mapping layer"); the story's AC4 escalated that to "both directions". So: should **AC4 be
+      amended** to the forward direction at container level + bidirectional at payload level (what
+      is now pinned and mutation-proven), and recorded as an **M13** in `architecture.md` the way
+      Story 3.1's FD1 became M11/M12 in `46e3a4b`? And does the residual belong to **Story 3.4**,
+      where the domain↔engine type edge next moves? Left unrecorded, nothing surfaces it again.
+
+**Patches applied**
+
+- [x] [Review][Patch] **AC4's reverse pin was available at the payload level and was not written —
+      so the pin could not catch the drift FD1 accepted duplication *against*.**
+      [packages/simulation/src/domainRuleSetCompatibility.test.ts] The record claimed "every
+      reverse-direction assignment attempted during development was rejected by `tsc`". That is
+      true at `RuleSet`/`Rule`/`Condition` and **false at `SurvivalPayload` and `Action`** — readonly
+      *property* modifiers are ignored for assignability and `Action` is a plain string union.
+      Proven by mutation: **before** this patch, adding a fourth member `'dormant'` to `src/gol`'s
+      `Action` left `tsc` at **exit 0**; forward-only assignment is covariant, so widening or
+      hollowing out the *engine's* copy compiled silently — precisely the failure FD1 said it had
+      eliminated. Added bidirectional payload/`Action` pins via `DomainSurvivalRule['payload']`
+      (which also re-names @gol/domain's payload type, unnamed in the file after this story's
+      rewrite). Both mutations now fail the build.
+- [x] [Review][Patch] **Three comments asserted a "bidirectional"/"to and from" pin that did not
+      exist** [packages/simulation/src/gol/survivalRules.ts:24, packages/simulation/src/index.ts:14,
+      domainRuleSetCompatibility.test.ts header] — Task 7 required the `index.ts` predictions to end
+      up "true or gone", and its replacement was untrue the day it was written. All three now state
+      exactly what is pinned in which direction, and why the payload half must stay bidirectional.
+- [x] [Review][Patch] **`neighborCount` / `occupantNeighborCount` shipped with no definition,
+      dropping RFC-004 §2.1's same-organism / other-organism split**
+      [packages/simulation/src/gol/cellSubject.ts:33] — the bare names read as "all eight occupied
+      neighbours". Story 3.3 materializes these, and Conway's Classic is single-organism, so **both
+      readings coincide for every fixture in this package**; a wrong materialization would surface
+      only in Story 3.6's multi-organism goldens, as wrong survival behaviour with no failing test
+      naming the cause. Definitions recorded at the declarations. `age` documented while there.
+- [x] [Review][Patch] **`cellSelectors` was an exported, mutable module singleton whose own comment
+      claimed "nothing mutates"** [packages/simulation/src/gol/cellSubject.ts:54] —
+      `Readonly<Record<…>>` is erased at runtime and the dictionary is exported from the barrel, so
+      one assignment over a row corrupts every reader for the process lifetime. Now
+      `Object.freeze`d, matching `Object.freeze(DEFAULT_SETTINGS)` / `deepFreeze(CONWAYS_CLASSIC)`
+      in `@gol/domain`. **Re-verified that Task 3's build-time key-set guarantee still fires**:
+      deleting the `age` row still fails `tsc` with "Property 'age' is missing".
+- [x] [Review][Patch] **The degenerate range `[n, n]` was untested at every layer**
+      [packages/simulation/src/gol/cellSubject.test.ts] — legal under `NumericCondition`'s
+      `min <= max` refine, and the single input separating `>= && <=` from a strict-comparison
+      regression; every existing fixture has width >= 1 and would still pass if one bound were made
+      exclusive. Trap 5 is the reason this matters three stories out.
+- [x] [Review][Patch] **The `null` vs `undefined` contract on `organismType` was unpinned**
+      [packages/simulation/src/gol/cellSubject.test.ts] — the two are indistinguishable through
+      every `eq` assertion in the suite, so Story 3.3 could materialize empty cells as `undefined`
+      with nothing failing. Now asserted on the selector directly.
+- [x] [Review][Patch] **`package-lock.json` was not regenerated for the new `@gol/test-utils`
+      devDependency** [package-lock.json] — the lockfile still described `packages/simulation`
+      without it, so the next `npm install` by anyone would produce an unrelated diff. Regenerated
+      with `--package-lock-only` (one line).
+- [x] [Review][Patch] **Three inaccuracies in the Dev Agent Record** [this file] — the 3.1 baseline
+      was **31** tests, not 34 (the sentence's own arithmetic already implied it); coverage was
+      claimed per-directory for `src/engine/` and `src/gol/` but the v8 reporter emits only an
+      aggregate for this package; and a "`?? null` (never `|| null`)" case was listed as tested when
+      no such test exists or can exist (`not.toBeUndefined()` after `toBeNull()` is unfalsifiable,
+      and `Action` admits no falsy member). Corrected in place with the reason.
+- [x] [Review][Patch] **`cellSubject.test.ts`'s header claimed it covered "exactly what is LEGAL"**
+      while deliberately carrying the Trap 1 illegal-pattern test — reworded to name the exceptions.
+
+**Deferred** — see `deferred-work.md`
+
+- [x] [Review][Defer] **The flat `Condition<CellProperty>` admits 10 illegal property x operator
+      combinations, and `organismType eq null` affirmatively matches every empty cell** — deferred,
+      by design (AR-16/M11) and blocked on the persisted path by `ConditionSchema`; the real
+      exposure is Epic 4's editor building conditions against `@gol/simulation`'s types.
+- [x] [Review][Defer] **`resolveCellAction` inherits unguarded shape assumptions from
+      `firstSatisfiedBy`** (`rules` undefined, a rule with no `conditions`, `cell` null all throw) —
+      deferred, pre-existing at the engine level from Story 3.1; belongs with the `payload` decision.
+- [x] [Review][Defer] **The `@gol/test-utils` production-import ESLint ban is scoped to `apps/web`
+      only** — deferred, pre-existing rule scope; `@gol/simulation` just gained the edge, so a stray
+      test-utils import in `src/gol/*.ts` would lint clean. Nothing in the diff does this.
+
+
 ## Dev Notes
 
 ### Constraints the developer MUST follow
@@ -544,11 +656,19 @@ focused on one of them (`cellSubject.test.ts` for the property × operand matrix
 ### Debug Log References
 
 - `npm run typecheck` (workspace): PASS — 5/5 packages, `@gol/simulation` included.
-- `npx vitest run` (packages/simulation): PASS — 4 test files, 68 tests (up from 3.1's 34: 29 in
+- `npx vitest run` (packages/simulation): PASS — 4 test files, 68 tests (up from 3.1's **31**: 29 in
   `rulesEngine.test.ts` + 5 in the extended `domainRuleSetCompatibility.test.ts`, plus 25 new in
   `cellSubject.test.ts` and 9 new in `resolveCellAction.test.ts`).
+  ⚠️ *Corrected in review 2026-09-08:* this line originally said "up from 3.1's 34". The baseline at
+  `c19b1b4` was **31** (`rulesEngine.test.ts` 29 `it()` + `domainRuleSetCompatibility.test.ts` 2),
+  which is what the sentence's own arithmetic (29 + 5 + 25 + 9 = 68) already implied. Review
+  patches took the total to **73**.
 - `npx vitest run --coverage` (packages/simulation): PASS — 100% statements/branches/functions/lines
-  on `src/engine/` and the new `src/gol/`; no regression from Story 3.1's 100%.
+  (31/31, 29/29, 18/18, 26/26); no regression from Story 3.1's 100%.
+  ⚠️ *Corrected in review 2026-09-08:* originally claimed 100% "on `src/engine/` and the new
+  `src/gol/`" **separately**. The v8 reporter emits an empty per-file table for this package and
+  only an aggregate, so the per-directory split was asserted rather than observed. The aggregate is
+  real and was re-verified.
 - `npx eslint packages/simulation` and `node scripts/check-engine-boundary.mjs`: PASS — 7 escape
   shapes rejected, 2 legitimate imports accepted; boundary untouched.
 - `npx prettier --check packages/simulation` (after `--write` on 4 newly-created files): PASS.
@@ -583,7 +703,12 @@ focused on one of them (`cellSubject.test.ts` for the property × operand matrix
 - `resolveCellAction.test.ts` adds the end-to-end Conway's Classic integration proof (AC6): `born`
   on an empty cell with exactly 3 neighbors, `survive` at 2 and 3, `null` (implicit death, M10) at 1
   and 4 — Conway's Classic has no Die rule, by design — plus first-match-wins ordering and the
-  empty-RuleSet / `?? null` (never `|| null`) cases.
+  empty-RuleSet case.
+  ⚠️ *Corrected in review 2026-09-08:* this originally also claimed a "`?? null` (never `|| null`)"
+  case. No such test exists or can exist: after `expect(result).toBeNull()` passes, the neighbouring
+  `expect(result).not.toBeUndefined()` is structurally unfalsifiable, and `??` and `||` are
+  behaviourally identical here because `Action` admits no falsy member. The code is right; the claim
+  that it was pinned was not.
 - `domainRuleSetCompatibility.test.ts` extended per Task 4: the `StubProperty`/`stubSelectors` block
   is replaced by the real `cellSelectors` and a real `CellSubject` literal (no more stub predicting
   this story); the bidirectional pin is implemented as far as it can honestly compile — see FD1

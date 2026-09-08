@@ -11,7 +11,9 @@
 // `tsc --noEmit` via this package's `include: ["src"]`. The dependency stays declared in
 // package.json even though Story 3.2 (FD1 option (b)) keeps the edge TEST-ONLY: `./gol/` declares
 // its own Action/SurvivalPayload/SurvivalRule/SurvivalRules rather than importing @gol/domain's, so
-// only domainRuleSetCompatibility.test.ts's bidirectional pin exercises the dependency.
+// only domainRuleSetCompatibility.test.ts's assignability pins exercise the dependency — forward
+// (domain -> engine) at the RuleSet/Rule/Condition levels, and BOTH directions at the payload
+// level, which is what keeps FD1's duplication from drifting silently.
 //
 // ❌ No schema surface. RFC-004 §1.5's `makeRuleSchema(payloadSchema, conditionSchema)` helper is
 // RETIRED, not pending (M11): its only intended caller already exists and bypasses it — Story 1.3

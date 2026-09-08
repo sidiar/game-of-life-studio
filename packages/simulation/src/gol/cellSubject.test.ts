@@ -1,9 +1,11 @@
 // The property x operand matrix (AC6; Trap 4). Story 1.3's ConditionSchema is a DISCRIMINATED
 // UNION, not a bare 5-property x 6-operator cartesian product: `cellState` admits only `eq` over
 // its three values, `organismType` admits only `eq`, and the three numeric properties admit all
-// six operators (a scalar, or `range` with a [min,max] tuple). This suite covers exactly what is
-// LEGAL — 20 combinations — in both directions, so a predicate stuck at `true` cannot pass
-// silently. Subjects are hand-built CellSubject literals; no grid (RFC-004 §3.5).
+// six operators (a scalar, or `range` with a [min,max] tuple). This suite covers all 20 LEGAL
+// combinations in both directions, so a predicate stuck at `true` cannot pass silently — plus two
+// deliberate exceptions that assert what is NOT legal or NOT yet reachable: the Trap 1 library-id
+// case below, and the frozen-dictionary guard. Subjects are hand-built CellSubject literals; no
+// grid (RFC-004 §3.5).
 import { describe, expect, it } from 'vitest';
 
 import { conditionIsSatisfiedBy } from '../engine/firstSatisfiedBy';
@@ -53,6 +55,22 @@ describe('cellSelectors — one row per CellProperty (AC2)', () => {
       'occupantNeighborCount',
     ];
     expect(Object.keys(cellSelectors).sort()).toEqual([...expectedKeys].sort());
+  });
+
+  // The dictionary is exported from @gol/simulation's barrel, and `Readonly<…>` is erased at
+  // runtime. Frozen so a consumer cannot assign over a row and corrupt every other reader for the
+  // process lifetime — the same protection @gol/domain gives DEFAULT_SETTINGS / CONWAYS_CLASSIC.
+  it('is frozen — a compile-time Readonly<> claim is erased at runtime', () => {
+    expect(Object.isFrozen(cellSelectors)).toBe(true);
+  });
+
+  // The empty-cell contract Story 3.3 has to honour when it materializes CellSubjects from the
+  // grid. `null` and `undefined` are indistinguishable through every `eq` test above (both are
+  // !== any numeric ref), so without this assertion 3.3 could ship `undefined` and no test would
+  // fail — while `organismType eq null` would flip from matching every empty cell to none.
+  it('yields exactly null — never undefined — for an empty cell', () => {
+    expect(cellSelectors.organismType(cell())).toBeNull();
+    expect(cellSelectors.organismType(cell())).not.toBeUndefined();
   });
 });
 
@@ -229,6 +247,20 @@ describe('neighborCount — all six operators, both directions', () => {
     expect(holds(condition, withNeighborCount(3))).toBe(true); // hi
     expect(holds(condition, withNeighborCount(1))).toBe(false); // lo - 1
     expect(holds(condition, withNeighborCount(4))).toBe(false); // hi + 1
+  });
+
+  // The DEGENERATE range [n, n] — legal under NumericCondition's `min <= max` refine, and the one
+  // input that separates `>= && <=` from any strict-comparison regression: every other fixture
+  // here has width >= 1 and would still pass if a single bound were made exclusive.
+  it('range [n, n] matches exactly n (Trap 5, tightest bound)', () => {
+    const condition: Condition<CellProperty> = {
+      property: 'neighborCount',
+      operator: 'range',
+      pattern: [3, 3],
+    };
+    expect(holds(condition, withNeighborCount(3))).toBe(true);
+    expect(holds(condition, withNeighborCount(2))).toBe(false);
+    expect(holds(condition, withNeighborCount(4))).toBe(false);
   });
 });
 

@@ -5,22 +5,34 @@
 // in this package rather than importing @gol/domain's), drift here is exactly the failure mode FD1
 // accepts as the cost of keeping @gol/simulation self-describing.
 //
-// ⚠️ Spec-conflict flag (Dev Agent Record, FD1): AC4/FD1 ask for the pin to hold in BOTH
-// directions. Only the DOMAIN -> ENGINE direction actually compiles, and it does so for a
-// structural reason no implementation choice inside this story's scope can change: (1) engine
-// Rule/RuleSet/Condition are `readonly` (AR-16 immutability, src/engine/rule.ts — out of scope to
-// edit) while @gol/domain's Zod-inferred types are mutable, and TypeScript never allows assigning a
-// readonly array into a mutable-typed reference regardless of element shape; (2) @gol/domain's
-// Condition is a discriminated union with a narrowed `pattern` per branch, while the engine's
-// generic Condition<Props> is deliberately ONE flat shape with `pattern: unknown` — the whole point
-// of AR-16's domain-blindness. A strict supertype (the engine's) can never be reverse-assigned into
-// a narrower discriminated union (the domain's) without a cast; narrowing the engine's Condition
-// to fix that would re-introduce the exact GoL-awareness AR-16 exists to keep out of src/engine/.
-// Both facts were confirmed empirically (`tsc` rejects every reverse-direction line attempted
-// during development; see Dev Agent Record) rather than assumed. So this file pins the direction
-// that is both SOUND and LOAD-BEARING — the one resolveCellAction and cellSelectors actually
-// exercise at runtime — at all three levels (RuleSet, Rule, Condition), which is a strictly
-// stronger pin than Story 3.1's AC5 (RuleSet only, Props defaulted to `string`).
+// ⚠️ Spec-conflict flag (Dev Agent Record, FD1; review 2026-09-08): AC4/FD1 ask for the pin to hold
+// in BOTH directions. It holds both ways at the PAYLOAD level and one way at the CONTAINER level,
+// and the split is structural rather than a choice this story made:
+//
+//   - CONTAINER levels (RuleSet / Rule / Condition) — DOMAIN -> ENGINE only. (1) engine
+//     Rule/RuleSet/Condition are `readonly` (AR-16 immutability, src/engine/rule.ts — out of scope
+//     to edit) while @gol/domain's Zod-inferred types are mutable, and TypeScript never allows
+//     assigning a readonly ARRAY into a mutable-typed reference regardless of element shape;
+//     (2) @gol/domain's Condition is a discriminated union with a narrowed `pattern` per branch,
+//     while the engine's generic Condition<Props> is deliberately ONE flat shape with
+//     `pattern: unknown` — the whole point of AR-16's domain-blindness. A strict supertype can
+//     never be reverse-assigned into a narrower discriminated union without a cast, and narrowing
+//     the engine's Condition to fix it would re-introduce the exact GoL-awareness AR-16 exists to
+//     keep out of src/engine/. RFC-004 §2.4 only ever claims the forward direction ("persisted
+//     data is fed to the engine without any mapping layer"), so this half is the RFC's own claim.
+//
+//   - PAYLOAD level (SurvivalPayload / Action) — BOTH directions, pinned below. `readonly`
+//     PROPERTY modifiers (unlike readonly arrays) are ignored for assignability, and `Action` is a
+//     plain string union, so nothing structural blocks the reverse here.
+//
+// ⚠️ The payload direction is the one that MATTERS for FD1, and an earlier revision of this file
+// omitted it. FD1 accepts duplicating Action/SurvivalPayload in src/gol/survivalRules.ts *on the
+// grounds that* drift becomes a build failure here. A domain -> engine assignment alone is
+// covariant, so it cannot deliver that: widening the ENGINE's copy (adding a fourth Action member)
+// or hollowing it out still compiles, which is precisely the drift FD1 claimed to have closed.
+// Verified by mutation during review — adding `'dormant'` to `Action` left `tsc` at exit 0 before
+// the reverse pins below existed, and fails with them. Keep both directions, or FD1's justification
+// stops being true.
 //
 // ⚠️ This file lives OUTSIDE src/engine/ on purpose. It must import @gol/domain, which the
 // import-boundary block in eslint.config.mjs bans inside that directory. The AR-40 proof
@@ -40,6 +52,7 @@
 import { CONWAYS_CLASSIC } from '@gol/domain';
 import type {
   Condition as DomainCondition,
+  SurvivalRule as DomainSurvivalRule,
   SurvivalRules as DomainSurvivalRules,
 } from '@gol/domain';
 import { describe, expect, it } from 'vitest';
@@ -48,7 +61,7 @@ import { firstSatisfiedBy } from './engine/firstSatisfiedBy';
 import type { Condition, RuleSet } from './engine/rule';
 import { cellSelectors } from './gol/cellSubject';
 import type { CellProperty } from './gol/cellSubject';
-import type { SurvivalPayload, SurvivalRule, SurvivalRules } from './gol/survivalRules';
+import type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol/survivalRules';
 
 describe('a GoL SurvivalRules value IS a generic RuleSet (AR-21, RFC-004 §2.4)', () => {
   it('assigns with no mapping layer — the compiler is the assertion', () => {
@@ -92,6 +105,31 @@ describe('a GoL SurvivalRules value IS a generic RuleSet (AR-21, RFC-004 §2.4)'
     const typed: DomainCondition = domainCondition;
     const asEngineCondition: Condition<CellProperty> = typed;
     expect(asEngineCondition).toBe(typed);
+  });
+
+  // ── The REVERSE direction (ENGINE -> DOMAIN), at the payload level ──────────────────────────
+  //
+  // This is the half FD1's justification actually rests on: it fails the moment src/gol's own
+  // Action/SurvivalPayload drift from @gol/domain's, which the forward (covariant) assignments
+  // above cannot detect. `DomainSurvivalRule['payload']` is the indexed access that names
+  // @gol/domain's payload type — it exports no standalone alias for it (Story 3.1's FD6).
+  it("the engine payload assigns BACK into @gol/domain's payload type (FD1 drift guard)", () => {
+    const domainPayload: DomainSurvivalRule['payload'] = { summary: 'survives', action: 'survive' };
+    const asEnginePayload: SurvivalPayload = domainPayload;
+    // …and back again. Adding a member to src/gol's `Action`, or dropping `summary`, fails HERE.
+    const backToDomain: DomainSurvivalRule['payload'] = asEnginePayload;
+
+    expect(backToDomain).toBe(domainPayload);
+  });
+
+  it("the engine Action assigns BACK into @gol/domain's action union (FD1 drift guard)", () => {
+    const domainAction: DomainSurvivalRule['payload']['action'] = 'born';
+    const asEngineAction: Action = domainAction;
+    const backToDomain: DomainSurvivalRule['payload']['action'] = asEngineAction;
+
+    // The value is incidental; both assignments compiling in BOTH directions is the assertion —
+    // it proves the two three-member unions are mutually assignable, i.e. identical.
+    expect(backToDomain).toBe('born');
   });
 
   // Wiring proof with a REAL GoL subject and the REAL cellSelectors — CellSubject and its five
