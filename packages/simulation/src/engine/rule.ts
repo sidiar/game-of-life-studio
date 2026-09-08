@@ -20,9 +20,20 @@ export type Selector<S> = (subject: S) => unknown;
 // time, at the call site that owns the omission. It also costs nothing at runtime: no guard, no
 // branch, no fallback in the NFR-1.1 inner loop.
 //
-// The `string` default is what keeps a bare `RuleSet<Payload>` / `Selectors<S>` legal for callers
-// that do not want to name their property set.
-export type Selectors<S, Props extends string = string> = Readonly<Record<Props, Selector<S>>>;
+// ⚠️ NO DEFAULT on Props here, deliberately — and this is the one type in the file that must not
+// have one. `Props = string` would make `Selectors<S>` mean `Record<string, Selector<S>>`, which
+// TypeScript treats as TOTAL over every string key (noUncheckedIndexedAccess is off repo-wide). A
+// selector dictionary missing an entry would then type-check, and `selectors[...]` would hand back
+// a Selector the compiler believes in and the runtime does not — reinstating, silently and by
+// default, the exact "is not a function" throw this seam exists to prevent. The guarantee is only
+// real when the key set is named, so naming it is mandatory.
+//
+// Condition / Rule / RuleSet DO keep a `string` default: their default is harmless (it widens a
+// property name, it does not fake a lookup), and AC5 requires a bare `RuleSet<SurvivalPayload>` to
+// be a legal way to spell the persisted GoL shape. A caller that genuinely wants the loose form can
+// still write `Selectors<S, string>` — now an explicit, visible opt-in rather than what you get by
+// saying nothing.
+export type Selectors<S, Props extends string> = Readonly<Record<Props, Selector<S>>>;
 
 // The atomic predicate: the subject's VALUE (resolved via `property`) tested against `pattern`.
 //

@@ -186,6 +186,43 @@ describe('conditionIsSatisfiedBy — malformed input fails the condition, never 
     expect(firstSatisfiedBy([broken, good], loan(), loanSelectors)?.id).toBe('good');
   });
 
+  it('a property with no selector fails the condition instead of throwing', () => {
+    // Types cannot reach this: the property arrives as DATA (an older workspace's rule, or a
+    // non-GoL caller), so no amount of pinning Props proves anything about it at runtime.
+    const orphan = {
+      property: 'unknownProperty',
+      operator: 'eq',
+      pattern: 0,
+    } as unknown as Condition<LoanProperty>;
+    expect(() => conditionIsSatisfiedBy(orphan, loan(), loanSelectors)).not.toThrow();
+    expect(conditionIsSatisfiedBy(orphan, loan(), loanSelectors)).toBe(false);
+  });
+
+  it('an inherited Object.prototype key is not mistaken for a selector', () => {
+    // `loanSelectors` is a plain literal, so it inherits toString/valueOf/constructor. An
+    // `undefined`/typeof guard does NOT catch these — they are real functions — and calling them is
+    // not harmless: Object.prototype.hasOwnProperty with `this === undefined` THROWS "Cannot convert
+    // undefined or null to object". This test is what forced the guard from a typeof tag test to
+    // Object.hasOwn; keep the 'hasOwnProperty' case, it is the one that fails the cheap version.
+    for (const property of ['toString', 'valueOf', 'constructor', 'hasOwnProperty']) {
+      const inherited = {
+        property,
+        operator: 'gt',
+        pattern: 0,
+      } as unknown as Condition<LoanProperty>;
+      expect(() => conditionIsSatisfiedBy(inherited, loan(), loanSelectors)).not.toThrow();
+      expect(conditionIsSatisfiedBy(inherited, loan(), loanSelectors)).toBe(false);
+    }
+  });
+
+  it('a missing selector fails only its own rule, leaving later rules reachable', () => {
+    const broken = rule('broken', [
+      { property: 'nope', operator: 'eq', pattern: 0 } as unknown as Condition<LoanProperty>,
+    ]);
+    const good = rule('good', [{ property: 'status', operator: 'eq', pattern: 'on-loan' }]);
+    expect(firstSatisfiedBy([broken, good], loan(), loanSelectors)?.id).toBe('good');
+  });
+
   it('eq still compares non-numeric values — the guards are numeric-only', () => {
     expect(holds('eq', 'on-loan', loan(), 'status')).toBe(true);
     expect(holds('eq', 'returned', loan(), 'status')).toBe(false);

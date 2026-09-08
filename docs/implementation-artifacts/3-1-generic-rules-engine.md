@@ -703,9 +703,39 @@ The `satisfies Record<Operator, Predicate>` on the literal is load-bearing: anno
 null-prototype copy would have dropped the exhaustiveness check that makes a seventh operator a
 build failure. Mutation-tested — adding a seventh arm to `Operator` fails the build.
 
-**Still carried to Story 3.2** (type-level, not `operators.ts`): `Props extends string = string`
-widens `Selectors<S>` to a total `Record<string, …>`, which weakens the compile-time selector
-guarantee whenever `Props` is left at its default.
+### The `Props` default (also folded in, at Sidiar's direction)
+
+`Selectors<S, Props extends string = string>` meant a bare `Selectors<S>` was
+`Record<string, Selector<S>>`, which TypeScript treats as **total over every string key**
+(`noUncheckedIndexedAccess` is off repo-wide). A dictionary missing an entry type-checked, and the
+lookup handed back a `Selector` the compiler believed in and the runtime did not — reinstating by
+default the exact "is not a function" throw FD3 option (c) was chosen to prevent.
+
+**The default is removed from `Selectors` only.** `Condition` / `Rule` / `RuleSet` keep theirs: a
+default `Props` there merely widens a property name rather than faking a lookup, and **AC5 requires a
+bare `RuleSet<SurvivalPayload>`** to remain a legal spelling of the persisted GoL shape. A caller who
+genuinely wants the loose form writes `Selectors<S, string>` — an explicit opt-in instead of what you
+get by saying nothing. Mutation-tested: deleting one entry from a pinned `Selectors` now fails the
+build with *"Property 'age' is missing"*, and the AC5 assignability test still compiles untouched.
+
+Types still cannot prove anything about a `property` that arrives as **data** (an older workspace's
+rule; a future non-GoL caller), so `conditionIsSatisfiedBy` also guards at the point of use.
+
+⚠️ **That guard is `Object.hasOwn`, and the cheap version was wrong.** It was first written as
+`typeof selector === 'function'`, which looks sufficient and is not: a caller's dictionary is a plain
+literal and **inherits `Object.prototype`**, so a property named `toString`, `valueOf`,
+`constructor` or `hasOwnProperty` finds a real function, passes the typeof test, and is called.
+These do not degrade politely — `Object.prototype.hasOwnProperty` with `this === undefined` **throws
+"Cannot convert undefined or null to object"**, the very hot-loop crash the guard exists to stop.
+The new test caught this; the documented rationale for the cheap version had asserted the opposite.
+
+Cost measured, and paid deliberately: **0.128 → 0.219 ms/cycle, +0.091 ms against the 16.7 ms
+NFR-1.1 budget (~0.5%)** — five times the operator guards, accepted because the alternative is a
+thrown exception rather than a wrong answer. The zero-per-cell version is a one-pass key sweep at
+rule-**compile** time (Story 3.4), after which this guard is redundant and should be revisited with
+Story 3.7's harness in hand.
+
+Nothing from the Edge Case Hunter's list remains deferred.
 
 ---
 
