@@ -138,6 +138,47 @@ export default tseslint.config(
     },
   },
 
+  // Import boundary: the generic rules engine (packages/simulation/src/engine/) must import
+  // NOTHING GoL-specific. AR-16 makes it parametric over an arbitrary subject; AR-40 tests that
+  // claim with a non-Game-of-Life subject. A `@gol/domain` import here typechecks, passes every
+  // test, and silently ends the reusability the layer exists for — the failure is invisible, so
+  // the boundary has to be mechanical. Story 3.2 lands the GoL layer in this SAME package
+  // (src/gol/), which is why this is scoped to a DIRECTORY and not to the package: removing
+  // `"@gol/domain": "*"` from packages/simulation/package.json would break 3.2 instead.
+  //
+  // The AR-40 proof test lives inside src/engine/ deliberately, so this rule enforces its
+  // "imports nothing from @gol/domain" claim rather than leaving it to review — hence NO test
+  // exemption here, unlike the two apps/web blocks above. The AC5 assignability test sits outside
+  // this directory precisely because it must import @gol/domain.
+  //
+  // ⚠️ A THIRD, independent block. Do not merge it into the AR-46 colour block or the
+  // @gol/test-utils block above; all three have deliberately non-interchangeable scopes.
+  {
+    files: ['packages/simulation/src/engine/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@gol/*'],
+              message:
+                'The generic rules engine must import nothing GoL-specific (AR-16/AR-40). It is ' +
+                'parametric over an arbitrary subject S with an opaque payload; the Game of Life ' +
+                'binding belongs in packages/simulation/src/gol/, which is a CALLER of this layer.',
+            },
+            {
+              regex: '^\\.\\./',
+              message:
+                'src/engine/ is a self-contained boundary (AR-40) — a relative path escaping it ' +
+                'reaches GoL code without tripping the @gol/* ban above. Keep the engine leaf-only.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Must be last: turn off every stylistic rule that would fight Prettier.
   prettier,
 );
