@@ -816,7 +816,7 @@ now say what is true rather than promising a future that already happened differ
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/2-8-undo.md`
+- `docs/implementation-artifacts/epic-2/2-8-undo.md`
 
 **Unchanged, deliberately:** `apps/web/lib/tool.ts`, `apps/web/lib/canvas/*`, every `packages/*`,
 `apps/web/app/themes.css`.

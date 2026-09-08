@@ -649,7 +649,7 @@ Modified:
   new entry (the `toThumbnailSource` naming mismatch)
 - `docs/implementation-artifacts/sprint-status.yaml` — `2-4-edit-canvas-display`:
   `ready-for-dev` → `review`
-- `docs/implementation-artifacts/2-4-edit-canvas-display.md` — this file
+- `docs/implementation-artifacts/epic-2/2-4-edit-canvas-display.md` — this file
 
 ## Change Log
 

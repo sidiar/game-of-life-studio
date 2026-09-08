@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-08-31
+# last_updated: 2026-09-08
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-08-31
+last_updated: 2026-09-08
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -64,7 +64,7 @@ development_status:
   # to actually run one, move the story files back up beside this file first (CLAUDE.md).
 
   # Epic 2: Battle Editor (Edit Mode & Canvas Renderer)
-  epic-2: in-progress
+  epic-2: done
   2-1-battle-route-page-skeleton: done
   2-2-create-new-battle-gallery-wiring: done
   2-3-renderer-dirty-region-editing-paths: done
@@ -81,7 +81,12 @@ development_status:
   2-14-edit-mode-grid-resize: done
   2-15-clear-petri-dish: done
   2-16-back-navigation-unsaved-changes-guard: done
-  epic-2-retrospective: optional
+  # No epic-2-retrospective key: the retrospective was deliberately skipped (Sidiar, 2026-09-08)
+  # rather than left `optional` in perpetuity — the same call as Epic 1, and for the same reason.
+  # Epic 2's stories are archived into epic-2/, and the retrospective skill globs
+  # {implementation_artifacts}/{epic}-{n}-*.md NON-recursively — it would find zero stories there
+  # and silently produce an empty retro. Skipping is the honest record; to actually run one, move
+  # the story files back up beside this file first (CLAUDE.md).
 
   # Epic 3: Living Simulations (Play Mode & Engine)
   epic-3: backlog

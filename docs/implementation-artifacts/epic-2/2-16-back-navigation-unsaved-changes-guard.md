@@ -672,13 +672,13 @@ Conventions that apply and are easy to violate here:
   is why leaving either one is a real unmount.
 - [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/petri-dish-lab-mode.html]
   — `.sidebar-footer` (`:120-127`), `.back-btn` (`:129-147`), the footer markup (`:737-741`).
-- [Source: docs/implementation-artifacts/2-15-clear-petri-dish.md] — the immediately preceding story:
+- [Source: docs/implementation-artifacts/epic-2/2-15-clear-petri-dish.md] — the immediately preceding story:
   the sidebar-button idiom and its two token substitutions, the axe transition finding, the
   four-section sidebar this story adds a footer beneath, and the bundle measurements this story is
   held against.
-- [Source: docs/implementation-artifacts/2-14-edit-mode-grid-resize.md] — the `next/dynamic` dialog
+- [Source: docs/implementation-artifacts/epic-2/2-14-edit-mode-grid-resize.md] — the `next/dynamic` dialog
   measurement (three variants, one tree) and the focus-restore machinery this story copies.
-- [Source: docs/implementation-artifacts/2-13-save-battle.md] — the save path, the edit lock, and the
+- [Source: docs/implementation-artifacts/epic-2/2-13-save-battle.md] — the save path, the edit lock, and the
   `role="alert"` failure surface forced decision 5 reuses.
 - [Source: docs/implementation-artifacts/deferred-work.md] — entries `:175`, `:191`, `:239`, `:355`,
   `:376`, `:411`, `:417` (AC8).
@@ -876,7 +876,7 @@ lifetime = undo lifetime"), which is what the test would catch if it ever stoppe
 - `apps/web/e2e/createBattle.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/2-16-back-navigation-unsaved-changes-guard.md`
+- `docs/implementation-artifacts/epic-2/2-16-back-navigation-unsaved-changes-guard.md`
 
 ### Change Log
 

@@ -530,7 +530,7 @@ asking. Merging is always Sidiar's call.
 - [Source: docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md#NFR-4.2] — "< 100ms"
 - [Source: docs/project-context.md] — hot state in refs; grid dimensions never constants; the
   `var()`-in-`fillStyle` trap; no raw hex; the pipe-swallowed-exit-code trap; the commit gate
-- [Source: docs/implementation-artifacts/2-5-click-placement.md] — the pointer path this story
+- [Source: docs/implementation-artifacts/epic-2/2-5-click-placement.md] — the pointer path this story
   extends; forced decisions 1 (recompute the layout, don't touch the frozen contract), 2 (tool→ref
   in `<BattleEditorView>`), 6 (`cursor: crosshair` on the edit-only wrapper); trap 12's
   commit-without-a-renderer call
@@ -656,7 +656,7 @@ Modified:
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/2-6-drag-painting.md` (this file)
+- `docs/implementation-artifacts/epic-2/2-6-drag-painting.md` (this file)
 
 ### Code Review Record (2026-08-27, opus, fresh context)
 

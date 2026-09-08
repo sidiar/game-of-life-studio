@@ -637,7 +637,7 @@ the change has broken the filter.
   install.
 - `docs/implementation-artifacts/deferred-work.md` — 4 items closed, 3 new deferrals.
 - `docs/implementation-artifacts/sprint-status.yaml` — `ready-for-dev` → `in-progress` → `review`.
-- `docs/implementation-artifacts/2-3-renderer-dirty-region-editing-paths.md` — this record.
+- `docs/implementation-artifacts/epic-2/2-3-renderer-dirty-region-editing-paths.md` — this record.
 
 ## Change Log
 

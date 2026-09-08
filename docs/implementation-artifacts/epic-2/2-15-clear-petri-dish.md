@@ -496,10 +496,10 @@ Conventions that apply and are easy to violate here:
   — `.sidebar-section` (`:149-164`), `.tool-btn` (`:407-431`), the Tools markup (`:727-733`).
 - [Source: docs/implementation-artifacts/deferred-work.md] — entries `:239`, `:257`, `:369`, `:400`
   (AC6).
-- [Source: docs/implementation-artifacts/2-14-edit-mode-grid-resize.md] — the immediately preceding
+- [Source: docs/implementation-artifacts/epic-2/2-14-edit-mode-grid-resize.md] — the immediately preceding
   story: the commit-seam pattern, the `<GridSettingsSection>` styling substitutions, the axe
   transition findings, the bundle measurements this story is held against.
-- [Source: docs/implementation-artifacts/2-8-undo.md] — forced decision 5 (silent mid-stroke
+- [Source: docs/implementation-artifacts/epic-2/2-8-undo.md] — forced decision 5 (silent mid-stroke
   discard) and the ring's shape.
 - [Source: docs/project-context.md] — the load-bearing non-obvious rules (auto-loaded by BMad
   skills; not restated here beyond the ones this story can actually trip).

@@ -586,7 +586,7 @@ asking; **merging is always Sidiar's call**, and `main` is never touched directl
 - [Source: docs/implementation-artifacts/deferred-work.md] — the `setPalette` entry (Story 2.10),
   the Story 2.9 cap close-note, the `resolveSelectedTool` scan entry, the `BattleTile` dependency
   residual.
-- [Source: docs/implementation-artifacts/2-9-organism-roster-tool-selection.md] — the roster
+- [Source: docs/implementation-artifacts/epic-2/2-9-organism-roster-tool-selection.md] — the roster
   component, the four forced decisions, Sidiar's two review decisions, the bundle numbers.
 - [Source: docs/project-context.md] — AR-46 no-raw-hex, AR-35 per-component MUI imports, AR-2/27
   repository injection, the pipe-swallowed-exit-code and local-CI-is-not-CI warnings.
@@ -729,7 +729,7 @@ change. ❌ No renderer contract change (AC6's preferred answer).
 - `docs/implementation-artifacts/deferred-work.md` — the `setPalette` entry closed; the Story 2.9
   cap close-note resolved; the `BattleTile` dependency-array residual re-pointed to Story 6.4; the
   `resolveSelectedTool` scan entry annotated.
-- `docs/implementation-artifacts/2-10-add-organisms-from-library.md` — this file.
+- `docs/implementation-artifacts/epic-2/2-10-add-organisms-from-library.md` — this file.
 - `docs/implementation-artifacts/sprint-status.yaml` — story status.
 
 ## Change Log

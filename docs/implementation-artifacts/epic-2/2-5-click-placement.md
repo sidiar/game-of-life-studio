@@ -561,7 +561,7 @@ asking. Merging is always Sidiar's call.
 - [Source: docs/implementation-artifacts/deferred-work.md] — the `toDraft()` `organismIds`-aliasing
   entry (owned by this story); the e2e seed-helper triplication; the 2.4 dish-overflow and
   bundle-headroom entries (**not** this story's)
-- [Source: docs/implementation-artifacts/2-4-edit-canvas-display.md] — `EditDish`'s lifecycle, the
+- [Source: docs/implementation-artifacts/epic-2/2-4-edit-canvas-display.md] — `EditDish`'s lifecycle, the
   double-paint review finding, the `RecordingContext2D`-before-first-render technique
 - [Source: apps/web/components/PetriDishCanvas.tsx#146-297] — `EditDish`: retained renderer,
   `paintedGridRef`, the grid effect, the resize observer
@@ -702,7 +702,7 @@ no `packages/*` change, no new dependency.
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/2-5-click-placement.md` (this file)
+- `docs/implementation-artifacts/epic-2/2-5-click-placement.md` (this file)
 
 ## Change Log
 

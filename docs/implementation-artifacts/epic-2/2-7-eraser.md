@@ -270,7 +270,7 @@ re-defer the touch/pen deadlock:**
       the gesture share one `cellsBetween`, so the ratio survives breaking it)
       [apps/web/e2e/battleRoute.spec.ts]
 - [x] [Review][Patch] Dev Agent Record's "Agent Model Used" said Opus 5; the story was implemented
-      by Sonnet [docs/implementation-artifacts/2-7-eraser.md:553]
+      by Sonnet [docs/implementation-artifacts/epic-2/2-7-eraser.md:553]
 - [x] [Review][Patch] Stale comment claiming `mountEditor`'s existing call sites were unchanged —
       they were changed in the same diff [apps/web/components/battle/BattleEditorView.test.tsx:131]
 
@@ -592,10 +592,10 @@ asking. Merging is always Sidiar's call.
 - [Source: docs/project-context.md] — hot state in refs; grid dimensions never constants; no raw
   hex; one immutable theme; the `var()`-in-`fillStyle` trap; the pipe-swallowed-exit-code trap; the
   commit gate
-- [Source: docs/implementation-artifacts/2-6-drag-painting.md] — the stroke pipeline this story
+- [Source: docs/implementation-artifacts/epic-2/2-6-drag-painting.md] — the stroke pipeline this story
   reuses verbatim; its six forced decisions, thirteen traps, and the Code Review Record's five
   behavioural patches and twelve deferrals
-- [Source: docs/implementation-artifacts/2-5-click-placement.md] — the tool→ref seam (forced
+- [Source: docs/implementation-artifacts/epic-2/2-5-click-placement.md] — the tool→ref seam (forced
   decision 2), `cursor: crosshair` (forced decision 6), the commit-without-a-renderer call
 - [Source: docs/implementation-artifacts/deferred-work.md] — the two entries **owned by this story**
   (the tripled `PetriDishCanvas.test.tsx` fixture set; the touch/pen stroke deadlock), plus the
@@ -781,7 +781,7 @@ snapshots anywhere. All four required mutations run and confirmed reddening (Deb
 - `docs/implementation-artifacts/deferred-work.md` — modified (Task 4, Task 5 resolutions; two
   new entries filed)
 - `docs/implementation-artifacts/sprint-status.yaml` — modified (`2-7-eraser` → `review`)
-- `docs/implementation-artifacts/2-7-eraser.md` — this file (Dev Agent Record, tasks, status)
+- `docs/implementation-artifacts/epic-2/2-7-eraser.md` — this file (Dev Agent Record, tasks, status)
 
 ## Change Log
 

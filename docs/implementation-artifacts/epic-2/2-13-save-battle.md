@@ -782,10 +782,10 @@ Conventions that apply and are easy to violate here:
 - [Source: docs/implementation-artifacts/deferred-work.md] — the six entries naming this story
   (`:229`, `:275`, `:329`, `:349`, `:353`, `:371`); ⚠️ `:275` and `:329` rest on a premise this
   story's design falsifies (AC6).
-- [Source: docs/implementation-artifacts/2-12-editor-status-bar-stats.md] — the bar's current shape,
+- [Source: docs/implementation-artifacts/epic-2/2-12-editor-status-bar-stats.md] — the bar's current shape,
   the `<RightGroup>` slot built for SAVE, the bundle baseline in AC8, the port-4173 e2e trap, and the
   ref/id/de-duplication traps this story's prune inherits.
-- [Source: docs/implementation-artifacts/2-2-create-new-battle-gallery-wiring.md] — forced decision 5
+- [Source: docs/implementation-artifacts/epic-2/2-2-create-new-battle-gallery-wiring.md] — forced decision 5
   ("Does the draft carry an id?" — no; "2.13 inherits it").
 - [Source: docs/project-context.md] — auto-loaded; repository injection, no-global-store, hot state
   in refs, grid-dimensions-are-parameters, "referential-integrity logic is core", AR-46, the commit
@@ -961,7 +961,7 @@ Bundle movement against Story 2.12's baseline: `/battle` and `/battle/new` **300
 - `scripts/check-spec-ids.mjs`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/2-13-save-battle.md`
+- `docs/implementation-artifacts/epic-2/2-13-save-battle.md`
 
 ### Change Log
 

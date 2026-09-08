@@ -623,9 +623,9 @@ is always Sidiar's call**, and `main` is never touched directly.
   `.organism-eraser` 338–380, markup 658–701.
 - [Source: docs/implementation-artifacts/deferred-work.md] — the seven Story 2.9 entries and the
   bundle-headroom entry flagged "before Story 2.9 starts".
-- [Source: docs/implementation-artifacts/2-7-eraser.md] — the provisional toggle's forced decision
+- [Source: docs/implementation-artifacts/epic-2/2-7-eraser.md] — the provisional toggle's forced decision
   1(a) and its promise to be deleted here.
-- [Source: docs/implementation-artifacts/2-8-undo.md] — `useUndoableGrid`, the boolean-`canUndo`
+- [Source: docs/implementation-artifacts/epic-2/2-8-undo.md] — `useUndoableGrid`, the boolean-`canUndo`
   override, the `<EditorStatusBar>` house style.
 - [Source: docs/project-context.md] — AR-46 no-raw-hex, AR-35 per-component MUI imports, AR-2/27
   repository injection, the pipe-swallowed-exit-code and local-CI-is-not-CI warnings.
@@ -806,7 +806,7 @@ the `OrganismSummary` gap is recorded under forced decision 3.
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/2-9-organism-roster-tool-selection.md`
+- `docs/implementation-artifacts/epic-2/2-9-organism-roster-tool-selection.md`
 
 ## Change Log
 

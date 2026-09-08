@@ -511,7 +511,7 @@ Conventions that apply and are easy to violate here:
   the centred-flex overflow entry, the narrow-viewport entry (all three name Story 2.12), plus the
   dish-keyboard entry (Story 6.11) and the `<OrganismSearchAdd>` focus entry (released by the
   2026-08-27 `<select>` decision) which are **not** this story's.
-- [Source: docs/implementation-artifacts/2-11-battle-name-dirty-tracking.md] — the Story 2.8–2.11
+- [Source: docs/implementation-artifacts/epic-2/2-11-battle-name-dirty-tracking.md] — the Story 2.8–2.11
   forced decisions this story inherits, and the bundle baseline in AC7.
 - [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/petri-dish-lab-mode.html]
   — `.stats-bar` / `.stats-left` / `.stat-item` / `.stat-label` / `.stat-value` CSS (:510-549),
@@ -688,7 +688,7 @@ Updated:
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/2-12-editor-status-bar-stats.md` (this file — Dev Agent Record,
+- `docs/implementation-artifacts/epic-2/2-12-editor-status-bar-stats.md` (this file — Dev Agent Record,
   Tasks/Subtasks, Status)
 
 Dev Model: sonnet   # a memoized derivation, a styled stats row and two inherited layout/a11y fixes, all following patterns Stories 2.8-2.11 already established; no new architecture

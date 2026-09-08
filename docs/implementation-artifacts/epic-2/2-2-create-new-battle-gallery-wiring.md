@@ -545,7 +545,7 @@ persistence, or rules logic.
   chrome via `styled()`, not `sx`
 - [Source: docs/project-context.md] — repositories injected never imported; grid dimensions never
   constants; camelCase file naming; `npm run ci` is the gate and must not be piped
-- [Source: docs/implementation-artifacts/2-1-battle-route-page-skeleton.md] — the branch-order fix,
+- [Source: docs/implementation-artifacts/epic-2/2-1-battle-route-page-skeleton.md] — the branch-order fix,
   the `ready`+`null` trap, the `useAsyncResource` deps precondition, the bundle-gate coverage note
 - [Source: docs/implementation-artifacts/epic-1/1-10-battle-gallery-tiles-sorting.md:606-611] —
   "ship no toolbar", with the reasoning conflict #3 preserves

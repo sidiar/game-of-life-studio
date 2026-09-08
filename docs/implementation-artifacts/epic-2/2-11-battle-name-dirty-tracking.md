@@ -579,7 +579,7 @@ Conventions that apply and are easy to violate here:
   mid-stroke-scroll entry, the `battleId`-swap reset entry.
 - [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/petri-dish-lab-mode.html]
   — `.battle-name-input` / `.char-count` (:381-403), markup (:703-707).
-- [Source: docs/implementation-artifacts/2-10-add-organisms-from-library.md] — the Story 2.9/2.10
+- [Source: docs/implementation-artifacts/epic-2/2-10-add-organisms-from-library.md] — the Story 2.9/2.10
   forced decisions this story inherits, and the bundle baseline.
 - [Source: docs/project-context.md] — auto-loaded; the repository-injection, no-global-store,
   one-theme, AR-46 and verification rules all apply unchanged.

@@ -643,12 +643,12 @@ Conventions that apply and are easy to violate here:
 - [Source: docs/implementation-artifacts/deferred-work.md] — the eight entries citing this story:
   `:71` (closed), `:75`, `:239`, **`:243` (a resolved decision this story inherits)**, `:249`,
   **`:257` (a resolved, Sidiar-ratified decision this story inherits)**, `:347`, `:367`, `:369`.
-- [Source: docs/implementation-artifacts/2-13-save-battle.md] — the current bundle baseline
+- [Source: docs/implementation-artifacts/epic-2/2-13-save-battle.md] — the current bundle baseline
   (`/battle` **301.5 KB**, 8.5 KB headroom), the edit-lock (`savingRef`) it added, the
   `seedWorkspaceIfFresh` e2e trap, and the projection comment AC5 is a test of.
-- [Source: docs/implementation-artifacts/2-8-undo.md] — forced decision 4 (`size` derived from the
+- [Source: docs/implementation-artifacts/epic-2/2-8-undo.md] — forced decision 4 (`size` derived from the
   grid) and forced decision 5 (the mid-stroke discard policy this story inherits).
-- [Source: docs/implementation-artifacts/2-12-editor-status-bar-stats.md] — the `stats` memo AC1
+- [Source: docs/implementation-artifacts/epic-2/2-12-editor-status-bar-stats.md] — the `stats` memo AC1
   feeds from, and the ref/id de-duplication traps that come with it.
 - [Source: docs/project-context.md] — auto-loaded; **"grid dimensions are parameters, never
   constants"**, the editable/persisted `{50×30, 100×60}` bound, "hot state in refs", the
@@ -821,7 +821,7 @@ no change to `battleRecord.ts` or `<BattlePage>`.
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/2-14-edit-mode-grid-resize.md`
+- `docs/implementation-artifacts/epic-2/2-14-edit-mode-grid-resize.md`
 
 **Deliberately unchanged** (the assumption was checked, not assumed): `apps/web/components/battle/BattlePage.tsx`,
 `apps/web/lib/battleRecord.ts`, `apps/web/vitest.setup.ts`, `scripts/check-bundle-size.mjs`, `packages/*`.
