@@ -7,13 +7,13 @@ import Tooltip from '@mui/material/Tooltip';
 import type { Organism } from '@gol/domain';
 import type { BattleRepository } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
-import { formatBattleDate } from '@/lib/formatBattleDate';
+import { formatBattleDate } from '@/lib/gallery/formatBattleDate';
 import { toThumbnailSource } from '@/lib/canvas/battleThumbnail';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
-import { useInView } from '@/lib/useInView';
+import { useInView } from '@/lib/gallery/useInView';
 import PetriDishCanvas from '../PetriDishCanvas';
 
 // A battle may legally place 255 organisms (Decision G.3) — the mockup's 2-3 dots is not the

@@ -5,8 +5,8 @@ import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type BattleSummary, type Organism, type Settings } from '@gol/domain';
 import type { BattleRepository, OrganismRepository, SettingsRepository } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
-import type { WorkspaceSeedStatus } from '@/lib/useWorkspaceSeed';
-import { sortByLastModified } from '@/lib/gallerySort';
+import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
+import { sortByLastModified } from '@/lib/gallery/gallerySort';
 import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
 import { readGridColors } from '@/lib/canvas/themeColors';
 import BattleTile from './BattleTile';
@@ -114,7 +114,7 @@ const SectionSubtitle = styled('p')({
 // Mockup: .toolbar (battle-gallery.html:111-118), but shipping ONLY the create CTA — the mockup's
 // search input and Sort-By dropdown are Story 1.10's recorded resolution (spec conflict #3): no
 // FR covers battle search, and a five-option sort directly contradicts FR-7.1's fixed "most recent
-// first" (lib/gallerySort.ts). "Ship the mockup's toolbar band, not the mockup's whole toolbar."
+// first" (lib/gallery/gallerySort.ts). "Ship the mockup's toolbar band, not the mockup's whole toolbar."
 const Toolbar = styled('div')({
   marginBottom: '35px',
 });

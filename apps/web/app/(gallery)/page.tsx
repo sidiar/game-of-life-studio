@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import BattleGallery from '@/components/gallery/BattleGallery';
 import { createRepositories } from '@/lib/repositoryFactory';
-import { useWorkspaceSeed } from '@/lib/useWorkspaceSeed';
+import { useWorkspaceSeed } from '@/lib/gallery/useWorkspaceSeed';
 
 // The page boundary (RFC-005 conflict 3): app/page.tsx IS the Gallery page under the App
 // Router, so a second `<BattleGalleryPage>` wrapper would add a layer with no state of its own.
