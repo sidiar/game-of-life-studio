@@ -24,7 +24,7 @@ import { useLeaveGuard } from '@/lib/battle/useLeaveGuard';
 import { useUndoableGrid } from '@/lib/battle/useUndoableGrid';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
 import BattleHeader from './BattleHeader';
-import BattleEditorView from './BattleEditorView';
+import BattleEditorView from './editor/BattleEditorView';
 
 const Body = styled('div')({
   padding: '30px',

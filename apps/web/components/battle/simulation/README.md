@@ -20,35 +20,41 @@ hooks — not here. `<BattleSimulationView>` is "the only component that touches
 
 ## What does NOT go here
 
-**Anything both modes render.** `<BattlePage>`, `<BattleHeader>`, `<UnsavedChangesDialog>` and
-`<SidebarSection>` stay at `battle/` root. `<BattlePage>` in particular stays mounted across
-Lab↔Run (RFC-005 Decision 3) — it is the shared parent, not a Lab component.
+**Anything both modes render** — that is `battle/` root's job, not this folder's.
+`<BattlePage>` in particular stays mounted across Lab↔Run (RFC-005 Decision 3): it is the shared
+parent, not a Lab component and not a Run one.
 
-**Anything from `battle/` root reached for out of convenience.** The spec gives Run its own
+**Anything from `editor/` reached for out of convenience.** The spec gives Run its own
 transport bar and its own sidebar sections deliberately; importing `<EditorStatusBar>` or
 `<EditorToolsSection>` from here is a design change, not a shortcut. If one genuinely should be
-shared, say so and move it to `battle/` root in that story — do not import across the boundary
-and leave the folders lying about who owns what.
+shared, say so and move it up to `battle/` root in that story — do not import across the
+boundary and leave the folders lying about who owns what.
 
-## Three files that are deliberately unsorted
+## The sibling folder
 
-The Lab side is NOT being extracted into a sibling `editor/` folder yet, because three files
-cannot be placed correctly until Epic 3 exists:
+`components/battle/editor/` holds the Lab counterparts — `<BattleEditorView>` and the six
+components only it renders. The two folders are siblings by design, and `battle/` root means one
+thing: **shared across modes**. Five files live there — `<BattlePage>`, `<BattleHeader>`,
+`<UnsavedChangesDialog>`, `<SidebarSection>`, `<SidebarFooter>` — and a component arriving at
+root is a claim that both modes render it.
 
-- **`SidebarFooter`** — one importer today (`BattleEditorView`), but it is shared by design: the
-  spec's tree puts it in BOTH sidebars, and its FR traceability row reads "SidebarFooter Back
-  (both modes) | 2, 3" in as many words. Observed imports would file it under `editor/` and Epic
-  3 would move it straight back.
-- **`SidebarSection`** — same shape. One importer today; the Run sidebar has four sections of
-  its own.
-- **`GridSettingsSection`** — genuinely undecided. §3.6 scopes it to the Edit-mode preset resize,
-  while the Run tree calls for `<GridSizeControl variant="play">`. One component with a variant,
-  or two? **Story 3.16** (`play-mode-ephemeral-resize`) decides, and nothing before it can.
+`<SidebarFooter>` is the clearest case: one importer today (`<BattleEditorView>`), but its FR
+traceability row reads "SidebarFooter Back (both modes) | 2, 3" in as many words. Story 3.11's
+`<SimulationSidebar>` is its second caller.
 
-When Story 3.16 lands, extract `components/battle/editor/` from what remains — against observed
-imports, the way `lib/battle/` and `lib/gallery/` were split (2026-09-08). `tsc` catches every
-missed specifier, so that move is verifiable rather than careful.
+⚠️ `<GridSizeControl>` (§3.12, FR-4.9) belongs HERE and is NOT `<GridSettingsSection>` under a
+variant. They share the preset MODEL, not a component — §3.12's last line says so, and the props
+differ: `<GridSettingsSection>` takes the two-preset edit subset plus stats and commits undoably,
+while `<GridSizeControl>` is a detented slider over all four presets with a `disabled` flag,
+calling `useSimulation.resizeLive`. Reaching for the edit-mode component here would be a design
+change, not reuse.
 
-⚠️ One class it does not catch: `next/dynamic(() => import('./X'))`. `<UnsavedChangesDialog>` and
-`<ResizeClipWarningDialog>` are both reached that way, and a rewrite that greps only for
-`from '…'` will miss them.
+## When moving files across the boundary
+
+`tsc` catches every missed specifier, which is what makes a move here verifiable rather than
+careful. Two classes it does NOT catch, both live in this subtree:
+
+- **`vi.mock('./path')`** — a bare string, unchecked. `BattlePage.commitSeam.test.tsx` mocks
+  `<BattleEditorView>` this way. A missed rewrite stops the mock applying silently.
+- **`next/dynamic(() => import('./X'))`** — `<UnsavedChangesDialog>` and
+  `<ResizeClipWarningDialog>` are both reached this way.

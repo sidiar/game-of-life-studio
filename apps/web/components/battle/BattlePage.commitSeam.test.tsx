@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Battle } from '@gol/domain';
 import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
-import type { BattleEditorViewProps } from './BattleEditorView';
+import type { BattleEditorViewProps } from './editor/BattleEditorView';
 import BattlePage from './BattlePage';
 
 // ⚠️ MANDATORY once Story 2.16 lands, not merely convenient (trap 21). `useRouter()` throws
@@ -30,7 +30,7 @@ vi.mock('next/navigation', () => ({
  * `useCallback(…, [commitGrid])` alone, and nothing observes it.
  *
  * Why the assertion needs its own file: the only clean way to observe the prop is
- * `vi.mock('./BattleEditorView')`, and `vi.mock` is FILE-HOISTED — putting it in
+ * `vi.mock('./editor/BattleEditorView')`, and `vi.mock` is FILE-HOISTED — putting it in
  * `BattlePage.test.tsx` would replace the real child for all ~80 other tests there. The entry says
  * exactly this, and names "whichever story next touches the commit seam" as the owner. Story 2.14's
  * confirmed resize is a commit source, so it is that story.
@@ -46,7 +46,7 @@ vi.mock('next/navigation', () => ({
 // the prop is observable at all.
 const renderedProps: BattleEditorViewProps[] = [];
 
-vi.mock('./BattleEditorView', () => ({
+vi.mock('./editor/BattleEditorView', () => ({
   default: (props: BattleEditorViewProps) => {
     renderedProps.push(props);
     return (

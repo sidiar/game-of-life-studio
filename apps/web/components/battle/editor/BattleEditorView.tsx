@@ -13,14 +13,14 @@ import { computeEditorGridStats } from '@/lib/battle/gridStats';
 import { countClippedLivingCells, resizeGrid } from '@/lib/battle/resizeGrid';
 import { ERASER_TOOL, refForTool, type Tool } from '@/lib/battle/tool';
 import { useInertBackground } from '@/lib/useInertBackground';
-import PetriDishCanvas from '../PetriDishCanvas';
+import PetriDishCanvas from '../../PetriDishCanvas';
 import BattleNameField from './BattleNameField';
 import EditorStatusBar, { type EditorStatusBarStats } from './EditorStatusBar';
 import EditorToolsSection from './EditorToolsSection';
 import GridSettingsSection, { presetKey } from './GridSettingsSection';
 import OrganismRoster from './OrganismRoster';
-import SidebarFooter from './SidebarFooter';
-import SidebarSection from './SidebarSection';
+import SidebarFooter from '../SidebarFooter';
+import SidebarSection from '../SidebarSection';
 
 /**
  * Forced decision 4, option (b): the resize warning is loaded ON DEMAND, not statically imported.
