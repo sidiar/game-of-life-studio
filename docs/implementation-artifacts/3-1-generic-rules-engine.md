@@ -647,3 +647,18 @@ the review should be treated as good rather than exhaustive.
 ---
 
 Dev Model: opus   # architecture-shaping: this is the layer 3.2/3.4/3.5/3.6 all compile against, and it must settle a live RFC-004 ambiguity (the `P` parameter means "pattern" in §1.1 and "payload" in §1.4, and `Condition<P>` is inert as written), the `Selectors<S>` miss-behaviour that decides whether a missing selector is a build error or a per-cell runtime throw, the on-disk boundary plus its lint enforcement that makes AR-40's purity claim mechanical, and the RFC §1.5 schema-helper divergence — nothing precedes it to follow, and every one of those choices is inherited rather than revisited
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 42s | 22 | 5,465 | 13,258 | 429,652 | 448,397 |
+| Step 1 — create-story | opus-5 | 1 | 8m 32s | 190 | 35,380 | 384,820 | 7,375,845 | 7,796,235 |
+| Step 2 — dev-story | opus-5 | 1 | 33m 00s | 214 | 32,702 | 664,397 | 9,375,822 | 10,073,135 |
+| Step 3 — code review + PR | sonnet-5 | 5 | 3h 03m | 554 | 66,051 | 2,056,447 | 19,774,373 | 21,897,425 |
+| _of which the orchestrator_ | opus-5 | — | — | 198 | 48,320 | 93,555 | 6,670,083 | 6,812,156 |
+| **Total (create-story → PR ready)** | | 7 | **3h 45m** | 980 | 139,598 | 3,118,922 | 36,955,692 | **40,215,192** |
+
+Run started 2026-09-08 11:44 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
