@@ -133,6 +133,14 @@ build, not latest. Do not bump versions opportunistically.
 - **Modes are state, not routes.** Edit/Play are local state within `<BattlePage>`, not URL
   segments. App Router file-based routing is canonical; RFC-005's `<Routes>` snippets are
   illustrative only.
+- **Run-mode components go in `components/battle/simulation/`.** The folder exists ahead of its
+  first file (2026-09-08) so Epic 3 writes into it instead of landing flat beside the Lab
+  components. Shared-across-modes components (`<BattlePage>`, `<BattleHeader>`,
+  `<UnsavedChangesDialog>`, `<SidebarSection>`) stay at `battle/` root; the Lab side is
+  deliberately NOT extracted into a sibling `editor/` yet, because `SidebarFooter`,
+  `SidebarSection` and `GridSettingsSection` cannot be placed until Story 3.16 settles whether
+  the play-mode resize shares a component with the edit-mode one. That folder's `README.md`
+  carries the boundary and what decides the three open cases.
 
 **MUI — one immutable theme (Decision J)**
 
