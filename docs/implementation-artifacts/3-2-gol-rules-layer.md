@@ -756,3 +756,18 @@ focused on one of them (`cellSubject.test.ts` for the property × operand matrix
 ---
 
 Dev Model: sonnet   # follows the pattern Story 3.1 already established — RFC-004 §2.1-2.3 gives the shapes almost literally, the engine README already dictates the directory and the boundary, and the open calls (FD1's duplicate-vs-import, FD2's scope line, FD3's alias) are scoped judgment calls inside an existing design rather than a pattern later stories inherit
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 26s | 22 | 2,425 | 12,388 | 467,597 | 482,432 |
+| Step 1 — create-story | opus-5 | 1 | 7m 05s | 142 | 26,699 | 417,241 | 6,062,802 | 6,506,884 |
+| Step 2 — dev-story | sonnet-5 | 1 | 16m 18s | 270 | 25,935 | 473,224 | 18,883,175 | 19,382,604 |
+| Step 3 — code review + PR | opus-5 | 4 | 19m 39s | 632 | 74,511 | 1,233,367 | 29,812,548 | 31,121,058 |
+| _of which the orchestrator_ | opus-5 | — | — | 70 | 11,943 | 54,964 | 1,826,546 | 1,893,523 |
+| **Total (create-story → PR ready)** | | 6 | **43m 28s** | 1,066 | 129,570 | 2,136,220 | 55,226,122 | **57,492,978** |
+
+Run started 2026-09-08 16:30 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
