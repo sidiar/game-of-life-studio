@@ -56,6 +56,7 @@
 import { CONWAYS_CLASSIC } from '@gol/domain';
 import type {
   Condition as DomainCondition,
+  Organism as DomainOrganism,
   SurvivalRule as DomainSurvivalRule,
   SurvivalRules as DomainSurvivalRules,
 } from '@gol/domain';
@@ -66,6 +67,7 @@ import type { Condition, RuleSet } from './engine/rule';
 import { cellSelectors } from './gol/cellSubject';
 import type { CellProperty } from './gol/cellSubject';
 import type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol/survivalRules';
+import type { CompilableOrganism } from './session/compileEvaluators';
 
 describe('a GoL SurvivalRules value IS a generic RuleSet (AR-21, RFC-004 §2.4)', () => {
   it('assigns with no mapping layer — the compiler is the assertion', () => {
@@ -134,6 +136,46 @@ describe('a GoL SurvivalRules value IS a generic RuleSet (AR-21, RFC-004 §2.4)'
     // The value is incidental; both assignments compiling in BOTH directions is the assertion —
     // it proves the two three-member unions are mutually assignable, i.e. identical.
     expect(backToDomain).toBe('born');
+  });
+
+  // ── Story 3.4's FD1: the ORGANISM container, duplicated as a minimal local shape ────────────
+  //
+  // `CompilableOrganism` declares only what compilation reads — the library `id` to intern and the
+  // `survivalRules` to compile — rather than importing @gol/domain's `Organism` (which would
+  // reverse Story 3.2's FD1 test-only edge and drag colorToken/schemaVersion/dominance into the
+  // engine) or declaring RFC-004 §3.1's speculative full `OrganismRuntime`.
+  //
+  // M13 asks for a BIDIRECTIONAL pin at the level duplicated. What is newly duplicated here is a
+  // RECORD, not a union, and that distinction decides what the pin has to look like:
+  //
+  //   - Widening the engine's copy — the drift M13 exists to catch — is caught by the FORWARD
+  //     assignment alone. Adding a required field to `CompilableOrganism` makes @gol/domain's
+  //     `Organism` stop satisfying it, and this file stops compiling. (Verified by mutation during
+  //     development: adding `readonly dominance: number` fails HERE.) That is unlike the payload
+  //     level below, where widening a string UNION is covariant and therefore invisible forward —
+  //     which is exactly why that level needs both directions and this one does not.
+  //   - The reverse container assignment is structurally EXCLUDED for the reason the header
+  //     already gives: `survivalRules` is a `readonly` array of the engine's flat `Condition`
+  //     against @gol/domain's mutable array of a discriminated union. Nothing about this story
+  //     changes that, and it reuses the already-pinned `SurvivalRules` rather than duplicating it
+  //     again, so no NEW type crosses the seam unpinned.
+  it("@gol/domain's Organism assigns into CompilableOrganism with no mapping layer (3.4 FD1, M13)", () => {
+    const organism: DomainOrganism = {
+      schemaVersion: 1,
+      id: 'conways-classic',
+      name: "Conway's Classic",
+      colorToken: 'vermillion',
+      dominance: 50,
+      agingEnabled: false,
+      survivalRules: [...CONWAYS_CLASSIC.survivalRules],
+    };
+    const compilable: CompilableOrganism = organism;
+
+    expect(compilable).toBe(organism);
+    // The reverse at the one level it CAN hold: the interned key is a plain `string` in both, so a
+    // future narrowing of either `id` (to a branded or template-literal type) fails here.
+    const backToDomainId: DomainOrganism['id'] = compilable.id;
+    expect(backToDomainId).toBe(organism.id);
   });
 
   // Wiring proof with a REAL GoL subject and the REAL cellSelectors — CellSubject and its five

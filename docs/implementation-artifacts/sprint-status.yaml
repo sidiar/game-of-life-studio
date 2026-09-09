@@ -93,7 +93,7 @@ development_status:
   3-1-generic-rules-engine: done
   3-2-gol-rules-layer: done
   3-3-typed-array-grid-neighborhood: done
-  3-4-precompiled-evaluators-organism-interning: backlog
+  3-4-precompiled-evaluators-organism-interning: review
   3-5-phases-1-2-death-claims: backlog
   3-6-phase-3-the-assembled-cycle: backlog
   3-7-performance-harness-coverage-gate-flip: backlog

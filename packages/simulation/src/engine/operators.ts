@@ -39,10 +39,12 @@ export type Predicate = (value: unknown, pattern: unknown) => boolean;
 // +0.019 ms against the 16.7 ms NFR-1.1 frame budget, ~0.1% of it. Story 3.7 owns the real
 // performance harness; re-measure there rather than trusting this note forever.
 //
-// ⚠️ Failing closed is deliberate but it is not free: malformed rule data now yields a rule that
-// never fires instead of a crash, which is the right behaviour inside a 60 FPS loop but is also
-// silent. Eager diagnostics belong at rule-COMPILE time — one pass per battle, not one per cell —
-// which is Story 3.4's evaluator cache, not this hot path.
+// ⚠️ Failing closed is deliberate but it is not free: malformed rule data yields a rule that never
+// fires instead of a crash, which is the right behaviour inside a 60 FPS loop but is also silent.
+// The loud half now ships: ../session/validateRules.ts sweeps every condition once per battle at
+// evaluator-compile time (Story 3.4, M12) and THROWS, naming the organism and the rule. These
+// guards are what still stands between a caller that skipped that compile step and a crash in the
+// hot loop, so they stay until Story 3.7 re-measures them.
 const isNumber = (v: unknown): v is number => typeof v === 'number';
 
 // ⚠️ NULL PROTOTYPE, deliberately. A plain object literal inherits from Object.prototype, so a

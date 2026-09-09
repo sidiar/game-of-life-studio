@@ -50,3 +50,20 @@ export type { GridBuffers } from './grid/doubleBuffer';
 export { countNeighbors } from './grid/neighborhood';
 export type { NeighborCounts } from './grid/neighborhood';
 export { resizeGrid } from './grid/resizeGrid';
+
+// The session layer (RFC-004 §3.5, Story 3.4) — the once-per-battle-run boundary where persisted,
+// string-keyed, workspace-shared organism data becomes battle-relative numbers and closures:
+// id -> OrganismRef interning (Decision E.3), the two phase-partitioned evaluators per organism
+// (AR-18), the session-scoped compile cache (Decision E.4), MAX_RELEVANT_AGE (Decision B.5), and
+// the eager compile-time diagnostic sweep M12 assigns here. Stories 3.5/3.6 consume `CompiledSession`;
+// nothing in it runs per cell.
+export { compileSession } from './session/compileEvaluators';
+export type {
+  CompilableOrganism,
+  CompiledSession,
+  OrganismEvaluators,
+} from './session/compileEvaluators';
+export { internOrganismIds, NO_MATCH_REF } from './session/internOrganisms';
+export { maxRelevantAge } from './session/maxRelevantAge';
+export { isRuleCompilationError, validateSurvivalRules } from './session/validateRules';
+export type { RuleCompilationError } from './session/validateRules';
