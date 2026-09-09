@@ -125,18 +125,27 @@ python3 .claude/skills/implement-next-story/story-run-stats.py mark step3
 ```
 
 Re-read the `Dev Model:` line from the story file and spawn a fresh subagent on the
-**other** model — the complement, never a fixed choice:
+model this table pairs it with — a lookup, never a fixed choice:
 
 | Step 2 ran on | Step 3 reviews on |
 | --- | --- |
 | `sonnet` | `opus` |
-| `opus`   | `sonnet` |
+| `opus`   | `fable` |
 
-Two models, never one. A model reviewing its own output re-runs the reasoning that
+Never the same model twice. A model reviewing its own output re-runs the reasoning that
 produced the bug and agrees with itself; the split exists to break that. Escalating dev
-to Opus does **not** license an Opus review — it forces a Sonnet one. State in the spawn
-prompt which model implemented the story and that this review is deliberately the other
-one, so the reviewer knows it is the second pair of eyes.
+to Opus does **not** license an Opus review — it escalates the review too, to Fable. A
+story is on Opus because it is architecture-shaping, and that is the diff least worth
+handing to a weaker reviewer. State in the spawn prompt which model implemented the
+story and that this review is deliberately a different one, so the reviewer knows it is
+the second pair of eyes.
+
+`fable` is reachable only through the `opus` row, so it never touches the default path:
+most stories are `sonnet`, and Fable costs roughly double Opus per token before its
+longer turns are counted. When it is the reviewer, keep its spawn prompt shorter than
+the others — the goal, the branch, and the two hard rules below — and leave the method
+to it. Fable loses quality under step-by-step prescription in a way Opus and Sonnet
+do not.
 
 Before spawning, assert the choice out loud: *"Step 2 ran on X, so Step 3 spawns Y."*
 If X and Y are the same, you have mis-derived it — stop and recompute.
