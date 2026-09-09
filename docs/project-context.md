@@ -237,7 +237,7 @@ are active on `apps/web`. ESLint is pinned to **v9** — v10 breaks `eslint-conf
   `(AR-2)`. That is how the next reader finds the authority.
   - **Enforced:** `npm run spec:check` (in `ci`, after `format:check`) fails the build when a
     cited ID resolves to nothing under `docs/`. It tokenises `ARn`, `RFC-00n`, `FRx.y`/`NFRx.y`,
-    `Mn` (M1–M10 only), `Decision A–Z` and `Story N.M` out of both code and docs and compares
+    `Mn` (M1–M13 only), `Decision A–Z` and `Story N.M` out of both code and docs and compares
     them as sets — a renumbered decision otherwise keeps compiling and keeps *looking*
     authoritative. Write IDs exactly as the specs spell them (`AR-2`, `M9`, `FR-8.7`); a
     hyphenated `M-9` matches nothing and is silently exempt forever. `ACn` and bare
@@ -320,7 +320,7 @@ projects under `NewJob/`), so it never shows up in this repo's `git status`.
 
 ### Critical Don't-Miss Rules
 
-The architecture's Decisions A–K and M1–M10 mostly encode **reversals of the intuitive default**.
+The architecture's Decisions A–K and M1–M13 mostly encode **reversals of the intuitive default**.
 Following instinct here produces code that compiles, passes tests, and violates the spec.
 
 **Anti-patterns — these compile and pass tests, and are still wrong**
@@ -403,7 +403,7 @@ Following instinct here produces code that compiles, passes tests, and violates 
   deliberately override stale RFC snippets (`repositoryFactory.ts` naming, the factory's
   `APP_MODE` read, RFC-003 Decision 2's per-`[data-theme]` token structure and its illustrative
   theme snippet). New conflicts are signal, not noise.
-- Spec authority order: **Architecture Cross-Cutting Decisions** (A–K, M1–M10) → owning **RFC**
+- Spec authority order: **Architecture Cross-Cutting Decisions** (A–K, M1–M13) → owning **RFC**
   → companion specs. Within one area the RFC wins; for anything cross-cutting the Decision wins.
 
 **For humans:**
