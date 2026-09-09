@@ -859,3 +859,18 @@ while the 73 pre-existing tests stayed green.
 ---
 
 Dev Model: opus   # 3.3 is the epic's pattern-setting story, not a pattern-follower: it fixes the Grid shape, the double-buffering seam (FD3), the hot-path neighbourhood API (FD4) and the ref encoding (FD5) that Stories 3.4-3.9 and 3.16 all build on directly, and it must resolve a genuine RFC-004-vs-shipped-code contradiction plus a two-story-old deferred architecture clause rather than implement a settled design
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 29s | 26 | 3,054 | 13,097 | 556,910 | 573,087 |
+| Step 1 — create-story | opus-5 | 1 | 8m 20s | 190 | 36,045 | 491,322 | 9,300,891 | 9,828,448 |
+| Step 2 — dev-story | opus-5 | 1 | 23m 04s | 222 | 61,314 | 466,128 | 15,265,160 | 15,792,824 |
+| Step 3 — code review + PR | fable-5 | 4 | 31m 46s | 428 | 77,260 | 1,796,562 | 20,003,152 | 21,877,402 |
+| _of which the orchestrator_ | opus-5 | — | — | 84 | 17,579 | 62,247 | 2,242,146 | 2,322,056 |
+| **Total (create-story → PR ready)** | | 6 | **1h 03m** | 866 | 177,673 | 2,767,109 | 45,126,113 | **48,071,761** |
+
+Run started 2026-09-09 11:24 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
