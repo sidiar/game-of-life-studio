@@ -31,9 +31,21 @@ describe('validateSurvivalRules accepts everything the repo actually ships', () 
   });
 
   it('accepts all three AR-45 mock organisms — all five properties, all six operators', () => {
+    const properties = new Set<string>();
+    const operators = new Set<string>();
     for (const organism of createMockOrganisms()) {
       expect(() => validateSurvivalRules(organism.id, organism.survivalRules)).not.toThrow();
+      for (const { conditions } of organism.survivalRules) {
+        for (const condition of conditions) {
+          properties.add(condition.property);
+          operators.add(condition.operator);
+        }
+      }
     }
+    // The title's claim, asserted: if the fixtures drift to cover less, the accept path shrinks
+    // with them and this is where it shows.
+    expect(properties.size).toBe(5);
+    expect(operators.size).toBe(6);
   });
 });
 
@@ -213,6 +225,55 @@ describe('the eager diagnostic sweep (M12, AC7) — one pass per battle, not per
   it('rejects a survivalRules value that is not an array', () => {
     rejects(undefined as unknown as SurvivalRules, /survivalRules must be an array/);
   });
+
+  it('rejects a numeric literal outside the schema bound — NaN, Infinity, negative, fraction, > 65534', () => {
+    // `typeof NaN === 'number'`. Every comparison against NaN is false, so the rule is dead for
+    // every cell with no diagnostic — the exact silent class this sweep exists to make loud. And
+    // 65535 (or Infinity) makes `maxRelevantAge` overflow the Uint16 age buffer: the cycle-end
+    // clamp would store a saturated cell as 0, a newborn (RFC-004 §2.4/§3.4).
+    for (const pattern of [NaN, Infinity, -Infinity, -3, 7.5, 65535]) {
+      rejects(
+        malformed(ok({ conditions: [{ property: 'age', operator: 'gt', pattern }] })),
+        /integer from 0 to 65534/,
+      );
+    }
+    rejects(
+      malformed(ok({ conditions: [{ property: 'age', operator: 'range', pattern: [0, 65535] }] })),
+      /integer from 0 to 65534/,
+    );
+    rejects(
+      malformed(ok({ conditions: [{ property: 'age', operator: 'range', pattern: [NaN, 5] }] })),
+      /integer from 0 to 65534/,
+    );
+  });
+
+  it('accepts the bound itself — 65534, and [0, 65534]', () => {
+    expect(() =>
+      validateSurvivalRules('org-x', [
+        ok({ conditions: [{ property: 'age', operator: 'lte', pattern: 65534 }] }),
+        ok({ conditions: [{ property: 'age', operator: 'range', pattern: [0, 65534] }] }),
+      ]),
+    ).not.toThrow();
+  });
+
+  it('rejects a missing, empty or non-string contentHash — the cache key would collide', () => {
+    // `JSON.stringify([undefined])` and `[null]` are both "[null]": two organisms with DIFFERENT
+    // hash-less rules would share one compiled pair (verified by execution during review).
+    rejects(malformed({ ...ok(), contentHash: undefined }), /non-empty `contentHash`/);
+    rejects(malformed(ok({ contentHash: '' })), /non-empty `contentHash`/);
+    rejects(malformed({ ...ok(), contentHash: 42 }), /non-empty `contentHash`/);
+  });
+});
+
+describe('isRuleCompilationError', () => {
+  it('does not accept an Error that only forges the name', () => {
+    // A rethrow that copies `name` but not the fields would otherwise pass the guard and hand
+    // the caller `undefined` where the type promises `string`.
+    const forged = Object.assign(new Error('x'), { name: 'RuleCompilationError' });
+    expect(isRuleCompilationError(forged)).toBe(false);
+    expect(isRuleCompilationError(new Error('x'))).toBe(false);
+    expect(isRuleCompilationError(null)).toBe(false);
+  });
 });
 
 // AC8, and deferred-work.md's `resolveCellAction` payload entry — decided by Sidiar 2026-09-09 as
@@ -265,18 +326,17 @@ describe('the property x operator legality table (FD9)', () => {
     let rejected = 0;
     for (const property of ['cellState', 'organismType'] as const) {
       for (const operator of ILLEGAL_FOR_EQ_ONLY) {
-        try {
-          validateSurvivalRules(
-            'org-x',
-            malformed(
-              ok({
-                conditions: [{ property, operator, pattern: 'alive' }],
-              } as unknown as Partial<SurvivalRule>),
-            ),
-          );
-        } catch {
-          rejected += 1;
-        }
+        // The legality-table message specifically: a rejection for any other reason (a
+        // `TypeError` from a broken table, the tuple check under `range`) would otherwise count.
+        rejects(
+          malformed(
+            ok({
+              conditions: [{ property, operator, pattern: 'alive' }],
+            } as unknown as Partial<SurvivalRule>),
+          ),
+          /does not take operator/,
+        );
+        rejected += 1;
       }
     }
     expect(rejected).toBe(10);

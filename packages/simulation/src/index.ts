@@ -64,6 +64,12 @@ export type {
   OrganismEvaluators,
 } from './session/compileEvaluators';
 export { internOrganismIds, NO_MATCH_REF } from './session/internOrganisms';
-export { maxRelevantAge } from './session/maxRelevantAge';
-export { isRuleCompilationError, validateSurvivalRules } from './session/validateRules';
+// `maxRelevantAge` is deliberately NOT exported: its numeric casts are sound only after
+// `validateSurvivalRules`, which `compileSession` guarantees and a direct caller would not.
+// `CompiledSession.maxRelevantAge` is the contract.
+export {
+  isRuleCompilationError,
+  ROSTER_LEVEL,
+  validateSurvivalRules,
+} from './session/validateRules';
 export type { RuleCompilationError } from './session/validateRules';

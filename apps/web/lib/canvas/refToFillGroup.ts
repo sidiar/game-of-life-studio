@@ -8,14 +8,13 @@
  * interns ids to refs in that same roster order. So `ref = occupant value` needs no translation
  * layer in Epic 1.
  *
- * ⚠️ CORRECTED (Story 3.4): this LUT is NOT the one the interning step produces. Story 3.4 ships
- * `internOrganismIds` (`@gol/simulation`), whose map is `library id -> OrganismRef` and feeds rule
- * compilation. This one is `OrganismRef -> fill group`, is palette-dependent, and belongs to
- * rendering (Story 3.9's colour batching, Decision B.2). The two share only the roster ORDERING
- * that both derive from `battle.organismIds` — which is the real invariant, and the reason this
- * file may keep reading `ref = occupant value` unchanged. ❌ Do not move this into
- * `packages/simulation`: it imports the `apps/web` palette registry, and `packages/*` has no DOM
- * and no UI knowledge by design.
+ * ⚠️ This is NOT the interning map. `internOrganismIds` (`@gol/simulation`, Story 3.4) maps
+ * `library id -> OrganismRef` and feeds rule compilation; this LUT maps `OrganismRef -> fill group`,
+ * is palette-dependent, and belongs to rendering (Story 3.9's colour batching, Decision B.2). The
+ * two share only the roster ORDERING that both derive from `battle.organismIds` — which is the
+ * real invariant, and the reason this file may keep reading `ref = occupant value` unchanged.
+ * ❌ Do not move this into `packages/simulation`: it imports the `apps/web` palette registry, and
+ * `packages/*` has no DOM and no UI knowledge by design.
  */
 import type { Organism } from '@gol/domain';
 import { ageShadeFor } from '../palette/displayColor';

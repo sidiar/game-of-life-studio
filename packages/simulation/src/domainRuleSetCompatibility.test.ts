@@ -148,12 +148,17 @@ describe('a GoL SurvivalRules value IS a generic RuleSet (AR-21, RFC-004 §2.4)'
   // M13 asks for a BIDIRECTIONAL pin at the level duplicated. What is newly duplicated here is a
   // RECORD, not a union, and that distinction decides what the pin has to look like:
   //
-  //   - Widening the engine's copy — the drift M13 exists to catch — is caught by the FORWARD
-  //     assignment alone. Adding a required field to `CompilableOrganism` makes @gol/domain's
-  //     `Organism` stop satisfying it, and this file stops compiling. (Verified by mutation during
-  //     development: adding `readonly dominance: number` fails HERE.) That is unlike the payload
-  //     level below, where widening a string UNION is covariant and therefore invisible forward —
-  //     which is exactly why that level needs both directions and this one does not.
+  //   - Widening the engine's copy with a field `Organism` does NOT have is caught by the FORWARD
+  //     assignment alone: @gol/domain's `Organism` stops satisfying `CompilableOrganism` and this
+  //     file stops compiling. (Verified by mutation during development: adding
+  //     `readonly weight: number` fails HERE.) That is unlike the payload level below, where
+  //     widening a string UNION is covariant and therefore invisible forward.
+  //   - ⚠️ The forward pin is BLIND to a field `Organism` already has — `dominance`,
+  //     `agingEnabled`, `colorToken` — creeping into `CompilableOrganism`, because `organism`
+  //     still satisfies the wider type. That is precisely the FD1 leak the record argues against
+  //     (Phase 3's and 3.6's fields dragged into the engine early), so the KEY SET is pinned
+  //     exactly below: a third key fails as a missing property, a dropped one as an excess
+  //     property.
   //   - The reverse container assignment is structurally EXCLUDED for the reason the header
   //     already gives: `survivalRules` is a `readonly` array of the engine's flat `Condition`
   //     against @gol/domain's mutable array of a discriminated union. Nothing about this story
@@ -176,6 +181,11 @@ describe('a GoL SurvivalRules value IS a generic RuleSet (AR-21, RFC-004 §2.4)'
     // future narrowing of either `id` (to a branded or template-literal type) fails here.
     const backToDomainId: DomainOrganism['id'] = compilable.id;
     expect(backToDomainId).toBe(organism.id);
+
+    // The exact key set (see the bullet above): `Record<keyof CompilableOrganism, true>` fails to
+    // compile if a key is added to the interface and not here, or listed here and gone from it.
+    const exactKeys: Record<keyof CompilableOrganism, true> = { id: true, survivalRules: true };
+    expect(Object.keys(exactKeys).sort()).toEqual(['id', 'survivalRules']);
   });
 
   // Wiring proof with a REAL GoL subject and the REAL cellSelectors — CellSubject and its five

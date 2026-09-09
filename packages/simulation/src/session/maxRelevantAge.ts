@@ -25,8 +25,12 @@ const AGE: CellProperty = 'age';
  * counts bounded at 8 and contribute nothing (Trap 11); a `range` pattern contributes its UPPER
  * bound, because that is the largest age the rule can still distinguish.
  *
- * Patterns are trusted to be numeric here — `validateSurvivalRules` runs first and rejects any
- * `age` condition whose pattern is not a number or a numeric [min,max] tuple.
+ * Patterns are trusted here — `validateSurvivalRules` runs first and rejects any `age` condition
+ * whose pattern is not an integer literal in 0..65534 (or a tuple of two), which is also what
+ * keeps the result inside the Uint16 age buffer (RFC-004 §3.4). ⚠️ That precondition is why this
+ * is NOT in the package barrel: `compileSession` guarantees the order, a direct caller would not
+ * (`'8' > 0` is true and `'8' + 1` is `'81'`), and `CompiledSession.maxRelevantAge` is the
+ * contract Story 3.6 consumes.
  */
 export function maxRelevantAge(rulesPerOrganism: readonly SurvivalRules[]): number {
   let maxLiteral = 0;

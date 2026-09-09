@@ -5,10 +5,10 @@
  * and `buildRefToFillGroup`. ❌ Do not reimplement either — the dense at-rest cell value IS the
  * runtime OrganismRef (M14).
  *
- * ⚠️ CORRECTED (Story 3.4): the LUT built here is NOT what that story's interning step produces —
- * see `refToFillGroup.ts`'s header. Story 3.4's map is `library id -> OrganismRef` and feeds rule
- * compilation; this one is `OrganismRef -> fill group` and is palette-dependent. They share the
- * roster ordering, nothing more.
+ * ⚠️ The LUT built here is NOT the interning map — see `refToFillGroup.ts`'s header.
+ * `internOrganismIds` (`@gol/simulation`, Story 3.4) maps `library id -> OrganismRef` and feeds
+ * rule compilation; this one is `OrganismRef -> fill group` and is palette-dependent. They share
+ * the roster ordering, nothing more.
  */
 import type { Battle, Organism } from '@gol/domain';
 import { buildRefToFillGroup, type RefToFillGroup } from './refToFillGroup';

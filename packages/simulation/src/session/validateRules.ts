@@ -36,26 +36,66 @@ export interface RuleCompilationError extends Error {
   readonly ruleId: string;
 }
 
-// Named narrowly on `name` rather than on field presence: a caller wrapping compilation (Story
-// 4.15's preview, import, migrations) needs to tell "this organism's rules are malformed" apart
-// from a genuine bug, and `instanceof` is unavailable for a factory-made error by design.
+// Discriminated on `name` AND the two fields the interface promises: a caller wrapping compilation
+// (Story 4.15's preview, import, migrations) needs to tell "this organism's rules are malformed"
+// apart from a genuine bug, and `instanceof` is unavailable for a factory-made error by design.
+// The field checks matter because `name` alone is forgeable by any rethrow that copies it — the
+// guard would then hand the caller `undefined` where the type says `string`.
 export function isRuleCompilationError(value: unknown): value is RuleCompilationError {
-  return value instanceof Error && value.name === 'RuleCompilationError';
+  return (
+    value instanceof Error &&
+    value.name === 'RuleCompilationError' &&
+    typeof (value as { organismId?: unknown }).organismId === 'string' &&
+    typeof (value as { ruleId?: unknown }).ruleId === 'string'
+  );
 }
 
 // A rule with no readable `id` still has to be nameable, or the diagnostic points at nothing.
 const UNIDENTIFIED_RULE = '<rule with no id>';
 
-function fail(organismId: string, ruleId: string, detail: string): never {
-  const error: Error = new Error(
-    `Cannot compile organism "${organismId}", rule "${ruleId}": ${detail}`,
-  );
-  throw Object.assign(error, {
+// A roster-level fault — a bad or duplicate organism id, a roster over the cap — has no rule to
+// name. The `ruleId` slot carries this marker so a caller reading the field never mistakes it for
+// a real id, and the message drops the rule clause. One error channel for everything
+// `compileSession` rejects: a caller that can classify a malformed rule can classify a malformed
+// roster the same way, instead of one of them escaping as a bare `Error`.
+export const ROSTER_LEVEL = '<roster>';
+
+/** The factory behind every compile-time rejection (FD5) — `internOrganisms.ts` throws it too. */
+export function ruleCompilationError(
+  organismId: string,
+  ruleId: string,
+  detail: string,
+): RuleCompilationError {
+  const where =
+    ruleId === ROSTER_LEVEL
+      ? `organism "${organismId}"`
+      : `organism "${organismId}", rule "${ruleId}"`;
+  const error: Error = new Error(`Cannot compile ${where}: ${detail}`);
+  return Object.assign(error, {
     name: 'RuleCompilationError' as const,
     organismId,
     ruleId,
   });
 }
+
+function fail(organismId: string, ruleId: string, detail: string): never {
+  throw ruleCompilationError(organismId, ruleId, detail);
+}
+
+// Mirrors @gol/domain's `NumericLiteral` — `z.number().int().min(0).max(65534)` (RFC-004 §2.4) —
+// for the in-memory path. The bound is not cosmetic: `MAX_RELEVANT_AGE = maxAgeLiteral + 1` has
+// to fit the Uint16 age buffer (RFC-004 §3.4, Decision B.5), and a literal of 65535 or `Infinity`
+// makes the clamp Story 3.6 applies wrap a saturated cell to 0 — a newborn. `typeof === 'number'`
+// alone also lets `NaN` through, and every comparison against NaN is false, so the rule is dead
+// for every cell with no diagnostic: the exact silent class this sweep exists to make loud.
+// `Number.isInteger` rejects NaN, ±Infinity and fractions in one test.
+const MAX_NUMERIC_LITERAL = 65534;
+const isNumericLiteral = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isInteger(value) &&
+  value >= 0 &&
+  value <= MAX_NUMERIC_LITERAL;
+const NUMERIC_LITERAL_RULE = `an integer from 0 to ${MAX_NUMERIC_LITERAL} (RFC-004 §2.4)`;
 
 // The six (engine/operators.ts). A frozen array, not a Set: a Set is mutable at runtime and this
 // is module-level (AR-16 forbids module-level mutable state), and six linear comparisons run once
@@ -129,8 +169,12 @@ function validatePattern(
   if (operator === 'range') {
     const tuple = pattern as readonly unknown[];
     const [low, high] = tuple;
-    if (tuple.length !== 2 || typeof low !== 'number' || typeof high !== 'number') {
-      fail(organismId, ruleId, 'a `range` pattern must be a [min,max] tuple of two numbers');
+    if (tuple.length !== 2 || !isNumericLiteral(low) || !isNumericLiteral(high)) {
+      fail(
+        organismId,
+        ruleId,
+        `a \`range\` pattern must be a [min,max] tuple of two numbers, each ${NUMERIC_LITERAL_RULE}`,
+      );
     }
     // Rejected rather than normalised, matching the schema and operators.ts: an inclusive range
     // whose low exceeds its high is satisfiable by no value at all, so the rule is dead for every
@@ -172,8 +216,12 @@ function validatePattern(
     return;
   }
 
-  if (typeof pattern !== 'number') {
-    fail(organismId, ruleId, `property "${property}" requires a numeric pattern`);
+  if (!isNumericLiteral(pattern)) {
+    fail(
+      organismId,
+      ruleId,
+      `property "${property}" requires a numeric pattern — ${NUMERIC_LITERAL_RULE}, got ${String(pattern)}`,
+    );
   }
 }
 
@@ -242,6 +290,17 @@ function validateRule(organismId: string, rule: SurvivalRule): void {
   // `payload.summary` is deliberately NOT validated: nothing in the engine reads it (only
   // `action` reaches a decision), so requiring it here would reject an otherwise-runnable draft
   // organism for a field that is pure editor UX.
+
+  // `contentHash` IS validated, because the session cache is keyed on the ordered join of a
+  // list's hashes (compileEvaluators.ts) and a missing one is not a cosmetic gap:
+  // `JSON.stringify([undefined])` and `JSON.stringify([null])` are both `"[null]"`, so every
+  // hash-less single-rule list collides on one key and the second organism silently receives the
+  // first one's compiled evaluators. The schema's `contentHash: z.string().min(1)` names this
+  // exact collision as its reason; a draft that has not been through Epic 4's hasher yet is the
+  // in-memory case. Opaque otherwise (AR-21) — never parsed, prefixed or compared for content.
+  if (typeof rule.contentHash !== 'string' || rule.contentHash.length === 0) {
+    fail(organismId, ruleId, 'a rule must carry a non-empty `contentHash` (AR-21)');
+  }
 }
 
 /**

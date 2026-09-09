@@ -159,6 +159,29 @@ evaluator without them leaves them orphaned between 3.4 and 3.5.
   - [x] `npm run ci` — full local gate. ⚠️ **Never pipe it.** `npm run ci | tail` reports *tail's*
         exit code; redirect to a file and echo `$?`. Report the real result.
 
+### Review Findings
+
+Code review 2026-09-09 (Fable 5.1 reviewing the Opus 5 implementation — three parallel layers:
+Blind Hunter on the diff alone, Edge Case Hunter with repo access, Acceptance Auditor against this
+file and the authority docs). Every load-bearing finding below was **confirmed by execution**
+before it was classified, not taken on the reviewer's word.
+
+- [ ] [Review][Decision] **RFC-004 §3.1's single `resolveAction` vs §2.3/§3.5 + AR-18's phase-partitioned pair (FD2)** — implemented as the pair on M10's authority; no `M15` minted and `architecture.md` untouched, deliberately. Whether this becomes a Minor Resolution (and `check-spec-ids.mjs` is widened in both places) is Sidiar's call; §3.1's `SimulationDeps.resolveAction` line needs amending either way (owner: Story 3.5).
+- [ ] [Review][Decision] **`resolveBirthSurvival` is typed `Action | null` although `'die'` is unreachable from it** — the partition routes every `die` rule to `resolvesToDeath`, so the Phase-2 signature re-admits the branch the compile-time partition exists to remove; a 3.5 consumer must either handle `'die'` or trust a comment. `Exclude<Action, 'die'> | null` encodes the invariant, but RFC-004 §2.3 spells the return as `Action | null` and Story 3.5 inherits whichever is chosen — so it is not the reviewer's to narrow. [`packages/simulation/src/session/compileEvaluators.ts` — `OrganismEvaluators.resolveBirthSurvival`]
+- [x] [Review][Patch] Numeric patterns admitted `NaN`, `±Infinity`, negatives, fractions and `> 65534` — `typeof === 'number'` only; NaN made a rule silently dead for every cell (the class the sweep exists to make loud), and `age gt 70000` gave `maxRelevantAge = 70001`, which the Uint16 age buffer wraps to `0` (verified: `new Uint16Array(1)[0] = 65536` reads `0`). Now mirrors the schema's `NumericLiteral` (`int().min(0).max(65534)`, RFC-004 §2.4/§3.4). [`validateRules.ts` — `isNumericLiteral`]
+- [x] [Review][Patch] Missing / empty / non-string `contentHash` was not validated and collapsed the cache key — `JSON.stringify([undefined])` and `[null]` are both `"[null]"`, so two organisms with *different* hash-less rules shared one compiled pair (verified: organism `b` answered with `a`'s evaluators). Mirrors the schema's `contentHash: z.string().min(1)`. [`validateRules.ts` — end of `validateRule`]
+- [x] [Review][Patch] Organism `id` was never validated at the interning boundary, a duplicate id escaped as a bare `Error` (invisible to `isRuleCompilationError`), the 255 roster cap (Decision G.3) was asserted in a comment but not enforced (ref 256 stores as `0` = empty in the `Uint8Array` occupant), and `forEach` skipped holes in a sparse roster. `internOrganismIds` now rejects all four through the same `RuleCompilationError` channel with `ruleId: ROSTER_LEVEL`, and `compileSession` interns before it validates rules so a rule diagnostic always names a proven organism. `MAX_CELL_VALUE` is exported from `grid.ts` (not the barrel) rather than a third by-value copy of `255`. [`internOrganisms.ts`, `compileEvaluators.ts`, `grid.ts:68`]
+- [x] [Review][Patch] `range` tuples were aliased between the input rule and the compiled closure — `{ ...condition }` is shallow, so `pattern[1] = 9` on the caller's draft after compile flipped the evaluator's answer (verified: `null` → `'survive'`). The tuple is now copied. [`compileEvaluators.ts` — `internRule`]
+- [x] [Review][Patch] The M13 pin's comment claimed "adding `readonly dominance: number` fails HERE" — false: `Organism` already has `dominance`, so the forward assignment still compiles. The record's FD1 correctly says the mutation run was `weight`. Comment corrected to state the limit, and the exact key set of `CompilableOrganism` is now pinned (`Record<keyof CompilableOrganism, true>`) so `dominance`/`agingEnabled` creeping in fails the build — the FD1 leak the record argues against. [`domainRuleSetCompatibility.test.ts`]
+- [x] [Review][Patch] `isRuleCompilationError` guarded on `name` alone while promising two fields — a rethrow copying only `name` passed and the caller read `undefined` as `string`. Now checks both fields. [`validateRules.ts`]
+- [x] [Review][Patch] `maxRelevantAge` was in the package barrel although its casts are sound only after `validateSurvivalRules` (`'8' > 0` → `'8' + 1` → `'81'` → **81**, verified). Removed from the barrel; `CompiledSession.maxRelevantAge` is the contract. [`index.ts`, `maxRelevantAge.ts`]
+- [x] [Review][Patch] Residual "`MAX_RELEVANT_AGE` is Story 3.4's" forward reference outside Task 7's list (the AC10 class). [`grid.ts:61`]
+- [x] [Review][Patch] The two AC10 comments led with "⚠️ CORRECTED (Story 3.4):" — change narration, not the invariant (project-context: never narrate that a change is correct). Reworded. [`apps/web/lib/canvas/refToFillGroup.ts`, `battleThumbnail.ts`]
+- [x] [Review][Patch] Five tests whose titles outran their assertions: "throws before compiling ANY organism" asserted only the throw (now counts `survivalRules` reads — exactly 1, the validation pass); "is not reachable from module scope" would pass with a module-level cache (retitled; the cross-session test is the real pin); the DEEP-FROZEN test never reached the rewrite branch (Conway has no `organismType` condition — now also compiles a deep-frozen targeting rule and checks the input still holds the library id); "rejects all 10 pairings" counted any exception (now asserts `/does not take operator/`); "all five properties, all six operators" asserted no coverage (now counts both sets). Plus new tests for every patch above. [`compileEvaluators.test.ts`, `validateRules.test.ts`, `internOrganisms.test.ts`]
+- [x] [Review][Defer] **Empty `survivalRules` compiles to an inert organism with no diagnostic** [`validateRules.ts` — `validateSurvivalRules`] — deferred, pre-existing: `OrganismSchema` embeds a bare `z.array(SurvivalRuleSchema)` with no `min(1)`, so this is **persisted-reachable** and by schema design; every placed cell of such an organism dies by implicit death at cycle 1. Whether that is a legitimate "inert organism" or a schema/editor rejection is Epic 4's authoring call, not the session boundary's.
+
+Dismissed as noise (3): "born/survive routed exclusively" proved by fixture accident (the mutation table's partition-skip fails 2 tests, so it is pinned); AC6 "recompiles on change" is a miss between inputs rather than a mutation (the session is an immutable value — B.5, rules cannot change mid-run); the Auditor's restatement of FD2 (merged into the first decision above).
+
 ## Dev Notes
 
 ### Constraints the developer MUST follow
@@ -714,6 +737,16 @@ Load-bearing invariants were verified by **mutation**, not just by assertion:
   `MAX_RELEVANT_AGE`, and the eager compile-time diagnostic sweep that fails loudly on a malformed
   rule or payload. `src/engine/` unchanged except comments. `deferred-work.md` outcomes written
   back. Status → review.
+- 2026-09-09 — Code review (Fable 5.1, three parallel layers): 10 patches applied as a second
+  commit — numeric literals bounded to the schema's `int 0..65534` (NaN/Infinity/overflow of the
+  Uint16 age buffer), `contentHash` required (cache-key collision), organism ids validated and the
+  255 roster cap enforced through the one `RuleCompilationError` channel (`ROSTER_LEVEL`), `range`
+  tuples copied out of the input, the false `dominance` mutation claim corrected and the
+  `CompilableOrganism` key set pinned, `maxRelevantAge` removed from the barrel, residual
+  forward-reference and change-narration comments fixed, five under-asserting tests strengthened.
+  1 deferred (empty `survivalRules` → inert organism, schema-legal). 2 decisions left for Sidiar
+  (FD2 / `M15`; `resolveBirthSurvival`'s return type). Status stays `review` until FD2 is decided.
+  `packages/simulation`: 224 tests, 100%.
 
 ### Decisions Needed From Sidiar
 

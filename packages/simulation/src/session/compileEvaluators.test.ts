@@ -7,7 +7,7 @@ import type { CellSubject } from '../gol/cellSubject';
 import type { SurvivalRule, SurvivalRules } from '../gol/survivalRules';
 import { compileSession } from './compileEvaluators';
 import type { CompilableOrganism, OrganismEvaluators } from './compileEvaluators';
-import { isRuleCompilationError } from './validateRules';
+import { isRuleCompilationError, ROSTER_LEVEL } from './validateRules';
 
 const cell = (over: Partial<CellSubject> = {}): CellSubject => ({
   state: 'empty',
@@ -293,7 +293,9 @@ describe('the session cache (AC2/AC6, FD3, Decision E.4)', () => {
     expect(second.evaluatorsByRef[1]).not.toBe(first.evaluatorsByRef[1]);
   });
 
-  it('is not reachable from module scope — an empty roster carries no leftover state', () => {
+  it('yields a one-slot table and an empty map for an empty roster', () => {
+    // The module-scope property itself is pinned by "never hits across sessions" above; this
+    // only fixes the empty-roster shape (slot 0 still present, nothing interned).
     const empty = compileSession([]);
     expect(empty.evaluatorsByRef).toEqual([null]);
     expect(empty.refById.size).toBe(0);
@@ -302,12 +304,59 @@ describe('the session cache (AC2/AC6, FD3, Decision E.4)', () => {
 
 describe('compileSession is eager and fails loudly (AC7/AC8, FD4, FD5)', () => {
   it('throws before compiling ANY organism when a later one is malformed', () => {
+    // Observable through access counting: the validation pass reads `survivalRules` exactly once
+    // per organism, and compilation reads it again (the cache key, the partition loop, the age
+    // scan). If `good` were compiled before `bad` was validated, the count would exceed 1.
+    let reads = 0;
+    const good: CompilableOrganism = {
+      id: 'good',
+      get survivalRules(): SurvivalRules {
+        reads += 1;
+        return [rule()];
+      },
+    };
     const organisms: CompilableOrganism[] = [
-      { id: 'good', survivalRules: [rule()] },
+      good,
       { id: 'bad', survivalRules: [{ ...rule(), conditions: [] }] },
     ];
 
     expect(() => compileSession(organisms)).toThrow(/Cannot compile organism "bad"/);
+    expect(reads).toBe(1);
+  });
+
+  it('rejects a duplicate roster id through the SAME error channel as a bad rule', () => {
+    // A duplicate id is malformed input, not a bug; a Story 4.15 wrapper classifying with
+    // `isRuleCompilationError` must not see it escape as a bare Error.
+    let caught: unknown;
+    try {
+      compileSession([
+        { id: 'twin', survivalRules: [rule()] },
+        { id: 'twin', survivalRules: [rule()] },
+      ]);
+    } catch (error) {
+      caught = error;
+    }
+    if (!isRuleCompilationError(caught)) throw new Error('expected a RuleCompilationError');
+    expect(caught.organismId).toBe('twin');
+    expect(caught.ruleId).toBe(ROSTER_LEVEL);
+    expect(caught.message).toMatch(/^Cannot compile organism "twin": duplicate organism id/);
+  });
+
+  it('rejects an organism whose id is not a non-empty string', () => {
+    expect(() => compileSession([{ id: '', survivalRules: [rule()] }])).toThrow(
+      /an organism id must be a non-empty string/,
+    );
+    expect(() => compileSession([{ id: 7 as unknown as string, survivalRules: [rule()] }])).toThrow(
+      /an organism id must be a non-empty string/,
+    );
+  });
+
+  it('rejects a roster over the 255-organism cap (Decision G.3)', () => {
+    const roster = (size: number): CompilableOrganism[] =>
+      Array.from({ length: size }, (_, index) => ({ id: `o${index}`, survivalRules: [rule()] }));
+
+    expect(compileSession(roster(255)).evaluatorsByRef).toHaveLength(256);
+    expect(() => compileSession(roster(256))).toThrow(/caps it at 255 \(Decision G\.3\)/);
   });
 
   it('carries the organism and rule ids on the thrown error', () => {
@@ -394,9 +443,60 @@ describe('compilation never mutates its input (Trap 6, fast-check)', () => {
 
   it('does not throw on a DEEP-FROZEN rule list — the rewrite allocates rather than assigns', () => {
     // CONWAYS_CLASSIC is deepFrozen in @gol/domain, so an in-place pattern rewrite would throw in
-    // strict mode (module code is always strict) or, worse, silently no-op.
+    // strict mode (module code is always strict) or, worse, silently no-op. But Conway carries no
+    // `organismType` condition, so it never reaches the rewrite branch — the frozen rule below
+    // does, targeting an organism that IS in the roster so the rewrite actually assigns a ref.
     const conway = { id: 'conways-classic', survivalRules: CONWAYS_CLASSIC.survivalRules };
     expect(() => compileSession([conway, ...mocks()])).not.toThrow();
     expect(Object.isFrozen(CONWAYS_CLASSIC.survivalRules)).toBe(true);
+
+    const frozen = deepFreeze([
+      rule({
+        contentHash: 'frozen-targeting',
+        conditions: [
+          { property: 'organismType', operator: 'eq', pattern: 'target' },
+          { property: 'age', operator: 'range', pattern: [0, 3] },
+        ],
+        payload: { summary: 'colonize', action: 'born' },
+      }),
+    ]);
+    const session = compileSession([
+      { id: 'target', survivalRules: [rule()] },
+      { id: 'hunter', survivalRules: frozen },
+    ]);
+
+    expect(
+      evaluatorsFor(session, 2).resolveBirthSurvival(
+        cell({ state: 'occupied', organismType: 1, age: 2 }),
+      ),
+    ).toBe('born');
+    // The input still says what it said: the library id, not the ref.
+    expect(frozen[0]?.conditions[0]?.pattern).toBe('target');
+  });
+
+  it('owns its `range` tuples — a later write to the input does not move the compiled bounds', () => {
+    // `{ ...condition }` is a shallow copy; without an explicit tuple copy the closure and the
+    // caller's draft rule share one `[min,max]` array, and an in-place edit (Story 4.15) changes
+    // the evaluator under it.
+    const pattern = [2, 3];
+    const session = compileSession([
+      {
+        id: 'o',
+        survivalRules: [rule({ conditions: [{ property: 'age', operator: 'range', pattern }] })],
+      },
+    ]);
+    const aged = cell({ state: 'alive', organismType: 1, age: 9 });
+
+    expect(evaluatorsFor(session, 1).resolveBirthSurvival(aged)).toBeNull();
+    pattern[1] = 9;
+    expect(evaluatorsFor(session, 1).resolveBirthSurvival(aged)).toBeNull();
   });
 });
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}

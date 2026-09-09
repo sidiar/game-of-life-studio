@@ -5,6 +5,7 @@ import { cellSelectors } from '../gol/cellSubject';
 import type { CellSubject } from '../gol/cellSubject';
 import { operators } from '../engine/operators';
 import { internOrganismIds, NO_MATCH_REF } from './internOrganisms';
+import { isRuleCompilationError, ROSTER_LEVEL } from './validateRules';
 
 const cell = (over: Partial<CellSubject> = {}): CellSubject => ({
   state: 'occupied',
@@ -39,6 +40,39 @@ describe('internOrganismIds (AR-8, Decision E.3, M14)', () => {
 
   it('rejects a duplicate id rather than letting the later index win silently', () => {
     expect(() => internOrganismIds(['a', 'b', 'a'])).toThrow(/duplicate organism id "a"/);
+  });
+
+  it('throws a RuleCompilationError marked ROSTER_LEVEL, not a bare Error', () => {
+    let caught: unknown;
+    try {
+      internOrganismIds(['a', 'a']);
+    } catch (error) {
+      caught = error;
+    }
+    if (!isRuleCompilationError(caught)) throw new Error('expected a RuleCompilationError');
+    expect(caught.organismId).toBe('a');
+    expect(caught.ruleId).toBe(ROSTER_LEVEL);
+  });
+
+  it('rejects an id that is not a non-empty string — the key a targeting rule can never name', () => {
+    expect(() => internOrganismIds(['a', ''])).toThrow(/non-empty string.*at roster index 1/);
+    expect(() => internOrganismIds([undefined as unknown as string])).toThrow(
+      /non-empty string.*got undefined/,
+    );
+  });
+
+  it('rejects a sparse roster instead of skipping the hole and leaving a gap in the refs', () => {
+    const sparse: string[] = ['a', 'c'];
+    delete sparse[1];
+    sparse[2] = 'c';
+    expect(() => internOrganismIds(sparse)).toThrow(/at roster index 1/);
+  });
+
+  it('caps the roster at 255 — ref 256 would store as 0 (empty) in the Uint8Array occupant', () => {
+    const ids = (size: number): string[] => Array.from({ length: size }, (_, index) => `o${index}`);
+
+    expect(internOrganismIds(ids(255)).get('o254')).toBe(255);
+    expect(() => internOrganismIds(ids(256))).toThrow(/256 organisms.*caps it at 255/);
   });
 
   it('is empty for an empty roster', () => {

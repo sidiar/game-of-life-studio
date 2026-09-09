@@ -112,10 +112,18 @@ function cacheKeyFor(rules: SurvivalRules): string {
  * are shared, sometimes frozen fixture data: `CONWAYS_CLASSIC` is `deepFreeze`d, so an in-place
  * rewrite throws in strict mode, and `createMockOrganisms()` hands out deep clones precisely
  * because a previous story shared them and one test's write changed the next call's data.
+ *
+ * ⚠️ And a NEW tuple for a `range` pattern — the spread is shallow, so without the copy the
+ * compiled closure would share the `[min,max]` array with the caller's rule object, and a later
+ * write to that draft (Story 4.15 edits in place) would change the evaluator's bounds under it.
+ * The closure must own every value it compares against.
  */
 function internRule(rule: SurvivalRule, refById: ReadonlyMap<string, OrganismRef>): SurvivalRule {
   const conditions: Condition<CellProperty>[] = rule.conditions.map((condition) => {
-    if (condition.property !== 'organismType') return { ...condition };
+    if (condition.property !== 'organismType') {
+      const { pattern } = condition;
+      return { ...condition, pattern: Array.isArray(pattern) ? [...pattern] : pattern };
+    }
     // A target absent from THIS battle compiles to the never-match sentinel, so "occupied by
     // organism X" is simply `false` in a battle that does not include X (Decision E.3) — not an
     // error, because sharing an organism across battles is the normal case.
@@ -189,14 +197,18 @@ function compileOrganism(
  * impossible rather than merely discouraged — the same shape Story 3.3's `GridBuffers` chose (its
  * FD3): the seam is a value, owned by the caller, with no ambient state behind it.
  *
- * @throws RuleCompilationError naming the organism and rule, before anything is compiled.
+ * @throws RuleCompilationError naming the organism (and rule, for a rule fault), before anything
+ *   is compiled — for a bad, duplicate or over-cap roster as much as for a malformed rule.
  */
 export function compileSession(organisms: readonly CompilableOrganism[]): CompiledSession {
-  // First, and over the WHOLE roster: a diagnostic that fires after half the evaluators exist is
-  // not "before the first cycle" in any useful sense (AC7/AC8, M12).
+  // Roster first: the ids are the interning key, and a rule diagnostic that names an organism is
+  // only useful once the organism's own id has been proven a real one.
+  const refById = internOrganismIds(organisms.map((organism) => organism.id));
+
+  // Then the rules — over the WHOLE roster before any compile: a diagnostic that fires after half
+  // the evaluators exist is not "before the first cycle" in any useful sense (AC7/AC8, M12).
   for (const organism of organisms) validateSurvivalRules(organism.id, organism.survivalRules);
 
-  const refById = internOrganismIds(organisms.map((organism) => organism.id));
   const cache = new Map<string, OrganismEvaluators>();
 
   // Slot 0 is the reserved EMPTY value (M14) — `null`, deliberately placed, never an organism.
