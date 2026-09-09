@@ -1,7 +1,8 @@
 // Dense at-rest grid builders (RFC-006 Decision 2 / RFC-001) — the shape BattleSchema.gridState
 // validates: `number[][]`, `0` = empty, `v` = `index + 1` into a battle's `organismIds`. NOT the
-// typed-array `Grid` (Uint8Array/Uint16Array double buffering) — that lands in Story 3.3 once its
-// shape is frozen. NOT sparse `cells` conversion — that is the Story 5.3 serializer.
+// typed-array `Grid` (Uint8Array/Uint16Array double buffering) — that landed in Story 3.3 and is
+// owned by `@gol/simulation` — feed these builders to its `gridFromDense` rather than hand-rolling
+// a typed fixture. NOT sparse `cells` conversion — that is the Story 5.3 serializer.
 //
 // Every builder here validates its inputs eagerly and throws. The shared reason (review 2026-08-05):
 // a malformed grid does not fail where it was built, it fails at `BattleSchema.parse()` hundreds of

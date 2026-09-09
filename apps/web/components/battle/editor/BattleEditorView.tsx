@@ -4,13 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
 import { MAX_BATTLE_NAME_LENGTH, type EditableGridPreset } from '@gol/domain';
+// AR-17's grid primitives, owned by the engine since Story 3.3 (FD2): one implementation of the
+// top-left anchor for Edit-mode resize and Story 3.16's ephemeral Play-mode resize alike.
+import { clearGrid, resizeGrid } from '@gol/simulation';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
-import { clearGrid } from '@/lib/battle/clearGrid';
 import { computeEditorGridStats } from '@/lib/battle/gridStats';
-import { countClippedLivingCells, resizeGrid } from '@/lib/battle/resizeGrid';
+import { countClippedLivingCells } from '@/lib/battle/resizeGrid';
 import { ERASER_TOOL, refForTool, type Tool } from '@/lib/battle/tool';
 import { useInertBackground } from '@/lib/useInertBackground';
 import PetriDishCanvas from '../../PetriDishCanvas';
@@ -755,7 +757,7 @@ export default function BattleEditorView({
       if (clippedLivingCells === 0) {
         // ⚠️ Trap 6: a shrink over an empty region applies SILENTLY. Warning about discarding
         // nothing is what teaches a user to dismiss the dialog unread.
-        onCommitGrid(resizeGrid(grid, preset));
+        onCommitGrid(resizeGrid(grid, preset.cols, preset.rows));
         return;
       }
 
@@ -781,7 +783,7 @@ export default function BattleEditorView({
   // enabled during a save. Guarding here keeps the dialog open instead, matching that convention.
   const handleConfirmResize = useCallback(() => {
     if (pendingResize === null || isSaving) return;
-    onCommitGrid(resizeGrid(grid, pendingResize.preset));
+    onCommitGrid(resizeGrid(grid, pendingResize.preset.cols, pendingResize.preset.rows));
     setResizeDialogOpen(false);
   }, [grid, isSaving, onCommitGrid, pendingResize]);
 

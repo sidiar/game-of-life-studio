@@ -36,3 +36,17 @@ export { cellSelectors } from './gol/cellSubject';
 export type { CellProperty, CellState, CellSubject, OrganismRef } from './gol/cellSubject';
 export { resolveCellAction } from './gol/resolveCellAction';
 export type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol/survivalRules';
+
+// The grid layer (RFC-004 §3.4, Story 3.3) — the typed-array representation the engine runs on,
+// the dense<->typed conversion at its boundary, the Moore neighbourhood, the pure resize, and the
+// double-buffer seam Stories 3.5/3.6/3.8 write against. `apps/web` consumes `Grid` through its own
+// `RenderableGrid` alias (lib/canvas/renderableGrid.ts), which is now a re-export of this type
+// rather than a structural twin of it — Cross-RFC Reconciliation #3's runtime boundary lives here,
+// not in @gol/persistence, which must stay a leaf over @gol/domain (AR-2/27).
+export { clearGrid, createGrid, gridFromDense, gridToDense } from './grid/grid';
+export type { Grid } from './grid/grid';
+export { createGridBuffers, swapGridBuffers } from './grid/doubleBuffer';
+export type { GridBuffers } from './grid/doubleBuffer';
+export { countNeighbors } from './grid/neighborhood';
+export type { NeighborCounts } from './grid/neighborhood';
+export { resizeGrid } from './grid/resizeGrid';
