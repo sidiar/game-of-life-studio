@@ -1,57 +1,21 @@
 /**
- * The read-only structural view GridRenderer reads (Story 1.8 Task 1, AC1). Field names are
- * verbatim from RFC-004 §3.4's `Grid` — `width`/`height`/`occupant`/`age`, NOT `cols`/`rows` —
- * so Story 3.3's real typed-array `Grid` satisfies this interface structurally, with zero
- * adaptation and zero import. Declared in apps/web (not packages/simulation, which does not exist
- * yet and does not own this type until 3.3 lands): apps/web already depends on @gol/simulation,
- * never the reverse, so building the join here is the only direction that doesn't invert that
- * dependency or steal 3.3's design (Dev Notes, forced decision 2).
- */
-export interface RenderableGrid {
-  readonly width: number; // cols
-  readonly height: number; // rows
-  readonly occupant: Uint8Array; // 0 = empty; 1..255 = OrganismRef = dense roster index + 1
-  readonly age: Uint16Array; // Uint16, not Uint8 — canonical (Decision B.5)
-}
-
-/**
- * Adapts a battle's at-rest dense grid (`BattleSchema.gridState`, RFC-006 Decision 2) into a
- * `RenderableGrid`. Age is always zero here — every initial grid has `age === 0` everywhere
- * (RFC-005 "Representation note") — so this allocates a zero-filled `Uint16Array` rather than
- * reading age from anywhere; there is nowhere to read it from at this boundary.
+ * `RenderableGrid` is now an ALIAS of `@gol/simulation`'s `Grid` (Story 3.3, FD1 option (a)).
  *
- * Validates eagerly and throws, naming the offending row (the `gridBuilders.ts` convention): a
- * ragged `gridState` that reached the canvas would otherwise paint a plausible-looking but wrong
- * dish, with the real defect three stories away from where it surfaced.
+ * Story 1.8 declared this interface here with RFC-004 §3.4's exact field names —
+ * `width`/`height`/`occupant`/`age` — so that the real typed-array `Grid` would satisfy it
+ * structurally the moment it existed. It exists now, and `@gol/simulation` owns it, so the twin is
+ * retired in favour of a re-export: the ~25 files that import `RenderableGrid` from this path keep
+ * compiling untouched, and there is exactly one definition of the shape again.
+ *
+ * ⚠️ THE DIRECTION IS UNCHANGED, and is the reason this alias points down rather than the type
+ * moving up: `apps/web` depends on `@gol/*` and never the reverse (AR-2/27). A `packages/*` module
+ * may not name an `apps/web` type, which is why Story 1.8 could not put it below the boundary and
+ * why `@gol/domain`'s `battleProjection.ts` still works over the dense at-rest shape instead.
+ *
+ * `toRenderableGrid` is likewise a re-export of the owning conversion, `gridFromDense`. Keeping the
+ * app-side NAME is deliberate: the call sites read as "adapt a persisted battle for the canvas",
+ * which is what they are doing, while the implementation lives with the type it constructs.
+ * Cross-RFC Reconciliation #3's dense->typed clause is discharged there (see architecture.md).
  */
-export function toRenderableGrid(gridState: readonly (readonly number[])[]): RenderableGrid {
-  const height = gridState.length;
-  const width = height > 0 ? gridState[0].length : 0;
-
-  const occupant = new Uint8Array(width * height);
-  for (let row = 0; row < height; row++) {
-    const line = gridState[row];
-    if (line.length !== width) {
-      throw new Error(
-        `toRenderableGrid: row ${row} has ${line.length} cells, expected ${width} (ragged input)`,
-      );
-    }
-    for (let col = 0; col < width; col++) {
-      // Range-check before the assignment: a Uint8Array coerces silently, so 256 lands as 0 (the
-      // cell vanishes as empty), -1 lands as 255 (a phantom organism at a ref no roster covers),
-      // and 1.9 truncates to 1. Each of those is exactly the "plausible-looking but wrong dish"
-      // this function's eager validation exists to prevent, and groupByColourState's
-      // out-of-range guard cannot help once the value has already wrapped into range.
-      const value = line[col];
-      if (!Number.isInteger(value) || value < 0 || value > 255) {
-        throw new Error(
-          `toRenderableGrid: row ${row}, col ${col} has value ${value}, expected an integer ` +
-            `in 0..255 (0 = empty, 1..255 = OrganismRef)`,
-        );
-      }
-      occupant[row * width + col] = value;
-    }
-  }
-
-  return { width, height, occupant, age: new Uint16Array(width * height) };
-}
+export type { Grid as RenderableGrid } from '@gol/simulation';
+export { gridFromDense as toRenderableGrid } from '@gol/simulation';

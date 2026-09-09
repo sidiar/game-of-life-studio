@@ -342,8 +342,10 @@ for the organism currently being evaluated — exactly as it already does for th
 organism" is `cellState = occupied` (no `ne` needed); see §2.1.1.
 
 **Organism identity is numeric for performance — at runtime only ([Decision E](/docs/planning-artifacts/architecture.md#decision-e--stable-organism-ids-at-rest-numeric-refs-are-runtime-only)).**
-An `OrganismRef` is a **number**: the index into the dense `organisms` array built when a battle
-simulation starts. Because this value is stored *per cell* across a large grid, a number (packed
+An `OrganismRef` is a **number**: the battle's roster index **+ 1**, with `0` reserved for "empty"
+([M14](/docs/planning-artifacts/architecture.md#minor-spec-resolutions)) — so a roster lookup off a
+ref is `organisms[ref - 1]`, **never** `organisms[ref]`. The roster is the dense `organisms` array
+built when a battle simulation starts. Because this value is stored *per cell* across a large grid, a number (packed
 into a typed array) is dramatically cheaper than a string id. The numeric ref is **confined to the
 simulation session**: persisted rule patterns reference organisms by their stable **library id**
 (rules live on workspace-shared organisms — FR-7.15 — so a battle-relative index would mean a
@@ -352,7 +354,7 @@ patterns are translated inside the compiled evaluators (§3.5).
 
 ```ts
 export type CellState = 'empty' | 'alive' | 'occupied'   // FR-2.5; RELATIVE to evaluating organism: alive = self, occupied = another (Decision C)
-export type OrganismRef = number             // index into the battle's organisms array (perf)
+export type OrganismRef = number             // roster index + 1; 0 = empty (M14). Lookup: organisms[ref - 1]
 
 export interface CellSubject {
   readonly state: CellState
@@ -648,8 +650,8 @@ grid. The *same* decision function serves both phases; only the input grid chang
 **Conflict resolution (Phase 3, FR-5.4):**
 ```ts
 function resolveConflict(claimants: OrganismRef[], deps: SimulationDeps): OrganismRef {
-  const maxDom = Math.max(...claimants.map(r => deps.organisms[r].dominance))
-  const top = claimants.filter(r => deps.organisms[r].dominance === maxDom)
+  const maxDom = Math.max(...claimants.map(r => deps.organisms[r - 1].dominance))   // ref - 1: M14
+  const top = claimants.filter(r => deps.organisms[r - 1].dominance === maxDom)
   return top.length === 1 ? top[0] : top[deps.rng.int(top.length)]   // random tie-break
 }
 ```
@@ -716,7 +718,7 @@ allocation). Numeric `OrganismRef` (§2.1) is what makes per-cell occupant stora
 ```ts
 export interface Grid {
   readonly width: number; readonly height: number   // parametric (Decision A): Edit ≤100×60; up to 200×120 during ephemeral Play-mode expansion (H-9)
-  readonly occupant: Uint8Array   // 0 = empty; 1..255 = OrganismRef into the battle's organisms array (≤255 per battle — the type-derived cap, arch Decision G.3; ~20 co-placed is the NFR-1.1 perf baseline, not a limit)
+  readonly occupant: Uint8Array   // 0 = empty; 1..255 = OrganismRef, i.e. roster index + 1 — organisms[ref - 1] (M14) (≤255 per battle — the type-derived cap, arch Decision G.3; ~20 co-placed is the NFR-1.1 perf baseline, not a limit)
   readonly age: Uint16Array       // CANONICAL type (B.5): saturates at MAX_RELEVANT_AGE (§3.3); age literals are schema-bounded ≤ 65534 (§2.4) so maxLiteral+1 always fits
 }
 ```

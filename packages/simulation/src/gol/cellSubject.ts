@@ -14,12 +14,23 @@ import type { Selectors } from '../engine/rule';
 // "occupied by anyone else" is already `cellState eq occupied`, so a not-equals adds nothing.
 export type CellState = 'empty' | 'alive' | 'occupied';
 
-// The battle's dense organisms-array index (Decision E). RUNTIME-ONLY: rules persist the target
-// organism's stable LIBRARY ID (a string — see @gol/domain's OrganismTypeCondition), never this
-// numeric ref, because a persisted ref would target a different organism in every battle it is
-// loaded into (Decision E, project-context "Never persist a numeric OrganismRef"). The
-// string -> ref translation happens once per rule per session, inside Story 3.4's compiled
-// evaluators (Decision E.3) — not here (Trap 1).
+// A battle-relative reference to an organism (Decision E).
+//
+// ⚠️ THE ENCODING IS `index + 1`, NOT the bare index — corrected in Story 3.3 (FD5), where the
+// grid that produces these refs landed and the ambiguity had to stop. `ref = rosterIndex + 1`,
+// `rosterIndex = ref - 1`, and slot 0 is RESERVED for "empty" so that the runtime ref and the
+// persisted dense `gridState` cell value are the same number with no translation layer (RFC-001;
+// `BattleSchema` validates `v <= organismIds.length`; `buildRefToFillGroup` sizes its LUT at
+// roster length + 1). This comment previously read "the battle's dense organisms-array index",
+// which is the competing reading and cannot coexist with it: under a bare index, `organisms[0]`
+// is a real organism and collides with occupant 0 = empty. `../grid/grid.ts` carries the full
+// statement of the convention and the off-by-one it protects against.
+//
+// RUNTIME-ONLY: rules persist the target organism's stable LIBRARY ID (a string — see
+// @gol/domain's OrganismTypeCondition), never this numeric ref, because a persisted ref would
+// target a different organism in every battle it is loaded into (Decision E, project-context
+// "Never persist a numeric OrganismRef"). The string -> ref translation happens once per rule per
+// session, inside Story 3.4's compiled evaluators (Decision E.3) — not here (Trap 1).
 export type OrganismRef = number;
 
 // The five properties a rule can read off a cell (FR-2.5), materialized per-organism per-cycle by

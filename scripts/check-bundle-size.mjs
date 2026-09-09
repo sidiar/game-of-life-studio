@@ -60,6 +60,22 @@ const ROUTES = [
     // route (the retained-renderer edit canvas, `<BattleEditorView>`). Measured at 295.2 KB gzip
     // (`/battle`, the marginally heavier of the two battle-route pages — see `battle/new` below).
     // Same formula as the home budget's two moves: ceil((295.2 + 12) / 5) * 5 = 310.
+    //
+    // ⚠️ THE FORMULA ABOVE NO LONGER DERIVES THIS NUMBER, and 310 is deliberately NOT being
+    // raised to restore it (Sidiar, 2026-09-09). Stories 2.15/2.16 grew `/battle` to 305.0 KB
+    // without this comment moving, so the 295.2 KB the derivation quotes is two stories stale and
+    // the real headroom is ~5 KB, not the ~14.8 KB the arithmetic implies. Story 3.3 adds 0.2 KB
+    // of that; the drift is not its doing.
+    //
+    // The reason this is a correction and not a raise: THE ABSOLUTE-KB GATE IS BEING RETIRED. It
+    // stands in for NFR-1.2 (initial load < 2 s on desktop broadband), and at these sizes it is
+    // not the binding constraint on that NFR — the home route has already been raised four times
+    // (300 -> 320 -> 330 -> 340), the last one deliberately off-formula, which is the pattern of a
+    // control being worked around rather than one doing its job. The accepted replacement gates on
+    // GROWTH against a committed baseline instead, so an unnoticed +40 KB import fails regardless
+    // of where a ceiling happens to sit, and no story has to re-derive a round number. Design and
+    // rationale: `deferred-work.md`, "the bundle gate moves off absolute budgets". Until that
+    // lands, 310 stands as a ceiling that still passes — read it as a stale ratchet, not a budget.
     name: 'battle (/battle)',
     html: 'battle.html',
     budgetGzipKb: 310,
