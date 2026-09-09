@@ -263,13 +263,18 @@ describe('grid properties (fast-check)', () => {
     );
   });
 
-  it('gridFromDense never aliases its input', () => {
+  it('gridFromDense allocates fresh buffers on every call — conversions never share state', () => {
     fc.assert(
       fc.property(arbDense, (dense) => {
-        const grid = gridFromDense(dense);
-        grid.occupant[0] = (grid.occupant[0] + 1) % 256;
+        // A memoized or buffer-pooling gridFromDense would hand two callers the same typed
+        // arrays, so a write through one grid would bleed into the other (trap 2's failure mode
+        // one level up). The earlier form of this test mutated a Uint8Array and asserted a
+        // number[][] was unchanged — a property the types already guarantee, so it could not fail.
+        const first = gridFromDense(dense);
+        const second = gridFromDense(dense);
 
-        expect(dense[0][0]).toBe(gridFromDense(dense).occupant[0]);
+        expect(second.occupant).not.toBe(first.occupant);
+        expect(second.age).not.toBe(first.age);
       }),
     );
   });

@@ -8,10 +8,13 @@ import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
  * comment replaces predicted: AR-17's resize now lives in `@gol/simulation`
  * (`packages/simulation/src/grid/resizeGrid.ts`) beside the typed-array `Grid` it operates on, so
  * Story 3.16's ephemeral Play-mode resize gets the SAME implementation Decision A.3 requires
- * ("top-left for both resizes") rather than a per-mode fork. Two behaviours changed in the move and
- * are recorded there: the signature is RFC-004 §3.4's positional `resizeGrid(grid, cols, rows)`,
- * and `age` is now carried across top-left-anchored instead of zero-filled (a no-op for every
- * editable grid, which is age-zero everywhere, and a correctness fix for the live grid).
+ * ("top-left for both resizes") rather than a per-mode fork. Three behaviours changed in the move
+ * and are recorded there: the signature is RFC-004 §3.4's positional `resizeGrid(grid, cols, rows)`;
+ * `age` is now carried across top-left-anchored instead of zero-filled (a no-op for every
+ * editable grid, which is age-zero everywhere, and a correctness fix for the live grid); and
+ * dimensions are validated eagerly — a fractional or negative `cols`/`rows` now throws, where this
+ * file's Epic-2 version silently built a corrupt grid (`new Uint8Array(2.5 * 4)` allocates 10, and
+ * every row-major index computed from the claimed width then lands on the wrong cell).
  *
  * What stayed here, and why: these two predicates serve the Edit-mode warning DIALOG, not the
  * engine. "How many living cells would this shrink destroy" is a question about what to tell the

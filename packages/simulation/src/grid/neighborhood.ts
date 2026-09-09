@@ -42,6 +42,12 @@ export interface NeighborCounts {
  * neighbour as `other`, which is the degenerate any caller passing it deserves rather than a throw
  * inside the 60 FPS loop.
  *
+ * `(col, row)` is trusted the same way: the engine's scan produces only in-bounds integer cells,
+ * and a bounds check here would sit inside that same loop. Out-of-range or fractional coordinates
+ * are NOT detected — the clamped bounds map them onto the nearest real rows/columns and the return
+ * is a phantom cell's counts, silently. A caller that can be handed arbitrary coordinates owns
+ * that validation, exactly as it owns `selfRef`'s.
+ *
  * ⚠️ RETURN SHAPE is one small object literal per call (story FD4 option (a)) — the readable
  * default. RFC-004 §3.4 flags this exact spot as where the frame budget is won or lost, and the
  * zero-allocation alternative is a PACKED INTEGER: both counts are <= 8, so `same * 9 + other`

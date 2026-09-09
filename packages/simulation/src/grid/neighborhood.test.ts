@@ -57,6 +57,13 @@ describe('countNeighbors — relative counts (AC5)', () => {
     expect(countNeighbors(MULTI_ORGANISM, 1, 1, 200)).toEqual({ same: 0, other: 7 });
   });
 
+  it('the reserved empty ref 0 sees every occupied neighbour as OTHER, empties as neither', () => {
+    // Pins the degenerate the doc comment blesses: the `value === 0` empty test runs BEFORE the
+    // `value === selfRef` comparison, so a selfRef of 0 never claims an empty neighbour as `same`.
+    // Reordering those two checks is the silent change this test exists to redden on.
+    expect(countNeighbors(MULTI_ORGANISM, 1, 1, 0)).toEqual({ same: 0, other: 7 });
+  });
+
   it('an all-empty grid answers 0/0 everywhere', () => {
     const empty = gridFromDense(gridFromPattern(['...', '...', '...'], { '.': 0 }));
 

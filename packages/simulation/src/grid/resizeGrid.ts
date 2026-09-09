@@ -1,6 +1,6 @@
 // AR-17's pure, top-left-anchored resize (RFC-004 §3.4, Decision A.3).
 import type { Grid } from './grid';
-import { createGrid } from './grid';
+import { assertDimension, createGrid } from './grid';
 
 /**
  * Reallocates `grid` at `cols` x `rows`, preserving content TOP-LEFT ANCHORED (Decision A.3): every
@@ -28,6 +28,12 @@ import { createGrid } from './grid';
  * test. Copying costs one extra `set` per row and is correct for both modes.
  */
 export function resizeGrid(grid: Grid, cols: number, rows: number): Grid {
+  // Validated here first, under THIS signature's parameter names: delegating to `createGrid`
+  // alone reports a bad `cols` as "createGrid: width ..." — the wrong function and the wrong
+  // spelling for a caller holding the public `(grid, cols, rows)` form.
+  assertDimension('resizeGrid: cols', cols);
+  assertDimension('resizeGrid: rows', rows);
+
   const resized = createGrid(cols, rows);
 
   const copyCols = Math.min(grid.width, cols);

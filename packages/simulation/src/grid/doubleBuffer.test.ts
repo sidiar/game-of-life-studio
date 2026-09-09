@@ -13,6 +13,7 @@ describe('createGridBuffers', () => {
     expect(buffers.back.width).toBe(4);
     expect(buffers.back.height).toBe(3);
     expect(buffers.back.occupant.every((cell) => cell === 0)).toBe(true);
+    expect(buffers.back.age.every((cell) => cell === 0)).toBe(true);
   });
 
   it('gives `back` its own buffers — writing it cannot touch `front`', () => {

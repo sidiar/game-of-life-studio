@@ -23,7 +23,15 @@ import { createGrid } from './grid';
 export interface GridBuffers {
   /** The grid the renderer and the population pass read. */
   readonly front: Grid;
-  /** The scratch grid the next cycle writes into. Its contents before that write are meaningless. */
+  /**
+   * The scratch grid the next cycle writes into. Its contents before that write are meaningless —
+   * all-empty fresh from `createGridBuffers`, but after two swaps it holds a STALE FRAME (cycle N
+   * writes into the buffer cycle N-2 rendered). The obligation that follows sits on the WRITER: a
+   * cycle must store every cell of `back`, empties included. A writer that stores only
+   * living/changed cells — the natural-looking optimisation in a module this cost-conscious —
+   * resurrects dead cells from two cycles ago, and nothing in this file can fail on it (the phase
+   * pipeline that writes here is Stories 3.5/3.6's).
+   */
   readonly back: Grid;
 }
 
@@ -33,6 +41,12 @@ export interface GridBuffers {
  *
  * `front` is taken by reference, not copied: the caller already owns it and a copy here would only
  * double the allocation this seam exists to avoid.
+ *
+ * ⚠️ Pass a grid the simulation owns EXCLUSIVELY. After one `swapGridBuffers` the grid supplied
+ * here IS `back` — the scratch buffer the next cycle writes into — so pairing `initialGrid`
+ * itself would overwrite the persisted dish from the second cycle onward, with nothing logged.
+ * RFC-005 Decision 4's "cloned from `initialGrid`" is the CALLER's step, taken before this one:
+ * "taken by reference" trims the pairing's allocation, it does not waive the clone.
  */
 export function createGridBuffers(front: Grid): GridBuffers {
   return { front, back: createGrid(front.width, front.height) };

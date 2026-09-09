@@ -157,8 +157,8 @@ describe('resizeGrid', () => {
   });
 
   it('throws on a dimension a typed array would silently coerce', () => {
-    expect(() => resizeGrid(makeGrid(2, 2, [0, 0, 0, 0]), 2.5, 2)).toThrow(/width/);
-    expect(() => resizeGrid(makeGrid(2, 2, [0, 0, 0, 0]), 2, -1)).toThrow(/height/);
+    expect(() => resizeGrid(makeGrid(2, 2, [0, 0, 0, 0]), 2.5, 2)).toThrow(/resizeGrid: cols/);
+    expect(() => resizeGrid(makeGrid(2, 2, [0, 0, 0, 0]), 2, -1)).toThrow(/resizeGrid: rows/);
   });
 });
 

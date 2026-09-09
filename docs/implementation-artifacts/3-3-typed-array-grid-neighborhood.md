@@ -159,6 +159,66 @@ check independently.
   - [x] Record the commands and their real output summary in the Dev Agent Record. Never state a
         step ran when it did not.
 
+### Review Findings
+
+Code review 2026-09-09 (Fable, fresh context, three parallel layers: Blind Hunter / Edge Case
+Hunter / Acceptance Auditor). All ten ACs verified satisfied (AC7 as amended per FD7); all
+thirteen traps held; the three dev-flagged items verified rather than accepted. Buckets: 1
+decision-needed, 7 patches (applied below as the review commit), 1 defer, 5 dismissed as noise.
+
+- [ ] [Review][Decision] Mint `M14` and correct RFC-004's two `OrganismRef` lines — §2.1 still
+      defines a ref as "the index into the battle's organisms array" and §3.2's `resolveConflict`
+      still reads `deps.organisms[r].dominance`, both off by one under the `index + 1` encoding
+      every shipped layer now agrees on. The code is consistent; the RFC is not, and Story 3.6 is
+      where the off-by-one first produces silently wrong winners. Fixing it means editing RFC-004
+      and widening `scripts/check-spec-ids.mjs` in its two places — an authority-doc act the dev
+      correctly declined to take unilaterally (recorded as the M14 candidate in
+      `deferred-work.md`). Sidiar's call; carried as an explicit question on the PR.
+- [x] [Review][Patch] `createGridBuffers`/`GridBuffers.back` contract gaps — the doc invited
+      pairing `initialGrid` by reference (after one swap it becomes the write target), and stated
+      no full-overwrite obligation on the cycle writer (a sparse writer resurrects a two-cycles
+      -stale frame). Both now stated at the seam; `back.age` emptiness pinned in the constructor
+      test. [packages/simulation/src/grid/doubleBuffer.ts]
+- [x] [Review][Patch] `countNeighbors` silently clamps out-of-range/fractional `(col, row)` onto
+      real cells and answers with a phantom cell's counts — deliberate hot-loop trade, but
+      undocumented, unlike the blessed `selfRef: 0` degenerate. Contract now stated beside it.
+      [packages/simulation/src/grid/neighborhood.ts]
+- [x] [Review][Patch] The documented `selfRef: 0` degenerate was unpinned — reordering the
+      `value === 0` and `value === selfRef` checks would silently count empties as `same` with no
+      red test. Pinned. [packages/simulation/src/grid/neighborhood.test.ts]
+- [x] [Review][Patch] The `gridFromDense never aliases its input` property was vacuous — it
+      mutated a `Uint8Array` and asserted a `number[][]` was unchanged (type-guaranteed), against
+      a fresh conversion that would also pass under aliasing. Rewritten to pin the real property:
+      two conversions share no buffers. [packages/simulation/src/grid/grid.test.ts]
+- [x] [Review][Patch] `resizeGrid(grid, 2.5, 2)` threw `createGrid: width …` — wrong function and
+      wrong parameter name for the public `(grid, cols, rows)` signature, and the test's bare
+      `/width/` regex pinned the misattribution green. Now validated under its own names; regexes
+      tightened. [packages/simulation/src/grid/resizeGrid.ts]
+- [x] [Review][Patch] The hand-off header said "Two behaviours changed in the move" — there are
+      three: the moved `resizeGrid` also throws eagerly on fractional/negative dimensions where
+      the Epic-2 version silently built a corrupt grid. Enumeration corrected.
+      [apps/web/lib/battle/resizeGrid.ts]
+- [x] [Review][Patch] `gridToDense` of an Nx0 grid degrades to `[]` and round-trips to 0x0 — the
+      dense form has no slot for width with zero rows. Unreachable from the schema-bounded
+      presets; asymmetry documented rather than guarded. [packages/simulation/src/grid/grid.ts]
+- [x] [Review][Defer] Stale bundle-budget derivation comment in `scripts/check-bundle-size.mjs` —
+      deferred, pre-existing (last touched on `main` in 93d381a, story 2.14; this branch adds
+      0.2 KB of the drift and does not touch the file). The comment derives `/battle`'s 310 KB
+      budget from a 295.2 KB measurement; the route measured 305.0 KB before this story's first
+      line, so the standing formula has been silently unsatisfied since Stories 2.15/2.16 and the
+      real headroom is ~5.0 KB, not the ~14.8 KB the comment implies. Raising a budget is
+      Sidiar's call.
+
+Dismissed (recorded so they are not re-litigated): the over-allocated-fixture-vs-invariant
+tension (`clearGrid`'s normalising read is documented and deliberate); the
+`toRenderableGrid:` → `gridFromDense:` error-prefix change (no surviving assertion names the
+prefix); the "equality only when every in-bounds neighbour is occupied" sentence (a valid
+necessary-condition claim, spec-verbatim from trap 9); age-carry endangering Edit mode (every
+Edit-mode grid producer verified age-zero — `gridFromDense`, `clearGrid`, `restore()`; Story 3.16
+is the intended nonzero consumer); under-allocated input buffers (outside the stated `Grid`
+invariant by design — guarding every function against invariant-violating input would contradict
+"relied on rather than re-derived").
+
 ## Dev Notes
 
 ### Constraints the developer MUST follow

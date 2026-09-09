@@ -67,7 +67,9 @@ export interface Grid {
 // by import — @gol/domain must not become a dependency of the hot path for a literal.
 const MAX_CELL_VALUE = 255;
 
-function assertDimension(name: string, value: number): void {
+// Exported for `resizeGrid`, whose errors must carry ITS parameter names (`cols`/`rows`), not
+// `createGrid`'s — not part of the package barrel.
+export function assertDimension(name: string, value: number): void {
   // `new Uint8Array(2.5)` throws, but `2.5 * 4` is 10 — a fractional dimension yields a
   // plausible-looking grid whose width no longer divides its buffer, so every row-major index
   // computed from it silently lands on the wrong cell. NaN and negatives fail the same way, later.
@@ -154,6 +156,11 @@ export function gridFromDense(dense: readonly (readonly number[])[]): Grid {
  *
  * Each row is its own array — `Array(h).fill([])` would hand every row the same reference, so a
  * single cell write would write a whole column.
+ *
+ * ⚠️ A width > 0, height = 0 grid degrades to `[]`: the dense form keeps width only as row length,
+ * so with zero rows there is nowhere to store it and `gridFromDense` reads `[]` back as 0x0.
+ * Round-trip identity therefore holds for every grid with at least one row; Nx0 is unreachable
+ * from the schema-bounded presets and is documented here rather than guarded.
  */
 export function gridToDense(grid: Grid): number[][] {
   const { width, height, occupant } = grid;
