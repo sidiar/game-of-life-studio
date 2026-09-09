@@ -758,3 +758,18 @@ Load-bearing invariants were verified by **mutation**, not just by assertion:
    amending** (owner: Story 3.5).
 
 Dev Model: opus   # architecture-shaping: this story fixes the compiled-evaluator API that 3.5/3.6/3.8/4.15 all consume, resolves RFC-004 §3.1-vs-§3.5 in the open, sets the engine's fail-loud-at-compile-time posture (M12/deferred-work:457), and re-crosses the domain/engine seam under M13's bidirectional-pin rule — it establishes patterns rather than following one.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 22s | 26 | 2,390 | 12,365 | 583,909 | 598,690 |
+| Step 1 — create-story | opus-5 | 1 | 8m 10s | 148 | 33,143 | 507,272 | 6,458,259 | 6,998,822 |
+| Step 2 — dev-story | opus-5 | 1 | 23m 00s | 246 | 69,400 | 388,967 | 17,375,279 | 17,833,892 |
+| Step 3 — code review + PR | fable-5-1 | 4 | 36m 27s | 6,026 | 72,538 | 2,792,798 | 28,629,401 | 31,500,763 |
+| _of which the orchestrator_ | opus-5 | — | — | 78 | 17,704 | 66,056 | 2,254,407 | 2,338,245 |
+| **Total (create-story → PR ready)** | | 6 | **1h 07m** | 6,446 | 177,471 | 3,701,402 | 53,046,848 | **56,932,167** |
+
+Run started 2026-09-09 16:36 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
