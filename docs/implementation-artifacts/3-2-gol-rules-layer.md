@@ -180,9 +180,9 @@ Acceptance Auditor; implemented on Sonnet, reviewed on Opus). 9 patches applied,
 `organismType` interning gap is **pinned, not fixed**, and nothing under `src/engine/`,
 `eslint.config.mjs`, `scripts/`, `vitest.config.ts`, `packages/domain/**` or `apps/web` was touched.
 
-**Decision needed (Sidiar) — UNRESOLVED, story is not done**
+**Decision needed (Sidiar) — 1 of 2 RESOLVED; story is not done until AC4 (below) is settled**
 
-- [ ] [Review][Decision] **`payload` is the one field this story reads without a guard, and M12's
+- [x] [Review][Decision] **`payload` is the one field this story reads without a guard, and M12's
       fail-closed posture does not reach it.** `resolveCellAction` is
       `firstSatisfiedBy(...)?.payload.action ?? null` — the `?.` guards only a *null winner*.
       Verified by executing the shipped code against probe inputs: a matching rule with **no
@@ -201,6 +201,26 @@ Acceptance Auditor; implemented on Sonnet, reviewed on Opus). 9 patches applied,
       diagnostic at evaluator-compile time in **Story 3.4**, which is where M12 explicitly says
       eager diagnostics belong ("one pass per battle, not one per cell"). (c) is defensible and
       costs nothing per cell, but leaves a live `TypeError` path until 3.4 lands.
+
+      ✅ **RESOLVED — Sidiar, 2026-09-09: option (c).** The eager diagnostic lands in **Story 3.4**'s
+      evaluator-compile pass, where M12 already assigns it; nothing is guarded in `resolveCellAction`
+      here. Two things were established before the call and belong with it. **First, reachability is
+      narrower than this finding states:** the `conditions: []` vacuous-win trigger is blocked at the
+      schema — `survivalRuleSchema.ts:60` is `z.array(ConditionSchema).min(1)` with an explicit
+      "rejects an empty conditions array" test, the same schema requires `payload.summary` +
+      `payload.action`, `OrganismSchema` embeds `survivalRules: SurvivalRulesSchema`, and
+      `localStorageOrganismRepository` `safeParse`s on every read (`load()` throws
+      `CorruptDataError`, `list()` skips the bad organism). The **persisted** path is therefore
+      closed; the open path is **in-memory** rules that never round-trip through Zod — most
+      concretely **Story 4.15 (`preview-simulation`)**, which runs a draft organism straight from
+      Epic 4's editor, plus import (5-8) and migrations (5-7). A compile-time sweep covers that case;
+      a per-cell guard here never could. **Second, the deferral window is empty:** `resolveCellAction`
+      has no production caller today (its own tests and the barrel export only), and 3.5/3.6 — which
+      will call it — both land after 3.4. ⚠️ **Constraint carried to Story 3.4:** the diagnostic must
+      reject a missing-or-malformed `payload` as an **error, not a skip**, or it degrades into the
+      silent-`null` implicit death that made (a) unacceptable. Recorded in `deferred-work.md` under
+      the 3.2 review section, paired with the `firstSatisfiedBy` shape-assumption entry — same
+      question, same owner.
 
 - [ ] [Review][Decision] **AC4's "assignable both directions" is unachievable at the container
       level, and the specs disagree about whether it was ever required.** Verified with `tsc`:
