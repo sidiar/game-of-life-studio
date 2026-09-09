@@ -5,9 +5,12 @@
 // in this package rather than importing @gol/domain's), drift here is exactly the failure mode FD1
 // accepts as the cost of keeping @gol/simulation self-describing.
 //
-// ⚠️ Spec-conflict flag (Dev Agent Record, FD1; review 2026-09-08): AC4/FD1 ask for the pin to hold
-// in BOTH directions. It holds both ways at the PAYLOAD level and one way at the CONTAINER level,
-// and the split is structural rather than a choice this story made:
+// ⚠️ RESOLVED BY M13 (2026-09-09) — this was a spec-conflict flag (Dev Agent Record, FD1; review
+// 2026-09-08) until Sidiar amended AC4. AC4/FD1 originally asked for the pin to hold in BOTH
+// directions at every level; M13 restates that as FORWARD at the container level and BOTH at the
+// payload level, which is what this file pins. The split is structural, not a choice this story
+// made, and the container half is architecturally EXCLUDED rather than deferred — there is no
+// follow-up story:
 //
 //   - CONTAINER levels (RuleSet / Rule / Condition) — DOMAIN -> ENGINE only. (1) engine
 //     Rule/RuleSet/Condition are `readonly` (AR-16 immutability, src/engine/rule.ts — out of scope
@@ -26,7 +29,8 @@
 //     plain string union, so nothing structural blocks the reverse here.
 //
 // ⚠️ The payload direction is the one that MATTERS for FD1, and an earlier revision of this file
-// omitted it. FD1 accepts duplicating Action/SurvivalPayload in src/gol/survivalRules.ts *on the
+// omitted it. M13 generalizes exactly this: any type duplicated across the domain/engine seam must
+// be pinned BIDIRECTIONALLY at the level it was duplicated. FD1 accepts duplicating Action/SurvivalPayload in src/gol/survivalRules.ts *on the
 // grounds that* drift becomes a build failure here. A domain -> engine assignment alone is
 // covariant, so it cannot deliver that: widening the ENGINE's copy (adding a fourth Action member)
 // or hollowing it out still compiles, which is precisely the drift FD1 claimed to have closed.

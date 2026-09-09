@@ -47,8 +47,9 @@ const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', '.git', 'coverage'
 // as [A-Z] rather than the [A-J] that actually exist — a typo'd `Decision Z` then
 // fails loudly here instead of being silently skipped by a narrow class.
 //
-// Minor Resolutions are bounded to the exact set architecture.md declares — now M1–M12
-// (widened from M1–M10 by Story 3.1, which added M11/M12) — rather than an open `M\d+`.
+// Minor Resolutions are bounded to the exact set architecture.md declares — now M1–M13
+// (M1–M10 originally; widened to M12 by Story 3.1, to M13 by Story 3.2) — rather than an
+// open `M\d+`.
 // Unbounded, this scans SVG path data as spec ids: the icon `d="M12 4 L20 12 M4 12"`
 // yields BOTH `M12` — which would fail CI as a stale citation, indistinguishable from a
 // real one — and `M4`, which silently resolves because M4 genuinely exists. Epic 2 is the
@@ -64,14 +65,16 @@ const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', '.git', 'coverage'
 // `M12 ` will now extract as a citation of M12 and RESOLVE — noise, not a failure, which
 // is the trade this bound was always making, but the noise floor is higher than it was.
 // If that ever becomes misleading, the fix is a real lexer, not a narrower range.
+// M13 (Story 3.2) rides along in range. It is a far rarer moveto coordinate than M12,
+// so it does not raise the noise floor the way widening to M12 did.
 //
 // This deliberately trades AWAY the typo detection the `Decision [A-Z]` choice above
-// buys: a mistyped `M13` is silently skipped, where `M\d+` would have failed it loudly.
-// The two cases are not symmetric — `Decision Z` cannot occur in path data, `M13` can.
-// Adding a Minor Resolution beyond M12 means widening this again, in BOTH places: the
+// buys: a mistyped `M14` is silently skipped, where `M\d+` would have failed it loudly.
+// The two cases are not symmetric — `Decision Z` cannot occur in path data, `M14` can.
+// Adding a Minor Resolution beyond M13 means widening this again, in BOTH places: the
 // regex alternation below and the range named in this comment.
 const SPEC_ID =
-  /(?<![\w.-])(AR-\d+|RFC-00\d|NFR-\d+(?:\.\d+)*|FR-\d+(?:\.\d+)*|M(?:[1-9]|1[0-2])|Decision [A-Z](?:\.\d+)?|Story \d+\.\d+)(?![\w.-])/g;
+  /(?<![\w.-])(AR-\d+|RFC-00\d|NFR-\d+(?:\.\d+)*|FR-\d+(?:\.\d+)*|M(?:[1-9]|1[0-3])|Decision [A-Z](?:\.\d+)?|Story \d+\.\d+)(?![\w.-])/g;
 
 // ─── Cross-RFC Reconciliations (added 2026-08-29, Sidiar's call) ───────────────
 //

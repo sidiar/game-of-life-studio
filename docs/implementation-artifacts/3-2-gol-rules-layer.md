@@ -4,7 +4,7 @@ baseline_commit: c19b1b48acedae18329647a3cbc27ddc9657e173
 
 # Story 3.2: GoL Rules Layer
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -36,8 +36,11 @@ independently.
    `Action = 'born' | 'survive' | 'die'`, an **object** `SurvivalPayload` (`summary` + `action`,
    object-shaped for forward-compatibility per RFC-004 §2.2), and `SurvivalRule` / `SurvivalRules`
    as the generic `Rule` / `RuleSet` at that payload — with `@gol/domain`'s persisted
-   `SurvivalRules` assignable **both directions** with no mapping layer, pinned by `tsc` in a test
-   (RFC-004 §2.4).
+   `SurvivalRules` assignable with no mapping layer, pinned by `tsc` in a test (RFC-004 §2.4):
+   **forward (domain → engine) at the container level, and BOTH directions at the payload level**.
+   ⚠️ Amended 2026-09-09 (M13) from a flat "both directions", which over-specified §2.4's own
+   forward-only claim: the container-level reverse is architecturally excluded by AR-16, while the
+   payload-level reverse is what makes FD1's duplication non-silent. See M13 for both halves.
 5. **And** `resolveCellAction(rules, cell): Action | null` returns the winning rule's
    `payload.action`, or `null` when no rule matches (AR-16). It is a thin function **built on top
    of** `firstSatisfiedBy` — it reads the payload, the engine still does not.
@@ -180,7 +183,7 @@ Acceptance Auditor; implemented on Sonnet, reviewed on Opus). 9 patches applied,
 `organismType` interning gap is **pinned, not fixed**, and nothing under `src/engine/`,
 `eslint.config.mjs`, `scripts/`, `vitest.config.ts`, `packages/domain/**` or `apps/web` was touched.
 
-**Decision needed (Sidiar) — 1 of 2 RESOLVED; story is not done until AC4 (below) is settled**
+**Decision needed (Sidiar) — BOTH RESOLVED (2026-09-09)**
 
 - [x] [Review][Decision] **`payload` is the one field this story reads without a guard, and M12's
       fail-closed posture does not reach it.** `resolveCellAction` is
@@ -222,7 +225,7 @@ Acceptance Auditor; implemented on Sonnet, reviewed on Opus). 9 patches applied,
       the 3.2 review section, paired with the `firstSatisfiedBy` shape-assumption entry — same
       question, same owner.
 
-- [ ] [Review][Decision] **AC4's "assignable both directions" is unachievable at the container
+- [x] [Review][Decision] **AC4's "assignable both directions" is unachievable at the container
       level, and the specs disagree about whether it was ever required.** Verified with `tsc`:
       engine→domain fails at `RuleSet` (readonly array → mutable array, TS4104) and at `Rule`
       (same, via `conditions`), and would also fail at `Condition` (flat `pattern: unknown` →
@@ -234,6 +237,25 @@ Acceptance Auditor; implemented on Sonnet, reviewed on Opus). 9 patches applied,
       is now pinned and mutation-proven), and recorded as an **M13** in `architecture.md` the way
       Story 3.1's FD1 became M11/M12 in `46e3a4b`? And does the residual belong to **Story 3.4**,
       where the domain↔engine type edge next moves? Left unrecorded, nothing surfaces it again.
+
+      ✅ **RESOLVED — Sidiar, 2026-09-09: AC4 amended and recorded as M13.** AC4 above is restated
+      as *forward at container level, bidirectional at payload level* — what is pinned and
+      mutation-proven — and `architecture.md` carries **M13**, following the M11/M12 precedent in
+      `46e3a4b`. This is a wording defect in AC4, not a shortfall in the implementation: AC4
+      over-specified RFC-004 §2.4, which only ever claimed the forward direction. ⚠️ **The residual
+      does NOT go to Story 3.4 — it is closed, with no owner.** Container-level reverse
+      assignability is architecturally *excluded* by AR-16 (readonly arrays; the engine's flat
+      `Condition` being a strict supertype), permanently — not deferred work someone eventually
+      does, so assigning it to 3.4 would hand that story an item it can never complete and would
+      re-litigate. 3.4 does own the domain↔engine edge, but its concern there is *translation*
+      (library-id string → numeric `OrganismRef`), which is unrelated. What M13 carries forward
+      instead is the generalizable rule: **any story duplicating a type across the domain/engine
+      seam must pin it bidirectionally at the level it duplicated**, because forward-only is
+      covariant and blind to widening in the engine's copy. Propagated in the same pass:
+      `scripts/check-spec-ids.mjs` widened M1–M12 → M1–M13 (both the regex alternation and the
+      range named in its comment, as that file requires), and the four stale `M1–M10` citations in
+      `CLAUDE.md` and `docs/project-context.md` — already two versions behind since 3.1 added
+      M11/M12 — corrected to M1–M13.
 
 **Patches applied**
 
