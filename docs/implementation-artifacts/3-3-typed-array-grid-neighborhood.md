@@ -4,7 +4,7 @@ baseline_commit: 708babddc9f713de525fccef5d29f8b08628ef6b
 
 # Story 3.3: Typed-Array Grid & Neighborhood
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -165,15 +165,19 @@ Code review 2026-09-09 (Fable, fresh context, three parallel layers: Blind Hunte
 Hunter / Acceptance Auditor). All ten ACs verified satisfied (AC7 as amended per FD7); all
 thirteen traps held; the three dev-flagged items verified rather than accepted. Buckets: 1
 decision-needed, 7 patches (applied below as the review commit), 1 defer, 5 dismissed as noise.
+The decision-needed finding was resolved on 2026-09-09 by Sidiar's authorization to mint `M14` —
+see the first item below. The `defer` item (the stale `/battle` bundle-budget derivation, verified
+pre-existing on `main`) remains open in `deferred-work.md` and does not block this story.
 
-- [ ] [Review][Decision] Mint `M14` and correct RFC-004's two `OrganismRef` lines — §2.1 still
-      defines a ref as "the index into the battle's organisms array" and §3.2's `resolveConflict`
-      still reads `deps.organisms[r].dominance`, both off by one under the `index + 1` encoding
-      every shipped layer now agrees on. The code is consistent; the RFC is not, and Story 3.6 is
-      where the off-by-one first produces silently wrong winners. Fixing it means editing RFC-004
-      and widening `scripts/check-spec-ids.mjs` in its two places — an authority-doc act the dev
-      correctly declined to take unilaterally (recorded as the M14 candidate in
-      `deferred-work.md`). Sidiar's call; carried as an explicit question on the PR.
+- [x] [Review][Decision] **RESOLVED — Sidiar authorized the mint, 2026-09-09.** `M14` is minted in
+      `architecture.md` and RFC-004's `OrganismRef` lines are corrected: §2.1's definition and type
+      comment now say roster index **+ 1** with `0` reserved for empty, §3.2's `resolveConflict`
+      reads `deps.organisms[r - 1].dominance`, and §3.4's `occupant` field comment carries the same
+      correction. `scripts/check-spec-ids.mjs` widened `M1`–`M13` → `M1`–`M14` in both places its
+      comment prescribes; `grid.ts`'s note no longer describes the RFC as wrong, and the
+      `deferred-work.md` candidate entry is marked resolved. This was the finding that blocked
+      `done`; with it settled the story is complete. *(Story 3.6 was where the off-by-one would
+      first have produced silently wrong Dominance winners.)*
 - [x] [Review][Patch] `createGridBuffers`/`GridBuffers.back` contract gaps — the doc invited
       pairing `initialGrid` by reference (after one swap it becomes the write target), and stated
       no full-overwrite obligation on the cycle writer (a sparse writer resurrects a two-cycles

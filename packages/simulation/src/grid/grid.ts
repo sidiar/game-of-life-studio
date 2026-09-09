@@ -42,7 +42,7 @@ export interface Grid {
   /**
    * Row-major occupancy. `0` = empty; `1..255` = an `OrganismRef`.
    *
-   * ⚠️ **THE REF ENCODING, settled once, here (story 3.3 FD5).** A ref is the battle's roster
+   * ⚠️ **THE REF ENCODING — ratified as M14 (Sidiar, 2026-09-09).** A ref is the battle's roster
    * index **+ 1**, with slot 0 reserved for "empty" — `ref = index + 1`, `index = ref - 1`. This
    * is what the persisted dense `gridState` already means (RFC-001, `BattleSchema` validates
    * `v <= organismIds.length`), what `buildRefToFillGroup` allocates for (`size = roster length +
@@ -52,10 +52,10 @@ export interface Grid {
    * persisted battle.
    *
    * ⚠️ **Consequence for Story 3.5/3.6, stated where it can be read rather than re-derived:** a
-   * roster lookup off a ref is `organisms[ref - 1]`, NEVER `organisms[ref]`. RFC-004 §3.2's
-   * `resolveConflict` snippet writes `deps.organisms[r].dominance` — off by one for every organism
-   * in the battle under this encoding, and the symptom is a Dominance comparison that reads the
-   * WRONG organism's dominance: plausible battles, no failing test.
+   * roster lookup off a ref is `organisms[ref - 1]`, NEVER `organisms[ref]`. RFC-004 §2.1 and
+   * §3.2 were corrected to match when M14 was minted — `resolveConflict` now reads
+   * `deps.organisms[r - 1].dominance`. Getting this wrong is silent: the symptom is a Dominance
+   * comparison against the WRONG organism, i.e. plausible battles and no failing test.
    */
   readonly occupant: Uint8Array;
   /** Cycles alive. NOT clamped or incremented here — `MAX_RELEVANT_AGE` is Story 3.4's, aging is Story 3.6's cycle-end step. */
