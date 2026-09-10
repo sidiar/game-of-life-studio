@@ -376,12 +376,15 @@ export class GridRenderer {
    *
    * ⚠️ MEASURED IN STORY 3.7, because Decision D.3 repaints after EVERY step and deferred-work.md
    * (2.3 review) asked whether that would put this sweep on the cycle rate. At 100x60 it is
-   * **0.048-0.061 ms** — 0.3% of a 16.67 ms frame — so `drawFull` on the playback path would be
+   * **~0.08 ms** — 0.5% of a 16.67 ms frame — so `drawFull` on the playback path would be
    * affordable even though it is not the recommended call. That entry also asked this story to
    * confirm Story 3.8's loop calls `draw` rather than `drawFull`: on the DECISION cost alone
-   * `drawFull` is CHEAPER (groupByColourState 0.033 + this 0.048 = ~0.08 ms) than marking all
-   * 6,000 cells and diffing them (~0.41 ms), because `markDirty` allocates a coordinate per cell
-   * and routes it through a `Set`. The recommendation still stands the other way — `draw` repaints
+   * `drawFull` is CHEAPER (groupByColourState ~0.07 + this ~0.08 = ~0.15 ms) than the dirty path's
+   * UPPER BOUND — every cell marked and every occupied cell reading as changed, ~0.7 ms — because
+   * `markDirty` allocates a coordinate per cell and routes it through a `Set`. (Figures are the
+   * report's, taken on the pinned 30% fill after Story 3.7's review corrected the fixture; a live
+   * frame diffs against the previous one and sits below that bound.) The recommendation still
+   * stands the other way — `draw` repaints
    * only the cells that changed, and RASTERIZATION is the half no off-browser harness can measure
    * (jsdom has no canvas) — but Story 3.8 now has both numbers instead of an assumption. See
    * docs/implementation-artifacts/performance-baseline-validation.md.

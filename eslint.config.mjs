@@ -123,7 +123,7 @@ export default tseslint.config(
     ignores: [
       'apps/web/**/*.test.{ts,tsx}',
       'apps/web/**/*.spec.{ts,tsx}',
-      'apps/web/**/*.bench.ts',
+      'apps/web/**/*.bench.{ts,tsx}',
       'apps/web/e2e/**',
     ],
     rules: {

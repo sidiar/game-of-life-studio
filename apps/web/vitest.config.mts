@@ -41,7 +41,7 @@ export default defineConfig({
       // is excluded because `vitest run` never executes it (it is `vitest bench`'s glob), so it
       // would sit at 0% forever.
       include: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
-      exclude: ['**/*.test.{ts,tsx}', '**/*.bench.ts'],
+      exclude: ['**/*.test.{ts,tsx}', '**/*.bench.{ts,tsx}'],
     },
   },
 });

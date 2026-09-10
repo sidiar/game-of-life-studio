@@ -14,6 +14,7 @@ import {
   BENCHMARK_FILL_PERMILLE,
   BENCHMARK_PRESETS,
   BENCHMARK_ROSTER_SIZE,
+  BENCHMARK_RUN_OPTIONS,
   createBenchmarkFill,
   createBenchmarkRoster,
   createSeededRng,
@@ -30,21 +31,10 @@ import { createRng } from './rng';
 import type { SimulationDeps } from './threePhaseStep';
 import { threePhaseStep } from './threePhaseStep';
 
-/**
- * ⚠️ EXACT ITERATION COUNTS, not a time budget (`time: 0`). tinybench's default is "run for N
- * milliseconds", which makes the cycle count a function of how fast the machine is — so the fixture
- * would describe a different amount of work on CI than on a laptop and AC2's "the cycle count is
- * pinned" could not be honoured. With `time: 0` these two numbers ARE the run.
- *
- * Warmup is not optional here: V8 runs the first iterations in the interpreter tier, and at
- * ~13 ms/cycle a cold first sample is a large fraction of a small sample set.
- */
-const BENCH_OPTIONS = {
-  time: 0,
-  iterations: 100,
-  warmupTime: 0,
-  warmupIterations: 25,
-} as const;
+// The run options are the fixture's, shared with apps/web's repaint bench through @gol/test-utils
+// (`BENCHMARK_RUN_OPTIONS`) because the gate SUMS the two results: exact iteration counts, `time:
+// 0`, a pinned warm-up. See that constant for why each of the four numbers is what it is.
+const BENCH_OPTIONS = BENCHMARK_RUN_OPTIONS;
 
 /**
  * One preset's state: a compiled session, a buffer pair, and the cursor that walks them.
@@ -139,6 +129,13 @@ function benchPhases(cols: number, rows: number): void {
   );
 
   const claims = birthSurvivalPhase(buffers.back, deps);
+  // ⚠️ Phase 3 writes IN PLACE, so iterations 2..N re-apply the same `claims` to a grid the
+  // previous iteration already finished (ages advance until MAX_RELEVANT_AGE clamps them; the
+  // occupants converge on the first pass). The work per iteration is the same full-grid sweep, so
+  // the number is still Phase 3's cost — but "measured against the grid Phase 2 produced" is exact
+  // only for the first iteration. Restoring a pristine copy per iteration would add two 6,000-cell
+  // typed-array copies to a ~10 µs measurement, i.e. distort it more than the drift does. Diagnostic,
+  // never gated (Story 3.7 code review).
   bench(
     `phase3-conflict 100x60 x${BENCHMARK_ROSTER_SIZE}`,
     () => {

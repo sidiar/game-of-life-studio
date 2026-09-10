@@ -352,11 +352,11 @@ function OrganismSearchAdd({
   const query = searchText.trim().toLowerCase();
   // ⚠️ UNMEMOISED, ON PURPOSE — MEASURED IN STORY 3.7 (deferred-work.md, 2.10 review, which flagged
   // this as a per-render scan of the UNCAPPED workspace library, Decision G.3/M6). Benched at
-  // `lib/canvas/repaintDecision.bench.ts`'s `library-filter 1000 organisms`: **0.030 ms** for a
-  // library of 1,000 — far past any realistic workspace, and roughly one keystroke's worth of budget
-  // spent on a scan that runs once per render, not in a loop. A `useMemo` here would cost a
-  // dependency array and a cache to reason about in exchange for 30 microseconds. Closed, not
-  // deferred again.
+  // `lib/canvas/repaintDecision.bench.ts`'s `library-filter 1000 organisms`: **~0.02-0.04 ms** for
+  // a library of 1,000 — far past any realistic workspace, and roughly one keystroke's worth of
+  // budget spent on a scan that runs once per render, not in a loop. A `useMemo` here would cost a
+  // dependency array and a cache to reason about in exchange for tens of microseconds. Closed, not
+  // deferred again. (The report carries the canonical figure.)
   const filtered = library.filter((organism) => organism.name.toLowerCase().includes(query));
 
   return (

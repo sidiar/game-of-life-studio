@@ -1,4 +1,4 @@
-import { CONWAYS_CLASSIC, type Organism, type SurvivalRule } from '@gol/domain';
+import { CONWAYS_CLASSIC, type Condition, type Organism, type SurvivalRule } from '@gol/domain';
 import { createMockOrganisms } from './mockWorkspace';
 
 /**
@@ -37,6 +37,28 @@ export const BENCHMARK_ROSTER_SIZE = 20;
 
 /** 30% occupancy — see `createBenchmarkFill` on why the number matters to the repaint half only. */
 export const BENCHMARK_FILL_PERMILLE = 300;
+
+/**
+ * The tinybench options BOTH benches run under — the engine step in @gol/simulation and the
+ * repaint decision in apps/web. Shared for the same reason the roster is: `check-bench-budget.mjs`
+ * SUMS the two results, and a sum of numbers taken under different iteration or warm-up counts
+ * describes no single frame. (Story 3.7 code review: this was duplicated verbatim in both files
+ * with a comment saying they must match, and nothing enforced it.)
+ *
+ * ⚠️ EXACT ITERATION COUNTS, not a time budget (`time: 0`). tinybench's default is "run for N
+ * milliseconds", which makes the cycle count a function of how fast the machine is — so the
+ * fixture would describe a different amount of work on CI than on a laptop and AC2's "the cycle
+ * count is pinned" could not be honoured. With `time: 0` these two numbers ARE the run.
+ *
+ * Warm-up is not optional: V8 runs the first iterations in the interpreter tier, and a cold first
+ * sample is a large fraction of a 100-sample set.
+ */
+export const BENCHMARK_RUN_OPTIONS = Object.freeze({
+  time: 0,
+  iterations: 100,
+  warmupTime: 0,
+  warmupIterations: 25,
+});
 
 // The four canonical organisms, in roster order. Conway's Classic first (FR-1.5), then the three
 // AR-45 mocks — a deliberately MIXED set: 2/3/3/2 rules, five distinct condition properties, all
@@ -77,6 +99,19 @@ const BENCHMARK_COLOR_TOKENS: readonly string[] = [
 ];
 
 /**
+ * A fresh condition object — and, for the numeric variant, a fresh `[min,max]` tuple. Narrowed on
+ * `property` (the union's discriminant) rather than on `Array.isArray(pattern)`, because narrowing
+ * the pattern alone does not narrow the condition and the spread then widens out of the union.
+ */
+function cloneCondition(condition: Condition): Condition {
+  if (condition.property === 'cellState' || condition.property === 'organismType') {
+    return { ...condition };
+  }
+  const { pattern } = condition;
+  return { ...condition, pattern: Array.isArray(pattern) ? [pattern[0], pattern[1]] : pattern };
+}
+
+/**
  * ⚠️ A DISTINCT `contentHash` PER ORGANISM, deliberately. The Decision E.4 evaluator cache is keyed
  * on the ordered join of a rule list's `contentHash`es (`compileEvaluators.ts`), so 20 organisms
  * cloned with their template's hashes intact would compile to FOUR shared evaluator pairs, not 20 —
@@ -91,7 +126,10 @@ function distinctiveRule(rule: SurvivalRule, rosterIndex: number, ruleIndex: num
     contentHash: `bench-hash-${rosterIndex}-${ruleIndex}`,
     // Deep enough for the compile step: `internRule` rebuilds every condition and pattern anyway,
     // but the caller may hold this roster across runs and the templates are frozen fixture data.
-    conditions: rule.conditions.map((condition) => ({ ...condition })),
+    // ⚠️ The `range` tuple is copied too (Story 3.7 code review): a condition spread is shallow,
+    // so without it every clone of Conway's Classic would share ONE deep-frozen `[2, 3]` with the
+    // template — a write to it throws, and a write to a clone's tuple rewrites four siblings.
+    conditions: rule.conditions.map(cloneCondition),
     payload: { ...rule.payload },
   };
 }

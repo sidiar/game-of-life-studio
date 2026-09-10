@@ -86,7 +86,10 @@ jobs:
       # GATES the JSON it wrote against the NFR-1.1 frame budget. Splitting them
       # is what makes a failure legible: a red `bench` means the harness broke, a
       # red `bench:check` means the frame got slower. Merging them would also hide
-      # the measurement's own exit code behind the gate's.
+      # the measurement's own exit code behind the gate's. `npm run bench` runs the
+      # two workspaces' benches SERIALLY (`--concurrency=1`): the gate sums them,
+      # and on a 4-vCPU runner a number taken beside a sibling bench is not a
+      # frame.
       - name: Performance benchmark (NFR-1.1)
         run: npm run bench
 

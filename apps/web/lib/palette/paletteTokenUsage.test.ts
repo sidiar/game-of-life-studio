@@ -1,5 +1,5 @@
 import { CONWAYS_CLASSIC } from '@gol/domain';
-import { createMockOrganisms } from '@gol/test-utils';
+import { createBenchmarkRoster, createMockOrganisms } from '@gol/test-utils';
 import { describe, expect, it } from 'vitest';
 import { PALETTE } from './paletteRegistry';
 
@@ -25,5 +25,16 @@ describe('fixture colorTokens resolve against the real palette registry', () => 
     for (const organism of createMockOrganisms()) {
       expect(paletteIds.has(organism.colorToken)).toBe(true);
     }
+  });
+
+  it('every organism in the AR-43 benchmark roster (@gol/test-utils) uses a real, distinct token', () => {
+    // `benchmarkRoster.ts` duplicates the registry's 20 ids as string literals because
+    // @gol/test-utils cannot import apps/web's registry. An unknown token is NOT loud there —
+    // `buildRefToFillGroup` falls back to the default token with a warn-once, which silently
+    // collapses the fixture's fill groups and understates the gated repaint half. This is the
+    // guard that file's comment points at; it did not cover this source until Story 3.7's review.
+    const tokens = createBenchmarkRoster(20).map((organism) => organism.colorToken);
+    for (const token of tokens) expect(paletteIds.has(token)).toBe(true);
+    expect(new Set(tokens).size).toBe(20);
   });
 });

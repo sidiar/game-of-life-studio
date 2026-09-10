@@ -1,6 +1,12 @@
-import { CONWAYS_CLASSIC_ID } from '@gol/domain';
+import { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { describe, expect, it } from 'vitest';
-import { createBenchmarkFill, createBenchmarkRoster } from './benchmarkRoster';
+import {
+  BENCHMARK_GATED_PRESET,
+  BENCHMARK_PRESETS,
+  BENCHMARK_RUN_OPTIONS,
+  createBenchmarkFill,
+  createBenchmarkRoster,
+} from './benchmarkRoster';
 import { MOCK_ORGANISM_IDS } from './mockWorkspace';
 import { createSeededRng, FIXED_SEED } from './seededRng';
 
@@ -67,7 +73,7 @@ describe('createBenchmarkRoster — the AR-43 20-organism fixture', () => {
     expect(new Set(roster.map((organism) => organism.colorToken)).size).toBe(20);
   });
 
-  it('carries at least one aging-enabled organism and one explicit die rule', () => {
+  it('carries at least one aging-enabled organism, and exactly 10 explicit die rules', () => {
     expect(roster.some((organism) => organism.agingEnabled)).toBe(true);
     const dieRules = roster.flatMap((organism) =>
       organism.survivalRules.filter((rule) => rule.payload.action === 'die'),
@@ -83,10 +89,50 @@ describe('createBenchmarkRoster — the AR-43 20-organism fixture', () => {
     expect(() => createBenchmarkRoster(2.5)).toThrow(/size must be an integer in 1\.\.20/);
   });
 
-  it('does not share rule objects with its templates or between calls', () => {
+  it('does not share rule objects — or `range` tuples — with its templates or between calls', () => {
     const other = createBenchmarkRoster(20);
     expect(other[0].survivalRules[0]).not.toBe(roster[0].survivalRules[0]);
     expect(other[0].survivalRules[0]).toEqual(roster[0].survivalRules[0]);
+    // Against the TEMPLATE, which the old assertion never compared: Conway's Classic is
+    // deep-frozen, and a shallow condition spread would leave every clone holding the template's
+    // own `[2, 3]` — a write to it throws, and a write to one clone's tuple rewrites four siblings
+    // (Story 3.7 code review).
+    const templateRange = CONWAYS_CLASSIC.survivalRules
+      .flatMap((rule) => rule.conditions)
+      .find((condition) => Array.isArray(condition.pattern));
+    const clonedRange = roster[0].survivalRules
+      .flatMap((rule) => rule.conditions)
+      .find((condition) => Array.isArray(condition.pattern));
+    expect(templateRange).toBeDefined();
+    expect(clonedRange).toBeDefined();
+    expect(clonedRange?.pattern).not.toBe(templateRange?.pattern);
+    expect(clonedRange?.pattern).toEqual(templateRange?.pattern);
+    expect(Object.isFrozen(clonedRange?.pattern)).toBe(false);
+  });
+});
+
+describe('the preset table and run options — the other gate parameters', () => {
+  it('labels every preset as its own cols x rows, and the gated label is in the table', () => {
+    // `scripts/check-bench-budget.mjs` names the gated task by LABEL (`step 100x60 x20`); a label
+    // that disagreed with its dimensions would gate a grid nobody meant to gate. Nothing else reads
+    // BENCHMARK_PRESETS against BENCHMARK_GATED_PRESET (Story 3.7 code review).
+    for (const preset of BENCHMARK_PRESETS) {
+      expect(preset.label).toBe(`${preset.cols}x${preset.rows}`);
+    }
+    expect(BENCHMARK_PRESETS.map((preset) => preset.label)).toContain(BENCHMARK_GATED_PRESET);
+    expect(BENCHMARK_GATED_PRESET).toBe('100x60');
+  });
+
+  it('pins the run options both summed benches use — exact counts, never a time budget', () => {
+    // `time: 0` + an exact iteration count is what makes the cycle count a property of the
+    // fixture rather than of the machine (AC2). Both workspaces' benches import this one object.
+    expect(BENCHMARK_RUN_OPTIONS).toEqual({
+      time: 0,
+      iterations: 100,
+      warmupTime: 0,
+      warmupIterations: 25,
+    });
+    expect(Object.isFrozen(BENCHMARK_RUN_OPTIONS)).toBe(true);
   });
 });
 

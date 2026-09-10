@@ -208,12 +208,15 @@ a run that matches zero test files now fails, in all four workspaces.
   **50 rules** — is pinned by `packages/test-utils/src/benchmarkRoster.test.ts`, because Phase 2
   costs `cells × organisms × rules-until-first-match` and a cheaper roster is a looser gate with no
   diff to review.
-- ✅ **Measured 6.760 ms against the 16.667 ms budget — 59.4% headroom.** It was 18.749 ms and RED
+- ✅ **Measured 5.6–5.8 ms against the 16.667 ms budget — 65–67% headroom** (6.760 ms / 59.4% when
+  the story landed; the review corrected a collapsed repaint fixture and serialized the two
+  benches). It was 18.749 ms and RED
   until Story 3.7's FD7 landed (conditions compiled to concrete predicates at session time), which
   took the cycle from ~14 ms to ~6.7 ms and amended **M12** accordingly. If the gate ever goes red
   again, the budget does **not** move — change the mechanism or fix the code. Every number:
   `docs/implementation-artifacts/performance-baseline-validation.md`.
-- ⚠️ **Phase 2 is ~98% of the cycle** (5.9 ms of 6.7 ms). Any engine performance work that is not
+- ⚠️ **Phase 2 is ~98% of the cycle** (5.9 ms of the 6.0 ms phase sum; the assembled step
+  measures ~6.7 ms because the three-phase split is taken per phase, not per cycle). Any engine performance work that is not
   `birthSurvivalPhase` work is measurement theatre at these ratios. The largest remaining lever —
   not evaluating every organism at every cell — is a **semantics-bearing** change to M10/Decision C
   and needs its own story and its own goldens.
@@ -297,7 +300,8 @@ are active on `apps/web`. ESLint is pinned to **v9** — v10 breaks `eslint-conf
 `main` branch, commits pushed straight to it. **No PR flow exists**, so branch naming is still
 deliberately unspecified; don't invent one. GitHub Actions **runs on every push** to `main`
 (`.github/workflows/ci.yml`, Story 1.2): a `quality` job (typecheck → lint → format:check →
-coverage → build → bundle) and an `e2e` job gated on it. **`npm run ci` is the local mirror of
+spec:check → boundary:check → coverage → build → bundle → bench → bench:check) and an `e2e` job
+gated on it. **`npm run ci` is the local mirror of
 that gate — keep the two in lockstep.** Run the full gate before calling a change done; the
 pre-commit hook (lint-staged + typecheck) is the fast subset only.
 

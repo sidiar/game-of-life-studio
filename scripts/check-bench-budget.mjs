@@ -107,10 +107,29 @@ function readReport({ label, file, command }) {
     return null;
   }
 
+  // The shape `vitest bench --outputJson` writes (vitest 4.1.10): `{ files: [{ filepath,
+  // groups: [{ fullName, benchmarks: [{ name, mean, ... }] }] }] }`. Anything else — a bare
+  // array, a number, a `files` that is not an array — is not a report, and the loop below would
+  // otherwise escape as a TypeError with a stack trace instead of the labelled diagnostic.
+  if (report === null || typeof report !== 'object' || !Array.isArray(report.files)) {
+    console.error(`✖ bench-budget: ${file} is not a \`vitest bench\` report (no \`files\` array).`);
+    return null;
+  }
+
   const means = new Map();
-  for (const reportFile of report.files ?? []) {
+  for (const reportFile of report.files) {
     for (const group of reportFile.groups ?? []) {
       for (const benchmark of group.benchmarks ?? []) {
+        // A duplicate name would let the LAST one silently win, so the gate could measure a
+        // bench that merely shares a label with the gated one. Two `bench()` calls with one name
+        // is a harness bug; make it a failure with the name in it.
+        if (means.has(benchmark.name)) {
+          console.error(
+            `✖ bench-budget: "${benchmark.name}" appears more than once in ${file} — two ` +
+              `benchmarks share a name, so neither can be the one the gate means.`,
+          );
+          return null;
+        }
         means.set(benchmark.name, benchmark.mean);
       }
     }
@@ -129,6 +148,22 @@ function readReport({ label, file, command }) {
 
 const means = new Map();
 let ok = true;
+
+// `means` is only ever populated from the `required` lists, so a gated or tracked name that is
+// not ALSO required would read back `undefined` — and `undefined + number` is NaN, which compares
+// false against the budget: the vacuous pass this script exists to refuse, one level up from the
+// per-task NaN guard below. Until Story 3.7's review this only failed by accident (`.toFixed` on
+// `undefined` throws); now it fails on purpose, by name.
+for (const name of [...GATED_TASKS, ...TRACKED_TASKS]) {
+  if (!SOURCES.some((source) => source.required.includes(name))) {
+    console.error(
+      `✖ bench-budget: "${name}" is gated or tracked but no source lists it as required — the ` +
+        `script would gate a number it never read. Add it to that source's \`required\`.`,
+    );
+    ok = false;
+  }
+}
+if (!ok) process.exit(1);
 
 for (const source of SOURCES) {
   const report = readReport(source);

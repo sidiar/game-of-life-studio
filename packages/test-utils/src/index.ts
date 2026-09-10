@@ -20,6 +20,7 @@ export {
   BENCHMARK_GATED_PRESET,
   BENCHMARK_PRESETS,
   BENCHMARK_ROSTER_SIZE,
+  BENCHMARK_RUN_OPTIONS,
   createBenchmarkFill,
   createBenchmarkRoster,
 } from './benchmarkRoster';

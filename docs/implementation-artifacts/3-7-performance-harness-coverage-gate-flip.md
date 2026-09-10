@@ -172,7 +172,9 @@ deferred entries that say *"Story 3.7's to measure"*.
   - [x] Measure the two guards against the harness (a local branch that removes them, measured and
         then reverted — the guards themselves stay).
   - [x] Record both numbers and a recommendation in the Dev Agent Record and the report. **Do not
-        remove them and do not amend M12.**
+        remove them and do not amend M12.** *(As written, this held until the FD6 halt; Sidiar's
+        mid-run authorization of FD7 then covered the M12 amendment — see the Dev Agent Record.
+        Neither guard was removed.)*
 
 - [x] **Task 7 — The deferred perf items** (AC: 13)
   - [x] Measure each named item. Record a number per item, and for each: fix, or "measured, not
@@ -192,6 +194,90 @@ deferred entries that say *"Story 3.7's to measure"*.
         break coverage (temporarily delete a test file) — each must redden, by name. A gate nobody
         has seen fail is not known to work.
   - [x] Record every command and its actual result in the Dev Agent Record.
+
+### Review Findings
+
+Code review 2026-09-10 (Fable, three parallel adversarial layers over an Opus implementation).
+Patches landed as their own commit on the story branch; the one `decision-needed` item is a
+question for Sidiar on the PR and is **not** resolved here.
+
+- [ ] [Review][Decision] **RFC-004 still describes the pre-FD7 hot path — amend, or record the
+      divergence?** `architecture.md` M12's amendment names RFC-004 as owner, and both precedents
+      (M14 `a645d31`, M15 `75dbccd`) amended RFC-004 in the same commit; this story did not.
+      RFC-004 §1.4 (reference code, "+0.091 ms/cycle"), §2.3/§3.5 (evaluators as
+      `firstSatisfiedBy(rules.filter(...))` closures) and Risk 2 ("one primitive underlies all
+      decisions") now contradict `compileEvaluators.ts`. Whether FD7's authorization covered
+      RFC-004 is not knowable from the repo. Options: (a) amend §1.4/§2.3/§3.5/Risk 2 in the
+      M14/M15 style on this branch; (b) leave RFC-004 and add a Minor-Resolution-style pointer in
+      it to M12's amendment; (c) record the divergence in `deferred-work.md` only (done, as the
+      holding position).
+- [x] [Review][Patch] `compileSession` read `survivalRules` twice (validate pass, compile pass); an
+      accessor-backed organism — the shape its own read-counting test uses — could hand the
+      compiler an array the sweep never saw. Now read once and the same reference is validated,
+      compiled and age-scanned; `compileOrganism` takes the rule list. Three tests pin the FD7
+      boundary (`toString` property, `ne` operator, single read)
+      [packages/simulation/src/session/compileEvaluators.ts]
+- [x] [Review][Patch] M15's JSDoc had been detached from `OrganismEvaluators` by the inserted
+      `CellPredicate`/`CompiledBirthSurvivalRule` types [compileEvaluators.ts]
+- [x] [Review][Patch] The repaint fixture collapsed: stepping the seeded fill 50 cycles leaves a
+      7-organism still life by cycle 10 (7 groups, 502 cells, static to cycle 200), so the gated
+      repaint half measured an 8%-occupied frozen dish while claiming a live one. Replaced with the
+      pinned 30% fill + seeded ages across all eight shades, asserted at every (token, shade) group
+      the roster can produce (55 — only 5 of 20 organisms are aging-enabled, so "~160" was never
+      reachable). `repaint-decision` 0.047 → ~0.07 ms; frame 5.6–5.8 ms, 65–67% headroom
+      [apps/web/lib/canvas/repaintDecision.bench.ts]
+- [x] [Review][Patch] `turbo run bench` ran the two summed benches concurrently; now
+      `--concurrency=1` [package.json, turbo.json, .github/workflows/ci.yml]
+- [x] [Review][Patch] Gate script: report-shape guard, duplicate-task-name guard, and
+      `GATED_TASKS`/`TRACKED_TASKS ⊆ required` asserted by name (was an accidental `TypeError`)
+      [scripts/check-bench-budget.mjs]
+- [x] [Review][Patch] `COLS`/`ROWS` hardcoded while `BENCHMARK_GATED_PRESET` was read by nothing;
+      the bench now derives them from the preset table and names its tasks by the gated label
+      [repaintDecision.bench.ts]
+- [x] [Review][Patch] `BENCH_OPTIONS` duplicated across the two summed benches → shared
+      `BENCHMARK_RUN_OPTIONS` in `@gol/test-utils`, pinned by test [benchmarkRoster.ts, both benches]
+- [x] [Review][Patch] `distinctiveRule` shared `range` tuples with the deep-frozen template →
+      typed `cloneCondition`; test compares against the template [benchmarkRoster.ts]
+- [x] [Review][Patch] Preset label ↔ dims and the gated label's presence pinned by test
+      [benchmarkRoster.test.ts]
+- [x] [Review][Patch] `BENCHMARK_COLOR_TOKENS` claimed a guard that did not cover it →
+      `paletteTokenUsage.test.ts` now checks the benchmark roster's 20 tokens are real and distinct
+- [x] [Review][Patch] `*.bench.tsx` was outside both the web coverage exclude and the ESLint
+      exemption [apps/web/vitest.config.mts, eslint.config.mjs]
+- [x] [Review][Patch] Phase-3 diagnostic mutates its input across iterations — documented as
+      diagnostic-only with the reason a pristine copy is not restored [threePhaseStep.bench.ts]
+- [x] [Review][Patch] Report said "the engine ships unchanged from `05827c3`" (false after FD7) and
+      contradicted itself on A.4 (6.71 vs 6 ms is ~12%, not "a few percent") — both fixed
+      [performance-baseline-validation.md]
+- [x] [Review][Patch] Stale text after FD7: Completion Notes "gate is currently red", File List
+      "one blocking", Task 6 / "What NOT to build" vs the authorized M12 amendment, deferred-work's
+      3.5 closure quoting pre-FD7 numbers unlabelled, its 2.10 closure claiming
+      `<OrganismSearchAdd>` "does not exist" (it is `OrganismRoster.tsx:302`), project-context's
+      old six-stage CI list and "5.9 of 6.7 = 98%" arithmetic
+- [x] [Review][Patch] Three code comments quoted repaint numbers different from the report they
+      cite — now aligned to the report, taken on the corrected fixture
+      [colourStateGroups.ts, gridRenderer.ts, OrganismRoster.tsx]
+- [x] [Review][Defer] `bench-results.json` freshness (same class as the bundle entry) — deferred,
+      pre-existing class
+- [x] [Review][Defer] Gate reads `mean`; `p99`/`max` discarded — deferred, mechanism question
+- [x] [Review][Defer] `createBenchmarkFill` argument validation — deferred, caller-bug class
+- [x] [Review][Defer] apps/web `benchmark.exclude` — deferred, no such file exists
+- [x] [Review][Defer] `repaint-dirty-path` is an upper bound — labelled, live-frame number is 3.8's
+
+Dismissed as noise (11): "A18 Pro" (confirmed via `sysctl`); Vitest 4's default
+`coverage.exclude` is `[]`, so nothing was replaced; a per-rule guard inside `compileCondition`
+(superseded by the read-once fix; would add an unreachable branch under a per-file 90% gate);
+`Exclude<Action, 'die'>` (recorded Sidiar decision); the gated repaint variant (deliberate,
+documented); spread wording; the hardcoded "~98%" in the failure string; test-title nits;
+`agingEnabled` redundancy; RFC-008 Decision 9's pipeline diagram (flagged below, no amendment);
+project-context carrying a machine number (the story mandated that update).
+
+Verification after patches: `typecheck` → `lint` (1 pre-existing warning) → `format:check` →
+`spec:check` → `boundary:check` → `test:coverage` (domain 99, simulation 370, persistence 82,
+test-utils 89, web 935; every threshold met) → `bench` (`0 cached`, serialized) → `bench:check`
+all exit 0. The gate was also seen to refuse the empty report a FAILED bench suite writes
+("contains zero benchmark results" → exit 1) — a real-failure mutation check on top of the six
+synthetic ones above.
 
 ## Dev Notes
 
@@ -456,7 +542,10 @@ Given the numbers above, plan on this branch being taken.
   RFC-002) — if the baseline misses, FD6 is the path, not a worker.
 - ❌ No `apps/web` coverage gate (RFC-008 Decision 3 / Alt 5 — the counter-metric is deliberate).
 - ❌ No bundle-gate rework (its own story).
-- ❌ No amendment to `architecture.md`, RFC-004 or RFC-008. Flag; Sidiar decides.
+- ❌ No amendment to `architecture.md`, RFC-004 or RFC-008. Flag; Sidiar decides. *(Superseded
+  for M12 only, by Sidiar's explicit mid-run authorization of FD7 — recorded in the Dev Agent
+  Record. RFC-004 and RFC-008 were not amended; see the Review Findings for the open question on
+  RFC-004.)*
 - ❌ No new runtime dependency. `vitest bench` ships with the installed Vitest; tinybench comes with
   it. Do **not** add `benchmark.js`, `mitata` or a stats package.
 
@@ -686,8 +775,8 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
   graph. Recorded in `deferred-work.md` because widening a boundary rule is a deliberate act.
 - **`docs/project-context.md` updated** — the Testing Rules block said the gate *"flips on in Story
   3.7"* and that `passWithNoTests` keeps empty packages green; both stopped being true. It now also
-  carries the performance gate, the fixture-is-a-gate-parameter warning, and 🔴 the fact that the
-  gate is currently red.
+  carries the performance gate, the fixture-is-a-gate-parameter warning, and the measured margin
+  (it said the gate was red for the span between the FD6 halt and FD7 landing; it no longer does).
 - **One engine behaviour change ships, and only one:** FD7's condition compilation in
   `compileEvaluators.ts`. Both FD6 optimizations were reverted and both M12 guards are intact, so
   every other phase/engine/session source differs from `05827c3` in comments only.
@@ -715,6 +804,15 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
   recorded; the operator guards confirmed at 0 ± 0.3 ms). **M12 amended** in `architecture.md` on
   Sidiar's explicit authorization — the corrected cost *and* the guards' new placement. Neither guard
   was removed.
+
+### Spec-conflict flags raised by the code review (2026-09-10)
+
+- **🟡 RFC-004 §1.4 / §2.3 / §3.5 / Risk 2 vs. the shipped hot path** — see the `[Decision]` item
+  under Review Findings. Not amended; Sidiar's call.
+- **⚪ RFC-008 Decision 9's pipeline diagram** still reads `… ─► build (next, bundle-budget check)
+  ─► e2e …` and omits the `bench → bench:check` stages Decision 7 implies. Not a contradiction —
+  Decision 7 already names the harness — and not amended (What NOT to build); recorded so the next
+  RFC-008 touch folds it in.
 
 ### File List
 
@@ -755,9 +853,28 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 - `apps/web/lib/canvas/colourStateGroups.ts`, `apps/web/lib/canvas/gridRenderer.ts`,
   `apps/web/components/battle/editor/OrganismRoster.tsx` — **comments only**, same
 - `docs/implementation-artifacts/deferred-work.md` — five entries closed with numbers, one
-  reassigned, five new (one blocking)
+  reassigned, five new (the one that was blocking is resolved by FD7)
 - `docs/project-context.md` — Testing Rules rewritten; CI stage order updated
 - `docs/implementation-artifacts/sprint-status.yaml` — status
+
+**Added or changed by the code review (own commit, 2026-09-10)**
+
+- `packages/simulation/src/session/compileEvaluators.ts` — rules read once per organism; the
+  validated reference is the compiled one; M15 JSDoc re-attached
+- `packages/simulation/src/session/compileEvaluators.test.ts` — three FD7-boundary pins
+- `packages/simulation/src/strategy/threePhaseStep.bench.ts` — shared run options; Phase-3 note
+- `packages/test-utils/src/benchmarkRoster.ts`, `benchmarkRoster.test.ts`, `index.ts` —
+  `BENCHMARK_RUN_OPTIONS`, typed `cloneCondition`, preset/tuple/option pins
+- `apps/web/lib/canvas/repaintDecision.bench.ts` — non-collapsing fixture, preset-derived
+  dimensions, group-count assertion, upper-bound label
+- `apps/web/lib/palette/paletteTokenUsage.test.ts` — benchmark roster tokens guarded
+- `apps/web/vitest.config.mts`, `eslint.config.mjs` — `*.bench.{ts,tsx}`
+- `scripts/check-bench-budget.mjs` — shape, duplicate-name and gated⊆required guards
+- `package.json`, `turbo.json`, `.github/workflows/ci.yml` — `bench --concurrency=1`
+- `apps/web/lib/canvas/colourStateGroups.ts`, `gridRenderer.ts`,
+  `components/battle/editor/OrganismRoster.tsx` — comment numbers aligned to the report
+- `docs/implementation-artifacts/performance-baseline-validation.md`, `deferred-work.md`,
+  `docs/project-context.md`, this file — corrections above
 
 ### Change Log
 
@@ -765,6 +882,7 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 |---|---|
 | 2026-09-10 | `vitest bench` harness across all four presets × 20 organisms + the repaint-decision bench; `scripts/check-bench-budget.mjs` with the derived 16.667 ms budget and a vacuous-result guard; `bench` / `bench:check` wired into `turbo.json`, `npm run ci` and `ci.yml`; coverage gates flipped on (90% per-file on domain/simulation, 80% aggregate on persistence/test-utils, none on apps/web) with `coverage.include` landing first and `passWithNoTests` removed everywhere; M12 re-measured; seven deferred perf items closed with numbers; `performance-baseline-validation.md` written. |
 | 2026-09-10 | ⛔ **HALT at FD6's terminal branch** — `npm run ci` red on `bench:check` at 18.749 ms vs 16.667 ms after both permitted optimizations measured at ~0 and were reverted. One recommendation recorded; awaiting Sidiar. |
+| 2026-09-10 | 🔍 **Code review** (Fable): 15 patches landed in their own commit — the load-bearing ones are `compileSession` reading `survivalRules` once (FD7's safety property made structural), the collapsed repaint fixture replaced (7-organism still life → pinned 30% fill, 55 groups asserted), and the two summed benches serialized. Post-review frame **5.6–5.8 ms, 65–67% headroom**. One `decision-needed` left for Sidiar: RFC-004 still describes the pre-FD7 hot path. Status stays `review`. |
 | 2026-09-10 | ✅ **FD7 authorized by Sidiar and landed** — conditions compiled to concrete `(cell) => boolean` predicates at session time; ~2.3× on the assembled cycle (12.2–14.4 → 5.7–6.1 ms), gated frame 18.749 → **6.760 ms** with 59.4% headroom. `architecture.md` **M12 amended** (corrected cost + new guard placement). 367 simulation tests and every golden green and unedited. `npm run ci` fully green. |
 
 Dev Model: opus   # establishes the perf-gate mechanism, budget derivation and coverage-include shape that 3.8/3.9 benches and the pending bundle-ratchet story all inherit — and the measured baseline likely misses NFR-1.1, so the story is a judgment call, not wiring.

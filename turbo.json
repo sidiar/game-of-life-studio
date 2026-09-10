@@ -43,6 +43,14 @@
     // happened to Story 3.7's own coverage probe while the story was being
     // written. test:coverage stays cached because it is deterministic; a wall
     // clock is not.
+    //
+    // ⚠️ AND NEVER IN PARALLEL: the root `bench` script passes `--concurrency=1`
+    // (Story 3.7 code review). Turbo schedules independent tasks concurrently
+    // by default, which would run @gol/simulation's engine bench and apps/web's
+    // repaint bench on the same cores at the same time — and `bench:check` SUMS
+    // the two. A number taken under a sibling's CPU contention is not the frame
+    // NFR-1.1 constrains, least of all on a 4-vCPU runner. (Turbo has no
+    // per-task concurrency knob, so the flag lives on the script.)
     "bench": {
       "cache": false
     }

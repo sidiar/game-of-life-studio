@@ -32,6 +32,7 @@ than as a vacuously passing budget.
 | Vitest | 4.1.10 (`vitest bench`, tinybench) |
 | Repaint | **not rasterized** — see "What the repaint number is" below |
 | Tree | branch `story/3-7-performance-harness-coverage-gate-flip`, baseline commit `05827c3` |
+| Bench scheduling | **serial** — `npm run bench` is `turbo run bench --concurrency=1` (code review, 2026-09-10); the two workspaces' benches never share the cores |
 
 **How much of this is hardware: most of it.** Every absolute number below is a property of this
 laptop, and the numbers move by ~15% depending on what else the machine has just been doing.
@@ -75,6 +76,15 @@ repaint to measure**, and this document does not pretend otherwise:
 - So the measured "repaint" is the renderer's **decision logic**: `groupByColourState`,
   `colourStateAt`, `selectDirtyCells` and the `refToFillGroup` LUT — what RFC-008 Decision 6 says to
   test, and explicitly **not** rasterization.
+- ⚠️ **The repaint fixture was corrected by this story's code review (2026-09-10).** The first
+  version stepped the seeded fill 50 cycles "so the age ramp is live"; measured, the 20 rule sets
+  collapse into a **7-organism still life by cycle 10** (7 groups, 502 occupied cells, static
+  through cycle 200), so the gated repaint number was taken on an 8%-occupied frozen dish. The
+  fixture is now the pinned 30% fill with every occupied cell's age drawn from the seeded RNG
+  across all eight shades — **1,777 occupied cells, 55 colour-state groups**, which is every
+  (token, shade) pair this roster can produce (5 of its 20 organisms are aging-enabled; the rest
+  fold to one shade each, FR-2.4) and is asserted in the bench. The repaint-decision number rose
+  from 0.047 to ~0.07 ms as a result; every repaint figure below is from the corrected fixture.
 - A real repaint number needs a real browser. Rejected for this story: the `e2e` job is already the
   slow one and RFC-008 Risk 6 argues against browser timing on shared runners.
 
@@ -122,6 +132,9 @@ blocks, before and after, because the before-numbers are what justified the chan
 | budget (1000 / 60) | 16.667 |
 | **headroom** | **9.907 ms (59.4%)** |
 
+**After the code review** (fixture corrected, benches serialized, two runs): `step` 5.49 / 5.74 ms,
+`repaint-decision` 0.071 / 0.072 ms, **frame 5.562 / 5.816 ms — 65-67% headroom**.
+
 **Before FD7**, four consecutive standalone `npm run bench` runs, in order, on an otherwise idle
 machine — plus the run that halted the story:
 
@@ -151,8 +164,9 @@ story, and what FD7 fixed.
 
 Cost is ~linear in cell count, as Decision A.4 predicts. Worth noting for Story 3.16: after FD7 the
 150×90 preset (13.3 ms) also fits inside a 16.667 ms frame, and only 200×120 does not — which is
-what Decision A.4's graceful degradation was always for. **The constant is still not what A.4
-predicts, but it is now optimistic rather than pessimistic** — see the spec-conflict flag below.
+what Decision A.4's graceful degradation was always for. **The constant now sits within ~12% of
+A.4's 6 ms at 6,000 cells and within ~1% of its 24 ms at 24,000** — close enough that the
+spec-conflict flag below is withdrawn.
 
 ### The phase split at the gated preset (diagnostic, never gated)
 
@@ -170,13 +184,14 @@ confirmation, not search.
 
 | task | ms | note |
 |---|---|---|
-| `repaint-decision` (`groupByColourState`) | 0.044 – 0.048 | the gated repaint half |
-| `repaint-dirty-path` (mark all 6,000 + `selectDirtyCells`) | 0.42 – 0.52 | ~10× the above |
-| `colour-state-reprime` (`drawFull`'s O(cells) sweep) | 0.060 – 0.073 | |
-| `ref-to-fill-group-build` | 0.005 – 0.007 | **once per battle**, not per frame |
-| `library-filter 1000 organisms` | 0.033 – 0.039 | `<OrganismRoster>`'s per-render scan |
+| `repaint-decision` (`groupByColourState`) | 0.071 – 0.072 | the gated repaint half (was 0.044 – 0.048 on the collapsed fixture) |
+| `repaint-dirty-path` (mark all 6,000 + `selectDirtyCells`) | 0.70 – 0.75 | **upper bound** — every occupied cell reads as changed; ~10× the above |
+| `colour-state-reprime` (`drawFull`'s O(cells) sweep) | 0.076 – 0.083 | |
+| `ref-to-fill-group-build` | 0.003 | **once per battle**, not per frame |
+| `library-filter 1000 organisms` | 0.022 – 0.023 | `<OrganismSearchAdd>`'s per-render scan |
 
-**The whole repaint decision is ~0.3% of the frame.** The renderer's brain is not where the budget
+Two serialized runs on the corrected fixture (2026-09-10, code review). **The whole repaint
+decision is ~0.4% of the frame.** The renderer's brain is not where the budget
 goes, and no render-side redesign in Epic 3 can buy back a meaningful fraction of it.
 
 ---
@@ -185,8 +200,9 @@ goes, and no render-side redesign in Epic 3 can buy back a meaningful fraction o
 
 Every change below was implemented, measured against this harness in an **interleaved A/B** (the
 machine drifts under sustained load, so adjacent pairs are compared rather than absolute runs), and
-then **reverted**. The engine ships unchanged from `05827c3`; `npm test` was green and the Conway
-goldens, conflict goldens and property tests passed **without edits** at every step.
+then **reverted**. Nothing in this table ships; the ONE engine change that does is FD7 (next
+section), which landed after this table was taken. `npm test` was green and the Conway goldens,
+conflict goldens and property tests passed **without edits** at every step, FD7 included.
 
 | change | measured delta at 100×60 × 20 | verdict |
 |---|---|---|
@@ -275,7 +291,8 @@ story halted, and it halted rather than widening anything: the budget stayed `10
 stayed hard, the fixture stayed pinned, 100×60 stayed the gated preset, and `step()` was never gated
 alone.
 
-**After FD7 the frame is 6.760 ms against 16.667 ms — 9.907 ms of headroom, 59.4% of the frame.**
+**After FD7 the frame is 6.760 ms against 16.667 ms — 9.907 ms of headroom, 59.4% of the frame**
+(5.56–5.82 ms and 65–67% after the code review's fixture correction and bench serialization).
 That is the *generous* margin RFC-008 **Risk 6** asks for, and it is what makes the absolute-ms gate
 defensible on hardware this story cannot measure:
 
@@ -297,8 +314,8 @@ local-green-≠-CI-green rule).
 
 - **✅ WITHDRAWN — `architecture.md` Decision A.4's performance model.** Raised mid-story: A.4 states
   *"~6 ms at 6,000 cells → ~24 ms at 24,000"* and the pre-FD7 engine measured ~14–16 ms and
-  ~55–61 ms. **After FD7 the same two points measure 6.71 ms and 23.87 ms** — within a few percent of
-  A.4's figures. A.4 was right about the destination; the engine had not arrived yet. No amendment
+  ~55–61 ms. **After FD7 the same two points measure 6.71 ms and 23.87 ms** — ~12% over and ~1% under
+  A.4's figures respectively, against a run-to-run spread of ~10%. A.4 was right about the destination; the engine had not arrived yet. No amendment
   proposed, and none needed. ⚠️ For **Story 3.16**: at these numbers 150×90 (13.3 ms) also fits
   inside a frame, and only 200×120 does not — which is what A.4's graceful degradation was for.
 - **🟡 `epics.md`'s AC for this story says the benchmark measures "`step()` + repaint".** Off-browser
@@ -389,15 +406,15 @@ A gate nobody has seen fail is not known to work.
 |---|---|---|
 | Per-pair `CellSubject` allocation in Phase 2 (3.5 review) | 0 ms | **Closed** — measured, not worth it; change reverted |
 | Phase 1's scan for organisms with no `die` rule (3.5 review) | ≤0.1 ms of a 14.5 ms cycle | **Closed** — measured, not worth a Story 3.4 surface change |
-| `groupByColourState`'s per-frame allocation profile (1.8 review) | 0.044–0.048 ms, ~0.3% of the frame | **Closed** — no change needed |
-| `drawFull`'s O(cells) colour-state re-prime (2.3 review) | 0.060–0.073 ms | **Closed** — affordable even at cycle rate |
-| …and confirm Story 3.8's loop calls `draw`, not `drawFull` | decision cost: `drawFull` ~0.11 ms vs dirty-path ~0.47 ms | **Answered, with a caveat** — see below |
+| `groupByColourState`'s per-frame allocation profile (1.8 review) | ~0.07 ms, ~0.4% of the frame | **Closed** — no change needed |
+| `drawFull`'s O(cells) colour-state re-prime (2.3 review) | ~0.08 ms | **Closed** — affordable even at cycle rate |
+| …and confirm Story 3.8's loop calls `draw`, not `drawFull` | decision cost: `drawFull` ~0.15 ms vs dirty-path upper bound ~0.7 ms | **Answered, with a caveat** — see below |
 | The dirty path's four-bar grid-line restoration (2.3 review) | **4 `fillRect`s per repainted cell instead of 2**, exactly | **Not measurable here** — it is pure rasterization and jsdom has no canvas. Needs a browser (Story 3.9 or Playwright). |
-| `<OrganismRoster>`'s unmemoised library scan (2.10 review) | 0.033–0.039 ms for a 1,000-organism library | **Closed** — no `useMemo` warranted |
+| `<OrganismSearchAdd>`'s unmemoised library scan (2.10 review) | ~0.02–0.04 ms for a 1,000-organism library | **Closed** — no `useMemo` warranted |
 | Four byte-identical `vitest.config.ts` files (1.2 review) | — | **Closed** by FD3 above |
 
 **On `draw` vs `drawFull` for Story 3.8.** On *decision* cost alone `drawFull` is cheaper
-(0.11 ms) than marking all 6,000 cells and diffing them (0.47 ms), because `markDirty` allocates a
+(~0.15 ms) than marking all 6,000 cells and diffing them at the upper bound (~0.7 ms), because `markDirty` allocates a
 coordinate per cell and routes it through a `Set`. **The recommendation is still `draw`**, for the
 half this harness cannot see: `draw` touches the canvas only for cells whose colour state actually
 changed, while `drawFull` repaints the entire background, every cell and every grid line on every

@@ -34,6 +34,15 @@ export interface CompilableOrganism {
   readonly survivalRules: SurvivalRules;
 }
 
+/** A rule or condition reduced to the one question the hot loop asks it (FD7). */
+type CellPredicate = (cell: CellSubject) => boolean;
+
+/** A compiled Phase-2 rule: its predicate, and the action it yields when that predicate holds. */
+interface CompiledBirthSurvivalRule {
+  readonly matches: CellPredicate;
+  readonly action: Action;
+}
+
 /**
  * The two phase-partitioned evaluators for one organism (AR-18, RFC-004 §2.3/§3.5).
  *
@@ -50,15 +59,6 @@ export interface CompilableOrganism {
  * act — the M14 precedent); minted as M15 on Sidiar's explicit authorization, 2026-09-10. §3.1's
  * `SimulationDeps` now reads `evaluatorsByRef`, so there is no `deps.resolveAction` to consume.
  */
-/** A rule or condition reduced to the one question the hot loop asks it (FD7). */
-type CellPredicate = (cell: CellSubject) => boolean;
-
-/** A compiled Phase-2 rule: its predicate, and the action it yields when that predicate holds. */
-interface CompiledBirthSurvivalRule {
-  readonly matches: CellPredicate;
-  readonly action: Action;
-}
-
 export interface OrganismEvaluators {
   // Phase 1. `true` when any `die` rule fires — a boolean, not an Action, because "which die rule
   // won" changes nothing downstream.
@@ -192,12 +192,23 @@ function compileRule(rule: SurvivalRule): CellPredicate {
   };
 }
 
+/**
+ * ⚠️ Takes the RULE LIST, not the organism (Story 3.7 code review). `compileSession` reads
+ * `organism.survivalRules` exactly once and hands this function the same array reference the
+ * validation sweep saw. Re-reading the property here would let an accessor-backed organism — a
+ * getter or a Proxy, the very shape `compileEvaluators.test.ts` uses to count reads — return a
+ * DIFFERENT array on the compile read than on the validated read, and the compiled closures below
+ * would then close over a selector or predicate the sweep never checked: `undefined`, called per
+ * cell. FD7's safety property ("the checks moved, they did not vanish") is only a property if the
+ * validated array and the compiled array are the same object, and this signature is what makes
+ * that structural rather than assumed.
+ */
 function compileOrganism(
-  organism: CompilableOrganism,
+  rules: SurvivalRules,
   refById: ReadonlyMap<string, OrganismRef>,
   cache: Map<string, OrganismEvaluators>,
 ): OrganismEvaluators {
-  const key = cacheKeyFor(organism.survivalRules);
+  const key = cacheKeyFor(rules);
   const hit = cache.get(key);
   // Two organisms with byte-identical rule lists in the SAME session may share one compiled pair:
   // the closures below bake in `refById`, and within a session that map is the same one. Across
@@ -210,7 +221,7 @@ function compileOrganism(
   // optimize"; that is the single thing keeping the engine reusable (AR-16, Trap 7).
   const death: CellPredicate[] = [];
   const birthSurvival: CompiledBirthSurvivalRule[] = [];
-  for (const rule of organism.survivalRules) {
+  for (const rule of rules) {
     const interned = internRule(rule, refById);
     // Persisted order is preserved verbatim WITHIN each partition (FR-2.6): a partition is a
     // filter, never a sort.
@@ -300,21 +311,32 @@ export function compileSession(organisms: readonly CompilableOrganism[]): Compil
   // only useful once the organism's own id has been proven a real one.
   const refById = internOrganismIds(organisms.map((organism) => organism.id));
 
+  // ⚠️ `survivalRules` is read ONCE per organism, here, and every later step — the validation
+  // sweep, the compile, the MAX_RELEVANT_AGE scan — works on this same array reference. FD7 (Story
+  // 3.7) removed the per-cell guards from the compiled path on the strength of the sweep below, and
+  // that argument holds only for the array the sweep actually saw: an organism whose
+  // `survivalRules` is a getter or a Proxy could otherwise answer the compile read with a list the
+  // sweep never validated. Snapshotting the reference closes that gap structurally; the read
+  // count is pinned by compileEvaluators.test.ts.
+  const rulesByOrganism = organisms.map((organism) => organism.survivalRules);
+
   // Then the rules — over the WHOLE roster before any compile: a diagnostic that fires after half
   // the evaluators exist is not "before the first cycle" in any useful sense (AC7/AC8, M12).
-  for (const organism of organisms) validateSurvivalRules(organism.id, organism.survivalRules);
+  organisms.forEach((organism, index) =>
+    validateSurvivalRules(organism.id, rulesByOrganism[index]),
+  );
 
   const cache = new Map<string, OrganismEvaluators>();
 
   // Slot 0 is the reserved EMPTY value (M14) — `null`, deliberately placed, never an organism.
   const evaluatorsByRef: (OrganismEvaluators | null)[] = [null];
-  for (const organism of organisms) {
-    evaluatorsByRef.push(compileOrganism(organism, refById, cache));
+  for (const rules of rulesByOrganism) {
+    evaluatorsByRef.push(compileOrganism(rules, refById, cache));
   }
 
   return {
     evaluatorsByRef,
     refById,
-    maxRelevantAge: maxRelevantAge(organisms.map((organism) => organism.survivalRules)),
+    maxRelevantAge: maxRelevantAge(rulesByOrganism),
   };
 }

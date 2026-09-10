@@ -24,7 +24,7 @@
     "test:coverage": "turbo run test:coverage",
     "e2e": "turbo run e2e",
     "bundle:check": "node scripts/check-bundle-size.mjs",
-    "bench": "turbo run bench",
+    "bench": "turbo run bench --concurrency=1",
     "bench:check": "node scripts/check-bench-budget.mjs",
     "spec:check": "node scripts/check-spec-ids.mjs",
     "boundary:check": "node scripts/check-engine-boundary.mjs",

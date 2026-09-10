@@ -14,72 +14,73 @@
 // stopped running a red build rather than a green one.
 import {
   BENCHMARK_FILL_PERMILLE,
+  BENCHMARK_GATED_PRESET,
+  BENCHMARK_PRESETS,
   BENCHMARK_ROSTER_SIZE,
+  BENCHMARK_RUN_OPTIONS,
   createBenchmarkFill,
   createBenchmarkRoster,
   createSeededRng,
   FIXED_SEED,
 } from '@gol/test-utils';
 import type { Organism } from '@gol/domain';
-import {
-  compileSession,
-  createGridBuffers,
-  createRng,
-  gridFromDense,
-  swapGridBuffers,
-  threePhaseStep,
-} from '@gol/simulation';
+import { gridFromDense } from '@gol/simulation';
 import { bench, describe } from 'vitest';
 import { buildRefToFillGroup } from './refToFillGroup';
 import { colourStateAt, groupByColourState } from './colourStateGroups';
 import { markDirtyCells, selectDirtyCells } from './dirtyCells';
 import type { RenderableGrid } from './renderableGrid';
 
-// Same shape and options as packages/simulation's engine bench, and for the same reason: `time: 0`
-// with an exact iteration count makes the amount of work a fixed property of the fixture instead of
-// a function of how fast the machine is (AC2 — the cycle count is pinned, not discovered).
-const BENCH_OPTIONS = {
-  time: 0,
-  iterations: 100,
-  warmupTime: 0,
-  warmupIterations: 25,
-} as const;
-
 // The gate sums this file's `repaint-decision` against the engine bench's `step` at the SAME
-// preset, so both must describe one battle. 100x60 is NFR-1.1's baseline and the only gated size.
-const COLS = 100;
-const ROWS = 60;
+// preset, so both must describe one battle. The dimensions come from the fixture's own preset
+// table rather than two literals (Decision A: grid dimensions are parameters, never constants) —
+// and the gated label is the one `scripts/check-bench-budget.mjs` names, so the constant that
+// claims to be "the only gated preset" is the constant this bench actually runs.
+const GATED = BENCHMARK_PRESETS.find((preset) => preset.label === BENCHMARK_GATED_PRESET);
+if (GATED === undefined) {
+  throw new Error(`BENCHMARK_GATED_PRESET "${BENCHMARK_GATED_PRESET}" is not in BENCHMARK_PRESETS`);
+}
+const COLS = GATED.cols;
+const ROWS = GATED.rows;
+
+// Decision B.2 batches by `(colorToken, min(age, 7))` — eight age shades per token (AR-22 bounds
+// the ramp at 7 cycles; `displayColor.ts`'s SHADE_COUNT and `colourStateGroups.ts`'s `% 8` are the
+// same number) — but ONLY for an organism with `agingEnabled` (FR-2.4): every other organism's
+// cells fold into a single shade whatever their age. So the most groups a roster can produce is
+// `sum(agingEnabled ? 8 : 1)`, not tokens x 8: for this roster (5 aging-enabled of 20) that is 55,
+// and the "~160 groups a live dish reaches" the first version of this file assumed was never
+// reachable with it. `maxGroupsFor` states the real ceiling; the bench asserts the fixture hits it.
+const AGE_SHADES = 8;
+function maxGroupsFor(roster: readonly Organism[]): number {
+  return roster.reduce((groups, organism) => groups + (organism.agingEnabled ? AGE_SHADES : 1), 0);
+}
 
 /**
- * A grid that has actually been RUN, not a freshly seeded one.
+ * The repaint fixture: the pinned 30% seeded fill, with the AGE of every occupied cell drawn from
+ * the same seeded RNG across all eight shades.
  *
- * ⚠️ Ages matter here in a way they do not on the engine side. Decision B.2 batches by
- * `(colorToken, min(age, 7))`, so an all-zero age buffer collapses every organism to one shade and
- * `groupByColourState` builds 20 groups instead of the ~160 a live dish reaches. Stepping the
- * fixture forward is what makes the measured group count the real one.
+ * ⚠️ NOT a grid the engine has run, and that is deliberate (Story 3.7 code review). The first
+ * version of this bench stepped the fixture 50 cycles "so the age ramp is live and the group count
+ * is the real one" — measured, the 20 rule sets collapse into a 7-organism still life by cycle 10
+ * (7 groups, 502 occupied cells, static through cycle 200), so the gated number was being taken on
+ * an 8%-occupied frozen dish while its label claimed ~160 live groups. The repaint decision's cost
+ * is driven by occupied-cell count and group count, and both must be PINNED gate parameters
+ * (AC2), not whatever the engine's dynamics happen to leave standing. So this fixture states them:
+ * the pinned fill, and every (token, shade) group this roster can produce populated (55 — see
+ * `maxGroupsFor`) — the batching upper bound for this roster at this density, which is what a
+ * "worst frame" derivation (Decision D.2/D.3) wants.
  */
-function evolvedGrid(roster: readonly Organism[], cycles: number): RenderableGrid {
-  const deps = {
-    ...compileSession(roster),
-    organisms: roster,
-    rng: createRng(FIXED_SEED),
-  };
-  let buffers = createGridBuffers(
-    gridFromDense(
-      createBenchmarkFill(
-        COLS,
-        ROWS,
-        BENCHMARK_ROSTER_SIZE,
-        BENCHMARK_FILL_PERMILLE,
-        createSeededRng(FIXED_SEED),
-      ),
-    ),
+function repaintFixture(roster: readonly Organism[]): RenderableGrid {
+  const rng = createSeededRng(FIXED_SEED);
+  const grid = gridFromDense(
+    createBenchmarkFill(COLS, ROWS, roster.length, BENCHMARK_FILL_PERMILLE, rng),
   );
-  for (let cycle = 0; cycle < cycles; cycle++) {
-    threePhaseStep(buffers.front, buffers.back, deps);
-    buffers = swapGridBuffers(buffers);
+  // `age` is a `Uint16Array` behind a readonly PROPERTY — the contents are writable, and this
+  // grid is this bench's own, never handed to the engine.
+  for (let index = 0; index < grid.occupant.length; index++) {
+    if (grid.occupant[index] !== 0) grid.age[index] = rng.int(AGE_SHADES);
   }
-  return buffers.front;
+  return grid;
 }
 
 describe('repaint decision — the measurable half of the NFR-1.1 frame', () => {
@@ -88,10 +89,21 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
     roster.map((organism) => organism.id),
     new Map(roster.map((organism) => [organism.id, organism])),
   );
-  // 50 cycles: enough for the age ramp to saturate (AR-22 bounds the shade ramp at 7 cycles) and
-  // for the initial random fill to settle into whatever these 20 rule sets produce.
-  const grid = evolvedGrid(roster, 50);
+  const grid = repaintFixture(roster);
   const cellCount = COLS * ROWS;
+
+  // The fixture's shape, asserted rather than assumed: with a seeded fill this is deterministic,
+  // and a roster or fill change that collapses the group count must fail the bench (which the
+  // gate's vacuous-result guard turns into a red build) instead of quietly measuring less.
+  const groupCount = groupByColourState(grid, lut).length;
+  const expectedGroups = maxGroupsFor(roster);
+  if (groupCount !== expectedGroups) {
+    throw new Error(
+      `repaint fixture has ${groupCount} colour-state groups, expected ${expectedGroups} ` +
+        `(every (token, shade) pair this roster can produce — ${AGE_SHADES} shades per ` +
+        `aging-enabled organism, one otherwise)`,
+    );
+  }
 
   // Every cell as a dirty candidate, built once — Story 3.8's loop would rebuild this per frame,
   // but the allocation of the coordinate list is that story's cost to shape, not this one's.
@@ -109,11 +121,11 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
    * meaning the same thing after 3.8 lands. Both alternatives are measured below.
    */
   bench(
-    `repaint-decision 100x60 x${BENCHMARK_ROSTER_SIZE}`,
+    `repaint-decision ${BENCHMARK_GATED_PRESET} x${BENCHMARK_ROSTER_SIZE}`,
     () => {
       groupByColourState(grid, lut);
     },
-    BENCH_OPTIONS,
+    BENCHMARK_RUN_OPTIONS,
   );
 
   /**
@@ -121,16 +133,21 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
    * playback frame is, since a step can change any cell and the engine publishes no change list.
    * deferred-work.md (2.3 review) asks Story 3.7 to confirm Story 3.8's loop calls `draw` rather
    * than `drawFull`; this is the number that answers it, against the one above.
+   *
+   * ⚠️ AN UPPER BOUND, labelled as one (Story 3.7 code review): the baseline is zeroed per
+   * iteration, so every occupied cell reads as changed — the most the diff can ever report — and
+   * the `Uint16Array` allocation is counted although the real renderer allocates it once per grid
+   * shape. A live frame changes a fraction of the cells and diffs against the previous frame.
    */
   bench(
-    `repaint-dirty-path 100x60 x${BENCHMARK_ROSTER_SIZE}`,
+    `repaint-dirty-path ${BENCHMARK_GATED_PRESET} x${BENCHMARK_ROSTER_SIZE}`,
     () => {
       const marks = new Set<number>();
       markDirtyCells(marks, { cols: COLS, rows: ROWS }, allCells);
       const baseline = new Uint16Array(cellCount);
       selectDirtyCells(marks, grid, lut, baseline);
     },
-    BENCH_OPTIONS,
+    BENCHMARK_RUN_OPTIONS,
   );
 
   /**
@@ -141,14 +158,14 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
    * loop reached for `drawFull`.
    */
   bench(
-    `colour-state-reprime 100x60 x${BENCHMARK_ROSTER_SIZE}`,
+    `colour-state-reprime ${BENCHMARK_GATED_PRESET} x${BENCHMARK_ROSTER_SIZE}`,
     () => {
       const baseline = new Uint16Array(cellCount);
       for (let index = 0; index < cellCount; index++) {
         baseline[index] = colourStateAt(grid, lut, index);
       }
     },
-    BENCH_OPTIONS,
+    BENCHMARK_RUN_OPTIONS,
   );
 
   /**
@@ -164,18 +181,18 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
         new Map(roster.map((organism) => [organism.id, organism])),
       );
     },
-    BENCH_OPTIONS,
+    BENCHMARK_RUN_OPTIONS,
   );
 });
 
 /**
- * `<OrganismRoster>`'s unmemoised search filter (deferred-work.md, 2.10 review) — `library.filter(
+ * `<OrganismSearchAdd>`'s unmemoised search filter (deferred-work.md, 2.10 review) — `library.filter(
  * (organism) => organism.name.toLowerCase().includes(query))` on every render, over the UNCAPPED
- * workspace library (Decision G.3/M6). The predicate is copied verbatim from `OrganismRoster.tsx`;
- * the library size is not, because there is no cap to copy — 1,000 is far past any realistic
- * workspace and is the point of the measurement.
+ * workspace library (Decision G.3/M6). The predicate is copied verbatim from `OrganismRoster.tsx`,
+ * where that component lives; the library size is not, because there is no cap to copy — 1,000 is
+ * far past any realistic workspace and is the point of the measurement.
  */
-describe('OrganismRoster search filter — the uncapped per-render library scan', () => {
+describe('OrganismSearchAdd search filter — the uncapped per-render library scan', () => {
   const library: Organism[] = Array.from({ length: 1000 }, (_, index) => ({
     ...createBenchmarkRoster(1)[0],
     id: `library-organism-${index}`,
@@ -188,6 +205,6 @@ describe('OrganismRoster search filter — the uncapped per-render library scan'
     () => {
       library.filter((organism) => organism.name.toLowerCase().includes(query));
     },
-    BENCH_OPTIONS,
+    BENCHMARK_RUN_OPTIONS,
   );
 });
