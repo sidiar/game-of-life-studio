@@ -53,6 +53,15 @@ export interface OrganismEvaluators {
   // until then — that is what preserves Conway's simultaneous-generation semantics. Conway's
   // Classic has no `die` rule at all, so collapsing `null` into `'die'` here breaks it while
   // looking equivalent.
+  //
+  // ❌ DO NOT narrow this to `Exclude<Action, 'die'> | null`. `'die'` is genuinely unreachable —
+  // the compile-time partition routes every `die` rule to `resolvesToDeath` above — so the wide
+  // type is deliberately WIDER than this function can produce, and that is Sidiar's call
+  // (2026-09-10): RFC-004 §2.3 spells the return as `Action | null` and the RFC is followed as
+  // written. The invariant is therefore carried by the partition and by this comment, NOT by the
+  // type. Callers must neither treat `'die'` as a live case nor "tighten" the signature on the
+  // assumption it was an oversight. Narrowing it would diverge from §2.3 and is a spec change,
+  // not a cleanup.
   readonly resolveBirthSurvival: (cell: CellSubject) => Action | null;
 }
 

@@ -166,8 +166,8 @@ Blind Hunter on the diff alone, Edge Case Hunter with repo access, Acceptance Au
 file and the authority docs). Every load-bearing finding below was **confirmed by execution**
 before it was classified, not taken on the reviewer's word.
 
-- [ ] [Review][Decision] **RFC-004 §3.1's single `resolveAction` vs §2.3/§3.5 + AR-18's phase-partitioned pair (FD2)** — implemented as the pair on M10's authority; no `M15` minted and `architecture.md` untouched, deliberately. Whether this becomes a Minor Resolution (and `check-spec-ids.mjs` is widened in both places) is Sidiar's call; §3.1's `SimulationDeps.resolveAction` line needs amending either way (owner: Story 3.5).
-- [ ] [Review][Decision] **`resolveBirthSurvival` is typed `Action | null` although `'die'` is unreachable from it** — the partition routes every `die` rule to `resolvesToDeath`, so the Phase-2 signature re-admits the branch the compile-time partition exists to remove; a 3.5 consumer must either handle `'die'` or trust a comment. `Exclude<Action, 'die'> | null` encodes the invariant, but RFC-004 §2.3 spells the return as `Action | null` and Story 3.5 inherits whichever is chosen — so it is not the reviewer's to narrow. [`packages/simulation/src/session/compileEvaluators.ts` — `OrganismEvaluators.resolveBirthSurvival`]
+- [x] [Review][Decision] **RFC-004 §3.1's single `resolveAction` vs §2.3/§3.5 + AR-18's phase-partitioned pair (FD2)** — implemented as the pair on M10's authority; no `M15` minted and `architecture.md` untouched, deliberately. Whether this becomes a Minor Resolution (and `check-spec-ids.mjs` is widened in both places) is Sidiar's call; §3.1's `SimulationDeps.resolveAction` line needs amending either way (owner: Story 3.5).
+- [x] [Review][Decision] **`resolveBirthSurvival` is typed `Action | null` although `'die'` is unreachable from it** — the partition routes every `die` rule to `resolvesToDeath`, so the Phase-2 signature re-admits the branch the compile-time partition exists to remove; a 3.5 consumer must either handle `'die'` or trust a comment. `Exclude<Action, 'die'> | null` encodes the invariant, but RFC-004 §2.3 spells the return as `Action | null` and Story 3.5 inherits whichever is chosen — so it is not the reviewer's to narrow. [`packages/simulation/src/session/compileEvaluators.ts` — `OrganismEvaluators.resolveBirthSurvival`]
 - [x] [Review][Patch] Numeric patterns admitted `NaN`, `±Infinity`, negatives, fractions and `> 65534` — `typeof === 'number'` only; NaN made a rule silently dead for every cell (the class the sweep exists to make loud), and `age gt 70000` gave `maxRelevantAge = 70001`, which the Uint16 age buffer wraps to `0` (verified: `new Uint16Array(1)[0] = 65536` reads `0`). Now mirrors the schema's `NumericLiteral` (`int().min(0).max(65534)`, RFC-004 §2.4/§3.4). [`validateRules.ts` — `isNumericLiteral`]
 - [x] [Review][Patch] Missing / empty / non-string `contentHash` was not validated and collapsed the cache key — `JSON.stringify([undefined])` and `[null]` are both `"[null]"`, so two organisms with *different* hash-less rules shared one compiled pair (verified: organism `b` answered with `a`'s evaluators). Mirrors the schema's `contentHash: z.string().min(1)`. [`validateRules.ts` — end of `validateRule`]
 - [x] [Review][Patch] Organism `id` was never validated at the interning boundary, a duplicate id escaped as a bare `Error` (invisible to `isRuleCompilationError`), the 255 roster cap (Decision G.3) was asserted in a comment but not enforced (ref 256 stores as `0` = empty in the `Uint8Array` occupant), and `forEach` skipped holes in a sparse roster. `internOrganismIds` now rejects all four through the same `RuleCompilationError` channel with `ruleId: ROSTER_LEVEL`, and `compileSession` interns before it validates rules so a rule diagnostic always names a proven organism. `MAX_CELL_VALUE` is exported from `grid.ts` (not the barrel) rather than a third by-value copy of `255`. [`internOrganisms.ts`, `compileEvaluators.ts`, `grid.ts:68`]
@@ -745,8 +745,9 @@ Load-bearing invariants were verified by **mutation**, not just by assertion:
   `CompilableOrganism` key set pinned, `maxRelevantAge` removed from the barrel, residual
   forward-reference and change-narration comments fixed, five under-asserting tests strengthened.
   1 deferred (empty `survivalRules` → inert organism, schema-legal). 2 decisions left for Sidiar
-  (FD2 / `M15`; `resolveBirthSurvival`'s return type). FD2 was decided and minted as `M15`
-  (2026-09-10); status stays `review` while the return-type call is open.
+  (FD2 / `M15`; `resolveBirthSurvival`'s return type). Both were decided 2026-09-10 — FD2
+  minted as `M15`, the return type kept as `Action | null` per the RFC — so no
+  decision-needed item remains and the story moves to `done`.
   `packages/simulation`: 224 tests, 100%.
 
 ### Decisions Needed From Sidiar
@@ -762,10 +763,17 @@ Load-bearing invariants were verified by **mutation**, not just by assertion:
    already records the phase-partitioned form, which is why §3.1 was a missed edit rather than a
    live disagreement. §3.1 no longer needs amending by Story 3.5; it is done here.
 
-2. ⏳ **OPEN — `resolveBirthSurvival`'s return type.** Declared `Action | null` per RFC-004 §2.3,
-   but `'die'` is unreachable from it (the partition routes every `die` rule to `resolvesToDeath`).
-   `Exclude<Action, 'die'> | null` would encode the invariant at the cost of diverging from the
-   RFC's spelling. Story 3.5 inherits whichever is chosen. Untouched — Sidiar's call.
+2. ✅ **RESOLVED 2026-09-10 — `resolveBirthSurvival` keeps `Action | null`, per RFC-004 §2.3.**
+   Sidiar's call: follow the RFC as written rather than narrow to `Exclude<Action, 'die'> | null`.
+   **No spec change and no Minor Resolution** — this decision is "the RFC is already right", so
+   there is nothing to amend and nothing to mint; the code was already the chosen shape, so no
+   code change either beyond making the reasoning explicit.
+   ⚠️ **The consequence Story 3.5 inherits:** the return type is deliberately WIDER than the
+   partition can actually produce. `'die'` is unreachable — every `die` rule is routed to
+   `resolvesToDeath` at compile time — so the invariant is carried by the partition and by the
+   comment on `OrganismEvaluators.resolveBirthSurvival`, not by the type. A 3.5 consumer must
+   neither handle `'die'` as a live case nor "tighten" the signature on the assumption it was an
+   oversight. Recorded in that comment so the next reader finds it at the definition.
 
 Dev Model: opus   # architecture-shaping: this story fixes the compiled-evaluator API that 3.5/3.6/3.8/4.15 all consume, resolves RFC-004 §3.1-vs-§3.5 in the open, sets the engine's fail-loud-at-compile-time posture (M12/deferred-work:457), and re-crosses the domain/engine seam under M13's bidirectional-pin rule — it establishes patterns rather than following one.
 
