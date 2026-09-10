@@ -85,7 +85,7 @@ function fail(organismId: string, ruleId: string, detail: string): never {
 // Mirrors @gol/domain's `NumericLiteral` — `z.number().int().min(0).max(65534)` (RFC-004 §2.4) —
 // for the in-memory path. The bound is not cosmetic: `MAX_RELEVANT_AGE = maxAgeLiteral + 1` has
 // to fit the Uint16 age buffer (RFC-004 §3.4, Decision B.5), and a literal of 65535 or `Infinity`
-// makes the clamp Story 3.6 applies wrap a saturated cell to 0 — a newborn. `typeof === 'number'`
+// makes the clamp `../strategy/conflictPhase.ts` applies wrap a saturated cell to 0 — a newborn. `typeof === 'number'`
 // alone also lets `NaN` through, and every comparison against NaN is false, so the rule is dead
 // for every cell with no diagnostic: the exact silent class this sweep exists to make loud.
 // `Number.isInteger` rejects NaN, ±Infinity and fractions in one test.

@@ -1,5 +1,6 @@
 // MAX_RELEVANT_AGE (AR-20, Decision B.5, RFC-004 §3.3) — computed once per BATTLE at compile
-// time. Story 3.6's cycle-end step applies it; this file only computes it.
+// time. ../strategy/conflictPhase.ts's cycle-end write applies it as `min(age + 1, max)` (Story
+// 3.6); this file only computes it.
 import type { CellProperty } from '../gol/cellSubject';
 import type { SurvivalRules } from '../gol/survivalRules';
 
@@ -30,7 +31,8 @@ const AGE: CellProperty = 'age';
  * keeps the result inside the Uint16 age buffer (RFC-004 §3.4). ⚠️ That precondition is why this
  * is NOT in the package barrel: `compileSession` guarantees the order, a direct caller would not
  * (`'8' > 0` is true and `'8' + 1` is `'81'`), and `CompiledSession.maxRelevantAge` is the
- * contract Story 3.6 consumes.
+ * contract — it reaches Phase 3 on `SimulationDeps`, which a `CompiledSession` satisfies
+ * structurally.
  */
 export function maxRelevantAge(rulesPerOrganism: readonly SurvivalRules[]): number {
   let maxLiteral = 0;

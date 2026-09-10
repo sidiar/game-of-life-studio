@@ -12,8 +12,14 @@ import { createGrid } from './grid';
  * what keeps the two the same number. Story 3.5 SHIPPED the writer this was built for: `deathPhase`
  * takes a caller-supplied destination (`deathPhase(source, destination, deps)`, its FD2) rather than
  * allocating per §3.2's snippet, so the post-death intermediate IS `back`, Phase 2 only reads it,
- * and Story 3.6's Phase 3 finishes in place over it before the swap. AR-41's "phases are pure,
- * inputs are never mutated" property holds as stated — the SOURCE grid is never written.
+ * and Story 3.6's `conflictPhase` finishes in place over it before the swap — the whole plan now
+ * ships as `threePhaseStep`. AR-41's "phases are pure, inputs are never mutated" property holds as
+ * stated — the SOURCE grid is never written.
+ *
+ * ⚠️ THE SWAP IS THE CALLER'S, deliberately (Story 3.6's FD1): `threePhaseStep` returns the
+ * destination it wrote and never touches the pair, so a caller can run a second simulation — Story
+ * 3.9's preview instance (M3), Story 4.15's draft-organism run — without the strategy type
+ * carrying a `GridBuffers`.
  *
  * ❌ NOT module state. No `class`, no `this`, no singleton (AR-16) — whatever holds the pair is a
  * value the caller owns and passes, which is also what lets Story 3.9's preview instance (M3) run
@@ -34,8 +40,11 @@ export interface GridBuffers {
    * resurrects dead cells from two cycles ago, and nothing in this file can fail on it. Story 3.5's
    * `deathPhase` DISCHARGES that obligation for Phase 1 — it writes both buffers for every cell
    * including empties, and a cleared cell zeroes `age` as well as `occupant` — and it is pinned by
-   * a test that pre-fills the destination with a stale frame. Story 3.6's Phase-3 write inherits
-   * the same obligation.
+   * a test that pre-fills the destination with a stale frame. Story 3.6's `conflictPhase`
+   * DISCHARGES it for the rest of the cycle the same way: it sweeps all `width * height` cells with
+   * a cursor into the claims arrays rather than iterating the claims, so a cell nobody claimed is
+   * written as empty with age 0 (which is also implicit death, M10). Iterating the claims alone
+   * would leave every non-claiming occupant standing AND resurrect the stale frame underneath.
    */
   readonly back: Grid;
 }

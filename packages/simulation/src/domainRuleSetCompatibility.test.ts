@@ -68,6 +68,7 @@ import { cellSelectors } from './gol/cellSubject';
 import type { CellProperty } from './gol/cellSubject';
 import type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol/survivalRules';
 import type { CompilableOrganism } from './session/compileEvaluators';
+import type { OrganismRuntime } from './strategy/phaseDeps';
 
 describe('a GoL SurvivalRules value IS a generic RuleSet (AR-21, RFC-004 §2.4)', () => {
   it('assigns with no mapping layer — the compiler is the assertion', () => {
@@ -186,6 +187,43 @@ describe('a GoL SurvivalRules value IS a generic RuleSet (AR-21, RFC-004 §2.4)'
     // compile if a key is added to the interface and not here, or listed here and gone from it.
     const exactKeys: Record<keyof CompilableOrganism, true> = { id: true, survivalRules: true };
     expect(Object.keys(exactKeys).sort()).toEqual(['id', 'survivalRules']);
+  });
+
+  // ── Story 3.6's FD2: the ORGANISM RUNTIME, the other minimal local shape ───────────────────
+  //
+  // Phase 3 compares Dominance and nothing else, so `OrganismRuntime` declares `dominance` and
+  // nothing else — RFC-004 §3.1 sketches it as `// dense array; dominance, agingEnabled, …` and
+  // that `…` is a comment on a deferred type, not a contract.
+  //
+  // The KEY SET is what this pin is really for. The forward assignment alone is blind to a field
+  // `Organism` already has creeping in, and there is one specific field that must never arrive:
+  // `agingEnabled`. FR-2.4 makes it a RENDER input — *"this toggle affects visual rendering only;
+  // cell-age tracking (FR-5.6) is unaffected"* — so an engine that reads it would stop a non-aging
+  // organism's `age`-conditioned rules from ever firing, with no failing test in any fixture that
+  // does not run past an age literal. Two shipped comments predicted the opposite before this
+  // story and were corrected; this assertion is what keeps the correction true.
+  it("@gol/domain's Organism assigns into OrganismRuntime, which carries dominance ALONE (3.6 FD2, M13)", () => {
+    const organism: DomainOrganism = {
+      schemaVersion: 1,
+      id: 'conways-classic',
+      name: "Conway's Classic",
+      colorToken: 'vermillion',
+      dominance: 50,
+      agingEnabled: true,
+      survivalRules: [...CONWAYS_CLASSIC.survivalRules],
+    };
+    const runtime: OrganismRuntime = organism;
+
+    expect(runtime).toBe(organism);
+    // The reverse at the level it CAN hold: `dominance` is a plain `number` in both, so a future
+    // narrowing of either (to a branded or literal-union type) fails here.
+    const backToDomain: DomainOrganism['dominance'] = runtime.dominance;
+    expect(backToDomain).toBe(50);
+
+    // Adding `agingEnabled` (or anything else) to the interface and not to this record fails to
+    // compile; listing a key the interface does not have fails as an excess property.
+    const exactKeys: Record<keyof OrganismRuntime, true> = { dominance: true };
+    expect(Object.keys(exactKeys)).toEqual(['dominance']);
   });
 
   // Wiring proof with a REAL GoL subject and the REAL cellSelectors — CellSubject and its five

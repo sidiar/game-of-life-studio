@@ -22,7 +22,8 @@ import type { Action, SurvivalRules } from './survivalRules';
 // semantics. Story 3.5 shipped the half that PROVES it: `birthSurvivalPhase` turns a `null` into
 // NO CLAIM (never a death claim), and `deathPhase` removes only cells whose `resolvesToDeath`
 // answered `true`, so a doomed cell is still standing — and still counted as a neighbour — for the
-// whole of Phase 2. The cycle-end write that finally removes it is Story 3.6's.
+// whole of Phase 2. The cycle-end write that finally removes it is ../strategy/conflictPhase.ts's
+// full-grid sweep (Story 3.6): a cell nobody claimed is written empty.
 //
 // ❌ And neither phase calls THIS function (Story 3.5, Trap 13): using the whole-list primitive
 // inside a phase re-scans `die` rules per cell and quietly undoes the compile-time partition M10's

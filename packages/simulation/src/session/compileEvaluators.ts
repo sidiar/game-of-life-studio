@@ -17,10 +17,16 @@ import { validateSurvivalRules } from './validateRules';
  * FD1 (Dev Agent Record): a MINIMAL LOCAL type, not `@gol/domain`'s `Organism` and not RFC-004
  * §3.1's full `OrganismRuntime`. Story 3.2's FD1 made the `@gol/domain` edge TEST-ONLY, and
  * importing `Organism` here would reverse that and drag `colorToken` / `schemaVersion` /
- * `dominance` into the engine — `dominance` and `agingEnabled` are Phase 3's and Story 3.6's, and
- * Story 3.1 already declined to reserve a name for something it did not build. @gol/domain's
- * `Organism` assigns INTO this structurally with no mapping layer; the pin lives in
- * ../domainRuleSetCompatibility.test.ts (M13).
+ * `dominance` into the engine — `dominance` is Phase 3's alone, and Story 3.1 already declined to
+ * reserve a name for something it did not build. @gol/domain's `Organism` assigns INTO this
+ * structurally with no mapping layer; the pin lives in ../domainRuleSetCompatibility.test.ts (M13).
+ *
+ * ⚠️ CORRECTED IN STORY 3.6 (spec-conflict flag). This comment used to say *"`dominance` and
+ * `agingEnabled` are Phase 3's and Story 3.6's"*. Phase 3 reads `dominance` and NOTHING else:
+ * FR-2.4 states `agingEnabled` *"affects visual rendering only; cell-age tracking (FR-5.6) is
+ * unaffected"*, so it never reaches the engine at all — it is consumed by the renderer (RFC-002's
+ * `refToGroup`, Story 3.9). `../strategy/phaseDeps.ts`'s shipped `OrganismRuntime` carries
+ * `dominance` alone, and the exact key set is pinned so the field cannot creep back in.
  */
 export interface CompilableOrganism {
   // The stable LIBRARY id (AR-21) — the thing being interned. Opaque: never parsed or prefixed.

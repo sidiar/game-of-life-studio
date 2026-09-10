@@ -24,8 +24,9 @@ import { createNeighborTally, sameNeighbors, tallyNeighbors } from './neighborTa
  * neighbour counting and break every Conway golden while looking equivalent.
  *
  * ❌ NO CONFLICT RESOLUTION HERE (Trap 10). No `dominance`, no `rng`, no tie-break, no eviction: if
- * this function compared two claims it would have absorbed Phase 3 (Story 3.6). Two organisms
- * claiming one cell is the NORMAL output of this phase, not a problem for it to solve.
+ * this function compared two claims it would have absorbed Phase 3 (`conflictPhase.ts`, Story
+ * 3.6). Two organisms claiming one cell is the NORMAL output of this phase, not a problem for it
+ * to solve.
  *
  * ❌ No re-ranking or merging of an organism's RULES (AC8). Rule order is first-match priority
  * WITHIN the phase (FR-2.6, M10) and it already ran inside the compiled evaluator, so one organism
@@ -58,9 +59,10 @@ export function birthSurvivalPhase(grid: Grid, deps: PhaseDeps): Claims {
   const tally = createNeighborTally();
 
   // CELL-OUTER, ORGANISM-INNER, and that is a contract rather than a preference: it is what makes
-  // every claim for one cell CONTIGUOUS in the returned arrays, which is what lets Story 3.6's
-  // Phase 3 resolve conflicts in a single linear pass with no map and no per-cell array. Reordering
-  // these two loops silently breaks Phase 3 (claims.ts, invariant 1).
+  // every claim for one cell CONTIGUOUS in the returned arrays, which is what lets `conflictPhase`
+  // resolve conflicts in a single linear pass with one cursor, no map and no per-cell array.
+  // Reordering these two loops silently breaks Phase 3 — its sweep skips past a cell whose claims
+  // arrive late and drops them (claims.ts, invariant 1).
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const index = row * width + col;
@@ -73,7 +75,7 @@ export function birthSurvivalPhase(grid: Grid, deps: PhaseDeps): Claims {
 
       // ⚠️ `ref = 1`, not 0: slot 0 is the reserved EMPTY value and holds a deliberate `null`
       // (M14/M15). And `evaluatorsByRef[r]`, never `[r - 1]` — the `- 1` form is correct for the
-      // ROSTER array (Story 3.6's `organisms[ref - 1]`) and here it would run every organism's
+      // ROSTER array (`ConflictDeps.organisms[ref - 1]`) and here it would run every organism's
       // neighbour's rules, producing a plausible battle no test names (Trap 1).
       for (let r = 1; r < rosterEnd; r++) {
         const evaluators = evaluatorsByRef[r];
@@ -90,7 +92,7 @@ export function birthSurvivalPhase(grid: Grid, deps: PhaseDeps): Claims {
           // The OCCUPANT's ref (self or other), `null` when nobody is here — never the evaluating
           // organism's, which would make `organismType eq X` self-referential.
           organismType: occ === 0 ? null : occ,
-          // Exactly as stored (Trap 9): the clamp is Story 3.6's cycle-end step.
+          // Exactly as stored (Trap 9): the clamp is `conflictPhase`'s cycle-end write.
           age: cellAge,
           neighborCount: same,
           occupantNeighborCount: tally.total - same,

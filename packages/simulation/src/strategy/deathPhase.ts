@@ -15,14 +15,16 @@ import { evaluatorsFor } from './phaseDeps';
  * snippet is illustrative pseudocode; `../grid/doubleBuffer.ts` — written after it, and naming this
  * story — states the shape the shipped buffer seam was built for: *"Stories 3.5/3.6 write into
  * `back` and swap … the input grid is never written — the destination is a distinct grid the
- * caller supplied."* Allocating would cost a `Uint8Array(N)` plus a `Uint16Array(N)` PER CYCLE (18
+ * caller supplied."* Story 3.6 adopted the same shape for `threePhaseStep` (its FD1). Allocating would cost a `Uint8Array(N)` plus a `Uint16Array(N)` PER CYCLE (18
  * KB at 100x60, 72 KB at 200x120, up to 20 times a second), which is precisely the per-cycle
  * allocation Decision A.6's steady-state memory budget and the double buffer exist to avoid. It
  * also makes the two-buffer plan serve a three-grid pipeline: this intermediate IS `back`, Phase 2
  * only reads it, and Phase 3 finishes in place over it.
  *
- * ⚠️ The divergence from §3.2's snippet is FLAGGED, not amended here: `threePhaseStep`'s signature
- * is Story 3.6's to write, and the RFC edit rides with it.
+ * ⚠️ The divergence from §3.2's snippet is FLAGGED, not amended. `threePhaseStep` shipped in Story
+ * 3.6 with the matching `(source, destination, deps)` shape, and the §3.1/§3.2 edit that would
+ * reconcile the RFC is drafted in that story's Dev Agent Record awaiting Sidiar's go-ahead —
+ * amending an authority doc is not a story's call (the M14/M15 precedent).
  *
  * ## The two properties this function is pinned on
  *
@@ -38,9 +40,9 @@ import { evaluatorsFor } from './phaseDeps';
  *
  * ⚠️ IMPLICIT DEATH IS NOT APPLIED HERE (M10, Trap 3 — the load-bearing sentence of this story). A
  * living cell that matches no `die` rule stays on the intermediate grid even when it will match no
- * `survive` rule either. It yields no claim and is gone at cycle end (Story 3.6's write), but it
- * COUNTS AS A PHASE-2 NEIGHBOUR until then, which is what preserves Conway's simultaneous-
- * generation semantics. Conway's Classic has no `die` rule at all, so this phase over a Conway
+ * `survive` rule either. It yields no claim and is gone at cycle end (`conflictPhase`'s sweep
+ * clears every unclaimed cell), but it COUNTS AS A PHASE-2 NEIGHBOUR until then, which is what
+ * preserves Conway's simultaneous-generation semantics. Conway's Classic has no `die` rule at all, so this phase over a Conway
  * battle returns a grid equal in content to its input.
  *
  * ❌ No call to `resolveCellAction` (Trap 13). The action partition is Story 3.4's COMPILE-TIME
@@ -106,8 +108,9 @@ export function deathPhase(source: Grid, destination: Grid, deps: PhaseDeps): Gr
  * (deferred-work.md, Story 3.5 review).
  *
  * ⚠️ `age` is passed exactly as stored — never clamped, incremented or saturated (Trap 9).
- * `CompiledSession.maxRelevantAge` is applied at CYCLE END by Story 3.6; clamping here would make
- * an `age gt <literal>` rule behave differently in Phase 1 than at cycle end.
+ * `CompiledSession.maxRelevantAge` is applied at CYCLE END, by `conflictPhase`'s write (Story
+ * 3.6); clamping here would make an `age gt <literal>` rule behave differently in Phase 1 than at
+ * cycle end.
  */
 function subjectForOccupant(
   source: Grid,
