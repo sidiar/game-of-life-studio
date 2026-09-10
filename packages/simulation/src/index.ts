@@ -73,3 +73,18 @@ export {
   validateSurvivalRules,
 } from './session/validateRules';
 export type { RuleCompilationError } from './session/validateRules';
+
+// The strategy layer (RFC-004 §3.1/§3.2, Story 3.5) — the first code in this package that WALKS
+// THE GRID rather than deciding about one cell, and the first that runs inside the NFR-1.1 frame
+// budget. Phase 1 answers who is explicitly killed, Phase 2 answers who is asking to be here next
+// cycle; neither answers who WINS — Phase 3, `threePhaseStep` and the seeded `Rng` are Story 3.6's,
+// which is also where `SimulationDeps` is declared (this story's FD1: a wider deps object satisfies
+// `PhaseDeps` structurally, so no adapter is needed when it lands).
+//
+// ⚠️ `deathPhase` takes a caller-supplied DESTINATION rather than allocating (this story's FD2),
+// which diverges from RFC-004 §3.2's allocation-shaped snippet and matches what `doubleBuffer.ts`
+// was built for. The RFC amendment rides with `threePhaseStep`'s signature, which is Story 3.6's.
+export { deathPhase } from './strategy/deathPhase';
+export { birthSurvivalPhase } from './strategy/birthSurvivalPhase';
+export type { Claims } from './strategy/claims';
+export type { PhaseDeps } from './strategy/phaseDeps';

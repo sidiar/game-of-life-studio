@@ -9,8 +9,10 @@ import type { Selectors } from '../engine/rule';
 //   - `occupied` = this cell holds ANOTHER organism.
 //   - `empty`    = nobody is here.
 // It is not a global fact about the cell. The same physical cell is `alive` when organism A
-// evaluates it and `occupied` when organism B does — materializing that switch belongs to
-// Stories 3.5/3.6's per-organism evaluation pass, not this layer. `ne` is retired (Decision C.3):
+// evaluates it and `occupied` when organism B does — materializing that switch is not this layer's
+// job and now SHIPS in ../strategy/birthSurvivalPhase.ts (Story 3.5), which builds one subject per
+// (cell x organism) from the post-death grid. Phase 1 needs no switch: it asks each occupant about
+// its OWN cell, so `state` is always `alive` there. `ne` is retired (Decision C.3):
 // "occupied by anyone else" is already `cellState eq occupied`, so a not-equals adds nothing.
 export type CellState = 'empty' | 'alive' | 'occupied';
 
@@ -53,8 +55,9 @@ export interface CellSubject {
   // ⚠️ SAME-organism Moore neighbours — not "all eight occupied neighbours" (RFC-004 §2.1). The
   // bare name reads like the latter, and Story 3.3 is what materializes it, so the definition is
   // recorded here rather than left to be re-derived: Conway's Classic is single-organism, so the
-  // two readings COINCIDE for every fixture in this package's tests and diverge only in Story
-  // 3.6's multi-organism goldens — as wrong survival behaviour, with no failing test naming why.
+  // two readings COINCIDE for every single-organism fixture and diverge only under a
+  // multi-organism roster — as wrong survival behaviour, with no failing test naming why. Story
+  // 3.5's Phase-2 pass is where that divergence first becomes observable.
   readonly neighborCount: number;
   // ⚠️ OTHER-organism Moore neighbours (RFC-004 §2.1) — the complement of `neighborCount`, and the
   // property Decision C.4's "occupied by anyone" limitation is expressed through. Same caveat as

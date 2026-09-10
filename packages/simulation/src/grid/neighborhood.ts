@@ -11,9 +11,12 @@ import type { OrganismRef } from '../gol/cellSubject';
  * ⚠️ `same` is `CellSubject.neighborCount` and `other` is `CellSubject.occupantNeighborCount`, and
  * both are relative TO THE EVALUATING ORGANISM — not "all eight occupied neighbours". The bare
  * name `neighborCount` reads like the latter, and because Conway's Classic is single-organism the
- * two readings coincide for every single-organism fixture in the repo; they diverge only in Story
- * 3.6's multi-organism goldens, as wrong survival behaviour with no failing test naming why.
- * `neighborhood.test.ts`'s two-organism fixture is the thing that can tell them apart.
+ * two readings coincide for every single-organism fixture in the repo. Story 3.5 is where they
+ * first become OBSERVABLE AS BEHAVIOUR: its Phase-2 pass materializes a subject per (cell x
+ * organism), so a swapped pair there shows up as wrong survival behaviour in a multi-organism
+ * battle with no failing test naming why (Story 3.6's goldens then inherit the same exposure).
+ * `neighborhood.test.ts`'s two-organism fixture and `strategy/neighborTally.test.ts`'s
+ * differential property are the two things that can tell them apart.
  */
 export interface NeighborCounts {
   readonly same: number;
@@ -47,6 +50,12 @@ export interface NeighborCounts {
  * are NOT detected — the clamped bounds map them onto the nearest real rows/columns and the return
  * is a phantom cell's counts, silently. A caller that can be handed arbitrary coordinates owns
  * that validation, exactly as it owns `selfRef`'s.
+ *
+ * ⚠️ Story 3.5's Phase 2 does NOT call this per (cell x organism) — that would re-read the same
+ * <= 8 slots up to 20 times per cell. It builds one per-cell tally instead
+ * (`../strategy/neighborTally.ts`, its FD5), pinned DIFFERENTIALLY against this function, which
+ * stays the reference implementation of hard-edge Moore counting. Phase 1 still calls it directly:
+ * one organism per cell, nothing to amortise.
  *
  * ⚠️ RETURN SHAPE is one small object literal per call (story FD4 option (a)) — the readable
  * default. RFC-004 §3.4 flags this exact spot as where the frame budget is won or lost, and the

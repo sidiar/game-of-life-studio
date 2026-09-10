@@ -19,7 +19,14 @@ import type { Action, SurvivalRules } from './survivalRules';
 // ⚠️ `null` means "no rule matched" — NOT "die" (Trap 7). A living cell that matches nothing is
 // gone at cycle end by IMPLICIT death (M10), resolved at cycle-end so it still counts as a Phase-2
 // neighbour; collapsing `null` into `'die'` here would look equivalent and silently break Conway
-// semantics. That resolution is Story 3.5/3.6's, not this function's.
+// semantics. Story 3.5 shipped the half that PROVES it: `birthSurvivalPhase` turns a `null` into
+// NO CLAIM (never a death claim), and `deathPhase` removes only cells whose `resolvesToDeath`
+// answered `true`, so a doomed cell is still standing — and still counted as a neighbour — for the
+// whole of Phase 2. The cycle-end write that finally removes it is Story 3.6's.
+//
+// ❌ And neither phase calls THIS function (Story 3.5, Trap 13): using the whole-list primitive
+// inside a phase re-scans `die` rules per cell and quietly undoes the compile-time partition M10's
+// precedence depends on. It stays here for a different strategy, which is the point.
 //
 // ❌ No filtering, sorting, or action-partitioning here — see FD2 above. ❌ No "self organism"
 // parameter — relativity already arrives via `cell.state` (Decision C); a parameter here would

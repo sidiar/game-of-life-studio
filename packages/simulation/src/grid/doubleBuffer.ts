@@ -9,9 +9,11 @@ import { createGrid } from './grid';
  * allocate-a-whole-new-grid-per-cycle, and at the NFR-1.1 baseline that is a fresh
  * `Uint8Array(24000)` plus a `Uint16Array(24000)` up to 20 times a second. Decision A.6's ~144 KB
  * at 200x120 is the STEADY-STATE memory budget, not a per-cycle allowance — double buffering is
- * what keeps the two the same number. Stories 3.5/3.6 write into `back` and swap; the "phases are
- * pure, inputs are never mutated" property AR-41 assigns to 3.5 still holds, because the input
- * grid is never written — the destination is a distinct grid the caller supplied.
+ * what keeps the two the same number. Story 3.5 SHIPPED the writer this was built for: `deathPhase`
+ * takes a caller-supplied destination (`deathPhase(source, destination, deps)`, its FD2) rather than
+ * allocating per §3.2's snippet, so the post-death intermediate IS `back`, Phase 2 only reads it,
+ * and Story 3.6's Phase 3 finishes in place over it before the swap. AR-41's "phases are pure,
+ * inputs are never mutated" property holds as stated — the SOURCE grid is never written.
  *
  * ❌ NOT module state. No `class`, no `this`, no singleton (AR-16) — whatever holds the pair is a
  * value the caller owns and passes, which is also what lets Story 3.9's preview instance (M3) run
@@ -29,8 +31,11 @@ export interface GridBuffers {
    * writes into the buffer cycle N-2 rendered). The obligation that follows sits on the WRITER: a
    * cycle must store every cell of `back`, empties included. A writer that stores only
    * living/changed cells — the natural-looking optimisation in a module this cost-conscious —
-   * resurrects dead cells from two cycles ago, and nothing in this file can fail on it (the phase
-   * pipeline that writes here is Stories 3.5/3.6's).
+   * resurrects dead cells from two cycles ago, and nothing in this file can fail on it. Story 3.5's
+   * `deathPhase` DISCHARGES that obligation for Phase 1 — it writes both buffers for every cell
+   * including empties, and a cleared cell zeroes `age` as well as `occupant` — and it is pinned by
+   * a test that pre-fills the destination with a stale frame. Story 3.6's Phase-3 write inherits
+   * the same obligation.
    */
   readonly back: Grid;
 }

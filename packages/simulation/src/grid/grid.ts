@@ -51,8 +51,11 @@ export interface Grid {
    * occupant `0` = empty, and changing the shipped convention instead would mean migrating every
    * persisted battle.
    *
-   * ⚠️ **Consequence for Story 3.5/3.6, stated where it can be read rather than re-derived:** a
-   * roster lookup off a ref is `organisms[ref - 1]`, NEVER `organisms[ref]`. RFC-004 §2.1 and
+   * ⚠️ **Consequence, stated where it can be read rather than re-derived:** a roster lookup off a
+   * ref is `organisms[ref - 1]`, NEVER `organisms[ref]`. ⚠️ TWO CONVENTIONS now ship side by side
+   * and both are right in their place: Story 3.5's phases read the ref-indexed
+   * `evaluatorsByRef[ref]` (M14/M15, slot 0 an explicit `null`), while the ROSTER lookup below —
+   * Story 3.6's — stays `organisms[ref - 1]`. RFC-004 §2.1 and
    * §3.2 were corrected to match when M14 was minted — `resolveConflict` now reads
    * `deps.organisms[r - 1].dominance`. Getting this wrong is silent: the symptom is a Dominance
    * comparison against the WRONG organism, i.e. plausible battles and no failing test.
@@ -61,7 +64,9 @@ export interface Grid {
   /**
    * Cycles alive. NOT clamped or incremented here — `MAX_RELEVANT_AGE` is computed once per battle
    * by the session layer (`../session/maxRelevantAge.ts`, riding on `CompiledSession`); aging and
-   * the clamp are Story 3.6's cycle-end step.
+   * the clamp are Story 3.6's cycle-end step. Story 3.5's phases read this buffer verbatim and
+   * copy it forward; a cell they CLEAR writes `age = 0` alongside `occupant = 0`, because an age
+   * left standing under an empty cell is inherited by whatever is born there next.
    */
   readonly age: Uint16Array;
 }
