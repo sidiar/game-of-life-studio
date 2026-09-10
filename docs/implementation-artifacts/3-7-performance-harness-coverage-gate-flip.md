@@ -741,3 +741,17 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 | 2026-09-10 | ⛔ **HALT at FD6's terminal branch** — `npm run ci` red on `bench:check` at 18.749 ms vs 16.667 ms after both permitted optimizations measured at ~0 and were reverted. One recommendation recorded; awaiting Sidiar. |
 
 Dev Model: opus   # establishes the perf-gate mechanism, budget derivation and coverage-include shape that 3.8/3.9 benches and the pending bundle-ratchet story all inherit — and the measured baseline likely misses NFR-1.1, so the story is a judgment call, not wiring.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 20s | 18 | 1,711 | 8,742 | 404,939 | 415,410 |
+| Step 1 — create-story | opus-5 | 1 | 12m 30s | 224 | 28,908 | 560,255 | 13,491,208 | 14,080,595 |
+| Step 2 — dev-story | opus-5 | 1 | 37m 55s | 442 | 114,267 | 569,788 | 42,813,471 | 43,497,968 |
+| _of which the orchestrator_ | opus-5 | — | — | 66 | 16,960 | 48,580 | 1,719,928 | 1,785,534 |
+| **Total (create-story → PR ready)** | | 2 | **50m 44s** | 684 | 144,886 | 1,138,785 | 56,709,618 | **57,993,973** |
+
+Run started 2026-09-10 15:32 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
