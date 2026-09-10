@@ -1,6 +1,6 @@
-// The value Phase 2 produces and Phase 3 (Story 3.6) consumes — the most consequential shape in
-// this story, so its invariants are written down rather than left to be re-derived from the loop
-// that happens to produce them.
+// The value Phase 2 produces and Phase 3 (`conflictPhase.ts`, Story 3.6) consumes — the most
+// consequential shape in this story, so its invariants are written down rather than left to be
+// re-derived from the loop that happens to produce them.
 import type { Action } from '../gol/survivalRules';
 import type { OrganismRef } from '../gol/cellSubject';
 
@@ -22,11 +22,11 @@ import type { OrganismRef } from '../gol/cellSubject';
  * 2. **Within a cell's run, `ref` is strictly increasing** — one organism produces AT MOST ONE
  *    claim per cell (AC8: first-match priority already ran inside the compiled evaluator, so this
  *    layer never merges or re-ranks).
- * 3. **`action` is the claim's own action, carried — never re-derived.** Story 3.6 sets a
- *    survivor's age to `age + 1` and a birth's to `0`, and "winner === incumbent" cannot tell
- *    them apart: an incumbent may legitimately win with a **`born`** claim (a rebirth, age reset).
- *    Dropping the action is a silent aging bug with no failing test in any single-organism
- *    fixture.
+ * 3. **`action` is the claim's own action, carried — never re-derived.** `conflictPhase` (Story
+ *    3.6) sets a survivor's age to `min(age + 1, maxRelevantAge)` and a birth's to `0`, and
+ *    "winner === incumbent" cannot tell them apart: an incumbent may legitimately win with a
+ *    **`born`** claim (a rebirth, age reset). Dropping the action is a silent aging bug with no
+ *    failing test in any single-organism fixture — pinned by name in `conflictPhase.test.ts`.
  * 4. **A `survive` claim is always the INCUMBENT's** (story FD4) — a non-incumbent's `survive` is
  *    dropped in Phase 2, so Phase 3 never has to ask whose age a survivor would inherit.
  * 5. **No claim carries `'die'`.** `resolveBirthSurvival` returns `Action | null` because RFC-004

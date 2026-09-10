@@ -14,7 +14,9 @@ import type { OrganismRef } from '../gol/cellSubject';
  * two readings coincide for every single-organism fixture in the repo. Story 3.5 is where they
  * first become OBSERVABLE AS BEHAVIOUR: its Phase-2 pass materializes a subject per (cell x
  * organism), so a swapped pair there shows up as wrong survival behaviour in a multi-organism
- * battle with no failing test naming why (Story 3.6's goldens then inherit the same exposure).
+ * battle with no failing test naming why. Story 3.6's multi-organism conflict goldens
+ * (`../strategy/conflictGoldens.test.ts`) now cover it end to end — its Conway goldens deliberately
+ * cannot, being single-organism, which is why the two golden files are separate.
  * `neighborhood.test.ts`'s two-organism fixture and `strategy/neighborTally.test.ts`'s
  * differential property are the two things that can tell them apart.
  */
@@ -32,9 +34,14 @@ export interface NeighborCounts {
  * `continue`, so there is no out-of-bounds read to guard in the first place — and emphatically not
  * by the modulo idiom `(row + dr + height) % height`, which is the first thing most
  * implementations reach for and is wrong twice over here: it makes a glider that leaves the right
- * edge reappear on the left (so Story 3.6's glider-translation golden passes at some grid sizes
- * and fails at others), and on a 1-tall or 1-wide grid it maps every offset back onto the same row
- * and double-counts the cell's own neighbours and itself.
+ * edge reappear on the left, and on a 1-tall or 1-wide grid it maps every offset back onto the same
+ * row and double-counts the cell's own neighbours and itself. ⚠️ THE DETECTOR is Story 3.6's
+ * edge-collision glider in `../strategy/conwayGoldens.test.ts`: 32 cycles on an 8x8 field, where a
+ * wrapping idiom carries the glider exactly (8, 8) — back onto its start, byte for byte — and hard
+ * edges collapse it. Its TRANSLATION goldens cannot see this, and were never able to: they keep
+ * the glider clear of every edge by design (AC10), and while no live cell touches the border a
+ * modulo idiom is byte-identical to hard edges on every grid size. `neighborhood.test.ts` pins the
+ * same contract for this function directly.
  *
  * ⚠️ Empty neighbours count toward NEITHER total, so `same + other <= 8` with equality only when
  * every in-bounds neighbour is occupied. A caller asserting the two sum to the neighbour SLOT count

@@ -1,4 +1,4 @@
-import { createMockOrganisms } from '@gol/test-utils';
+import { createMockOrganisms, createSeededRng, FIXED_SEED } from '@gol/test-utils';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
@@ -6,8 +6,11 @@ import { createGrid, gridFromDense } from '../grid/grid';
 import type { Grid } from '../grid/grid';
 import { compileSession } from '../session/compileEvaluators';
 import { birthSurvivalPhase } from './birthSurvivalPhase';
+import { conflictPhase } from './conflictPhase';
 import { deathPhase } from './deathPhase';
-import type { PhaseDeps } from './phaseDeps';
+import type { OrganismRuntime, PhaseDeps } from './phaseDeps';
+import { threePhaseStep } from './threePhaseStep';
+import type { SimulationDeps } from './threePhaseStep';
 
 // AR-41 assigns PHASE PURITY to this story, and it is the property examples cannot pin: the damage
 // is a WRITE somewhere the assertions never look, on a grid shape the goldens never take.
@@ -26,6 +29,10 @@ interface PhaseCase {
   readonly roster: ReturnType<typeof createMockOrganisms>;
   readonly dense: number[][];
   readonly ages: number[];
+  // Story 3.6: a narrow Dominance range so TIES are frequent rather than incidental — the whole
+  // point of generating them is to drive the seeded tie-break, which a 1..100 spread almost never
+  // reaches.
+  readonly dominances: number[];
 }
 
 // Grids from 1x1 up, deliberately including 1xN and Nx1 — degenerate shapes are where hard-edge
@@ -50,6 +57,10 @@ const arbCase: fc.Arbitrary<PhaseCase> = fc
         minLength: width * height,
         maxLength: width * height,
       }),
+      dominances: fc.array(fc.integer({ min: 1, max: 3 }), {
+        minLength: roster.length,
+        maxLength: roster.length,
+      }),
     }),
   );
 
@@ -60,6 +71,16 @@ const buildGrid = ({ dense, ages }: PhaseCase): Grid => {
 };
 
 const depsFor = ({ roster }: PhaseCase): PhaseDeps => compileSession(roster);
+
+// Story 3.6: the full deps a whole cycle needs. Two calls with the same spec build two FRESH
+// generators from the same seed — never one shared instance, which would make the determinism
+// property below pass for the wrong reason (one advancing stream read twice cannot diverge from
+// itself only if the two runs draw the same NUMBER of times, which is the thing under test).
+const simulationDepsFor = (spec: PhaseCase): SimulationDeps => ({
+  ...compileSession(spec.roster),
+  organisms: spec.dominances.map((dominance): OrganismRuntime => ({ dominance })),
+  rng: createSeededRng(FIXED_SEED),
+});
 
 describe('phase purity over the source grid (fast-check, AR-41, AC9)', () => {
   it('deathPhase leaves the source occupant and age byte-identical', () => {
@@ -193,6 +214,155 @@ describe('phase invariants over generated grids (fast-check)', () => {
           if (claims.cellIndex[i] === claims.cellIndex[i - 1]) {
             expect(claims.ref[i]).toBeGreaterThan(claims.ref[i - 1]);
           }
+        }
+      }),
+    );
+  });
+});
+
+describe('the assembled cycle (fast-check, AR-41, Story 3.6 AC13)', () => {
+  it('the same seed gives a byte-identical run — occupant AND age', () => {
+    // ⚠️ TWO INDEPENDENT sessions, each with its own generator. FR-5.4's tie-break is the single
+    // non-deterministic decision a cycle makes, and A-2 keeps the seed out of everything
+    // persisted, so "deterministic under a seed" is the only reproducibility the app can offer.
+    fc.assert(
+      fc.property(arbCase, (spec) => {
+        const runOnce = (): Grid => {
+          let grid = buildGrid(spec);
+          const deps = simulationDepsFor(spec);
+          for (let cycle = 0; cycle < 4; cycle++) {
+            grid = threePhaseStep(grid, createGrid(grid.width, grid.height), deps);
+          }
+          return grid;
+        };
+
+        const first = runOnce();
+        const second = runOnce();
+
+        expect(Array.from(first.occupant)).toEqual(Array.from(second.occupant));
+        expect(Array.from(first.age)).toEqual(Array.from(second.age));
+      }),
+    );
+  });
+
+  it('no cell is both born and dead in one cycle', () => {
+    // Stated over the ASSEMBLED step: a cell that receives a winning claim is occupied afterwards,
+    // and a cell that receives none is empty — with age 0, so nothing is inherited by whatever is
+    // born there next.
+    fc.assert(
+      fc.property(arbCase, (spec) => {
+        const source = buildGrid(spec);
+        const deps = simulationDepsFor(spec);
+
+        // The same three calls `threePhaseStep` makes, decomposed so the CLAIMS are observable.
+        const destination = createGrid(source.width, source.height);
+        deathPhase(source, destination, deps);
+        const claims = birthSurvivalPhase(destination, deps);
+        const claimed = new Set(claims.cellIndex);
+        conflictPhase(destination, claims, deps);
+
+        for (let i = 0; i < destination.occupant.length; i++) {
+          if (claimed.has(i)) {
+            expect(destination.occupant[i]).not.toBe(0);
+          } else {
+            expect(destination.occupant[i]).toBe(0);
+            expect(destination.age[i]).toBe(0);
+          }
+        }
+      }),
+    );
+  });
+
+  it('a winner is always a claimant for that cell, aged by its own claim', () => {
+    fc.assert(
+      fc.property(arbCase, (spec) => {
+        const source = buildGrid(spec);
+        const deps = simulationDepsFor(spec);
+        const destination = createGrid(source.width, source.height);
+
+        deathPhase(source, destination, deps);
+        const claims = birthSurvivalPhase(destination, deps);
+        const previousAges = Array.from(destination.age);
+        conflictPhase(destination, claims, deps);
+
+        // The "always a claimant" half, asserted rather than assumed: the ref written to a claimed
+        // cell is one of THAT cell's claimants. Without this, a slip such as `ref[winner + 1]`
+        // survives — the aging loop below `continue`s past any occupant it does not recognise.
+        const claimantsByCell = new Map<number, Set<number>>();
+        for (let i = 0; i < claims.cellIndex.length; i++) {
+          const refs = claimantsByCell.get(claims.cellIndex[i]) ?? new Set<number>();
+          refs.add(claims.ref[i]);
+          claimantsByCell.set(claims.cellIndex[i], refs);
+        }
+        for (const [cell, refs] of claimantsByCell) {
+          expect(refs.has(destination.occupant[cell])).toBe(true);
+        }
+
+        for (let i = 0; i < claims.cellIndex.length; i++) {
+          const cell = claims.cellIndex[i];
+          if (destination.occupant[cell] !== claims.ref[i]) continue;
+
+          // Age follows the winning claim's ACTION, never "winner === incumbent" — an incumbent
+          // may legitimately win with a `born` claim (claims.ts invariant 3).
+          const expected =
+            claims.action[i] === 'born' ? 0 : Math.min(previousAges[cell] + 1, deps.maxRelevantAge);
+          expect(destination.age[cell]).toBe(expected);
+        }
+      }),
+    );
+  });
+
+  it('every stored age stays within the battle ceiling', () => {
+    // The clamp is what keeps the value inside the Uint16 age buffer; `outAge[i] = value` wraps
+    // silently at 65536 (validateRules.ts caps age literals at 65534 for exactly this reason).
+    fc.assert(
+      fc.property(arbCase, (spec) => {
+        const deps = simulationDepsFor(spec);
+        let grid = buildGrid(spec);
+        for (let cycle = 0; cycle < 3; cycle++) {
+          grid = threePhaseStep(grid, createGrid(grid.width, grid.height), deps);
+          for (const age of grid.age) expect(age).toBeLessThanOrEqual(deps.maxRelevantAge);
+        }
+      }),
+    );
+  });
+
+  it('threePhaseStep leaves the SOURCE byte-identical and returns no aliased buffer', () => {
+    // The purity property of AR-41, extended to the whole cycle. Phase 3 writes IN PLACE over the
+    // destination, which is exactly why this has to be restated at the composed level: the
+    // in-place write is safe only because Phase 3 reads cell i's own previous age and nothing else.
+    fc.assert(
+      fc.property(arbCase, (spec) => {
+        const source = buildGrid(spec);
+        const occupantBefore = Array.from(source.occupant);
+        const ageBefore = Array.from(source.age);
+        const destination = createGrid(source.width, source.height);
+
+        const result = threePhaseStep(source, destination, simulationDepsFor(spec));
+
+        expect(Array.from(source.occupant)).toEqual(occupantBefore);
+        expect(Array.from(source.age)).toEqual(ageBefore);
+        expect(result.occupant).not.toBe(source.occupant);
+        expect(result.age).not.toBe(source.age);
+        expect(result.occupant).toBe(destination.occupant);
+      }),
+    );
+  });
+
+  it('overwrites a destination pre-filled with a stale frame, every cell (AC6)', () => {
+    fc.assert(
+      fc.property(arbCase, (spec) => {
+        const source = buildGrid(spec);
+        const destination = createGrid(source.width, source.height);
+        // Cycle N-2's ghost: a ref no cell holds and an age above every ceiling.
+        destination.occupant.fill(spec.roster.length + 1);
+        destination.age.fill(999);
+
+        threePhaseStep(source, destination, simulationDepsFor(spec));
+
+        for (let i = 0; i < destination.occupant.length; i++) {
+          expect(destination.occupant[i]).not.toBe(spec.roster.length + 1);
+          expect(destination.age[i]).not.toBe(999);
         }
       }),
     );

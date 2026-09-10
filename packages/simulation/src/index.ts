@@ -39,8 +39,8 @@ export type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol
 
 // The grid layer (RFC-004 §3.4, Story 3.3) — the typed-array representation the engine runs on,
 // the dense<->typed conversion at its boundary, the Moore neighbourhood, the pure resize, and the
-// double-buffer seam Story 3.5's `deathPhase` writes into (3.6's Phase 3 and 3.8's loop follow).
-// `apps/web` consumes `Grid` through its own
+// double-buffer seam the whole cycle writes into: Phase 1 into `back`, Phase 3 in place over it,
+// and the SWAP is the caller's (Story 3.8's loop). `apps/web` consumes `Grid` through its own
 // `RenderableGrid` alias (lib/canvas/renderableGrid.ts), which is now a re-export of this type
 // rather than a structural twin of it — Cross-RFC Reconciliation #3's runtime boundary lives here,
 // not in @gol/persistence, which must stay a leaf over @gol/domain (AR-2/27).
@@ -56,8 +56,10 @@ export { resizeGrid } from './grid/resizeGrid';
 // string-keyed, workspace-shared organism data becomes battle-relative numbers and closures:
 // id -> OrganismRef interning (Decision E.3), the two phase-partitioned evaluators per organism
 // (AR-18), the session-scoped compile cache (Decision E.4), MAX_RELEVANT_AGE (Decision B.5), and
-// the eager compile-time diagnostic sweep M12 assigns here. Story 3.5's phases consume it as
-// `PhaseDeps` (its `evaluatorsByRef`); 3.6's Phase 3 reads the rest. Nothing in it runs per cell.
+// the eager compile-time diagnostic sweep M12 assigns here. Phases 1 and 2 consume it as
+// `PhaseDeps` (its `evaluatorsByRef`) and Phase 3 as `ConflictDeps` (its `maxRelevantAge`), which
+// is why a `CompiledSession` spread with a roster and an `Rng` IS a `SimulationDeps` with no
+// construction step. Nothing in it runs per cell.
 export { compileSession } from './session/compileEvaluators';
 export type {
   CompilableOrganism,
@@ -75,17 +77,30 @@ export {
 } from './session/validateRules';
 export type { RuleCompilationError } from './session/validateRules';
 
-// The strategy layer (RFC-004 §3.1/§3.2, Story 3.5) — the first code in this package that WALKS
-// THE GRID rather than deciding about one cell, and the first that runs inside the NFR-1.1 frame
-// budget. Phase 1 answers who is explicitly killed, Phase 2 answers who is asking to be here next
-// cycle; neither answers who WINS — Phase 3, `threePhaseStep` and the seeded `Rng` are Story 3.6's,
-// which is also where `SimulationDeps` is declared (this story's FD1: a wider deps object satisfies
-// `PhaseDeps` structurally, so no adapter is needed when it lands).
+// The strategy layer (RFC-004 §3.1/§3.2, Stories 3.5 and 3.6) — the code that WALKS THE GRID
+// rather than deciding about one cell, and the only code in this package that runs inside the
+// NFR-1.1 frame budget. Phase 1 answers who is explicitly killed, Phase 2 answers who is asking to
+// be here next cycle, and Phase 3 answers who WINS — by Dominance, ties broken through the
+// injected seeded `Rng` (FR-5.4, AR-19) — then ages the winner and CLEARS every cell nobody
+// claimed, which is implicit death (M10) and the load-bearing half of the write.
+// `threePhaseStep` composes all three into the cycle; `activeStrategy` is the MVP's fixed
+// selection (❌ no registry, descriptor or `beta` flag — §3.1 defers all of it).
 //
-// ⚠️ `deathPhase` takes a caller-supplied DESTINATION rather than allocating (this story's FD2),
-// which diverges from RFC-004 §3.2's allocation-shaped snippet and matches what `doubleBuffer.ts`
-// was built for. The RFC amendment rides with `threePhaseStep`'s signature, which is Story 3.6's.
+// ⚠️ THE SWAP IS THE CALLER'S. `threePhaseStep(source, destination, deps)` returns the destination
+// it wrote; Story 3.8's loop holds the `GridBuffers` and calls `swapGridBuffers`. Keeping the pair
+// out of the strategy TYPE is what lets Story 3.9's preview instance (M3) and Story 4.15's
+// draft-organism run reuse it.
+//
+// ⚠️ Every phase takes a caller-supplied DESTINATION rather than allocating (Story 3.5's FD2,
+// Story 3.6's FD1), matching what `doubleBuffer.ts` was built for. RFC-004 §3.1/§3.2 carried
+// allocation-shaped signatures until Story 3.6; **the RFC now states the destination-passing
+// shape** — amended on Sidiar's explicit authorization (2026-09-10), the M14/M15 precedent.
 export { deathPhase } from './strategy/deathPhase';
 export { birthSurvivalPhase } from './strategy/birthSurvivalPhase';
+export { conflictPhase } from './strategy/conflictPhase';
+export { activeStrategy, threePhaseStep } from './strategy/threePhaseStep';
+export { createRng } from './strategy/rng';
 export type { Claims } from './strategy/claims';
-export type { PhaseDeps } from './strategy/phaseDeps';
+export type { ConflictDeps, OrganismRuntime, PhaseDeps } from './strategy/phaseDeps';
+export type { Rng } from './strategy/rng';
+export type { SimulationDeps, SimulationStrategy } from './strategy/threePhaseStep';

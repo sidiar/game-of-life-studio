@@ -49,8 +49,9 @@ export interface CellSubject {
   readonly organismType: OrganismRef | null;
   // Cycles alive (FR-5.6). NOT clamped here — MAX_RELEVANT_AGE is computed once per battle at
   // evaluator-compile time and rides on `CompiledSession` (../session/maxRelevantAge.ts,
-  // Decision B.5); Story 3.6's cycle-end step is what APPLIES it. Saturating in this layer would
-  // be wrong.
+  // Decision B.5), and ../strategy/conflictPhase.ts's cycle-end write is what APPLIES it (Story
+  // 3.6). Saturating in this layer would be wrong: the same cell would answer `age` differently in
+  // Phase 1 than at cycle end.
   readonly age: number;
   // ⚠️ SAME-organism Moore neighbours — not "all eight occupied neighbours" (RFC-004 §2.1). The
   // bare name reads like the latter, and Story 3.3 is what materializes it, so the definition is

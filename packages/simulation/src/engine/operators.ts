@@ -68,7 +68,9 @@ const table = {
   lte: (value, pattern) => isNumber(value) && isNumber(pattern) && value <= pattern,
   // ⚠️ Inclusive at BOTH bounds. Conway's Classic survives on `range [2,3]`, which means 2 OR 3; an
   // exclusive upper bound reads as correct, silently drops 3, and breaks every golden pattern in
-  // Story 3.6 — three stories after the bug is written.
+  // Story 3.6 — three stories after the bug is written. ⚠️ THOSE GOLDENS NOW EXIST
+  // (../strategy/conwayGoldens.test.ts): flipping this bound reddens the blinker, the glider and
+  // both still-lifes, so the warning above is now enforced rather than merely recorded.
   //
   // The shape check is not redundant with @gol/domain's NumericPattern. Destructuring a non-iterable
   // (`pattern` a bare number, null, or an object) THROWS, and a 1-element array destructures to

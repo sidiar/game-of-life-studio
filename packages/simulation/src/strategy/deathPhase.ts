@@ -11,18 +11,21 @@ import { evaluatorsFor } from './phaseDeps';
  *
  * ## Why a DESTINATION rather than a fresh grid (story FD2, option (b))
  *
- * RFC-004 §3.2's snippet reads `deathPhase(grid, deps) => Grid`, i.e. allocate-per-call. That
- * snippet is illustrative pseudocode; `../grid/doubleBuffer.ts` — written after it, and naming this
- * story — states the shape the shipped buffer seam was built for: *"Stories 3.5/3.6 write into
- * `back` and swap … the input grid is never written — the destination is a distinct grid the
- * caller supplied."* Allocating would cost a `Uint8Array(N)` plus a `Uint16Array(N)` PER CYCLE (18
- * KB at 100x60, 72 KB at 200x120, up to 20 times a second), which is precisely the per-cycle
+ * RFC-004 §3.2's snippet used to read `deathPhase(grid, deps) => Grid`, i.e. allocate-per-call.
+ * That snippet was illustrative pseudocode; `../grid/doubleBuffer.ts` — written after it, and
+ * naming this story — states the shape the shipped buffer seam was built for: the phases write
+ * into `back`, the caller swaps, and the SOURCE grid is never written, so the destination is a
+ * distinct grid the caller supplied. Story 3.6 adopted the same shape for `threePhaseStep` (its FD1).
+ * Allocating would cost a `Uint8Array(N)` plus a `Uint16Array(N)` PER CYCLE (18 KB at 100x60,
+ * 72 KB at 200x120, up to 20 times a second), which is precisely the per-cycle
  * allocation Decision A.6's steady-state memory budget and the double buffer exist to avoid. It
  * also makes the two-buffer plan serve a three-grid pipeline: this intermediate IS `back`, Phase 2
  * only reads it, and Phase 3 finishes in place over it.
  *
- * ⚠️ The divergence from §3.2's snippet is FLAGGED, not amended here: `threePhaseStep`'s signature
- * is Story 3.6's to write, and the RFC edit rides with it.
+ * ✅ The divergence is RESOLVED in the RFC's favour of what shipped: `threePhaseStep` landed in
+ * Story 3.6 with the matching `(source, destination, deps)` shape, and RFC-004 §3.1/§3.2 were
+ * amended to state it — on Sidiar's explicit authorization (2026-09-10), since amending an
+ * authority doc is not a story's call (the M14/M15 precedent).
  *
  * ## The two properties this function is pinned on
  *
@@ -38,10 +41,10 @@ import { evaluatorsFor } from './phaseDeps';
  *
  * ⚠️ IMPLICIT DEATH IS NOT APPLIED HERE (M10, Trap 3 — the load-bearing sentence of this story). A
  * living cell that matches no `die` rule stays on the intermediate grid even when it will match no
- * `survive` rule either. It yields no claim and is gone at cycle end (Story 3.6's write), but it
- * COUNTS AS A PHASE-2 NEIGHBOUR until then, which is what preserves Conway's simultaneous-
- * generation semantics. Conway's Classic has no `die` rule at all, so this phase over a Conway
- * battle returns a grid equal in content to its input.
+ * `survive` rule either. It yields no claim and is gone at cycle end (`conflictPhase`'s sweep
+ * clears every unclaimed cell), but it COUNTS AS A PHASE-2 NEIGHBOUR until then, which is what
+ * preserves Conway's simultaneous-generation semantics. Conway's Classic has no `die` rule at
+ * all, so this phase over a Conway battle returns a grid equal in content to its input.
  *
  * ❌ No call to `resolveCellAction` (Trap 13). The action partition is Story 3.4's COMPILE-TIME
  * work (AR-18, RFC-004 §2.3/§3.5): this phase asks `resolvesToDeath` and never filters, sorts or
@@ -106,8 +109,9 @@ export function deathPhase(source: Grid, destination: Grid, deps: PhaseDeps): Gr
  * (deferred-work.md, Story 3.5 review).
  *
  * ⚠️ `age` is passed exactly as stored — never clamped, incremented or saturated (Trap 9).
- * `CompiledSession.maxRelevantAge` is applied at CYCLE END by Story 3.6; clamping here would make
- * an `age gt <literal>` rule behave differently in Phase 1 than at cycle end.
+ * `CompiledSession.maxRelevantAge` is applied at CYCLE END, by `conflictPhase`'s write (Story
+ * 3.6); clamping here would make an `age gt <literal>` rule behave differently in Phase 1 than at
+ * cycle end.
  */
 function subjectForOccupant(
   source: Grid,
