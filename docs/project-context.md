@@ -208,15 +208,15 @@ a run that matches zero test files now fails, in all four workspaces.
   **50 rules** — is pinned by `packages/test-utils/src/benchmarkRoster.test.ts`, because Phase 2
   costs `cells × organisms × rules-until-first-match` and a cheaper roster is a looser gate with no
   diff to review.
-- 🔴 **THE GATE IS CURRENTLY RED and Story 3.7 stopped there.** `npm run ci` measures **18.749 ms
-  against the 16.667 ms budget**; standalone runs measure 12.4-16.5 ms and pass, so the result
-  depends on what the machine has just been doing. The budget does **not** move and the gate is
-  **not** softened — see `deferred-work.md`'s Story 3.7 entries for the one standing proposal
-  (awaiting Sidiar) and `docs/implementation-artifacts/performance-baseline-validation.md` for every
-  number. ⚠️ Until that decision lands, expect `npm run ci` and the CI `quality` job to fail on
-  `bench:check`.
-- ⚠️ **Phase 2 is ~98.5% of the cycle.** Any engine performance work that is not
-  `birthSurvivalPhase` work is measurement theatre at these ratios.
+- ✅ **Measured 6.760 ms against the 16.667 ms budget — 59.4% headroom.** It was 18.749 ms and RED
+  until Story 3.7's FD7 landed (conditions compiled to concrete predicates at session time), which
+  took the cycle from ~14 ms to ~6.7 ms and amended **M12** accordingly. If the gate ever goes red
+  again, the budget does **not** move — change the mechanism or fix the code. Every number:
+  `docs/implementation-artifacts/performance-baseline-validation.md`.
+- ⚠️ **Phase 2 is ~98% of the cycle** (5.9 ms of 6.7 ms). Any engine performance work that is not
+  `birthSurvivalPhase` work is measurement theatre at these ratios. The largest remaining lever —
+  not evaluating every organism at every cell — is a **semantics-bearing** change to M10/Decision C
+  and needs its own story and its own goldens.
 
 - Do **not** chase 100%, and never write a test whose only purpose is to raise the number.
   Coverage-padding tests are rejected in review.

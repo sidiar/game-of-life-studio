@@ -4,7 +4,7 @@ baseline_commit: 05827c3
 
 # Story 3.7: Performance Harness & Coverage-Gate Flip
 
-Status: in-progress — ⛔ HALTED at FD6's terminal branch, awaiting Sidiar (see Dev Agent Record)
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -185,7 +185,7 @@ deferred entries that say *"Story 3.7's to measure"*.
   - [x] Write `docs/implementation-artifacts/performance-baseline-validation.md`.
   - [x] Reproduction command first, verified by actually running it from a clean shell.
 
-- [~] **Task 9 — Verification** ⛔ HALTED — `npm run ci` is RED on `bench:check` (FD6 terminal branch) (AC: all)
+- [x] **Task 9 — Verification** (AC: all)
   - [x] `npm run ci` **redirected to a file, never piped** (`npm run ci > /tmp/ci.log 2>&1; echo $?`).
         A pipe reports the *pipe's* exit code and has already masked a real failure in this repo.
   - [x] Mutation-check the new gates: break the perf budget (temporarily inflate the fixture),
@@ -534,50 +534,55 @@ activation, so a stale line there misinforms every future story. Update the **Te
 
 claude-opus-5 (dev-story, `implement-next-story` step 2).
 
-### ⛔ HALT — FD6 terminal branch, awaiting Sidiar
+### FD6 terminal branch: raised, authorized, resolved
 
-**`npm run ci` is RED on `bench:check`.**
+**The story halted once, and this is the record of why and how it resumed.**
 
-```
-  step 100x60 x20                18.704 ms
-  repaint-decision 100x60 x20     0.044 ms
-  = frame                        18.749 ms
-  budget (1000 / 60)             16.667 ms
-✖ bench-budget: ... exceeding its 16.667 ms budget by 2.082 ms.
-```
+`npm run ci` failed on `bench:check` at **18.749 ms against a 16.667 ms budget, over by 2.082 ms**,
+with the benchmark in its real pipeline position. FD6 had been followed in order: the baseline was
+measured; both optimizations `deferred-work.md` names as this story's were **built and measured** —
+the reused scratch `CellSubject` (**0 ms**) and the "has death rules" flag (**≤0.1 ms**) — each delta
+recorded separately, both reverted. It still missed, so the story raised the Spec-conflict flag,
+presented **one** recommendation and stopped.
 
-FD6 was followed in order: **(1)** the baseline was measured and recorded; **(2)** both optimizations
-`deferred-work.md` names as this story's were **built and measured** — the reused scratch
-`CellSubject` and the "has death rules" flag; **(3)** each delta was re-measured and recorded
-separately (**0 ms** and **≤0.1 ms**) and both changes were **reverted**. It still misses. FD6's
-terminal instruction is then: raise a Spec-conflict flag, present **one** recommendation, and wait.
+**Nothing on FD6's "not allowed" list was touched, before or after.** The budget is still `1000/60`.
+The gate is still a hard failure, never a warning, never skipped. The fixture is still 20 organisms ×
+50 rules, pinned by `benchmarkRoster.test.ts` so it *cannot* be cheapened silently. 100×60 is still
+the only gated preset. `step()` was never gated alone with the repaint dropped.
 
-**Nothing on FD6's "not allowed" list was done.** The budget was not widened (it is `1000/60`,
-derived from NFR-1.1 + Decision D.2/D.3). The gate was not softened to a warning and not skipped. The
-fixture was not shrunk — it is pinned by `benchmarkRoster.test.ts` so it *cannot* be, silently. No
-other preset was gated in 100×60's place. `step()` was not gated alone with the repaint dropped.
+**Sidiar authorized the recommendation (2026-09-10), including the M12 amendment it required.**
+FD7 landed:
 
-**Spec-conflict flag: NFR-1.1's guarantee against a measured baseline.** NFR-1.1 promises 60 FPS at
-100×60 with up to 20 organisms. On the fastest machine available to this story, in the benchmark's
-real pipeline position, one cycle costs 18.7 ms of a 16.667 ms frame. The repaint decision is 0.3% of
-that; **Phase 2 is 98.5%**.
+- Each condition is compiled to a concrete `(cell) => boolean` at session time
+  (`compileEvaluators.ts`), resolving selector and predicate **once per rule per session**. The
+  compiled hot path performs neither dictionary lookup and neither M12 guard — and, it turned out,
+  no `.find`/`.every` closure allocation per call either.
+- **Measured: 12.2–14.4 ms → 5.7–6.1 ms per cycle, ~2.3×** (interleaved A/B, four pairs, table in
+  the report). The gated frame went **18.749 ms → 6.760 ms** standalone (59.4% headroom) and
+  **18.749 ms → 8.060 ms in `npm run ci`** — the exact position that was red — with 51.6% headroom.
+- **The safety property holds as argued.** `compileSession` runs `validateSurvivalRules` over the
+  whole roster before any evaluator exists, and that sweep's `isCellProperty` **is**
+  `Object.hasOwn(cellSelectors, property)` while its `OPERATORS.includes` **is** the operator
+  dictionary's totality test. The checks moved from per-cell to per-rule-per-session; they did not
+  vanish. Story 4.15's draft organism goes through `compileSession` and is still checked, once,
+  before its first cycle.
+- **`firstSatisfiedBy` and `operators` are unchanged and keep every guard**, because they are
+  parametric over an arbitrary subject and reachable by callers that never compile a session
+  (`resolveCellAction` is one). Invariant, written into both files: *a caller is either guarded per
+  cell, or guarded once before its first cycle — never neither.*
+- **`architecture.md` M12 amended** in the M14/M15 style: the corrected cost (+1.4 ms/cycle
+  re-measured against +0.091 ms recorded, and the operator guards confirmed at 0 ± 0.3 ms) and the
+  guards' new placement.
+- **367/367 `@gol/simulation` tests green and UNEDITED** through the change — Conway goldens,
+  conflict goldens, phase purity, property tests. Had a golden moved, that would have been a
+  semantics change and a second halt.
 
-> **THE ONE RECOMMENDATION.** Authorize compiling each condition down to a concrete
-> `(cell) => boolean` at session time — the option `compileEvaluators.ts` already records as its own
-> deferred FD7 and explicitly defers to *"Story 3.7, with the harness"*. It removes M12's
-> `Object.hasOwn` guard, the selector lookup **and** the operator-dictionary lookup from the per-cell
-> path in one change, with no caller left less safe: the check moves from per-cell to
-> per-rule-per-session, so Story 4.15's draft organism is still checked — once, before its first
-> cycle, instead of ~300,000 times per cycle. Measured lever: **≥1.4 ms/cycle** from the `hasOwn`
-> guard alone. It needs authorization because it changes what **M12** governs, and amending an
-> authority doc is not a story's call (the M14/M15 precedent).
->
-> If that is not enough on its own, the next lever is the one this story was told to stop at — **not
-> evaluating every organism at every cell**. That is a semantics-bearing change to M10/Decision C,
-> needs its own story and its own goldens, and remains out of scope. The numbers point there.
+❌ **The out-of-scope lever stayed out of scope.** Narrowing the candidate organism set per cell was
+never touched; the authorization excluded it and FD7 alone closed the gap.
 
-Everything else in the story is complete and green: the harness, both gates, all mutation checks, the
-coverage flip, the report, and the deferred-item closures. `bench:check` is the only red stage.
+**Nothing is awaiting Sidiar.** The one remaining unknown is a check, not a decision: `ci.yml`
+triggers on `main`/`pull_request` only, so the first *runner* number arrives when the PR opens. The
+frame would have to be 2.4× slower there to reach the budget.
 
 ### Forced Decisions
 
@@ -620,7 +625,16 @@ coverage flip, the report, and the deferred-item closures. `bench:check` is the 
   template ids in the roster, so Chaotic Spreader's `organismType eq mock-aggressive-colonizer`
   still resolves instead of compiling to `NO_MATCH_REF`. The rule count (**50**) and every other gate
   parameter are pinned by `benchmarkRoster.test.ts`.
-- **FD6 — the baseline misses.** See the HALT section above.
+- **FD6 — the baseline missed, then FD7 closed it.** See the section above. Allowed steps (1)-(3)
+  were taken in order and the terminal branch was reached honestly; the fix came from Sidiar's
+  authorization, not from a story quietly widening something.
+- **FD7 (`compileEvaluators.ts`'s own deferred decision) — TAKEN, on explicit authorization.**
+  Conditions compile to concrete predicates at session time. The operator itself is still
+  `operators[...]`, resolved once and **not** re-implemented inline per operator: specialising would
+  remove one more call and would fork the semantics of six predicates away from the file that
+  documents them — `operators.ts` warns that flipping `range`'s inclusive upper bound *"reads as
+  correct, silently drops 3, and breaks every golden pattern"*. One source of truth for what an
+  operator MEANS; this layer only decides when it is looked up.
 
 ### Debug Log References
 
@@ -630,7 +644,10 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 |---|---|
 | `npm run bench` (×8, standalone) | exit 0; `step 100x60 x20` = 12.4 – 16.4 ms |
 | `npm run bench:check` (standalone) | exit 0, headroom 0.19 – 4.3 ms |
-| `npm run ci > /tmp/gol-ci.log 2>&1; echo $?` | **exit 1** — `bench:check`, frame 18.749 ms vs 16.667 ms. Every stage before it green (typecheck, lint, format:check, spec:check, boundary:check, test:coverage, build:standalone, bundle:check). `e2e` not reached. |
+| `npm run ci > /tmp/gol-ci.log 2>&1; echo $?` (pre-FD7) | **exit 1** — `bench:check`, frame 18.749 ms vs 16.667 ms. Every stage before it green. `e2e` not reached. |
+| `npm run ci > /tmp/gol-ci2.log 2>&1; echo $?` (post-FD7) | **exit 0 — fully green**, `e2e` included (344 Playwright tests). In-pipeline frame **8.060 ms**, 8.606 ms headroom (51.6%). `bench` reported `0 cached, 2 total` (Trap 1). |
+| interleaved A/B, FD7 condition compilation (4 pairs) | before 12.219/13.495/14.145/14.428 · after **5.703/5.813/6.122/6.100** → **~2.3x, ~7.6 ms/cycle** |
+| `npm run bench` + `npm run bench:check` (post-FD7) | exit 0 — frame **6.760 ms**, **9.907 ms headroom (59.4%)**; turbo reported `0 cached, 2 total` (Trap 1 checked) |
 | `npm run ci` (first attempt) | exit 2 — `web:typecheck`, `BenchFunction` must return `void`; three arrow-body benches in `repaintDecision.bench.ts` returned values. Fixed. |
 | interleaved A/B, scratch `CellSubject` (3 pairs) | 15.10 vs 15.15 ms mean; by min 12.52 vs 13.91 — **no gain**; reverted |
 | interleaved A/B, M12 guards (4 triples) | SHIPPED 13.06/14.30/14.57/14.65 · NO-`hasOwn` 11.63/12.39/12.62/12.99 · NO-`typeof` 13.99/14.38/14.91/15.25 → **`hasOwn` +1.4 ms**, `typeof` **0 ± 0.3 ms**; both restored |
@@ -671,19 +688,20 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
   3.7"* and that `passWithNoTests` keeps empty packages green; both stopped being true. It now also
   carries the performance gate, the fixture-is-a-gate-parameter warning, and 🔴 the fact that the
   gate is currently red.
-- **The engine ships byte-identical to `05827c3`** apart from comments: both optimizations were
-  reverted, both M12 guards restored. `git diff` on the phase/engine/session sources shows comment
-  changes only.
+- **One engine behaviour change ships, and only one:** FD7's condition compilation in
+  `compileEvaluators.ts`. Both FD6 optimizations were reverted and both M12 guards are intact, so
+  every other phase/engine/session source differs from `05827c3` in comments only.
 
 ### Spec-conflict flags raised
 
-- **🔴 NFR-1.1's guarantee vs. the measured baseline** — the HALT above. Awaiting Sidiar.
-- **🟡 `architecture.md` Decision A.4's performance model is ~2.4× optimistic.** A.4: *"~6 ms at
-  6,000 cells → ~24 ms at 24,000"*. Measured: **~14–16 ms** and **~55–61 ms**. The *shape* A.4
-  asserts (~O(N), graceful degradation) holds exactly — ~3.9× for a 4× cell count — so its conclusion
-  survives; only the constant is wrong, and it was never measured. Proposed wording: *"~15 ms at
-  6,000 cells → ~58 ms at 24,000, measured (Story 3.7)"*. **Not edited** — A.4 is a Cross-Cutting
-  Decision.
+- **✅ NFR-1.1's guarantee vs. the measured baseline** — raised as the HALT above, **resolved** by the
+  authorized FD7 change. The frame is 6.760 ms against 16.667 ms.
+- **✅ WITHDRAWN — `architecture.md` Decision A.4's performance model.** Raised mid-story as ~2.4×
+  optimistic (A.4: *"~6 ms at 6,000 cells → ~24 ms at 24,000"*; pre-FD7 measurement ~14–16 ms and
+  ~55–61 ms). **After FD7 the same two points measure 6.71 ms and 23.87 ms** — within a few percent
+  of A.4's figures. A.4 was right about the destination; the engine had not arrived yet. No
+  amendment proposed and none needed. ⚠️ For **Story 3.16**: 150×90 (13.3 ms) now also fits inside a
+  frame; only 200×120 does not.
 - **🟡 `epics.md`'s AC for this story says the benchmark measures "`step()` + repaint".** Off-browser
   there is no repaint to measure. Amended in the open (the M13 precedent): the harness measures
   **`step()` + the repaint DECISION**, and the AC's wording should follow the code.
@@ -693,7 +711,10 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
   coverage-for-its-own-sake RFC-008 Risk 1 rejects); not zero either (`apps/web`'s no-gate is a
   counter-metric about *UI* coverage theatre, and this package is not UI — a broken fixture here
   silently weakens every consumer's tests).
-- **🟡 M12's `Object.hasOwn` figure is ~15× low** — see the HALT recommendation. M12 **not amended**.
+- **✅ M12's `Object.hasOwn` figure was ~15× low** (+1.4 ms/cycle measured against +0.091 ms
+  recorded; the operator guards confirmed at 0 ± 0.3 ms). **M12 amended** in `architecture.md` on
+  Sidiar's explicit authorization — the corrected cost *and* the guards' new placement. Neither guard
+  was removed.
 
 ### File List
 
@@ -708,6 +729,11 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 
 **Modified**
 
+- `docs/planning-artifacts/architecture.md` — **M12 amended** (corrected cost + the guards' new
+  placement), on Sidiar's explicit authorization
+- `packages/simulation/src/session/compileEvaluators.ts` — **FD7**: `compileCondition` /
+  `compileRule` compile each condition to a concrete `(cell) => boolean` at session time; the
+  evaluators loop over compiled predicates instead of closing over `firstSatisfiedBy`
 - `package.json` — `bench` / `bench:check` scripts; the `ci` chain
 - `turbo.json` — `bench` task, `"cache": false`
 - `.github/workflows/ci.yml` — two new stages + the header stage-order comment
@@ -723,9 +749,9 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 - `packages/simulation/src/strategy/birthSurvivalPhase.ts`,
   `packages/simulation/src/strategy/deathPhase.ts`,
   `packages/simulation/src/engine/firstSatisfiedBy.ts`,
-  `packages/simulation/src/engine/operators.ts`,
-  `packages/simulation/src/session/compileEvaluators.ts` — **comments only**: each "Story 3.7's to
-  measure" note replaced by its measured result
+  `packages/simulation/src/engine/operators.ts` — **comments only**: each "Story 3.7's to measure"
+  note replaced by its measured result, and the two engine files now state the
+  guarded-per-cell-or-guarded-once invariant FD7 rests on
 - `apps/web/lib/canvas/colourStateGroups.ts`, `apps/web/lib/canvas/gridRenderer.ts`,
   `apps/web/components/battle/editor/OrganismRoster.tsx` — **comments only**, same
 - `docs/implementation-artifacts/deferred-work.md` — five entries closed with numbers, one
@@ -739,6 +765,7 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 |---|---|
 | 2026-09-10 | `vitest bench` harness across all four presets × 20 organisms + the repaint-decision bench; `scripts/check-bench-budget.mjs` with the derived 16.667 ms budget and a vacuous-result guard; `bench` / `bench:check` wired into `turbo.json`, `npm run ci` and `ci.yml`; coverage gates flipped on (90% per-file on domain/simulation, 80% aggregate on persistence/test-utils, none on apps/web) with `coverage.include` landing first and `passWithNoTests` removed everywhere; M12 re-measured; seven deferred perf items closed with numbers; `performance-baseline-validation.md` written. |
 | 2026-09-10 | ⛔ **HALT at FD6's terminal branch** — `npm run ci` red on `bench:check` at 18.749 ms vs 16.667 ms after both permitted optimizations measured at ~0 and were reverted. One recommendation recorded; awaiting Sidiar. |
+| 2026-09-10 | ✅ **FD7 authorized by Sidiar and landed** — conditions compiled to concrete `(cell) => boolean` predicates at session time; ~2.3× on the assembled cycle (12.2–14.4 → 5.7–6.1 ms), gated frame 18.749 → **6.760 ms** with 59.4% headroom. `architecture.md` **M12 amended** (corrected cost + new guard placement). 367 simulation tests and every golden green and unedited. `npm run ci` fully green. |
 
 Dev Model: opus   # establishes the perf-gate mechanism, budget derivation and coverage-include shape that 3.8/3.9 benches and the pending bundle-ratchet story all inherit — and the measured baseline likely misses NFR-1.1, so the story is a judgment call, not wiring.
 

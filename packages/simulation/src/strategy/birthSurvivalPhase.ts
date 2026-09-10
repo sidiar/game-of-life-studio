@@ -48,10 +48,12 @@ import { createNeighborTally, sameNeighbors, tallyNeighbors } from './neighborTa
  * `CellSubject` is `readonly`, so a shared scratch subject is a real seam — every evaluator would
  * see one aliased object and any that RETAINED it would silently hold the last cell's values.
  *
- * Where the cycle actually goes, measured at the same baseline: Phase 1 0.21 ms, **Phase 2
- * 14.3 ms**, Phase 3 0.01 ms — and ~1.4 ms of Phase 2 is the per-condition `Object.hasOwn` guard in
- * ../engine/firstSatisfiedBy.ts (M12). Full numbers and the standing proposal:
- * docs/implementation-artifacts/performance-baseline-validation.md.
+ * Where the cycle actually goes, measured at the same baseline AFTER Story 3.7's FD7 landed
+ * (conditions compiled to concrete predicates at session time, ../session/compileEvaluators.ts):
+ * Phase 1 0.12 ms, **Phase 2 5.9 ms**, Phase 3 0.01 ms — a whole cycle of 6.7 ms against a 16.67 ms
+ * frame. Before FD7 the same split was 0.21 / 14.3 / 0.01 ms, and ~1.4 ms of that Phase 2 was the
+ * per-condition `Object.hasOwn` guard in ../engine/firstSatisfiedBy.ts (M12, since amended). Full
+ * numbers: docs/implementation-artifacts/performance-baseline-validation.md.
  */
 export function birthSurvivalPhase(grid: Grid, deps: PhaseDeps): Claims {
   // ⚠️ Dimensions are parameters, never constants (Decision A).

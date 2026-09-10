@@ -2,7 +2,7 @@
 // workspace-shared organism data becomes battle-relative numbers and closures ONCE, before the
 // first cycle. Everything after this in Epic 3 runs inside the NFR-1.1 frame budget and can afford
 // none of it.
-import { firstSatisfiedBy } from '../engine/firstSatisfiedBy';
+import { operators } from '../engine/operators';
 import type { Condition } from '../engine/rule';
 import { cellSelectors } from '../gol/cellSubject';
 import type { CellProperty, CellSubject, OrganismRef } from '../gol/cellSubject';
@@ -50,6 +50,15 @@ export interface CompilableOrganism {
  * act — the M14 precedent); minted as M15 on Sidiar's explicit authorization, 2026-09-10. §3.1's
  * `SimulationDeps` now reads `evaluatorsByRef`, so there is no `deps.resolveAction` to consume.
  */
+/** A rule or condition reduced to the one question the hot loop asks it (FD7). */
+type CellPredicate = (cell: CellSubject) => boolean;
+
+/** A compiled Phase-2 rule: its predicate, and the action it yields when that predicate holds. */
+interface CompiledBirthSurvivalRule {
+  readonly matches: CellPredicate;
+  readonly action: Action;
+}
+
 export interface OrganismEvaluators {
   // Phase 1. `true` when any `die` rule fires — a boolean, not an Action, because "which die rule
   // won" changes nothing downstream.
@@ -147,6 +156,42 @@ function internRule(rule: SurvivalRule, refById: ReadonlyMap<string, OrganismRef
   return { ...rule, conditions };
 }
 
+/**
+ * One condition, compiled to a concrete predicate over a `CellSubject` (FD7).
+ *
+ * The whole point is what is NOT here at call time. `selector` and `predicate` are resolved once,
+ * against dictionaries `validateSurvivalRules` has already proven total for this condition's
+ * property and operator, and `pattern` is captured from the INTERNED rule — so the returned closure
+ * does two calls and no lookups. `firstSatisfiedBy` does the same work per cell, for every cell, for
+ * every organism.
+ *
+ * ⚠️ The operator itself is still `operators[...]`, deliberately NOT re-implemented inline per
+ * operator. Specialising would remove one more call, and it would also fork the semantics of six
+ * predicates away from the file that documents them — `operators.ts` warns that flipping `range`'s
+ * inclusive upper bound "reads as correct, silently drops 3, and breaks every golden pattern". One
+ * source of truth for what an operator MEANS; this layer only decides when it is looked up.
+ */
+function compileCondition(condition: Condition<CellProperty>): CellPredicate {
+  const selector = cellSelectors[condition.property];
+  const predicate = operators[condition.operator];
+  const { pattern } = condition;
+  return (cell: CellSubject) => predicate(selector(cell), pattern);
+}
+
+/**
+ * One rule, compiled: ALL conditions must hold (Composite, AND semantics), short-circuiting at the
+ * first false exactly as `ruleIsSatisfiedBy`'s `.every` did — with no callback allocated per cell.
+ */
+function compileRule(rule: SurvivalRule): CellPredicate {
+  const conditions = rule.conditions.map(compileCondition);
+  return (cell: CellSubject) => {
+    for (let index = 0; index < conditions.length; index++) {
+      if (!conditions[index](cell)) return false;
+    }
+    return true;
+  };
+}
+
 function compileOrganism(
   organism: CompilableOrganism,
   refById: ReadonlyMap<string, OrganismRef>,
@@ -163,39 +208,66 @@ function compileOrganism(
   // partitions on `payload.action` — which is why it lives here and not in `src/engine/`.
   // rule.ts states the engine never inspects `payload`, "not to sort, not to filter, not to
   // optimize"; that is the single thing keeping the engine reusable (AR-16, Trap 7).
-  const death: SurvivalRule[] = [];
-  const birthSurvival: SurvivalRule[] = [];
+  const death: CellPredicate[] = [];
+  const birthSurvival: CompiledBirthSurvivalRule[] = [];
   for (const rule of organism.survivalRules) {
     const interned = internRule(rule, refById);
     // Persisted order is preserved verbatim WITHIN each partition (FR-2.6): a partition is a
     // filter, never a sort.
-    (rule.payload.action === 'die' ? death : birthSurvival).push(interned);
+    if (rule.payload.action === 'die') {
+      death.push(compileRule(interned));
+    } else {
+      birthSurvival.push({ matches: compileRule(interned), action: rule.payload.action });
+    }
   }
 
-  // FD7 (Dev Agent Record): compilation stops at "partition + intern + close over
-  // firstSatisfiedBy" — the readable form. The deeper option is to compile each condition down to
-  // a concrete `(cell) => boolean` here, which would remove the per-cell selector lookup, the
-  // `Object.hasOwn` guard and the operator dictionary lookup entirely (the "zero-per-cell key
-  // sweep" firstSatisfiedBy.ts describes) at the cost of a second evaluation path to keep correct.
-  // Not built blind: this repo optimizes on measurement (M12's guards were justified at
-  // +0.019/+0.091 ms against a 16.7 ms budget, and Story 3.3's FD4 wrote its packed-integer
-  // alternative into a comment for the same reason).
+  // FD7 — AUTHORIZED AND TAKEN (Sidiar, 2026-09-10; M12 amended in the same change). Compilation
+  // used to stop at "partition + intern + close over `firstSatisfiedBy`", which left three lookups
+  // on the per-cell path: the selector lookup, M12's `Object.hasOwn` guard, and the operator
+  // dictionary lookup — plus a `.find`/`.every` closure pair allocated per call. `compileRule`
+  // above resolves all of it ONCE PER RULE PER SESSION, and what survives into the loop is a
+  // concrete `(cell) => boolean`.
   //
-  // ⚠️ STORY 3.7 MEASURED IT, AND THIS IS NOW THE LARGEST KNOWN LEVER THAT IS NOT A SEMANTICS
-  // CHANGE — but it is NOT taken here, because it is Sidiar's call. At the NFR-1.1 baseline the
-  // cycle is ~14.5 ms of a 16.67 ms frame, Phase 2 is 98.5% of it, and **~1.4 ms is the per-
-  // condition `Object.hasOwn` guard in ../engine/firstSatisfiedBy.ts** — which compiling conditions
-  // to concrete predicates would remove along with the selector lookup and the operator-dictionary
-  // lookup, at no cost to any caller's safety. That guard is M12, an authority-doc decision owned by
-  // RFC-004, and M12 says it is re-measured rather than removed on an argument. The measurement and
-  // the proposal are in docs/implementation-artifacts/performance-baseline-validation.md; the
-  // decision is not a story's to take.
+  // Measured, interleaved A/B against `../strategy/threePhaseStep.bench.ts` at the NFR-1.1
+  // baseline: see docs/implementation-artifacts/performance-baseline-validation.md. The guard alone
+  // was +1.4 ms/cycle — 15x what M12 originally recorded, because this loop makes ~300,000
+  // `Object.hasOwn` calls per cycle (120,000 subjects x ~2.5 conditions).
+  //
+  // ⚠️ NO CALLER IS LESS SAFE, and that is the property the authorization rests on rather than a
+  // hope. `compileSession` runs `validateSurvivalRules` over the WHOLE roster before any evaluator
+  // exists, and that sweep already performs both checks per condition: `isCellProperty` is
+  // literally `Object.hasOwn(cellSelectors, property)` — M12's guard — and `OPERATORS.includes`
+  // is the operator dictionary's totality check. So the check did not disappear; it MOVED from
+  // per-cell to per-rule-per-session, which is what M12's amended text now records. Story 4.15's
+  // draft organism goes through `compileSession` and is therefore still checked, once, before its
+  // first cycle.
+  //
+  // ⚠️ `../engine/firstSatisfiedBy.ts` KEEPS its guards and is unchanged. It is parametric over an
+  // arbitrary subject and reachable by callers that never compile a session (`resolveCellAction`
+  // is one), and those callers have no sweep standing behind them. The hot path simply no longer
+  // routes through it.
   const evaluators: OrganismEvaluators = Object.freeze({
-    resolvesToDeath: (cell: CellSubject) => firstSatisfiedBy(death, cell, cellSelectors) !== null,
-    // `?? null`, never `|| null` (Story 3.1's trap): optional chaining off a null winner yields
-    // `undefined`, and a leaked `undefined` passes `!winner` while failing `winner === null`.
-    resolveBirthSurvival: (cell: CellSubject) =>
-      firstSatisfiedBy(birthSurvival, cell, cellSelectors)?.payload.action ?? null,
+    resolvesToDeath: (cell: CellSubject) => {
+      // An index loop, not `.some`: this runs once per occupied cell per cycle, and the callback
+      // `.some` allocates is the cost the compile step exists to remove.
+      for (let index = 0; index < death.length; index++) {
+        if (death[index](cell)) return true;
+      }
+      return false;
+    },
+    // ⚠️ `null` means NO RULE MATCHED, never "die" (Trap 9) — the same contract the
+    // `firstSatisfiedBy` form carried through `?? null`. `action` is read at COMPILE time above and
+    // cannot be `undefined` here: `validateSurvivalRules` rejects a payload whose action is outside
+    // the three, before this function is ever reached.
+    resolveBirthSurvival: (cell: CellSubject) => {
+      // FIRST match wins, in persisted order (FR-2.6, M10) — the loop exits on it exactly as
+      // `Array.prototype.find` did.
+      for (let index = 0; index < birthSurvival.length; index++) {
+        const rule = birthSurvival[index];
+        if (rule.matches(cell)) return rule.action;
+      }
+      return null;
+    },
   });
 
   cache.set(key, evaluators);

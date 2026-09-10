@@ -96,7 +96,7 @@ development_status:
   3-4-precompiled-evaluators-organism-interning: done
   3-5-phases-1-2-death-claims: done
   3-6-phase-3-the-assembled-cycle: done
-  3-7-performance-harness-coverage-gate-flip: in-progress
+  3-7-performance-harness-coverage-gate-flip: review
   3-8-simulationloop: backlog
   3-9-colour-state-batch-rendering: backlog
   3-10-usesimulation-hook: backlog

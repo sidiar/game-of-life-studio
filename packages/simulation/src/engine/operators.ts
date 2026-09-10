@@ -41,10 +41,13 @@ export type Predicate = (value: unknown, pattern: unknown) => boolean;
 // ✅ RE-MEASURED IN STORY 3.7 with the real harness (100x60, 20 organisms, 50 rules, guards removed
 // and restored in an interleaved A/B): **0 +/- 0.3 ms/cycle** — below the harness's own run-to-run
 // spread, which is consistent with M12's +0.019 ms and confirms it. THIS HALF OF M12 IS CHEAP. The
-// other half is not: ../engine/firstSatisfiedBy.ts's `Object.hasOwn` guard re-measures at
-// +1.4 ms/cycle, 15x its recorded figure — see that file's header and
-// docs/implementation-artifacts/performance-baseline-validation.md. Neither guard is removed and
-// M12 is not amended from a story; both are Sidiar's call.
+// other half is not: ../engine/firstSatisfiedBy.ts's `Object.hasOwn` guard re-measured at
+// +1.4 ms/cycle, 15x its recorded figure. Neither guard was removed — but on Sidiar's authorization
+// the hot path stopped routing through either of them: ../session/compileEvaluators.ts resolves
+// `operators[condition.operator]` ONCE per rule per session and hands the loop a concrete
+// predicate. M12 was amended in the same change to record both the corrected cost and the new
+// placement. This dictionary is unchanged, and every caller that indexes it directly still gets the
+// null prototype and the guards. See docs/implementation-artifacts/performance-baseline-validation.md.
 //
 // ⚠️ Failing closed is deliberate but it is not free: malformed rule data yields a rule that never
 // fires instead of a crash, which is the right behaviour inside a 60 FPS loop but is also silent.

@@ -106,12 +106,11 @@ export function deathPhase(source: Grid, destination: Grid, deps: PhaseDeps): Gr
  * cell, including those of an organism with no `die` rule at all (Conway's Classic), whose
  * `resolvesToDeath` can only answer `false`; Story 3.5's review parked a per-organism "has death
  * rules" flag on `OrganismEvaluators` as the fix. The harness bounds what that flag could ever buy:
- * the WHOLE of Phase 1 is **0.21 ms of a 14.5 ms cycle** at the NFR-1.1 baseline (1.4%), and the
- * flag would skip only the occupants whose organism has no `die` rule — half the benchmark roster,
- * so ~0.1 ms. That is under the harness's own +/-1.5 ms run-to-run spread, i.e. below what this
- * repo can measure, in exchange for a field on a Story 3.4 public surface. Phase 2 is 98.5% of the
- * cycle; that is where the frame budget goes
- * (docs/implementation-artifacts/performance-baseline-validation.md).
+ * the WHOLE of Phase 1 is **0.12 ms of a 6.7 ms cycle** at the NFR-1.1 baseline (2%), and the flag
+ * would skip only the occupants whose organism has no `die` rule — half the benchmark roster, so
+ * ~0.06 ms. That is under the harness's own run-to-run spread, i.e. below what this repo can
+ * measure, in exchange for a field on a Story 3.4 public surface. Phase 2 is ~98% of the cycle; that
+ * is where the frame budget goes (docs/implementation-artifacts/performance-baseline-validation.md).
  *
  * ⚠️ `age` is passed exactly as stored — never clamped, incremented or saturated (Trap 9).
  * `CompiledSession.maxRelevantAge` is applied at CYCLE END, by `conflictPhase`'s write (Story

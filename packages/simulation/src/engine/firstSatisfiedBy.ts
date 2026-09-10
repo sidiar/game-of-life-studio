@@ -30,17 +30,19 @@ import type { Rule, RuleSet, Condition, Selectors } from './rule';
 // each. The typeof guards in operators.ts re-measure at 0 +/- 0.3 ms — below resolution, exactly as
 // M12 says.
 //
-// ⚠️ THE GUARD STAYS, and M12 is NOT amended from here. Both are Sidiar's call: M12 is an
-// authority-doc decision owned by RFC-004, `firstSatisfiedBy` is public API that Story 4.15 will
-// call with a draft organism that never went through `compileSession`, and the once-per-battle
-// sweep (validateSurvivalRules, Story 3.4) only covers callers that DO. Removing it would trade a
-// measured 10% for an unmeasured crash surface inside the 60 FPS loop.
+// ⚠️ THE GUARD STAYS HERE — but the 60 FPS loop no longer comes through this function. On Sidiar's
+// authorization (2026-09-10, M12 amended in the same change) ../session/compileEvaluators.ts now
+// compiles each condition to a concrete `(cell) => boolean`, resolving selector and predicate ONCE
+// per rule per session, so the compiled path performs neither lookup and neither guard. Measured
+// effect on the assembled cycle: 12.2-14.4 ms -> 5.7-6.1 ms, ~2.3x.
 //
-// The standing proposal, with its number, is in
-// docs/implementation-artifacts/performance-baseline-validation.md: hoist the check out of the
-// per-cell path entirely by compiling each condition to a concrete `(cell) => boolean` at session
-// time (../session/compileEvaluators.ts's own deferred FD7), which removes this guard, the selector
-// lookup AND the operator-dictionary lookup from the hot loop without weakening any caller.
+// This function is NOT the compiled path and keeps every guard, because it is parametric over an
+// arbitrary subject (AR-16) and is public API reachable by callers that never compile a session —
+// `../gol/resolveCellAction.ts` is one today. The invariant, stated so a later story cannot erode it
+// by accident: **a caller is either guarded per cell HERE, or guarded once before its first cycle by
+// `validateSurvivalRules`, but never neither.** Story 4.15's draft organism is the second case: it
+// goes through `compileSession`, whose sweep runs this exact `Object.hasOwn` check per condition,
+// once.
 //
 // operators.ts closes its half of the same inherited-key class at the root with a null prototype; a
 // CALLER's dictionary is not ours to reshape, so it is checked at the point of use instead.

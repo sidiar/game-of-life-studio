@@ -498,66 +498,53 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 ## Deferred from: Story 3-7 performance harness (2026-09-10)
 
-- **🟠 DECISION NEEDED — M12's `Object.hasOwn` guard costs ~15× what M12 records, and the fix needs
-  Sidiar's authorization.** `architecture.md` **M12** states the two per-cell guards at
-  **+0.019 ms/cycle** (`operators.ts`'s `typeof` checks) and **+0.091 ms/cycle**
-  (`firstSatisfiedBy`'s `Object.hasOwn`), and says they *"should be re-measured with Story 3.7's
-  harness"*. Re-measured against the real baseline (100×60, 20 organisms, 50 rules, each guard
-  removed and restored in an interleaved A/B): the **operator guards cost what M12 says** (0 ± 0.3 ms,
-  below resolution — confirmed), and the **`Object.hasOwn` guard costs +1.4 ms/cycle** — ≈10% of the
-  cycle and 8% of the whole NFR-1.1 frame budget. M12's figure was taken on a far smaller evaluation
-  count; the real baseline makes ~300,000 `hasOwn` calls per cycle (120,000 subjects × ~2.5
-  conditions) at ~4.7 ns each.
+- **✅ RESOLVED — M12's `Object.hasOwn` guard was re-measured at ~15x its recorded cost, and the fix
+  was authorized and landed in Story 3.7.** Re-measured against the real baseline (100x60, 20
+  organisms, 50 rules, interleaved A/B): the **operator `typeof` guards cost what M12 says**
+  (0 +/- 0.3 ms, below resolution — confirmed), and the **`Object.hasOwn` guard cost +1.4 ms/cycle** —
+  ~10% of the cycle against M12's recorded +0.091 ms. M12's figure was taken on a far smaller
+  evaluation count; the real baseline makes ~300,000 `hasOwn` calls per cycle.
 
-  **Nothing was removed and M12 was not amended** (story AC12: measure and propose). The guard is
-  what stands between a caller that skipped `compileSession` and a crash inside the 60 FPS loop, and
-  **Story 4.15** is exactly such a caller — it runs a draft organism straight out of Epic 4's editor,
-  so Story 3.4's once-per-battle `validateSurvivalRules` sweep does not cover it.
+  **Sidiar authorized FD7** (2026-09-10): each condition is now compiled to a concrete
+  `(cell) => boolean` at session time (`compileEvaluators.ts`), resolving selector and predicate
+  once, so the hot path performs neither lookup and neither guard. Measured: **12.2-14.4 ms ->
+  5.7-6.1 ms per cycle, ~2.3x** — more than the guard alone, because the two dictionary lookups and
+  the per-call `.find`/`.every` closure allocations went with it. `architecture.md` **M12 was amended
+  in the same change** to record the corrected cost and the guards' new placement.
 
-  **The proposal, and it is one proposal:** authorize **compiling each condition down to a concrete
-  `(cell) => boolean` at session time** — the option `compileEvaluators.ts` already records as its own
-  deferred FD7 and defers to *"Story 3.7, with the harness"*. It removes the `hasOwn` guard, the
-  selector lookup and the operator-dictionary lookup from the per-cell path in one change, with no
-  caller left less safe: the check moves from per-cell to per-rule-per-session, so a Story 4.15 draft
-  is still checked — once, before its first cycle. Measured lever ≥1.4 ms/cycle on a frame whose
-  worst observed headroom is 0.19 ms. ⚠️ It is **not** the algorithmic fix (narrowing the candidate
-  organism set per cell), which is a semantics-bearing change to M10/Decision C and needs its own
-  story and its own goldens — still out of scope. Numbers:
-  `docs/implementation-artifacts/performance-baseline-validation.md`.
+  ⚠️ **`firstSatisfiedBy` and `operators` are unchanged and keep every guard.** The checks moved
+  rather than vanished: `validateSurvivalRules`'s `isCellProperty` **is**
+  `Object.hasOwn(cellSelectors, property)` and its `OPERATORS.includes` **is** the dictionary's
+  totality test, both run once per condition per battle. The invariant to preserve: **a caller is
+  either guarded per cell, or guarded once before its first cycle — never neither.** Story 4.15's
+  draft organism is the second case.
 
-- **🔴 BLOCKING — the NFR-1.1 frame gate is RED, and Story 3.7 stopped there (its FD6 terminal
-  branch).** `npm run ci` fails on `bench:check`: **18.749 ms against a 16.667 ms budget, over by
-  2.082 ms**, measured with the benchmark in its real pipeline position (after typecheck, lint,
-  coverage, build and bundle) on an Apple-silicon dev machine. Standalone, the same tree measures
-  12.4–16.5 ms and passes — worst standalone headroom **0.19 ms (1.1%)** — so pass/fail depends on
-  what the machine has just been doing, which is itself the finding. Run-to-run spread on one
-  machine, one tree, one commit is **≈ ±10%** (thermal, and it grows across consecutive runs), and
-  `ubuntu-latest` is slower than an M-series Mac on single-threaded JS on top of that. **RFC-008
-  Risk 6 asks for a *generous* margin; the sign is negative.**
+  ❌ **Still out of scope, explicitly excluded from the authorization:** narrowing the candidate
+  organism set per cell. Semantics-bearing (M10/Decision C), needs its own story and its own
+  goldens. FD7 alone closed the gap, so it was not needed.
 
-  **The budget was not moved and the gate was not softened** — no warning-only mode, no `skip`, no
-  shrunken fixture, no substitute preset, no gating `step()` alone. All of those are on the story's
-  FD6 "not allowed" list, and Sidiar's standing preference is that a gate's *mechanism* changes
-  rather than its threshold being relaxed again. Both optimizations FD6 permitted were **built,
-  measured and reverted** — 0 ms and ≤0.1 ms, each delta recorded separately in the report. **It
-  still misses**, so the story raised the flag and stopped rather than landing something green.
+- **✅ RESOLVED — the NFR-1.1 frame gate was red at 18.749 ms and now passes at 6.760 ms with 59.4%
+  headroom.** Story 3.7 halted at its FD6 terminal branch when `npm run ci` failed `bench:check` by
+  2.082 ms; both optimizations FD6 permitted had been built, measured (**0 ms** and **<=0.1 ms**) and
+  reverted. Nothing on FD6's "not allowed" list was touched then and nothing was touched after: the
+  budget is still `1000/60 = 16.667 ms`, the gate is still hard, the fixture is still 20 organisms /
+  50 rules pinned by a test, and 100x60 is still the only gated preset. The gap was closed by the
+  entry above (FD7) — a change of *mechanism* in the engine, not a relaxed threshold.
 
-  **The single recommendation is the condition-compilation proposal in the entry above.** If that is
-  not enough on its own, the next lever is the one Story 3.7 was told to stop at — not evaluating
-  every organism at every cell — which is a semantics-bearing change to M10/Decision C and needs its
-  own story and its own goldens.
+  ⚠️ **CI still has not measured this branch.** `.github/workflows/ci.yml` triggers on `main` and
+  `pull_request` only, so a topic-branch push runs nothing — the first *runner* number arrives when
+  the PR opens. The frame would have to be **2.4x slower** there to reach the budget, so this is now
+  a check rather than a cliff; read `gh run list` after the PR opens rather than inferring it.
 
-  ⚠️ `.github/workflows/ci.yml` triggers on `main` and `pull_request` only, so a topic-branch push
-  runs nothing — the first *runner* number arrives when the PR opens, and it will be worse than
-  18.7 ms.
-
-- **🟡 `architecture.md` Decision A.4's performance model is ~2.4× optimistic — proposed amendment,
-  not edited from a story.** A.4 states step cost *"~6 ms at 6,000 cells → ~24 ms at 24,000"*.
-  Measured: **~14–16 ms at 6,000 and ~55–61 ms at 24,000**. The *shape* A.4 asserts (~O(N), graceful
-  degradation) holds exactly — ~3.9× for a 4× cell count — and its conclusion is unaffected; only the
-  constant is wrong, and A.4's estimate was never measured. Proposed wording: "~15 ms at 6,000 cells
-  → ~58 ms at 24,000, measured (Story 3.7)". A.4 is a Cross-Cutting Decision, so the edit is
-  Sidiar's.
+- **✅ WITHDRAWN — `architecture.md` Decision A.4's performance model turned out to be RIGHT, once
+  the engine was.** Raised mid-story as a ~2.4x-optimistic estimate: A.4 states step cost *"~6 ms at
+  6,000 cells -> ~24 ms at 24,000"*, and the pre-FD7 engine measured **~14-16 ms** and **~55-61 ms**.
+  After FD7 (see above) the same two points measure **6.71 ms** and **23.87 ms** — within a few
+  percent of A.4's figures, and the shape (~O(N), ~3.6x for a 4x cell count) holds as it always did.
+  **No amendment proposed and none needed**; the flag is recorded as withdrawn rather than deleted,
+  because "the estimate was wrong" was a reasonable reading of the numbers for as long as they stood
+  and the next reader should see why it stopped being one. ⚠️ Worth carrying to **Story 3.16**: at
+  these numbers 150x90 (13.3 ms) also fits inside a 16.667 ms frame, and only 200x120 does not.
 
 - **🟡 `epics.md`'s Story 3.7 AC says the benchmark measures "`step()` + repaint"; off-browser there
   is no repaint to measure.** Amended in the open (the M13 precedent, Story 3.3): the harness

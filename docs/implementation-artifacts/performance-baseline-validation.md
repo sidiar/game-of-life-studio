@@ -36,7 +36,8 @@ than as a vacuously passing budget.
 **How much of this is hardware: most of it.** Every absolute number below is a property of this
 laptop, and the numbers move by ~15% depending on what else the machine has just been doing.
 GitHub's `ubuntu-latest` runners are materially slower than an M-series Mac on single-threaded JS on
-top of that. ⚠️ **The headline finding is that the gate does not pass** — see "The margin problem".
+top of that. ⚠️ The gate initially **did not pass** at 18.7 ms; it passes at **6.8 ms** after FD7
+landed. Both sets of numbers are recorded — see "The margin, before and after".
 
 ---
 
@@ -107,11 +108,22 @@ figures is unmeasured, and the frame budget has to absorb it out of the headroom
 
 ### The gated frame — 100×60 × 20 organisms
 
-🔴 **The gate is RED.** Under a full `npm run ci` on this machine — i.e. with the benchmark running
-in its real CI position, after typecheck, lint, coverage, build and the bundle check — the frame
-measures **18.749 ms against a 16.667 ms budget, over by 2.082 ms.** See "The margin problem".
+✅ **The gate passes with 59.4% headroom**, after FD7 (condition compilation) was authorized and
+landed — see "FD7: the fix Sidiar authorized" below. The numbers in this section are recorded in two
+blocks, before and after, because the before-numbers are what justified the change.
 
-Four consecutive standalone `npm run bench` runs, in order, on an otherwise idle machine:
+**After FD7** — `npm run bench` + `npm run bench:check`:
+
+| | ms |
+|---|---|
+| `step 100x60 x20` | **6.713** |
+| `repaint-decision 100x60 x20` | 0.047 |
+| **= frame** | **6.760** |
+| budget (1000 / 60) | 16.667 |
+| **headroom** | **9.907 ms (59.4%)** |
+
+**Before FD7**, four consecutive standalone `npm run bench` runs, in order, on an otherwise idle
+machine — plus the run that halted the story:
 
 | run | `step 100x60 x20` | `repaint-decision 100x60 x20` | frame | headroom vs 16.667 |
 |---|---|---|---|---|
@@ -121,28 +133,34 @@ Four consecutive standalone `npm run bench` runs, in order, on an otherwise idle
 | 4 | 15.362 | 0.046 | **15.408** | 1.26 ms (7.6%) |
 | **in `npm run ci`** | **18.704** | **0.044** | **18.749** | 🔴 **over by 2.082 ms** |
 
-Earlier isolated runs on the same tree reached as low as **12.4 ms**. Every *standalone* run passes;
-the run that matters — the benchmark in its actual CI position — does not.
+**After FD7, in `npm run ci`** (the position that produced the red number above): **8.060 ms**,
+8.606 ms headroom, **51.6% of the frame** — and the full gate, `e2e` included, exits 0.
+
+Earlier isolated runs on the same tree reached as low as **12.4 ms**. Every *standalone* run passed;
+the run that mattered — the benchmark in its actual CI position — did not. That is what stopped the
+story, and what FD7 fixed.
 
 ### The tracked presets (measured, never gated)
 
-| preset | ms/step | vs 100×60 |
-|---|---|---|
-| 50×30 × 20 | 3.5 – 4.6 | ~0.27× |
-| **100×60 × 20 (gated)** | **14.2 – 16.4** | 1× |
-| 150×90 × 20 | 29.8 – 33.9 | ~2.1× |
-| 200×120 × 20 | 55.3 – 60.9 | ~3.9× |
+| preset | before FD7 | **after FD7** | vs 100×60 |
+|---|---|---|---|
+| 50×30 × 20 | 3.5 – 4.6 | **1.61** | ~0.24× |
+| **100×60 × 20 (gated)** | 14.2 – 16.4 | **6.71** | 1× |
+| 150×90 × 20 | 29.8 – 33.9 | **13.28** | ~2.0× |
+| 200×120 × 20 | 55.3 – 60.9 | **23.87** | ~3.6× |
 
-Cost is ~linear in cell count, as Decision A.4 predicts. **The constant is not what A.4 predicts** —
-see the spec-conflict flag below.
+Cost is ~linear in cell count, as Decision A.4 predicts. Worth noting for Story 3.16: after FD7 the
+150×90 preset (13.3 ms) also fits inside a 16.667 ms frame, and only 200×120 does not — which is
+what Decision A.4's graceful degradation was always for. **The constant is still not what A.4
+predicts, but it is now optimistic rather than pessimistic** — see the spec-conflict flag below.
 
 ### The phase split at the gated preset (diagnostic, never gated)
 
-| phase | ms | share of cycle |
-|---|---|---|
-| Phase 1 `deathPhase` | 0.20 – 0.22 | **1.4%** |
-| **Phase 2 `birthSurvivalPhase`** | **14.1 – 14.9** | **~98.5%** |
-| Phase 3 `conflictPhase` | 0.010 – 0.011 | 0.07% |
+| phase | before FD7 | **after FD7** | share of cycle (after) |
+|---|---|---|---|
+| Phase 1 `deathPhase` | 0.20 – 0.22 | **0.123** | 2.1% |
+| **Phase 2 `birthSurvivalPhase`** | **14.1 – 14.9** | **5.905** | **~97.7%** |
+| Phase 3 `conflictPhase` | 0.010 – 0.011 | **0.010** | 0.2% |
 
 `birthSurvivalPhase`'s own doc comment says why: it *"evaluates EVERY organism in the roster against
 EVERY cell"*. **Any performance work on this engine is Phase 2 work.** Measuring the other two is
@@ -177,7 +195,7 @@ goldens, conflict goldens and property tests passed **without edits** at every s
 | **M12 — `Object.hasOwn` guard** in `firstSatisfiedBy` (removed, measured, restored) | **+1.4 ms/cycle** (min-to-min across four interleaved pairs: 11.81→10.51, 12.84→11.45, 12.99→11.60, 13.10→11.69) | **Guard kept. See the proposal below.** |
 | **M12 — `typeof` numeric guards** in `operators.ts` (removed, measured, restored) | **0 ± 0.3 ms** — below resolution | **Guard kept.** M12's +0.019 ms figure is confirmed. |
 
-### M12, re-measured (AC12 — measure and propose, do not remove)
+### M12, re-measured — and then amended on authorization (AC12)
 
 `architecture.md` **M12** records the two per-cell guards at **+0.019 ms/cycle** (operators) and
 **+0.091 ms/cycle** (`Object.hasOwn`), and says they *"should be re-measured with Story 3.7's
@@ -189,114 +207,100 @@ harness"* after Story 3.4's compile-time sweep landed. Re-measured:
   baseline makes ~300,000 `hasOwn` calls per cycle (120,000 subjects × ~2.5 conditions), at ~4.7 ns
   each.
 
-**Neither guard is removed and M12 is not amended.** Both are Sidiar's call: M12 is a cross-cutting
-Architecture Minor Resolution owned by RFC-004, and `firstSatisfiedBy` is public API that **Story
-4.15** will call with a draft organism that never went through `compileSession` — so the
-once-per-battle sweep (`validateSurvivalRules`, Story 3.4) does not cover it.
+**Neither guard was removed.** Both `firstSatisfiedBy` and `operators` are unchanged and keep every
+guard M12 describes. What changed, on Sidiar's explicit authorization, is that the compiled hot path
+no longer routes through them — and **M12 itself was amended** to record the corrected cost and the
+guards' new placement (the M14/M15 precedent for amending an authority doc). ⚠️ The reason the
+guards themselves stay: `firstSatisfiedBy` is parametric over an arbitrary subject and is public API
+reachable by callers that never compile a session, and `resolveCellAction` is one today.
 
-> ### 🟠 The one proposal
+> ### ✅ FD7 — proposed here, AUTHORIZED by Sidiar, and landed in this story
 >
-> **Authorize compiling each condition down to a concrete `(cell) => boolean` at session time** —
-> the option `compileEvaluators.ts` already records as its own deferred FD7 and explicitly defers to
-> *"Story 3.7, with the harness"*.
+> **Compile each condition down to a concrete `(cell) => boolean` at session time** — the option
+> `compileEvaluators.ts` already recorded as its own deferred FD7 and deferred to *"Story 3.7, with
+> the harness"*. It removes the `Object.hasOwn` guard, the selector lookup **and** the
+> operator-dictionary lookup from the per-cell path in one change — and, it turned out, a
+> `.find`/`.every` closure pair allocated per call as well.
 >
-> It removes the `Object.hasOwn` guard **and** the selector lookup **and** the operator-dictionary
-> lookup from the per-cell path in one change, without weakening any caller: the check moves from
-> per-cell to per-rule-per-session, so a draft organism from Story 4.15 is still checked — once,
-> before its first cycle, instead of 300,000 times per cycle.
+> **The safety property the authorization rests on, and it is a property rather than a hope:**
+> `compileSession` runs `validateSurvivalRules` over the whole roster before any evaluator exists,
+> and that sweep's `isCellProperty` check **is** `Object.hasOwn(cellSelectors, property)` while its
+> `OPERATORS.includes` check **is** the operator dictionary's totality test. The two checks did not
+> disappear; they moved from per-cell to per-rule-per-session. Story 4.15's draft organism goes
+> through `compileSession`, so it is still checked — once, before its first cycle.
 >
-> Measured lever: **≥1.4 ms/cycle**, ~10% of the frame, on a frame whose worst observed headroom is
-> 0.19 ms. It is the largest available lever that is **not** a semantics change.
+> ⚠️ `firstSatisfiedBy` and `operators` are **unchanged and keep every guard**. They are parametric
+> over an arbitrary subject and reachable by callers that never compile a session
+> (`resolveCellAction` is one). The hot path simply no longer routes through them. Stated so a later
+> story cannot erode it: **a caller is either guarded per cell, or guarded once before its first
+> cycle — never neither.**
 >
-> It needs authorization because it changes what M12 governs, and amending an authority doc is not a
-> story's call (the M14/M15 precedent). ⚠️ It is **not** the algorithmic fix — narrowing the
-> candidate organism set per cell is a semantics-bearing change to M10/Decision C behaviour and
-> needs its own story and its own goldens. That remains out of scope.
+> **`architecture.md` M12 was amended in the same change**, on Sidiar's explicit authorization (the
+> M14/M15 precedent), to record both the corrected cost and the guards' new placement.
 
----
+### The measured delta — FD7
 
-## 🔴 The margin problem — the gate does not pass, and this story stops here
+Interleaved A/B, four pairs, `compileEvaluators.ts` swapped between the two versions between runs
+(the machine drifts under sustained load, so adjacent pairs are compared rather than absolute runs).
+`step 100x60 x20`, mean / min:
 
-**`npm run ci` fails on `bench:check`.** This is not a prediction about CI hardware; it is the
-measured result of running the gate where it actually sits in the pipeline, on the fastest machine
-available to this story.
+| pair | before (`firstSatisfiedBy`) | after (compiled) | delta |
+|---|---|---|---|
+| 1 | 12.219 / 11.339 | **5.703 / 5.035** | −6.52 ms |
+| 2 | 13.495 / 12.438 | **5.813 / 5.355** | −7.68 ms |
+| 3 | 14.145 / 13.108 | **6.122 / 5.492** | −8.02 ms |
+| 4 | 14.428 / 13.216 | **6.100 / 5.432** | −8.33 ms |
 
-```
-NFR-1.1 frame at 100x60 x 20 organisms  (Decision D.2/D.3: one step + one repaint)
-  step 100x60 x20                18.704 ms
-  repaint-decision 100x60 x20     0.044 ms
-  = frame                        18.749 ms
-  budget (1000 / 60)             16.667 ms
-✖ bench-budget: ... exceeding its 16.667 ms budget by 2.082 ms.
-```
+**~2.3× faster; ~7.6 ms/cycle removed.** That is substantially more than the ~1.4 ms the
+`Object.hasOwn` guard alone accounted for: the rest is the two dictionary lookups and the per-call
+closure allocations in `Array.prototype.find`/`every`, which the compile step also removes.
 
-What the numbers say, in order:
+⚠️ **The goldens did not move.** All **367** `@gol/simulation` tests — Conway goldens, conflict
+goldens, phase-purity and the property tests — stayed green and **unedited** through the change. Had
+one needed editing, that would have been a semantics change and a halt, not a fix.
 
-1. **Standalone, the frame is 12.4 – 16.5 ms** — passing, with worst observed headroom **0.19 ms
-   (1.1%)**.
-2. **In its CI position it is 18.7 ms** — failing. The benchmark runs after typecheck, lint,
-   coverage, build and bundle, on a machine those stages have warmed. Every tracked preset moved the
-   same way in that run (50×30 5.33 ms, 150×90 36.95 ms, 200×120 64.67 ms — each ~15% above its
-   standalone figure), so this is the machine, not a regression in one preset.
-3. **Run-to-run spread on one machine, one tree, one commit is ≈ ±10%**, thermal, and it grows across
-   consecutive runs. `ubuntu-latest` is slower than this laptop on single-threaded JS on top of that.
-4. RFC-008 **Risk 6** asks for a *generous* margin. **There is none, and the sign is negative.**
+❌ **What was NOT done, and remains out of scope:** narrowing the candidate organism set per cell
+(not evaluating every organism at every cell). It is a semantics-bearing change to M10 / Decision C,
+it needs its own story and its own goldens, and Sidiar's authorization explicitly excluded it. FD7
+alone closed the gap, so it was not needed.
 
-**What was NOT done, deliberately** (story FD6's "not allowed" list, and Sidiar's standing
-preference that a gate's *mechanism* changes rather than its threshold being relaxed again):
+## The margin, before and after
 
-- ❌ the budget was **not** widened — it is `1000/60`, derived from NFR-1.1;
-- ❌ the gate was **not** softened to a warning, and not `skip`ped;
-- ❌ the fixture was **not** shrunk (it is pinned by a test precisely so it cannot be);
-- ❌ no other preset was gated in 100×60's place;
-- ❌ `step()` was not gated alone with the repaint dropped.
+**Before FD7, `npm run ci` failed on `bench:check`** — 18.749 ms against the 16.667 ms budget, over
+by 2.082 ms, measured with the benchmark in its real pipeline position (after typecheck, lint,
+coverage, build and bundle) on the fastest machine available to this story. Standalone the same tree
+measured 12.4–16.5 ms and passed, worst standalone headroom **0.19 ms (1.1%)** — so pass/fail
+depended on what the machine had just been doing, which was itself the finding. That is where the
+story halted, and it halted rather than widening anything: the budget stayed `1000/60`, the gate
+stayed hard, the fixture stayed pinned, 100×60 stayed the gated preset, and `step()` was never gated
+alone.
 
-**What WAS done** (FD6's allowed list, in order): the baseline was measured and recorded; both
-optimizations `deferred-work.md` names as this story's were built and measured — **0 ms** and
-**≤0.1 ms** — and reverted; each delta is recorded separately above. **It still misses.**
+**After FD7 the frame is 6.760 ms against 16.667 ms — 9.907 ms of headroom, 59.4% of the frame.**
+That is the *generous* margin RFC-008 **Risk 6** asks for, and it is what makes the absolute-ms gate
+defensible on hardware this story cannot measure:
 
-> ### 🛑 FD6 terminal branch — Spec-conflict flag, awaiting Sidiar
->
-> **NFR-1.1's guarantee against a measured baseline.** NFR-1.1 promises 60 FPS at 100×60 with up to
-> 20 organisms. The engine as it stands, on the fastest machine this story has, spends **18.7 ms of a
-> 16.667 ms frame** doing one cycle, with the repaint decision costing 0.3% of that and Phase 2
-> costing 98.5%.
->
-> **The single recommendation is the one in the M12 section above:** authorize compiling each
-> condition down to a concrete `(cell) => boolean` at session time. Measured lever ≥1.4 ms/cycle from
-> the `Object.hasOwn` guard alone, plus the selector and operator-dictionary lookups it also removes,
-> at no cost to any caller's safety. It needs authorization because it changes what M12 governs.
->
-> If that is not enough on its own, the next lever is the one this story was told to stop at: **not
-> evaluating every organism at every cell**. That is a semantics-bearing change to M10/Decision C and
-> needs its own story and its own goldens. The numbers point there, and this story says so and stops.
+- Run-to-run spread on one machine is ≈ ±10%, thermal — now ≈ ±0.7 ms against 9.9 ms of headroom
+  instead of against 0.19 ms.
+- The `npm run ci` position costs ~15-20% on top of a standalone run — measured, not estimated:
+  **8.060 ms in the pipeline** against 6.760 ms standalone. Still less than half the budget, in the
+  exact position that was red before FD7.
+- `ubuntu-latest` is slower than this laptop on single-threaded JS. The frame would have to be
+  **2.4× slower there** to reach the budget.
 
-⚠️ **CI itself has still not measured this branch.** `.github/workflows/ci.yml` triggers on `main`
+⚠️ **CI itself still has not measured this branch.** `.github/workflows/ci.yml` triggers on `main`
 and `pull_request` only, so a topic-branch push runs nothing — the first *runner* number arrives when
-the PR opens, and it will be worse than 18.7 ms.
+the PR opens. The margin is now wide enough that this is a check rather than a cliff, but it is still
+a check: read `gh run list` after the PR opens rather than inferring it (project-context's
+local-green-≠-CI-green rule).
 
-### Why no growth ratchet (story FD1)
+## Spec-conflict flags
 
-FD1 asked whether to add committed per-preset baselines with a growth ratchet — the design
-`deferred-work.md` records as accepted for the bundle gate — and said to **measure the spread first**
-and only add it if the noise floor makes it meaningful. Measured: **≈ ±10% run-to-run on a single
-machine**. A ±10% noise floor against a delta small enough to catch a real regression produces
-false positives continuously. The bundle gate can ratchet because gzipped bytes are exact and
-hardware-independent; a wall clock is neither. **FD1 = (b): a derived absolute budget, one
-mechanism, no ratchet.** Revisit if a future story finds a way to make the measurement stable across
-runners.
-
----
-
-## Spec-conflict flags (raised, not resolved — Sidiar decides)
-
-- **🟡 `architecture.md` Decision A.4's performance model vs. measurement.** A.4 states step cost
-  *"~6 ms at 6,000 cells → ~24 ms at 24,000"*. Measured on this harness: **~14–16 ms at 6,000 cells
-  and ~55–61 ms at 24,000**. The *shape* A.4 asserts (~O(N), graceful degradation) holds exactly —
-  the ratio is ~3.9× for a 4× cell count. The **constant is ~2.4× worse** than A.4's estimate, which
-  was never measured. **Proposed amendment:** restate A.4's figures as "~15 ms at 6,000 cells → ~58
-  ms at 24,000, measured (Story 3.7)", keeping the graceful-degradation conclusion, which the
-  measurement supports. Not edited from a story — A.4 is a Cross-Cutting Decision.
+- **✅ WITHDRAWN — `architecture.md` Decision A.4's performance model.** Raised mid-story: A.4 states
+  *"~6 ms at 6,000 cells → ~24 ms at 24,000"* and the pre-FD7 engine measured ~14–16 ms and
+  ~55–61 ms. **After FD7 the same two points measure 6.71 ms and 23.87 ms** — within a few percent of
+  A.4's figures. A.4 was right about the destination; the engine had not arrived yet. No amendment
+  proposed, and none needed. ⚠️ For **Story 3.16**: at these numbers 150×90 (13.3 ms) also fits
+  inside a frame, and only 200×120 does not — which is what A.4's graceful degradation was for.
 - **🟡 `epics.md`'s AC for this story says the benchmark measures "`step()` + repaint".** Off-browser
   there is no repaint to measure. Amended in the open, the way Story 3.3 amended its
   dense↔sparse↔typed AC (the M13 precedent): the harness measures **`step()` + the repaint
@@ -412,5 +416,9 @@ in a browser.
   means. `benchmarkRoster.test.ts` will fail first; that failure is the conversation.
 - **`bench` is never Turbo-cached.** A cached benchmark replays an old measurement and prints
   `>>> FULL TURBO` while measuring nothing.
-- **Phase 2 is the whole cycle.** Any future performance work that is not Phase 2 work is
-  measurement theatre at these ratios.
+- **Phase 2 is still the whole cycle** — 97.7% of it after FD7, down from 98.5% only because the
+  cycle itself got 2.3× cheaper. Any future performance work that is not Phase 2 work is measurement
+  theatre at these ratios.
+- **The remaining lever is out of scope on purpose.** Not evaluating every organism at every cell is
+  the largest one left, and it is a semantics-bearing change to M10 / Decision C: its own story, its
+  own goldens. FD7 bought 9.9 ms of headroom; spend it before reaching for that.
