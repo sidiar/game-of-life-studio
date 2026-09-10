@@ -111,9 +111,21 @@ export default tseslint.config(
   // `packages/*` deliberately do not have (project-context: engine purity). `recordingContext2d`
   // sat in `lib/` until 2026-09-08, where nothing stopped a production module importing it; the
   // move only means something with this pattern beside it.
+  //
+  // ⚠️ `*.bench.ts` was ADDED to this list in Story 3.7, and to THIS block only. A benchmark file is
+  // a non-production file on the same terms as a test: nothing under `app/` imports one, so it is
+  // never in Next's build graph and cannot reach the browser bundle — which is the failure this
+  // rule exists to prevent. It must NOT be copied into the AR-46 colour block above: a raw hex in a
+  // bench file is still a colour literal outside the palette registry, and that block's `ignores`
+  // additionally carries `paletteRegistry.ts`, which has no business being exempt from this one.
   {
     files: ['apps/web/**/*.{ts,tsx}'],
-    ignores: ['apps/web/**/*.test.{ts,tsx}', 'apps/web/**/*.spec.{ts,tsx}', 'apps/web/e2e/**'],
+    ignores: [
+      'apps/web/**/*.test.{ts,tsx}',
+      'apps/web/**/*.spec.{ts,tsx}',
+      'apps/web/**/*.bench.ts',
+      'apps/web/e2e/**',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',

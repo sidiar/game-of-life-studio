@@ -21,18 +21,29 @@ import type { Rule, RuleSet, Condition, Selectors } from './rule';
 // exists to prevent, just from a different direction. (This was written the cheap way first; the
 // test below is what caught it.)
 //
-// Measured cost of doing it properly, on the hot path's shape: 0.128 -> 0.219 ms/cycle, +0.091 ms
-// against the 16.7 ms NFR-1.1 frame budget — ~0.5%. Paid deliberately, because the alternative is
-// not a wrong answer but a thrown exception. operators.ts closes its half of the same
-// inherited-key class at the root with a null prototype; a CALLER's dictionary is not ours to
-// reshape, so it is checked at the point of use instead.
+// ⚠️ RE-MEASURED IN STORY 3.7, AND THE COST IS 15x WHAT M12 RECORDS. M12 states this guard at
+// 0.128 -> 0.219 ms/cycle, +0.091 ms against the 16.7 ms NFR-1.1 frame budget (~0.5%). Measured
+// against the real harness at the real baseline — 100x60, 20 organisms, 50 rules, the guard removed
+// and restored in an interleaved A/B, four pairs — it is **+1.4 ms/cycle**: ~10% of the cycle and
+// 8% of the frame budget. M12's figure was taken on a far smaller evaluation count; this loop makes
+// roughly 300,000 `Object.hasOwn` calls per cycle (120,000 subjects x ~2.5 conditions), at ~4.7 ns
+// each. The typeof guards in operators.ts re-measure at 0 +/- 0.3 ms — below resolution, exactly as
+// M12 says.
 //
-// The one-pass key sweep at rule-COMPILE time now exists — validateSurvivalRules in ../session/,
-// which rejects an unknown property once per battle (Story 3.4). ⚠️ This guard STAYS anyway: the
-// sweep only covers callers that go through that compile step, this layer is parametric over an
-// arbitrary subject and reusable by callers that do not, and M12 says the removal is re-measured
-// with Story 3.7's harness rather than argued. Removing it here would trade a measured 0.5% for
-// an unmeasured crash surface.
+// ⚠️ THE GUARD STAYS, and M12 is NOT amended from here. Both are Sidiar's call: M12 is an
+// authority-doc decision owned by RFC-004, `firstSatisfiedBy` is public API that Story 4.15 will
+// call with a draft organism that never went through `compileSession`, and the once-per-battle
+// sweep (validateSurvivalRules, Story 3.4) only covers callers that DO. Removing it would trade a
+// measured 10% for an unmeasured crash surface inside the 60 FPS loop.
+//
+// The standing proposal, with its number, is in
+// docs/implementation-artifacts/performance-baseline-validation.md: hoist the check out of the
+// per-cell path entirely by compiling each condition to a concrete `(cell) => boolean` at session
+// time (../session/compileEvaluators.ts's own deferred FD7), which removes this guard, the selector
+// lookup AND the operator-dictionary lookup from the hot loop without weakening any caller.
+//
+// operators.ts closes its half of the same inherited-key class at the root with a null prototype; a
+// CALLER's dictionary is not ours to reshape, so it is checked at the point of use instead.
 export function conditionIsSatisfiedBy<S, Props extends string>(
   condition: Condition<Props>,
   subject: S,

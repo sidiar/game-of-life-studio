@@ -179,8 +179,17 @@ function compileOrganism(
   // sweep" firstSatisfiedBy.ts describes) at the cost of a second evaluation path to keep correct.
   // Not built blind: this repo optimizes on measurement (M12's guards were justified at
   // +0.019/+0.091 ms against a 16.7 ms budget, and Story 3.3's FD4 wrote its packed-integer
-  // alternative into a comment for the same reason). ⚠️ The FIRST measurements of this loop exist
-  // in Story 3.7 — decide it there, with the harness.
+  // alternative into a comment for the same reason).
+  //
+  // ⚠️ STORY 3.7 MEASURED IT, AND THIS IS NOW THE LARGEST KNOWN LEVER THAT IS NOT A SEMANTICS
+  // CHANGE — but it is NOT taken here, because it is Sidiar's call. At the NFR-1.1 baseline the
+  // cycle is ~14.5 ms of a 16.67 ms frame, Phase 2 is 98.5% of it, and **~1.4 ms is the per-
+  // condition `Object.hasOwn` guard in ../engine/firstSatisfiedBy.ts** — which compiling conditions
+  // to concrete predicates would remove along with the selector lookup and the operator-dictionary
+  // lookup, at no cost to any caller's safety. That guard is M12, an authority-doc decision owned by
+  // RFC-004, and M12 says it is re-measured rather than removed on an argument. The measurement and
+  // the proposal are in docs/implementation-artifacts/performance-baseline-validation.md; the
+  // decision is not a story's to take.
   const evaluators: OrganismEvaluators = Object.freeze({
     resolvesToDeath: (cell: CellSubject) => firstSatisfiedBy(death, cell, cellSelectors) !== null,
     // `?? null`, never `|| null` (Story 3.1's trap): optional chaining off a null winner yields

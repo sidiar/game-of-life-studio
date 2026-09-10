@@ -36,8 +36,15 @@ export type Predicate = (value: unknown, pattern: unknown) => boolean;
 //
 // Measured on the shape of the real hot path (6,000 cells x 3 conditions x 200 cycles = 3.6M
 // evaluations, identical results both ways): 0.141 ms/cycle unguarded vs 0.160 ms/cycle guarded —
-// +0.019 ms against the 16.7 ms NFR-1.1 frame budget, ~0.1% of it. Story 3.7 owns the real
-// performance harness; re-measure there rather than trusting this note forever.
+// +0.019 ms against the 16.7 ms NFR-1.1 frame budget, ~0.1% of it.
+//
+// ✅ RE-MEASURED IN STORY 3.7 with the real harness (100x60, 20 organisms, 50 rules, guards removed
+// and restored in an interleaved A/B): **0 +/- 0.3 ms/cycle** — below the harness's own run-to-run
+// spread, which is consistent with M12's +0.019 ms and confirms it. THIS HALF OF M12 IS CHEAP. The
+// other half is not: ../engine/firstSatisfiedBy.ts's `Object.hasOwn` guard re-measures at
+// +1.4 ms/cycle, 15x its recorded figure — see that file's header and
+// docs/implementation-artifacts/performance-baseline-validation.md. Neither guard is removed and
+// M12 is not amended from a story; both are Sidiar's call.
 //
 // ⚠️ Failing closed is deliberate but it is not free: malformed rule data yields a rule that never
 // fires instead of a crash, which is the right behaviour inside a 60 FPS loop but is also silent.

@@ -35,6 +35,16 @@
     // free port — environment-specific, so never cached.
     "e2e": {
       "cache": false
+    },
+    // ⚠️ NEVER CACHED, for a reason stronger than e2e's. A cached benchmark does
+    // not merely re-run somewhere else — turbo replays the previous run's stdout
+    // and its bench-results.json, so `bench:check` gates a number measured on a
+    // different tree and reports ">>> FULL TURBO" while measuring nothing. This
+    // happened to Story 3.7's own coverage probe while the story was being
+    // written. test:coverage stays cached because it is deterministic; a wall
+    // clock is not.
+    "bench": {
+      "cache": false
     }
   }
 }

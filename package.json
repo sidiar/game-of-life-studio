@@ -24,9 +24,11 @@
     "test:coverage": "turbo run test:coverage",
     "e2e": "turbo run e2e",
     "bundle:check": "node scripts/check-bundle-size.mjs",
+    "bench": "turbo run bench",
+    "bench:check": "node scripts/check-bench-budget.mjs",
     "spec:check": "node scripts/check-spec-ids.mjs",
     "boundary:check": "node scripts/check-engine-boundary.mjs",
-    "ci": "npm run typecheck && npm run lint && npm run format:check && npm run spec:check && npm run boundary:check && npm run test:coverage && npm run build:standalone && npm run bundle:check && npm run e2e",
+    "ci": "npm run typecheck && npm run lint && npm run format:check && npm run spec:check && npm run boundary:check && npm run test:coverage && npm run build:standalone && npm run bundle:check && npm run bench && npm run bench:check && npm run e2e",
     "prepare": "husky"
   },
   "lint-staged": {
