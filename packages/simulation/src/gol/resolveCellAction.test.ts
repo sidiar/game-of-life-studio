@@ -38,7 +38,8 @@ describe('resolveCellAction — thin wrapper over firstSatisfiedBy (AC5)', () =>
   });
 
   // Trap 7: null means "no rule matched", never "die". Collapsing it into 'die' would break
-  // Conway semantics (M10's implicit-death-at-cycle-end path is Story 3.5/3.6's, not this one's).
+  // Conway semantics (M10's implicit-death-at-cycle-end path is Story 3.5's no-claim plus Story 3.6's
+  // cycle-end write, not this one's).
   it('returns null — not undefined, not "die" — when no rule matches', () => {
     const rules: SurvivalRules = [
       survivalRule('born', [{ property: 'cellState', operator: 'eq', pattern: 'empty' }], 'born'),

@@ -100,8 +100,9 @@ describe('cellState — eq only, three-valued', () => {
 // comment. Nothing else in the codebase pins this yet.
 describe('cellState is RELATIVE to the evaluating organism (Decision C.1)', () => {
   it('the same physical cell reads "alive" for its own organism and "occupied" for another', () => {
-    // One physical cell, two evaluations: the caller (Stories 3.5/3.6) is what decides which
-    // CellSubject.state a given organism's evaluation sees for the same grid cell. This layer only
+    // One physical cell, two evaluations: the caller (Story 3.5's `birthSurvivalPhase`) is what
+    // decides which CellSubject.state a given organism's evaluation sees for the same grid cell.
+    // This layer only
     // has to get the resulting comparison right, which is what is pinned here.
     const ownOrganismsEvaluation = cell({ state: 'alive' });
     const otherOrganismsEvaluation = cell({ state: 'occupied' });

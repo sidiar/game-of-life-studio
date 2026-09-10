@@ -385,7 +385,7 @@ describe('MAX_RELEVANT_AGE rides along on the session (AC5)', () => {
 // Trap 6 — the invariant examples cannot pin, because the damage is a WRITE somewhere in a nested
 // structure the assertions never look at. AR-41 assigns no property test to this story; this is
 // the one place a generated corpus earns its place, and it is the shape Story 3.5's phase-purity
-// properties will extend.
+// properties (`strategy/phasePurity.test.ts`) extend.
 describe('compilation never mutates its input (Trap 6, fast-check)', () => {
   const conditionArb = fc.oneof(
     fc.record({
