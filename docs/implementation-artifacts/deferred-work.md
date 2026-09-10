@@ -532,10 +532,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   50 rules pinned by a test, and 100x60 is still the only gated preset. The gap was closed by the
   entry above (FD7) — a change of *mechanism* in the engine, not a relaxed threshold.
 
-  ⚠️ **CI still has not measured this branch.** `.github/workflows/ci.yml` triggers on `main` and
-  `pull_request` only, so a topic-branch push runs nothing — the first *runner* number arrives when
-  the PR opens. The frame would have to be **2.4x slower** there to reach the budget, so this is now
-  a check rather than a cliff; read `gh run list` after the PR opens rather than inferring it.
+  ✅ **CI measured it on PR #24 (run 34496827364): 12.046 ms on `ubuntu-latest`, 4.621 ms headroom
+  (27.7%)** — ~2.1× the laptop, inside the 2.4× the paragraph above allowed for. The runner's margin
+  is the one that gates; a ~4 ms/cycle regression there is red. Larger presets on the runner: 150×90
+  28.5 ms, 200×120 50.5 ms.
 
 - **✅ WITHDRAWN — `architecture.md` Decision A.4's performance model turned out to be RIGHT, once
   the engine was.** Raised mid-story as a ~2.4x-optimistic estimate: A.4 states step cost *"~6 ms at

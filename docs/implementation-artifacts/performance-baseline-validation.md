@@ -304,11 +304,15 @@ defensible on hardware this story cannot measure:
 - `ubuntu-latest` is slower than this laptop on single-threaded JS. The frame would have to be
   **2.4× slower there** to reach the budget.
 
-⚠️ **CI itself still has not measured this branch.** `.github/workflows/ci.yml` triggers on `main`
-and `pull_request` only, so a topic-branch push runs nothing — the first *runner* number arrives when
-the PR opens. The margin is now wide enough that this is a check rather than a cliff, but it is still
-a check: read `gh run list` after the PR opens rather than inferring it (project-context's
-local-green-≠-CI-green rule).
+✅ **CI has now measured it — and the runner's margin is the number to remember, not the laptop's.**
+The first `ubuntu-latest` run (PR #24, run 34496827364, 2026-09-10, benches serialized, `0 cached`)
+measured **`step` 11.899 ms + `repaint-decision` 0.147 ms = 12.046 ms against 16.667 — 4.621 ms of
+headroom, 27.7% of the frame.** That is ~2.1× the laptop's 5.6–5.8 ms (the section above guessed
+"2.4× would reach the budget"; the guess held with 0.3× to spare). Tracked there: 50×30 3.19 ms,
+150×90 28.47 ms, 200×120 50.54 ms — so on the runner only the gated preset fits inside a frame.
+**A 28% margin on shared hardware is comfortable, not generous**: a change that costs ~4 ms/cycle
+on the runner reds CI, and the runner is the gate. Read `gh run list` for the current figure
+rather than this paragraph; it is the first data point, not a baseline.
 
 ## Spec-conflict flags
 

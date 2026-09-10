@@ -208,9 +208,9 @@ a run that matches zero test files now fails, in all four workspaces.
   **50 rules** — is pinned by `packages/test-utils/src/benchmarkRoster.test.ts`, because Phase 2
   costs `cells × organisms × rules-until-first-match` and a cheaper roster is a looser gate with no
   diff to review.
-- ✅ **Measured 5.6–5.8 ms against the 16.667 ms budget — 65–67% headroom** (6.760 ms / 59.4% when
-  the story landed; the review corrected a collapsed repaint fixture and serialized the two
-  benches). It was 18.749 ms and RED
+- ✅ **Measured 5.6–5.8 ms locally (65–67% headroom) and 12.046 ms on `ubuntu-latest` (4.6 ms,
+  27.7% headroom — the margin that actually gates)** against the 16.667 ms budget. It was 18.749 ms
+  and RED
   until Story 3.7's FD7 landed (conditions compiled to concrete predicates at session time), which
   took the cycle from ~14 ms to ~6.7 ms and amended **M12** accordingly. If the gate ever goes red
   again, the budget does **not** move — change the mechanism or fix the code. Every number:
