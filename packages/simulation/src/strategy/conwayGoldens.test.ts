@@ -11,8 +11,11 @@ import type { SimulationDeps } from './threePhaseStep';
 // AR-40's golden-pattern suite, end to end through the assembled cycle. These are the fixtures
 // that catch the two silent defects no smoke test can: a Phase 3 that iterates the CLAIMS instead
 // of sweeping the grid (implicit death never happens, so Conway — which has no `die` rule at all —
-// only ever grows), and a WRAPPING neighbourhood (`neighborhood.ts` names the glider golden as its
-// detector: a modulo idiom passes at some grid sizes and fails at others).
+// only ever grows), and a WRAPPING neighbourhood — but ⚠️ only the fixture that lets the glider
+// REACH an edge can see that one. The translation goldens keep it clear of every edge by design
+// (AC10), and while no live cell touches the border a modulo idiom is byte-identical to hard
+// edges on every grid size, so they pass under wrapping too (the Story 3.6 review checked, by
+// mutating `neighborTally.ts` to wrap).
 //
 // ⚠️ Conway's Classic is single-organism, so `neighborCount` (same-organism) and "all occupied
 // neighbours" COINCIDE here. That is why the multi-organism goldens live in their own file — no
@@ -93,14 +96,44 @@ describe('glider — one cell diagonally every 4 cycles (AR-40, FR-5.8/5.9 hard 
     expect(gridToDense(run(start, conwayDeps(), 8))).toEqual(placePattern(field, GLIDER, 5, 5));
   });
 
-  it('translates identically on a DIFFERENT grid size', () => {
-    // The modulo neighbour idiom makes a glider that leaves one edge reappear on the other, which
-    // shows up as a golden that passes at some sizes and fails at others. Running the same
-    // translation on two field sizes is what turns "passes" into "passes for the right reason".
+  it('translates identically on a DIFFERENT, non-square grid size', () => {
+    // Dimensions are parameters, never constants (Decision A): the same translation on a second,
+    // non-square field pins that nothing in the cycle has a 14 (or a square) baked in. ⚠️ This is
+    // NOT the wrap detector — with the glider clear of every edge, wrapping and hard edges agree
+    // here too; the edge-collision fixture below is the detector.
     const field = emptyGrid(11, 17);
     const start = gridFromDense(placePattern(field, GLIDER, 2, 5));
 
     expect(gridToDense(run(start, conwayDeps(), 4))).toEqual(placePattern(field, GLIDER, 3, 6));
+  });
+
+  it('is stopped by the hard edge — a wrapping neighbourhood would return it to its start', () => {
+    // THE wrap detector (FR-5.8/5.9, `neighborhood.ts`). On an 8x8 field the glider advances
+    // (1, 1) every 4 cycles, so under a toroidal `(row + dr + height) % height` idiom 32 cycles
+    // carry it exactly (8, 8) — back onto its starting cells, byte for byte. Under hard edges it
+    // runs into the far corner and collapses into a block, the textbook fate of a glider on a
+    // bounded field. Verified by mutating `neighborTally.ts` to wrap during the Story 3.6 review:
+    // this test reddens, the three translation goldens above do not.
+    const field = emptyGrid(8, 8);
+    const start = placePattern(field, GLIDER, 3, 3);
+    const after = gridToDense(run(gridFromDense(start), conwayDeps(), 32));
+
+    expect(after).not.toEqual(start);
+    expect(after).toEqual(
+      gridFromPattern(
+        [
+          '........',
+          '........',
+          '........',
+          '........',
+          '........',
+          '........',
+          '......XX',
+          '......XX',
+        ],
+        LIVE,
+      ),
+    );
   });
 });
 

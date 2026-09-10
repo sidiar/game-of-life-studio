@@ -38,6 +38,15 @@ describe('createRng — the production generator (story FD4, AR-19)', () => {
     expect(() => rng.int(2.5)).toThrow(/maxExclusive must be a positive integer/);
   });
 
+  it('refuses a bound above 2^32 rather than spinning forever', () => {
+    // Above 2^32, `UINT32_RANGE % maxExclusive` is the whole range, so the rejection limit is 0
+    // and `while (value >= 0)` never exits — a hang, not a throw, exactly where the guard promises
+    // to catch a hand-built caller. 2^32 itself is the largest bound a 32-bit draw can cover.
+    const rng = createRng(FIXED_SEED);
+    expect(() => rng.int(2 ** 32 + 1)).toThrow(/no greater than 2\^32/);
+    expect(rng.int(2 ** 32)).toBeLessThan(2 ** 32);
+  });
+
   it('stays inside [0, maxExclusive) for every bound (fast-check)', () => {
     fc.assert(
       fc.property(fc.integer(), fc.integer({ min: 1, max: 5000 }), (seed, bound) => {
@@ -58,12 +67,12 @@ describe('createRng — the production generator (story FD4, AR-19)', () => {
     );
   });
 
-  it('REJECTS the partial final block rather than folding it onto the low values', () => {
+  it('stays in range at the pathological bound, where half of every draw is retried', () => {
     // The rejection loop is what makes the result uniform, and almost no bound exercises it: with
     // `int(3)` exactly one value in 2^32 is discarded. `2^31 + 1` is the pathological case — the
     // usable limit is 2^31 + 1, so roughly HALF of every draw is rejected and retried, which is
-    // both the loop's only real workout and the strongest statement of why plain modulo is wrong
-    // (it would map that whole half onto the bottom of the range).
+    // the loop's only real workout. ⚠️ Range alone cannot tell rejection from plain modulo (both
+    // stay in range); the oracle test below is what pins the retry.
     const bound = 2 ** 31 + 1;
     const rng = createRng(FIXED_SEED);
 
@@ -72,6 +81,31 @@ describe('createRng — the production generator (story FD4, AR-19)', () => {
       expect(value).toBeGreaterThanOrEqual(0);
       expect(value).toBeLessThan(bound);
     }
+  });
+
+  it('actually REJECTS an inadmissible draw and redraws — pinned through the raw-draw oracle', () => {
+    // `int(2 ** 32)` has `limit === 2^32`, so it returns the raw 32-bit draw untouched: a fresh
+    // generator read that way is an oracle for the underlying sequence. For `bound = 2^31 + 1` the
+    // usable limit is exactly 2^31 + 1, so a raw draw at or above it must be DISCARDED and the next
+    // one used. Plain modulo returns `raw[0] % bound` and its next raw draw is `raw[1]`; the
+    // sampler returns `raw[j] % bound` for the first admissible `j` and continues from
+    // `raw[j + 1]`. Deleting the `while` in `rng.ts` reddens this and nothing else in the file.
+    const bound = 2 ** 31 + 1;
+    const rawDraws = (seed: number, count: number): number[] => {
+      const rng = createRng(seed);
+      return Array.from({ length: count }, () => rng.int(2 ** 32));
+    };
+    // The first seed whose opening draw is inadmissible — about every second seed qualifies, and
+    // the search is deterministic, so the fixture is stable.
+    let seed = 0;
+    while (rawDraws(seed, 1)[0] < bound) seed++;
+    const sequence = rawDraws(seed, 8);
+    const j = sequence.findIndex((value) => value < bound);
+    expect(j).toBeGreaterThan(0);
+
+    const rng = createRng(seed);
+    expect(rng.int(bound)).toBe(sequence[j] % bound);
+    expect(rng.int(2 ** 32)).toBe(sequence[j + 1]);
   });
 
   it('does not favour the low values a plain modulo would skew toward', () => {

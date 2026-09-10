@@ -221,6 +221,90 @@ FD1/FD2, which left `SimulationDeps` and `threePhaseStep`'s signature to this st
         full sweep, AC7's `min(age + 1, max)` and AC8's ungated increment must **redden a named
         test**. An invariant that survives its own mutation is untested.
 
+### Review Findings
+
+Code review 2026-09-10 (Fable 5.1, `bmad-code-review`: Blind Hunter + Edge Case Hunter + Acceptance
+Auditor, each on a fresh context). **1 `decision-needed` (open), 12 `patch` (all applied), 1
+`defer`, 1 dismissed as noise** (an unchecked `maxRelevantAge` range — a documented `compileSession`
+precondition, `maxRelevantAge.ts`). FD4 was weighed as the deliberate exception it is and holds:
+the alternatives are a banned test-utils import or an untestable third copy, and the differential
+pin is what makes the duplication non-silent — the review kept the pair identical (patch 3).
+
+- [ ] [Review][Decision] **RFC-004 §3.1/§3.2 amendment** — drafted in full under **Spec-conflict
+      flags raised** below (the `SimulationStrategy` signature, the `threePhaseStep` composition,
+      the `resolveConflict` note, and the §3.1 `organisms` clarification); NOT applied, because
+      amending an authority doc is Sidiar's call (the M14/M15 precedent). **Question for Sidiar:**
+      apply the four edits as drafted, apply with changes, or leave RFC-004 as written and let the
+      divergence live only in the three code comments that flag it?
+- [x] [Review][Patch] AC1's dedicated off-by-one pin was vacuous — `rosterOf(90, 10, 5)` elects
+      ref 1 under BOTH `organisms[ref - 1]` (90 v 10) and `organisms[ref]` (10 v 5); the mutation
+      table's "54 tests fail" came from other fixtures CRASHING on `undefined.dominance`, the
+      opposite of the "not a crash" case AC1 warns about
+      [packages/simulation/src/strategy/conflictPhase.test.ts] — roster is now `(90, 10, 50)`
+      (mutant elects ref 2), verified by mutation to redden.
+- [x] [Review][Patch] The glider goldens cannot detect a wrapping neighbourhood, and two rewritten
+      comments (`neighborhood.ts` "THE DETECTOR NOW EXISTS", the `conwayGoldens` header) claimed
+      they do — both fixtures keep the glider clear of every edge (AC10), where a modulo idiom is
+      byte-identical to hard edges on every size
+      [packages/simulation/src/grid/neighborhood.ts, packages/simulation/src/strategy/conwayGoldens.test.ts]
+      — added the real detector: 32 cycles on 8x8, where wrapping returns the glider exactly to its
+      start and hard edges collapse it into a corner block (asserted as the exact grid); verified by
+      mutating `neighborTally.ts` to wrap — the new test reddens, the three translation goldens do
+      not. Both comments now say which fixture detects what.
+- [x] [Review][Patch] `int(n)` with `n > 2^32` HANGS — `UINT32_RANGE % n` is the whole range, so
+      `limit` is 0 and the rejection loop never exits — exactly where the guard promises to catch a
+      hand-built caller [packages/simulation/src/strategy/rng.ts,
+      packages/test-utils/src/seededRng.ts] — the guard now refuses `n > 2^32` in BOTH copies (FD4's
+      pair stays identical; the differential test's 1..256 bounds could not see this), pinned in
+      each package's test.
+- [x] [Review][Patch] An injected `Rng` returning an out-of-range or fractional draw silently elected
+      the FIRST top claimant — every tie to the lowest ref, the exact bias rejection sampling
+      exists to remove, presenting as a deterministic battle; a realistic Story 3.10 adapter
+      mistake (`{ int: () => Math.random() }`) [packages/simulation/src/strategy/conflictPhase.ts]
+      — pass 2 now throws naming the bound and the draw; one comparison per contested tie, never
+      per cell. Pinned for 7, 2, -1 and 0.5.
+- [x] [Review][Patch] The two "rejection sampling" tests pass for plain modulo — range-only
+      assertions, and `int(3)`'s bias is 1 in 2^32 [packages/simulation/src/strategy/rng.test.ts]
+      — added a raw-draw oracle (`int(2^32)` returns the raw draw): for `bound = 2^31 + 1` the
+      sampler must skip an inadmissible opening draw and continue from the one after; deleting the
+      `while` reddens this test and nothing else in the file (mutation-verified). The range test is
+      retitled to what it actually pins.
+- [x] [Review][Patch] An out-of-order or off-grid claim stalls the cursor and silently clears the
+      REST of the grid — not "one cell", as `birthSurvivalPhase.ts`'s comment said — and reads as a
+      legitimate extinction [packages/simulation/src/strategy/conflictPhase.ts,
+      packages/simulation/src/strategy/birthSurvivalPhase.ts] — one check AFTER the sweep (never per
+      cell): unconsumed claims throw, naming how many; both comments corrected; pinned for a
+      decreasing index and an index off the grid.
+- [x] [Review][Patch] `maxDominance = -1` sentinel assumes FR-2.2's 1..100 range the `number` type
+      does not state — a run of negative Dominances elected the first claimant
+      [packages/simulation/src/strategy/conflictPhase.ts] — pass 1 now seeds from the first
+      claimant; pinned with `(-5, -1)` → ref 2.
+- [x] [Review][Patch] The seed guard's comment claimed to rule out "two nominally different seeds
+      replaying one sequence" while `seed >>> 0` still aliases integers that agree modulo 2^32
+      (`Date.now()` is already above it) [packages/simulation/src/strategy/rng.ts,
+      packages/test-utils/src/seededRng.ts] — comments now state exactly what is and is not ruled
+      out and direct Story 3.8/3.10 to mint inside `[0, 2^32)`; range ENFORCEMENT is deferred (below).
+- [x] [Review][Patch] Dead fixture: the k-th-claimant test built an outer `grid` it never passed to
+      `conflictPhase`, then asserted on it — testing `gridFromDense`
+      [packages/simulation/src/strategy/conflictPhase.test.ts] — removed.
+- [x] [Review][Patch] "a winner is always a claimant" was never asserted — the loop `continue`d past
+      any occupant it did not recognise, so `ref[winner + 1]` would survive
+      [packages/simulation/src/strategy/phasePurity.test.ts] — the written ref is now asserted to
+      be one of that cell's claimants before the aging check.
+- [x] [Review][Patch] Record slips: the Change Log's "15 shipped comments" (27 sites across 14
+      files); mutation rows 1, 2 and 4 cited counts rather than the named test Task 9 asked for
+      [docs/implementation-artifacts/3-6-phase-3-the-assembled-cycle.md] — corrected; row 1 now
+      names the (repaired) pin.
+- [x] [Review][Patch] Three rewritten comment lines ran to 121–164 columns (Prettier does not
+      reflow comments), and `deathPhase.ts` quoted a `doubleBuffer.ts` sentence that file does not
+      contain (pre-existing; fixed in passing) [packages/simulation/src/strategy/deathPhase.ts,
+      packages/simulation/src/session/validateRules.ts] — rewrapped; the quote is now a paraphrase.
+- [x] [Review][Defer] Enforce the seed domain (`0 <= seed < 2^32`) in `createRng` / `createSeededRng`
+      [packages/simulation/src/strategy/rng.ts] — deferred, belongs with the story that mints seeds:
+      `@gol/test-utils`'s twin has a test accepting negative seeds, so rejecting them is a contract
+      change to another package, and the pair must move together (FD4). Recorded in
+      `deferred-work.md` for Story 3.8/3.10.
+
 ## Dev Notes
 
 ### Constraints the developer MUST follow
@@ -687,10 +771,10 @@ genuine workout and the strongest statement of why plain modulo is wrong.
 
 | # | Mutation | Result |
 |---|---|---|
-| 1 | `organisms[ref - 1]` → `organisms[ref]` (AC1, M14) | **54 tests fail** across 5 files |
-| 2 | `if (tieCount > 1)` → `>= 1` (AC3, draw only on a tie) | **42 tests fail** — `forbiddenRng` throws throughout |
+| 1 | `organisms[ref - 1]` → `organisms[ref]` (AC1, M14) | **54 tests fail** across 5 files (58 after review) — ⚠️ but, as the review found, the one NAMED pin (*"reads organisms[ref - 1], not organisms[ref] — the silent off-by-one"*) shipped vacuous and the rest were crashes; repaired in review (`(90, 10, 50)`), the named pin now reddens — see **Review Findings** |
+| 2 | `if (tieCount > 1)` → `>= 1` (AC3, draw only on a tie) | **42 tests fail** — `forbiddenRng` throws throughout, incl. *"never consults the generator when there is a single top claimant"* and *"never reaches the tie-break — 80 against 20 is not a tie (AC3)"* |
 | 3 | incumbency bonus (`action === 'survive' ? 101 : …`) (AC4, H-6) | **5 tests fail**, incl. *"a higher-Dominance BIRTH evicts a surviving incumbent"*, *"order within the run does not privilege the survivor"* |
-| 4 | drop the clear-branch writes — iterate claims only (AC6) | **17 tests fail**, incl. the blinker and both still-lifes |
+| 4 | drop the clear-branch writes — iterate claims only (AC6) | **17 tests fail**, incl. *"an occupied cell nobody claimed is gone at cycle end — implicit death"*, the blinker and both still-lifes |
 | 5 | `min(age + 1, max)` → `min(age, max) + 1` (AC7) | **7 tests fail**, incl. *"is min(age + 1, max), NOT min(age, max) + 1"* and the AC11 age golden |
 | 6 | age keyed off `winner === incumbent` instead of the action | **10 tests fail**, incl. *"a birth resets to 0 even when the INCUMBENT wins it"* |
 | 7 | add `agingEnabled` to `OrganismRuntime` (AC8) | **`tsc` fails** at the exact-key-set pin in `domainRuleSetCompatibility.test.ts` + 6 more sites |
@@ -835,7 +919,15 @@ is a RENDER input (FR-2.4)`. That is a clarification of an already-correct line,
   `SimulationDeps` / `SimulationStrategy` / `activeStrategy`, and the production seeded `Rng`.
   Conway golden suite (blinker, glider, block, beehive, the age golden), multi-organism conflict
   goldens (eviction refused, eviction won, relative-Cell-State gating, seeded tie-break), and six
-  `fast-check` properties over the assembled cycle. 15 shipped comments predicting this story
-  rewritten to describe what shipped, including two `agingEnabled` corrections. Status → review.
+  `fast-check` properties over the assembled cycle. Every shipped comment predicting this story
+  (27 sites across 14 files) rewritten to describe what shipped, including two `agingEnabled`
+  corrections. Status → review.
+- 2026-09-10 — Code review (Fable 5.1, a different model from the implementer): 1 decision-needed
+  left OPEN for Sidiar (the RFC-004 §3.1/§3.2 amendment), 12 patches applied, 1 deferred — see
+  **Review Findings**. Two named pins that shipped vacuous now redden under mutation (AC1's
+  `organisms[ref]`, the wrapping-neighbourhood detector); three silent contract failures now throw
+  (`int(n > 2^32)` hang in both mulberry32 copies, an `Rng` draw outside `[0, tieCount)`, an
+  unconsumed claim after the sweep). +6 tests (367; 100% coverage unchanged), +1 in
+  `@gol/test-utils`. Status stays `review` pending the decision.
 
 Dev Model: opus   # this story fixes the engine's public step contract (SimulationDeps, Rng, SimulationStrategy, threePhaseStep's signature) plus the RNG-ownership and in-place-write patterns that stories 3.7-3.10 and 4.15 all inherit — it sets the pattern rather than following one.

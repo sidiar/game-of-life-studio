@@ -61,8 +61,9 @@ export function birthSurvivalPhase(grid: Grid, deps: PhaseDeps): Claims {
   // CELL-OUTER, ORGANISM-INNER, and that is a contract rather than a preference: it is what makes
   // every claim for one cell CONTIGUOUS in the returned arrays, which is what lets `conflictPhase`
   // resolve conflicts in a single linear pass with one cursor, no map and no per-cell array.
-  // Reordering these two loops silently breaks Phase 3 — its sweep skips past a cell whose claims
-  // arrive late and drops them (claims.ts, invariant 1).
+  // Reordering these two loops breaks Phase 3: its cursor stalls on the first claim that arrives
+  // out of order and `conflictPhase` throws on the claims it could not consume (claims.ts,
+  // invariant 1) — loud, rather than a sweep that quietly clears everything after the stall.
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const index = row * width + col;

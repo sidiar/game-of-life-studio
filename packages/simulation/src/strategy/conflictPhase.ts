@@ -56,7 +56,9 @@ export function conflictPhase(grid: Grid, claims: Claims, deps: ConflictDeps): G
   // option (b)). This is the whole of what `claims.ts`'s invariant 1 buys: because Phase 2 scans
   // cell-outer/organism-inner, a cell's claims are one unbroken run at a non-decreasing index, so
   // the sweep never needs a Map, a per-cell array or a second look. ⚠️ Reordering the Phase-2 scan
-  // silently breaks this — claims for a skipped-over cell are dropped, not mis-resolved.
+  // breaks this: the cursor STALLS on the first out-of-order claim and never advances again, which
+  // would clear every later cell and drop every later claim — the post-sweep check at the bottom
+  // turns that into a throw rather than a plausible extinction.
   let cursor = 0;
 
   for (let index = 0; index < cells; index++) {
@@ -83,10 +85,14 @@ export function conflictPhase(grid: Grid, claims: Claims, deps: ConflictDeps): G
     // "Blue holds its corner" true under H-6.
     //
     // ⚠️ `organisms[ref - 1]`, never `organisms[ref]` (M14) — see `ConflictDeps`.
-    let maxDominance = -1;
-    let tieCount = 0;
+    //
+    // Seeded from the FIRST claimant rather than from a `-1` sentinel: `OrganismRuntime.dominance`
+    // is a plain `number`, and a sentinel quietly assumes FR-2.2's 1..100 range that the type does
+    // not state — under it a run of negative Dominances would elect the first claimant regardless.
+    let maxDominance = organisms[ref[runStart] - 1].dominance;
+    let tieCount = 1;
     let firstTop = runStart;
-    for (let i = runStart; i < runEnd; i++) {
+    for (let i = runStart + 1; i < runEnd; i++) {
       const dominance = organisms[ref[i] - 1].dominance;
       if (dominance > maxDominance) {
         maxDominance = dominance;
@@ -109,7 +115,9 @@ export function conflictPhase(grid: Grid, claims: Claims, deps: ConflictDeps): G
       // allocates a mapped array plus a spread PER CONTESTED CELL inside the frame budget.
       // ❌ Not reservoir selection either — one pass, but it draws on cells that end up
       // uncontested and makes the number of draws depend on claim order.
-      let k = rng.int(tieCount);
+      const draw = rng.int(tieCount);
+      let k = draw;
+      winner = -1;
       for (let i = firstTop; i < runEnd; i++) {
         if (organisms[ref[i] - 1].dominance === maxDominance) {
           if (k === 0) {
@@ -118,6 +126,17 @@ export function conflictPhase(grid: Grid, claims: Claims, deps: ConflictDeps): G
           }
           k--;
         }
+      }
+      // ⚠️ LOUD on a generator that breaks its own contract. `Rng` is injected, and an adapter
+      // written as `{ int: () => Math.random() }` or `int: (n) => Math.random() * n` returns a
+      // fraction or an out-of-range draw: `k` then never reaches 0, the walk runs off the end of
+      // the run, and silently keeping `firstTop` would resolve EVERY tie to the lowest ref —
+      // precisely the bias `rng.ts`'s rejection sampling exists to remove, presenting as a
+      // deterministic battle. One comparison per contested tie, never per cell.
+      if (winner < 0) {
+        throw new Error(
+          `conflictPhase: rng.int(${tieCount}) must return an integer in [0, ${tieCount}), got ${draw}`,
+        );
       }
     }
 
@@ -147,6 +166,20 @@ export function conflictPhase(grid: Grid, claims: Claims, deps: ConflictDeps): G
         : previousAge + 1 < maxRelevantAge
           ? previousAge + 1
           : maxRelevantAge;
+  }
+
+  // ⚠️ Every claim must have been consumed. The cursor only advances past a claim whose
+  // `cellIndex` EQUALS the cell being swept, so a claim that arrives out of order (`claims.ts`
+  // invariant 1 broken) or names a cell outside the grid stalls it for the rest of the sweep:
+  // every later cell takes the "nobody asked" branch and is cleared, every later claim is dropped,
+  // and because extinction is a normal outcome (Decision B.5) the result reads as a legitimate
+  // wipe-out. Checking ONCE after the sweep — never per cell — makes it loud instead. The only
+  // producer that can trip this is a caller bypassing `birthSurvivalPhase`.
+  if (cursor !== claimCount) {
+    throw new Error(
+      `conflictPhase: ${claimCount - cursor} of ${claimCount} claims were never matched to a cell — ` +
+        `cellIndex must be non-decreasing and within [0, ${cells})`,
+    );
   }
 
   return grid;

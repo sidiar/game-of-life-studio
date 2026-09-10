@@ -20,7 +20,9 @@ const UINT32_RANGE = 4294967296; // 2^32
 export function createSeededRng(seed: number): { int(maxExclusive: number): number } {
   // `seed >>> 0` silently coerces rather than rejecting: 1.5 and 1 collapse to the same state, and
   // NaN/Infinity both become 0. Two nominally different seeds producing an identical sequence
-  // would make a divergence test pass vacuously — the exact failure a seeded RNG exists to rule out.
+  // would make a divergence test pass vacuously, so non-integers are refused. ⚠️ Integer seeds that
+  // agree modulo 2^32 still replay one sequence (the state is 32 bits) — mint seeds inside
+  // [0, 2^32); enforcing that range is deferred with the story that mints them (deferred-work.md).
   if (!Number.isInteger(seed)) {
     throw new Error(`createSeededRng: seed must be an integer, got ${seed}`);
   }
@@ -42,9 +44,13 @@ export function createSeededRng(seed: number): { int(maxExclusive: number): numb
       // A bare `% maxExclusive` answers `int(0)` with NaN, which a caller then uses as an array
       // index and reads back `undefined` rather than throwing — the failure surfaces as a missing
       // value somewhere else entirely. Negative and fractional bounds break the documented
-      // [0, maxExclusive) contract just as quietly.
-      if (!Number.isInteger(maxExclusive) || maxExclusive < 1) {
-        throw new Error(`int: maxExclusive must be a positive integer, got ${maxExclusive}`);
+      // [0, maxExclusive) contract just as quietly. ⚠️ A bound ABOVE 2^32 makes `limit` below 0
+      // and the rejection loop spin forever — a hang, not a throw — so it is refused too. Mirrors
+      // `@gol/simulation`'s `createRng` exactly; the two are pinned differentially (Story 3.6 FD4).
+      if (!Number.isInteger(maxExclusive) || maxExclusive < 1 || maxExclusive > UINT32_RANGE) {
+        throw new Error(
+          `int: maxExclusive must be a positive integer no greater than 2^32, got ${maxExclusive}`,
+        );
       }
 
       // Rejection sampling, not plain modulo. 2^32 is not divisible by most bounds, so `% n` maps

@@ -469,3 +469,15 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `false`. Both are Story 3.7's to measure before touching: a reused scratch subject needs a seam
   (`CellSubject` is `readonly`), and a "has death rules" flag is a Story 3.4 surface change. Noted
   in code at both sites.
+
+## Deferred from: code review of 3-6-phase-3-the-assembled-cycle (2026-09-10)
+
+- **Seed domain is not enforced by `createRng` / `createSeededRng`** — both mulberry32 copies hold
+  32 bits of state, so integer seeds that agree modulo 2^32 (`0` and `2 ** 32`; `-1` and
+  `4294967295`) replay one sequence, and `Date.now()` is already above 2^32. The integer guard's
+  comment used to claim it ruled this class out; the Story 3.6 review corrected the comments in
+  both copies and left ENFORCEMENT (`0 <= seed < 2^32`, throw otherwise) to the story that mints
+  seeds — **Story 3.8/3.10** — because `@gol/test-utils`'s `seededRng.test.ts` deliberately accepts
+  negative seeds today, so rejecting them is a contract change to another package, and FD4 requires
+  the pair to move together. Until then: mint with `Math.floor(Math.random() * 2 ** 32)`, and the
+  reported seed IS the effective seed.

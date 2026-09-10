@@ -285,6 +285,19 @@ describe('the assembled cycle (fast-check, AR-41, Story 3.6 AC13)', () => {
         const previousAges = Array.from(destination.age);
         conflictPhase(destination, claims, deps);
 
+        // The "always a claimant" half, asserted rather than assumed: the ref written to a claimed
+        // cell is one of THAT cell's claimants. Without this, a slip such as `ref[winner + 1]`
+        // survives — the aging loop below `continue`s past any occupant it does not recognise.
+        const claimantsByCell = new Map<number, Set<number>>();
+        for (let i = 0; i < claims.cellIndex.length; i++) {
+          const refs = claimantsByCell.get(claims.cellIndex[i]) ?? new Set<number>();
+          refs.add(claims.ref[i]);
+          claimantsByCell.set(claims.cellIndex[i], refs);
+        }
+        for (const [cell, refs] of claimantsByCell) {
+          expect(refs.has(destination.occupant[cell])).toBe(true);
+        }
+
         for (let i = 0; i < claims.cellIndex.length; i++) {
           const cell = claims.cellIndex[i];
           if (destination.occupant[cell] !== claims.ref[i]) continue;

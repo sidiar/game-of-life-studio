@@ -59,8 +59,14 @@ const UINT32_RANGE = 4294967296; // 2^32
 export function createRng(seed: number): Rng {
   // `seed >>> 0` coerces silently rather than rejecting: 1.5 and 1 collapse to the same state, and
   // NaN and Infinity both become 0. Two nominally different seeds producing an identical sequence
-  // makes a divergence test pass vacuously — the exact failure a seeded generator exists to rule
-  // out.
+  // makes a divergence test pass vacuously, so non-integers are refused here.
+  //
+  // ⚠️ What this check does NOT rule out: the state is 32 bits, so integer seeds that agree modulo
+  // 2^32 (`0` and `2 ** 32`; `-1` and `4294967295`) replay one sequence. The seed a run REPORTS
+  // (Story 3.8/3.10 — "which seed did this battle use") must therefore be minted inside [0, 2^32):
+  // `Math.floor(Math.random() * 2 ** 32)`, not `Date.now()`, which is already above it. Enforcing
+  // the range here is deferred to the minting story (deferred-work.md): `@gol/test-utils`'s twin
+  // deliberately accepts negative seeds, and the pair must stay identical.
   if (!Number.isInteger(seed)) {
     throw new Error(`createRng: seed must be an integer, got ${seed}`);
   }
@@ -82,8 +88,14 @@ export function createRng(seed: number): Rng {
       // into a claim run and reads back `undefined` rather than throwing — the failure surfaces
       // somewhere else entirely. Phase 3 only ever calls this with a tie count >= 2, so the guard
       // costs nothing on the hot path and catches a hand-built caller.
-      if (!Number.isInteger(maxExclusive) || maxExclusive < 1) {
-        throw new Error(`int: maxExclusive must be a positive integer, got ${maxExclusive}`);
+      //
+      // ⚠️ And no greater than 2^32: above it `UINT32_RANGE % maxExclusive` is the whole range,
+      // `limit` below is 0, and the rejection loop never exits — a HANG on the main thread rather
+      // than a throw. A 32-bit source cannot cover [0, n) for such an n anyway.
+      if (!Number.isInteger(maxExclusive) || maxExclusive < 1 || maxExclusive > UINT32_RANGE) {
+        throw new Error(
+          `int: maxExclusive must be a positive integer no greater than 2^32, got ${maxExclusive}`,
+        );
       }
 
       // Rejection sampling, not plain modulo. 2^32 is not divisible by most bounds, so `% n` maps

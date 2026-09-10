@@ -48,6 +48,14 @@ describe('createSeededRng', () => {
     expect(() => rng.int(Number.NaN)).toThrow(/positive integer/);
   });
 
+  // Above 2^32 the rejection limit is 0 and `while (value >= 0)` never exits — a hang where the
+  // guard promises a throw. 2^32 itself is the largest bound a 32-bit draw can cover.
+  it('rejects a bound above 2^32 rather than spinning forever', () => {
+    const rng = createSeededRng(FIXED_SEED);
+    expect(() => rng.int(2 ** 32 + 1)).toThrow(/no greater than 2\^32/);
+    expect(rng.int(2 ** 32)).toBeLessThan(2 ** 32);
+  });
+
   // `seed >>> 0` collapsed 1.5 to 1 and NaN to 0, so two nominally different seeds could produce
   // an identical sequence and a divergence test would pass vacuously.
   it('rejects a non-integer seed rather than silently coercing it', () => {

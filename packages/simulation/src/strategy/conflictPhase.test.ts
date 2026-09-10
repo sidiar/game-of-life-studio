@@ -74,8 +74,11 @@ describe('Dominance decides, and the roster lookup is ref - 1 (AC1, M14)', () =>
   it('reads organisms[ref - 1], not organisms[ref] — the silent off-by-one', () => {
     // Built so the two conventions give DIFFERENT answers. Under `organisms[ref - 1]` the
     // dominances in play are 90 (ref 1) and 10 (ref 2), so ref 1 wins. Under `organisms[ref]` they
-    // would be 10 and 5, so ref 2 would win. A roster whose entries happen to be ordered the same
-    // way cannot tell the two apart, which is why this fixture is deliberately non-monotonic.
+    // are 10 (ref 1) and 50 (ref 2), so ref 2 wins. The third entry is what keeps the mutant from
+    // CRASHING — AC1's whole point is that `organisms[ref]` is not a crash but a plausible battle —
+    // and its value has to beat the middle one, or the mutant still elects ref 1 and the pin is
+    // vacuous (the Story 3.6 review found it shipped as `(90, 10, 5)`, which is exactly that).
+    // Verified by mutation: this test reddens under `organisms[ref]`.
     const grid = gridFromDense([[0]]);
     conflictPhase(
       grid,
@@ -83,10 +86,27 @@ describe('Dominance decides, and the roster lookup is ref - 1 (AC1, M14)', () =>
         [0, 1, 'born'],
         [0, 2, 'born'],
       ]),
-      depsOf(rosterOf(90, 10, 5)),
+      depsOf(rosterOf(90, 10, 50)),
     );
 
     expect(grid.occupant[0]).toBe(1);
+  });
+
+  it('compares Dominance as a plain number — no sentinel below which the first claimant wins', () => {
+    // `OrganismRuntime.dominance` is `number`; FR-2.2's 1..100 range is the domain schema's promise,
+    // not the type's. A `-1` sentinel for "no maximum yet" makes a run of negative Dominances elect
+    // whoever came first. Seeding the maximum from the first claimant has no such floor.
+    const grid = gridFromDense([[0]]);
+    conflictPhase(
+      grid,
+      claimsOf([
+        [0, 1, 'born'],
+        [0, 2, 'born'],
+      ]),
+      depsOf(rosterOf(-5, -1)),
+    );
+
+    expect(grid.occupant[0]).toBe(2);
   });
 
   it('resolves each contested cell independently across a multi-cell run', () => {
@@ -161,7 +181,6 @@ describe('ties break through the INJECTED generator, and only on a genuine tie (
   });
 
   it('picks the k-th top claimant the generator names — k = 0 is the first', () => {
-    const grid = gridFromDense([[0]]);
     const claims = claimsOf([
       [0, 1, 'born'],
       [0, 2, 'born'],
@@ -179,8 +198,23 @@ describe('ties break through the INJECTED generator, and only on a genuine tie (
       conflictPhase(cell, claims, depsOf(rosterOf(50, 50, 50), { int: () => k }));
       expect(cell.occupant[0]).toBe(expected);
     }
+  });
 
-    expect(grid.occupant[0]).toBe(0);
+  it('throws when the generator breaks its contract, rather than electing the first claimant', () => {
+    // `Rng` is injected. An adapter written as `{ int: () => Math.random() }` or
+    // `int: (n) => Math.random() * n` returns a fraction or an out-of-range draw; the pass-2 walk
+    // then never lands and silently keeping the first top claimant would resolve EVERY tie to the
+    // lowest ref — the exact low-ref bias `rng.ts` rejection-samples to remove, presenting as a
+    // deterministic battle.
+    const contest = claimsOf([
+      [0, 1, 'born'],
+      [0, 2, 'born'],
+    ]);
+    for (const bad of [7, 2, -1, 0.5]) {
+      expect(() =>
+        conflictPhase(gridFromDense([[0]]), contest, depsOf(rosterOf(50, 50), { int: () => bad })),
+      ).toThrow(/rng\.int\(2\) must return an integer in \[0, 2\)/);
+    }
   });
 
   it('skips over non-top claimants when counting to k', () => {
@@ -349,6 +383,33 @@ describe('every destination cell is written, and an unclaimed occupant is CLEARE
     const empty = gridFromDense([]);
     expect(() => conflictPhase(empty, claimsOf([]), depsOf(rosterOf(10)))).not.toThrow();
     expect(gridToDense(empty)).toEqual([]);
+  });
+
+  it('throws on claims that arrive out of order or off the grid, instead of wiping the rest', () => {
+    // The cursor only advances past a claim whose cellIndex EQUALS the swept cell, so an
+    // out-of-order or out-of-range claim stalls it: every later cell would be cleared and every
+    // later claim dropped, and — extinction being a normal outcome — that reads as a legitimate
+    // wipe-out. The post-sweep check makes it loud. Nothing in the shipped path can produce these
+    // (`birthSurvivalPhase` scans row-major); this pins the contract for a hand-built caller.
+    const outOfOrder = claimsOf([
+      [1, 1, 'born'],
+      [0, 2, 'born'],
+    ]);
+    expect(() =>
+      conflictPhase(gridFromDense([[0, 0]]), outOfOrder, depsOf(rosterOf(10, 20))),
+    ).toThrow(/1 of 2 claims were never matched to a cell/);
+
+    const offGrid = claimsOf([[4, 1, 'born']]);
+    expect(() =>
+      conflictPhase(
+        gridFromDense([
+          [0, 0],
+          [0, 0],
+        ]),
+        offGrid,
+        depsOf(rosterOf(10)),
+      ),
+    ).toThrow(/1 of 1 claims were never matched to a cell/);
   });
 
   it('resolves a claim on the LAST cell — the cursor must not run off the end first', () => {

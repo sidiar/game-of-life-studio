@@ -13,10 +13,11 @@ import { evaluatorsFor } from './phaseDeps';
  *
  * RFC-004 §3.2's snippet reads `deathPhase(grid, deps) => Grid`, i.e. allocate-per-call. That
  * snippet is illustrative pseudocode; `../grid/doubleBuffer.ts` — written after it, and naming this
- * story — states the shape the shipped buffer seam was built for: *"Stories 3.5/3.6 write into
- * `back` and swap … the input grid is never written — the destination is a distinct grid the
- * caller supplied."* Story 3.6 adopted the same shape for `threePhaseStep` (its FD1). Allocating would cost a `Uint8Array(N)` plus a `Uint16Array(N)` PER CYCLE (18
- * KB at 100x60, 72 KB at 200x120, up to 20 times a second), which is precisely the per-cycle
+ * story — states the shape the shipped buffer seam was built for: the phases write into `back`,
+ * the caller swaps, and the SOURCE grid is never written, so the destination is a distinct grid
+ * the caller supplied. Story 3.6 adopted the same shape for `threePhaseStep` (its FD1).
+ * Allocating would cost a `Uint8Array(N)` plus a `Uint16Array(N)` PER CYCLE (18 KB at 100x60,
+ * 72 KB at 200x120, up to 20 times a second), which is precisely the per-cycle
  * allocation Decision A.6's steady-state memory budget and the double buffer exist to avoid. It
  * also makes the two-buffer plan serve a three-grid pipeline: this intermediate IS `back`, Phase 2
  * only reads it, and Phase 3 finishes in place over it.
@@ -42,8 +43,8 @@ import { evaluatorsFor } from './phaseDeps';
  * living cell that matches no `die` rule stays on the intermediate grid even when it will match no
  * `survive` rule either. It yields no claim and is gone at cycle end (`conflictPhase`'s sweep
  * clears every unclaimed cell), but it COUNTS AS A PHASE-2 NEIGHBOUR until then, which is what
- * preserves Conway's simultaneous-generation semantics. Conway's Classic has no `die` rule at all, so this phase over a Conway
- * battle returns a grid equal in content to its input.
+ * preserves Conway's simultaneous-generation semantics. Conway's Classic has no `die` rule at
+ * all, so this phase over a Conway battle returns a grid equal in content to its input.
  *
  * ❌ No call to `resolveCellAction` (Trap 13). The action partition is Story 3.4's COMPILE-TIME
  * work (AR-18, RFC-004 §2.3/§3.5): this phase asks `resolvesToDeath` and never filters, sorts or
