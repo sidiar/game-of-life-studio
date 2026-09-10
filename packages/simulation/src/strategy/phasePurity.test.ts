@@ -17,16 +17,28 @@ import type { PhaseDeps } from './phaseDeps';
 // the function does nothing. What must hold is that the source is byte-identical afterwards and
 // that no returned buffer aliases a source buffer.
 
-const REF_CEILING = 3; // the mock roster's size; refs 0..3, so out-of-roster refs never appear
+// ROSTERS are generated too (Task 5: "over generated grids and rosters"): any non-empty ordering
+// of any subset of the mock organisms, so refs are re-assigned per case (M14: ref = index + 1)
+// and no property can quietly depend on "Aggressive is always 1".
+const arbRoster = fc.shuffledSubarray(createMockOrganisms(), { minLength: 1 });
+
+interface PhaseCase {
+  readonly roster: ReturnType<typeof createMockOrganisms>;
+  readonly dense: number[][];
+  readonly ages: number[];
+}
 
 // Grids from 1x1 up, deliberately including 1xN and Nx1 — degenerate shapes are where hard-edge
-// neighbour bounds go wrong (Trap 8), and a phase inherits that from the counting it does.
-const arbGrid = fc
-  .tuple(fc.integer({ min: 1, max: 8 }), fc.integer({ min: 1, max: 8 }))
-  .chain(([width, height]) =>
+// neighbour bounds go wrong (Trap 8), and a phase inherits that from the counting it does. Refs
+// run 0..roster.length, so an out-of-roster ref never appears (that path has its own example
+// tests in `deathPhase.test.ts` / `birthSurvivalPhase.test.ts`).
+const arbCase: fc.Arbitrary<PhaseCase> = fc
+  .tuple(arbRoster, fc.integer({ min: 1, max: 8 }), fc.integer({ min: 1, max: 8 }))
+  .chain(([roster, width, height]) =>
     fc.record({
+      roster: fc.constant(roster),
       dense: fc.array(
-        fc.array(fc.integer({ min: 0, max: REF_CEILING }), {
+        fc.array(fc.integer({ min: 0, max: roster.length }), {
           minLength: width,
           maxLength: width,
         }),
@@ -41,23 +53,23 @@ const arbGrid = fc
     }),
   );
 
-const buildGrid = ({ dense, ages }: { dense: number[][]; ages: number[] }): Grid => {
+const buildGrid = ({ dense, ages }: PhaseCase): Grid => {
   const source = gridFromDense(dense);
   source.age.set(ages);
   return source;
 };
 
-const deps = (): PhaseDeps => compileSession(createMockOrganisms());
+const depsFor = ({ roster }: PhaseCase): PhaseDeps => compileSession(roster);
 
 describe('phase purity over the source grid (fast-check, AR-41, AC9)', () => {
   it('deathPhase leaves the source occupant and age byte-identical', () => {
     fc.assert(
-      fc.property(arbGrid, (spec) => {
+      fc.property(arbCase, (spec) => {
         const source = buildGrid(spec);
         const occupantBefore = Array.from(source.occupant);
         const ageBefore = Array.from(source.age);
 
-        deathPhase(source, createGrid(source.width, source.height), deps());
+        deathPhase(source, createGrid(source.width, source.height), depsFor(spec));
 
         expect(Array.from(source.occupant)).toEqual(occupantBefore);
         expect(Array.from(source.age)).toEqual(ageBefore);
@@ -67,12 +79,12 @@ describe('phase purity over the source grid (fast-check, AR-41, AC9)', () => {
 
   it('birthSurvivalPhase leaves the grid it reads byte-identical', () => {
     fc.assert(
-      fc.property(arbGrid, (spec) => {
+      fc.property(arbCase, (spec) => {
         const source = buildGrid(spec);
         const occupantBefore = Array.from(source.occupant);
         const ageBefore = Array.from(source.age);
 
-        birthSurvivalPhase(source, deps());
+        birthSurvivalPhase(source, depsFor(spec));
 
         expect(Array.from(source.occupant)).toEqual(occupantBefore);
         expect(Array.from(source.age)).toEqual(ageBefore);
@@ -82,11 +94,11 @@ describe('phase purity over the source grid (fast-check, AR-41, AC9)', () => {
 
   it('no returned buffer aliases a source buffer', () => {
     fc.assert(
-      fc.property(arbGrid, (spec) => {
+      fc.property(arbCase, (spec) => {
         const source = buildGrid(spec);
         const destination = createGrid(source.width, source.height);
 
-        const result = deathPhase(source, destination, deps());
+        const result = deathPhase(source, destination, depsFor(spec));
 
         expect(result.occupant).not.toBe(source.occupant);
         expect(result.age).not.toBe(source.age);
@@ -99,14 +111,16 @@ describe('phase purity over the source grid (fast-check, AR-41, AC9)', () => {
     // Nothing in Phases 1-2 is random (the seeded `Rng` is Phase 3's, Story 3.6). A phase that
     // needed one would have absorbed Phase 3.
     fc.assert(
-      fc.property(arbGrid, (spec) => {
+      fc.property(arbCase, (spec) => {
         const source = buildGrid(spec);
-        const first = deathPhase(source, createGrid(source.width, source.height), deps());
-        const second = deathPhase(source, createGrid(source.width, source.height), deps());
+        const first = deathPhase(source, createGrid(source.width, source.height), depsFor(spec));
+        const second = deathPhase(source, createGrid(source.width, source.height), depsFor(spec));
 
         expect(Array.from(first.occupant)).toEqual(Array.from(second.occupant));
         expect(Array.from(first.age)).toEqual(Array.from(second.age));
-        expect(birthSurvivalPhase(first, deps())).toEqual(birthSurvivalPhase(second, deps()));
+        expect(birthSurvivalPhase(first, depsFor(spec))).toEqual(
+          birthSurvivalPhase(second, depsFor(spec)),
+        );
       }),
     );
   });
@@ -115,17 +129,17 @@ describe('phase purity over the source grid (fast-check, AR-41, AC9)', () => {
 describe('phase invariants over generated grids (fast-check)', () => {
   it('deathPhase writes EVERY destination cell, so a stale frame never survives (AC10)', () => {
     fc.assert(
-      fc.property(arbGrid, (spec) => {
+      fc.property(arbCase, (spec) => {
         const source = buildGrid(spec);
         // The destination starts as cycle N-2's ghost: a ref no cell holds and an age no cell has.
         const destination = createGrid(source.width, source.height);
-        destination.occupant.fill(REF_CEILING + 1);
+        destination.occupant.fill(spec.roster.length + 1);
         destination.age.fill(999);
 
-        deathPhase(source, destination, deps());
+        deathPhase(source, destination, depsFor(spec));
 
         for (let i = 0; i < destination.occupant.length; i++) {
-          expect(destination.occupant[i]).not.toBe(REF_CEILING + 1);
+          expect(destination.occupant[i]).not.toBe(spec.roster.length + 1);
           expect(destination.age[i]).not.toBe(999);
         }
       }),
@@ -136,9 +150,9 @@ describe('phase invariants over generated grids (fast-check)', () => {
     // Phase 1's whole job is explicit death. A cell in the output is either the source's occupant
     // with the source's age, or empty with age 0.
     fc.assert(
-      fc.property(arbGrid, (spec) => {
+      fc.property(arbCase, (spec) => {
         const source = buildGrid(spec);
-        const result = deathPhase(source, createGrid(source.width, source.height), deps());
+        const result = deathPhase(source, createGrid(source.width, source.height), depsFor(spec));
 
         for (let i = 0; i < result.occupant.length; i++) {
           if (result.occupant[i] === 0) {
@@ -154,9 +168,9 @@ describe('phase invariants over generated grids (fast-check)', () => {
 
   it('claims obey the invariants Story 3.6 depends on (claims.ts)', () => {
     fc.assert(
-      fc.property(arbGrid, (spec) => {
+      fc.property(arbCase, (spec) => {
         const grid = buildGrid(spec);
-        const claims = birthSurvivalPhase(grid, deps());
+        const claims = birthSurvivalPhase(grid, depsFor(spec));
         const cells = grid.width * grid.height;
 
         expect(claims.ref).toHaveLength(claims.cellIndex.length);

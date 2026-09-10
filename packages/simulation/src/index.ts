@@ -39,7 +39,8 @@ export type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol
 
 // The grid layer (RFC-004 §3.4, Story 3.3) — the typed-array representation the engine runs on,
 // the dense<->typed conversion at its boundary, the Moore neighbourhood, the pure resize, and the
-// double-buffer seam Stories 3.5/3.6/3.8 write against. `apps/web` consumes `Grid` through its own
+// double-buffer seam Story 3.5's `deathPhase` writes into (3.6's Phase 3 and 3.8's loop follow).
+// `apps/web` consumes `Grid` through its own
 // `RenderableGrid` alias (lib/canvas/renderableGrid.ts), which is now a re-export of this type
 // rather than a structural twin of it — Cross-RFC Reconciliation #3's runtime boundary lives here,
 // not in @gol/persistence, which must stay a leaf over @gol/domain (AR-2/27).
@@ -55,8 +56,8 @@ export { resizeGrid } from './grid/resizeGrid';
 // string-keyed, workspace-shared organism data becomes battle-relative numbers and closures:
 // id -> OrganismRef interning (Decision E.3), the two phase-partitioned evaluators per organism
 // (AR-18), the session-scoped compile cache (Decision E.4), MAX_RELEVANT_AGE (Decision B.5), and
-// the eager compile-time diagnostic sweep M12 assigns here. Stories 3.5/3.6 consume `CompiledSession`;
-// nothing in it runs per cell.
+// the eager compile-time diagnostic sweep M12 assigns here. Story 3.5's phases consume it as
+// `PhaseDeps` (its `evaluatorsByRef`); 3.6's Phase 3 reads the rest. Nothing in it runs per cell.
 export { compileSession } from './session/compileEvaluators';
 export type {
   CompilableOrganism,

@@ -24,8 +24,8 @@ import type { OrganismEvaluators } from '../session/compileEvaluators';
  * What Phases 1 and 2 read off the session — and nothing more (story FD1).
  *
  * RFC-004 §3.1's `SimulationDeps` (as amended by M15) names three members: `evaluatorsByRef`,
- * `organisms` and `rng`. These two phases read ONLY the first: `dominance` and `rng` are Phase 3's,
- * `agingEnabled` is Story 3.6's cycle-end step. Declaring the full `SimulationDeps` here would
+ * `organisms` and `rng`. These two phases read ONLY the first: `organisms` (its `dominance`) and
+ * `rng` are Phase 3's, and `organisms`' `agingEnabled` is Story 3.6's cycle-end step. Declaring the full `SimulationDeps` here would
  * publish two fields no shipped code reads and no test can exercise as used — the same call Story
  * 3.1 made against `RuleSetCollection` and Story 3.4's FD1 made against `OrganismRuntime`.
  *

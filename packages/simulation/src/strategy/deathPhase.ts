@@ -99,6 +99,12 @@ export function deathPhase(source: Grid, destination: Grid, deps: PhaseDeps): Gr
  * Counts come from `countNeighbors` on the SOURCE grid: one organism per cell here, so there is
  * nothing for `neighborTally.ts`'s per-cell tally to amortise.
  *
+ * ⚠️ For Story 3.7's benchmark, not for now: this scan runs for EVERY occupied cell, including
+ * those of an organism with no `die` rule at all (Conway's Classic), whose `resolvesToDeath` can
+ * only answer `false`. A per-organism "has death rules" flag on `OrganismEvaluators` would skip
+ * it, but that is a Story 3.4 surface change and the repo optimises on measurement
+ * (deferred-work.md, Story 3.5 review).
+ *
  * ⚠️ `age` is passed exactly as stored — never clamped, incremented or saturated (Trap 9).
  * `CompiledSession.maxRelevantAge` is applied at CYCLE END by Story 3.6; clamping here would make
  * an `age gt <literal>` rule behave differently in Phase 1 than at cycle end.

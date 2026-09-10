@@ -1,12 +1,13 @@
 import { CONWAYS_CLASSIC, createMockOrganisms, gridFromPattern } from '@gol/test-utils';
 import { describe, expect, it } from 'vitest';
 
-import { gridFromDense } from '../grid/grid';
+import { createGrid, gridFromDense } from '../grid/grid';
 import type { Grid } from '../grid/grid';
 import { compileSession } from '../session/compileEvaluators';
 import type { CompilableOrganism } from '../session/compileEvaluators';
 import { birthSurvivalPhase } from './birthSurvivalPhase';
 import type { Claims } from './claims';
+import { deathPhase } from './deathPhase';
 import type { PhaseDeps } from './phaseDeps';
 
 // Refs are roster index + 1 (M14). createMockOrganisms(): 1 = Aggressive Colonizer,
@@ -173,6 +174,47 @@ describe('birthSurvivalPhase — survive is the incumbent’s alone (FD4)', () =
     expect(triples(claims)).toEqual([[0, 1, 'born']]);
   });
 
+  it('drops the organism’s ANSWER, not a rule — a later `born` rule is NOT consulted (FR-2.6)', () => {
+    // First-match already ran inside the compiled evaluator: this organism's first matching rule
+    // on someone else's cell says `survive`, so that IS its answer, and FD4 discards it. Falling
+    // through to its second rule (`born` on the same cell) would make this layer re-rank rules,
+    // which AC8 forbids — so the organism makes no claim here at all, by its own configured order.
+    const shadowed: CompilableOrganism = {
+      id: 'shadowed',
+      survivalRules: [
+        {
+          id: 'r-survive-first',
+          contentHash: 'h-survive-first',
+          conditions: [{ property: 'cellState', operator: 'eq', pattern: 'occupied' }],
+          payload: { summary: 'survives on someone else’s cell', action: 'survive' },
+        },
+        {
+          id: 'r-born-second',
+          contentHash: 'h-born-second',
+          conditions: [{ property: 'cellState', operator: 'eq', pattern: 'occupied' }],
+          payload: { summary: 'would be born on someone else’s cell', action: 'born' },
+        },
+      ],
+    };
+    // Ref 1 is `inert` (holding the cell, no rules), ref 2 is `shadowed`.
+    const session = compileSession([{ id: 'inert', survivalRules: [] }, shadowed]);
+    const claims = birthSurvivalPhase(grid(['I'], { I: 1 }), session);
+
+    expect(triples(claims)).toEqual([]);
+
+    // The same two rules in the OTHER order claim the cell — the order is the user's, not ours.
+    const reordered: CompilableOrganism = {
+      id: 'shadowed',
+      survivalRules: [shadowed.survivalRules[1], shadowed.survivalRules[0]],
+    };
+    const claimsReordered = birthSurvivalPhase(
+      grid(['I'], { I: 1 }),
+      compileSession([{ id: 'inert', survivalRules: [] }, reordered]),
+    );
+
+    expect(triples(claimsReordered)).toEqual([[0, 2, 'born']]);
+  });
+
   it('KEEPS a `born` from the incumbent — the mirror case is not symmetric (AC7)', () => {
     // A rebirth: Story 3.6 resets the winner's age to 0, which cannot be re-derived from
     // "winner === incumbent". Dropping this would be a silent aging bug with no failing test in
@@ -295,6 +337,32 @@ describe('birthSurvivalPhase — the roster loop (Trap 1)', () => {
     expect(triples(claims)).toEqual([[0, 2, 'born']]);
   });
 
+  it('treats an occupant beyond the compiled roster as `occupied` for everyone, claiming nothing itself (Trap 14)', () => {
+    // Phase 2 never indexes the table by a GRID value — its refs are the table's own indices — so
+    // an out-of-roster occupant (unreachable through persistence, an in-memory shape bug) cannot
+    // crash it. What it does instead is pinned: the cell reads `occupied` with `organismType` 7
+    // for every real organism, so a plain born-on-occupied rule claims it, and ref 7 itself is
+    // never asked and makes no claim — gone at cycle end by implicit death, as in Phase 1.
+    const squatterHunter: CompilableOrganism = {
+      id: 'squatter-hunter',
+      survivalRules: [
+        {
+          id: 'r-born-on-any-occupied',
+          contentHash: 'h-born-on-any-occupied',
+          conditions: [{ property: 'cellState', operator: 'eq', pattern: 'occupied' }],
+          payload: { summary: 'born on any occupied cell', action: 'born' },
+        },
+      ],
+    };
+    const claims = birthSurvivalPhase(
+      grid(['Z.'], { '.': 0, Z: 7 }),
+      compileSession([squatterHunter]),
+    );
+
+    expect(triples(claims)).toEqual([[0, 1, 'born']]);
+    expect(claims.ref).not.toContain(7);
+  });
+
   it('counts an implicitly-doomed cell as a neighbour for the whole phase (M10, Trap 3)', () => {
     // The blinker's end cell at (2,1) matches nothing and will be gone at cycle end — but it is
     // still standing here, and it is one of the 3 neighbours that let (1,2) and (3,2) be born.
@@ -304,5 +372,73 @@ describe('birthSurvivalPhase — the roster loop (Trap 1)', () => {
 
     expect(claims.cellIndex).toContain(2 * 5 + 1);
     expect(claims.cellIndex).toContain(2 * 5 + 3);
+  });
+});
+
+// ── AC3: Phase 2 reads Phase 1's OUTPUT — the two phases chained over one fixture ───────────────
+
+describe('deathPhase → birthSurvivalPhase over one multi-organism grid (AC3, AC12)', () => {
+  // The 3x3 Aggressive block: Phase 1 removes exactly the centre (8 same-organism neighbours,
+  // AGGRESSIVE_DIE is `neighborCount gt 5`), and Phase 2 must then see that hole. Each phase is
+  // pinned on its own elsewhere; what only a CHAINED run can pin is that an explicit death is
+  // gone from the neighbour counts before any claim is made (FR-5.2, RFC-004 §3.2: "the same
+  // decision function serves both phases; only the input grid changes").
+  //
+  //        col:  0 1 2 3 4
+  //   row 0:     . . . . .
+  //   row 1:     . A A A .
+  //   row 2:     . A A A .      <- (2,2) dies in Phase 1
+  //   row 3:     . A A A .
+  //   row 4:     . . . . .
+  const BLOCK = ['.....', '.AAA.', '.AAA.', '.AAA.', '.....'];
+  const at = (col: number, row: number): number => row * 5 + col;
+  const CENTRE = at(2, 2);
+
+  const chained = (): Claims => {
+    const source = grid(BLOCK, { '.': 0, A: REF_AGGRESSIVE });
+    const afterDeath = deathPhase(source, createGrid(source.width, source.height), mockSession());
+    return birthSurvivalPhase(afterDeath, mockSession());
+  };
+
+  it('makes no claim on the cell Phase 1 emptied — it is gone before Phase 2 counts', () => {
+    // Over the SOURCE grid the centre is alive with 8 same neighbours: Aggressive survives it and
+    // Chaotic claims it. Over Phase 1's output it is empty with 8 Aggressive neighbours: no born
+    // rule fits (Aggressive needs exactly 3, Patient's own count is 0, Chaotic needs `occupied`).
+    const unchained = birthSurvivalPhase(grid(BLOCK, { '.': 0, A: REF_AGGRESSIVE }), mockSession());
+    expect(triples(unchained).filter(([index]) => index === CENTRE)).toEqual([
+      [CENTRE, REF_AGGRESSIVE, 'survive'],
+      [CENTRE, REF_CHAOTIC, 'born'],
+    ]);
+
+    expect(chained().cellIndex).not.toContain(CENTRE);
+  });
+
+  it('yields exactly the hand-computed claim set for the post-death grid', () => {
+    // Every remaining block cell keeps >= 2 same neighbours (corners 2, edge-middles 4) so
+    // Aggressive survives all eight and Chaotic claims all eight; the four outside cells with
+    // exactly 3 Aggressive neighbours — (2,0), (0,2), (4,2), (2,4) — get an Aggressive birth.
+    // Patient Defender claims nothing anywhere: its own `neighborCount` is 0 (Trap 6).
+    expect(triples(chained())).toEqual([
+      [at(2, 0), REF_AGGRESSIVE, 'born'],
+      [at(1, 1), REF_AGGRESSIVE, 'survive'],
+      [at(1, 1), REF_CHAOTIC, 'born'],
+      [at(2, 1), REF_AGGRESSIVE, 'survive'],
+      [at(2, 1), REF_CHAOTIC, 'born'],
+      [at(3, 1), REF_AGGRESSIVE, 'survive'],
+      [at(3, 1), REF_CHAOTIC, 'born'],
+      [at(0, 2), REF_AGGRESSIVE, 'born'],
+      [at(1, 2), REF_AGGRESSIVE, 'survive'],
+      [at(1, 2), REF_CHAOTIC, 'born'],
+      [at(3, 2), REF_AGGRESSIVE, 'survive'],
+      [at(3, 2), REF_CHAOTIC, 'born'],
+      [at(4, 2), REF_AGGRESSIVE, 'born'],
+      [at(1, 3), REF_AGGRESSIVE, 'survive'],
+      [at(1, 3), REF_CHAOTIC, 'born'],
+      [at(2, 3), REF_AGGRESSIVE, 'survive'],
+      [at(2, 3), REF_CHAOTIC, 'born'],
+      [at(3, 3), REF_AGGRESSIVE, 'survive'],
+      [at(3, 3), REF_CHAOTIC, 'born'],
+      [at(2, 4), REF_AGGRESSIVE, 'born'],
+    ]);
   });
 });

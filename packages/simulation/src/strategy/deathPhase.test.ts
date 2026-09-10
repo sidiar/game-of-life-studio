@@ -85,8 +85,10 @@ describe('deathPhase applies `die` rules and nothing else (AC1)', () => {
     expect(gridToDense(result)).toEqual(gridFromPattern(['.AA.', 'A..A', '.AA.'], legendA));
   });
 
-  it('reads `age` exactly as stored, with no clamp or increment (Trap 9)', () => {
-    // Patient Defender's PATIENT_DIE is `alive` + `age gte 8`.
+  it('reads `age` exactly as stored — an increment here would kill the 7 (Trap 9)', () => {
+    // Patient Defender's PATIENT_DIE is `alive` + `age gte 8`. Only the INCREMENT half of Trap 9
+    // is detectable by any rule: MAX_RELEVANT_AGE is `maxLiteral + 1` by construction (Decision
+    // B.5), so a clamp to it changes no operator's answer — that is the point of the `+ 1`.
     const source = grid(['P.P'], { '.': 0, P: REF_PATIENT });
     source.age[0] = 7;
     source.age[2] = 8;
@@ -163,7 +165,7 @@ describe('deathPhase — the source is an input, the destination an output (AC9,
     expect(Array.from(source.age)).toEqual(ageBefore);
   });
 
-  it('returns the caller-supplied destination for chaining, allocating nothing', () => {
+  it('returns the caller-supplied destination itself for chaining — no grid is allocated', () => {
     const source = grid(['A'], legendA);
     const destination = back(source);
 

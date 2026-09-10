@@ -75,6 +75,36 @@ describe('tallyNeighbors — reuse across cells', () => {
     expect(tally.total).toBe(3);
   });
 
+  it('tracks 8 DISTINCT refs around one cell — the `touched` array is exactly full', () => {
+    // `touched` is `Uint8Array(8)`; a write past its end is a silent no-op, and the ref it failed
+    // to record would stay uncleared in `countByRef` for the NEXT cell. Eight distinct neighbours
+    // is the boundary, so it is built explicitly rather than left to the generator to find.
+    const tally = createNeighborTally();
+    const ring = gridFromDense(
+      gridFromPattern(['ABC', 'D.E', 'FGH'], {
+        '.': 0,
+        A: 1,
+        B: 2,
+        C: 3,
+        D: 4,
+        E: 5,
+        F: 6,
+        G: 7,
+        H: 8,
+      }),
+    );
+
+    tallyNeighbors(ring, 1, 1, tally);
+    expect(tally.touchedCount).toBe(8);
+    expect(tally.total).toBe(8);
+    for (let ref = 1; ref <= 8; ref++) expect(sameNeighbors(tally, ref)).toBe(1);
+
+    // And the next cell clears all eight, not just the first few.
+    tallyNeighbors(ring, 1, 1, tally);
+    expect(tally.touchedCount).toBe(8);
+    for (let ref = 1; ref <= 8; ref++) expect(sameNeighbors(tally, ref)).toBe(1);
+  });
+
   it('leaves no residue behind an all-empty cell', () => {
     const tally = createNeighborTally();
     const lonely = gridFromDense(gridFromPattern(['A..', '...', '...'], { '.': 0, A: 1 }));
@@ -92,13 +122,16 @@ describe('tallyNeighbors — reuse across cells', () => {
 describe('tallyNeighbors agrees with countNeighbors everywhere (fast-check, AR-41)', () => {
   // Small grids, deliberately including 1xN and Nx1: the modulo idiom this file avoids
   // (Trap 8) is correct on a comfortable interior and wrong exactly at the degenerate shapes.
+  // Refs are drawn from 0..MAX_REF, wide enough that a cell CAN see 8 distinct organisms — with
+  // refs 0..3 the "never more than 8 distinct refs" property below could not reach its own bound.
+  const MAX_REF = 9;
   const arbGrid = fc
     .tuple(fc.integer({ min: 1, max: 7 }), fc.integer({ min: 1, max: 7 }))
     .chain(([width, height]) =>
-      fc.array(fc.array(fc.integer({ min: 0, max: 3 }), { minLength: width, maxLength: width }), {
-        minLength: height,
-        maxLength: height,
-      }),
+      fc.array(
+        fc.array(fc.integer({ min: 0, max: MAX_REF }), { minLength: width, maxLength: width }),
+        { minLength: height, maxLength: height },
+      ),
     );
 
   it('matches the reference implementation for every (cell, ref)', () => {
@@ -111,7 +144,7 @@ describe('tallyNeighbors agrees with countNeighbors everywhere (fast-check, AR-4
           for (let col = 0; col < grid.width; col++) {
             tallyNeighbors(grid, col, row, tally);
 
-            for (let ref = 0; ref <= 4; ref++) {
+            for (let ref = 0; ref <= MAX_REF + 1; ref++) {
               const expected = countNeighbors(grid, col, row, ref);
               const same = sameNeighbors(tally, ref);
 

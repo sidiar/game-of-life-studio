@@ -27,13 +27,21 @@ import { createNeighborTally, sameNeighbors, tallyNeighbors } from './neighborTa
  * this function compared two claims it would have absorbed Phase 3 (Story 3.6). Two organisms
  * claiming one cell is the NORMAL output of this phase, not a problem for it to solve.
  *
- * ❌ No re-ordering, re-filtering or merging of an organism's claims (AC8). Rule order is
- * first-match priority WITHIN the phase (FR-2.6, M10) and it already ran inside the compiled
- * evaluator, so one organism produces at most one claim per cell.
+ * ❌ No re-ranking or merging of an organism's RULES (AC8). Rule order is first-match priority
+ * WITHIN the phase (FR-2.6, M10) and it already ran inside the compiled evaluator, so one organism
+ * produces at most one ANSWER per cell — and this layer never re-scans its rules for a different
+ * one. The single thing dropped below (FD4) is that answer itself when it is meaningless, not a
+ * rule; see the comment at the drop for the consequence that has.
  *
  * ❌ No call to `resolveCellAction` (Trap 13) and no branch on `'die'` (Trap 11) — comparing
  * `=== 'survive'` for the FD4 rule below and passing the action through otherwise means the
  * unreachable case never has to be handled or "tightened" away.
+ *
+ * ⚠️ COST, for Story 3.7's benchmark rather than for now: this loop allocates one `CellSubject`
+ * literal per (cell x organism) — ~120,000 a cycle at the NFR-1.1 baseline — and `countNeighbors`
+ * in Phase 1 allocates one `NeighborCounts` per occupied cell. `CellSubject` is `readonly`, so a
+ * reused scratch subject would be a deliberate seam, not a local tweak; it is the first candidate
+ * to measure, and the repo optimises on measurement (deferred-work.md, Story 3.5 review).
  */
 export function birthSurvivalPhase(grid: Grid, deps: PhaseDeps): Claims {
   // ⚠️ Dimensions are parameters, never constants (Decision A).
@@ -100,6 +108,13 @@ export function birthSurvivalPhase(grid: Grid, deps: PhaseDeps): Claims {
         // ⚠️ The mirror case is NOT symmetric: an INCUMBENT answering `'born'` is a legitimate
         // claim — a rebirth, age reset to 0 — and dropping that would be a real defect. This
         // asymmetry is why a claim carries its action instead of being re-derived from occupancy.
+        //
+        // ⚠️ What is dropped is the organism's ANSWER, and first-match already gave it (FR-2.6):
+        // an organism whose first matching rule is a non-incumbent `survive` makes NO claim on
+        // that cell, even if a later rule would have said `born`. Falling through to the next
+        // rule here would make this layer re-rank rules, which AC8 forbids; the rule that
+        // shadows is the organism's own configuration, in the order the user chose. Pinned in
+        // `birthSurvivalPhase.test.ts`.
         if (claimed === 'survive' && occ !== r) continue;
 
         cellIndex.push(index);

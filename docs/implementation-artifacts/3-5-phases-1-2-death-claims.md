@@ -4,7 +4,7 @@ baseline_commit: 5e4a082033c9c70ada1f67211cfbeb1e6c1768f1
 
 # Story 3.5: Phases 1–2 — Death & Claims
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -72,8 +72,9 @@ indexing, Story 3.4's `Decisions Needed` #2, and the `neighborhood.ts` same/othe
     is correct for the **roster** array — `organisms[ref - 1]` — which is Story 3.6's, not this
     story's. Two conventions, one deps object.)
 12. **Hand-computed fixture grids pin both phases** (AR-40/AR-41): at minimum a Conway blinker
-    (Phase 1 no-op; Phase 2 = 1 survive claim on the centre + 2 born claims above and below, and
-    **no** claims on the two ends, which die implicitly), plus a multi-organism grid built from
+    (Phase 1 no-op; Phase 2 = 1 survive claim on the centre + 2 born claims flanking it on the axis
+    the blinker does not occupy, and **no** claims on the two ends, which die implicitly), plus a
+    multi-organism grid built from
     `createMockOrganisms()` that exercises an explicit `die` rule in Phase 1 and Chaotic Spreader's
     **born-on-an-occupied-cell** claim in Phase 2 (the H-6 eviction candidate — 3.5 proves the claim
     *exists*; who wins it is 3.6).
@@ -157,6 +158,67 @@ indexing, Story 3.4's `Decisions Needed` #2, and the `neighborhood.ts` same/othe
         `node scripts/check-spec-ids.mjs`, `npx prettier --check packages/simulation`.
   - [x] `npm run ci` — full local gate. ⚠️ **Never pipe it.** `npm run ci | tail` reports *tail's*
         exit code; redirect to a file and echo `$?`. Report the real result.
+
+### Review Findings
+
+Code review 2026-09-10 (Fable 5.1, `bmad-code-review`: Blind Hunter + Edge Case Hunter + Acceptance
+Auditor). 0 `decision-needed`, 11 `patch` (all applied), 1 `defer`, 22 dismissed as noise
+(unreachable-by-construction inputs, documented preconditions, or AC-mandated tests).
+
+- [x] [Review][Patch] AC3 was satisfied in code but pinned by no test — the multi-organism fixture
+      was split across two unrelated grids, never chained [packages/simulation/src/strategy/birthSurvivalPhase.test.ts]
+      — added `deathPhase → birthSurvivalPhase` over BLOCK: the centre gets `survive(1)`+`born(3)`
+      over the source grid and NO claim over Phase 1's output, plus the full 20-claim golden.
+- [x] [Review][Patch] FD4's drop is of the organism's ANSWER, not a rule: a non-incumbent `survive`
+      that wins first-match shadows a later `born` rule on the same cell, and nothing said or
+      pinned so [packages/simulation/src/strategy/birthSurvivalPhase.ts:FD4 comment] — documented
+      (FR-2.6: falling through would re-rank rules, which AC8 forbids) and pinned both orders.
+- [x] [Review][Patch] Header said "no re-filtering of an organism's claims (AC8)" two paragraphs
+      above a filter [packages/simulation/src/strategy/birthSurvivalPhase.ts] — reworded to "no
+      re-ranking of RULES", pointing at the FD4 drop.
+- [x] [Review][Patch] Phase-2 out-of-roster occupant path (Trap 14's "no claim in Phase 2") was
+      documented but untested [packages/simulation/src/strategy/birthSurvivalPhase.test.ts] — pinned:
+      `occupied`/`organismType 7` for every real organism, ref 7 never asked.
+- [x] [Review][Patch] Task 5's "over generated grids **and rosters**" was ticked with a fixed roster
+      [packages/simulation/src/strategy/phasePurity.test.ts] — rosters are now
+      `fc.shuffledSubarray(createMockOrganisms(), {minLength: 1})`; this also removes the
+      hard-coded `REF_CEILING = 3` the stale-frame sentinel depended on.
+- [x] [Review][Patch] "never records more than 8 distinct refs" could not reach 8 — generator drew
+      refs 0..3 [packages/simulation/src/strategy/neighborTally.test.ts] — refs now 0..9, differential
+      loop to 10, plus an explicit 8-distinct-neighbours boundary test (the `touched` overflow is a
+      silent no-op that would leave the next cell dirty).
+- [x] [Review][Patch] Test title "allocating nothing" asserted only `result === destination` while
+      the function allocates a subject per occupied cell [packages/simulation/src/strategy/deathPhase.test.ts]
+      — retitled to what it checks.
+- [x] [Review][Patch] Test title "no clamp or increment" can only detect the increment half — a
+      clamp to `MAX_RELEVANT_AGE` is invisible to every operator by construction (Decision B.5)
+      [packages/simulation/src/strategy/deathPhase.test.ts] — retitled and explained.
+- [x] [Review][Patch] `phaseDeps.ts` named `dominance` as a `SimulationDeps` member; it is
+      `organisms[ref - 1].dominance` [packages/simulation/src/strategy/phaseDeps.ts] — fixed.
+- [x] [Review][Patch] Task 6 left forward-looking "Stories 3.5/3.6" comments standing in
+      `src/index.ts:42,58` (a file the diff edited), `gol/cellSubject.test.ts`,
+      `gol/resolveCellAction.test.ts`, `session/compileEvaluators.test.ts` — updated to name what
+      shipped.
+- [x] [Review][Patch] Dev Agent Record slips: "7 fast-check properties" (10 shipped, 7 + 3 in
+      `neighborTally.test.ts`); File List's `ready-for-dev → in-progress → review` (the commit's
+      hunk is `backlog → review`); AC12's "above and below" for a vertical blinker whose births are
+      left/right — corrected below and in AC12.
+- [x] [Review][Defer] Per-pair `CellSubject` allocation in Phase 2 (~120k/cycle at baseline) and
+      Phase 1's full Moore scan for organisms with no `die` rule (Conway's Classic pays it for
+      nothing) [packages/simulation/src/strategy/birthSurvivalPhase.ts, deathPhase.ts] — deferred,
+      Story 3.7's benchmark; the repo optimises on measurement. Noted in code and
+      `deferred-work.md`.
+
+**Dismissed (for the record, so they are not re-raised):** sparse/`undefined` holes in
+`evaluatorsByRef` and rosters > 255 (both impossible from `compileSession`; the cap throws in
+`internOrganisms.ts`); a hand-built evaluator returning `'die'` (Trap 11 forbids handling it);
+buffers shorter than `width * height` (`grid.ts`'s stated invariant); a destination sharing an
+`ArrayBuffer` with the source (disjoint-region sharing is legal, identity is the documented seam);
+`resolvesToDeath` throwing mid-scan (compiled evaluators fail closed per cell, M12); `age` under
+an empty cell (`birthSurvivalPhase` already requires Phase 1's output, which zeroes it); exporting
+the phases before `threePhaseStep` exists (Task 6 requires it); the "tautological" alias and
+determinism properties (AC9 names them); `fill(0)` vs `touched` clearing (3.7's measurement); the
+reversed-roster and second blinker tests (they pin M14 remapping and Trap 3 by name).
 
 ## Dev Notes
 
@@ -719,14 +781,21 @@ its own mutation is untested):
 - `packages/simulation/src/gol/cellSubject.ts` — comments only
 - `packages/simulation/src/gol/resolveCellAction.ts` — comments only
 - `docs/implementation-artifacts/3-5-phases-1-2-death-claims.md` — this record
-- `docs/implementation-artifacts/sprint-status.yaml` — `ready-for-dev` → `in-progress` → `review`
+- `docs/implementation-artifacts/sprint-status.yaml` — `backlog` → `review` (one hunk; the
+  in-progress step was never committed), then `review` → `done` in the review commit
 
 ### Change Log
 
 - 2026-09-10 — Story 3.5 implemented: Phases 1–2 as pure functions in a new
   `packages/simulation/src/strategy/` layer, plus the `Claims` value Phase 3 will consume. 48 new
-  tests (goldens, invariants, 7 fast-check properties); `packages/simulation` holds 100% coverage at
-  272 tests. `npm run ci` green (exit 0). FD1–FD6 and Trap 14 recorded above; the RFC-004 §3.2
-  signature divergence is flagged for Story 3.6 and no Minor Resolution was minted.
+  tests (goldens, invariants, 10 fast-check properties — 7 in `phasePurity.test.ts`, 3 in
+  `neighborTally.test.ts`); `packages/simulation` holds 100% coverage at 272 tests. `npm run ci`
+  green (exit 0). FD1–FD6 and Trap 14 recorded above; the RFC-004 §3.2 signature divergence is
+  flagged for Story 3.6 and no Minor Resolution was minted.
+- 2026-09-10 — Code review (Fable 5.1): 11 patches applied, 1 deferred to Story 3.7, 0
+  decision-needed (see **Review Findings**). +5 tests (277; 100% coverage unchanged): the chained
+  AC3 golden, FD4's first-match shadowing in both rule orders, Phase 2's out-of-roster occupant,
+  and the 8-distinct-neighbours `touched` boundary; purity properties now generate rosters too.
+  `npm run ci` re-run green (exit 0). Story → `done`.
 
 Dev Model: opus   # architecture-shaping: it fixes the claims structure Phase 3 consumes, the phase signatures (allocating vs destination-passing) that `threePhaseStep` and the double-buffer plan are built on, and the first per-cycle hot loop 3.7 benchmarks — later stories build on these shapes rather than following an existing one.
