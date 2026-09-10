@@ -591,7 +591,9 @@ export interface SimulationDeps {
   // `length = roster length + 1`, slot 0 an explicit `null` (M14). Read `evaluatorsByRef[ref]`,
   // where `ref = rosterIndex + 1`. Compiled once per session (§3.5); injected (Part 2).
   evaluatorsByRef: readonly (OrganismEvaluators | null)[]
-  organisms: OrganismRuntime[]               // dense array; dominance, agingEnabled, …
+  // roster-indexed: organisms[ref - 1] (M14); dominance only — agingEnabled is a
+  // RENDER input (FR-2.4), never read by the strategy.
+  readonly organisms: readonly OrganismRuntime[]
   rng: Rng                                    // seedable; injected for determinism
 }
 
@@ -602,12 +604,22 @@ export interface OrganismEvaluators {
   resolveBirthSurvival: (cell: CellSubject) => Action | null  // Phase 2: `born`+`survive`
 }
 
-// A strategy is a pure stepping function. (Functional Strategy pattern.)
-export type SimulationStrategy = (grid: Grid, deps: SimulationDeps) => Grid
+// A strategy is a pure stepping function over a CALLER-SUPPLIED destination (Story 3.6 FD1).
+// It writes `destination` and returns it; the caller owns both grids and performs the swap.
+export type SimulationStrategy = (source: Grid, destination: Grid, deps: SimulationDeps) => Grid
 
 // MVP: the active strategy is fixed in code. No registry/descriptor/UI yet.
 export const activeStrategy: SimulationStrategy = threePhaseStep
 ```
+
+> **Destination-passing, not allocation.** The signature reads `(source, destination, deps)` rather
+> than `(grid, deps) => Grid` because allocating a fresh `Grid` per call costs a `Uint8Array(N)` plus
+> a `Uint16Array(N)` up to 20 times a second — 18 KB at 100×60, 72 KB at 200×120 — which is precisely
+> the per-cycle allocation Decision A.6's steady-state memory budget and the double buffer (§3.4,
+> AR-17) exist to remove. The destination IS `back`; Phase 1 writes it, Phase 2 only reads it, and
+> Phase 3 finishes in place over it. **The swap is the caller's**, deliberately: making the strategy
+> own a `GridBuffers` would prevent the type describing Story 3.9's preview instance (M3) or Story
+> 4.15's draft-organism run, neither of which holds a persistent pair.
 
 **The strategy owns cross-action prioritization.** An organism is *strategy-agnostic data* — a set of
 survival rules plus a configured order (FR-2.6). It does **not** define how its Die/Survive/Born
@@ -636,10 +648,10 @@ the phases differ only in **which grid they derive Cell subjects from** and **wh
 on**.
 
 ```ts
-const threePhaseStep: SimulationStrategy = (grid, deps) => {
-  const afterDeath = deathPhase(grid, deps)               // Phase 1 (FR-5.2): remove cells whose organism matches a Die rule (death partition — H-5)
-  const claims     = birthSurvivalPhase(afterDeath, deps) // Phase 2 (FR-5.3): 'born'|'survive' partition, parallel
-  return conflictPhase(claims, deps)                       // Phase 3 (FR-5.4): Dominance, random tie-break (survive & born claims pooled uniformly — H-6)
+const threePhaseStep: SimulationStrategy = (source, destination, deps) => {
+  deathPhase(source, destination, deps)                // Phase 1 (FR-5.2): destination = post-death intermediate (death partition — H-5)
+  const claims = birthSurvivalPhase(destination, deps) // Phase 2 (FR-5.3): READS the intermediate; 'born'|'survive' partition, parallel
+  return conflictPhase(destination, claims, deps)      // Phase 3 (FR-5.4): resolves IN PLACE — Dominance, random tie-break (pooled uniformly — H-6)
 }
 ```
 
@@ -658,13 +670,17 @@ Phase 2 evaluates against the post-death intermediate grid simply by deriving it
 grid. The *same* decision function serves both phases; only the input grid changes.
 
 **Conflict resolution (Phase 3, FR-5.4):**
-```ts
-function resolveConflict(claimants: OrganismRef[], deps: SimulationDeps): OrganismRef {
-  const maxDom = Math.max(...claimants.map(r => deps.organisms[r - 1].dominance))   // ref - 1: M14
-  const top = claimants.filter(r => deps.organisms[r - 1].dominance === maxDom)
-  return top.length === 1 ? top[0] : top[deps.rng.int(top.length)]   // random tie-break
-}
-```
+
+> **Conflict resolution is a two-pass scan over the claim run, with no allocation.** The snippet
+> previously shown here (`Math.max(...claimants.map(…))` then `.filter(…)`) was *illustrative of the
+> rule*, not of the shape: it allocates a mapped array plus a spread per contested cell, inside the
+> frame budget. The shipped Phase 3 sweeps **every** cell of the grid — not the claims — advancing
+> one cursor through the contiguous per-cell claim runs Phase 2 guarantees, and resolves each run in
+> two passes: one for `maxDominance` and the tie count, and a second only when the count exceeds 1,
+> walking to the `deps.rng.int(count)`-th claimant at that Dominance. **The generator is drawn from
+> only on a genuine tie** — a draw per cell would burn ~6,000 draws a cycle at the NFR-1.1 baseline
+> and couple every seeded golden to grid content. A cell with no claim is written empty with age 0,
+> which is where implicit death (M10) is actually applied.
 
 > **`claimants` pools survivors and births alike (H-6).** A survivor is just the incumbent's own
 > Survive claim; it competes on equal footing with any Born claim for the cell, so a higher-Dominance
@@ -808,7 +824,7 @@ depends on the injected decision abstraction; the engine depends on selector/sch
 
 **Risk 6: Non-determinism from Dominance tie-break (FR-5.4) hurts testability (NFR-5.1).**
 - *Mitigation:* a seedable `Rng` is injected; tests use a fixed seed. `step` is pure given
-  `(grid, deps)`.
+  `(source, deps)` — it reads `source` and writes only the caller's `destination` (§3.1).
 - *Production:* runs use a fresh random seed (not persisted); shared/exported battles reproduce the
   **configuration, not the outcome** ("config, not outcome" reconciliation — see architecture
   Cross-RFC Reconciliations §6 and PRD A-2).

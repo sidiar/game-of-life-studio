@@ -92,10 +92,9 @@ export type { RuleCompilationError } from './session/validateRules';
 // draft-organism run reuse it.
 //
 // ⚠️ Every phase takes a caller-supplied DESTINATION rather than allocating (Story 3.5's FD2,
-// Story 3.6's FD1), which diverges from RFC-004 §3.1/§3.2's allocation-shaped signatures and
-// matches what `doubleBuffer.ts` was built for. **The RFC amendment is still PENDING**: the exact
-// proposed wording is in Story 3.6's Dev Agent Record awaiting Sidiar's go-ahead, because amending
-// an authority doc is not a story's call to make (the M14/M15 precedent).
+// Story 3.6's FD1), matching what `doubleBuffer.ts` was built for. RFC-004 §3.1/§3.2 carried
+// allocation-shaped signatures until Story 3.6; **the RFC now states the destination-passing
+// shape** — amended on Sidiar's explicit authorization (2026-09-10), the M14/M15 precedent.
 export { deathPhase } from './strategy/deathPhase';
 export { birthSurvivalPhase } from './strategy/birthSurvivalPhase';
 export { conflictPhase } from './strategy/conflictPhase';

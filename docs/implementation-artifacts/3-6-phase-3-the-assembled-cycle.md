@@ -4,7 +4,7 @@ baseline_commit: d3ce92b
 
 # Story 3.6: Phase 3 & the Assembled Cycle
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -224,18 +224,22 @@ FD1/FD2, which left `SimulationDeps` and `threePhaseStep`'s signature to this st
 ### Review Findings
 
 Code review 2026-09-10 (Fable 5.1, `bmad-code-review`: Blind Hunter + Edge Case Hunter + Acceptance
-Auditor, each on a fresh context). **1 `decision-needed` (open), 12 `patch` (all applied), 1
+Auditor, each on a fresh context). **1 `decision-needed` (resolved by Sidiar 2026-09-10 — the
+RFC amendment, applied), 12 `patch` (all applied), 1
 `defer`, 1 dismissed as noise** (an unchecked `maxRelevantAge` range — a documented `compileSession`
 precondition, `maxRelevantAge.ts`). FD4 was weighed as the deliberate exception it is and holds:
 the alternatives are a banned test-utils import or an untestable third copy, and the differential
 pin is what makes the duplication non-silent — the review kept the pair identical (patch 3).
 
-- [ ] [Review][Decision] **RFC-004 §3.1/§3.2 amendment** — drafted in full under **Spec-conflict
-      flags raised** below (the `SimulationStrategy` signature, the `threePhaseStep` composition,
-      the `resolveConflict` note, and the §3.1 `organisms` clarification); NOT applied, because
-      amending an authority doc is Sidiar's call (the M14/M15 precedent). **Question for Sidiar:**
-      apply the four edits as drafted, apply with changes, or leave RFC-004 as written and let the
-      divergence live only in the three code comments that flag it?
+- [x] [Review][Decision] **RFC-004 §3.1/§3.2 amendment — RESOLVED: apply as drafted.** Sidiar
+      authorized it on 2026-09-10; all four edits are applied verbatim from the draft under
+      **Spec-conflict flags raised** below (the `SimulationStrategy` signature + its
+      destination-passing note, the `threePhaseStep` composition, the `resolveConflict` note, and
+      the §3.1 `organisms` clarification). One edit beyond the draft: Risk 6's "`step` is pure
+      given `(grid, deps)`" named the signature the amendment replaces, so it now reads
+      `(source, deps)` — a consequence of the four, flagged rather than assumed. The three code
+      comments that carried the divergence (`index.ts`, `deathPhase.ts`, `threePhaseStep.ts`) now
+      record it as resolved.
 - [x] [Review][Patch] AC1's dedicated off-by-one pin was vacuous — `rosterOf(90, 10, 5)` elects
       ref 1 under BOTH `organisms[ref - 1]` (90 v 10) and `organisms[ref]` (10 v 5); the mutation
       table's "54 tests fail" came from other fixtures CRASHING on `undefined.dominance`, the
@@ -795,12 +799,15 @@ dominance, agingEnabled, …` is a comment on a type the RFC deferred, not a cla
 reads the field, so there is nothing in the RFC that is actually wrong. Stated here rather than left
 ambiguous.
 
-**🟡 OPEN — awaiting Sidiar: RFC-004 §3.1/§3.2's allocation-shaped signatures.** Story 3.5 resolved
+**✅ RESOLVED 2026-09-10 — RFC-004 §3.1/§3.2's allocation-shaped signatures.** Story 3.5 resolved
 this for `deathPhase` (its FD2) and flagged the RFC edit as riding with `threePhaseStep`'s
-signature — i.e. with this story. **The RFC was NOT edited** (the M14/M15 precedent: amending an
-authority doc is not a story's call). The exact proposed wording is drafted below. Until it is
-applied, `index.ts` and `deathPhase.ts` both carry a comment saying the amendment is pending and
-naming this record as where the wording lives.
+signature — i.e. with this story. The story deliberately did **not** edit the RFC (the M14/M15
+precedent: amending an authority doc is not a story's call); **Sidiar authorized it after review**,
+and the wording drafted below was applied verbatim. One further edit followed from it and is called
+out because it was not in the draft: Risk 6 read "`step` is pure given `(grid, deps)`" — the exact
+signature being replaced — and now reads `(source, deps)`. The three code comments that flagged the
+divergence as pending (`index.ts`, `deathPhase.ts`, `threePhaseStep.ts`) now record it as resolved.
+The wording is kept below as the record of what was applied.
 
 **Proposed RFC-004 §3.1 edit** — replace:
 
@@ -929,6 +936,10 @@ is a RENDER input (FR-2.4)`. That is a clarification of an already-correct line,
   (`int(n > 2^32)` hang in both mulberry32 copies, an `Rng` draw outside `[0, tieCount)`, an
   unconsumed claim after the sweep). +6 tests (367; 100% coverage unchanged), +1 in
   `@gol/test-utils`. Status stays `review` pending the decision.
+- 2026-09-10 — **RFC-004 §3.1/§3.2 amended on Sidiar's explicit go-ahead**, closing the one
+  decision-needed finding: four edits applied as drafted, plus Risk 6's purity line which named
+  the replaced signature. The three code comments flagging the divergence as PENDING now record it
+  as resolved. Status → done.
 
 Dev Model: opus   # this story fixes the engine's public step contract (SimulationDeps, Rng, SimulationStrategy, threePhaseStep's signature) plus the RNG-ownership and in-place-write patterns that stories 3.7-3.10 and 4.15 all inherit — it sets the pattern rather than following one.
 

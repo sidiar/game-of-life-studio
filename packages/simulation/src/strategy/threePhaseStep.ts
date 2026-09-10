@@ -51,9 +51,9 @@ export interface SimulationDeps extends PhaseDeps, ConflictDeps {}
  * WHO holds the buffers and WHEN they swap is Story 3.8's question, where the loop and its refs
  * live; this signature leaves it there.
  *
- * ⚠️ The RFC divergence is FLAGGED, not amended: §3.1/§3.2 still spell the allocating shape.
- * Amending an authority doc is Sidiar's call (the M14/M15 precedent), and the proposed wording is
- * recorded in this story's Dev Agent Record awaiting it.
+ * ✅ RFC-004 §3.1/§3.2 spelled the allocating shape until Story 3.6 and now state this one,
+ * amended on Sidiar's explicit authorization (2026-09-10) — amending an authority doc is their
+ * call, the M14/M15 precedent.
  *
  * ⚠️ `threePhaseStep` must remain ASSIGNABLE to this type — declaring a strategy type the only
  * implementation does not satisfy is worse than not declaring one. Pinned below by

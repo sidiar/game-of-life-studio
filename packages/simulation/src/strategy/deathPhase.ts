@@ -11,21 +11,21 @@ import { evaluatorsFor } from './phaseDeps';
  *
  * ## Why a DESTINATION rather than a fresh grid (story FD2, option (b))
  *
- * RFC-004 §3.2's snippet reads `deathPhase(grid, deps) => Grid`, i.e. allocate-per-call. That
- * snippet is illustrative pseudocode; `../grid/doubleBuffer.ts` — written after it, and naming this
- * story — states the shape the shipped buffer seam was built for: the phases write into `back`,
- * the caller swaps, and the SOURCE grid is never written, so the destination is a distinct grid
- * the caller supplied. Story 3.6 adopted the same shape for `threePhaseStep` (its FD1).
+ * RFC-004 §3.2's snippet used to read `deathPhase(grid, deps) => Grid`, i.e. allocate-per-call.
+ * That snippet was illustrative pseudocode; `../grid/doubleBuffer.ts` — written after it, and
+ * naming this story — states the shape the shipped buffer seam was built for: the phases write
+ * into `back`, the caller swaps, and the SOURCE grid is never written, so the destination is a
+ * distinct grid the caller supplied. Story 3.6 adopted the same shape for `threePhaseStep` (its FD1).
  * Allocating would cost a `Uint8Array(N)` plus a `Uint16Array(N)` PER CYCLE (18 KB at 100x60,
  * 72 KB at 200x120, up to 20 times a second), which is precisely the per-cycle
  * allocation Decision A.6's steady-state memory budget and the double buffer exist to avoid. It
  * also makes the two-buffer plan serve a three-grid pipeline: this intermediate IS `back`, Phase 2
  * only reads it, and Phase 3 finishes in place over it.
  *
- * ⚠️ The divergence from §3.2's snippet is FLAGGED, not amended. `threePhaseStep` shipped in Story
- * 3.6 with the matching `(source, destination, deps)` shape, and the §3.1/§3.2 edit that would
- * reconcile the RFC is drafted in that story's Dev Agent Record awaiting Sidiar's go-ahead —
- * amending an authority doc is not a story's call (the M14/M15 precedent).
+ * ✅ The divergence is RESOLVED in the RFC's favour of what shipped: `threePhaseStep` landed in
+ * Story 3.6 with the matching `(source, destination, deps)` shape, and RFC-004 §3.1/§3.2 were
+ * amended to state it — on Sidiar's explicit authorization (2026-09-10), since amending an
+ * authority doc is not a story's call (the M14/M15 precedent).
  *
  * ## The two properties this function is pinned on
  *
