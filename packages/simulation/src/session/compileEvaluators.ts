@@ -31,19 +31,18 @@ export interface CompilableOrganism {
 /**
  * The two phase-partitioned evaluators for one organism (AR-18, RFC-004 §2.3/§3.5).
  *
- * FD2 (Dev Agent Record) — decided in the open, because RFC-004 disagrees with ITSELF here (the
- * same species as M11 and M13, not a doc-vs-doc conflict): §3.1 declares ONE injected
- * `resolveAction: (organism, cell) => Action | null` on `SimulationDeps`, while §2.3/§3.5 and
- * AR-18 require TWO phase-partitioned closures per organism. Both cannot be the whole truth.
+ * **This shape is M15.** RFC-004 used to disagree with ITSELF here (the same species as M11 and
+ * M13, not a doc-vs-doc conflict): §3.1 declared ONE injected `resolveAction: (organism, cell) =>
+ * Action | null` on `SimulationDeps`, while §2.3/§3.5 and AR-18 required TWO phase-partitioned
+ * closures per organism. The PAIR won, for a reason that outranks the §3.1 line: M10's
+ * death-before-survival precedence is a cross-cutting Architecture Decision, and the authority
+ * order makes a cross-cutting Decision win over an RFC. It is also a PHASE property, not a
+ * parameter — folding it back into one function means re-branching per cell on the very thing the
+ * compile-time partition exists to remove.
  *
- * Resolved as the PAIR, for a reason that outranks the §3.1 line: M10's death-before-survival
- * precedence is a cross-cutting Architecture Decision, and the authority order makes a
- * cross-cutting Decision win over an RFC. It is also a PHASE property, not a parameter — folding
- * it back into one function means re-branching per cell on the very thing the compile-time
- * partition exists to remove. **§3.1's `SimulationDeps.resolveAction` signature is the line that
- * needs amending, and Story 3.5 owns it.** ❌ Not minted as a Minor Resolution here: declaring one
- * is an authority-doc act (Story 3.3's FD5 precedent; M14 was minted only on Sidiar's explicit
- * authorization), so this is recorded as a decision-needed item, not a fait accompli.
+ * Raised by this story as FD2 and left unminted (declaring a Minor Resolution is an authority-doc
+ * act — the M14 precedent); minted as M15 on Sidiar's explicit authorization, 2026-09-10. §3.1's
+ * `SimulationDeps` now reads `evaluatorsByRef`, so there is no `deps.resolveAction` to consume.
  */
 export interface OrganismEvaluators {
   // Phase 1. `true` when any `die` rule fires — a boolean, not an Action, because "which die rule

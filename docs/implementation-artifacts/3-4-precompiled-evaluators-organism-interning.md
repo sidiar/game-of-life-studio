@@ -745,17 +745,27 @@ Load-bearing invariants were verified by **mutation**, not just by assertion:
   `CompilableOrganism` key set pinned, `maxRelevantAge` removed from the barrel, residual
   forward-reference and change-narration comments fixed, five under-asserting tests strengthened.
   1 deferred (empty `survivalRules` → inert organism, schema-legal). 2 decisions left for Sidiar
-  (FD2 / `M15`; `resolveBirthSurvival`'s return type). Status stays `review` until FD2 is decided.
+  (FD2 / `M15`; `resolveBirthSurvival`'s return type). FD2 was decided and minted as `M15`
+  (2026-09-10); status stays `review` while the return-type call is open.
   `packages/simulation`: 224 tests, 100%.
 
 ### Decisions Needed From Sidiar
 
-1. **RFC-004 §3.1 vs §2.3/§3.5 (FD2).** Implemented as the phase-partitioned pair on M10's
-   authority. The canonical record has **not** been touched: no `M15`, no edit to
-   `architecture.md`'s decision list. If this should become a Minor Resolution, minting it is
-   yours — and `scripts/check-spec-ids.mjs` must then be widened from `M14` in **both** places its
-   own comment names. Either way, **§3.1's `SimulationDeps.resolveAction` signature needs
-   amending** (owner: Story 3.5).
+1. ✅ **RESOLVED 2026-09-10 — RFC-004 §3.1 vs §2.3/§3.5 (FD2) is now `M15`.** Sidiar authorized
+   minting it and propagating. The phase-partitioned pair stands, on M10's authority; the
+   canonical record is `architecture.md`'s **M15**. Propagated in the same change:
+   `scripts/check-spec-ids.mjs` widened `M14` → `M15` in both places its own comment names;
+   RFC-004 §3.1's `SimulationDeps` amended (`resolveAction` → `evaluatorsByRef`, with
+   `OrganismEvaluators` declared beside it), §3.5's DIP prose and the Design-patterns row
+   updated; `docs/project-context.md`'s three stale `M1–M13` range lines corrected to `M1–M15`.
+   **No PRD change** — the PRD never specified the evaluator's shape, and its decision log
+   already records the phase-partitioned form, which is why §3.1 was a missed edit rather than a
+   live disagreement. §3.1 no longer needs amending by Story 3.5; it is done here.
+
+2. ⏳ **OPEN — `resolveBirthSurvival`'s return type.** Declared `Action | null` per RFC-004 §2.3,
+   but `'die'` is unreachable from it (the partition routes every `die` rule to `resolvesToDeath`).
+   `Exclude<Action, 'die'> | null` would encode the invariant at the cost of diverging from the
+   RFC's spelling. Story 3.5 inherits whichever is chosen. Untouched — Sidiar's call.
 
 Dev Model: opus   # architecture-shaping: this story fixes the compiled-evaluator API that 3.5/3.6/3.8/4.15 all consume, resolves RFC-004 §3.1-vs-§3.5 in the open, sets the engine's fail-loud-at-compile-time posture (M12/deferred-work:457), and re-crosses the domain/engine seam under M13's bidirectional-pin rule — it establishes patterns rather than following one.
 
