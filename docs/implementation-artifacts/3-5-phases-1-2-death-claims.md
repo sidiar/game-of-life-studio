@@ -799,3 +799,18 @@ its own mutation is untested):
   `npm run ci` re-run green (exit 0). Story → `done`.
 
 Dev Model: opus   # architecture-shaping: it fixes the claims structure Phase 3 consumes, the phase signatures (allocating vs destination-passing) that `threePhaseStep` and the double-buffer plan are built on, and the first per-cycle hot loop 3.7 benchmarks — later stories build on these shapes rather than following an existing one.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 25s | 30 | 3,632 | 16,583 | 666,124 | 686,369 |
+| Step 1 — create-story | opus-5 | 1 | 9m 42s | 192 | 43,437 | 520,993 | 8,920,949 | 9,485,571 |
+| Step 2 — dev-story | opus-5 | 1 | 17m 09s | 208 | 64,647 | 364,810 | 14,280,569 | 14,710,234 |
+| Step 3 — code review + PR | fable-5-1 | 4 | 16m 22s | 5,224 | 78,718 | 2,016,125 | 17,376,777 | 19,476,844 |
+| _of which the orchestrator_ | opus-5 | — | — | 98 | 16,074 | 63,461 | 2,609,304 | 2,688,937 |
+| **Total (create-story → PR ready)** | | 6 | **43m 38s** | 5,654 | 190,434 | 2,918,511 | 41,244,419 | **44,359,018** |
+
+Run started 2026-09-10 09:21 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
