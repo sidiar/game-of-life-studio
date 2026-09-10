@@ -895,8 +895,9 @@ This story was implemented with the 'Implement next story' skill with the follow
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Step 0 — re-entry guard | — | 0 | 20s | 18 | 1,711 | 8,742 | 404,939 | 415,410 |
 | Step 1 — create-story | opus-5 | 1 | 12m 30s | 224 | 28,908 | 560,255 | 13,491,208 | 14,080,595 |
-| Step 2 — dev-story | opus-5 | 1 | 37m 55s | 442 | 114,267 | 569,788 | 42,813,471 | 43,497,968 |
-| _of which the orchestrator_ | opus-5 | — | — | 66 | 16,960 | 48,580 | 1,719,928 | 1,785,534 |
-| **Total (create-story → PR ready)** | | 2 | **50m 44s** | 684 | 144,886 | 1,138,785 | 56,709,618 | **57,993,973** |
+| Step 2 — dev-story | opus-5 | 1 | 1h 29m | 574 | 159,345 | 1,627,953 | 61,293,547 | 63,081,419 |
+| Step 3 — code review + PR | fable-5-1 | 4 | 37m 59s | 7,688 | 114,071 | 3,866,149 | 48,429,208 | 52,417,116 |
+| _of which the orchestrator_ | opus-5 | — | — | 134 | 35,520 | 82,283 | 4,373,398 | 4,491,335 |
+| **Total (create-story → PR ready)** | | 6 | **2h 20m** | 8,504 | 304,035 | 6,063,099 | 123,618,902 | **129,994,540** |
 
 Run started 2026-09-10 15:32 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
