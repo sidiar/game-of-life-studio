@@ -58,14 +58,20 @@ export interface Grid {
    * comparison against the WRONG organism, i.e. plausible battles and no failing test.
    */
   readonly occupant: Uint8Array;
-  /** Cycles alive. NOT clamped or incremented here — `MAX_RELEVANT_AGE` is Story 3.4's, aging is Story 3.6's cycle-end step. */
+  /**
+   * Cycles alive. NOT clamped or incremented here — `MAX_RELEVANT_AGE` is computed once per battle
+   * by the session layer (`../session/maxRelevantAge.ts`, riding on `CompiledSession`); aging and
+   * the clamp are Story 3.6's cycle-end step.
+   */
   readonly age: Uint16Array;
 }
 
 // The dense at-rest encoding's ceiling: 255 organisms per battle (Decision G.3), derived from the
 // Uint8Array occupant. Shared with `BattleSchema`'s `max(255)` and `MAX_ROSTER_SIZE` by value, not
-// by import — @gol/domain must not become a dependency of the hot path for a literal.
-const MAX_CELL_VALUE = 255;
+// by import — @gol/domain must not become a dependency of the hot path for a literal. Exported for
+// the session layer's roster cap (`../session/internOrganisms.ts`), which is derived from the
+// same buffer; not part of the package barrel.
+export const MAX_CELL_VALUE = 255;
 
 // Exported for `resizeGrid`, whose errors must carry ITS parameter names (`cols`/`rows`), not
 // `createGrid`'s — not part of the package barrel.

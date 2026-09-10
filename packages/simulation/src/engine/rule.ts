@@ -57,15 +57,16 @@ export interface Condition<Props extends string = string> {
 //
 // ⚠️ The engine NEVER inspects `payload` — not to sort, not to filter, not to "optimize". That is
 // the single thing keeping this layer reusable; returning an action instead of a Rule would weld it
-// to the Game of Life. Story 3.5's death-before-survival precedence (M10) partitions rules by
-// `payload.action` OUTSIDE this package, because that partition is GoL precedence, not a generic
-// concern.
+// to the Game of Life. Death-before-survival precedence (M10) partitions rules by
+// `payload.action` OUTSIDE this directory — in ../session/compileEvaluators.ts, once per organism
+// per session (Story 3.4) — because that partition is GoL precedence, not a generic concern.
 //
 // `id` and `contentHash` are OPAQUE strings here (AR-21) — never parsed, prefixed, compared for
 // content, or generated. Identical rules share a contentHash and keep distinct ids, so neither
-// implies the other. Generation belongs to Epic 4 (authoring) and Story 3.4 (the contentHash-keyed
-// evaluator cache, Decision E.4); writing a hasher here would fork rule identity across every
-// installed workspace.
+// implies the other. Story 3.4's evaluator cache (Decision E.4) now CONSUMES `contentHash` as its
+// key and does not parse, prefix-match or generate one; generation still belongs to Epic 4
+// (authoring), and writing a hasher here would fork rule identity across every installed
+// workspace.
 export interface Rule<Payload = unknown, Props extends string = string> {
   readonly id: string;
   readonly contentHash: string;

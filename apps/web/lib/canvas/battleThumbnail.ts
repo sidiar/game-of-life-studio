@@ -3,8 +3,12 @@
  * dense->renderable conversion lives here so the tile component holds no data logic and the
  * conversion is testable without a DOM. Both halves already exist (Story 1.8): `toRenderableGrid`
  * and `buildRefToFillGroup`. ❌ Do not reimplement either — the dense at-rest cell value IS the
- * runtime OrganismRef, and the LUT built here is exactly the one Story 3.4's interning step will
- * produce.
+ * runtime OrganismRef (M14).
+ *
+ * ⚠️ The LUT built here is NOT the interning map — see `refToFillGroup.ts`'s header.
+ * `internOrganismIds` (`@gol/simulation`, Story 3.4) maps `library id -> OrganismRef` and feeds
+ * rule compilation; this one is `OrganismRef -> fill group` and is palette-dependent. They share
+ * the roster ordering, nothing more.
  */
 import type { Battle, Organism } from '@gol/domain';
 import { buildRefToFillGroup, type RefToFillGroup } from './refToFillGroup';

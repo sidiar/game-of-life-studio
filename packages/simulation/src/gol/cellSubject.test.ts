@@ -143,9 +143,11 @@ describe('organismType — eq only, numeric OrganismRef pattern (post-interning 
   // Trap 1, pinned rather than "fixed": a persisted organismType pattern is the target's stable
   // LIBRARY ID — a string (Decision E, @gol/domain's OrganismTypeCondition) — while
   // CellSubject.organismType is a numeric OrganismRef. `eq` is `===`, so a raw library-id pattern
-  // can never match today; that is correct, not a bug. The string -> ref translation happens
-  // inside Story 3.4's compiled evaluators (Decision E.3), never per cell here.
-  it('a raw library-id (string) pattern never matches today — Story 3.4 interns it, not this layer', () => {
+  // matches nothing at THIS layer; that is correct, not a bug. The string -> ref translation
+  // happens in ../session/compileEvaluators.ts (Decision E.3), never per cell here — and its
+  // counterpart assertion, the same rule matching AFTER interning, lives in
+  // ../session/compileEvaluators.test.ts ("a raw library-id string DOES match once interned").
+  it('a raw library-id (string) pattern never matches at this layer — the session interns it', () => {
     expect(
       holds(
         { property: 'organismType', operator: 'eq', pattern: 'conways-classic' },

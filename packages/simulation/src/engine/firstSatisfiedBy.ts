@@ -27,9 +27,12 @@ import type { Rule, RuleSet, Condition, Selectors } from './rule';
 // inherited-key class at the root with a null prototype; a CALLER's dictionary is not ours to
 // reshape, so it is checked at the point of use instead.
 //
-// The zero-per-cell version of this is a one-pass key sweep at rule-COMPILE time — Story 3.4's
-// evaluator cache — after which this guard becomes redundant and can be revisited with 3.7's
-// harness in hand.
+// The one-pass key sweep at rule-COMPILE time now exists — validateSurvivalRules in ../session/,
+// which rejects an unknown property once per battle (Story 3.4). ⚠️ This guard STAYS anyway: the
+// sweep only covers callers that go through that compile step, this layer is parametric over an
+// arbitrary subject and reusable by callers that do not, and M12 says the removal is re-measured
+// with Story 3.7's harness rather than argued. Removing it here would trade a measured 0.5% for
+// an unmeasured crash surface.
 export function conditionIsSatisfiedBy<S, Props extends string>(
   condition: Condition<Props>,
   subject: S,
@@ -46,7 +49,9 @@ export function conditionIsSatisfiedBy<S, Props extends string>(
   // Unguarded, `operators[...]` is then `undefined` and CALLING it throws
   // "is not a function" from inside the per-cell hot loop, taking the whole simulation down. One
   // `undefined` comparison turns that into a rule that does not fire. See operators.ts on why
-  // failing closed is right here and where the eager diagnostic belongs (Story 3.4, compile time).
+  // failing closed is right here; the LOUD half now ships alongside it as the once-per-battle
+  // sweep in ../session/validateRules.ts (Story 3.4), which rejects an operator outside the six
+  // before the first cycle. This one stays — see the header on why (M12, Story 3.7).
   const predicate = operators[condition.operator];
   if (predicate === undefined) return false;
   return predicate(value, condition.pattern);

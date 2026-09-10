@@ -30,7 +30,11 @@ export type CellState = 'empty' | 'alive' | 'occupied';
 // @gol/domain's OrganismTypeCondition), never this numeric ref, because a persisted ref would
 // target a different organism in every battle it is loaded into (Decision E, project-context
 // "Never persist a numeric OrganismRef"). The string -> ref translation happens once per rule per
-// session, inside Story 3.4's compiled evaluators (Decision E.3) — not here (Trap 1).
+// session and now SHIPS: ../session/internOrganisms.ts builds the battle's id -> ref map and
+// ../session/compileEvaluators.ts rewrites every organismType pattern through it at compile time
+// (Decision E.3). A target absent from the battle becomes `NO_MATCH_REF` (-1), which equals
+// neither a real ref nor the `null` an empty cell carries. Still not here: this layer only
+// declares the encoding.
 export type OrganismRef = number;
 
 // The five properties a rule can read off a cell (FR-2.5), materialized per-organism per-cycle by
@@ -42,7 +46,9 @@ export interface CellSubject {
   // organism (self or other) `state` says is present.
   readonly organismType: OrganismRef | null;
   // Cycles alive (FR-5.6). NOT clamped here — MAX_RELEVANT_AGE is computed once per battle at
-  // evaluator-compile time (Decision B.5, Story 3.4). Saturating in this layer would be wrong.
+  // evaluator-compile time and rides on `CompiledSession` (../session/maxRelevantAge.ts,
+  // Decision B.5); Story 3.6's cycle-end step is what APPLIES it. Saturating in this layer would
+  // be wrong.
   readonly age: number;
   // ⚠️ SAME-organism Moore neighbours — not "all eight occupied neighbours" (RFC-004 §2.1). The
   // bare name reads like the latter, and Story 3.3 is what materializes it, so the definition is

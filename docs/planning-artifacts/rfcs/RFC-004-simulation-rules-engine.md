@@ -587,9 +587,19 @@ user-facing strategy metadata yet. The three-phase model (FR-5) is the single, h
 
 ```ts
 export interface SimulationDeps {
-  resolveAction: (organism: OrganismRef, cell: CellSubject) => Action | null  // injected (Part 2)
+  // M15: a phase-partitioned PAIR per organism, not one `resolveAction`. Ref-indexed —
+  // `length = roster length + 1`, slot 0 an explicit `null` (M14). Read `evaluatorsByRef[ref]`,
+  // where `ref = rosterIndex + 1`. Compiled once per session (§3.5); injected (Part 2).
+  evaluatorsByRef: readonly (OrganismEvaluators | null)[]
   organisms: OrganismRuntime[]               // dense array; dominance, agingEnabled, …
   rng: Rng                                    // seedable; injected for determinism
+}
+
+// The two evaluators, partitioned by action type at COMPILE time so Phase 1 enforces death
+// precedence (M10/H-5) structurally rather than by scan order — see §2.3.
+export interface OrganismEvaluators {
+  resolvesToDeath: (cell: CellSubject) => boolean        // Phase 1: any `die` rule fired
+  resolveBirthSurvival: (cell: CellSubject) => Action | null  // Phase 2: `born`+`survive`
 }
 
 // A strategy is a pure stepping function. (Functional Strategy pattern.)
@@ -742,8 +752,8 @@ enforces death precedence (H-5) without re-scanning survive rules; the `.filter`
 runs once at compile time, not per cell.
 
 **Separation of concerns (why this is its own domain):** the Simulation Engine depends on the rules
-layer **only** through the injected `resolveAction` function (DIP). It can be tested with a stub
-decision function and no rules at all; conversely, the rules layer is tested with hand-built
+layer **only** through the injected `evaluatorsByRef` table of compiled evaluator pairs (DIP,
+M15). It can be tested with stub evaluators and no rules at all; conversely, the rules layer is tested with hand-built
 `CellSubject`s and no grid. Neither knows the other's internals.
 
 ### Design patterns (functional realization)
@@ -759,7 +769,7 @@ rather than via class hierarchies:
 | **Adapter** | `Selectors<S, Props>` projection: `cellSelectors`, future `battleSelectors` |
 | **Factory** | Schema-validated parsing (`SurvivalRulesSchema.parse`) — data in, typed union out |
 | **Registry** | `operators` — additive `as const` maps (rule migrations live in RFC-006's single chain — arch Decision I) |
-| **Dependency Injection** | Deps as arguments (`Selectors`, `SimulationDeps.resolveAction`, `rng`) — no ambient state |
+| **Dependency Injection** | Deps as arguments (`Selectors`, `SimulationDeps.evaluatorsByRef`, `rng`) — no ambient state |
 | **Decorator** | Pure `SurvivalRule → RuleViewModel` mapping for the editor (labels/help) |
 | **Memoization / Lazy** | Precompiled evaluators cached by `contentHash` (§3.5) |
 
