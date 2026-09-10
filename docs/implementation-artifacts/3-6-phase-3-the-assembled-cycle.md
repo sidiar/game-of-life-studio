@@ -931,3 +931,18 @@ is a RENDER input (FR-2.4)`. That is a clarification of an already-correct line,
   `@gol/test-utils`. Status stays `review` pending the decision.
 
 Dev Model: opus   # this story fixes the engine's public step contract (SimulationDeps, Rng, SimulationStrategy, threePhaseStep's signature) plus the RNG-ownership and in-place-write patterns that stories 3.7-3.10 and 4.15 all inherit — it sets the pattern rather than following one.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 25s | 20 | 1,602 | 8,355 | 448,510 | 458,487 |
+| Step 1 — create-story | opus-5 | 1 | 9m 14s | 178 | 37,002 | 504,241 | 8,571,623 | 9,113,044 |
+| Step 2 — dev-story | opus-5 | 1 | 37m 07s | 256 | 88,866 | 444,193 | 19,743,971 | 20,277,286 |
+| Step 3 — code review + PR | fable-5-1 | 4 | 2h 12m | 4,676 | 97,436 | 2,638,874 | 17,848,359 | 20,589,345 |
+| _of which the orchestrator_ | opus-5 | — | — | 80 | 14,936 | 146,889 | 2,018,897 | 2,180,802 |
+| **Total (create-story → PR ready)** | | 6 | **2h 59m** | 5,130 | 224,906 | 3,595,663 | 46,612,463 | **50,438,162** |
+
+Run started 2026-09-10 11:09 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
