@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-09-10
+# last_updated: 2026-09-13
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-09-10
+last_updated: 2026-09-13
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -96,7 +96,7 @@ development_status:
   3-4-precompiled-evaluators-organism-interning: done
   3-5-phases-1-2-death-claims: done
   3-6-phase-3-the-assembled-cycle: done
-  3-7-performance-harness-coverage-gate-flip: review
+  3-7-performance-harness-coverage-gate-flip: done
   3-8-simulationloop: backlog
   3-9-colour-state-batch-rendering: backlog
   3-10-usesimulation-hook: backlog

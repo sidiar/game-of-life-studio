@@ -570,17 +570,17 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
 (Blind Hunter, Edge Case Hunter, Acceptance Auditor). Patches applied are recorded in the story's
 Review Findings; these are the items consciously left open.
 
-- **⏸ AWAITING SIDIAR — RFC-004 still describes the pre-FD7 hot path.** `architecture.md` M12 was
-  amended on authorization and names RFC-004 as owner, but RFC-004 itself was not touched: §1.4's
-  reference code still quotes the `Object.hasOwn` guard at "+0.091 ms/cycle (~0.5% of the NFR-1.1
-  budget)" (the figure M12 now records as ~15× understated); §2.3 and §3.5 still describe the
-  phase-partitioned evaluators as `firstSatisfiedBy(rules.filter(...))` closures; Risk 2 still says
-  "one primitive (`firstSatisfiedBy`) underlies all decisions". After FD7 the compiled path is
-  `predicate(selector(cell), pattern)` closures and `firstSatisfiedBy` is off the 60 FPS loop
-  entirely (`resolveCellAction` is its only non-test caller). Both precedents the story invokes —
-  M14 (`a645d31`) and M15 (`75dbccd`) — amended RFC-004 in the same commit as the architecture
-  entry. Whether FD7's authorization covered RFC-004 is not knowable from the repo, and amending an
-  RFC is Sidiar's call, so the review did not touch it. **The question is on the Story 3.7 PR.**
+- **✅ RESOLVED — RFC-004 amended to the post-FD7 hot path (Sidiar, option (a), 2026-09-13).** The
+  review found RFC-004 still describing the pre-FD7 engine — §1.4's reference code at "+0.091
+  ms/cycle", §2.3/§3.5 with the evaluators as `firstSatisfiedBy(rules.filter(...))` closures, Risk 2
+  with "one primitive underlies all decisions" — while `architecture.md` M12's amendment named
+  RFC-004 as owner and both precedents (M14 `a645d31`, M15 `75dbccd`) had amended the RFC in the
+  same commit. Sidiar chose to amend on the branch. Each of the four sections now carries an
+  "AMENDED by M12's 2026-09-10 amendment (Story 3.7)" marker in the M14/M15 style: §1.4 records
+  the re-measured +1.4 ms/cycle and that the function keeps its guards while the loop no longer
+  routes through it; §2.3 shows the compiled pair and keeps the old form as the readable
+  equivalent; §3.5 states what "compiled" now means, why the sweep makes it safe, and the measured
+  12.2–14.4 → 5.7–6.1 ms; Risk 2 speaks of one *semantics* with two realizations.
 - **`bench-results.json` has no freshness tie to the tree** — the same class as the recorded
   `bundle:check` entry above: `bench:check` reads whatever file exists, so a developer who runs it
   alone gates a number from an earlier tree. In the `ci` chain and in `ci.yml` the gate only runs

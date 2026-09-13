@@ -4,7 +4,7 @@ baseline_commit: 05827c3
 
 # Story 3.7: Performance Harness & Coverage-Gate Flip
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -198,19 +198,18 @@ deferred entries that say *"Story 3.7's to measure"*.
 ### Review Findings
 
 Code review 2026-09-10 (Fable, three parallel adversarial layers over an Opus implementation).
-Patches landed as their own commit on the story branch; the one `decision-needed` item is a
-question for Sidiar on the PR and is **not** resolved here.
+Patches landed as their own commit on the story branch; the one `decision-needed` item was put to
+Sidiar on the PR and resolved 2026-09-13 (below).
 
-- [ ] [Review][Decision] **RFC-004 still describes the pre-FD7 hot path — amend, or record the
+- [x] [Review][Decision] **RFC-004 still describes the pre-FD7 hot path — amend, or record the
       divergence?** `architecture.md` M12's amendment names RFC-004 as owner, and both precedents
       (M14 `a645d31`, M15 `75dbccd`) amended RFC-004 in the same commit; this story did not.
       RFC-004 §1.4 (reference code, "+0.091 ms/cycle"), §2.3/§3.5 (evaluators as
       `firstSatisfiedBy(rules.filter(...))` closures) and Risk 2 ("one primitive underlies all
-      decisions") now contradict `compileEvaluators.ts`. Whether FD7's authorization covered
-      RFC-004 is not knowable from the repo. Options: (a) amend §1.4/§2.3/§3.5/Risk 2 in the
-      M14/M15 style on this branch; (b) leave RFC-004 and add a Minor-Resolution-style pointer in
-      it to M12's amendment; (c) record the divergence in `deferred-work.md` only (done, as the
-      holding position).
+      decisions") contradicted `compileEvaluators.ts`. **Decided by Sidiar (2026-09-13): option
+      (a) — amend on this branch.** All four sections amended in the M14/M15 style, each marked
+      "AMENDED by M12's 2026-09-10 amendment (Story 3.7)"; the `deferred-work.md` holding entry is
+      now the record of the resolution.
 - [x] [Review][Patch] `compileSession` read `survivalRules` twice (validate pass, compile pass); an
       accessor-backed organism — the shape its own read-counting test uses — could hand the
       compiler an array the sweep never saw. Now read once and the same reference is validated,
@@ -807,8 +806,8 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 
 ### Spec-conflict flags raised by the code review (2026-09-10)
 
-- **🟡 RFC-004 §1.4 / §2.3 / §3.5 / Risk 2 vs. the shipped hot path** — see the `[Decision]` item
-  under Review Findings. Not amended; Sidiar's call.
+- **✅ RFC-004 §1.4 / §2.3 / §3.5 / Risk 2 vs. the shipped hot path** — resolved by Sidiar
+  (option (a), 2026-09-13): amended on this branch, see the `[Decision]` item under Review Findings.
 - **⚪ RFC-008 Decision 9's pipeline diagram** still reads `… ─► build (next, bundle-budget check)
   ─► e2e …` and omits the `bench → bench:check` stages Decision 7 implies. Not a contradiction —
   Decision 7 already names the harness — and not amended (What NOT to build); recorded so the next
@@ -883,6 +882,7 @@ All commands run from the repo root unless noted; `npm run ci` was **redirected,
 | 2026-09-10 | `vitest bench` harness across all four presets × 20 organisms + the repaint-decision bench; `scripts/check-bench-budget.mjs` with the derived 16.667 ms budget and a vacuous-result guard; `bench` / `bench:check` wired into `turbo.json`, `npm run ci` and `ci.yml`; coverage gates flipped on (90% per-file on domain/simulation, 80% aggregate on persistence/test-utils, none on apps/web) with `coverage.include` landing first and `passWithNoTests` removed everywhere; M12 re-measured; seven deferred perf items closed with numbers; `performance-baseline-validation.md` written. |
 | 2026-09-10 | ⛔ **HALT at FD6's terminal branch** — `npm run ci` red on `bench:check` at 18.749 ms vs 16.667 ms after both permitted optimizations measured at ~0 and were reverted. One recommendation recorded; awaiting Sidiar. |
 | 2026-09-10 | 🔍 **Code review** (Fable): 15 patches landed in their own commit — the load-bearing ones are `compileSession` reading `survivalRules` once (FD7's safety property made structural), the collapsed repaint fixture replaced (7-organism still life → pinned 30% fill, 55 groups asserted), and the two summed benches serialized. Post-review frame **5.6–5.8 ms, 65–67% headroom**. One `decision-needed` left for Sidiar: RFC-004 still describes the pre-FD7 hot path. Status stays `review`. |
+| 2026-09-13 | ✅ **Decision resolved — RFC-004 amended** (Sidiar, option (a)): §1.4, §2.3, §3.5 and Risk 2 brought to the post-FD7 hot path in the M14/M15 style, own commit. No findings open. Story **done**. |
 | 2026-09-10 | ✅ **FD7 authorized by Sidiar and landed** — conditions compiled to concrete `(cell) => boolean` predicates at session time; ~2.3× on the assembled cycle (12.2–14.4 → 5.7–6.1 ms), gated frame 18.749 → **6.760 ms** with 59.4% headroom. `architecture.md` **M12 amended** (corrected cost + new guard placement). 367 simulation tests and every golden green and unedited. `npm run ci` fully green. |
 
 Dev Model: opus   # establishes the perf-gate mechanism, budget derivation and coverage-include shape that 3.8/3.9 benches and the pending bundle-ratchet story all inherit — and the measured baseline likely misses NFR-1.1, so the story is a judgment call, not wiring.
