@@ -28,13 +28,15 @@ otherwise violates while still compiling and passing tests. The load-bearing one
 
 - `docs/implementation-artifacts/sprint-status.yaml` — story tracker and current phase.
 - Per-story files (`1-1-*.md`, …) carry a Dev Agent Record each. **Completed epics are
-  archived into `epic-N/`; the epic in progress stays flat beside `sprint-status.yaml`.**
+  archived into `epic-N/`; every epic in progress stays flat beside `sprint-status.yaml`.**
+  Two epics can be in progress at once — `implement-next-story` runs them as parallel
+  lanes (`--epic N`, one per working tree); each is archived on its own completion.
   That split is not cosmetic — the BMad skills glob story files *non-recursively* off
   `implementation_artifacts` (create-story writes `{implementation_artifacts}/{story_key}.md`
   and reads `{epic}-{prev}-*.md`; retrospective reads `{epic}-{n}-*.md`; dev-story
   scans `*-*-*.md`). Move an epic's stories down only once it is done, or those lookups
-  silently find nothing. Cross-epic artifacts (`deferred-work.md`, the validation docs)
-  stay at the root.
+  silently find nothing. Cross-epic artifacts (`deferred-work.md`, `lane-gates.yaml`, the
+  validation docs) stay at the root.
 
 ## Workflow
 
@@ -44,3 +46,5 @@ otherwise violates while still compiling and passing tests. The load-bearing one
   file list and a suggested message, then wait. Story subagents running under
   `implement-next-story` may commit and push to their own `story/*` branch without asking —
   merging that branch is always Sidiar's call. Approval for one merge does not carry to the next.
+  With two lanes open, merge one PR at a time and let the other lane sync (its next run does
+  it) and go green before merging it — the repo has no branch protection to enforce that.

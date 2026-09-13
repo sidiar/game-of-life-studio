@@ -1,0 +1,40 @@
+# lane-gates.yaml — cross-epic dependency gates for parallel lanes.
+#
+# `implement-next-story` runs one epic per lane, and story order inside a lane cannot say
+# "4-15 needs 3-15". This file can. It is read on `main` at every Step 0 by
+# `.claude/skills/implement-next-story/lane-gates.py`, and it is versioned like everything
+# else: rows arrive on `main` through a PR, never by hand-editing a checkout.
+#
+# SHAPE (kept deliberately small — the reader is strict and rejects anything else):
+#   analysed: one entry per epic PAIR that has had a dependency analysis. Opening a lane
+#             for epic N while epic M is in progress requires an entry for {N, M}.
+#   gates:    one entry per (story, prerequisite). `requires` is either a story key, which
+#             must be `done` on main, or `epic-N`, meaning every `N-*` story is `done` —
+#             NOT the `epic-N: done` row, which only flips in Sidiar's manual close-out.
+#             A story with several prerequisites has several entries.
+#
+# LIFECYCLE: created when a lane opens (Opening a lane, SKILL.md); rows proposed by
+# create-story, code-review, or a Step S sync that hit a code conflict; every row and
+# every `analysed` entry is Sidiar's approval, recorded in `approved_by`/`date`.
+
+analysed:
+  - lane: 4
+    against: 3
+    date: 2026-09-13
+    approved_by: Sidiar
+
+gates:
+  - story: 4-15-preview-simulation
+    requires: 3-15-extinction-auto-pause
+    why: >-
+      The preview is a second useSimulation (3.10) and must follow the transport (3.12),
+      speed-ladder (3.13) and extinction auto-pause (3.15) semantics, not define them.
+  - story: 4-24-edit-organism-from-battle
+    requires: epic-3
+    why: >-
+      Modal over <BattlePage>, which 3.11 and 3.16-3.19 are still reshaping; 3.19's
+      "hotkeys suspended while a dialog is open" is what 4.24 must not break.
+  - story: 4-25-create-organism-from-battle
+    requires: epic-3
+    why: >-
+      Same surface as 4.24.
