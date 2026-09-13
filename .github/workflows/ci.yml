@@ -7,7 +7,7 @@
 #
 # Stage order (both here and in `npm run ci`):
 #   typecheck -> lint -> format:check -> spec:check -> boundary:check -> test:coverage
-#     -> build:standalone -> bundle:check -> e2e (+axe)
+#     -> build:standalone -> bundle:check -> bench -> bench:check -> e2e (+axe)
 #
 # Deployment is intentionally NOT part of this workflow: no static host is chosen
 # yet ($0 static deploy lands when one exists).
@@ -80,6 +80,21 @@ jobs:
 
       - name: Bundle-size budget
         run: npm run bundle:check
+
+      # ⚠️ Two steps, not one, and in this order (Story 3.7). `bench` MEASURES
+      # (turbo, "cache": false — a replayed benchmark is a lie) and `bench:check`
+      # GATES the JSON it wrote against the NFR-1.1 frame budget. Splitting them
+      # is what makes a failure legible: a red `bench` means the harness broke, a
+      # red `bench:check` means the frame got slower. Merging them would also hide
+      # the measurement's own exit code behind the gate's. `npm run bench` runs the
+      # two workspaces' benches SERIALLY (`--concurrency=1`): the gate sums them,
+      # and on a 4-vCPU runner a number taken beside a sibling bench is not a
+      # frame.
+      - name: Performance benchmark (NFR-1.1)
+        run: npm run bench
+
+      - name: Frame budget (AR-43 / NFR-1.1)
+        run: npm run bench:check
 
   # E2E + a11y (Playwright, 3 browsers + tablet, axe on key screens). Runs after
   # the cheaper gates pass.

@@ -259,6 +259,16 @@ export type Selectors<S, Props extends string> = Readonly<Record<Props, Selector
 // 'hasOwnProperty' resolve to real functions that pass a typeof test and then throw when
 // invoked with `this === undefined`. Measured at +0.091 ms/cycle (~0.5% of the NFR-1.1
 // budget); the zero-per-cell form is a key sweep at evaluator-COMPILE time (§3.5).
+// ⚠️ AMENDED AGAIN by M12's 2026-09-10 amendment (Story 3.7, on Sidiar's authorization): the
+// +0.091 ms above was taken on a small evaluation count. RE-MEASURED with Story 3.7's harness
+// at the NFR-1.1 baseline (100x60, 20 organisms, 50 rules, ~300,000 `Object.hasOwn` calls per
+// cycle, interleaved A/B) the guard costs **+1.4 ms/cycle** — ~10% of the cycle, ~15x the
+// figure recorded. The operator `undefined` check re-measures at 0 +/- 0.3 ms, as stated.
+// THIS FUNCTION IS UNCHANGED AND KEEPS BOTH GUARDS — but the 60 FPS loop no longer routes
+// through it: §3.5's compile step resolves selector and predicate ONCE per rule per session
+// and hands the loop a concrete `(cell) => boolean`, so the compiled path performs neither
+// lookup and neither guard. The invariant (architecture.md M12): a caller is either guarded
+// per cell HERE, or guarded once before its first cycle by the §3.5 sweep — never neither.
 export function conditionIsSatisfiedBy<S, Props extends string>(
   c: Condition<Props>, subject: S, selectors: Selectors<S, Props>,
 ): boolean {
@@ -429,25 +439,49 @@ export function resolveCellAction(rules: SurvivalRules, cell: CellSubject): Acti
 Because the payload is an object, a future caller can read additional fields (e.g.
 `winner.payload.weight`) without touching this function's contract.
 
-**Phase-scoped resolution (the three-phase strategy's use of this primitive).** The three-phase
+**Phase-scoped resolution (the three-phase strategy's use of this semantics).** The three-phase
 strategy does **not** call `resolveCellAction` over an organism's whole rule list; to enforce its
-cross-phase precedence (death before survival — H-5) it feeds `firstSatisfiedBy` **action-partitioned
-subsets**: a **death evaluator** over the organism's `die` rules (Phase 1) and a **birth/survival
-evaluator** over its `born` + `survive` rules (Phase 2). Within each phase the configured order
-(FR-2.6) is the first-match priority. `resolveCellAction` (whole-list first-match) remains available
-as the primitive a *different* strategy could use to honour a single global order — the partitioning
-is this strategy's choice, not the engine's law.
+cross-phase precedence (death before survival — H-5) it evaluates **action-partitioned subsets**
+with first-match semantics: a **death evaluator** over the organism's `die` rules (Phase 1) and a
+**birth/survival evaluator** over its `born` + `survive` rules (Phase 2). Within each phase the
+configured order (FR-2.6) is the first-match priority. `resolveCellAction` (whole-list first-match
+over `firstSatisfiedBy`) remains available as the primitive a *different* strategy could use to
+honour a single global order — the partitioning is this strategy's choice, not the engine's law.
+
+> ⚠️ **AMENDED by M12's 2026-09-10 amendment (Story 3.7, on Sidiar's authorization).** This
+> snippet used to read `firstSatisfiedBy(rules.filter(r => r.payload.action === 'die'), cell,
+> cellSelectors)` — the pair as two per-cell calls into §1.4's primitive over a pre-filtered list.
+> That was the shipped form through Story 3.6 and it is the readable equivalent of what follows;
+> it is not what the 60 FPS loop runs. Since Story 3.7 the pair is **compiled** (§3.5): each
+> condition becomes a concrete `(cell) => boolean` with its selector and predicate resolved once,
+> each rule an AND-loop over those, and the two evaluators a first-match loop over the compiled
+> rules of their partition. Same semantics — first satisfied rule in persisted order, all
+> conditions AND'd, `null` for "no rule matched" (never `'die'`) — with no per-cell lookup.
 
 ```ts
-// Three-phase strategy: resolve each phase over the relevant action partition.
-export const resolvesToDeath = (rules: SurvivalRules, cell: CellSubject): boolean =>
-  firstSatisfiedBy(rules.filter(r => r.payload.action === 'die'), cell, cellSelectors) !== null
-
-export const resolveBirthSurvival = (rules: SurvivalRules, cell: CellSubject): Action | null =>
-  firstSatisfiedBy(rules.filter(r => r.payload.action !== 'die'), cell, cellSelectors)?.payload.action ?? null
+// Three-phase strategy: the pair, as compiled once per organism per session (§3.5).
+type CellPredicate = (cell: CellSubject) => boolean
+// condition -> predicate: selector and operator resolved ONCE, pattern captured (already
+// interned, Decision E.3). The §1.4 guards are not needed here: §3.5's sweep has already
+// proven `property` and `operator` against the same two dictionaries, once per condition.
+const compileCondition = (c: Condition<CellProperty>): CellPredicate => {
+  const selector = cellSelectors[c.property], predicate = operators[c.operator], { pattern } = c
+  return cell => predicate(selector(cell), pattern)
+}
+const compileRule = (rule: SurvivalRule): CellPredicate => {
+  const conditions = rule.conditions.map(compileCondition)     // AND, short-circuit, no closure per cell
+  return cell => { for (const holds of conditions) if (!holds(cell)) return false; return true }
+}
+// Partition ONCE (persisted order preserved within each partition, FR-2.6):
+//   death         = rules.filter(die).map(compileRule)
+//   birthSurvival = rules.filter(not die).map(r => ({ matches: compileRule(r), action: r.payload.action }))
+export const resolvesToDeath = (cell: CellSubject): boolean =>
+  death.some(holds => holds(cell))                              // shipped as an index loop
+export const resolveBirthSurvival = (cell: CellSubject): Action | null =>
+  birthSurvival.find(r => r.matches(cell))?.action ?? null      // shipped as an index loop
 ```
 
-(The `.filter` is precomputed once per organism, not per cell — see §3.5.)
+(The partition and the compile run once per organism per session, never per cell — see §3.5.)
 
 #### 2.4 Persistence: JSON structure (= the generic structure), schemas, and rule identity
 
@@ -753,8 +787,24 @@ export interface Grid {
 
 #### 3.5 Precompiled evaluators (memoization, keyed by `contentHash`)
 
-Each organism's `SurvivalRules` is compiled once into a closure `(cell) => Action | null`, cached by
-the rules' `contentHash` set (§2.4). Compilation is also where **id→ref interning** happens
+Each organism's `SurvivalRules` is compiled once into the phase-partitioned closure pair of §2.3,
+cached by the rules' `contentHash` set (§2.4). ⚠️ **AMENDED by M12's 2026-09-10 amendment (Story
+3.7, on Sidiar's authorization) — "compiled" now means compiled all the way down.** Until Story 3.7
+compilation stopped at "partition + intern + close over `firstSatisfiedBy`", which left three
+lookups on the per-cell path: the selector lookup, M12's `Object.hasOwn` guard, and the operator
+dictionary lookup, plus a `.find`/`.every` closure pair allocated per call. Compilation now
+resolves each condition's selector and predicate **once per rule per session** into a concrete
+`(cell) => boolean`, so the hot loop performs neither lookup and neither guard. This is safe
+because the same compile step runs the eager diagnostic sweep (`validateSurvivalRules`, Story 3.4,
+M12) over the WHOLE roster before any evaluator exists — and that sweep's property check **is**
+`Object.hasOwn(cellSelectors, property)` while its operator check **is** the dictionary's totality
+test, asked once per condition per battle instead of once per condition per cell. The checks
+moved; they did not vanish. The operator itself is still looked up in §1.2's dictionary and never
+re-implemented inline, so `operators.ts` stays the single source of what an operator means.
+**Measured** on Story 3.7's harness at the NFR-1.1 baseline (100x60, 20 organisms, 50 rules,
+interleaved A/B, four pairs): **12.2–14.4 ms → 5.7–6.1 ms per cycle, ~2.3x**, with every Conway
+and conflict golden green and unedited — the change that took the gated frame from 18.7 ms (red)
+to under the 16.667 ms budget. Compilation is also where **id→ref interning** happens
 (Decision E): the battle's `id → OrganismRef` map translates each persisted `organismType` pattern
 (a library id) into the numeric ref the hot path compares; a target id not present in the battle
 compiles to a never-match sentinel (e.g. `-1`). Because the compiled closures bake in this
@@ -765,7 +815,7 @@ only when a rule's `contentHash` changes. For the
 three-phase strategy these compile as **two phase-partitioned closures** per organism — a death
 evaluator (`die` rules) and a birth/survival evaluator (`born`+`survive` rules), per §2.3 — so Phase 1
 enforces death precedence (H-5) without re-scanning survive rules; the `.filter` that partitions them
-runs once at compile time, not per cell.
+runs once at compile time, not per cell, and so does everything else described above.
 
 **Separation of concerns (why this is its own domain):** the Simulation Engine depends on the rules
 layer **only** through the injected `evaluatorsByRef` table of compiled evaluator pairs (DIP,
@@ -802,10 +852,18 @@ depends on the injected decision abstraction; the engine depends on selector/sch
   without touching UI. Benchmark against the budget.
 
 **Risk 2: Two evaluation framings (per-cell first-match vs. global three-phase) conflated.**
-- *Mitigation:* one primitive (`firstSatisfiedBy`) underlies all decisions; the three-phase strategy
-  feeds it **action-partitioned subsets per phase** (§2.3) and pure orchestration over different grids.
-  Cross-action precedence (Die>Survive; Dominance for survive-vs-born) is a **strategy property**
-  (§3.2), not an organism law — so the two framings never conflate. Covered by phase-level tests.
+- *Mitigation:* one **semantics** — first satisfied rule in persisted order, all conditions AND'd —
+  underlies all decisions; the three-phase strategy applies it to **action-partitioned subsets per
+  phase** (§2.3) and adds pure orchestration over different grids. Cross-action precedence
+  (Die>Survive; Dominance for survive-vs-born) is a **strategy property** (§3.2), not an organism
+  law — so the two framings never conflate. Covered by phase-level tests.
+- ⚠️ *AMENDED by M12's 2026-09-10 amendment (Story 3.7):* this used to say one **primitive**
+  (`firstSatisfiedBy`) underlies all decisions. Since Story 3.7 that semantics has two realizations:
+  `firstSatisfiedBy` (§1.4) for callers that evaluate per cell with no session behind them
+  (`resolveCellAction`), and the session-compiled predicates (§3.5) for the 60 FPS loop, which no
+  longer routes through `firstSatisfiedBy` at all. What keeps the two from drifting is that both
+  read the operator's meaning from §1.2's single dictionary rather than re-implementing it, and
+  that the Conway and conflict goldens run the compiled path.
 
 **Risk 3: Generic `Rule.payload` is untyped at the engine boundary.**
 - *Mitigation:* `firstSatisfiedBy<S,P>` is generic; the GoL layer fixes `P = SurvivalPayload`, so

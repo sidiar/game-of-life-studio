@@ -15,7 +15,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 - **`nextScopedToWeb` blanket-rewrites `files` globs in `eslint.config.mjs`** — re-scopes every `eslint-config-next` sub-config that has a `files` glob to `apps/web/**/*.{js,jsx,mjs,ts,tsx}` uniformly, which could clobber narrower intentional scoping if Next's flat-config array shape changes. Currently verified working (`eslint .` clean, exit 0). Revisit only if `eslint-config-next` changes shape or lint starts misbehaving.
 - **Bundle-budget gate's gzip assumption and regex-scrape approach** — `scripts/check-bundle-size.mjs` measures gzipped transfer size, but most real static hosts (Vercel/Netlify/Cloudflare Pages) negotiate Brotli, not gzip, so the gate may not reflect real transfer bytes on the eventual host. It also finds assets via a regex scrape of `index.html` rather than walking Next's build manifest. Revisit once an actual $0 static host is chosen (deploy story).
 - **No hash/timestamp ties `bundle:check`'s checked bundle to the current commit** — a stale `out/` from a previous run could theoretically be checked instead of a fresh one if `build:standalone` is skipped or fails silently upstream. Speculative for the current single-job-chain local pipeline; revisit if CI staging changes.
-- **`packages/{domain,simulation,persistence,test-utils}/vitest.config.ts` are byte-identical with no shared base config** — any future coverage-config change (e.g. the Story 3.7 gate flip) needs editing in four places with no mechanism to keep them in sync. Matches this repo's established per-package-owns-its-config convention, so not a defect — a shared base is a nice-to-have DRY improvement, best considered alongside the Story 3.7 coverage-gate work.
+- **`packages/{domain,simulation,persistence,test-utils}/vitest.config.ts` are byte-identical with no shared base config** — any future coverage-config change (e.g. the Story 3.7 gate flip) needs editing in four places with no mechanism to keep them in sync. Matches this repo's established per-package-owns-its-config convention, so not a defect — a shared base is a nice-to-have DRY improvement, best considered alongside the Story 3.7 coverage-gate work. — **✅ CLOSED in Story 3.7 (FD3), by the premise dissolving rather than by a refactor.** The gate flip is what this entry was waiting for, and after it the four files are **no longer byte-identical**: `domain`/`simulation` carry a ≥90% threshold with `perFile: true`, `persistence`/`test-utils` carry an aggregate 80%, `persistence` runs jsdom while the others run node, and each carries a different `include`/`exclude` pair and a different `passWithNoTests` history. RFC-008 Decision 9 is explicit that each package owns its `vitest.config`, and project-context says config lives at the level it applies to. Duplication that has become divergence is not duplication. A shared base was also the riskier option here: it would have had to avoid smuggling a threshold onto `apps/web`, whose zero-gate is a deliberate counter-metric (RFC-008 Decision 3 / Alt 5), not an oversight. Not revisiting.
 - **GitHub Actions pinned by major-version tag (`@v4`), not commit SHA** — standard supply-chain hardening step, skipped here. Low priority for a single-maintainer repo with no remote/external contributors yet; revisit once the repo has a remote and other contributors.
 
 ## Deferred from: code review of 1-3-domain-entities-zod-schemas (2026-08-03)
@@ -70,7 +70,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - ~~**No `setPalette` — a roster change cannot update the LUT the renderer holds**~~ — **✅ Closed in Story 2.10 (2026-08-27), on evidence, no code change.** The premise was written when nothing mutated a roster; Story 2.10 is the first that does, and the entry does NOT hold against the code as it stands. `<BattlePage>`'s `palette` memo depends on `[rosterIds, organisms]`, so an add mints a **new** `RefToFillGroup` identity; `EditDish`'s construction effect (`PetriDishCanvas.tsx`) lists `palette` among its three deps and its cleanup drops the retained renderer — so the new identity **reconstructs** the renderer and calls `drawFull(grid)` with the new LUT. Proven, not assumed: `PetriDishCanvas.test.tsx`'s "repaints a ref that was out-of-range in its OWN colour once a roster mutation gives palette a new identity (AC6)" builds a grid cell carrying a ref that is out-of-range under the FIRST palette identity (warns once, per Decision I.4), then rerenders with a second identity that brings it in range — asserting a SECOND `drawFull` call and the cell's own `displayColorAt` fillStyle, with no further warning. `apps/web/e2e/battleRoute.spec.ts`'s "adds an organism from the library, paints it…" pins the same claim end to end, with a real pointer and real geometry. The residual this buys, recorded rather than hidden: **one full `drawFull` repaint per add** (the dirty baseline `paintedGridRef` is re-primed by it, not incrementally updated) and the construction effect's cleanup **nulls `strokeRef`**. ⚠️ **Corrected by this story's own code review (2026-08-27):** that second residual was recorded as "unreachable via the UI today because the add control lives in the sidebar, not on the canvas", and it is NOT. Multi-touch reaches it — one finger holds the dish (pointer capture is on the canvas, `touchAction: 'none'`), a second operates the sidebar `<select>`; `handlePointerDown`'s second-pointer reject only guards the canvas element itself. The cleanup nulls `strokeRef` **directly** instead of going through `endStroke`, so the cells painted so far are discarded with no undo entry AND `releasePointerCapture` never runs, leaving the rest of that gesture inert. The two sibling terminations disagree deliberately — the resize effect commits (`endStroke(true)`), the grid effect discards (`endStroke(false)`) — so which one a PALETTE change should follow is a policy call Stories 2.14 and 2.15 inherit, not a local patch. ~~**Raised to Sidiar as a decision-needed finding on the Story 2.10 PR.**~~ **✅ Decided by Sidiar (2026-08-27): option (b) — discard, properly.** The cleanup now calls the shared `endStrokeRef.current(false)` rather than nulling `strokeRef` itself, so the cells are still discarded (unchanged behaviour, and consistent with the grid effect's mid-stroke policy) but pointer capture is released, which is the half that was actually broken. Option (a) — commit, following the resize effect — was not taken: a resize does not change grid CONTENT, and the argument that makes the grid effect discard applies here too. See the construction-effect cleanup entry below for the full record; the first residual (one full `drawFull` repaint per add) stands and is not a defect. Adding a `setPalette` to `GridRenderer` — which would have meant widening the RFC-002 frozen contract — was therefore never necessary and was not done.
 
-- **`groupByColourState`'s per-frame allocation profile** — a `number[]` per group, plus `Array.from` + `sort` + an object spread on every call, in the function the 60 FPS budget ultimately rests on. Correctness is not in question and Epic 1 calls it once per tile; the concern is Epic 3's 60 Hz loop. Deliberately pre-emptive — **revisit with Story 3.7**, which owns `vitest bench` and the 100×60 performance gate and is the first place a number would justify a change.
+- **`groupByColourState`'s per-frame allocation profile** — a `number[]` per group, plus `Array.from` + `sort` + an object spread on every call, in the function the 60 FPS budget ultimately rests on. Correctness is not in question and Epic 1 calls it once per tile; the concern is Epic 3's 60 Hz loop. Deliberately pre-emptive — **revisit with Story 3.7**, which owns `vitest bench` and the 100×60 performance gate and is the first place a number would justify a change. — **✅ CLOSED in Story 3.7: measured, no change needed.** At the NFR-1.1 baseline (100×60, 20 organisms, 20 distinct colour tokens, a grid stepped 50 cycles so the age ramp is live) the whole function costs **~0.07 ms** — ~0.4% of a 16.667 ms frame, against the ~5.5–5.7 ms the engine step next door spends after FD7 (figure re-taken by the story's code review on the corrected, non-collapsing repaint fixture; the 0.044–0.048 first recorded was measured on a dish that had collapsed to 7 organisms). The allocation profile this entry describes is real and is a rounding error at the scale that matters. `apps/web/lib/canvas/repaintDecision.bench.ts` keeps the number honest from here on; `docs/implementation-artifacts/performance-baseline-validation.md` carries the full table.
 
 - **`resize()` accepts NaN or fractional `cols`/`rows` unvalidated** — `resize({cols: NaN, rows: 60})` makes `drawWidth`/`originX` NaN, every rect draws at NaN, and the canvas goes blank with no error. Upstream the dimensions are schema-validated ({50×30, 100×60} only, Decision A), so this is only reachable through a caller bug, and there is no caller yet. ~~**Revisit with Story 2.14** (edit-mode grid resize), the first story to call `resize()` with a genuinely new size.~~ ⏸ **Re-deferred by Story 2.14 (2026-08-29), premise CORRECTED: 2.14 is NOT that story, and no such story exists yet.** A grid-dimension change does not reach `resize()` at all — `size` is one of `EditDish`'s three construction dependencies, so the construction effect tears the renderer down and builds a NEW one at the new size (`PetriDishCanvas.tsx`), which `PetriDishCanvas.test.tsx`'s "reconstructs the renderer ONCE and full-repaints ONCE" now asserts directly (`expect(resize).not.toHaveBeenCalled()`). The only `resize()` caller is still the `ResizeObserver` callback, which passes the CURRENT `size` unchanged for a canvas-box change — and its effect's deps are `[size]`, so the observer it registers always belongs to a renderer constructed at that same size. `resize()` therefore still has no new-size caller anywhere, and every value it receives is the schema-validated one the renderer was built with. **Pick this up in Story 3.16** (Play-mode ephemeral resize), whose {150×90, 200×120} expansion is the first design that might legitimately want a re-layout without a reconstruction — or sooner if any story adds a `resize()` call that changes `cols`/`rows`.
 
@@ -198,9 +198,9 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **`applyDevicePixelSizing`'s `dpr²` exposure survives for `static` tiles repainted at a 0-width box** — the residual of the 1.11 review item Story 2.3 closed by documentation rather than by re-engineering. The anti-double-scaling guard compares `canvas.width` against the *instance's* `backingWidth`, so it only ever matches on a renderer that outlives one paint. `<PetriDishCanvas variant="static">` constructs a renderer per paint (Story 1.11 forced decision 2), so on any repaint where `canvas.clientWidth` reads 0 — an ancestor `display:none`, a collapsed layout, a `ResizeObserver` notification for a 0×0 box — the backing store becomes `cssPx * dpr²`, then `dpr³`. Not reachable in the current Gallery layout, which never produces a 0-width repaint, and the caller-side guard (`PetriDishCanvas` ignores a notification whose `contentRect` matches the box last rasterised) narrows the window further. The fix, if it is ever needed, is to make the guard instance-independent by stamping the CSS box the backing store was computed from onto the canvas element (a `data-*` attribute or an expando), which is renderer state living outside the renderer — worth doing only when a real 0-width repaint exists to justify it. **Revisit if a static tile is ever observed rendering at the wrong scale**, or with Story 3.18 (fullscreen re-layout) if that path introduces a 0-width transition.
 
-- **`drawFull` re-primes the whole colour-state baseline on every call — O(cells) plus one allocation per grid shape** — `resetDirtyState()` sweeps all `width * height` cells through `colourStateAt` after every full repaint, and `resize()`/`setGridLines()` both route through it. At 100×60 that is a 6000-iteration pass and a 12 KB `Uint16Array`, which is affordable precisely because it runs on mount/resize/toggle and never on the per-edit `draw` path. Epic 3 changes the shape of that claim: **Decision D.3 repaints after every step**, and if Story 3.8's loop reaches for `drawFull` rather than `markDirty` + `draw`, this sweep lands at the cycle rate. Correctness is not in question. **Revisit with Story 3.7** (the `vitest bench` harness and the 100×60 performance gate), which is the first place a measurement would justify a change — and check Story 3.8's loop calls `draw`, not `drawFull`, while you are there.
+- **`drawFull` re-primes the whole colour-state baseline on every call — O(cells) plus one allocation per grid shape** — `resetDirtyState()` sweeps all `width * height` cells through `colourStateAt` after every full repaint, and `resize()`/`setGridLines()` both route through it. At 100×60 that is a 6000-iteration pass and a 12 KB `Uint16Array`, which is affordable precisely because it runs on mount/resize/toggle and never on the per-edit `draw` path. Epic 3 changes the shape of that claim: **Decision D.3 repaints after every step**, and if Story 3.8's loop reaches for `drawFull` rather than `markDirty` + `draw`, this sweep lands at the cycle rate. Correctness is not in question. **Revisit with Story 3.7** (the `vitest bench` harness and the 100×60 performance gate), which is the first place a measurement would justify a change — and check Story 3.8's loop calls `draw`, not `drawFull`, while you are there. — **✅ CLOSED in Story 3.7: measured, affordable, and the `draw`-vs-`drawFull` question is answered with both numbers.** The O(cells) re-prime costs **~0.08 ms** at 100×60 — 0.5% of a 16.667 ms frame — so it would be affordable even at the cycle rate Decision D.3 implies. On *decision* cost alone `drawFull` is in fact CHEAPER (groupByColourState ~0.07 + this ~0.08 ≈ 0.15 ms) than the dirty path's UPPER BOUND with every cell marked and every occupied cell reading as changed (**~0.7 ms**), because `markDirty` allocates a coordinate per cell and routes it through a `Set`. ⚠️ **The recommendation is still `draw`**, for the half no off-browser harness can measure: `draw` touches the canvas only for cells whose colour state actually changed, while `drawFull` repaints the whole background, every cell and every grid line every frame — and jsdom has no canvas to rasterize into. **Story 3.8 now has both numbers instead of an assumption**; if it takes `drawFull` it should say so against these figures and measure the paint in a browser. Full table: `docs/implementation-artifacts/performance-baseline-validation.md`.
 
-- **The dirty path's grid-line restoration redraws four bar segments per repainted cell, two of which are guaranteed no-ops** — `restoreGridLinesOver()` redraws the left, right, top and bottom bars bordering each dirty cell. Only the left and top bars actually fall inside the filled cell rect (the rect spans `[col * cellSize, (col+1) * cellSize)`); the right and bottom bars land on the *next* cell's first pixel, which was never overpainted — except on the last column/row, where the closing-bar clamp pulls them back inside and they are load-bearing. So two `fillRect`s per cell are redundant everywhere but the grid's right and bottom edge. Kept deliberately: the four-bar form is trivially the same geometry `drawGridLinesInto` produces, and a conditional version has to encode the clamp's edge case correctly to stay correct at all. The cost is 4 rather than 2 `fillRect`s per painted cell — invisible for a click, ~2x the line-restoration call count for a long drag stroke. **Revisit with Story 3.9 / 3.7** if the playback batching work measures it as material; the alternative is a 9-argument `drawImage` of the cached overlay's sub-rectangle, which needs both the `Canvas2D` alias and `RecordingContext2D.drawImage` widened.
+- **The dirty path's grid-line restoration redraws four bar segments per repainted cell, two of which are guaranteed no-ops** — `restoreGridLinesOver()` redraws the left, right, top and bottom bars bordering each dirty cell. Only the left and top bars actually fall inside the filled cell rect (the rect spans `[col * cellSize, (col+1) * cellSize)`); the right and bottom bars land on the *next* cell's first pixel, which was never overpainted — except on the last column/row, where the closing-bar clamp pulls them back inside and they are load-bearing. So two `fillRect`s per cell are redundant everywhere but the grid's right and bottom edge. Kept deliberately: the four-bar form is trivially the same geometry `drawGridLinesInto` produces, and a conditional version has to encode the clamp's edge case correctly to stay correct at all. The cost is 4 rather than 2 `fillRect`s per painted cell — invisible for a click, ~2x the line-restoration call count for a long drag stroke. **Revisit with Story 3.9 / 3.7** if the playback batching work measures it as material; the alternative is a 9-argument `drawImage` of the cached overlay's sub-rectangle, which needs both the `Canvas2D` alias and `RecordingContext2D.drawImage` widened. — **⏭️ Story 3.7 could NOT measure this, and says so rather than inventing a number.** The cost is entirely `fillRect` calls, i.e. RASTERIZATION, and jsdom's `getContext()` is unimplemented — a Vitest benchmark here would time a test double's method calls, not the browser's (story AC3/FD2). What Story 3.7 *can* state exactly is the call count the entry is really about: **4 `fillRect`s per repainted cell instead of 2**, deterministically, on every cell except the last column and row. Deciding it needs a real browser. **Stays open, now assigned to Story 3.9 alone** (the playback batching work), or to a Playwright measurement.
 
 ## Deferred from: code review of 2-3-renderer-dirty-region-editing-paths (2026-08-26)
 
@@ -334,7 +334,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 - **The search predicate does no Unicode normalisation and uses `toLowerCase`, not `toLocaleLowerCase`** — the review trimmed the query (the whitespace half was a live defect) but left these two. A decomposed "é" (NFD) never matches a precomposed one (NFC), and locale-sensitive casing (Turkish dotted/dotless i) is wrong under `toLowerCase`. Organism names are free user text, so both are reachable, just narrowly. `searchText.trim().normalize('NFC').toLocaleLowerCase()` against a likewise-normalised name is the whole fix. **Pick this up in whichever story next touches the search predicate**, or with Epic 6's i18n pass if one materialises.
 
-- **`filtered` is an unmemoised scan of the UNCAPPED workspace library on every render of `<OrganismSearchAdd>`** — `library.filter(...)` runs per render, and every keystroke re-renders the full `<option>` list. `<BattlePage>`'s own comment states the workspace library is uncapped (Decision G.3/M6), so unlike the 255-bounded `resolveSelectedTool` scan this has no upper bound at all. Not a measured problem — the list is tiny in every fixture — and recorded only because the sibling entry above (`resolveSelectedTool` re-derives over the whole roster) was annotated during this same story to say the search box did NOT introduce a per-render scan, which is true of `roster` and not of `library`. **Revisit with Story 3.7** (`vitest bench`), or the first time a workspace holds enough organisms to measure.
+- **`filtered` is an unmemoised scan of the UNCAPPED workspace library on every render of `<OrganismSearchAdd>`** — `library.filter(...)` runs per render, and every keystroke re-renders the full `<option>` list. `<BattlePage>`'s own comment states the workspace library is uncapped (Decision G.3/M6), so unlike the 255-bounded `resolveSelectedTool` scan this has no upper bound at all. Not a measured problem — the list is tiny in every fixture — and recorded only because the sibling entry above (`resolveSelectedTool` re-derives over the whole roster) was annotated during this same story to say the search box did NOT introduce a per-render scan, which is true of `roster` and not of `library`. **Revisit with Story 3.7** (`vitest bench`), or the first time a workspace holds enough organisms to measure. — **✅ CLOSED in Story 3.7: measured, no `useMemo` warranted.** Benched at `apps/web/lib/canvas/repaintDecision.bench.ts`'s `library-filter 1000 organisms` (the predicate copied verbatim from `<OrganismSearchAdd>`, the inner component of `OrganismRoster.tsx` where the scan lives): **~0.02–0.04 ms for a library of 1,000**, far past any realistic workspace. That is a scan that runs once per render, not in a loop; a `useMemo` would cost a dependency array and a cache to reason about in exchange for tens of microseconds. Annotated in code at the call site.
 
 - **The e2e AC6 paint check asserts a distinct-colour-count INCREASE, not the added organism's own colour** — `battleRoute.spec.ts`'s add/paint chain polls `distinctColorCount(canvas)` and asserts it grew. Any new colour satisfies that, so it proves "something painted", not "Conway's Classic painted in Conway's Classic's colour" as its comment claims. It also clicks the dish's geometric centre without first establishing that cell is empty — on a fixture where the centre is occupied and its colour occurs only there, the count could hold or fall against perfectly correct code. The real colour claim IS proven, at the unit level, by `PetriDishCanvas.test.tsx`'s `displayColorAt` assertion, which is why this is a coverage note and not a defect. **Pick this up in whichever story next touches this spec**, using the AR-42-permitted smoke-check pattern against a cell the test picks deliberately.
 
@@ -470,6 +470,21 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   (`CellSubject` is `readonly`), and a "has death rules" flag is a Story 3.4 surface change. Noted
   in code at both sites.
 
+  **✅ CLOSED in Story 3.7 — BOTH implemented, measured, and REVERTED.** The scratch `CellSubject`
+  was built (a local `MutableCellSubject` mapped type, no cast) and measured in an interleaved A/B
+  against `threePhaseStep.bench.ts`: **no difference at all** — 15.10 ms/cycle allocating vs
+  15.15 ms reusing, three pairs, inside a ±1.5 ms same-machine spread. V8's young-generation
+  allocation of a short-lived, stable-shape object is simply not what this loop costs, and keeping
+  the change would have opened a real seam (one aliased subject handed to every evaluator, silently
+  wrong for any caller that RETAINED it) for zero gain. The "has death rules" flag is bounded
+  without being built: **all of Phase 1 is 0.21 ms of a 14.5 ms cycle** (1.4%), and the flag skips
+  only the half of the roster with no `die` rule — ≤0.1 ms, under the harness's own run-to-run
+  spread, in exchange for a field on a Story 3.4 public surface. Both code comments now carry the
+  measurement. ⚠️ **Where the cycle went, PRE-FD7: Phase 2 was 98.5% of it**, and ~1.4 ms of that
+  was M12's per-condition `Object.hasOwn` guard — see the new entry below, which records FD7
+  removing it from the hot path (post-FD7 the cycle is ~6.7 ms and Phase 2 ~98% of that). `docs/implementation-artifacts/performance-baseline-validation.md` has the
+  numbers.
+
 ## Deferred from: code review of 3-6-phase-3-the-assembled-cycle (2026-09-10)
 
 - **Seed domain is not enforced by `createRng` / `createSeededRng`** — both mulberry32 copies hold
@@ -481,3 +496,111 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   negative seeds today, so rejecting them is a contract change to another package, and FD4 requires
   the pair to move together. Until then: mint with `Math.floor(Math.random() * 2 ** 32)`, and the
   reported seed IS the effective seed.
+
+## Deferred from: Story 3-7 performance harness (2026-09-10)
+
+- **✅ RESOLVED — M12's `Object.hasOwn` guard was re-measured at ~15x its recorded cost, and the fix
+  was authorized and landed in Story 3.7.** Re-measured against the real baseline (100x60, 20
+  organisms, 50 rules, interleaved A/B): the **operator `typeof` guards cost what M12 says**
+  (0 +/- 0.3 ms, below resolution — confirmed), and the **`Object.hasOwn` guard cost +1.4 ms/cycle** —
+  ~10% of the cycle against M12's recorded +0.091 ms. M12's figure was taken on a far smaller
+  evaluation count; the real baseline makes ~300,000 `hasOwn` calls per cycle.
+
+  **Sidiar authorized FD7** (2026-09-10): each condition is now compiled to a concrete
+  `(cell) => boolean` at session time (`compileEvaluators.ts`), resolving selector and predicate
+  once, so the hot path performs neither lookup and neither guard. Measured: **12.2-14.4 ms ->
+  5.7-6.1 ms per cycle, ~2.3x** — more than the guard alone, because the two dictionary lookups and
+  the per-call `.find`/`.every` closure allocations went with it. `architecture.md` **M12 was amended
+  in the same change** to record the corrected cost and the guards' new placement.
+
+  ⚠️ **`firstSatisfiedBy` and `operators` are unchanged and keep every guard.** The checks moved
+  rather than vanished: `validateSurvivalRules`'s `isCellProperty` **is**
+  `Object.hasOwn(cellSelectors, property)` and its `OPERATORS.includes` **is** the dictionary's
+  totality test, both run once per condition per battle. The invariant to preserve: **a caller is
+  either guarded per cell, or guarded once before its first cycle — never neither.** Story 4.15's
+  draft organism is the second case.
+
+  ❌ **Still out of scope, explicitly excluded from the authorization:** narrowing the candidate
+  organism set per cell. Semantics-bearing (M10/Decision C), needs its own story and its own
+  goldens. FD7 alone closed the gap, so it was not needed.
+
+- **✅ RESOLVED — the NFR-1.1 frame gate was red at 18.749 ms and now passes at 6.760 ms with 59.4%
+  headroom.** Story 3.7 halted at its FD6 terminal branch when `npm run ci` failed `bench:check` by
+  2.082 ms; both optimizations FD6 permitted had been built, measured (**0 ms** and **<=0.1 ms**) and
+  reverted. Nothing on FD6's "not allowed" list was touched then and nothing was touched after: the
+  budget is still `1000/60 = 16.667 ms`, the gate is still hard, the fixture is still 20 organisms /
+  50 rules pinned by a test, and 100x60 is still the only gated preset. The gap was closed by the
+  entry above (FD7) — a change of *mechanism* in the engine, not a relaxed threshold.
+
+  ✅ **CI measured it on PR #24 (run 34496827364): 12.046 ms on `ubuntu-latest`, 4.621 ms headroom
+  (27.7%)** — ~2.1× the laptop, inside the 2.4× the paragraph above allowed for. The runner's margin
+  is the one that gates; a ~4 ms/cycle regression there is red. Larger presets on the runner: 150×90
+  28.5 ms, 200×120 50.5 ms.
+
+- **✅ WITHDRAWN — `architecture.md` Decision A.4's performance model turned out to be RIGHT, once
+  the engine was.** Raised mid-story as a ~2.4x-optimistic estimate: A.4 states step cost *"~6 ms at
+  6,000 cells -> ~24 ms at 24,000"*, and the pre-FD7 engine measured **~14-16 ms** and **~55-61 ms**.
+  After FD7 (see above) the same two points measure **6.71 ms** and **23.87 ms** — within a few
+  percent of A.4's figures, and the shape (~O(N), ~3.6x for a 4x cell count) holds as it always did.
+  **No amendment proposed and none needed**; the flag is recorded as withdrawn rather than deleted,
+  because "the estimate was wrong" was a reasonable reading of the numbers for as long as they stood
+  and the next reader should see why it stopped being one. ⚠️ Worth carrying to **Story 3.16**: at
+  these numbers 150x90 (13.3 ms) also fits inside a 16.667 ms frame, and only 200x120 does not.
+
+- **🟡 `epics.md`'s Story 3.7 AC says the benchmark measures "`step()` + repaint"; off-browser there
+  is no repaint to measure.** Amended in the open (the M13 precedent, Story 3.3): the harness
+  measures **`step()` + the repaint DECISION** — `groupByColourState`, `colourStateAt`,
+  `selectDirtyCells`, the `refToFillGroup` LUT — because jsdom's `getContext()` is unimplemented and
+  a `GridRenderer` benchmark under Vitest times a test double. The rasterization half needs
+  Playwright or nothing; RFC-008 Risk 6 argues against putting browser timing on shared runners. The
+  AC's wording should follow the code.
+
+- **The `@gol/test-utils` production-import ESLint ban now exempts `apps/web/**/*.bench.ts`** — added
+  in Story 3.7 to the `no-restricted-imports` block ONLY (never the AR-46 colour block, whose
+  `ignores` list is deliberately not interchangeable with it). A `.bench.ts` is a non-production file
+  on the same terms as a `.test.ts`: nothing under `app/` imports one, so it is never in Next's build
+  graph and cannot reach the browser bundle, which is the failure that rule exists to prevent.
+  Recorded here because widening a boundary rule is a deliberate act, not a convenience. ⚠️ The
+  sibling entry above still stands unchanged: the ban covers `apps/web` only, and a stray
+  `@gol/test-utils` import inside `packages/simulation/src/*.ts` non-test code would still lint clean.
+
+## Deferred from: code review of 3-7-performance-harness-coverage-gate-flip (2026-09-10)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers
+(Blind Hunter, Edge Case Hunter, Acceptance Auditor). Patches applied are recorded in the story's
+Review Findings; these are the items consciously left open.
+
+- **✅ RESOLVED — RFC-004 amended to the post-FD7 hot path (Sidiar, option (a), 2026-09-13).** The
+  review found RFC-004 still describing the pre-FD7 engine — §1.4's reference code at "+0.091
+  ms/cycle", §2.3/§3.5 with the evaluators as `firstSatisfiedBy(rules.filter(...))` closures, Risk 2
+  with "one primitive underlies all decisions" — while `architecture.md` M12's amendment named
+  RFC-004 as owner and both precedents (M14 `a645d31`, M15 `75dbccd`) had amended the RFC in the
+  same commit. Sidiar chose to amend on the branch. Each of the four sections now carries an
+  "AMENDED by M12's 2026-09-10 amendment (Story 3.7)" marker in the M14/M15 style: §1.4 records
+  the re-measured +1.4 ms/cycle and that the function keeps its guards while the loop no longer
+  routes through it; §2.3 shows the compiled pair and keeps the old form as the readable
+  equivalent; §3.5 states what "compiled" now means, why the sweep makes it safe, and the measured
+  12.2–14.4 → 5.7–6.1 ms; Risk 2 speaks of one *semantics* with two realizations.
+- **`bench-results.json` has no freshness tie to the tree** — the same class as the recorded
+  `bundle:check` entry above: `bench:check` reads whatever file exists, so a developer who runs it
+  alone gates a number from an earlier tree. In the `ci` chain and in `ci.yml` the gate only runs
+  after a green `bench` in the same job, and a bench that failed writes an EMPTY report the gate
+  refuses (verified during review: a failed suite → "contains zero benchmark results" → exit 1).
+  Revisit together with the bundle entry if a freshness stamp is ever added to either.
+- **The gate reads tinybench's `mean`; `p99`/`max` are in the same JSON and discarded.** The
+  budget derivation is about the frame's *work* (one step + one repaint), not its distribution, so
+  the mean is the right estimator of that work — but a tail statistic would catch a jittery engine
+  a mean hides. At 65% headroom the two agree; revisit if CI variance ever makes the gate flap,
+  and change the mechanism (which statistic) rather than the threshold.
+- **`createBenchmarkFill` does not validate its arguments** — NaN/fractional/non-positive `cols`
+  or `rows`, a `fillPermille` outside 0..1000 or a `rosterSize` over 255 produce a wrong-size or
+  empty grid that benches trivially. Every caller today passes the pinned preset table (now itself
+  pinned by `benchmarkRoster.test.ts`), so this is the caller-bug class the `resize()` NaN entry
+  above deferred on the same grounds.
+- **apps/web has no `benchmark.exclude`** — `vitest bench` does not inherit `test.exclude`, so a
+  `*.bench.ts` under `e2e/`, `scripts/` or `out/` would run and land in the gated report. None
+  exists; add the exclude list when one does.
+- **`repaint-dirty-path` is an upper bound, labelled as one** — the baseline is zeroed per
+  iteration so every occupied cell reads as changed, and the `Uint16Array` allocation is counted
+  although the renderer allocates it once per grid shape. A live-frame number (diff against the
+  previous frame, ~a fraction of cells changed) is Story 3.8's to take once its loop exists.

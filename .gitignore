@@ -9,6 +9,12 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# Benchmark reports (Story 3.7) — `vitest bench --outputJson` writes one per
+# workspace and `scripts/check-bench-budget.mjs` reads them. Never committed: a
+# committed measurement is a number nobody re-took, and turbo runs `bench` with
+# "cache": false precisely so every run measures this tree.
+bench-results.json
+
 # Test / e2e artefacts (Story 1.2)
 playwright-report/
 test-results/

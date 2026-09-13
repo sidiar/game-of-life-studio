@@ -175,19 +175,51 @@ of RFC-003 Decision 2, Story 1.9 review 2026-08-07)*
 ### Testing Rules
 
 **Current state:** Vitest (+ v8 coverage), RTL, and Playwright are installed (Story 1.2).
-The coverage gate flips on in **Story 3.7** — the v8 provider and per-package configs exist,
-but no ≥90% threshold is enforced yet and `passWithNoTests: true` keeps empty packages green.
+**The coverage gate is LIVE as of Story 3.7**, and `passWithNoTests` is gone from every package —
+a run that matches zero test files now fails, in all four workspaces.
 
-- `npm test` runs real Vitest (`turbo run test`). Empty packages pass via `passWithNoTests`, so
-  a green run still does not mean a given package has tests — check the per-package count.
+- ⚠️ **`coverage.include` is the gate, and it had to land before any threshold.** Vitest 4 reports
+  only files *loaded during the run* unless `coverage.include` says otherwise (`coverage.all` was
+  removed in v4). Measured: an untested file added to `packages/domain/src` is **absent from the
+  report entirely** without it, and listed at 0% with it. A threshold on top of the old config would
+  have been a floor on the tested subset, not on the package. Every gated package sets
+  `include: ['src/**/*.ts']` + `exclude: ['**/*.test.ts', '**/*.bench.ts']`.
+- ⚠️ **`*.bench.ts` is excluded from coverage everywhere** — `vitest run` never executes it (that
+  glob belongs to `vitest bench`), so it would sit in the denominator at 0% forever.
+- ❌ Never `coverage.thresholds.autoUpdate` — it rewrites the config with whatever the last run
+  produced, turning a floor into a record.
 
 **Coverage is a floor on the core, not a target everywhere**
 
-| Scope | Gate |
-|---|---|
-| `packages/domain`, `packages/simulation` | **≥90%** (NFR-5.1) |
-| `packages/persistence` | ~80% — carried by round-trip tests |
-| `apps/web` | **no gate** — deliberate counter-metric |
+| Scope | Gate | Mode |
+|---|---|---|
+| `packages/domain`, `packages/simulation` | **≥90%** (NFR-5.1, AR-39) | **per file** — free today, both are at 100% on every file |
+| `packages/persistence` | **~80%** — carried by round-trip tests | aggregate |
+| `packages/test-utils` | **~80%** — decided in Story 3.7; AR-39 names it nowhere | aggregate (`mockWorkspace.ts` is at 75% branches, so per-file would fail) |
+| `apps/web` | **no gate** — deliberate counter-metric | — |
+
+**Performance is gated too, as of Story 3.7** (AR-43 / NFR-1.1)
+
+- `npm run bench` (`vitest bench`, **never Turbo-cached** — a replayed benchmark is a lie) then
+  `npm run bench:check` (`scripts/check-bench-budget.mjs`). Budget: **`1000/60` = 16.667 ms** for
+  `step() + repaint decision` at 100×60 × 20 organisms — derived from NFR-1.1 + Decision D.2/D.3,
+  never chosen. Larger presets are measured and printed, **never gated** (Decision A.4).
+- ⚠️ **The benchmark FIXTURE is part of the budget.** `createBenchmarkRoster(20)` — 20 organisms,
+  **50 rules** — is pinned by `packages/test-utils/src/benchmarkRoster.test.ts`, because Phase 2
+  costs `cells × organisms × rules-until-first-match` and a cheaper roster is a looser gate with no
+  diff to review.
+- ✅ **Measured 5.6–5.8 ms locally (65–67% headroom) and 12.046 ms on `ubuntu-latest` (4.6 ms,
+  27.7% headroom — the margin that actually gates)** against the 16.667 ms budget. It was 18.749 ms
+  and RED
+  until Story 3.7's FD7 landed (conditions compiled to concrete predicates at session time), which
+  took the cycle from ~14 ms to ~6.7 ms and amended **M12** accordingly. If the gate ever goes red
+  again, the budget does **not** move — change the mechanism or fix the code. Every number:
+  `docs/implementation-artifacts/performance-baseline-validation.md`.
+- ⚠️ **Phase 2 is ~98% of the cycle** (5.9 ms of the 6.0 ms phase sum; the assembled step
+  measures ~6.7 ms because the three-phase split is taken per phase, not per cycle). Any engine performance work that is not
+  `birthSurvivalPhase` work is measurement theatre at these ratios. The largest remaining lever —
+  not evaluating every organism at every cell — is a **semantics-bearing** change to M10/Decision C
+  and needs its own story and its own goldens.
 
 - Do **not** chase 100%, and never write a test whose only purpose is to raise the number.
   Coverage-padding tests are rejected in review.
@@ -268,7 +300,8 @@ are active on `apps/web`. ESLint is pinned to **v9** — v10 breaks `eslint-conf
 `main` branch, commits pushed straight to it. **No PR flow exists**, so branch naming is still
 deliberately unspecified; don't invent one. GitHub Actions **runs on every push** to `main`
 (`.github/workflows/ci.yml`, Story 1.2): a `quality` job (typecheck → lint → format:check →
-coverage → build → bundle) and an `e2e` job gated on it. **`npm run ci` is the local mirror of
+spec:check → boundary:check → coverage → build → bundle → bench → bench:check) and an `e2e` job
+gated on it. **`npm run ci` is the local mirror of
 that gate — keep the two in lockstep.** Run the full gate before calling a change done; the
 pre-commit hook (lint-staged + typecheck) is the fast subset only.
 
@@ -315,7 +348,8 @@ projects under `NewJob/`), so it never shows up in this repo's `git status`.
 
 - "Tested" means the story's own verification checklist actually ran — not that typecheck passed.
   Report failures with their output; never state a step ran when it didn't.
-- `npm run ci` runs the full local gate (typecheck → lint → coverage → build → bundle → e2e);
+- `npm run ci` runs the full local gate (typecheck → lint → format:check → spec:check →
+  boundary:check → coverage → build → bundle → bench → bench:check → e2e);
   it is the closest local proxy for CI until a remote exists. Report its actual result.
 
 ### Critical Don't-Miss Rules
@@ -414,4 +448,4 @@ Following instinct here produces code that compiles, passes tests, and violates 
   toolchain stops being news; the `npm test` "vacuously green" warning was retired 2026-08-07,
   when the remote went live and CI started running for real.
 
-Last updated: 2026-08-08
+Last updated: 2026-09-10

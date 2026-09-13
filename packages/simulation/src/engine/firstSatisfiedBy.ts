@@ -21,18 +21,31 @@ import type { Rule, RuleSet, Condition, Selectors } from './rule';
 // exists to prevent, just from a different direction. (This was written the cheap way first; the
 // test below is what caught it.)
 //
-// Measured cost of doing it properly, on the hot path's shape: 0.128 -> 0.219 ms/cycle, +0.091 ms
-// against the 16.7 ms NFR-1.1 frame budget — ~0.5%. Paid deliberately, because the alternative is
-// not a wrong answer but a thrown exception. operators.ts closes its half of the same
-// inherited-key class at the root with a null prototype; a CALLER's dictionary is not ours to
-// reshape, so it is checked at the point of use instead.
+// ⚠️ RE-MEASURED IN STORY 3.7, AND THE COST IS 15x WHAT M12 RECORDS. M12 states this guard at
+// 0.128 -> 0.219 ms/cycle, +0.091 ms against the 16.7 ms NFR-1.1 frame budget (~0.5%). Measured
+// against the real harness at the real baseline — 100x60, 20 organisms, 50 rules, the guard removed
+// and restored in an interleaved A/B, four pairs — it is **+1.4 ms/cycle**: ~10% of the cycle and
+// 8% of the frame budget. M12's figure was taken on a far smaller evaluation count; this loop makes
+// roughly 300,000 `Object.hasOwn` calls per cycle (120,000 subjects x ~2.5 conditions), at ~4.7 ns
+// each. The typeof guards in operators.ts re-measure at 0 +/- 0.3 ms — below resolution, exactly as
+// M12 says.
 //
-// The one-pass key sweep at rule-COMPILE time now exists — validateSurvivalRules in ../session/,
-// which rejects an unknown property once per battle (Story 3.4). ⚠️ This guard STAYS anyway: the
-// sweep only covers callers that go through that compile step, this layer is parametric over an
-// arbitrary subject and reusable by callers that do not, and M12 says the removal is re-measured
-// with Story 3.7's harness rather than argued. Removing it here would trade a measured 0.5% for
-// an unmeasured crash surface.
+// ⚠️ THE GUARD STAYS HERE — but the 60 FPS loop no longer comes through this function. On Sidiar's
+// authorization (2026-09-10, M12 amended in the same change) ../session/compileEvaluators.ts now
+// compiles each condition to a concrete `(cell) => boolean`, resolving selector and predicate ONCE
+// per rule per session, so the compiled path performs neither lookup and neither guard. Measured
+// effect on the assembled cycle: 12.2-14.4 ms -> 5.7-6.1 ms, ~2.3x.
+//
+// This function is NOT the compiled path and keeps every guard, because it is parametric over an
+// arbitrary subject (AR-16) and is public API reachable by callers that never compile a session —
+// `../gol/resolveCellAction.ts` is one today. The invariant, stated so a later story cannot erode it
+// by accident: **a caller is either guarded per cell HERE, or guarded once before its first cycle by
+// `validateSurvivalRules`, but never neither.** Story 4.15's draft organism is the second case: it
+// goes through `compileSession`, whose sweep runs this exact `Object.hasOwn` check per condition,
+// once.
+//
+// operators.ts closes its half of the same inherited-key class at the root with a null prototype; a
+// CALLER's dictionary is not ours to reshape, so it is checked at the point of use instead.
 export function conditionIsSatisfiedBy<S, Props extends string>(
   condition: Condition<Props>,
   subject: S,

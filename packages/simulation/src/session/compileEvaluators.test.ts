@@ -500,3 +500,75 @@ function deepFreeze<T>(value: T): T {
   }
   return value;
 }
+
+describe('FD7: the compiled path is guarded once, at this boundary (Story 3.7 code review)', () => {
+  // `compileCondition` indexes `cellSelectors` and `operators` with NO per-cell guard — the whole
+  // point of FD7. These tests pin the property that makes that safe: nothing malformed can reach
+  // the compiled closures, because `compileSession` rejects it here, before any evaluator exists.
+  // The per-cell forms of these exact cases live in ../engine/rulesEngine.test.ts (fail closed);
+  // this is their once-per-session counterpart (fail loud).
+  it('rejects an inherited-key property before compiling — never an evaluator that throws per cell', () => {
+    // `'toString' in cellSelectors` is true (frozen literal, inherits Object.prototype), so a
+    // `typeof`/`in` guard would let this through to a compiled `Object.prototype.toString` call.
+    const organism: CompilableOrganism = {
+      id: 'o',
+      survivalRules: [
+        {
+          ...rule(),
+          conditions: [
+            {
+              property: 'toString',
+              operator: 'eq',
+              pattern: 1,
+            } as unknown as SurvivalRule['conditions'][number],
+          ],
+        },
+      ],
+    };
+    expect(() => compileSession([organism])).toThrow(/"toString" is not a cell property/);
+  });
+
+  it('rejects a retired operator before compiling — `ne` never reaches a compiled closure', () => {
+    const organism: CompilableOrganism = {
+      id: 'o',
+      survivalRules: [
+        {
+          ...rule(),
+          conditions: [
+            {
+              property: 'age',
+              operator: 'ne',
+              pattern: 1,
+            } as unknown as SurvivalRule['conditions'][number],
+          ],
+        },
+      ],
+    };
+    expect(() => compileSession([organism])).toThrow(/"ne" is not one of the six operators/);
+  });
+
+  it('reads `survivalRules` ONCE per organism and compiles the array it validated', () => {
+    // An accessor-backed organism that answers the first read with a valid list and every later
+    // read with a malformed one. If compilation re-read the property, the sweep would pass on the
+    // first array and the compiler would close over the second — an `undefined` selector, called
+    // per cell. Snapshotting the reference is what makes "guarded once" hold.
+    let reads = 0;
+    const valid: SurvivalRules = [rule()];
+    const malformed = [
+      { ...rule(), conditions: [{ property: 'nope', operator: 'eq', pattern: 1 }] },
+    ] as unknown as SurvivalRules;
+    const organism: CompilableOrganism = {
+      id: 'shifty',
+      get survivalRules(): SurvivalRules {
+        reads += 1;
+        return reads === 1 ? valid : malformed;
+      },
+    };
+
+    const session = compileSession([organism]);
+    expect(reads).toBe(1);
+    const evaluators = evaluatorsFor(session, 1);
+    expect(() => evaluators.resolveBirthSurvival(cell({ state: 'alive' }))).not.toThrow();
+    expect(evaluators.resolveBirthSurvival(cell({ state: 'alive' }))).toBe('survive');
+  });
+});

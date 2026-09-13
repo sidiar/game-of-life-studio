@@ -373,6 +373,21 @@ export class GridRenderer {
    * grid. The sweep is O(cells) and allocates once per grid shape — affordable because it runs on
    * a full repaint (mount, resize, grid-lines toggle), never on the per-edit `draw` path this
    * story exists to keep cheap.
+   *
+   * ⚠️ MEASURED IN STORY 3.7, because Decision D.3 repaints after EVERY step and deferred-work.md
+   * (2.3 review) asked whether that would put this sweep on the cycle rate. At 100x60 it is
+   * **~0.08 ms** — 0.5% of a 16.67 ms frame — so `drawFull` on the playback path would be
+   * affordable even though it is not the recommended call. That entry also asked this story to
+   * confirm Story 3.8's loop calls `draw` rather than `drawFull`: on the DECISION cost alone
+   * `drawFull` is CHEAPER (groupByColourState ~0.07 + this ~0.08 = ~0.15 ms) than the dirty path's
+   * UPPER BOUND — every cell marked and every occupied cell reading as changed, ~0.7 ms — because
+   * `markDirty` allocates a coordinate per cell and routes it through a `Set`. (Figures are the
+   * report's, taken on the pinned 30% fill after Story 3.7's review corrected the fixture; a live
+   * frame diffs against the previous one and sits below that bound.) The recommendation still
+   * stands the other way — `draw` repaints
+   * only the cells that changed, and RASTERIZATION is the half no off-browser harness can measure
+   * (jsdom has no canvas) — but Story 3.8 now has both numbers instead of an assumption. See
+   * docs/implementation-artifacts/performance-baseline-validation.md.
    */
   private resetDirtyState(grid: RenderableGrid): void {
     this.dirtyCells.clear();
@@ -514,6 +529,17 @@ export class GridRenderer {
    * Redraws just the four bar segments bordering each repainted cell, at the same clamped
    * coordinates `drawGridLinesInto` uses — so a restored border is byte-identical to the one a
    * full repaint would have drawn, including the closing bars pulled back inside the rectangle.
+   *
+   * ⚠️ THE TWO REDUNDANT BARS ARE NOT MEASURABLE HERE, and Story 3.7 says so rather than inventing
+   * a number (deferred-work.md, 2.3 review: two of the four bars land on the next cell's first
+   * pixel and are no-ops everywhere but the grid's right and bottom edge). The cost is entirely
+   * `fillRect` calls, i.e. RASTERIZATION — and under Vitest there is no canvas to rasterize into
+   * (jsdom's `getContext()` is unimplemented), so a benchmark would time a test double's method
+   * calls, not the browser's. What CAN be stated exactly is the call count, which is what the entry
+   * is really about: **4 `fillRect`s per repainted cell instead of 2**, deterministically, on every
+   * cell except the last column and row. Deciding it needs a real browser (Story 3.9's batching
+   * work, or a Playwright measurement), not this harness. Kept as-is; see FD2 in
+   * docs/implementation-artifacts/performance-baseline-validation.md.
    *
    * Bar segments rather than a sub-rectangle `drawImage` of the cached overlay: the 9-argument
    * `drawImage` overload is outside the `Canvas2D` alias this file deliberately narrows to, so

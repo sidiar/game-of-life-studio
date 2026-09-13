@@ -88,6 +88,18 @@ export function ageShadeOfGroup(groupId: number): number {
   return groupId % 8;
 }
 
+/**
+ * ⚠️ ALLOCATION PROFILE — MEASURED IN STORY 3.7, and the answer was "leave it alone"
+ * (deferred-work.md, 1.8 review, which parked "a `number[]` per group, plus `Array.from` + `sort` +
+ * an object spread on every call" for the first story with a harness). At the NFR-1.1 baseline —
+ * 100x60, 20 organisms, 20 distinct colour tokens, the pinned 30% fill with every (token, shade)
+ * group this roster can produce populated (55) — this whole function costs **~0.07 ms**, about
+ * 0.4% of a 16.67 ms frame and ~1% of the ~5.5-5.7 ms the engine step next door spends after FD7.
+ * Redesigning it would buy back a rounding error. (The canonical figures are the report's; this
+ * comment quotes them rather than a run of its own.)
+ * The per-frame repaint decision is not where the frame budget goes; Phase 2 of the engine is.
+ * `lib/canvas/repaintDecision.bench.ts` keeps the number honest from here on.
+ */
 export function groupByColourState(grid: RenderableGrid, lut: RefToFillGroup): FillGroup[] {
   // groupId -> in-progress group. A Map (not a 160-slot array) because most grids use only a
   // handful of the 160 possible groups, and insertion order doesn't matter — the result is

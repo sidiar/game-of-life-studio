@@ -3,6 +3,10 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // apps/web component/unit tests run in jsdom via React Testing Library.
+//
+// ⚠️ NO `passWithNoTests` (removed in Story 3.7, story FD4). It was inherited from the Story 1.2
+// scaffold rather than chosen: with it on, a typo in the `include` glob below is a GREEN run over
+// zero tests, and this is the one workspace with no coverage gate to notice the absence.
 // @vitejs/plugin-react supplies the React 19 automatic JSX transform for tests
 // (Next's own SWC transform doesn't apply under Vitest).
 export default defineConfig({
@@ -17,7 +21,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
-    passWithNoTests: true,
     // Unit/component tests only. Playwright e2e specs live in e2e/ and must NOT
     // be picked up by Vitest (they import @playwright/test, a different runner).
     include: ['**/*.test.{ts,tsx}'],
@@ -28,7 +31,17 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      // apps/web has no coverage gate by design (RFC-008 Decision 3 counter-metric).
+      // Reported, never gated. apps/web has NO coverage threshold BY DESIGN (RFC-008 Decision 3 /
+      // Alt 5) — it is the Metric 4 counter-metric, the deliberate answer to "coverage everywhere"
+      // becoming a target. Story 3.7 turned the gate on for the three packages and left this one
+      // alone on purpose; do not add a threshold here.
+      //
+      // `include` is set anyway, for the reporter rather than for a gate: without it Vitest 4 lists
+      // only the files a test loaded, which makes the printed number quietly flattering. `*.bench.ts`
+      // is excluded because `vitest run` never executes it (it is `vitest bench`'s glob), so it
+      // would sit at 0% forever.
+      include: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+      exclude: ['**/*.test.{ts,tsx}', '**/*.bench.{ts,tsx}'],
     },
   },
 });

@@ -10,6 +10,21 @@ export { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID } from '@gol/domain';
 
 export { emptyGrid, gridFromPattern, placePattern } from './gridBuilders';
 
+// The AR-43 performance fixture (Story 3.7). Exported rather than kept inside the bench file
+// because TWO benches in two workspaces measure the same battle — @gol/simulation's engine step
+// and apps/web's repaint decision — and a gate that sums them is only meaningful if both ran
+// against one roster. `benchmarkRoster.test.ts` pins its shape; see the file header on why that
+// shape is a gate parameter.
+export {
+  BENCHMARK_FILL_PERMILLE,
+  BENCHMARK_GATED_PRESET,
+  BENCHMARK_PRESETS,
+  BENCHMARK_ROSTER_SIZE,
+  BENCHMARK_RUN_OPTIONS,
+  createBenchmarkFill,
+  createBenchmarkRoster,
+} from './benchmarkRoster';
+
 export { createFakeRepositories } from './fakeRepositories';
 export type { FakeSeed } from './fakeRepositories';
 

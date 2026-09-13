@@ -38,11 +38,22 @@ import { createNeighborTally, sameNeighbors, tallyNeighbors } from './neighborTa
  * `=== 'survive'` for the FD4 rule below and passing the action through otherwise means the
  * unreachable case never has to be handled or "tightened" away.
  *
- * ⚠️ COST, for Story 3.7's benchmark rather than for now: this loop allocates one `CellSubject`
- * literal per (cell x organism) — ~120,000 a cycle at the NFR-1.1 baseline — and `countNeighbors`
- * in Phase 1 allocates one `NeighborCounts` per occupied cell. `CellSubject` is `readonly`, so a
- * reused scratch subject would be a deliberate seam, not a local tweak; it is the first candidate
- * to measure, and the repo optimises on measurement (deferred-work.md, Story 3.5 review).
+ * ⚠️ COST — MEASURED IN STORY 3.7, and the answer was "leave it alone". This loop allocates one
+ * `CellSubject` literal per (cell x organism), ~120,000 a cycle at the NFR-1.1 baseline, and Story
+ * 3.5's review parked a reused scratch subject as the first candidate to try. Built and measured
+ * against `threePhaseStep.bench.ts` (interleaved A/B, three pairs, 100x60 x 20 organisms): **no
+ * difference at all** — 15.10 ms/cycle allocating vs 15.15 ms reusing, inside a run-to-run spread
+ * of +/-1.5 ms on the same machine. V8's young-generation allocation of a short-lived object with a
+ * stable shape is not what this loop costs. The change was REVERTED rather than kept for tidiness:
+ * `CellSubject` is `readonly`, so a shared scratch subject is a real seam — every evaluator would
+ * see one aliased object and any that RETAINED it would silently hold the last cell's values.
+ *
+ * Where the cycle actually goes, measured at the same baseline AFTER Story 3.7's FD7 landed
+ * (conditions compiled to concrete predicates at session time, ../session/compileEvaluators.ts):
+ * Phase 1 0.12 ms, **Phase 2 5.9 ms**, Phase 3 0.01 ms — a whole cycle of 6.7 ms against a 16.67 ms
+ * frame. Before FD7 the same split was 0.21 / 14.3 / 0.01 ms, and ~1.4 ms of that Phase 2 was the
+ * per-condition `Object.hasOwn` guard in ../engine/firstSatisfiedBy.ts (M12, since amended). Full
+ * numbers: docs/implementation-artifacts/performance-baseline-validation.md.
  */
 export function birthSurvivalPhase(grid: Grid, deps: PhaseDeps): Claims {
   // ⚠️ Dimensions are parameters, never constants (Decision A).
