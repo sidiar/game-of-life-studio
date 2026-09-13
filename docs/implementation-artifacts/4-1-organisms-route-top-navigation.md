@@ -568,3 +568,18 @@ e2e ✓ (364 passed, 4 skipped, 4 browser projects)
 
 Dev Model: sonnet   # follows the page-boundary, route-group and AppNav patterns Stories 1.9/2.1 fixed; the only design (nav match strategy) is decided above
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 20s | 12 | 1,904 | 5,557 | 327,622 | 335,095 |
+| Step 1 — create-story | opus-5 | 2 | 28m 45s | 366 | 90,682 | 525,235 | 18,462,739 | 19,079,022 |
+| Step 2 — dev-story | sonnet-5 | 1 | 23m 59s | 412 | 52,671 | 410,805 | 32,021,065 | 32,484,953 |
+| Step 3 — code review + PR | opus-5 | 4 | 17m 55s | 418 | 105,662 | 764,117 | 22,876,760 | 23,746,957 |
+| _of which the orchestrator_ | opus-5 | — | — | 120 | 33,154 | 64,175 | 4,387,407 | 4,484,856 |
+| **Total (create-story → PR ready)** | | 7 | **1h 11m** | 1,208 | 250,919 | 1,705,714 | 73,688,186 | **75,646,027** |
+
+Run started 2026-09-13 12:16 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
