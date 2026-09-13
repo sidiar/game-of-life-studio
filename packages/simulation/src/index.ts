@@ -40,7 +40,8 @@ export type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol
 // The grid layer (RFC-004 §3.4, Story 3.3) — the typed-array representation the engine runs on,
 // the dense<->typed conversion at its boundary, the Moore neighbourhood, the pure resize, and the
 // double-buffer seam the whole cycle writes into: Phase 1 into `back`, Phase 3 in place over it,
-// and the SWAP is the caller's (Story 3.8's loop). `apps/web` consumes `Grid` through its own
+// and the SWAP is the caller's — performed by Story 3.8's `stepGridBuffers`, with the pair itself
+// living in the caller's ref (Story 3.10), never in the loop. `apps/web` consumes `Grid` through its own
 // `RenderableGrid` alias (lib/canvas/renderableGrid.ts), which is now a re-export of this type
 // rather than a structural twin of it — Cross-RFC Reconciliation #3's runtime boundary lives here,
 // not in @gol/persistence, which must stay a leaf over @gol/domain (AR-2/27).
@@ -87,9 +88,10 @@ export type { RuleCompilationError } from './session/validateRules';
 // selection (❌ no registry, descriptor or `beta` flag — §3.1 defers all of it).
 //
 // ⚠️ THE SWAP IS THE CALLER'S. `threePhaseStep(source, destination, deps)` returns the destination
-// it wrote; Story 3.8's loop holds the `GridBuffers` and calls `swapGridBuffers`. Keeping the pair
-// out of the strategy TYPE is what lets Story 3.9's preview instance (M3) and Story 4.15's
-// draft-organism run reuse it.
+// it wrote; `stepGridBuffers` below composes that call with `swapGridBuffers`, and the pair itself
+// lives in the caller's ref (Story 3.10), never in Story 3.8's loop. Keeping the pair out of the
+// strategy TYPE is what lets Story 3.9's preview instance (M3) and Story 4.15's draft-organism run
+// reuse it.
 //
 // ⚠️ Every phase takes a caller-supplied DESTINATION rather than allocating (Story 3.5's FD2,
 // Story 3.6's FD1), matching what `doubleBuffer.ts` was built for. RFC-004 §3.1/§3.2 carried
@@ -104,3 +106,20 @@ export type { Claims } from './strategy/claims';
 export type { ConflictDeps, OrganismRuntime, PhaseDeps } from './strategy/phaseDeps';
 export type { Rng } from './strategy/rng';
 export type { SimulationDeps, SimulationStrategy } from './strategy/threePhaseStep';
+
+// The loop layer (Decision D, Story 3.8) — the driver that turns elapsed time into a bounded
+// number of `step()` calls, plus the pure `stepGridBuffers` composition every consumer of the
+// engine (Story 3.10's hook, Story 4.15's preview) calls to run one cycle and swap. It is
+// deliberately NOT: buffers (they live in the caller's ref), a cycle counter (manual Step, Story
+// 3.12, bypasses the loop and calls `step()` directly), an extinction check (Decision B.5, Story
+// 3.15's `stop()` from inside `step()`), or a population publish (M2, Story 3.10). `createSimulationLoop`
+// is a closure factory — no `class`, no `this` (AR-16), the same shape `createRng` above ships.
+export { createSimulationLoop } from './loop/simulationLoop';
+export type {
+  FrameScheduler,
+  ReadonlyRef,
+  SimulationLoop,
+  SimulationLoopDeps,
+  StepRenderer,
+} from './loop/simulationLoop';
+export { stepGridBuffers } from './loop/stepGridBuffers';
