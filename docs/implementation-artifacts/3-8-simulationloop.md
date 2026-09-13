@@ -618,3 +618,18 @@ shipped code.
 
 Dev Model: sonnet   # follows a prescribed pattern rather than setting one: RFC-002 §5 gives the accumulator literally, Decision D fixes the clamp and the ref-read, the component tree fixes the constructor shape, and this file already settles the open calls (FD1 location + injected scheduler, FD2 step-thunk + `stepGridBuffers`, FD3 accumulator clamp, FD4 primed first frame) with recommendations and a named test per branch — the dev records FDs and executes ~80 lines under a per-file gate, the 3.2 precedent, not the 3.3/3.6 one
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 21s | 10 | 1,403 | 3,234 | 263,689 | 268,336 |
+| Step 1 — create-story | opus-5 | 1 | 9m 40s | 130 | 41,494 | 454,159 | 6,254,797 | 6,750,580 |
+| Step 2 — dev-story | sonnet-5 | 1 | 16m 28s | 318 | 65,092 | 370,528 | 20,935,021 | 21,370,959 |
+| Step 3 — code review + PR | opus-5 | 4 | 26m 20s | 366 | 103,776 | 990,883 | 18,986,417 | 20,081,442 |
+| _of which the orchestrator_ | opus-5 | — | — | 40 | 10,742 | 22,232 | 1,137,600 | 1,170,614 |
+| **Total (create-story → PR ready)** | | 6 | **52m 48s** | 824 | 211,765 | 1,818,804 | 46,439,924 | **48,471,317** |
+
+Run started 2026-09-13 12:12 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
