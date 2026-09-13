@@ -41,7 +41,7 @@ const StatusText = styled('p')({
 
 /**
  * The page-boundary body for `/organisms` (AC3/AC4). `organisms` is injected, interface-typed
- * (AR-2/27) — this component never imports a concrete repository or calls createRepositories().
+ * (AR-2/AR-27) — this component never imports a concrete repository or calls createRepositories().
  *
  * No `battles` prop yet: RFC-005's tree gives the Library both repositories for the usage index,
  * but that index is Story 4.19's — an unused prop today would be a lie about what this component

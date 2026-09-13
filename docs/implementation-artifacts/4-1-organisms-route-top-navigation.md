@@ -4,7 +4,7 @@ baseline_commit: ef4eff1
 
 # Story 4.1: Organisms Route & Top Navigation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -241,6 +241,41 @@ destination".
         the Dev Agent Record. Then push and check `gh run list --limit 1` — a local green is not
         proof (`project-context.md`, Development Workflow).
 
+### Review Findings
+
+Code review 2026-09-13 (Opus, second model — Blind Hunter + Edge Case Hunter + Acceptance
+Auditor). Local `npm run ci` re-run independently: exit 0, web 959/959, e2e 364 passed / 4
+skipped, the four bundle figures reproduced exactly. WebKit's Tab behaviour was re-measured
+against the served export before the keyboard patch: plain `Tab` never leaves `<body>`,
+`Alt+Tab` walks `Battles → Organisms → …` in DOM order.
+
+- [x] [Review][Patch] `AppNav.tsx`'s header comment still says "Organisms joins in Story 4.1" above a `NAV_ITEMS` that already contains it, cites Story 1.9's `AC4` unqualified, and claims `prefix` is needed for `/organisms?id=` — which `navMatch.ts` (correctly) says a query never reaches [apps/web/components/layout/AppNav.tsx:8-14]
+- [x] [Review][Patch] The retargeted `/battle` inactive-branch test dropped the enumeration of what shipped unexercised (secondary colour, transparent border/background, non-active hover, `aria-current === undefined`) that Task 1 said to keep; AC ids rewritten to bare `AC1/AC7` are now Story 4.1-relative while the component still cites Story 1.9's [apps/web/components/layout/AppNav.test.tsx:24-26,62-66]
+- [x] [Review][Patch] `appShell.spec.ts` renumbers Story 1.9's `AC4` to `AC1` inside a `Story 1.9`-scoped describe [apps/web/e2e/appShell.spec.ts:25]
+- [x] [Review][Patch] The WebKit branch of the keyboard e2e gives up Tab-reachability on 2 of 4 projects (`webkit` + `tablet`) via `.focus()`, although `Alt+Tab` — the key a real Safari user presses — reaches the link and keeps AC4's proof on every engine; the `pageerror` listener is attached after the Tab loop, no `console` listener is attached, and `aria-current` is never asserted after the one client-side navigation in the file (the only path where `usePathname()` reactivity matters) [apps/web/e2e/organisms.spec.ts:48-89]
+- [x] [Review][Patch] The prerender proof matches the bare substring `Organism Library`, which the RSC flight payload also satisfies even for a client-rendered page; match the rendered `<h1>` element and the SSR "Loading organisms…" body the hydration-signal comment relies on [apps/web/e2e/organisms.spec.ts:90-99]
+- [x] [Review][Patch] `OrganismLibrary.test.tsx`: "loading even if `list()` has already resolved" asserts synchronously before the fake's promise settles, so it passes with the `seedStatus` clause deleted; the deliberate `seedStatus` dep re-run is untested (removing it from the deps leaves every test green); the ready test has no list-item count [apps/web/components/organisms/OrganismLibrary.test.tsx:12-31]
+- [x] [Review][Patch] The dev-fixture page test asserts the three names synchronously after a `waitFor` on localStorage, which can resolve before the post-seed `list()` re-render — the sibling `page.test.tsx` wraps the DOM assertion in its own `waitFor` [apps/web/app/(gallery)/organisms/page.test.tsx:61-78]
+- [x] [Review][Patch] The `navMatch` table omits the nested-route case (`/organisms/abc`) that the deferred-work entry it resolves is titled after; only the trailing-slash form is pinned [apps/web/lib/layout/navMatch.test.ts:8-17]
+- [x] [Review][Patch] `(AR-2/27)` leaves AR-27 untokenised for `spec:check` — the "silently exempt forever" case `project-context.md` names; `page.tsx` spells both out [apps/web/components/organisms/OrganismLibrary.tsx:44]
+- [x] [Review][Patch] Task 4 step 3 claims `not-found.test.tsx` "already asserts nothing is current" — it does not; AC1/AC2 name the 404 as a shell-wearing page, so add the guard the story believed existed [apps/web/app/not-found.test.tsx]
+- [x] [Review][Patch] Dev Agent Record attributes the home route's +1.1 KB to "a second real `next/link` plus its active-match logic" without a chunk-level measurement (Story 2.14's note shows this magnitude from chunk-splitting alone), and reports "364/364" e2e when the suite is 364 passed + 4 skipped [docs/implementation-artifacts/4-1-organisms-route-top-navigation.md]
+- [x] [Review][Defer] No `error.tsx` boundary under `app/(gallery)/` — `createRepositories()` throwing during render (e.g. an unexpected `NEXT_PUBLIC_MODE`) white-screens `/organisms` exactly as it already does `/` [apps/web/app/(gallery)/organisms/page.tsx:19] — deferred, pre-existing
+
+Dismissed (16): stale `list()` result overwriting the post-seed one (the hook's per-effect
+`alive` flag discards superseded results); "seeds exactly once" cannot see a double write (same
+assertion as `app/(gallery)/page.test.tsx`; idempotency is the hook's own test); empty ready
+state / whitespace names (M9 + Story 4.2's card grid); subtitle copy (mockup verbatim); the
+`aria-busy` comment (it restates `deferred-work.md:187`'s own wording); hardcoded heading id
+(`BattleGallery` precedent, one mount); `satisfies` on `NAV_ITEMS` (a typo is already a compile
+error at the call site); nested `~~` in the struck entry (renders under GFM flanking rules and
+matches lines 65/67/113/149 of the same file); the 290.5 KB baseline (a first measurement is what
+the gate compares against later); the `SectionHeader` duplication "untracked" (the story mandated
+the in-code note); `useMemo` not guaranteeing one call (the hook's documented precondition and
+the `/` page's precedent); `('/x', '/', 'prefix')` rows (pinning a combination the doc forbids);
+href trailing-slash typo (a two-entry `as const` literal); AC9's "CI checked" (the workflow is
+`main` + `pull_request` only — the run exists once the PR opens, and the PR body reports it).
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -444,15 +479,17 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
   `AppShell.test.tsx` confirmed unchanged and still green. One cross-browser fix needed — see Debug
   Log: the keyboard test branches on `browserName` because WebKit does not Tab to plain links by
   default. 56/56 e2e tests green across all 4 Playwright projects (chromium, firefox, webkit,
-  tablet) when run in isolation, and 364/364 in the full `npm run ci` run.
+  tablet) when run in isolation, and 364 passed + 4 conditional `test.skip`s (`deleteBattle.spec.ts`) in the full `npm run ci` run.
 - Task 5: `scripts/check-bundle-size.mjs` gained the `organisms (/organisms)` ROUTES entry.
   Measured (this branch, `npm run build:standalone` then `node scripts/check-bundle-size.mjs`):
   - `home (/)`: 330.6 KB gzip (budget 340, 9.4 KB headroom). This is +1.1 KB over the last recorded
     baseline (329.5 KB, Story 2.14's comment in the script) — over the story's own ">0.5 KB, find
-    out why" flag. Investigated: the delta is the Organisms `NAV_ITEMS` entry + the `navMatch.ts`
-    import in `AppNav.tsx` (Task 1) — a second real `next/link` plus its active-match logic is
-    exactly the kind of added weight AC1 asks for, not an unrelated chunk-splitting artifact. Still
-    well inside the 340 KB budget; no gate change made or needed.
+    out why" flag. The dev record attributed the delta to the Organisms `NAV_ITEMS` entry + the
+    `navMatch.ts` import in `AppNav.tsx`; **the review could not confirm that** — those are ~20
+    source lines and one extra `next/link` anchor, which does not plausibly gzip to 1.1 KB, and no
+    chunk-manifest diff against a baseline build was taken (Story 2.14's note in the script shows
+    this magnitude arising from Turbopack chunk-splitting alone). Recorded as *unattributed*;
+    still well inside the 340 KB budget; no gate change made or needed.
   - `battle (/battle)`: 305.8 KB gzip (budget 310, 4.2 KB headroom) — unchanged from the pre-story
     baseline (this story touches nothing on the battle route).
   - `battle/new (/battle/new)`: 305.7 KB gzip (budget 310, 4.3 KB headroom) — likewise unchanged.
@@ -486,7 +523,7 @@ bundle:check:
   battle/new            305.7 KB / 310 KB   (4.3 KB headroom)
   organisms (/organisms) 290.5 KB / 305 KB  (14.5 KB headroom, new route)
 bench / bench:check ✓ (9.502 ms headroom, 57.0% of the frame budget)
-e2e ✓ (364/364, 4 browser projects)
+e2e ✓ (364 passed, 4 skipped, 4 browser projects)
 ```
 
 ### File List
@@ -509,6 +546,16 @@ e2e ✓ (364/364, 4 browser projects)
 - `docs/implementation-artifacts/deferred-work.md` (resolved the nav-matching entry; added the AC5
   RFC-reconciliation entry)
 - `docs/implementation-artifacts/sprint-status.yaml` (status transitions, carried from lane setup)
+
+**Modified by the code review (2026-09-13), see Review Findings:**
+- `apps/web/components/layout/AppNav.tsx` (comment only), `AppNav.test.tsx` (comments/AC ids)
+- `apps/web/e2e/organisms.spec.ts` (WebKit `Alt+Tab`, listeners before the Tab loop, post-navigation
+  `aria-current`, rendered-`<h1>` prerender proof), `apps/web/e2e/appShell.spec.ts` (comment)
+- `apps/web/components/organisms/OrganismLibrary.tsx` (`AR-27` citation), `OrganismLibrary.test.tsx`
+  (flushed seeding test, seeding→ready re-run test, list-item count)
+- `apps/web/app/(gallery)/organisms/page.test.tsx` (`waitFor`), `apps/web/lib/layout/navMatch.test.ts`
+  (nested-route row), `apps/web/app/not-found.test.tsx` (no-link-current guard)
+- `docs/implementation-artifacts/deferred-work.md` (the `error.tsx` defer entry)
 
 ### Change Log
 

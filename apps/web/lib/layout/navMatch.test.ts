@@ -11,6 +11,8 @@ describe('isNavItemActive', () => {
     ['/organisms', '/', 'exact', false],
     ['/organisms', '/organisms', 'prefix', true],
     ['/organisms/', '/organisms', 'prefix', true],
+    // The nested-route case the deferred-work.md:85 entry is titled after.
+    ['/organisms/abc', '/organisms', 'prefix', true],
     ['/organismsX', '/organisms', 'prefix', false],
     ['/battle', '/', 'exact', false],
     ['/battle', '/organisms', 'prefix', false],

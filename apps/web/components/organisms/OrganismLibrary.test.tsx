@@ -9,15 +9,42 @@ afterEach(() => {
 });
 
 describe('OrganismLibrary', () => {
-  it('shows loading copy while seedStatus is "seeding", even if list() has already resolved', () => {
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+  it('shows loading copy while seedStatus is "seeding", even after list() has resolved', async () => {
+    const mocks = createMockOrganisms();
+    const { organisms } = createFakeRepositories({ organisms: mocks });
+    const list = vi.spyOn(organisms, 'list');
 
     render(<OrganismLibrary organisms={organisms} seedStatus="seeding" />);
 
+    // Let the fake's list() promise settle FIRST — asserting synchronously after render would
+    // pass on resource.status === 'loading' alone, with the seedStatus clause of the fold deleted.
+    await waitFor(() => expect(list).toHaveResolved());
     expect(screen.getByText('Loading organisms…')).toBeInTheDocument();
+    expect(screen.queryByText(mocks[0].name)).not.toBeInTheDocument();
   });
 
-  it('renders each organism by name once ready', async () => {
+  // The `seedStatus` dep on useAsyncResource is deliberate (the first list() reads a pre-seed
+  // store); this pins that the flip re-runs list() and the post-seed result is what renders —
+  // dropping the dep leaves every other test here green.
+  it('re-runs list() when seedStatus flips from "seeding" to "ready", rendering the seeded rows', async () => {
+    const mocks = createMockOrganisms();
+    const { organisms } = createFakeRepositories();
+    const list = vi.spyOn(organisms, 'list');
+
+    const { rerender } = render(<OrganismLibrary organisms={organisms} seedStatus="seeding" />);
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+
+    // The "seed" lands while the first read is already settled against an empty store.
+    for (const organism of mocks) await organisms.save(organism);
+    rerender(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length);
+    });
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders each organism by name once ready, and nothing else', async () => {
     const mocks = createMockOrganisms();
     const { organisms } = createFakeRepositories({ organisms: mocks });
 
@@ -28,6 +55,9 @@ describe('OrganismLibrary', () => {
         expect(screen.getByText(organism.name)).toBeInTheDocument();
       }
     });
+    // A COUNT, for the same reason AppNav.test.tsx counts links: name-presence alone passes with
+    // a duplicated or phantom row.
+    expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length);
   });
 
   it('shows role="alert" when seedStatus is "error"', () => {

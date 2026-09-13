@@ -5,11 +5,11 @@ import { usePathname } from 'next/navigation';
 import { styled } from '@mui/material/styles';
 import { isNavItemActive } from '@/lib/layout/navMatch';
 
-// AC4 / the no-dead-affordance rule: an entry appears here only once its route exists.
-// Organisms joins in Story 4.1, Settings in Story 5.1 — each is one line here, not before.
+// Story 1.9 AC4 / the no-dead-affordance rule: an entry appears here only once its route exists.
+// Organisms joined in Story 4.1; Settings joins in Story 5.1 — one line here, not before.
 // `match` is per-entry (Story 4.1, deferred-work.md:85): '/' has to be 'exact' because it
-// prefixes every route, while '/organisms' is 'prefix' so it stays active on '/organisms/' and
-// any future '/organisms?id=' — see lib/layout/navMatch.ts's doc comment.
+// prefixes every route, while '/organisms' is 'prefix' so it stays active on '/organisms/' (a
+// trailing-slash host) and on any nested path — see lib/layout/navMatch.ts's doc comment.
 const NAV_ITEMS = [
   { href: '/', label: 'Battles', match: 'exact' },
   { href: '/organisms', label: 'Organisms', match: 'prefix' },

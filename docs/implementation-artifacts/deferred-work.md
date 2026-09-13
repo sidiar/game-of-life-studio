@@ -613,3 +613,15 @@ Review Findings; these are the items consciously left open.
   flagged by the readiness report
   (`implementation-readiness-report-2026-07-16.md:55,286,410` — "RFC touch: add `/organisms` … to
   RFC-001/RFC-005 route sketches"); this entry is the tracker for that touch.
+
+## Deferred from: code review of 4-1-organisms-route-top-navigation (2026-09-13)
+
+- **No `error.tsx` boundary under `app/(gallery)/`** — `createRepositories()` runs inside render at
+  both page boundaries (`app/(gallery)/page.tsx`, `app/(gallery)/organisms/page.tsx`); anything it
+  throws (an unrecognised `NEXT_PUBLIC_MODE`, a future Connected-mode construction failure) has no
+  boundary nearer than Next's built-in `GlobalError`, which renders its own unthemed `<html>` (see
+  the token-layer note in `project-context.md`). Pre-existing on `/` since Story 1.6; Story 4.1 adds
+  a second surface with the same exposure. Not reachable today — the factory is a mode switch with
+  one branch. **Pick up with the first story that gives the factory a second branch** (Connected
+  mode) or with Story 6.5's unrecognised-theme handling, whichever first makes a thrown construction
+  a real path.

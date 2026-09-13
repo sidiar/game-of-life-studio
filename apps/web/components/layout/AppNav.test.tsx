@@ -13,13 +13,13 @@ vi.mock('next/navigation', () => ({
 }));
 
 describe('AppNav', () => {
-  it('renders exactly two links, Battles then Organisms, in DOM order (AC1/AC7)', () => {
+  it('renders exactly two links, Battles then Organisms, in DOM order (Story 4.1 AC1/AC7)', () => {
     mockPathname.value = '/';
     render(<AppNav />);
 
-    // AC1 / the no-dead-affordance rule is a COUNT assertion: a test that only checks "Battles"
-    // and "Organisms" exist still passes after someone adds a dead "Settings" link, which is
-    // exactly the failure AC1 exists to prevent.
+    // Story 1.9 AC4 / Story 4.1 AC1 — the no-dead-affordance rule is a COUNT assertion: a test
+    // that only checks "Battles" and "Organisms" exist still passes after someone adds a dead
+    // "Settings" link, which is exactly the failure the rule exists to prevent.
     const links = screen.getAllByRole('link');
     expect(links).toHaveLength(2);
 
@@ -31,7 +31,7 @@ describe('AppNav', () => {
     expect(links[1]).toHaveTextContent(/^Organisms$/);
   });
 
-  it('on / — Battles carries aria-current="page", Organisms does not (AC2)', () => {
+  it('on / — Battles carries aria-current="page", Organisms does not (Story 4.1 AC2)', () => {
     mockPathname.value = '/';
     render(<AppNav />);
 
@@ -41,7 +41,7 @@ describe('AppNav', () => {
     expect(organisms).not.toHaveAttribute('aria-current');
   });
 
-  it('on /organisms — Organisms carries aria-current="page", Battles does not (AC2)', () => {
+  it('on /organisms — Organisms carries aria-current="page", Battles does not (Story 4.1 AC2)', () => {
     mockPathname.value = '/organisms';
     render(<AppNav />);
 
@@ -51,17 +51,21 @@ describe('AppNav', () => {
     expect(battles).not.toHaveAttribute('aria-current');
   });
 
-  it('on /organisms/ (trailing slash) — Organisms is still active (prefix match, AC2/FD3)', () => {
+  it('on /organisms/ (trailing slash) — Organisms is still active (prefix match, Story 4.1 AC2/FD3)', () => {
     mockPathname.value = '/organisms/';
     render(<AppNav />);
 
     expect(screen.getByRole('link', { name: 'Organisms' })).toHaveAttribute('aria-current', 'page');
   });
 
-  // The retarget of the pre-4.1 "omits aria-current when the route does not match" test
-  // (code review 2026-08-07): '/organisms' was the non-matching path there, and now matches, so
-  // this uses '/battle' — a real route that carries no nav entry — to keep exercising the
-  // inactive branch on every link.
+  // The inactive branch never executed in CI before this test (code review 2026-08-07): the
+  // pathname mock was hardcoded to '/', NAV_ITEMS had one entry whose href is '/', and the e2e
+  // only ever visited '/'. So `active` was true in 100% of runs and every `active ? … : …`
+  // fallback — secondary colour, transparent border, transparent background, the non-active
+  // hover colour — plus the aria-current === undefined path shipped unexercised. Story 4.1
+  // retargeted the path: '/organisms' was the non-matching path here and now matches, so this
+  // uses '/battle' — a real route that carries no nav entry — to keep every link on the
+  // inactive branch at once.
   it('on /battle — no link carries aria-current (route has no nav entry)', () => {
     mockPathname.value = '/battle';
     render(<AppNav />);
@@ -80,7 +84,7 @@ describe('AppNav', () => {
     expect(results.violations).toEqual([]);
   });
 
-  it('is keyboard-operable: Tab reaches Battles then Organisms in order (AC4)', async () => {
+  it('is keyboard-operable: Tab reaches Battles then Organisms in order (Story 4.1 AC4)', async () => {
     mockPathname.value = '/';
     const user = userEvent.setup();
     render(<AppNav />);

@@ -73,8 +73,13 @@ describe('OrganismsPage', () => {
       );
     });
 
-    expect(screen.getByText('Aggressive Colonizer')).toBeInTheDocument();
-    expect(screen.getByText('Patient Defender')).toBeInTheDocument();
-    expect(screen.getByText('Chaotic Spreader')).toBeInTheDocument();
+    // Its own waitFor (as app/(gallery)/page.test.tsx does): the storage write above lands
+    // inside the seed effect, BEFORE the status flip re-runs list(), so the names can trail it by
+    // a tick.
+    await waitFor(() => {
+      expect(screen.getByText('Aggressive Colonizer')).toBeInTheDocument();
+      expect(screen.getByText('Patient Defender')).toBeInTheDocument();
+      expect(screen.getByText('Chaotic Spreader')).toBeInTheDocument();
+    });
   });
 });
