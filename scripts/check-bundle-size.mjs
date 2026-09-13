@@ -89,6 +89,15 @@ const ROUTES = [
     html: join('battle', 'new.html'),
     budgetGzipKb: 310,
   },
+  {
+    // New in Story 4.1 — the first story to measure `/organisms`. A new measurement, not a raise
+    // (deferred-work.md's "the bundle gate moves off absolute budgets" entry is being retired
+    // separately; this entry does not pre-empt that). Measured at 290.5 KB gzip; same formula as
+    // every other entry's initial derivation: ceil((290.5 + 12) / 5) * 5 = 305.
+    name: 'organisms (/organisms)',
+    html: 'organisms.html',
+    budgetGzipKb: 305,
+  },
 ];
 
 function measureRoute({ name, html }) {
