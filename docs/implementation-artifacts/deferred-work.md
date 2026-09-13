@@ -610,15 +610,12 @@ Review Findings; these are the items consciously left open.
   exists and calls `renderer.draw(grid)` once per step against a `StepRenderer` port — it decides
   no dirty set itself (AC5), so there is nothing in it to measure. Story 3.9 owns the repaint
   adapter (`markDirty` vs. a whole-grid diff vs. `drawFull`, per `simulationLoop.ts`'s Trap 1) and
-  is where a live-frame measurement would actually apply.
+  is where a live-frame measurement would actually apply. (`apps/web/lib/canvas/repaintDecision.bench.ts`
+  lines ~108–120 still say "Story 3.8's loop would rebuild this per frame … that story's cost to
+  shape" — Story 3.9's to reword when it touches the file; `apps/web` was out of 3.8's scope.)
 
 ## Deferred from: Story 3-8 SimulationLoop (2026-09-13)
 
-- **Seed-domain enforcement reassigns to Story 3.10** — the entry above (Story 3-6 review) named
-  "Story 3.8/3.10"; FD2 settles who mints and reports a battle's seed (the `step`-thunk owner, not
-  the loop, since manual Step bypasses the loop entirely), so the enforcement lands with
-  `SimulationDeps` construction in **Story 3.10**, not here. Story 3.8 ships no `Rng` construction
-  of its own.
 - **AC4's speed-change bank as a candidate RFC-002 §5 amendment.** RFC-002 §5's *"the accumulator
   can never hold more than one cycle"* is true only while `msPerCycle` is constant — a live ref
   read (AR-34) opens a second route to the multi-cycle burst Decision D.3 closed for tab
@@ -626,8 +623,14 @@ Review Findings; these are the items consciously left open.
   against the CURRENT `ms` before the frame's delta is added) bounds it the same way. Candidate
   one-sentence amendment: append *"— true only at constant `msPerCycle`; a live `msPerCycle` ref
   read requires the accumulator to also be capped against the CURRENT value before each frame's
-  delta is added, or a downward speed change drains a bank built at the old value in one burst."*
-  Sidiar's call (the M14/M15 precedent) whether this actually lands in the RFC.
+  delta is added, or a downward speed change drains a bank built at the old value one step per
+  frame until it is gone."* (With the `if`, the un-capped bank drains over consecutive frames —
+  900 ms at 1 gen/sec dropped to 20 gen/sec is 18 steps in 18 frames, a ~300 ms fast-forward —
+  not in a single frame; the wording above says so, so the RFC does not inherit the stronger
+  claim.) Note also that after both clamps the accumulator is `< 2·msPerCycle` before the `if`,
+  not `< msPerCycle`: on the one frame after a downward change the `if` is load-bearing and a
+  `while` would step twice (`simulationLoop.test.ts` pins it). Sidiar's call (the M14/M15
+  precedent) whether this actually lands in the RFC.
 - **`stepGridBuffers` (`packages/simulation/src/loop/stepGridBuffers.ts`) is the composition to
   reuse, not re-derive.** It runs the active strategy and swaps in one call, discharging FD2's
   "who swaps, when" question so Story 3.10's `useSimulation` hook and Story 4.15's Organism Editor

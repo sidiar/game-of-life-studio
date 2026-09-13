@@ -11,14 +11,17 @@ import { createSimulationLoop } from './simulationLoop';
 import type { SimulationLoop } from './simulationLoop';
 
 /**
- * FD5(a): a twelve-line local helper, not a shared `@gol/test-utils` fake — this file is its only
- * consumer today. `frame(now)` throws when nothing is pending, so a test that forgets to `start()`
- * (or that outlives a `stop()`) fails loudly instead of silently passing on a dead loop.
+ * FD5(a): a small local helper, not a shared `@gol/test-utils` fake — this file is its only
+ * consumer today. It is a real QUEUE, like `requestAnimationFrame`: two outstanding requests are
+ * two callbacks, both fired by the next `frame(now)` (a single-slot fake that overwrote the pending
+ * callback could not observe a doubled chain at all). `frame(now)` throws when nothing is pending,
+ * so a test that forgets to `start()` (or that outlives a `stop()`) fails loudly instead of
+ * silently passing on a dead loop. Callbacks requested DURING a frame run on the next one, as in
+ * the browser.
  */
 function createFakeScheduler() {
   let nextHandle = 1;
-  let pendingCallback: ((now: number) => void) | null = null;
-  let pendingHandle: number | null = null;
+  let queue: { handle: number; callback: (now: number) => void }[] = [];
   let cancelledCount = 0;
   let lastCancelledHandle: number | null = null;
   let requestCount = 0;
@@ -28,29 +31,24 @@ function createFakeScheduler() {
       requestCount += 1;
       const handle = nextHandle;
       nextHandle += 1;
-      pendingCallback = callback;
-      pendingHandle = handle;
+      queue.push({ handle, callback });
       return handle;
     },
     cancel(handle: number): void {
       cancelledCount += 1;
       lastCancelledHandle = handle;
-      if (handle === pendingHandle) {
-        pendingCallback = null;
-        pendingHandle = null;
-      }
+      queue = queue.filter((entry) => entry.handle !== handle);
     },
     frame(now: number): void {
-      if (pendingCallback === null) {
+      if (queue.length === 0) {
         throw new Error('createFakeScheduler: frame() called with no pending callback');
       }
-      const callback = pendingCallback;
-      pendingCallback = null;
-      pendingHandle = null;
-      callback(now);
+      const firing = queue;
+      queue = [];
+      for (const { callback } of firing) callback(now);
     },
     pending(): number {
-      return pendingCallback === null ? 0 : 1;
+      return queue.length;
     },
     get cancelledCount(): number {
       return cancelledCount;
@@ -138,11 +136,14 @@ describe('cadence (AC2, Decision D.1/D.2)', () => {
       scheduler.frame(now);
     }
 
+    // 1440 * (1000 / 144) is exactly 10 000 ms, so 100 is the ceiling: a loop that stepped on every
+    // frame would clear the lower bound and must not clear this one.
     expect(steps.length).toBeGreaterThanOrEqual(99);
+    expect(steps.length).toBeLessThanOrEqual(100);
   });
 });
 
-describe('the 10 s clamp (AC3, Decision D.3/D.4)', () => {
+describe('the frame-delta clamp (AC3, Decision D.3/D.4)', () => {
   it('turns a 10 000 ms delta into exactly one step, then resumes normal cadence', () => {
     const { loop, scheduler, steps } = createHarness(100);
     loop.start();
@@ -177,7 +178,8 @@ describe("the speed-change bank (AC4, FD3 — this story's one new fact)", () =>
     expect(steps).toHaveLength(0);
 
     // Drop to 20 gen/sec. Without the FD3 clamp the shipped RFC-002 §5 snippet drains the whole
-    // 900 ms bank as 18 steps on this single frame — the exact burst Decision D.3 forbids.
+    // 900 ms bank one step per frame for 18 frames — a ~300 ms fast-forward, the burst Decision
+    // D.3 forbids reached through the slider instead of a suspended tab.
     msPerCycleRef.current = 50;
     now += 10;
     scheduler.frame(now);
@@ -189,6 +191,26 @@ describe("the speed-change bank (AC4, FD3 — this story's one new fact)", () =>
       scheduler.frame(now);
     }
     expect(steps).toHaveLength(4); // 1 + floor((10 + 9 * 16.7) / 50) = 1 + 3
+  });
+
+  it('steps once, not twice, when the clamped bank plus the delta reach two cycles (if, never while)', () => {
+    // The one frame where `if` and `while` differ. After the two clamps the accumulator is
+    // `min(900, 50) + min(60, 50) = 100 = 2 * ms`: a `while` steps twice here, the `if` once and
+    // carries 50 ms into the next frame — which is why that next frame steps again on a 0 ms
+    // delta (no `while` can be told apart from the `if` in steady state, only here).
+    const { loop, scheduler, steps, msPerCycleRef } = createHarness(1000);
+    loop.start();
+
+    scheduler.frame(0);
+    scheduler.frame(900); // bank 900 ms, no step
+    expect(steps).toHaveLength(0);
+
+    msPerCycleRef.current = 50;
+    scheduler.frame(960); // delta 60
+    expect(steps).toHaveLength(1);
+
+    scheduler.frame(960); // delta 0: the carried 50 ms is a whole cycle at the new speed
+    expect(steps).toHaveLength(2);
   });
 });
 
@@ -279,6 +301,51 @@ describe('stop() called from inside step() is honoured (AC7)', () => {
     expect(scheduler.pending()).toBe(0); // no further frame was requested
     expect(loop.isRunning()).toBe(false);
   });
+
+  it('stop() then start() from inside step() hands the chain over instead of doubling it', () => {
+    // A reset-and-replay path. `start()` inside `step()` requests the next frame itself; the
+    // trailing re-request must recognise that the executing frame is no longer the outstanding
+    // one, or two chains run side by side and the sim steps at 2x with nothing thrown.
+    const { loop, scheduler, steps } = createHarness(100, (l) => {
+      l.stop();
+      l.start();
+    });
+    loop.start();
+
+    scheduler.frame(0);
+    scheduler.frame(100); // steps once; step() restarts the loop
+    expect(steps).toHaveLength(1);
+    expect(scheduler.pending()).toBe(1);
+    expect(loop.isRunning()).toBe(true);
+
+    // The restarted loop primes on its next frame (FD4) and then runs at the normal cadence —
+    // a doubled chain would step on the priming frame's successor twice as fast.
+    scheduler.frame(200); // primes the restarted loop
+    scheduler.frame(300); // one cycle
+    expect(steps).toHaveLength(2);
+    expect(scheduler.pending()).toBe(1);
+  });
+});
+
+describe('a throwing step() or draw() stops the loop instead of wedging it', () => {
+  it('rethrows, reports not running, and lets start() begin a fresh chain', () => {
+    const boom = new Error('rule evaluation failed');
+    const { loop, scheduler, steps } = createHarness(100, () => {
+      throw boom;
+    });
+    loop.start();
+
+    scheduler.frame(0);
+    expect(() => scheduler.frame(100)).toThrow(boom);
+    expect(steps).toHaveLength(1);
+    expect(loop.isRunning()).toBe(false);
+    expect(scheduler.pending()).toBe(0);
+
+    // Not wedged: a second start() is honoured, not swallowed by the idempotency guard.
+    loop.start();
+    expect(loop.isRunning()).toBe(true);
+    expect(scheduler.pending()).toBe(1);
+  });
 });
 
 describe('the primed first frame (AC6, FD4)', () => {
@@ -312,26 +379,60 @@ describe('the primed first frame (AC6, FD4)', () => {
 });
 
 describe('property: no frame ever steps twice, and draw count equals step count (AC10, AR-41)', () => {
-  it('holds for any sequence of frame deltas and any msPerCycle from the ladder', () => {
+  const LADDER = [50, 100, 200, 500, 1000] as const;
+  const deltaArb = fc.double({ min: 0, max: 20_000, noNaN: true, noDefaultInfinity: true });
+
+  it('holds for any sequence of frame deltas, with msPerCycle changing between frames', () => {
+    // `ms` is redrawn from the ladder before every frame, so the FD3 clamp and the if-vs-while
+    // frame are inside the search space rather than outside it.
     fc.assert(
       fc.property(
-        fc.array(fc.integer({ min: 0, max: 20_000 }), { maxLength: 200 }),
-        fc.constantFrom(50, 100, 200, 500, 1000),
-        (deltas, ms) => {
-          const { loop, scheduler, steps, draws } = createHarness(ms);
+        fc.array(fc.tuple(deltaArb, fc.constantFrom(...LADDER)), { maxLength: 200 }),
+        fc.constantFrom(...LADDER),
+        (frames, initialMs) => {
+          const { loop, scheduler, steps, draws, msPerCycleRef } = createHarness(initialMs);
           loop.start();
 
           let now = 0;
           scheduler.frame(now); // primes
 
-          for (const delta of deltas) {
+          for (const [delta, ms] of frames) {
             const stepsBefore = steps.length;
+            msPerCycleRef.current = ms;
             now += delta;
             scheduler.frame(now);
             expect(steps.length - stepsBefore).toBeLessThanOrEqual(1);
           }
 
           expect(draws.length).toBe(steps.length);
+        },
+      ),
+    );
+  });
+
+  it('at constant msPerCycle, the step count is exactly the clamped elapsed time in cycles', () => {
+    // With `ms` fixed the accumulator never reaches `2 * ms`, so the `if` never misses and the
+    // count is `floor(sum(min(delta, ms)) / ms)` — a bound a reset-to-zero accumulator, a missing
+    // delta clamp, or an every-frame stepper all violate. ±1 absorbs float accumulation only.
+    fc.assert(
+      fc.property(
+        fc.array(deltaArb, { maxLength: 200 }),
+        fc.constantFrom(...LADDER),
+        (deltas, ms) => {
+          const { loop, scheduler, steps } = createHarness(ms);
+          loop.start();
+
+          let now = 0;
+          scheduler.frame(now);
+          let clampedElapsed = 0;
+          for (const delta of deltas) {
+            now += delta;
+            scheduler.frame(now);
+            clampedElapsed += Math.min(delta, ms);
+          }
+
+          const expected = Math.floor(clampedElapsed / ms);
+          expect(Math.abs(steps.length - expected)).toBeLessThanOrEqual(1);
         },
       ),
     );

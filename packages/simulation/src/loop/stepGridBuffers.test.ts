@@ -17,17 +17,34 @@ describe('stepGridBuffers composes the strategy call with the swap (FD2, AC9)', 
   it("the returned pair's front IS the old back, holding what the strategy wrote", () => {
     const front = createGrid(2, 2);
     const buffers = createGridBuffers(front);
-    const writesMarker: SimulationStrategy = (_source, destination) => {
+    const deps = {} as SimulationDeps;
+    const seen: { source: unknown; destination: unknown; deps: unknown }[] = [];
+    const writesMarker: SimulationStrategy = (source, destination, receivedDeps) => {
+      seen.push({ source, destination, deps: receivedDeps });
       destination.occupant.set([9, 9, 9, 9]);
       return destination;
     };
 
-    const result = stepGridBuffers(buffers, {} as SimulationDeps, writesMarker);
+    const result = stepGridBuffers(buffers, deps, writesMarker);
 
+    // The strategy is handed exactly (front, back, deps) — the same objects, not copies.
+    expect(seen).toEqual([{ source: front, destination: buffers.back, deps }]);
+    expect(seen[0]?.deps).toBe(deps);
     expect(result.front).toBe(buffers.back);
     expect(Array.from(result.front.occupant)).toEqual([9, 9, 9, 9]);
     // The old front is reused as the new scratch buffer — no allocation, per Decision A.6.
     expect(result.back).toBe(front);
+  });
+
+  it('throws when the strategy returns a grid other than the destination it was given', () => {
+    // An allocating strategy would otherwise have its result discarded and the swap would promote
+    // an unwritten `back` — the grid from two cycles ago — with nothing thrown.
+    const buffers = createGridBuffers(createGrid(2, 2));
+    const allocates: SimulationStrategy = () => createGrid(2, 2);
+
+    expect(() => stepGridBuffers(buffers, {} as SimulationDeps, allocates)).toThrow(
+      /must write and return the destination/,
+    );
   });
 
   it('leaves the old front byte-identical — the strategy never writes its source', () => {
@@ -54,7 +71,9 @@ describe('stepGridBuffers composes the strategy call with the swap (FD2, AC9)', 
     );
 
     expect(after).not.toBe(before);
-    expect(before.front).toBe(front); // unaffected — swapGridBuffers never mutates its argument
+    // Unaffected — swapGridBuffers never mutates its argument: both roles, not just `front`.
+    expect(before.front).toBe(front);
+    expect(before.back).toBe(after.front);
   });
 
   it('defaults to activeStrategy: one blinker cycle turns vertical into horizontal', () => {

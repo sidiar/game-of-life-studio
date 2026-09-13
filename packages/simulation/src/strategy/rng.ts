@@ -48,8 +48,9 @@ const UINT32_RANGE = 4294967296; // 2^32
  *
  * ⚠️ The SEED is the caller's. This function does not mint one, and there is deliberately no
  * `createRng()` overload that reaches for `Math.random()`: "fresh seed in production" is a policy
- * about a run, decided where a run is started (Story 3.8/3.10), and a defaulted seed would make
- * "which seed did this battle use" unanswerable at exactly the call sites that need to answer it.
+ * about a run, decided where a run is started (Story 3.10, which builds `SimulationDeps` — Story
+ * 3.8's FD2 keeps the loop out of it), and a defaulted seed would make "which seed did this
+ * battle use" unanswerable at exactly the call sites that need to answer it.
  *
  * This closure carries mutable state, which is the one shape AR-16's "no internal mutable state"
  * ban does NOT cover: the ban is on the simulation core, and a seedable generator is what that core
@@ -63,7 +64,7 @@ export function createRng(seed: number): Rng {
   //
   // ⚠️ What this check does NOT rule out: the state is 32 bits, so integer seeds that agree modulo
   // 2^32 (`0` and `2 ** 32`; `-1` and `4294967295`) replay one sequence. The seed a run REPORTS
-  // (Story 3.8/3.10 — "which seed did this battle use") must therefore be minted inside [0, 2^32):
+  // (Story 3.10 — "which seed did this battle use") must therefore be minted inside [0, 2^32):
   // `Math.floor(Math.random() * 2 ** 32)`, not `Date.now()`, which is already above it. Enforcing
   // the range here is deferred to the minting story (deferred-work.md): `@gol/test-utils`'s twin
   // deliberately accepts negative seeds, and the pair must stay identical.

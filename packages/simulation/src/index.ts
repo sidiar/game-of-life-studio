@@ -108,7 +108,7 @@ export type { Rng } from './strategy/rng';
 export type { SimulationDeps, SimulationStrategy } from './strategy/threePhaseStep';
 
 // The loop layer (Decision D, Story 3.8) — the driver that turns elapsed time into a bounded
-// number of `step()` calls, plus the pure `stepGridBuffers` composition every consumer of the
+// number of `step()` calls, plus the allocation-free `stepGridBuffers` composition every consumer of the
 // engine (Story 3.10's hook, Story 4.15's preview) calls to run one cycle and swap. It is
 // deliberately NOT: buffers (they live in the caller's ref), a cycle counter (manual Step, Story
 // 3.12, bypasses the loop and calls `step()` directly), an extinction check (Decision B.5, Story
