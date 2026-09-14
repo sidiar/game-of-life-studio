@@ -19,7 +19,9 @@ import { styled } from '@mui/material/styles';
  *   real wrapper, never `display: contents`) — two nested regions would leave the rules no height.
  * - FD4: tiers are CSS media queries inside `styled()`, never `useMediaQuery` or conditional
  *   rendering — the DOM is identical at every width (SC 1.3.2) and no layout knowledge reaches
- *   React state (RFC-003 Decision 3 puts static chrome in `styled()` + tokens).
+ *   React state (RFC-005 Decision 1's three state categories have no slot for a viewport tier).
+ * - FD5: plain elements in `styled()` + `--gol-*` tokens, no MUI `Grid`/`Stack`/`Box` — RFC-003
+ *   Decision 3 puts static chrome in `styled()`, and MUI's own breakpoints match none of UX-DR5's.
  *
  * 1024px is NFR-3.1's supported floor, so the fold tier is a degradation path, not a layout.
  * The preview slot is where the isolated simulation subtree (M3) mounts in Story 4.14/4.15.
@@ -29,8 +31,9 @@ import { styled } from '@mui/material/styles';
 export const EDITOR_BREAKPOINTS = { compress: 1400, fold: 1024 } as const;
 
 // `-0.02` (the Bootstrap convention), not `-1`: fractional CSS-px viewports exist under browser
-// zoom, and a `1399px` cutoff leaves a 1px band where neither tier applies. Level-4 range syntax
-// (`width < 1400px`) needs Safari 16.4+, and NFR-2.1's floor is 15.5.
+// zoom, and a `1399px` cutoff would leave the (1399, 1400) band on the FULL tier — the wider
+// layout below the documented breakpoint. Level-4 range syntax (`width < 1400px`) needs Safari
+// 16.4+, and NFR-2.1's floor is 15.5.
 const COMPRESS = `@media (max-width: ${EDITOR_BREAKPOINTS.compress - 0.02}px)`;
 const FOLD = `@media (max-width: ${EDITOR_BREAKPOINTS.fold - 0.02}px)`;
 
@@ -49,9 +52,11 @@ export interface OrganismEditorLayoutProps {
   preview?: ReactNode;
 }
 
-// The row. `minWidth: 0` / `minHeight: 0` are load-bearing: a flex item's `min-*` defaults to
-// `auto` (its content size), so without them a column's own `overflow-y: auto` never engages and
-// the whole body grows instead — the defect `BattleEditorView.tsx`'s review measured.
+// The row. `minWidth: 0` / `minHeight: 0` are load-bearing because a flex item's `min-*` defaults
+// to `auto`, its CONTENT size (`BattleEditorView.tsx`'s `MainContent` records both halves):
+// without `minWidth: 0` the row refuses to shrink below its content's width and pushes a sibling
+// off-screen; without `minHeight: 0` it grows to its content's height instead of being bounded by
+// `<EditorBody>`, and no column's own `overflow-y: auto` ever engages.
 const Root = styled('div')({
   flex: 1,
   minWidth: 0,
@@ -89,10 +94,13 @@ const BasicInfoColumn = styled('section')({
     width: '280px',
   },
   // Stacked over Rules: the pair's separator moves from the right edge to the bottom, and the
-  // wrapper scrolls instead of the column.
+  // wrapper scrolls instead of the column. `flex: 0 0 auto` (the same as Rules below), NOT
+  // `flexShrink: 1`: `MainGroup` is a flex COLUMN here, so shrink acts on HEIGHT, and with
+  // `minHeight: 0` inherited from the row tier a shrinkable column collapses toward 0px and its
+  // now-visible overflow paints over Rules before the wrapper ever scrolls (review, 2026-09-14).
   [FOLD]: {
     width: 'auto',
-    flexShrink: 1,
+    flex: '0 0 auto',
     overflow: 'visible',
     borderRight: 'none',
     borderBottom: '1px solid var(--gol-border)',

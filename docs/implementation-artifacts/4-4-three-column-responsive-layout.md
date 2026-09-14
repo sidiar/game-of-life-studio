@@ -4,7 +4,7 @@ baseline_commit: 6b1659a39d31a8d4ed02b8f2088e2440c718aa53
 
 # Story 4.4: Three-Column Responsive Layout
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -277,6 +277,75 @@ editor body".
   - [x] `npm run ci > /tmp/ci.log 2>&1; echo $?` — paste the exit code, the bundle lines and the
         e2e summary into the Dev Agent Record. Push to `story/4-4-three-column-responsive-layout`;
         check `gh run list --limit 1` after the PR opens.
+
+### Review Findings
+
+Reviewed 2026-09-14 on **Fable** against the **Opus** implementation (`0227906`), via three parallel
+adversarial layers (Blind Hunter — diff only; Edge Case Hunter — diff + project; Acceptance Auditor
+— diff + this file + `project-context.md`). 33 raw findings, deduplicated to 0 `decision-needed`,
+14 `patch`, 0 `defer`, 14 dismissed. All patches applied in the review commit.
+
+- [x] [Review][Patch] **Fold tier collapses the Basic Information column once it has content** —
+      Task 1's literal `FOLD: { flexShrink: 1 }` on `BasicInfoColumn` contradicts FD3: under `FOLD`
+      `MainGroup` is a flex *column*, so shrink acts on height, and with the row tier's `minHeight: 0`
+      the column shrinks toward 0px and its `overflow: visible` content paints over Rules before the
+      wrapper ever scrolls. Now `flex: '0 0 auto'`, the same as `RulesColumn`. (Story text in Task 1
+      left as written; this bullet is the correction.) [`OrganismEditorLayout.tsx`, FOLD block]
+      (blind+edge+auditor)
+- [x] [Review][Patch] **FD3 was asserted in comments, never tested** — new e2e "fold tier: the
+      stacked pair scrolls as one region and never collapses" (probe in Basic Information at 1000×800:
+      the column grows by the probe, Rules is pushed below, `MainGroup` is what scrolls, Preview's box
+      unchanged). Fails on the pre-fix CSS. [`e2e/organisms.spec.ts`] (blind)
+- [x] [Review][Patch] **`documentElement` overflow reads were vacuous** — MUI's Dialog is
+      `position: fixed` (never contributes to document overflow) and `body` scroll is locked, so the
+      three `scrollWidth/Height <= client*` reads described the hidden Library page. Replaced by
+      `expectNoOverflow(dialog, basic)`, which reads the dialog paper and the layout `Root`.
+      [`e2e/organisms.spec.ts`] (blind+edge)
+- [x] [Review][Patch] **FD1's 800px cap and centring were never exercised** — `≤ 800` at 1440 is
+      true by arithmetic (720). New e2e at 1600×900: Rules ≈ 800 with two ≈ 40px gutters.
+      [`e2e/organisms.spec.ts`] (blind)
+- [x] [Review][Patch] **The `-0.02` boundaries were never exercised** — no test ran at 1400 / 1399 /
+      1024 / 1023. New e2e resizes in place and asserts tier via `toHaveCSS` (width 320→280,
+      `MainGroup` row→column). [`e2e/organisms.spec.ts`] (blind)
+- [x] [Review][Patch] **Preview column's independent scroll untested** (FD2 says *every* column) —
+      the probe test now covers all three columns and checks Rules' box across the other two probes.
+      [`e2e/organisms.spec.ts`] (blind)
+- [x] [Review][Patch] **Heading-order e2e did not test order** — counts only; now `getByRole('heading')`
+      `toHaveText([...])` with the `<h2>` first. [`e2e/organisms.spec.ts`] (blind)
+- [x] [Review][Patch] **Unit test (b) never tied the `aria-labelledby` target to the `<h3>`** — adds
+      `heading.id === region.aria-labelledby`. [`OrganismEditorLayout.test.tsx`] (blind)
+- [x] [Review][Patch] **Unit test (d) used `children` (elements only)** — a bare-string slot's text
+      node would pass "nothing but the heading pair"; now `childNodes`. [`OrganismEditorLayout.test.tsx`]
+      (edge)
+- [x] [Review][Patch] **`-0.02` comment taught a false model** — a `1399px` cutoff leaves no band where
+      "neither tier applies"; it leaves (1399, 1400) on the *full* tier. Reworded.
+      [`OrganismEditorLayout.tsx:31-34`] (blind)
+- [x] [Review][Patch] **`Root` comment carried only the height half of `BattleEditorView`'s two
+      reasons** (Task 1 asked for both) — now states the `minWidth: 0` sibling-pushed-off-screen
+      failure too. [`OrganismEditorLayout.tsx`, `Root`] (auditor)
+- [x] [Review][Patch] **FD4 sentence cited `RFC-003 Decision 3` for a state claim that is `RFC-005
+      Decision 1`'s** — recited; RFC-003 Decision 3 now sits on its own FD5 line. [`OrganismEditorLayout.tsx`
+      header] (auditor)
+- [x] [Review][Patch] **AC8's "checked, not inferred" was not recorded** — Dev Agent Record now
+      names PR #35 / run `34846165460` (green). [this file] (auditor)
+- [x] [Review][Patch] **Exact-1400px boundary differs between the design doc (">1400" desktop) and
+      `epics.md` ("≥ 1400")** — recorded in deferred item (2); the code follows the AC. [`deferred-work.md`]
+      (auditor)
+- [x] [Review][Patch] `type Region = ReturnType<Page['getByRole']>` → `Locator` from
+      `@playwright/test`. [`e2e/organisms.spec.ts`] (blind)
+
+Dismissed (spec-mandated shape, precedent, or false positive): no pre-emptive `tabIndex` on scroll
+containers (AC5 forbids it); e2e importing `EDITOR_BREAKPOINTS` (a `'use client'` MUI module in the
+Playwright runtime — the unit pin + `project-context.md` bullet are the drift guard); module-scope
+landmark ids (4.3's `TITLE_ID` reasoning); `waitForTimeout(300)` in the axe test (4.3 precedent);
+global `box-sizing` (MUI `CssBaseline` in `AppProviders`); console capture only in tests 1 and 5
+(as specified); `--gol-letter-spacing-title` on the `<h3>` (the mockup's own `-0.5px`, not the
+uppercase treatment the comment refuses); mockup line-number citations (house style); fold "not
+beside" assertion (same `x`/width + `y` below already excludes it); nested regions / slot headings
+breaking `toHaveLength` later (the story that nests them retargets the test — test (b) renders no
+slots); `test.skip` for out-of-band projects (no such project; loud failure is intended); `-0.001`
+instead of `-0.02` (story-mandated convention); FD6 cited without a header line (the header defers
+FD5–FD7 to this file).
 
 ## Dev Notes
 
@@ -558,7 +627,9 @@ Claude Opus 5 (`claude-opus-5`), via `bmad-dev-story` on branch
   (stmts). Bundle lines: `/` 331.5 KB (8.5 headroom), `/battle` 306.1 (3.9), `/battle/new` 306.0
   (4.0), `/organisms` 295.2 (9.8). Bench: 9.27 ms mean at 100×60 × 20 against the 16.667 ms budget
   (7.188 ms headroom). e2e summary: **`web:e2e: 436 passed (5.0m)`** across the four projects.
-  Remote CI is checked with `gh run list --limit 1` once the PR exists (a later step).
+  Remote CI, checked not inferred (review, 2026-09-14): draft PR #35 on `0227906`, run
+  `34846165460` — `quality` success, `e2e` success, `deploy` skipped. The review commit's own run is
+  recorded in the PR body.
 
 ### Completion Notes List
 
@@ -581,8 +652,8 @@ Claude Opus 5 (`claude-opus-5`), via `bmad-dev-story` on branch
 - AC6: all 4.3 unit/e2e assertions kept verbatim; only the hoist (`CREATE`, `openEditor`) moved
   lines. No Library, card, page, `AppShell`/`AppNav` or battle-route test edited.
 - AC7: figures above — `/organisms` unchanged at 295.2 KB, editor chunk +0.5 KB gzip.
-- AC8: local `npm run ci` result recorded below; the remote run is checked after the PR opens
-  (the next step's job).
+- AC8: local `npm run ci` exit 0 recorded above; remote run `34846165460` on PR #35 read as green
+  (quality + e2e success) during the review.
 - Spec conflicts surfaced, not silently picked: Rules width (AC "~500–600px" vs mockup 800px cap)
   and "stay put" vs per-column scroll — both in `deferred-work.md` under this story's heading.
 
@@ -605,6 +676,11 @@ Claude Opus 5 (`claude-opus-5`), via `bmad-dev-story` on branch
 - 2026-09-14 — Story 4.4 implemented: `<OrganismEditorLayout>` (three regions, three tiers, three
   named slots) mounted in the editor shell; unit + e2e coverage for structure, tiers, independent
   scroll, axe and heading order; deferred-work and project-context notes; status → review.
+- 2026-09-14 — Code review (Fable): fold-tier `flexShrink: 1` → `flex: 0 0 auto` on Basic
+  Information (FD3 defect), three new e2e tests (FD3 one-region probe, 1600px cap/centring, tier
+  boundaries), overflow reads moved from `documentElement` to the dialog/layout root, Preview probe
+  half, heading order asserted as a list, two unit-test tightenings, three comment corrections, AC8
+  recorded, deferred item (2) extended; status → done.
 
 Dev Model: opus   # architecture-shaping: sets the repo's first viewport-breakpoint idiom (CSS-in-styled, exported EDITOR_BREAKPOINTS), the three-slot layout contract and the fold/scroll ownership that Stories 4.5–4.15 mount into, and resolves two spec conflicts (Rules width 500–600 vs 800; "stay put" vs per-column scroll) rather than following an existing pattern
 Proposed lane gate: none

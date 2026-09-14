@@ -33,9 +33,11 @@ describe('OrganismEditorLayout', () => {
     for (const region of screen.getAllByRole('region')) {
       const headings = within(region).getAllByRole('heading');
       expect(headings).toHaveLength(1);
-      expect(within(region).getByRole('heading', { level: 3 })).toHaveTextContent(
-        accessibleName(region),
-      );
+      const heading = within(region).getByRole('heading', { level: 3 });
+      // The heading IS the `aria-labelledby` target, not merely text that matches it — a
+      // cross-wired id (Basic Information's section naming itself by Rules' `<h3>`) fails here.
+      expect(heading.id).toBe(region.getAttribute('aria-labelledby'));
+      expect(heading).toHaveTextContent(accessibleName(region));
     }
   });
 
@@ -70,9 +72,12 @@ describe('OrganismEditorLayout', () => {
     render(<OrganismEditorLayout />);
 
     for (const region of screen.getAllByRole('region')) {
-      expect(region.children).toHaveLength(2);
-      expect(region.children[0]?.tagName).toBe('H3');
-      expect(region.children[1]?.tagName).toBe('P');
+      // `childNodes`, not `children`: a bare-string slot renders a text node, which `children`
+      // (elements only) would not count — and a text-only "coming soon" is exactly the stand-in
+      // this test exists to refuse.
+      expect(region.childNodes).toHaveLength(2);
+      expect(region.childNodes[0]?.nodeName).toBe('H3');
+      expect(region.childNodes[1]?.nodeName).toBe('P');
     }
   });
 

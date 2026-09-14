@@ -850,7 +850,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   only, and neither theme's `organism-editor.html` has an `@media` rule. The 280 / flexible / 350
   compressed widths and the stacked fold (Basic Information over Rules in one scroll region, FD3)
   are implemented from that prose; they should get a mockup pass before Epic 6 restyles the editor,
-  since the Biotech Terminal theme will otherwise inherit a tier nobody drew.
+  since the Biotech Terminal theme will otherwise inherit a tier nobody drew. The same pass should
+  settle the exact-1400px boundary: the design doc's tiers read "Desktop (>1400px)" / "Tablet
+  (1024px-1400px)" (1400 itself compressed), `epics.md:1037` reads "≥ 1400px" (1400 itself full);
+  the code follows the AC (`max-width: 1399.98px`) and the e2e boundary test pins it that way.
 - **The `.rules-header` row** (`organism-editor.html:993-999`) puts "+ Add Rule" beside the
   Survival Rules title. `<OrganismEditorLayout>` renders the heading pair itself and exposes no
   header-action slot; Story 4.10 restructures the Rules column heading into that row and should add
