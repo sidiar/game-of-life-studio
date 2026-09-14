@@ -754,7 +754,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   order (SC 2.4.3), which a CSS `order` swap would have broken — so the real order is `create
   button → search input → first card`, and the unit + e2e tests pin that. **For the reviewer:** if
   the AC's order was the intent, the button moves after the search field and both tests retarget;
-  nothing else changes.
+  nothing else changes. ✅ **Decided by Sidiar (2026-09-14): the shipped order
+  `create → search → card` is ratified.** Nothing moves; the story's AC6/Task text is annotated
+  as stale rather than rewritten.
 
 ## Deferred from: code review of 4-3-editor-modal-shell (2026-09-14)
 

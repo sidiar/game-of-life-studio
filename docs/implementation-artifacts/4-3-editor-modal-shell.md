@@ -4,7 +4,7 @@ baseline_commit: 591f45b0ed561cc44e2615165f973a9d43247f4e
 
 # Story 4.3: Editor Modal Shell
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -87,7 +87,10 @@ gate and the CI gates already impose on "the story that adds a dialog to a route
 6. **Existing guards are retargeted, never loosened.** `OrganismLibrary.test.tsx` keeps every test
    green; the tab-order test now reads search input → **create button** → first card → second card
    (the button sits in `<ToolbarLeft>` before the cards). `organisms.spec.ts`'s keyboard test
-   is updated for the same reason. `page.test.tsx`, `OrganismCard.test.tsx`, `AppShell`/`AppNav`
+   is updated for the same reason. ✅ **Decided by Sidiar (2026-09-14): the shipped order
+   `create button → search input → first card` stands** (Task 3 / mockup / SC 2.4.3); the order
+   written here and in Task 3(f) / Task 4 is stale text, and the 4.2 keyboard e2e is correctly
+   unchanged. `page.test.tsx`, `OrganismCard.test.tsx`, `AppShell`/`AppNav`
    tests and every battle-route test are untouched and **run**. Story 4.2's prerender proof still
    holds: the create button is in the SSR body (it is static chrome); the dialog is not (`ssr:
    false`).
@@ -306,7 +309,7 @@ gate and the CI gates already impose on "the story that adds a dialog to a route
 Code review 2026-09-14 (Fable 5.1 reviewing an Opus implementation; Blind Hunter + Edge Case
 Hunter + Acceptance Auditor, 32 raw findings, 12 dismissed as noise or spec-mandated shape).
 
-- [ ] [Review][Decision] **Toolbar tab order: `create → search → card` (shipped) or
+- [x] [Review][Decision] **Toolbar tab order: `create → search → card` (shipped) or
       `search → create → card` (AC6 / Task 3(f) / Task 4)?** — The two orders trace to different
       sources and no spec settles it. For the shipped order: Task 3 ("**first** child of
       `<ToolbarLeft>`"), the Library mockup (`organism-library.html:406-408` renders
@@ -320,6 +323,8 @@ Hunter + Acceptance Auditor, 32 raw findings, 12 dismissed as noise or spec-mand
       `<SearchField>` in `OrganismLibrary.tsx` and retarget the unit tab-order test and the e2e
       "precedes the search input" test. AC6 also claims the 4.2 keyboard e2e "is updated"; it was
       not (correctly, under the shipped order — no new stop sits on `search → card`).
+      ✅ **Decided by Sidiar (2026-09-14): option (1) — the shipped order is ratified.** No code
+      moves; AC6, Task 3(f) and Task 4's last sub-item are annotated as stale.
 - [x] [Review][Patch] e2e `openEditor` "settled" wait reads `opacity` off the `role="dialog"`
       paper, but MUI's `Fade` wraps `.MuiDialog-container` (Dialog.js: Transition → Container →
       Paper) and `getComputedStyle` reports an element's own opacity — the wait never waited
