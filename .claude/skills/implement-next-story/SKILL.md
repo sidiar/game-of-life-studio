@@ -398,8 +398,8 @@ Report, briefly:
   branch before merge, so it reaches `main` with the story
 - **whether another lane also has an open PR** (`gh pr list --state open` filtered to
   `story/`), because then whichever merges second needs a sync before it is safe — say so
-- the stats table — paste it into the hand-back as printed, so the wall clock and token
-  cost of the run are visible without opening the story file
+- the stats table — paste it into the hand-back as printed, so the active time and token
+  cost of the run are visible without opening the story file (quote Active, not wall clock)
 
 Then **STOP**. Nothing "waits" — the run simply ends, and the open PR is where the
 work sits until Sidiar merges it. The gate is the **merge**: nothing reaches `main`
@@ -474,12 +474,20 @@ boundaries into phases. Labels, in order: `step0`, `step1`, `step2`, `step3`, `e
 Marks are kept in `$TMPDIR/implement-next-story-$CLAUDE_CODE_SESSION_ID.json` — keyed to
 the session, so two lanes never share a marks file.
 
-Each phase gets: wall clock, the model(s) its agents ran on, and tokens split
-input / output / cache-write / cache-read. Token counts are the `usage` blocks the
+Each phase gets: active time, wall clock, the model(s) its agents ran on, and tokens
+split input / output / cache-write / cache-read. Token counts are the `usage` blocks the
 runtime already recorded per assistant message — measured, not estimated.
 
-Three things worth knowing about what the numbers mean:
+Four things worth knowing about what the numbers mean:
 
+- **Active is the number to quote; wall clock is the raw mark-to-mark span.** A run
+  paused by a usage-limit reset, a sleeping laptop, or Sidiar stepping away still has
+  its marks hours apart. Active drops those pauses: every transcript entry (session and
+  subagents alike) is timestamped, so a stretch with no entries anywhere is idle, and any
+  such gap over 15 minutes is excluded (`--idle-gap MINUTES` to override). Real work never
+  goes that quiet — the longest gap a tool call or CI poll produces is ~10 minutes — while
+  the pauses worth excluding are 30 minutes to days. The footnote under the table lists
+  each excluded gap, so an Active figure is always auditable against its wall clock.
 - **A phase's cost is its whole subtree.** The report attributes every subagent
   transcript that *started* inside a phase window, so `bmad-code-review`'s three
   hunters count against Step 3, not against nothing. This works only because the

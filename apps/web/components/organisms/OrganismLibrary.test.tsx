@@ -239,7 +239,10 @@ describe('OrganismLibrary', () => {
     expect(replaceAll).not.toHaveBeenCalled();
   });
 
-  it('tabs from the search input to the first card, then the second, in grid order', async () => {
+  // Story 4.3 retargets this: the create button is the FIRST child of the toolbar's left group
+  // (mockup `:405-406` — button before the search container), so DOM order and visual order agree
+  // (SC 2.4.3) and it is the first stop.
+  it('tabs from the create button to the search input, then the first card, then the second, in grid order', async () => {
     const user = userEvent.setup();
     const mocks = createMockOrganisms();
     const { organisms } = createFakeRepositories({ organisms: [...mocks, CONWAYS_CLASSIC] });
@@ -247,6 +250,9 @@ describe('OrganismLibrary', () => {
     render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
 
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4));
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: '+ Create New Organism' })).toHaveFocus();
 
     await user.tab();
     expect(screen.getByRole('textbox', { name: 'Search organisms' })).toHaveFocus();
@@ -300,5 +306,123 @@ describe('OrganismLibrary', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('3 Organisms');
     });
+  });
+});
+
+/**
+ * Story 4.3 — the editor entry point and its lifecycle THROUGH the real Library and the real
+ * `next/dynamic` boundary. The shell's own contract is `OrganismEditorModal.test.tsx`'s and the
+ * hook's is `useOrganismEditorModal.test.tsx`'s; what only this file can pin is the wiring.
+ *
+ * ⚠️ `next/dynamic` is NOT mocked — the asynchrony is the thing under test. Every first query for
+ * the dialog is `find*`, never `get*`: the chunk resolves on a microtask
+ * (`BattleEditorView.test.tsx`'s Story 2.14 suite records the same rule).
+ */
+describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
+  const createButton = () => screen.getByRole('button', { name: '+ Create New Organism' });
+
+  // The toolbar sits OUTSIDE the aria-busy wrapper on purpose: a control that vanishes while the
+  // list loads is `deferred-work.md`'s "controls inside aria-busy" mistake, not repeated here.
+  it('renders the create button in the loading, error and ready states', async () => {
+    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+
+    const { rerender } = render(<OrganismLibrary organisms={organisms} seedStatus="seeding" />);
+    expect(screen.getByText('Loading organisms…')).toBeInTheDocument();
+    expect(createButton()).toBeInTheDocument();
+
+    rerender(<OrganismLibrary organisms={organisms} seedStatus="error" />);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(createButton()).toBeInTheDocument();
+
+    rerender(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+    expect(createButton()).toBeInTheDocument();
+  });
+
+  it('opens the editor as a labelled dialog when the create button is clicked', async () => {
+    const user = userEvent.setup();
+    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+
+    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.click(createButton());
+
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to Library' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  it('Escape closes the editor and returns focus to the create button', async () => {
+    const user = userEvent.setup();
+    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+
+    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+
+    await user.click(createButton());
+    await screen.findByRole('dialog', { name: 'Organism Editor' });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(createButton()).toHaveFocus();
+  });
+
+  it('Close closes the editor and returns focus to the create button', async () => {
+    const user = userEvent.setup();
+    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+
+    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+
+    await user.click(createButton());
+    await screen.findByRole('dialog', { name: 'Organism Editor' });
+
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(createButton()).toHaveFocus();
+  });
+
+  it('Back closes the editor and returns focus to the create button', async () => {
+    const user = userEvent.setup();
+    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+
+    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+
+    await user.click(createButton());
+    await screen.findByRole('dialog', { name: 'Organism Editor' });
+
+    await user.click(screen.getByRole('button', { name: 'Back to Library' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(createButton()).toHaveFocus();
+  });
+
+  // View-only proof: an open/close cycle must never write to the repository, and must not re-list.
+  it('never calls save/delete/replaceAll across an open/close cycle — list() is called exactly once', async () => {
+    const user = userEvent.setup();
+    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const list = vi.spyOn(organisms, 'list');
+    const save = vi.spyOn(organisms, 'save');
+    const del = vi.spyOn(organisms, 'delete');
+    const replaceAll = vi.spyOn(organisms, 'replaceAll');
+
+    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+
+    await user.click(createButton());
+    await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
+    expect(replaceAll).not.toHaveBeenCalled();
   });
 });

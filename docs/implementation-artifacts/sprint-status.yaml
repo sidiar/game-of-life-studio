@@ -115,7 +115,7 @@ development_status:
   epic-4: in-progress
   4-1-organisms-route-top-navigation: done
   4-2-organism-card-grid: done
-  4-3-editor-modal-shell: backlog
+  4-3-editor-modal-shell: done
   4-4-three-column-responsive-layout: backlog
   4-5-organism-name-field: backlog
   4-6-dominance-control: backlog
