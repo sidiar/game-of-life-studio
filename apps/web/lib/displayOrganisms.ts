@@ -59,6 +59,21 @@ const FALLBACK_NAME = 'Unknown organism';
 const UNNAMED_ORGANISM = 'Unnamed organism';
 
 /**
+ * Story 4.2 (FD3): the resolved branch of `resolveDisplayOrganisms` below, extracted rather than
+ * duplicated. `<OrganismCard>` needs exactly this branch (a library organism it already knows
+ * exists — never a dangling id, since the Library sources cards from its own roster) and writing
+ * a second resolver here is the outcome this module's own doc above forbids (Story 2.9).
+ */
+export function toDisplayOrganism(organism: Organism): DisplayOrganism {
+  return {
+    id: organism.id,
+    name: organism.name.trim() === '' ? UNNAMED_ORGANISM : organism.name,
+    color: displayColor(organism.colorToken, MAX_AGE_SHADE),
+    colorToken: organism.colorToken,
+  };
+}
+
+/**
  * Resolves a battle's organismIds (Decision H.1: exactly the placed set) against the current
  * roster for display. Colour is `displayColor(colorToken, MAX_AGE_SHADE)` — the identity shade
  * (Story 1.7: `displayColor(token, 7) === PALETTE[token].hex`), NOT `ageShadeFor(0, agingEnabled)`
@@ -112,11 +127,6 @@ export function resolveDisplayOrganisms(
           unresolved: true,
         };
       }
-      return {
-        id,
-        name: organism.name.trim() === '' ? UNNAMED_ORGANISM : organism.name,
-        color: displayColor(organism.colorToken, MAX_AGE_SHADE),
-        colorToken: organism.colorToken,
-      };
+      return toDisplayOrganism(organism);
     });
 }

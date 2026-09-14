@@ -112,6 +112,13 @@
      composite. */
   --gol-shadow-tile-hover: 0 4px 12px rgb(var(--gol-accent-channel) / 0.15);
 
+  /* SYSTEM tag fill (Story 4.2). Mockup: .organism-card.preloaded::before,
+     background: rgba(0, 212, 255, 0.1) (organism-library.html:227). Same construction as
+     --gol-shadow-tile-hover above — composed from --gol-accent-channel so Epic 6's Biotech
+     Terminal override block retunes it for free (Decision J: derived shades are their own
+     tokens), and authored here because AR-46 bans the rgb(...) literal in <OrganismCard>.tsx. */
+  --gol-accent-tint: rgb(var(--gol-accent-channel) / 0.1);
+
   /* Organism-dot tooltip drop shadow (Story 1.10). Mockup: .participant-dot::before,
      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8) (battle-gallery.html:366). Authored here for the
      same two reasons as the token above — AR-46 bans the rgba() literal in the component, and the

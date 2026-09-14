@@ -2,7 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { CONWAYS_CLASSIC } from '@gol/domain';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { DEFAULT_COLOR_TOKEN } from '@/lib/palette/paletteRegistry';
-import { resolveDisplayOrganisms } from './displayOrganisms';
+import { resolveDisplayOrganisms, toDisplayOrganism } from './displayOrganisms';
+
+describe('toDisplayOrganism', () => {
+  it('resolves a normal organism to its name and identity-shade colour', () => {
+    expect(toDisplayOrganism(CONWAYS_CLASSIC)).toEqual({
+      id: CONWAYS_CLASSIC.id,
+      name: CONWAYS_CLASSIC.name,
+      color: displayColor(CONWAYS_CLASSIC.colorToken, MAX_AGE_SHADE),
+      colorToken: CONWAYS_CLASSIC.colorToken,
+    });
+  });
+
+  it('substitutes a placeholder for an all-whitespace name', () => {
+    const unnamed = { ...CONWAYS_CLASSIC, name: '   ' };
+
+    expect(toDisplayOrganism(unnamed).name).toBe('Unnamed organism');
+  });
+});
 
 describe('resolveDisplayOrganisms', () => {
   it('resolves a known id to its roster name and identity-shade colour', () => {
