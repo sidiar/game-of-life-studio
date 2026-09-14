@@ -916,3 +916,18 @@ of `/battle` and not of the app — it changes nothing about AC8, which is per r
 
 Dev Model: opus   # architecture-shaping: fixes the Run chassis every 3.12-3.19 story writes into, the hook-consumer contract (`runOrganisms` roster/refusal semantics, stable-reference ownership in <BattlePage>), the `'playback'` canvas lifecycle 3.16/3.18/4.15 rebuild on, and the engine-loading mechanism for the bundle gate (FD1) — new seams, not an existing pattern applied
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 19s | 19s | 8 | 843 | 2,662 | 215,623 | 219,136 |
+| Step 1 — create-story | opus-5 | 3 | 16m 17s | 16m 17s | 380 | 131,540 | 845,907 | 27,841,975 | 28,819,802 |
+| Step 2 — dev-story | opus-5 | 2 | 32m 52s | 4h 03m | 420 | 91,967 | 808,431 | 33,949,103 | 34,849,921 |
+| Step 3 — code review + PR | fable-5-1 | 4 | 24m 46s | 24m 46s | 5,238 | 116,034 | 1,568,325 | 26,250,723 | 27,940,320 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 76 | 14,570 | 93,838 | 2,366,778 | 2,475,262 |
+| **Total (create-story → PR ready)** | | 9 | **1h 14m** | 4h 44m | 6,046 | 340,384 | 3,225,325 | 88,257,424 | **91,829,179** |
+
+Run started 2026-09-14 14:25 CEST; wall clock runs to the point the run stopped for Sidiar's review. Active excludes 1 idle gap totalling 3h 30m (3h 30m from 15:00) — stretches with no transcript activity in the session or any subagent, such as a usage-limit reset or the machine asleep. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
