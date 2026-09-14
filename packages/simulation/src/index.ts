@@ -45,7 +45,7 @@ export type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol
 // `RenderableGrid` alias (lib/canvas/renderableGrid.ts), which is now a re-export of this type
 // rather than a structural twin of it — Cross-RFC Reconciliation #3's runtime boundary lives here,
 // not in @gol/persistence, which must stay a leaf over @gol/domain (AR-2/27).
-export { clearGrid, createGrid, gridFromDense, gridToDense } from './grid/grid';
+export { clearGrid, cloneGrid, createGrid, gridFromDense, gridToDense } from './grid/grid';
 export type { Grid } from './grid/grid';
 export { createGridBuffers, swapGridBuffers } from './grid/doubleBuffer';
 export type { GridBuffers } from './grid/doubleBuffer';
