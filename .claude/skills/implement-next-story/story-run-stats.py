@@ -18,6 +18,16 @@ turns consecutive marks into phase windows, then attributes to each window:
 Token counts come from each assistant message's `usage` block, so they are the
 real billed numbers, not an estimate. Reading the transcripts this way keeps
 them out of the orchestrator's context — only the aggregate is printed.
+
+Time is reported two ways. *Wall clock* is mark-to-mark. *Active* is the same
+window with idle gaps removed: every transcript entry (main session and every
+subagent) carries a timestamp, so a stretch with no entries at all — a usage-limit
+reset, the laptop asleep, Sidiar away — shows up as a gap in the event stream.
+Any gap longer than `--idle-gap` minutes (default 15) is treated as idle and
+excluded; the excluded gaps are listed under the table so the number is auditable.
+The threshold sits well above the longest gap real work produces (a tool call or
+CI poll, ≤ 10 min in every run so far) and well below the shortest pause worth
+excluding (30+ min).
 """
 
 from __future__ import annotations
@@ -31,6 +41,8 @@ from datetime import datetime, timezone
 
 MARKER = ("This story was implemented with the 'Implement next story' skill "
           "with the following stats:")
+
+IDLE_GAP_MINUTES = 15.0
 
 # Ordered phase windows: (start mark, end mark, label)
 PHASES = [
@@ -151,6 +163,40 @@ def subagent_runs(sess_dir: str) -> list[dict]:
     return sorted(runs, key=lambda r: r["first"])
 
 
+# ------------------------------------------------------------- event stream
+
+def event_times(paths: list[str]) -> list[float]:
+    """Every timestamped entry across the given transcripts, sorted."""
+    times = []
+    for path in paths:
+        for entry in iter_entries(path):
+            ts = parse_ts(entry.get("timestamp"))
+            if ts is not None:
+                times.append(ts)
+    return sorted(times)
+
+
+def active_seconds(events: list[float], start: float, end: float,
+                   idle_gap: float) -> tuple[float, list[tuple[float, float]]]:
+    """Seconds inside [start, end] not covered by an idle gap.
+
+    Consecutive events closer than `idle_gap` seconds are one stretch of work;
+    a longer silence is idle and dropped. The window edges count as events so a
+    phase that starts or ends mid-silence is handled the same way. Returns the
+    active total and the excluded gaps as (gap start, gap length).
+    """
+    points = [start] + [t for t in events if start < t < end] + [end]
+    active = 0.0
+    idle: list[tuple[float, float]] = []
+    for a, b in zip(points, points[1:]):
+        gap = b - a
+        if gap > idle_gap:
+            idle.append((a, gap))
+        else:
+            active += gap
+    return active, idle
+
+
 # ----------------------------------------------------------------- rendering
 
 def fmt_duration(seconds: float | None) -> str:
@@ -178,12 +224,15 @@ def model_label(per_model: dict[str, int]) -> str:
     return ", ".join(pretty)
 
 
-def build_report(state: dict) -> tuple[str, dict]:
+def build_report(state: dict, idle_gap_minutes: float = IDLE_GAP_MINUTES) -> tuple[str, dict]:
     marks = {m["label"]: m["epoch"] for m in state.get("marks", [])}
     sess_dir = session_dir()
     session = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
     main_transcript = f"{sess_dir}/{session}.jsonl" if sess_dir else None
     runs = subagent_runs(sess_dir) if sess_dir else []
+    idle_gap = idle_gap_minutes * 60
+    events = event_times(([main_transcript] if main_transcript else [])
+                         + [r["path"] for r in runs])
 
     rows = []
     totals = dict(ZERO)
@@ -221,9 +270,11 @@ def build_report(state: dict) -> tuple[str, dict]:
 
         for key in totals:
             totals[key] += tokens[key]
+        active, _ = active_seconds(events, start, end, idle_gap)
         rows.append({
             "title": title,
             "seconds": end - start,
+            "active": active,
             "models": model_label(per_model),
             "agents": agents,
             "tokens": tokens,
@@ -232,44 +283,61 @@ def build_report(state: dict) -> tuple[str, dict]:
     first_mark = min(marks.values()) if marks else None
     last_mark = max(marks.values()) if marks else None
     wall = (last_mark - first_mark) if (first_mark and last_mark) else None
+    total_active, idle = (active_seconds(events, first_mark, last_mark, idle_gap)
+                          if wall is not None else (None, []))
 
     lines = [MARKER, ""]
-    lines.append("| Phase | Agent model | Agents | Wall clock | Input | Output | "
+    lines.append("| Phase | Agent model | Agents | Active | Wall clock | Input | Output | "
                  "Cache write | Cache read | Total tokens |")
-    lines.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for row in rows:
         t = row["tokens"]
         lines.append(
             f"| {row['title']} | {row['models']} | {row['agents']} | "
-            f"{fmt_duration(row['seconds'])} | {fmt_int(t['input'])} | "
+            f"{fmt_duration(row['active'])} | {fmt_duration(row['seconds'])} | "
+            f"{fmt_int(t['input'])} | "
             f"{fmt_int(t['output'])} | {fmt_int(t['cache_write'])} | "
             f"{fmt_int(t['cache_read'])} | {fmt_int(t['total'])} |"
         )
     lines.append(
-        f"| _of which the orchestrator_ | {model_label(orch_models)} | — | — | "
+        f"| _of which the orchestrator_ | {model_label(orch_models)} | — | — | — | "
         f"{fmt_int(orch_totals['input'])} | {fmt_int(orch_totals['output'])} | "
         f"{fmt_int(orch_totals['cache_write'])} | {fmt_int(orch_totals['cache_read'])} | "
         f"{fmt_int(orch_totals['total'])} |"
     )
     lines.append(
         f"| **Total (create-story → PR ready)** | | {sum(r['agents'] for r in rows)} | "
-        f"**{fmt_duration(wall)}** | {fmt_int(totals['input'])} | "
+        f"**{fmt_duration(total_active)}** | {fmt_duration(wall)} | {fmt_int(totals['input'])} | "
         f"{fmt_int(totals['output'])} | {fmt_int(totals['cache_write'])} | "
         f"{fmt_int(totals['cache_read'])} | **{fmt_int(totals['total'])}** |"
     )
     lines.append("")
     if first_mark:
         started = datetime.fromtimestamp(first_mark, timezone.utc).astimezone()
+        if idle:
+            def when(at: float) -> str:      # date only when the gap starts on another day
+                local = datetime.fromtimestamp(at, timezone.utc).astimezone()
+                return f"{local:%H:%M}" if local.date() == started.date() else f"{local:%b %d %H:%M}"
+            gaps = "; ".join(f"{fmt_duration(length)} from {when(at)}" for at, length in idle)
+            idle_note = (f"Active excludes {len(idle)} idle gap{'s' if len(idle) > 1 else ''} "
+                         f"totalling {fmt_duration(sum(g for _, g in idle))} ({gaps}) — "
+                         "stretches with no transcript activity in the session or any "
+                         "subagent, such as a usage-limit reset or the machine asleep. ")
+        else:
+            idle_note = "No idle gaps were excluded; Active and Wall clock agree. "
         lines.append(
             f"Run started {started:%Y-%m-%d %H:%M %Z}; wall clock runs to the point the run "
-            "stopped for Sidiar's review. Each phase row covers the phase agent, any agents "
-            "it spawned, and the orchestrator's own turns in that window — the orchestrator "
-            "row breaks its share out again, it is not additional. Cache reads dominate the "
-            "token totals and are billed at a fraction of input rate, so read the Input and "
-            "Output columns for effort and the total only as a ceiling. The orchestrator's "
-            "final turn is still being written when these numbers are taken.")
+            f"stopped for Sidiar's review. {idle_note}"
+            f"(A gap counts as idle above {idle_gap_minutes:g} min.) Each phase row covers "
+            "the phase agent, any agents it spawned, and the orchestrator's own turns in that "
+            "window — the orchestrator row breaks its share out again, it is not additional. "
+            "Cache reads dominate the token totals and are billed at a fraction of input "
+            "rate, so read the Input and Output columns for effort and the total only as a "
+            "ceiling. The orchestrator's final turn is still being written when these numbers "
+            "are taken.")
 
-    return "\n".join(lines) + "\n", {"rows": rows, "totals": totals, "wall": wall}
+    return "\n".join(lines) + "\n", {"rows": rows, "totals": totals, "wall": wall,
+                                     "active": total_active, "idle": idle}
 
 
 def write_into_story(story_file: str, block: str) -> None:
@@ -295,6 +363,9 @@ def main() -> int:
     parser.add_argument("--story-file", help="story markdown to append the stats block to")
     parser.add_argument("--write", action="store_true",
                         help="with --story-file, write the block into the story")
+    parser.add_argument("--idle-gap", type=float, default=IDLE_GAP_MINUTES, metavar="MINUTES",
+                        help="a silence longer than this is idle, not work "
+                             f"(default {IDLE_GAP_MINUTES:g})")
     args = parser.parse_args()
 
     path = state_path(args.state)
@@ -316,7 +387,7 @@ def main() -> int:
     if not state.get("marks"):
         print(f"no marks recorded in {path} — nothing to report", file=sys.stderr)
         return 1
-    block, _ = build_report(state)
+    block, _ = build_report(state, args.idle_gap)
     print(block)
     if args.story_file and args.write:
         write_into_story(args.story_file, block)
