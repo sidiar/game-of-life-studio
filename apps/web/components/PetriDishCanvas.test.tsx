@@ -2535,6 +2535,21 @@ describe('PetriDishCanvas (playback variant)', () => {
     expect(second).not.toBe(first);
   });
 
+  // Story 3.11 review: the construction key is the DIMENSIONS, not the object. `useSimulation.stop()`
+  // hands the view a fresh `liveSize` object at unchanged dimensions on every Stop; keyed on
+  // identity, each Stop would detach, rebuild and re-prime this renderer. Mutation-check: put
+  // `size` back in the construction deps and this reddens (three calls, not one).
+  it('a NEW `size` object with the SAME dimensions neither rebuilds nor re-calls', () => {
+    installContexts();
+    const onRendererReady = vi.fn();
+    const { rerender } = render(renderPlayback(onRendererReady, { size: { cols: 5, rows: 3 } }));
+    expect(onRendererReady).toHaveBeenCalledTimes(1);
+
+    rerender(renderPlayback(onRendererReady, { size: { cols: 5, rows: 3 } }));
+
+    expect(onRendererReady).toHaveBeenCalledTimes(1);
+  });
+
   it('serves a `showGridLines` change through setGridLines on the SAME instance, no rebuild', () => {
     installContexts();
     const setGridLinesSpy = vi.spyOn(GridRenderer.prototype, 'setGridLines');

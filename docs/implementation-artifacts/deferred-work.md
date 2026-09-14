@@ -883,3 +883,31 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   unchanged by Story 3.16 (ephemeral resize rebuilds the canvas) and 3.18 (fullscreen re-layout).
   **Revisit only if a Web Worker ever moves the step off the main thread** — the documented escape
   hatch, not a plan.
+
+## Deferred from: code review of 3-11-mode-toggle-run-view-skeleton (2026-09-14)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+
+- **`mode === 'run' && runOrganisms === null` renders a header over nothing, and nothing flips
+  `mode` back.** The Run branch's `runOrganisms !== null` guard is there for TypeScript (the story
+  prescribed "renders nothing rather than `!`"), which is correct only while the state is
+  unreachable — and today it is: `organismsResource` has fixed deps and never re-lists, and
+  `rosterIds` changes only through the editor, which is unmounted in Run mode. It stops being
+  unreachable the moment a story changes the library while `<BattlePage>` is mounted — Stories
+  4.24 / 4.25 (edit / create organism from the battle, gated on `epic-3`) are the first. **Pick
+  this up there:** either flip to `'lab'` when the roster becomes unresolvable (an effect, so mind
+  `react-hooks/set-state-in-effect`) or render the same disabled-with-reason notice the header
+  shows, and add the test the guard cannot have today.
+- **The disabled RUN button states its reason only through `title`.** A `disabled` `<button>` is
+  not focusable, so a keyboard user never meets the tooltip; screen readers do expose `title` as
+  the accessible description, so the gap is sighted keyboard use. This is the route's policy
+  rather than this story's: every `disabled={isSaving}` control on `/battle` explains nothing at
+  all, and the story's AC7 prescribed `title`. **Pick this up in Story 6.11** with the rest of the
+  route's disabled-state a11y (the `aria-disabled` + `aria-describedby` shape keeps the control
+  focusable and the reason reachable, at the cost of a click that must refuse by hand).
+- **A rejected `import()` of the Run chunk has no boundary nearer than `GlobalError`.** Offline,
+  or a deploy that rotated chunk hashes under an open tab, makes `next/dynamic`'s promise reject
+  after the editor has already unmounted — the whole page goes to Next's error surface with Lab
+  unreachable. Same owner as the 4-1 `error.tsx` entry FD8 already extended for the
+  `compileSession` throw: a second throw path under `(battle)`, to be settled with that entry, not
+  separately.

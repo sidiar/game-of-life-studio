@@ -100,7 +100,7 @@ development_status:
   3-8-simulationloop: done
   3-9-colour-state-batch-rendering: done
   3-10-usesimulation-hook: done
-  3-11-mode-toggle-run-view-skeleton: review
+  3-11-mode-toggle-run-view-skeleton: done
   3-12-transport-controls: backlog
   3-13-speed-control: backlog
   3-14-cycle-counter-population-stats: backlog

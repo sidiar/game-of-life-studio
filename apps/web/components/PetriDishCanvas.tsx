@@ -797,6 +797,13 @@ type PlaybackDishProps = PetriDishCanvasSharedProps & {
  * passes `sim.liveSize`, so Story 3.16's ephemeral resize rebuilds this canvas at the live size
  * and re-attaches — the path the hook's head comment plans on. The alternative (size owned by the
  * hook alone) leaves the observer's `renderer.resize(size)` closing over a stale mount-time size.
+ *
+ * ⚠️ Keyed on the DIMENSIONS (`cols`, `rows`), not on the `size` object's identity — the one
+ * place this diverges from `EditDish` (Story 3.11 review). `useSimulation.stop()` mints a fresh
+ * `liveSize` object at the initial dimensions on every Stop (`useSimulation.ts`), and keying on
+ * identity would make each Stop in Story 3.12 detach, destroy, reconstruct, re-attach and
+ * re-prime this renderer for a size that never changed — a blank frame per Stop, for nothing.
+ * A dimension change still rebuilds; a same-dimension object does not.
  */
 function PlaybackDish({
   size,
@@ -806,6 +813,8 @@ function PlaybackDish({
   className,
   onRendererReady,
 }: PlaybackDishProps) {
+  // The effects below depend on these two scalars, never on `size` itself (see the head comment).
+  const { cols, rows } = size;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Held for the grid-lines and resize effects below — a ref, never React state (project-context
   // "hot simulation state lives in refs").
@@ -819,21 +828,29 @@ function PlaybackDish({
   // would tear down and rebuild the renderer on every new callback identity — and calling the
   // prop directly in the cleanup would detach through a stale closure (the same staleness
   // `endStrokeRef` exists for, Story 2.8 Task 5). Declared FIRST so the refresh lands before the
-  // construction effect in the same commit; assigned in an effect, never during render
+  // construction effect's SETUP in the same commit; assigned in an effect, never during render
   // (`react-hooks/refs`).
+  //
+  // What the ref does NOT cover: React runs every cleanup of a commit before any setup, so a
+  // commit that changes BOTH the dimensions and the callback detaches through the previous
+  // callback, not the new one. Acceptable because the only caller passes `useSimulation`'s
+  // `attachRenderer`, which is `useCallback`-stable for the hook's lifetime — the ref exists for
+  // the unmount-after-rerender case (the test named in trap 2), not for a callback that changes
+  // in step with the size.
   const onRendererReadyRef = useRef(onRendererReady);
   useEffect(() => {
     onRendererReadyRef.current = onRendererReady;
   });
 
   // Construction effect. Deps are the three constructor arguments with no setter (`EditDish`'s
-  // exact reasoning); see forced decision 6 above for why `size` is one of them here too.
+  // exact reasoning); see forced decision 6 above for why the size is one of them here too, and
+  // why it enters as `cols` / `rows` rather than the object.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
 
     try {
-      const renderer = new GridRenderer(canvas, size, palette, { colors, showGridLines });
+      const renderer = new GridRenderer(canvas, { cols, rows }, palette, { colors, showGridLines });
       rendererRef.current = renderer;
       // ❌ No `drawFull` here — that is the difference from `EditDish`. The receiver paints.
       onRendererReadyRef.current(renderer);
@@ -859,7 +876,7 @@ function PlaybackDish({
     // re-attach it, re-priming the whole colour-state baseline — for a change the setter already
     // serves. `onRendererReady` is absent for the reason on `onRendererReadyRef`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size, palette, colors]);
+  }, [cols, rows, palette, colors]);
 
   // Grid-lines effect. `setGridLines` is a no-op when the value is unchanged (gridRenderer.ts),
   // so this is safe on every mount, including the one right after construction.
@@ -898,7 +915,7 @@ function PlaybackDish({
       const renderer = rendererRef.current;
       if (renderer === null) return;
       try {
-        renderer.resize(size);
+        renderer.resize({ cols, rows });
       } catch (error) {
         setPaintError(() => {
           throw error;
@@ -908,7 +925,7 @@ function PlaybackDish({
     observer.observe(target);
 
     return () => observer.disconnect();
-  }, [size]);
+  }, [cols, rows]);
 
   // role="img" + aria-label, as the edit dish (Story 2.4 Dev Notes trap 9): the running dish IS
   // the page's subject. No pointer props and no `tabIndex` — nothing to paint, nothing to focus.
@@ -916,7 +933,7 @@ function PlaybackDish({
     <canvas
       ref={canvasRef}
       role="img"
-      aria-label={`Petri dish, ${size.cols} by ${size.rows} cells`}
+      aria-label={`Petri dish, ${cols} by ${rows} cells`}
       className={className}
     />
   );

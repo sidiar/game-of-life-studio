@@ -60,7 +60,10 @@ const ModeToggle = styled('div')({
 // Mockup: .mode-btn (:68-95) verbatim, minus `transition: all 0.2s` (the axe mid-fade trap
 // `<EditorStatusBar>` and `<SidebarFooter>` both record — a scan landing mid-fade measures a
 // contrast no settled state has) and minus `position: relative` (nothing is positioned against
-// it). `:first-child` carries the divider between the pair, as in the mockup.
+// it). The mockup's `:first-child` carries the divider between the pair; it is written as
+// `:first-of-type` here because Emotion warns on `:first-child` (unsafe under SSR, where an
+// inserted `<style>` sibling can precede the element) — the two siblings are both `<button>`s,
+// so the selectors agree.
 //
 // Forced decision 3, option (a): the ACTIVE colour is MODE-DEPENDENT, because the two mockups
 // disagree and both are right. The lab mockup's `.mode-btn.active` is neutral

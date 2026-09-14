@@ -3,7 +3,7 @@ baseline_commit: 6b1659a39d31a8d4ed02b8f2088e2440c718aa53
 ---
 # Story 3.11: Mode Toggle & Run View Skeleton
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -385,6 +385,24 @@ hook and the first route import of the engine — AC8 is where that fact meets t
   - [x] `npm run ci > /tmp/ci-3-11.log 2>&1; echo $?` — never pipe to `tail`. Record the exit
     code, `/battle` first-load gzip + headroom (AC8), the run-view chunk size, `bench:check`
     (unchanged), the unit/e2e counts, in the Dev Agent Record.
+
+### Review Findings
+
+Code review 2026-09-14 on **Fable** against the **Opus** implementation (`c0b02d7`), three
+parallel adversarial layers (Blind Hunter / Edge Case Hunter / Acceptance Auditor). 0
+decision-needed, 8 patch, 3 defer, 15 dismissed.
+
+- [x] [Review][Patch] `PlaybackDish` is keyed on the `size` object's identity, and `useSimulation.stop()` mints a fresh `liveSize` at unchanged dimensions — every Stop in 3.12 would detach, rebuild and re-prime the renderer [apps/web/components/PetriDishCanvas.tsx:PlaybackDish] — construction and observer effects now key on `cols` / `rows`; new test "a NEW `size` object with the SAME dimensions neither rebuilds nor re-calls" (mutation-checked: identity deps redden it)
+- [x] [Review][Patch] `onRendererReadyRef` comment overclaims: React runs every cleanup of a commit before any setup, so a commit changing both size and callback detaches through the PREVIOUS callback [apps/web/components/PetriDishCanvas.tsx:onRendererReadyRef] — comment now states the actual guarantee and why it suffices (`attachRenderer` is stable)
+- [x] [Review][Patch] StrictMode test was vacuous about the thing it names — "one canvas, cycle 0" holds even if the hook ends up detached after the replay [apps/web/components/battle/simulation/BattleSimulationView.test.tsx] — asserts two `drawFull` primes and a painted surviving canvas
+- [x] [Review][Patch] AC5 "byte-equal to `initialGrid`" compared `occupant` only [BattleSimulationView.test.tsx] — `age`, `width`, `height` compared too
+- [x] [Review][Patch] "renders the dish box" test never located the box [BattleSimulationView.test.tsx] — renamed to what it pins (no canvas, paused at 0, footer present)
+- [x] [Review][Patch] Task 7(e) e2e did not assert a clean console (AC11 "every new e2e asserts `errors` empty"); `collectErrors` pushed an error-level "ResizeObserver loop" message twice [apps/web/e2e/battleRoute.spec.ts] — `collectErrors` added to the AC7 test, the double push collapsed
+- [x] [Review][Patch] Failing-library test asserted `title` presence, not text [apps/web/components/battle/BattlePage.test.tsx] — asserts the reason string
+- [x] [Review][Patch] Comment drift: `:first-child` in prose vs `:first-of-type` in code [BattleHeader.tsx]; FD1 comment attributed 3.9 KB to the 3-10 deferred-work entry, which says 3.8 [BattlePage.tsx]; Dev Agent Record counted 12 toggle tests / 41 new unit tests (10 new + 1 rewritten / 39 new) — all three corrected
+- [x] [Review][Defer] `mode === 'run' && runOrganisms === null` renders a header over nothing and never flips back [BattlePage.tsx:Run branch] — deferred: unreachable today (the library resource has fixed deps and `rosterIds` only changes in the unmounted editor); owned by the first story that changes the library while `<BattlePage>` is mounted (4.24/4.25, gated on `epic-3`)
+- [x] [Review][Defer] The disabled RUN's reason lives only in `title`, which a keyboard user cannot reach on an unfocusable `disabled` button [BattleHeader.tsx] — deferred, pre-existing pattern: every `disabled={isSaving}` control on the route explains nothing at all, so this is the route's a11y policy, not this story's; Story 6.11
+- [x] [Review][Defer] A rejected `import()` of the Run chunk (offline, rotated hashes after a deploy) has no boundary nearer than `GlobalError`, and the editor is already unmounted [BattlePage.tsx:dynamic()] — deferred into the 4-1 `error.tsx` entry FD8 already extended (a second throw path with the same owner)
 
 ## Dev Notes
 
@@ -866,7 +884,7 @@ of `/battle` and not of the app — it changes nothing about AC8, which is per r
 ### File List
 
 - `apps/web/components/battle/BattleHeader.tsx` (modified — the toggle, `BattleMode`, `disabled`/`disabledReason`)
-- `apps/web/components/battle/BattleHeader.test.tsx` (modified — count test flipped, 12 toggle tests)
+- `apps/web/components/battle/BattleHeader.test.tsx` (modified — count test rewritten, 10 new tests: 2 optionality + 8 toggle)
 - `apps/web/components/battle/BattlePage.tsx` (modified — `mode`, `handleModeToggle`, `runOrganisms`, lazy view, Run branch)
 - `apps/web/components/battle/BattlePage.test.tsx` (modified — two count tests converted, two `aria-pressed` tests scoped, new Story 3.11 describe)
 - `apps/web/components/battle/BattlePage.modeToggle.test.tsx` (new — props-identity tests through mocked views)
@@ -885,10 +903,16 @@ of `/battle` and not of the app — it changes nothing about AC8, which is per r
 
 - 2026-09-14 — Story 3.11 implemented: Lab⇄Run toggle in `<BattleHeader>`, `mode` widened in
   `<BattlePage>` with `runOrganisms` and the lazy `<BattleSimulationView>`, the Run chassis skeleton,
-  the `'playback'` `<PetriDishCanvas>` variant, 41 new unit tests + 5 e2e, deferred-work
-  bookkeeping. First `npm run ci` exit 1 (one e2e assertion under MUI's `aria-hidden`); fixed.
-  Final `npm run ci` → **exit 0**: spec:check 236 ids; unit 89 / 397 / 99 / 82 / 1146; bundle
-  `/battle` 308.5 KB (1.5 KB headroom); bench 9.439 ms headroom (56.6%); e2e **432 passed**.
+  the `'playback'` `<PetriDishCanvas>` variant, 39 new unit tests (+ 1 rewritten) + 5 e2e,
+  deferred-work bookkeeping. First `npm run ci` exit 1 (one e2e assertion under MUI's
+  `aria-hidden`); fixed. Final `npm run ci` → **exit 0**: spec:check 236 ids; unit 89 / 397 / 99 /
+  82 / 1146; bundle `/battle` 308.5 KB (1.5 KB headroom); bench 9.439 ms headroom (56.6%); e2e
+  **432 passed**.
+- 2026-09-14 — Code review (Fable): 8 patches applied (see Review Findings) — `PlaybackDish` keyed
+  on dimensions rather than `size` identity (+1 test, mutation-checked), StrictMode / AC5 /
+  title-text assertions strengthened, the AC7 e2e asserts a clean console, three comment and
+  bookkeeping corrections; 3 items deferred to `deferred-work.md`. Story-file units 212 passed;
+  typecheck / lint / format:check / spec:check exit 0. Status → done.
 
 Dev Model: opus   # architecture-shaping: fixes the Run chassis every 3.12-3.19 story writes into, the hook-consumer contract (`runOrganisms` roster/refusal semantics, stable-reference ownership in <BattlePage>), the `'playback'` canvas lifecycle 3.16/3.18/4.15 rebuild on, and the engine-loading mechanism for the bundle gate (FD1) — new seams, not an existing pattern applied
 Proposed lane gate: none

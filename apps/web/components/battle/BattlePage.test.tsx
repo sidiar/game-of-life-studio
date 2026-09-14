@@ -2807,7 +2807,10 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
     expect(runButton()).toBeDisabled();
-    expect(runButton()).toHaveAttribute('title');
+    expect(runButton()).toHaveAttribute(
+      'title',
+      'Some organisms in this battle could not be loaded',
+    );
   });
 
   // AC9 + the 2.16 deferred-work entry: the FR-7.9 guard works from Run mode, and after Cancel the

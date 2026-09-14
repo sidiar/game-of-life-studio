@@ -55,7 +55,8 @@ const UnsavedChangesDialog = dynamic(() => import('./UnsavedChangesDialog'), { s
  * `<BattleSimulationView>` is the only importer of `useSimulation`, which imports
  * `compileSession`, `threePhaseStep`, `createSimulationLoop` and `derivePopulation`; statically
  * imported, all of that rides in `/battle`'s first-load payload, against **3.9 KB gzip of
- * headroom** (deferred-work.md, 3-10; `/battle` measured 306.1 KB against 310 in Story 4.3).
+ * headroom** (`/battle` measured 306.1 KB against 310 in Story 4.3; deferred-work.md's 3-10 entry
+ * quoted 3.8 KB from the post-4.2 measurement).
  * `check-bundle-size.mjs` measures the scripts the route's HTML references, and a dynamic chunk is
  * not one: the engine is fetched on the first Lab -> Run toggle and cached thereafter. AR-35
  * sanctions the shape ("dynamic import for heavy components"), and Sidiar's ratchet rule is the

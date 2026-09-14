@@ -103,11 +103,15 @@ describe('BattleSimulationView (Story 3.11)', () => {
 
   // `readGridColors` is null under jsdom (no token layer): the dish BOX renders, the canvas does
   // not — the same "unavailable -> blank dish, same box" degradation the editor and BattleTile use.
-  it('with colors === null renders the dish box and no canvas', () => {
+  // The box has no role of its own, so what is pinned here is the half a test can see: no canvas,
+  // and a view that still reports its state (the sidebar's footer is asserted separately).
+  it('with colors === null renders no canvas and still reports paused at cycle 0', () => {
     const { container } = render(view({ colors: null }));
 
     expect(container.querySelector('canvas')).toBeNull();
     expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+    expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeInTheDocument();
   });
 
   // AC5: the playback canvas is PAINTED at cycle 0 — by the hook's prime (`paintFull`: `resize`
@@ -124,6 +128,8 @@ describe('BattleSimulationView (Story 3.11)', () => {
     const painted = drawFullSpy.mock.calls[0][0];
     expect(painted).not.toBe(GRID);
     expect(Array.from(painted.occupant)).toEqual(Array.from(GRID.occupant));
+    expect(Array.from(painted.age)).toEqual(Array.from(GRID.age));
+    expect([painted.width, painted.height]).toEqual([GRID.width, GRID.height]);
     const recording = contexts.get(canvas as HTMLCanvasElement) as RecordingContext2D;
     expect(recording.calls.filter((call) => call.op === 'fillRect').length).toBeGreaterThan(0);
   });
@@ -142,13 +148,21 @@ describe('BattleSimulationView (Story 3.11)', () => {
 
   // StrictMode double-invokes effects: the canvas builds two renderers, the first's cleanup
   // detaches, the second attaches — the hook handles attach/detach/attach (3.10 AC9). The view
-  // must settle to ONE canvas at cycle 0 either way.
-  it('settles under StrictMode: one canvas, paused at cycle 0', () => {
-    installContexts();
+  // must settle to ONE canvas at cycle 0 either way — AND that canvas must be painted: "one canvas"
+  // alone is true even if the hook ended up detached after the replay (Story 3.11 review).
+  it('settles under StrictMode: one canvas, paused at cycle 0, and the surviving renderer is primed', () => {
+    const contexts = installContexts();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
     const { container } = render(<StrictMode>{view()}</StrictMode>);
 
     expect(container.querySelectorAll('canvas')).toHaveLength(1);
     expect(root(container)).toHaveAttribute('data-cycle', '0');
+    // One prime per attach that met a session: the first renderer's (before the simulated
+    // unmount) and the second's (after the replay). A detached survivor would leave this at 1.
+    expect(drawFullSpy).toHaveBeenCalledTimes(2);
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    const recording = contexts.get(canvas) as RecordingContext2D;
+    expect(recording.calls.filter((call) => call.op === 'fillRect').length).toBeGreaterThan(0);
   });
 
   // Roster-order wiring through the REAL hook: a two-organism roster with ref 2 placed compiles

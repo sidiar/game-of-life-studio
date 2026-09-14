@@ -1952,8 +1952,9 @@ test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
   function collectErrors(page: Page): string[] {
     const errors: string[] = [];
     page.on('console', (msg) => {
-      if (msg.type() === 'error') errors.push(msg.text());
-      if (msg.text().includes('ResizeObserver loop')) errors.push(msg.text());
+      if (msg.type() === 'error' || msg.text().includes('ResizeObserver loop')) {
+        errors.push(msg.text());
+      }
     });
     page.on('pageerror', (err) => errors.push(err.message));
     return errors;
@@ -2092,6 +2093,7 @@ test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
   test('disables RUN, with a reason, when a roster id has no library record (AC7)', async ({
     page,
   }) => {
+    const errors = collectErrors(page);
     await seedWorkspace(page);
     await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleB}`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
@@ -2104,5 +2106,7 @@ test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
     );
     await expect(labButton(page)).toBeEnabled();
     await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+
+    expect(errors).toEqual([]);
   });
 });
