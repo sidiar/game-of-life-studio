@@ -492,10 +492,13 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `4294967295`) replay one sequence, and `Date.now()` is already above 2^32. The integer guard's
   comment used to claim it ruled this class out; the Story 3.6 review corrected the comments in
   both copies and left ENFORCEMENT (`0 <= seed < 2^32`, throw otherwise) to the story that mints
-  seeds — **Story 3.8/3.10** — because `@gol/test-utils`'s `seededRng.test.ts` deliberately accepts
-  negative seeds today, so rejecting them is a contract change to another package, and FD4 requires
-  the pair to move together. Until then: mint with `Math.floor(Math.random() * 2 ** 32)`, and the
-  reported seed IS the effective seed.
+  seeds — **Story 3.10** (narrowed from "Story 3.8/3.10" by Story 3.8's FD2: the loop takes no
+  buffers and mints no seed, and `SimulationDeps` — where the `Rng` is constructed — is built by
+  whoever owns the `step` thunk, which is Story 3.10, not the loop) — because
+  `@gol/test-utils`'s `seededRng.test.ts` deliberately accepts negative seeds today, so rejecting
+  them is a contract change to another package, and FD4 requires the pair to move together. Until
+  then: mint with `Math.floor(Math.random() * 2 ** 32)`, and the reported seed IS the effective
+  seed.
 
 ## Deferred from: Story 3-7 performance harness (2026-09-10)
 
@@ -603,6 +606,37 @@ Review Findings; these are the items consciously left open.
 - **`repaint-dirty-path` is an upper bound, labelled as one** — the baseline is zeroed per
   iteration so every occupied cell reads as changed, and the `Uint16Array` allocation is counted
   although the renderer allocates it once per grid shape. A live-frame number (diff against the
+  previous frame, ~a fraction of cells changed) reassigns to **Story 3.9**: Story 3.8's loop now
+  exists and calls `renderer.draw(grid)` once per step against a `StepRenderer` port — it decides
+  no dirty set itself (AC5), so there is nothing in it to measure. Story 3.9 owns the repaint
+  adapter (`markDirty` vs. a whole-grid diff vs. `drawFull`, per `simulationLoop.ts`'s Trap 1) and
+  is where a live-frame measurement would actually apply. (`apps/web/lib/canvas/repaintDecision.bench.ts`
+  lines ~108–120 still say "Story 3.8's loop would rebuild this per frame … that story's cost to
+  shape" — Story 3.9's to reword when it touches the file; `apps/web` was out of 3.8's scope.)
+
+## Deferred from: Story 3-8 SimulationLoop (2026-09-13)
+
+- **AC4's speed-change bank as a candidate RFC-002 §5 amendment.** RFC-002 §5's *"the accumulator
+  can never hold more than one cycle"* is true only while `msPerCycle` is constant — a live ref
+  read (AR-34) opens a second route to the multi-cycle burst Decision D.3 closed for tab
+  suspension, and `simulationLoop.ts`'s FD3 (`accumulator = Math.min(accumulator, ms)`, taken
+  against the CURRENT `ms` before the frame's delta is added) bounds it the same way. Candidate
+  one-sentence amendment: append *"— true only at constant `msPerCycle`; a live `msPerCycle` ref
+  read requires the accumulator to also be capped against the CURRENT value before each frame's
+  delta is added, or a downward speed change drains a bank built at the old value one step per
+  frame until it is gone."* (With the `if`, the un-capped bank drains over consecutive frames —
+  900 ms at 1 gen/sec dropped to 20 gen/sec is 18 steps in 18 frames, a ~300 ms fast-forward —
+  not in a single frame; the wording above says so, so the RFC does not inherit the stronger
+  claim.) Note also that after both clamps the accumulator is `< 2·msPerCycle` before the `if`,
+  not `< msPerCycle`: on the one frame after a downward change the `if` is load-bearing and a
+  `while` would step twice (`simulationLoop.test.ts` pins it). Sidiar's call (the M14/M15
+  precedent) whether this actually lands in the RFC.
+- **`stepGridBuffers` (`packages/simulation/src/loop/stepGridBuffers.ts`) is the composition to
+  reuse, not re-derive.** It runs the active strategy and swaps in one call, discharging FD2's
+  "who swaps, when" question so Story 3.10's `useSimulation` hook and Story 4.15's Organism Editor
+  preview both call it rather than each composing `activeStrategy(...)` + `swapGridBuffers(...)`
+  inline — the forgotten-swap bug (front never advances, grid appears frozen, nothing throws) is
+  otherwise two more chances to happen instead of zero.
   previous frame, ~a fraction of cells changed) is Story 3.8's to take once its loop exists.
 
 ## Deferred from: Story 4-1-organisms-route-top-navigation implementation (2026-09-13)

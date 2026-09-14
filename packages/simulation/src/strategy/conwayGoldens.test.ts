@@ -35,7 +35,8 @@ const conwayDeps = (): SimulationDeps => ({
 const LIVE = { '.': 0, X: 1 } as const;
 
 /**
- * Runs `cycles` full steps through the double buffer, exactly as Story 3.8's loop will.
+ * Runs `cycles` full steps through the double buffer — the same strategy-then-swap composition
+ * Story 3.8's `stepGridBuffers` ships for the loop's `step` thunk.
  *
  * ⚠️ `start` is taken BY REFERENCE by `createGridBuffers` and becomes the scratch buffer after the
  * first swap (`doubleBuffer.ts` says so explicitly) — snapshot anything you need from it BEFORE
