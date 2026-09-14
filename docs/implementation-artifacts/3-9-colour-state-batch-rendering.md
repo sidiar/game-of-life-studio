@@ -623,9 +623,9 @@ Canvas2D facts this story relies on: `fillStyle` set to an unparseable string is
 
 ### Agent Model Used
 
-Claude Opus 5 (orchestration/implementation), story targeted "Dev Model: sonnet" per the line
-below — implemented under Opus per the session's actual model; noted as a deviation rather than
-silently matched.
+Claude Sonnet (dev pass, per `Dev Model: sonnet` below and the `implement-next-story` launch);
+Claude Opus 5 (code review, 2026-09-14). The dev pass originally recorded itself as Opus — the
+same self-misreport Story 3.8's review corrected; the orchestration's launch model is authoritative.
 
 ### Debug Log References
 
