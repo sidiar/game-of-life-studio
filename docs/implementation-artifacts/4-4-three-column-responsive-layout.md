@@ -684,3 +684,18 @@ Claude Opus 5 (`claude-opus-5`), via `bmad-dev-story` on branch
 
 Dev Model: opus   # architecture-shaping: sets the repo's first viewport-breakpoint idiom (CSS-in-styled, exported EDITOR_BREAKPOINTS), the three-slot layout contract and the fold/scroll ownership that Stories 4.5–4.15 mount into, and resolves two spec conflicts (Rules width 500–600 vs 800; "stay put" vs per-column scroll) rather than following an existing pattern
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 26s | 26s | 10 | 1,922 | 6,722 | 305,101 | 313,755 |
+| Step 1 — create-story | opus-5, sonnet-5 | 3 | 12m 02s | 12m 02s | 338 | 73,440 | 671,455 | 13,820,232 | 14,565,465 |
+| Step 2 — dev-story | opus-5 | 1 | 16m 39s | 16m 39s | 216 | 42,215 | 236,824 | 12,246,517 | 12,525,772 |
+| Step 3 — code review + PR | fable-5-1 | 8 | 32m 28s | 4h 01m | 7,920 | 172,162 | 2,394,516 | 27,938,655 | 30,513,253 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 60 | 15,458 | 122,185 | 2,076,196 | 2,213,899 |
+| **Total (create-story → PR ready)** | | 12 | **1h 01m** | 4h 30m | 8,484 | 289,739 | 3,309,517 | 54,310,505 | **57,918,245** |
+
+Run started 2026-09-14 14:26 CEST; wall clock runs to the point the run stopped for Sidiar's review. Active excludes 2 idle gaps totalling 3h 29m (2h 15m from 15:01; 1h 13m from 17:17) — stretches with no transcript activity in the session or any subagent, such as a usage-limit reset or the machine asleep. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
