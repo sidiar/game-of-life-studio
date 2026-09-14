@@ -1,15 +1,33 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import type { OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { normalizeOrganismSearch, organismNameMatches } from '@/lib/organisms/organismNameMatches';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
+import { useOrganismEditorModal } from '@/lib/organisms/useOrganismEditorModal';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
 import OrganismCard from './OrganismCard';
+
+/**
+ * Story 4.3: the Organism Editor is loaded ON DEMAND, exactly as `<BattlePage>` loads
+ * `<UnsavedChangesDialog>` and `<BattleEditorView>` loads `<ResizeClipWarningDialog>`. The MUI
+ * `Dialog` stack measured **+18.1 KB gzip** when statically imported (Story 1.13, re-confirmed by
+ * 2.14); `/organisms` has 11.5 KB of headroom under its 305 KB budget. AR-35 names the editor as
+ * *the* example of its "dynamic import for heavy components" rule (RFC-003).
+ *
+ * `ssr: false` because a closed dialog can never be part of the first paint (`open` is false until
+ * a user gesture), so there is nothing for the prerender to render: the flag keeps the module out
+ * of the route's SERVER bundle, not out of its HTML — a closed `Dialog` emits no markup either way
+ * (the e2e's prerender proof pins that). No `loading` fallback (FD7): the two
+ * shipped lazy dialogs render nothing while the chunk resolves, and a spinner for a few
+ * milliseconds is chrome nobody asked for.
+ */
+const OrganismEditorModal = dynamic(() => import('./editor/OrganismEditorModal'), { ssr: false });
 
 export interface OrganismLibraryProps {
   organisms: OrganismRepository;
@@ -67,6 +85,36 @@ const ToolbarLeft = styled('div')({
   alignItems: 'center',
   gap: '15px',
   flex: 1,
+});
+
+// Mockup: .create-button (organism-library.html:122-139). The one filled control on this page.
+// `--gol-accent-hover` is the mockup's literal `#00e5ff` as the token it already is
+// (`<EditorStatusBar>`'s SAVE records the same substitution). The mockup's `transform:
+// translateY(-1px)` hover lift is kept — a transform is not a colour — but its `transition: all`
+// is NOT (the `<SidebarFooter>`/`<EditorStatusBar>` mid-fade axe trap: a scan landing mid-fade
+// measures a control at a contrast ratio no settled state has).
+const CreateButton = styled('button')({
+  background: 'var(--gol-accent)',
+  color: 'var(--gol-bg-primary)',
+  border: 'none',
+  padding: '14px 28px',
+  fontSize: '14px',
+  fontWeight: 600,
+  fontFamily: 'inherit',
+  // The DOM text is sentence case and CSS uppercases it, so the accessible name stays
+  // "+ Create New Organism" while the mockup's "+ CREATE NEW ORGANISM" is what renders.
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  '&:hover': {
+    background: 'var(--gol-accent-hover)',
+    transform: 'translateY(-1px)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
 });
 
 // Mockup: .search-container (:139-142).
@@ -150,8 +198,13 @@ function organismCountLabel(shown: number, total: number, filtering: boolean): s
 }
 
 /**
- * The page-boundary body for `/organisms` (AC1-AC7). `organisms` is injected, interface-typed
- * (AR-2/AR-27) — this component never imports a concrete repository or calls createRepositories().
+ * The page-boundary body for `/organisms`. `organisms` is injected, interface-typed (AR-2/AR-27)
+ * — this component never imports a concrete repository or calls createRepositories().
+ *
+ * Since Story 4.3 it also renders the editor's entry point: the "+ Create New Organism" control
+ * and the lazily loaded `<OrganismEditorModal>` it opens. The modal receives no repository yet —
+ * nothing to persist until Story 4.16 — and when it does, it will be a prop typed to the
+ * interface, passed down from here.
  *
  * No `battles` prop yet: RFC-005's tree gives the Library both repositories for the usage index,
  * but that index is Story 4.19's — an unused prop today would be a lie about what this component
@@ -168,6 +221,12 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
   // Ephemeral UI state only (RFC-005 Decision 1) — never persisted, never in a ref: this is not
   // hot simulation state.
   const [searchText, setSearchText] = useState('');
+
+  // Called HERE, from the component that renders the modal, because the hook's effects have to be
+  // the modal's PARENT effects to order correctly against MUI's focus trap. The hook's own header
+  // records why it lives in `lib/organisms/` rather than beside the modal — the dynamic import
+  // above is load-bearing and a static import of that module would defeat it.
+  const { requestCreate, mounted: editorMounted, modalProps } = useOrganismEditorModal('library');
 
   // Folded at render, exactly as BattleGallery folds seedStatus against its own load state
   // (Story 4.1) — never written into the resource itself, which would risk a cascading setState.
@@ -201,12 +260,22 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
         <SectionSubtitle>Create and manage your life forms</SectionSubtitle>
       </SectionHeader>
       {/* OUTSIDE the aria-busy wrapper below (deferred-work.md:187's mistake, not repeated here):
-          the search input must never be withheld from the accessibility tree while the list loads,
-          and must never unmount under the user's focus (deferred-work.md:327's trap, FD4). The count
-          badge is deliberately NOT rendered until `ready` — there is no count to announce before
-          the list exists, and an empty live region would misreport the page's state. */}
+          the create button and the search input must never be withheld from the accessibility
+          tree while the list loads, and the input must never unmount under the user's focus
+          (deferred-work.md:327's trap, FD4). The count badge is deliberately NOT rendered until
+          `ready` — there is no count to announce before the list exists, and an empty live region
+          would misreport the page's state. */}
       <Toolbar>
         <ToolbarLeft>
+          {/* First in the group, as the mockup has it (:405-406) — so DOM order matches the
+              visual order and the button is the toolbar's first Tab stop. Rendered in EVERY
+              status: creating an organism does not depend on the list having loaded.
+              `data-create-organism` is the focus-restore anchor `useOrganismEditorModal` looks up
+              by DOM query once the modal's exit transition ends (never a captured element — WebKit
+              does not focus a <button> on click). */}
+          <CreateButton type="button" onClick={requestCreate} data-create-organism="">
+            + Create New Organism
+          </CreateButton>
           <SearchField role="search">
             <SearchInput
               type="text"
@@ -217,8 +286,6 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
             />
             <SearchIcon aria-hidden="true">⌕</SearchIcon>
           </SearchField>
-          {/* Create-button slot: Story 4.3 adds "+ Create New Organism" here. Empty until then —
-              a button that does nothing is a dead affordance (NFR-4.1). */}
         </ToolbarLeft>
         {status === 'ready' && (
           <CountBadge role="status">
@@ -248,6 +315,10 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
             </CardGrid>
           ))}
       </div>
+      {/* Gated on `mounted`, not `open`, so the chunk is fetched on the first open only and the
+          fade-out completes before unmount (the `useLeaveGuard` contract). The Dialog portals to
+          `document.body` regardless of where this sits in the tree. */}
+      {editorMounted && <OrganismEditorModal {...modalProps} />}
     </section>
   );
 }
