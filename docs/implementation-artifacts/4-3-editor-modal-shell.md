@@ -301,6 +301,61 @@ gate and the CI gates already impose on "the story that adds a dialog to a route
         the e2e summary into the Dev Agent Record. Push to `story/4-3-editor-modal-shell`; check
         `gh run list --limit 1` after the PR opens.
 
+### Review Findings
+
+Code review 2026-09-14 (Fable 5.1 reviewing an Opus implementation; Blind Hunter + Edge Case
+Hunter + Acceptance Auditor, 32 raw findings, 12 dismissed as noise or spec-mandated shape).
+
+- [ ] [Review][Decision] **Toolbar tab order: `create → search → card` (shipped) or
+      `search → create → card` (AC6 / Task 3(f) / Task 4)?** — The two orders trace to different
+      sources and no spec settles it. For the shipped order: Task 3 ("**first** child of
+      `<ToolbarLeft>`"), the Library mockup (`organism-library.html:406-408` renders
+      `.create-button` before `.search-container`), and SC 2.4.3 (DOM order = visual order; a CSS
+      `order` swap would break it). For the AC's order: AC6 `:110-112`, Task 3(f) `:254-255`,
+      Task 4's last sub-item `:278-279` — all of which trace to Story 4.2's reserved slot sitting
+      *after* `<SearchField>` (`4-2-organism-card-grid.md:216`), a placement, not a design
+      decision. `epics.md:1017-1027` and the UX docs say nothing about toolbar order. **Options:**
+      (1) ratify the shipped/mockup order — AC6, Task 3(f) and Task 4's last sub-item become stale
+      text and nothing else moves; (2) enforce the AC — move `<CreateButton>` after
+      `<SearchField>` in `OrganismLibrary.tsx` and retarget the unit tab-order test and the e2e
+      "precedes the search input" test. AC6 also claims the 4.2 keyboard e2e "is updated"; it was
+      not (correctly, under the shipped order — no new stop sits on `search → card`).
+- [x] [Review][Patch] e2e `openEditor` "settled" wait reads `opacity` off the `role="dialog"`
+      paper, but MUI's `Fade` wraps `.MuiDialog-container` (Dialog.js: Transition → Container →
+      Paper) and `getComputedStyle` reports an element's own opacity — the wait never waited
+      [apps/web/e2e/organisms.spec.ts:252-258]
+- [x] [Review][Patch] Focus-trap e2e passes vacuously: `activeElement?.closest(…) !== null` is
+      `true` for a null `activeElement`, and a plain `Tab` on WebKit never leaves the container
+      (the file's own Alt+Tab note) so four "still inside" checks proved nothing — now `!!`, the
+      WebKit key, and both Back and Close must be seen focused
+      [apps/web/e2e/organisms.spec.ts:329-357]
+- [x] [Review][Patch] "Chunk requested on open" proof accepted any script growth, including a
+      late Next `<Link>` prefetch — now settles `networkidle` first and asserts a URL absent from
+      the pre-click set [apps/web/e2e/organisms.spec.ts:276-286]
+- [x] [Review][Patch] `ssr: false` comment said prerendering "would put the whole stack back into
+      the route's HTML"; a closed `Dialog` emits no markup either way — the flag is about the
+      server bundle, as the story's own Dev Notes (`:433-436`) say
+      [apps/web/components/organisms/OrganismLibrary.tsx:176-178]
+- [x] [Review][Patch] `Stories 2.13/2.14/2.15` is a form `spec:check` cannot tokenise (the
+      regex is `Story \d+\.\d+`), so three pointers were silently exempt
+      [apps/web/components/organisms/editor/OrganismEditorModal.tsx:82]
+- [x] [Review][Patch] Dev Agent Record counts: 6 (not 7) new Library tests, 8 (not 9) new e2e
+      per project [docs/implementation-artifacts/4-3-editor-modal-shell.md:545,565,568]
+- [x] [Review][Patch] Completion Notes labelled Task 5's deferred-work items as if all three were
+      delivered as listed; items (2) and (3) were folded into one bullet and the tab-order item
+      added [docs/implementation-artifacts/4-3-editor-modal-shell.md:604-606]
+- [ ] [Review][Patch] AC8 / Task 5's last sub-item is ticked while the record says the CI check
+      is "pending, not done" — performed by this review once the PR exists; result recorded below
+      [docs/implementation-artifacts/4-3-editor-modal-shell.md:300-302,575-576]
+- [x] [Review][Defer] `useOrganismEditorModal.test.tsx`'s `afterEach` removes every
+      `[aria-hidden="true"]` node in the document — including the still-mounted dialog's glyph
+      spans and the RTL container — before RTL's own cleanup; copied verbatim from
+      `useLeaveGuard.test.tsx:127` [apps/web/lib/organisms/useOrganismEditorModal.test.tsx:100-103]
+      — deferred, pre-existing idiom
+- [x] [Review][Defer] `deleteBattle.spec.ts:314-317` has the same paper-not-container opacity
+      wait; its `waitForTimeout(300)` is what actually settles it [apps/web/e2e/deleteBattle.spec.ts:316]
+      — deferred, pre-existing
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -542,7 +597,7 @@ Claude Opus 5 (claude-opus-5), via `bmad-dev-story` on branch `story/4-3-editor-
 ### Debug Log References
 
 - **Red → green order followed per task.** Task 1's test failed on the missing module, Task 2's on
-  the missing hook, Task 3's seven new Library tests failed against the unwired Library (14
+  the missing hook, Task 3's six new Library tests failed against the unwired Library (14
   existing stayed green) — then each went green without touching an existing assertion beyond the
   AC6 tab-order retarget.
 - **`user.click` refuses a disabled MUI `Button`** — MUI's `:disabled` sets `pointer-events: none`
@@ -562,10 +617,10 @@ Claude Opus 5 (claude-opus-5), via `bmad-dev-story` on branch `story/4-3-editor-
     ±0.5 noise band and is **not chunk-diffed**: `/` mounts nothing from this story, so it is a
     shared-chunk boundary shift; flagged rather than attributed (Story 4.1's lesson).
 - **Unit:** `vitest run` in `apps/web` — 71 files, **1051 passed**, 0 failed (10 new in
-  `OrganismEditorModal.test.tsx`, 8 in `useOrganismEditorModal.test.tsx`, 7 in the Library's
+  `OrganismEditorModal.test.tsx`, 8 in `useOrganismEditorModal.test.tsx`, 6 in the Library's
   Story 4.3 block; 1 retargeted).
 - **e2e:** `playwright test e2e/organisms.spec.ts` — **68 passed** across chromium / firefox /
-  webkit / tablet (17 per project; 9 new per project including the three close channels' WebKit
+  webkit / tablet (17 per project; 8 new per project including the three close channels' WebKit
   focus-return and the settled-dialog axe scan). Duration 37.0 s.
 - **`npm run ci > ci.log 2>&1; echo $?` → `0`.** typecheck · lint · format:check · spec:check ·
   boundary:check · coverage (domain 100 / simulation 100 / persistence 99.19 / web 95.65 stmts,
@@ -602,8 +657,11 @@ Claude Opus 5 (claude-opus-5), via `bmad-dev-story` on branch `story/4-3-editor-
   settled (opacity 1 + 300 ms for the Button's own transition); prerender proof (button element
   in the raw HTML, no `role="dialog"`, no "Organism Editor").
 - **Task 5 — docs:** `deferred-work.md` gains the Story 4.3 section: (1) the header/footer
-  three-way spec divergence (FD1) as a UX reconciliation touch; (2) the disabled-Save cross-fade
-  note for Story 4.16; (3) the toolbar tab-order self-contradiction and how it was resolved.
+  three-way spec divergence (FD1) as a UX reconciliation touch; (2) Task 5's items (2) and (3)
+  folded into ONE bullet — the disabled-Save cross-fade note for Story 4.16 already names MUI
+  `Button`'s own 250 ms transition and the `EditorStatusBar` ratios, so a second bullet would
+  have said the same thing twice; (3) the toolbar tab-order self-contradiction and how it was
+  resolved — not on Task 5's list, added because it is a reviewer's decision, not the dev's.
   `project-context.md` unchanged — no new "compiles but wrong" trap surfaced.
 - **⚠️ Deviation from the story text, flagged for review (not silently picked):** AC6 and Task 4
   wrote the toolbar tab order as `search input → create button → first card`; Task 3 and the

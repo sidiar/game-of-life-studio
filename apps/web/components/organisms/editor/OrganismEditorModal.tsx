@@ -67,7 +67,7 @@ const EditorHeader = styled('header')({
 // column footer — with the same two settled substitutions: `--gol-border-control` for the button's
 // only boundary (SC 1.4.11 — the decorative `--gol-border` measures 1.57:1), and NO `transition`
 // (the mockup's `transition: all 0.2s` is what an axe scan landing mid-fade measures at a ratio no
-// settled state has — Stories 2.13/2.14/2.15 each lost one here).
+// settled state has — Story 2.13, Story 2.14 and Story 2.15 each lost one here).
 const BackButton = styled('button')({
   justifySelf: 'start',
   background: 'transparent',

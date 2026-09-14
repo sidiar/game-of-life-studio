@@ -755,3 +755,19 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   button → search input → first card`, and the unit + e2e tests pin that. **For the reviewer:** if
   the AC's order was the intent, the button moves after the search field and both tests retarget;
   nothing else changes.
+
+## Deferred from: code review of 4-3-editor-modal-shell (2026-09-14)
+
+- **Hook-test `afterEach` sweeps every `[aria-hidden="true"]` node out of a live React tree.**
+  `useOrganismEditorModal.test.tsx:100-103` copies `useLeaveGuard.test.tsx:127` verbatim:
+  `document.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove())`. That
+  matches the `appendBackground()` sibling it means to remove, but also the `←`/`✕` glyph spans
+  inside a still-mounted dialog and the RTL render container MUI has aria-hidden — all detached
+  before RTL's own cleanup unmounts them. It works today only because React's root unmount detaches
+  top-level host nodes rather than each descendant. Scope both files' cleanup to the elements the
+  test created (track them from `appendBackground()`), in the same touch.
+- **`deleteBattle.spec.ts:314-317` waits for `opacity: 1` on the `role="dialog"` paper, which MUI's
+  `Fade` never animates** — it animates `.MuiDialog-container`, the paper's parent, and
+  `getComputedStyle` reports an element's own opacity. The wait returns at once; the
+  `waitForTimeout(300)` that follows is what actually settles the scan. Story 4.3's `openEditor`
+  helper now waits on the container; retarget the Gallery spec the same way when it is next touched.

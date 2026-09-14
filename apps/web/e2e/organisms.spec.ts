@@ -248,12 +248,17 @@ test.describe('editor modal shell (Story 4.3)', () => {
 
   /** The dialog, settled: visible AND its Fade at opacity 1. `toBeVisible()` alone passes the
    * instant the element has a bounding box, well before the ~225ms Fade ends
-   * (`deleteBattle.spec.ts`'s axe test records the measurement). */
+   * (`deleteBattle.spec.ts`'s axe test records the measurement).
+   *
+   * ⚠️ The opacity is read off `.MuiDialog-container`, not the `role="dialog"` paper. MUI's `Fade`
+   * wraps the CONTAINER (Dialog.js renders Transition → Container → Paper) and `getComputedStyle`
+   * reports an element's OWN `opacity`, never an ancestor's — the paper's is `1` from its first
+   * frame, so a wait on the paper returns at once and "settled" would be a name, not a fact. */
   async function openEditor(page: Page) {
     await page.getByRole('button', { name: CREATE }).click();
     const dialog = page.getByRole('dialog', { name: 'Organism Editor' });
     await expect(dialog).toBeVisible();
-    await expect(dialog).toHaveCSS('opacity', '1');
+    await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
     return dialog;
   }
 
@@ -277,10 +282,15 @@ test.describe('editor modal shell (Story 4.3)', () => {
     await page.goto('/organisms');
     // Hydration signal, same discipline as the blocks above.
     await expect(page.getByText("Conway's Classic")).toBeVisible();
-    const scriptsBeforeOpen = scriptRequests.size;
+    // Let Next's idle-time `<Link>` prefetches land BEFORE the snapshot, so a script that arrives
+    // after the click is the click's and not a late prefetch masquerading as the editor chunk.
+    // The bundle gate (AC7) stays the authoritative proof; this is its in-browser echo.
+    await page.waitForLoadState('networkidle');
+    const scriptsBeforeOpen = new Set(scriptRequests);
 
     const dialog = await openEditor(page);
-    expect(scriptRequests.size).toBeGreaterThan(scriptsBeforeOpen);
+    const scriptsOnOpen = [...scriptRequests].filter((url) => !scriptsBeforeOpen.has(url));
+    expect(scriptsOnOpen).not.toEqual([]);
     await expect(dialog.getByRole('heading', { level: 2, name: 'Organism Editor' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Back to Library' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -327,28 +337,40 @@ test.describe('editor modal shell (Story 4.3)', () => {
 
   test('traps focus inside the dialog and makes the background genuinely inert', async ({
     page,
+    browserName,
   }) => {
     await page.goto('/organisms');
     await expect(page.getByText("Conway's Classic")).toBeVisible();
 
     await openEditor(page);
 
+    // `!!`, not `!== null`: with optional chaining a null `activeElement` yields `undefined`, and
+    // `undefined !== null` is true — a dropped focus would read as "inside the dialog".
+    const focusIsInsideDialog = () =>
+      page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+
     // MUI's trap has already moved focus inside — no `autoFocus` in the shell, so the container
     // itself is the landing spot until Story 4.5's name field claims it.
-    const startedInside = await page.evaluate(
-      () => document.activeElement?.closest('[role="dialog"]') !== null,
-    );
-    expect(startedInside).toBe(true);
+    expect(await focusIsInsideDialog()).toBe(true);
 
     // Four presses is more than the header's two enabled tabbables (Back, Close — Save is
-    // disabled), so a leak to the page behind would show.
+    // disabled), so a leak to the page behind would show. WebKit needs Alt+Tab (the Story 4.1
+    // block's note) — with a plain Tab there, focus never leaves the container and four "still
+    // inside" assertions would pass without the trap ever being exercised, so each button also
+    // has to be SEEN focused for the loop to count.
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    const back = page.getByRole('button', { name: 'Back to Library' });
+    const close = page.getByRole('button', { name: 'Close' });
+    let backFocused = false;
+    let closeFocused = false;
     for (let i = 0; i < 4; i++) {
-      await page.keyboard.press('Tab');
-      const focusedInDialog = await page.evaluate(
-        () => document.activeElement?.closest('[role="dialog"]') !== null,
-      );
-      expect(focusedInDialog).toBe(true);
+      await page.keyboard.press(tabKey);
+      expect(await focusIsInsideDialog()).toBe(true);
+      backFocused ||= await back.evaluate((el) => el === document.activeElement);
+      closeFocused ||= await close.evaluate((el) => el === document.activeElement);
     }
+    expect(backFocused).toBe(true);
+    expect(closeFocused).toBe(true);
 
     // getByRole cannot resolve the search input once `inert` applies (an inert subtree is
     // excluded from the accessibility tree), so a raw CSS locator reaches the DOM node.

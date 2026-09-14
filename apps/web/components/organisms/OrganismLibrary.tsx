@@ -21,8 +21,9 @@ import OrganismCard from './OrganismCard';
  * *the* example of its "dynamic import for heavy components" rule (RFC-003).
  *
  * `ssr: false` because a closed dialog can never be part of the first paint (`open` is false until
- * a user gesture) and this app is a static export — prerendering it would put the whole stack back
- * into the route's HTML, which is the cost this avoids. No `loading` fallback (FD7): the two
+ * a user gesture), so there is nothing for the prerender to render: the flag keeps the module out
+ * of the route's SERVER bundle, not out of its HTML — a closed `Dialog` emits no markup either way
+ * (the e2e's prerender proof pins that). No `loading` fallback (FD7): the two
  * shipped lazy dialogs render nothing while the chunk resolves, and a spinner for a few
  * milliseconds is chrome nobody asked for.
  */
