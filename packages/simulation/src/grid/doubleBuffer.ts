@@ -19,7 +19,9 @@ import { createGrid } from './grid';
  * ⚠️ THE SWAP IS THE CALLER'S, deliberately (Story 3.6's FD1): `threePhaseStep` returns the
  * destination it wrote and never touches the pair, so a caller can run a second simulation — Story
  * 3.9's preview instance (M3), Story 4.15's draft-organism run — without the strategy type
- * carrying a `GridBuffers`.
+ * carrying a `GridBuffers`. Story 3.8's `../loop/stepGridBuffers.ts` is that caller for the RAF
+ * loop: it performs the swap immediately after the strategy returns; the pair itself lives in the
+ * caller's ref (Story 3.10), never in the loop.
  *
  * ❌ NOT module state. No `class`, no `this`, no singleton (AR-16) — whatever holds the pair is a
  * value the caller owns and passes, which is also what lets Story 3.9's preview instance (M3) run

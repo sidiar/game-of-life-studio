@@ -26,8 +26,10 @@ import type { ConflictDeps, PhaseDeps } from './phaseDeps';
  * time (Story 3.9). Publishing it here would invite the one bug the cycle-end write forbids.
  *
  * ⚠️ NO seed, and no `cycle` counter. A seed is config, not outcome (A-2): nothing persists or
- * exports one, so the caller constructs the `Rng` and owns it. The cycle number belongs to the loop
- * (Story 3.8), not to a pure reducer.
+ * exports one, so the caller constructs the `Rng` and owns it. The cycle number belongs to whoever
+ * owns the `step` thunk handed to Story 3.8's loop (Story 3.10's `useSimulation`), not to a pure
+ * reducer — and it has to live there rather than in the loop, because manual Step (Story 3.12)
+ * calls the thunk directly and bypasses the loop entirely.
  *
  * A `CompiledSession` already carries `evaluatorsByRef` and `maxRelevantAge`, so
  * `{ ...session, organisms, rng }` satisfies this whole interface with no construction step — the
@@ -45,11 +47,12 @@ export interface SimulationDeps extends PhaseDeps, ConflictDeps {}
  * cost a `Uint8Array(N)` plus a `Uint16Array(N)` up to 20 times a second — precisely the per-cycle
  * allocation Decision A.6's steady-state budget exists to rule out.
  *
- * ❌ NOT `(buffers: GridBuffers) => GridBuffers`, the other candidate. It gives Story 3.8 a
+ * ❌ NOT `(buffers: GridBuffers) => GridBuffers`, the other candidate. It gives a caller a
  * one-liner but bakes double-buffering into the strategy TYPE, which then cannot describe Story
  * 3.9's preview instance (M3) or Story 4.15's draft-organism run without each carrying a pair.
- * WHO holds the buffers and WHEN they swap is Story 3.8's question, where the loop and its refs
- * live; this signature leaves it there.
+ * WHO holds the buffers (the caller's ref, Story 3.10) and WHEN they swap (immediately, inside
+ * `stepGridBuffers` — Story 3.8's `../loop/stepGridBuffers.ts`) is answered there, not in this
+ * signature.
  *
  * ✅ RFC-004 §3.1/§3.2 spelled the allocating shape until Story 3.6 and now state this one,
  * amended on Sidiar's explicit authorization (2026-09-10) — amending an authority doc is their
@@ -77,8 +80,9 @@ export type SimulationStrategy = (source: Grid, destination: Grid, deps: Simulat
  * changes"*, and it is why explicit deaths are gone from the neighbour counts while implicit ones
  * are still standing (M10).
  *
- * ⚠️ THE SWAP IS NOT DONE HERE. This returns `destination`; the caller replaces its own pair with
- * `swapGridBuffers(...)`. Doing it here would require owning the pair — see `SimulationStrategy`.
+ * ⚠️ THE SWAP IS NOT DONE HERE. This returns `destination`; `../loop/stepGridBuffers.ts` composes
+ * this call with `swapGridBuffers(...)` so the caller never has to remember the swap itself. Doing
+ * it here would require owning the pair — see `SimulationStrategy`.
  *
  * Purity is stated over the SOURCE (Story 3.5's FD2): `source` is byte-identical afterwards and no
  * returned buffer aliases one of its buffers. `destination` is an OUTPUT — asserting nothing

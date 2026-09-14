@@ -97,7 +97,7 @@ development_status:
   3-5-phases-1-2-death-claims: done
   3-6-phase-3-the-assembled-cycle: done
   3-7-performance-harness-coverage-gate-flip: done
-  3-8-simulationloop: backlog
+  3-8-simulationloop: done
   3-9-colour-state-batch-rendering: backlog
   3-10-usesimulation-hook: backlog
   3-11-mode-toggle-run-view-skeleton: backlog
