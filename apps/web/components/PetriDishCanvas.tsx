@@ -56,7 +56,8 @@ export type PetriDishCanvasProps = PetriDishCanvasSharedProps &
         onStrokeCommit(next: RenderableGrid): void;
       }
   );
-// 'playback' (3.11) joins this union next.
+// 'playback' (3.11) joins this union next: its `onRendererReady(r)` goes straight to
+// `useSimulation.attachRenderer(r)`, and its cleanup to `attachRenderer(null)` (Story 3.10 AC9).
 
 // Exhaustiveness guard for `variant`. Its job is to stop COMPILING the moment 3.11's 'playback'
 // joins the union without a matching dispatch arm below — without it, a widened union

@@ -1,7 +1,7 @@
 import { emptyGrid, gridFromPattern, placePattern } from '@gol/test-utils';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { clearGrid, createGrid, gridFromDense, gridToDense } from './grid';
+import { clearGrid, cloneGrid, createGrid, gridFromDense, gridToDense } from './grid';
 
 // Grid dimensions are parameters, never constants (Decision A, AR-17). Every size below is
 // deliberately NOT one of the two editable presets except where a case is about the presets, so
@@ -216,6 +216,61 @@ describe('clearGrid', () => {
   it('clears both editable preset sizes (Decision A.2)', () => {
     expect(clearGrid(createGrid(50, 30)).occupant.length).toBe(1500);
     expect(clearGrid(createGrid(100, 60)).occupant.length).toBe(6000);
+  });
+});
+
+describe('cloneGrid (Story 3.10 Task 1, AR-31)', () => {
+  it('is byte-equal to the source on both buffers and keeps its dimensions', () => {
+    const grid = gridFromDense(placePattern(emptyGrid(5, 3), [[1, 2, 3]], 1, 1));
+    grid.age[6] = 4;
+    grid.age[7] = 9;
+
+    const clone = cloneGrid(grid);
+
+    expect(clone.width).toBe(5);
+    expect(clone.height).toBe(3);
+    expect(clone.occupant).toEqual(grid.occupant);
+    expect(clone.age).toEqual(grid.age);
+  });
+
+  it('allocates NEW buffers and a NEW wrapper — never a view (.subarray) and never the input', () => {
+    const grid = createGrid(4, 2);
+
+    const clone = cloneGrid(grid);
+
+    expect(clone).not.toBe(grid);
+    expect(clone.occupant).not.toBe(grid.occupant);
+    expect(clone.age).not.toBe(grid.age);
+    // A `.subarray()` would share the underlying ArrayBuffer; a `.slice()` never does.
+    expect(clone.occupant.buffer).not.toBe(grid.occupant.buffer);
+    expect(clone.age.buffer).not.toBe(grid.age.buffer);
+  });
+
+  it('writing the clone leaves the source untouched (the RFC-005 Decision 4 clone step)', () => {
+    const grid = gridFromDense([
+      [1, 2],
+      [3, 4],
+    ]);
+    const occupantBefore = Uint8Array.from(grid.occupant);
+    const ageBefore = Uint16Array.from(grid.age);
+
+    const clone = cloneGrid(grid);
+    clone.occupant.fill(200);
+    clone.age.fill(7);
+
+    expect(grid.occupant).toEqual(occupantBefore);
+    expect(grid.age).toEqual(ageBefore);
+  });
+
+  it('copies `age`, never zero-fills it — a live grid cloned mid-run keeps its ages (FR-5.6)', () => {
+    const grid = createGrid(3, 3);
+    grid.occupant[4] = 1;
+    grid.age[4] = 12;
+
+    const clone = cloneGrid(grid);
+
+    expect(clone.age[4]).toBe(12);
+    expect(Array.from(clone.age)).toEqual(Array.from(grid.age));
   });
 });
 

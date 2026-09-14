@@ -121,6 +121,32 @@ export function clearGrid(grid: Grid): Grid {
 }
 
 /**
+ * A deep copy at the same dimensions — RFC-005 Decision 4's "the live grid is cloned from
+ * `initialGrid`" is the CALLER's step (`createGridBuffers` takes `front` by reference and says so),
+ * and this is the one place that step is spelled for a `Grid` (Story 3.10, FD1). AR-31: the
+ * persisted `initialGrid` must never be written by a run — after one swap the grid handed to
+ * `createGridBuffers` IS `back`, the scratch buffer, so pairing `initialGrid` itself overwrites the
+ * saved dish from the second cycle on with nothing logged.
+ *
+ * `.slice()`, never `.subarray()` — a subarray is a VIEW onto the same `ArrayBuffer`, the
+ * one-character version of not copying at all (`useUndoableGrid#snapshot` carries the same note).
+ * `age` is copied cell for cell, not zero-filled (AR-17): every initial grid is age-zero today, but
+ * Story 4.15's preview clones a LIVE grid whose ages are a rule input (FR-5.6), and a clone that
+ * silently resets them changes which rules fire with no failing test.
+ *
+ * Not `resizeGrid(grid, grid.width, grid.height)`: that happens to copy both buffers too, but it
+ * reads as a resize and re-validates dimensions this grid already has — a contract by side effect.
+ */
+export function cloneGrid(grid: Grid): Grid {
+  return {
+    width: grid.width,
+    height: grid.height,
+    occupant: grid.occupant.slice(),
+    age: grid.age.slice(),
+  };
+}
+
+/**
  * Dense at-rest `number[][]` (RFC-001 / `BattleSchema.gridState`) -> typed runtime `Grid`.
  *
  * This is the dense->typed half of Cross-RFC Reconciliation #3, owned here rather than in

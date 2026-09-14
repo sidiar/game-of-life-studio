@@ -499,6 +499,15 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   them is a contract change to another package, and FD4 requires the pair to move together. Until
   then: mint with `Math.floor(Math.random() * 2 ** 32)`, and the reported seed IS the effective
   seed.
+  **Story 3.10 (2026-09-14): the hook-level half is CLOSED, the RNG-level half is RE-DEFERRED.**
+  `useSimulation` now mints every production seed as `Math.floor(Math.random() * 2 ** 32)` and
+  routes both the mint and a test's `opts.seed` through one `assertSeedDomain` (`0 <= seed <
+  2^32`, integer, throws naming the seed) — every seed a run reports is inside the domain.
+  Enforcement inside `createRng` / `createSeededRng` stays deferred, with the reason (FD7): the
+  two copies must move together, `seededRng.test.ts` deliberately accepts negative seeds, and a
+  single run-boundary site now covers every production path — so the RNG-level check buys nothing
+  until a SECOND production mint site appears (Story 4.15's preview is the candidate; it should
+  reuse the hook's mint rather than add one). Enforce in both copies in that story, together.
 
 ## Deferred from: Story 3-7 performance harness (2026-09-10)
 
@@ -649,6 +658,15 @@ Review Findings; these are the items consciously left open.
   is the freeze `simulationLoop.ts`'s Trap 1 and `3-8-simulationloop.md`'s Dev Notes both name —
   `draw` is the marks-only Edit path (Story 2.3) and the loop marks nothing (Story 3.8 AC5), so a
   raw renderer paints nothing after the first step, with nothing thrown.
+  **Closed by Story 3.10 (2026-09-14) — with a ref-forwarding `StepRenderer`, not the literal
+  call (FD3).** `useSimulation` builds the loop once per session with `draw: (g) =>
+  rendererRef.current?.drawDiff(g)`; the substance (`drawDiff`, never `draw`) is honoured and
+  pinned (`useSimulation.test.ts`, "the loop is built once per session"). The bound form
+  `toStepRenderer(rendererRef.current)` was not usable: the renderer arrives AFTER the loop is
+  built (a child's construction effect fires before the hook's session effect) and can be swapped
+  mid-run (Story 3.16's canvas rebuild, Story 3.18's fullscreen), so binding it at loop
+  construction would mean rebuilding — and restarting — the loop on every attach. `toStepRenderer`
+  stays as the adapter for a caller that holds its renderer up front (Story 4.15 may).
 
 ## Deferred from: Story 3-8 SimulationLoop (2026-09-13)
 
@@ -725,3 +743,34 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   moving — `Story 4.10` adds the rules sentence and `Story 4.20` the usage line. **Pick this up
   with whichever of those settles the card's stat block**, and decide the cell semantics once for
   all three rows.
+
+## Deferred from: Story 3-10-usesimulation-hook implementation (2026-09-14)
+
+- **⚠️ Story 3.11 will pull the whole engine into `/battle`, and the bundle gate has 3.8 KB gzip
+  of headroom.** This story adds no route import (`bundle:check` is unchanged), but
+  `<BattleSimulationView>` importing `useSimulation` imports `compileSession`, `threePhaseStep`,
+  `createSimulationLoop`, `cloneGrid`/`resizeGrid` and the population derivation into the `/battle`
+  chunk — almost certainly more than 3.8 KB. Story 3.11 must plan a gate conversation BEFORE
+  `npm run ci` discovers it, under Sidiar's ratchet rule (change the mechanism, not the threshold —
+  e.g. a `next/dynamic` split of the Run view so the engine loads on the first mode toggle, or a
+  per-route budget that names the engine as expected weight).
+- **`component-tree-battle-page.md` §4 / §3.11 amendment candidates** (planning artifact, not edited
+  — Sidiar's call, the M14/M15 precedent). What shipped diverges from the spec's sketch in four
+  places, each recorded in the story's Dev Agent Record:
+  1. §4's return gains `genPerSec: GenPerSec` and `liveSize: { cols, rows }` (FD6) — the hook is
+     the only holder of `msPerCycle` and of the live buffers' size, and without them Stories 3.13
+     and 3.16 mirror state that can drift from a ref.
+  2. §3.11's `organisms: OrganismRuntime[] // dense array w/ dominance, agingEnabled, compiled
+     rules` → the hook takes domain `Organism[]` in roster order; the shipped `OrganismRuntime` is
+     `{ dominance }` only (Story 3.6 FD2) and the name is not reused for a different shape.
+  3. §4's `attachRenderer(r: GridRenderer)` → `attachRenderer(r: PlaybackRenderer | null)` where
+     `PlaybackRenderer = Pick<GridRenderer, 'drawDiff' | 'drawFull' | 'resize'>`; `null` detaches.
+  4. §4's `resizeLive(p: GridPreset)` → `resizeLive({ cols, rows })` — no `GridPreset` type exists;
+     the four-preset model is Story 3.16's control.
+  Also §5's "`createSimulation(organisms, rng)`" names a function that never existed — the settled
+  shape is `compileSession` + `{ ...session, organisms, rng }` + `stepGridBuffers` (M15).
+- **`stop()` mints a fresh seed even under `opts.seed`.** `opts.seed` seeds the session at mount
+  and on a rebind; `stop()` is unconditionally a new run (AC4's "mints a fresh seed", observed
+  through a `Math.random` spy). A test that needs a reproducible run AFTER a Stop must re-mount (a
+  new `initialGrid` reference) rather than call `stop()`. Documented in the hook's head comment;
+  revisit only if a consumer needs seed-stable Stop.
