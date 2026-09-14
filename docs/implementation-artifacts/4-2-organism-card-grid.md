@@ -744,3 +744,18 @@ e2e ✓ (380 passed, 4 skipped, 4 browser projects)
   one live region. `<OrganismRoster>` switches to the same shared predicate. `npm run ci` green
   (exit 0); bundle deltas within the story's own predicted ranges on all four measured routes, no
   budget raised. Status → `review`.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 20s | 12 | 1,666 | 3,930 | 357,846 | 363,454 |
+| Step 1 — create-story | opus-5 | 3 | 12m 06s | 386 | 88,184 | 838,010 | 19,330,147 | 20,256,727 |
+| Step 2 — dev-story | sonnet-5 | 1 | 21m 47s | 388 | 77,295 | 799,586 | 37,855,897 | 38,733,166 |
+| Step 3 — code review + PR | opus-5 | 4 | 33m 25s | 428 | 86,936 | 954,150 | 22,276,866 | 23,318,380 |
+| _of which the orchestrator_ | opus-5 | — | — | 62 | 10,673 | 26,136 | 2,079,838 | 2,116,709 |
+| **Total (create-story → PR ready)** | | 8 | **1h 07m** | 1,214 | 254,081 | 2,595,676 | 79,820,756 | **82,671,727** |
+
+Run started 2026-09-14 08:59 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
