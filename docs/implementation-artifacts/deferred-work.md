@@ -774,3 +774,17 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   through a `Math.random` spy). A test that needs a reproducible run AFTER a Stop must re-mount (a
   new `initialGrid` reference) rather than call `stop()`. Documented in the hook's head comment;
   revisit only if a consumer needs seed-stable Stop.
+
+## Deferred from: code review of 3-10-usesimulation-hook (2026-09-14)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+
+- **A throw inside the RAF step leaves `status: 'playing'` over a loop that has stopped itself.**
+  `createSimulationLoop` clears its handle and rethrows when `step()` or the forwarded `drawDiff`
+  throws (`simulationLoop.ts`, the wedged-loop rule), so `loop.isRunning()` is `false` while the
+  hook's `view.status` stays `'playing'` — `play()` then restarts silently and `step()` stops
+  throwing. Nothing in `useSimulation` observes a loop that stops from inside a frame. **Deferred
+  to Story 3.15**: extinction auto-pause is exactly a loop stopping itself from inside the thunk
+  and needing `status` to follow, so the thunk→`'paused'` path should be built once there and
+  cover both the extinction stop and the error stop (the seam comment in the thunk marks the
+  spot). Until then a mid-run throw is a programming error whose only symptom is a frozen dish.

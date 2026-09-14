@@ -30,4 +30,17 @@ describe('cyclesPerPublish (M2, FD4)', () => {
       expect(speed / cyclesPerPublish(speed)).toBeLessThanOrEqual(10);
     }
   });
+
+  it('is an integer for every ladder speed — the hook uses it as a modulus', () => {
+    for (const speed of LADDER) {
+      expect(Number.isInteger(cyclesPerPublish(speed))).toBe(true);
+    }
+  });
+
+  it('rounds a hypothetical off-ladder speed UP, keeping the cadence integral and <= 10 Hz', () => {
+    // 15 gen/sec is not on the ladder; if it ever is, `15 / 10 = 1.5` as a modulus would publish
+    // only on cycles 3, 6, 9... — ceil makes it every second cycle (7.5 Hz).
+    const offLadder = 15 as number as GenPerSec;
+    expect(cyclesPerPublish(offLadder)).toBe(2);
+  });
 });

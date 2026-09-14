@@ -99,7 +99,7 @@ development_status:
   3-7-performance-harness-coverage-gate-flip: done
   3-8-simulationloop: done
   3-9-colour-state-batch-rendering: done
-  3-10-usesimulation-hook: review
+  3-10-usesimulation-hook: done
   3-11-mode-toggle-run-view-skeleton: backlog
   3-12-transport-controls: backlog
   3-13-speed-control: backlog

@@ -53,24 +53,40 @@ function createFakeScheduler() {
   };
 }
 
-/** A recording `PlaybackRenderer` — a plain object, which is why the hook's type is a `Pick`. */
-function createFakeRenderer() {
+/**
+ * A recording `PlaybackRenderer` — a plain object, which is why the hook's type is a `Pick`. It is
+ * STRICT about size the way the real `GridRenderer` is (`assertGridMatchesSize`): it is built at a
+ * size, `resize` moves it, and painting a grid of any other size throws. A fake that only recorded
+ * let the rebind path prime a 5x5 canvas with a 6x4 grid and pass (review 2026-09-14).
+ */
+function createFakeRenderer(size: { cols: number; rows: number } = { cols: 5, rows: 5 }) {
+  let current = { ...size };
   const drawDiff: Grid[] = [];
   const drawFull: Grid[] = [];
   const resize: { cols: number; rows: number }[] = [];
   // Snapshots, not references: the front buffer is reused across cycles, so a recorded reference
   // would show the LATEST grid at every index.
   const drawDiffSnapshots: Uint8Array[] = [];
+  const assertSize = (grid: Grid): void => {
+    if (grid.width !== current.cols || grid.height !== current.rows) {
+      throw new Error(
+        `fake renderer: grid ${grid.width}x${grid.height} does not match ${current.cols}x${current.rows}`,
+      );
+    }
+  };
   const renderer: PlaybackRenderer = {
     drawDiff: (grid) => {
+      assertSize(grid);
       drawDiff.push(grid);
       drawDiffSnapshots.push(grid.occupant.slice());
     },
     drawFull: (grid) => {
+      assertSize(grid);
       drawFull.push(grid);
     },
-    resize: (size) => {
-      resize.push({ ...size });
+    resize: (next) => {
+      current = { ...next };
+      resize.push({ ...next });
     },
   };
   return { renderer, drawDiff, drawFull, resize, drawDiffSnapshots };
@@ -239,6 +255,25 @@ describe('useSimulation — publish cadence (AC3, AC5, M2)', () => {
     runCycles(h, 40, 20);
 
     expect(derivePopulation).toHaveBeenCalledTimes(20);
+  });
+
+  it('a manual step() runs the population pass ONCE whether or not its cycle is on the cadence', () => {
+    // At 10 gen/sec every cycle is on the cadence (the thunk publishes); at 20 only even cycles
+    // are, so step() itself must publish cycle 1 — but never a second time on cycle 2.
+    for (const [genPerSec, steps] of [
+      [10, 3],
+      [20, 2],
+    ] as const) {
+      const h = harness(genPerSec);
+      const { result, unmount } = mount(blinker(), CONWAY, h);
+      vi.mocked(derivePopulation).mockClear();
+
+      for (let i = 0; i < steps; i++) act(() => result.current.step());
+
+      expect(derivePopulation).toHaveBeenCalledTimes(steps);
+      expect(result.current.cycle).toBe(steps);
+      unmount();
+    }
   });
 
   it.each<[GenPerSec, number]>([
@@ -430,7 +465,11 @@ describe('useSimulation — resizeLive is ephemeral and paused-only (AC8, FR-4.9
 
     expect(result.current.liveSize).toEqual({ cols: 7, rows: 6 });
     expect(result.current.cycle).toBe(1);
-    expect(fake.resize).toEqual([{ cols: 7, rows: 6 }]);
+    // The first entry is attach's own sizing (the hook owns the renderer's size from attach on).
+    expect(fake.resize).toEqual([
+      { cols: 5, rows: 5 },
+      { cols: 7, rows: 6 },
+    ]);
     const repainted = fake.drawFull[fake.drawFull.length - 1];
     expect(repainted.width).toBe(7);
     expect(repainted.height).toBe(6);
@@ -459,6 +498,7 @@ describe('useSimulation — resizeLive is ephemeral and paused-only (AC8, FR-4.9
 
     expect(result.current.liveSize).toEqual({ cols: 5, rows: 5 });
     expect(fake.resize).toEqual([
+      { cols: 5, rows: 5 },
       { cols: 8, rows: 7 },
       { cols: 5, rows: 5 },
     ]);
@@ -607,9 +647,38 @@ describe('useSimulation — session keyed on (initialGrid, organisms) (AC10, FD2
     expect(result.current.liveSize).toEqual({ cols: 6, rows: 4 });
     expect(h.scheduler.cancelled()).toBe(1);
     expect(h.scheduler.pending()).toBe(0);
-    // The still-mounted renderer is kept and primed with the NEW run's grid.
+    // The still-mounted renderer is kept, RESIZED to the new run's grid, and primed with it — the
+    // strict fake throws on the prime if the resize is skipped, as the real renderer would.
+    expect(fake.resize).toEqual([
+      { cols: 5, rows: 5 },
+      { cols: 6, rows: 4 },
+    ]);
     expect(fake.drawFull).toHaveLength(2);
     expect(fake.drawFull[1].occupant).toEqual(next.occupant);
+  });
+
+  it('a rebind after an ephemeral resize sizes the kept renderer back to the new initialGrid', () => {
+    const h = harness();
+    const fake = createFakeRenderer();
+    const { result, rerender } = renderHook(
+      ({ grid, roster }) => useSimulation(grid, roster, h.opts),
+      { initialProps: { grid: blinker(), roster: CONWAY } },
+    );
+    act(() => result.current.attachRenderer(fake.renderer));
+    act(() => result.current.resizeLive({ cols: 8, rows: 7 }));
+
+    // Same dimensions as the old initialGrid — the canvas is nevertheless at 8x7 right now.
+    rerender({ grid: blinker(), roster: CONWAY });
+
+    expect(result.current.liveSize).toEqual({ cols: 5, rows: 5 });
+    expect(fake.resize).toEqual([
+      { cols: 5, rows: 5 },
+      { cols: 8, rows: 7 },
+      { cols: 5, rows: 5 },
+    ]);
+    const primed = fake.drawFull[fake.drawFull.length - 1];
+    expect(primed.width).toBe(5);
+    expect(primed.occupant).toEqual(blinker().occupant);
   });
 
   it('a new organisms reference is likewise a new run', () => {
@@ -650,13 +719,13 @@ describe('useSimulation — session keyed on (initialGrid, organisms) (AC10, FD2
     const { play, pause, step, stop, resizeLive } = result.current;
     unmount();
 
-    expect(() => play()).toThrow('useSimulation: play called before mount');
-    expect(() => pause()).toThrow('useSimulation: pause called before mount');
-    expect(() => step()).toThrow('useSimulation: step called before mount');
-    expect(() => stop()).toThrow('useSimulation: stop called before mount');
-    expect(() => resizeLive({ cols: 5, rows: 5 })).toThrow(
-      'useSimulation: resizeLive called before mount',
-    );
+    const noSession = (op: string) =>
+      `useSimulation: ${op} called with no live session (before mount or after unmount)`;
+    expect(() => play()).toThrow(noSession('play'));
+    expect(() => pause()).toThrow(noSession('pause'));
+    expect(() => step()).toThrow(noSession('step'));
+    expect(() => stop()).toThrow(noSession('stop'));
+    expect(() => resizeLive({ cols: 5, rows: 5 })).toThrow(noSession('resizeLive'));
   });
 });
 
@@ -665,7 +734,7 @@ describe('useSimulation — session keyed on (initialGrid, organisms) (AC10, FD2
 describe('useSimulation — the seed (AC11, RFC-008 Decision 4)', () => {
   function runWithSeed(seed: number, cycles: number): Uint8Array {
     const h = harness(10, seed);
-    const fake = createFakeRenderer();
+    const fake = createFakeRenderer({ cols: 7, rows: 3 });
     const { result, unmount } = mount(contestedGrid(), TWO_CONWAYS, h);
     act(() => result.current.attachRenderer(fake.renderer));
     act(() => result.current.play());
@@ -681,11 +750,16 @@ describe('useSimulation — the seed (AC11, RFC-008 Decision 4)', () => {
     expect(first).toEqual(second);
   });
 
-  it('the contested grid really does reach the tie-break on cycle 1 (the test above is not vacuous)', () => {
-    // Cell (3, 1) has three `a` neighbours and three `b` neighbours at equal Dominance. After one
-    // cycle it is occupied — by one of them — which is only reachable through the tie-break.
-    const grid = runWithSeed(FIXED_SEED, 1);
-    expect(grid[1 * 7 + 3]).not.toBe(0);
+  it('the seed decides the tie: FIXED_SEED gives (3, 1) to b, seed 0 gives it to a', () => {
+    // Cell (3, 1) has three `a` neighbours and three `b` neighbours at equal Dominance, so cycle 1
+    // is only reachable through the tie-break — and two seeds resolve it DIFFERENTLY, which is what
+    // proves `opts.seed` reaches the RNG (the same-seed test above would also pass if the seed were
+    // ignored). The two winners are pinned values, not "some organism"; if mulberry32 or the
+    // tie-break ever changes, this is the test that says so.
+    const contested = 1 * 7 + 3;
+    expect(runWithSeed(FIXED_SEED, 1)[contested]).toBe(2);
+    expect(runWithSeed(0, 1)[contested]).toBe(1);
+    expect(runWithSeed(FIXED_SEED, 20)).not.toEqual(runWithSeed(0, 20));
   });
 
   it.each([-1, 2 ** 32, 1.5])('rejects opts.seed %p, naming the seed', (seed) => {

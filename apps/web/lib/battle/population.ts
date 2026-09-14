@@ -39,6 +39,13 @@ export interface PopulationEntry {
  * nobody (`gridStats.ts` trap 2). The engine can never produce one — every ref reaching a live
  * grid came from the compiled roster (`claims.ts` invariant 2) — so this is the persisted-grid
  * corruption case, documented rather than guarded.
+ *
+ * One entry per DISTINCT id, first occurrence wins — the same de-duplication
+ * `computeEditorGridStats` applies, which has already aggregated every duplicate slot's tally onto
+ * that id. One entry per SLOT would hand the aggregated count to each duplicate and push the `pct`
+ * sum past 100. A duplicate-id roster never reaches a session (`compileSession` throws on it), but
+ * `useSimulation` derives the initial population during render, BEFORE that throw, so the
+ * invariant is kept here rather than assumed.
  */
 export function derivePopulation(
   grid: RenderableGrid,
@@ -53,7 +60,10 @@ export function derivePopulation(
 
   const totalLiving = stats.livingCells;
 
-  const indexed = organisms.map((organism, rosterIndex) => {
+  const seen = new Set<string>();
+  const indexed = organisms.flatMap((organism, rosterIndex) => {
+    if (seen.has(organism.id)) return [];
+    seen.add(organism.id);
     const count = countById.get(organism.id) ?? 0;
     const entry: PopulationEntry = {
       organismId: organism.id,
@@ -63,10 +73,11 @@ export function derivePopulation(
       pct: totalLiving === 0 ? 0 : (count / totalLiving) * 100,
       extinct: count === 0,
     };
-    return { entry, rosterIndex };
+    return [{ entry, rosterIndex }];
   });
 
-  // Copy-then-sort on the indexed pairs: extinct after living, then count descending, then roster.
+  // Sorted in place — `indexed` is the fresh array from the map above, nothing shared. Extinct
+  // after living, then count descending, then roster.
   indexed.sort((a, b) => {
     if (a.entry.extinct !== b.entry.extinct) return a.entry.extinct ? 1 : -1;
     if (a.entry.count !== b.entry.count) return b.entry.count - a.entry.count;

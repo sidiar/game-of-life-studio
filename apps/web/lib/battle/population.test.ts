@@ -78,11 +78,25 @@ describe('derivePopulation (Story 3.10 Task 3, M2, FR-4.6)', () => {
     });
   });
 
-  it('returns a frozen-shape readonly list with exactly one entry per roster organism', () => {
+  it('returns exactly one entry per roster organism', () => {
     const grid = toRenderableGrid(gridFromPattern(['ab'], LEGEND));
 
     const entries = derivePopulation(grid, ROSTER);
 
     expect(entries).toHaveLength(ROSTER.length);
+  });
+
+  it('a duplicate id yields ONE entry with the aggregated count, so pct still sums to 100', () => {
+    // Slots 1 and 3 share an id: `a` (2 cells) and `c` (1 cell) both belong to it.
+    const roster = [ROSTER[0], ROSTER[1], { ...ROSTER[2], id: ROSTER[0].id }];
+    const grid = toRenderableGrid(gridFromPattern(['aab', 'c..'], LEGEND));
+
+    const entries = derivePopulation(grid, roster);
+
+    expect(entries.map((e) => [e.organismId, e.count])).toEqual([
+      [ROSTER[0].id, 3],
+      [ROSTER[1].id, 1],
+    ]);
+    expect(entries.reduce((sum, e) => sum + e.pct, 0)).toBeCloseTo(100);
   });
 });

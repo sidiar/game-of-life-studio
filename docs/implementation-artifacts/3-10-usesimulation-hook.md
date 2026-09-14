@@ -3,7 +3,7 @@ baseline_commit: 591f45b0ed561cc44e2615165f973a9d43247f4e
 ---
 # Story 3.10: `useSimulation` Hook
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -283,6 +283,29 @@ build on a documented surface rather than on what happened to compile.
     the `@gol/simulation` per-file coverage line for `grid.ts`, `bundle:check` headroom (expected
     unchanged: 4.1 KB gzip on `/battle`), `bench:check` (unchanged), and the e2e count in the Dev
     Agent Record.
+
+### Review Findings
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers
+(Blind Hunter — diff only; Edge Case Hunter — diff + project; Acceptance Auditor — diff + story +
+context), 2026-09-14. CI on `e6b90f7` (PR #32): quality and e2e green. 20 raw findings → 10 patch,
+1 defer, 0 decision-needed, 6 dismissed as noise (mint-range test — an out-of-range mint throws
+through `assertSeedDomain`, which the test observes; fake-scheduler fired-handle cancel — `stop()`
+outside a frame cancels a PENDING handle, which the harness does count; `Grid` in the state key —
+Task 4 prescribes it and it is never hot; the two-line Task 7 trailer; Dev Record numbers CI now
+verifies; the "nothing forbidden was built" note).
+
+- [x] [Review][Patch] Session rebind and attach prime a kept renderer via `drawFull` without `resize` — the real `GridRenderer` throws `GridRendererDimensionMismatchError` from inside the session effect on a rebind to a differently-sized `initialGrid`, or on a same-size rebind after an ephemeral `resizeLive`; the AC10 rebind test (5×5 → 6×4) passed only because the fake renderer never asserted size. Folds in: `resizeLive` swapped buffers before `renderer.resize`, so a throwing resize left the session at the new size and the canvas at the old; AC8's resize-then-drawFull order was not pinned. [apps/web/lib/battle/useSimulation.ts:310, :418]
+- [x] [Review][Patch] A stale RAF frame can publish into a freshly reset view — the view resets during render on a key change, but the old loop is stopped only in the effect cleanup, which React flushes after paint for non-discrete updates; a frame in that window merges the OLD session's cycle/population onto the NEW key's view (a `sessionRef` guard would not close it — the ref still points at the old session there). [apps/web/lib/battle/useSimulation.ts:291]
+- [x] [Review][Patch] `cyclesPerPublish` is not integer-guarded but the thunk uses it as a modulus — unreachable with today's five-literal ladder, but a ladder gaining 12 makes the loop publish on NO cycle while the ≤ 10 Hz test stays green. [apps/web/lib/battle/simulationSpeed.ts:31]
+- [x] [Review][Patch] No test proves the seed reaches the tie-break RNG — the AC11 pair (same seed twice → equal; contested cell non-zero) both pass if `createRng(seed)` were `createRng(0)`; `session.seed` is written and never read. [apps/web/lib/battle/useSimulation.test.ts AC11]
+- [x] [Review][Patch] `derivePopulation` emits one entry per roster SLOT while `computeEditorGridStats` aggregates duplicate ids — a duplicate-id roster double-counts and `pct` sums past 100, contradicting the file's own doc; reachable for exactly one render (`initialView` runs before `compileSession` throws). Also: the "frozen-shape readonly list" test title describes nothing the code does; the "Copy-then-sort" comment describes a copy that does not happen. [apps/web/lib/battle/population.ts:56]
+- [x] [Review][Patch] `opts.genPerSec` is read once and a changed prop is silently ignored, undocumented. [apps/web/lib/battle/useSimulation.ts:111]
+- [x] [Review][Patch] Manual `step()` runs the population sweep and `setView` twice on every click at 1–10 gen/sec (the thunk already published — `cyclesPerPublish` is 1 for four of five speeds, so the "cadence-aligned" case is the common one). [apps/web/lib/battle/useSimulation.ts:352]
+- [x] [Review][Patch] `requireSession` says "called before mount" for the realistic case — a captured handler firing after unmount. [apps/web/lib/battle/useSimulation.ts:322]
+- [x] [Review][Patch] Task 4's citation checklist names `Story 3.9`; the hook's head comment cites the substance (`toStepRenderer`, `playbackRenderer.ts`) without the ID. [apps/web/lib/battle/useSimulation.ts:30]
+- [x] [Review][Patch] AC5 / Trap 11 say "one `setCycle` + one `setPopulation`, never merged", the implementation holds one `RunView` cell — Task 4(b) prescribes exactly that cell and the API surface still exposes `cycle` as an int, so the deviation is harmless; record that it was consciously superseded so a later reader does not re-litigate it. [docs/implementation-artifacts/3-10-usesimulation-hook.md Dev Agent Record]
+- [x] [Review][Defer] A throw inside the RAF step (`stepGridBuffers` or the forwarded `drawDiff`) makes the loop clear its handle and rethrow, so `loop.isRunning()` is false while `status` stays `'playing'` — `play()` restarts silently and `step()` stops throwing. [apps/web/lib/battle/useSimulation.ts:236] — deferred: the thunk→`status: 'paused'` path is exactly what Story 3.15's extinction auto-pause must build; build it once there.
 
 ## Dev Notes
 
@@ -680,6 +703,13 @@ shape, §4 `attachRenderer` / `resizeLive` signatures and the two extra return m
 Decision 5's illustrative snippet (RAF in `pause()`, single `useRef<Grid>`, clock-based cadence),
 and "auto-pauses on extinction" listed under the hook but assigned to Story 3.15.
 
+AC5 / Trap 11's wording ("one `setCycle` + one `setPopulation`", "do not merge") was consciously
+superseded by Task 4's option (b): `cycle` and `population` live in ONE `RunView` state cell so the
+render-phase reset replaces the whole view atomically and no `setState` runs in the session effect.
+The render count is identical under React 19 batching (the AC3 test derives it from the cadence and
+passes), and the API surface still exposes `cycle` as its own int for Story 3.14 to subscribe to.
+Confirmed harmless in review (2026-09-14); do not re-litigate.
+
 One design note that is not a conflict but is worth a reviewer's eye: `stop()` mints a fresh seed
 **even when `opts.seed` is set**. AC4's test asserts the mint via a `Math.random` spy while the
 harness passes `FIXED_SEED`, so the two can only both hold if `stop()` mints unconditionally.
@@ -708,6 +738,15 @@ Recorded in `deferred-work.md` in case a consumer ever needs a seed-stable Stop.
 - 2026-09-14 — Story 3.10 implemented: `cloneGrid`; `simulationSpeed` / `population` /
   `rafScheduler` helpers; `useSimulation` hook with tests across AC1–AC11; `PetriDishCanvas`
   trailer; `deferred-work.md` bookkeeping. `npm run ci` exit 0. Status → review.
+- 2026-09-14 — Code review (Fable, PR #32): 10 patches applied in one `review:` commit — the hook
+  now owns the attached renderer's grid size (`paintFull` resizes before any full repaint it
+  issues: attach, rebind, `stop()`, `resizeLive`, and `resizeLive` sizes the renderer BEFORE
+  swapping buffers); `publish` refuses a session whose key is not the view's; `cyclesPerPublish`
+  is integer (`Math.ceil`); manual `step()` publishes once, not twice; `derivePopulation` emits one
+  entry per distinct id; `opts.genPerSec` documented as initial-only; `requireSession` names both
+  ends of the run; `Story 3.9` cited; the test fake renderer asserts size like the real one, plus
+  seed-divergence, rebind-after-resize, manual-step-sweep, integer-cadence and duplicate-id tests
+  (web `lib/battle`: 175 tests). One item deferred to Story 3.15. Status → done.
 
 Dev Model: opus   # architecture-shaping: the first hook to own hot refs + the loop, and the React↔engine contract that 3.11–3.19 and 4.15 all consume; it settles new calls (session keying, cadence-by-cycle, ref-forwarding renderer, throw-on-misuse) rather than following a pattern that already exists
 Proposed lane gate: none

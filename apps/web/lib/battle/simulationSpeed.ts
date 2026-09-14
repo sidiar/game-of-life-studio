@@ -28,5 +28,9 @@ export function msPerCycle(genPerSec: GenPerSec): number {
  * unconditionally on top of this, so the displayed cycle is never stale while paused.
  */
 export function cyclesPerPublish(genPerSec: GenPerSec): number {
-  return Math.max(1, genPerSec / 10);
+  // `Math.ceil`, so the result is an integer for ANY speed: the hook uses it as a modulus
+  // (`cycle % divisor === 0`), and a fractional divisor — a ladder that one day gains 12 or 15 —
+  // would publish on almost no cycle, or on none, with the "never above 10 Hz" test still green.
+  // Rounding up keeps the bound; rounding down could break it.
+  return Math.max(1, Math.ceil(genPerSec / 10));
 }

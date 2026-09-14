@@ -55,7 +55,7 @@ export type { GenPerSec } from './simulationSpeed';
  *   need). It forwards to `drawDiff` and NEVER `draw`: a raw `GridRenderer` type-checks as the
  *   loop's port and paints nothing, because `draw` is the marks-only Edit path and the loop marks
  *   nothing (`playbackRenderer.ts`'s `toStepRenderer` encodes the same intent for a renderer that
- *   is known up front; here it is late and replaceable, hence the ref).
+ *   is known up front — Story 3.9's adapter; here it is late and replaceable, hence the ref).
  * - **The session is keyed on `(initialGrid, organisms)` (FD2).** A new reference is a new run at
  *   cycle 0 with a fresh seed; the same references across re-renders mean nothing happens.
  *   Handlers called before the session exists throw — unreachable from a rendered control,
@@ -73,7 +73,13 @@ export type { GenPerSec } from './simulationSpeed';
  * 3. Unmount the view to leave Run mode. No live grid survives Run -> Lab (RFC-005 Decision 4);
  *    unmount stops the loop, detaches the renderer and drops the session.
  * 4. Hand the canvas's `onRendererReady(r)` straight to `attachRenderer(r)`, and its cleanup to
- *    `attachRenderer(null)`. Any order works (Trap 1).
+ *    `attachRenderer(null)`. Any order works (Trap 1), and the canvas may be built at any size:
+ *    from attach on the hook owns the renderer's grid size, and every full repaint it issues goes
+ *    through `resize` first whenever the renderer is not known to be at that grid's size (a fresh
+ *    attach, a rebind to a differently-sized `initialGrid`, a `stop()` after an ephemeral resize).
+ *    `GridRenderer` asserts every grid against its size, so a repaint without that step throws.
+ * 6. `opts.genPerSec` is the INITIAL speed only. Speed changes go through `setSpeed`; a changed
+ *    prop is not observed (Trap 10 — a prop-driven restart on every slider move is the bug).
  * 5. `compileSession` throws `RuleCompilationError` for a bad roster or rule BEFORE the first
  *    cycle (M12). It is deliberately not caught here: the roster comes from a schema-validated
  *    battle and library, so this is unreachable in normal use, and swallowing it would make a run
@@ -101,6 +107,7 @@ export type PlaybackRenderer = Pick<GridRenderer, 'drawDiff' | 'drawFull' | 'res
 export type SimulationStatus = 'paused' | 'playing';
 
 export interface UseSimulationOptions {
+  /** The initial speed only — change it through `setSpeed`; a changed prop is not observed. */
   readonly genPerSec: GenPerSec;
   /** Tests only. Must be an integer in `[0, 2^32)`; production mints its own. */
   readonly seed?: number;
@@ -145,6 +152,28 @@ function mintSeed(): number {
   return Math.floor(Math.random() * SEED_RANGE);
 }
 
+/**
+ * What a run is bound to (FD2): a new reference in any field is a new run. Held on the view (the
+ * render-phase reset compares it) AND on the session (a publish refuses a session whose key is not
+ * the view's — see `publish`). `seed` here is `opts.seed`, possibly undefined; the session's
+ * effective seed is minted separately.
+ */
+interface SessionKey {
+  readonly initialGrid: Grid;
+  readonly organisms: readonly Organism[];
+  readonly seed: number | undefined;
+  readonly scheduler: FrameScheduler;
+}
+
+function sameKey(a: SessionKey, b: SessionKey): boolean {
+  return (
+    a.initialGrid === b.initialGrid &&
+    a.organisms === b.organisms &&
+    a.seed === b.seed &&
+    a.scheduler === b.scheduler
+  );
+}
+
 /** Everything one run owns, held in a ref for the run's lifetime. Module-private by design. */
 interface SimulationSession {
   /** Replaced by every step (`stepGridBuffers` returns a NEW pair — Trap 4), never mutated. */
@@ -155,9 +184,17 @@ interface SimulationSession {
   readonly loop: SimulationLoop;
   /** The ONE step function: the loop's `step` and manual `step()` both call it. */
   readonly step: () => Grid;
-  readonly initialGrid: Grid;
-  readonly organisms: readonly Organism[];
+  readonly key: SessionKey;
   readonly compiled: CompiledSession;
+}
+
+/**
+ * The cadence test, in ONE place: the thunk publishes on these cycles and manual `step()` on the
+ * others, so a click costs one sweep whichever side of the cadence it lands on. `cyclesPerPublish`
+ * is 1 for four of the five ladder speeds, so "on the cadence" is the COMMON case for a click.
+ */
+function isPublishCycle(cycle: number, genPerSec: GenPerSec): boolean {
+  return cycle % cyclesPerPublish(genPerSec) === 0;
 }
 
 /**
@@ -168,19 +205,14 @@ interface SimulationSession {
  * read during render outright (`useUndoableGrid` records the same choice).
  */
 interface RunView {
-  readonly key: {
-    readonly initialGrid: Grid;
-    readonly organisms: readonly Organism[];
-    readonly seed: number | undefined;
-    readonly scheduler: FrameScheduler;
-  };
+  readonly key: SessionKey;
   readonly status: SimulationStatus;
   readonly cycle: number;
   readonly population: readonly PopulationEntry[];
   readonly liveSize: LiveSize;
 }
 
-function initialView(key: RunView['key']): RunView {
+function initialView(key: SessionKey): RunView {
   // At cycle 0 the live grid is a byte-identical clone of `initialGrid`, so the population of the
   // initial grid IS the run's first publish — computed here, during render, so the session effect
   // never has to set state on mount (which `react-hooks/set-state-in-effect` flags as a cascade).
@@ -194,10 +226,9 @@ function initialView(key: RunView['key']): RunView {
 }
 
 interface SessionInputs {
-  readonly initialGrid: Grid;
-  readonly organisms: readonly Organism[];
+  readonly key: SessionKey;
+  /** The effective seed — `key.seed` when given, a fresh mint otherwise. */
   readonly seed: number;
-  readonly scheduler: FrameScheduler;
   readonly msPerCycleRef: { readonly current: number };
   readonly genPerSecRef: { readonly current: GenPerSec };
   readonly rendererRef: { readonly current: PlaybackRenderer | null };
@@ -205,8 +236,8 @@ interface SessionInputs {
 }
 
 function createSession(inputs: SessionInputs): SimulationSession {
-  const { initialGrid, organisms, seed, scheduler, msPerCycleRef, genPerSecRef, rendererRef } =
-    inputs;
+  const { key, seed, msPerCycleRef, genPerSecRef, rendererRef } = inputs;
+  const { initialGrid, organisms, scheduler } = key;
   assertSeedDomain(seed);
 
   // Throws `RuleCompilationError` for a bad roster before the first cycle (M12) — not caught, see
@@ -226,8 +257,7 @@ function createSession(inputs: SessionInputs): SimulationSession {
     deps: { ...compiled, organisms, rng: createRng(seed) },
     cycle: 0,
     seed,
-    initialGrid,
-    organisms,
+    key,
     compiled,
     step: () => {
       // Store the return value (Trap 4) — the pair is new, the old one's `front` is now scratch.
@@ -237,7 +267,7 @@ function createSession(inputs: SessionInputs): SimulationSession {
       // be its own per-cycle scan, not a reuse of the population pass below: that pass runs only
       // at publish cadence, and an empty grid can be re-seeded by a `neighbors = 0` born rule, so
       // an extinction observed one publish late is a wrong auto-stop (Decision B.5).
-      if (session.cycle % cyclesPerPublish(genPerSecRef.current) === 0) inputs.publish(session);
+      if (isPublishCycle(session.cycle, genPerSecRef.current)) inputs.publish(session);
       return session.buffers.front;
     },
     loop: createSimulationLoop({
@@ -289,25 +319,51 @@ export function useSimulation(
   // any context including a RAF callback (React 19 batches everywhere). The population sweep runs
   // here and nowhere else (M2).
   const publish = useCallback((session: SimulationSession) => {
-    const population = derivePopulation(session.buffers.front, session.organisms);
-    setView((prev) => ({ ...prev, cycle: session.cycle, population }));
+    const population = derivePopulation(session.buffers.front, session.key.organisms);
+    // Refuse a foreign session. On a rebind the view is reset during render, but the old loop is
+    // stopped only in the session effect's cleanup — which React flushes AFTER paint for a
+    // non-discrete update (a repository load resolving, a transition) — so a frame in that window
+    // steps the OLD session and would merge its cycle and population onto the NEW key's view,
+    // with nothing to republish until the user acts. The key is the guard, not `sessionRef`: in
+    // that same window the ref still points at the old session.
+    setView((prev) =>
+      sameKey(prev.key, session.key) ? { ...prev, cycle: session.cycle, population } : prev,
+    );
+  }, []);
+
+  // The grid size the hook last put onto the attached renderer, or `null` when it has not sized it
+  // yet. `GridRenderer` asserts every grid it paints against its own size, so a full repaint at a
+  // size the renderer is not at throws — and only the hook knows when that is about to happen (a
+  // fresh attach, a rebind to a differently-sized `initialGrid`, a `stop()` after an ephemeral
+  // resize). One ref lets every full repaint make the "resize first?" call in one place.
+  const paintedSizeRef = useRef<LiveSize | null>(null);
+
+  const paintFull = useCallback((renderer: PlaybackRenderer, grid: Grid) => {
+    const painted = paintedSizeRef.current;
+    if (painted === null || painted.cols !== grid.width || painted.rows !== grid.height) {
+      const size = { cols: grid.width, rows: grid.height };
+      renderer.resize(size);
+      paintedSizeRef.current = size;
+    }
+    renderer.drawFull(grid);
   }, []);
 
   // The session effect (FD2). Builds refs only; the view was reset during render above.
   useEffect(() => {
+    const key: SessionKey = { initialGrid, organisms, seed: seedOpt, scheduler };
     const session = createSession({
-      initialGrid,
-      organisms,
+      key,
       seed: seedOpt ?? mintSeed(),
-      scheduler,
       msPerCycleRef,
       genPerSecRef,
       rendererRef,
       publish,
     });
     sessionRef.current = session;
-    // Trap 1: a child's construction effect may already have attached a renderer. Prime it.
-    rendererRef.current?.drawFull(session.buffers.front);
+    // Trap 1: a child's construction effect may already have attached a renderer. Prime it — on a
+    // rebind that renderer is still at the previous run's size, which `paintFull` undoes.
+    const renderer = rendererRef.current;
+    if (renderer !== null) paintFull(renderer, session.buffers.front);
     return () => {
       // Complete cleanup, or StrictMode's double-invocation (Trap 6) leaves the first loop stepping
       // a dropped session: stop the chain and forget the session. The renderer is NOT detached
@@ -315,27 +371,40 @@ export function useSimulation(
       session.loop.stop();
       sessionRef.current = null;
     };
-  }, [initialGrid, organisms, seedOpt, scheduler, publish]);
+  }, [initialGrid, organisms, seedOpt, scheduler, publish, paintFull]);
 
   // Unmount only: drop the renderer so the canvas it belongs to can go with the view.
   useEffect(
     () => () => {
       rendererRef.current = null;
+      paintedSizeRef.current = null;
     },
     [],
   );
 
   const requireSession = useCallback((op: string): SimulationSession => {
     const session = sessionRef.current;
-    if (session === null) throw new Error(`useSimulation: ${op} called before mount`);
+    if (session === null) {
+      // Both ends of the run: before the session effect, and after its cleanup — the realistic
+      // one, a captured handler firing after Run -> Lab.
+      throw new Error(
+        `useSimulation: ${op} called with no live session (before mount or after unmount)`,
+      );
+    }
     return session;
   }, []);
 
-  const attachRenderer = useCallback((renderer: PlaybackRenderer | null) => {
-    rendererRef.current = renderer;
-    const session = sessionRef.current;
-    if (renderer !== null && session !== null) renderer.drawFull(session.buffers.front);
-  }, []);
+  const attachRenderer = useCallback(
+    (renderer: PlaybackRenderer | null) => {
+      rendererRef.current = renderer;
+      // A fresh renderer is at whatever size its canvas was built with — unknown here — so the
+      // next full repaint resizes it first (a `resize` to the size it already has is cheap).
+      paintedSizeRef.current = null;
+      const session = sessionRef.current;
+      if (renderer !== null && session !== null) paintFull(renderer, session.buffers.front);
+    },
+    [paintFull],
+  );
 
   const play = useCallback(() => {
     const session = requireSession('play');
@@ -350,7 +419,7 @@ export function useSimulation(
     session.loop.stop();
     // Publish the exact paused cycle (FR-4.5): the last loop publish may be up to
     // `cyclesPerPublish - 1` cycles stale.
-    const population = derivePopulation(session.buffers.front, session.organisms);
+    const population = derivePopulation(session.buffers.front, session.key.organisms);
     setView((prev) => ({ ...prev, status: 'paused', cycle: session.cycle, population }));
   }, [requireSession]);
 
@@ -361,36 +430,28 @@ export function useSimulation(
     const front = session.step();
     // Outside the loop the hook repaints — same adapter method the loop's `draw` forwards to.
     rendererRef.current?.drawDiff(front);
-    // Unconditional (FR-4.5 "including manual steps"). On a cadence-aligned cycle the thunk has
-    // already published; this second `setView` batches into the same render, at the cost of one
-    // extra sweep on a human click.
-    publish(session);
+    // Every manual step publishes (FR-4.5 "including manual steps") — through the thunk when the
+    // cycle is on the cadence, here otherwise. One sweep per click, never two.
+    if (!isPublishCycle(session.cycle, genPerSecRef.current)) publish(session);
   }, [requireSession, publish]);
 
   const stop = useCallback(() => {
     const session = requireSession('stop');
     session.loop.stop();
-    const { initialGrid: initial } = session;
-    const previous = session.buffers.front;
+    const { initialGrid: initial, organisms } = session.key;
     // A new run: fresh buffers from a fresh clone at `initialGrid`'s OWN size (an ephemeral
     // resize is gone — FR-4.9), a fresh seed through the same domain check as the mint, and the
     // same compiled evaluators (the roster is unchanged; only the generator restarts).
     const seed = mintSeed();
     assertSeedDomain(seed);
     session.seed = seed;
-    session.deps = { ...session.compiled, organisms: session.organisms, rng: createRng(seed) };
+    session.deps = { ...session.compiled, organisms, rng: createRng(seed) };
     session.buffers = createGridBuffers(cloneGrid(initial));
     session.cycle = 0;
+    // `paintFull` undoes an ephemeral resize on the canvas before the repaint.
     const renderer = rendererRef.current;
-    if (renderer !== null) {
-      // The renderer asserts the grid matches its size, so an ephemeral resize must be undone on
-      // the canvas before the full repaint.
-      if (previous.width !== initial.width || previous.height !== initial.height) {
-        renderer.resize({ cols: initial.width, rows: initial.height });
-      }
-      renderer.drawFull(session.buffers.front);
-    }
-    const population = derivePopulation(session.buffers.front, session.organisms);
+    if (renderer !== null) paintFull(renderer, session.buffers.front);
+    const population = derivePopulation(session.buffers.front, organisms);
     setView((prev) => ({
       ...prev,
       status: 'paused',
@@ -398,7 +459,7 @@ export function useSimulation(
       population,
       liveSize: { cols: initial.width, rows: initial.height },
     }));
-  }, [requireSession]);
+  }, [requireSession, paintFull]);
 
   const setSpeed = useCallback((next: GenPerSec) => {
     // AR-34 / FR-4.2: a ref write IS the speed change. The loop reads `msPerCycleRef` live every
@@ -416,23 +477,22 @@ export function useSimulation(
         throw new Error('useSimulation: resizeLive() called while playing');
       }
       const { cols, rows } = size;
-      // Both buffers: `resizeGrid` carries occupant AND age (Story 3.3 FD6), and `back`'s contents
-      // are meaningless between cycles, so a fresh empty scratch of the new size is all it needs.
-      // `initialGrid` is untouched — Decision A.2's ephemeral expansion; `stop()` undoes it.
-      session.buffers = {
-        front: resizeGrid(session.buffers.front, cols, rows),
-        back: createGrid(cols, rows),
-      };
+      // `resizeGrid` carries occupant AND age (Story 3.3 FD6). `initialGrid` is untouched —
+      // Decision A.2's ephemeral expansion; `stop()` undoes it.
+      const front = resizeGrid(session.buffers.front, cols, rows);
+      // The renderer BEFORE the buffers: it owns the canvas and is the party most likely to refuse
+      // a size, and if it throws the session must still be at the size the canvas is at, or the
+      // next `step()` paints a grid the renderer no longer matches.
       const renderer = rendererRef.current;
-      if (renderer !== null) {
-        renderer.resize({ cols, rows });
-        renderer.drawFull(session.buffers.front);
-      }
+      if (renderer !== null) paintFull(renderer, front);
+      // Both buffers: `back`'s contents are meaningless between cycles, so a fresh empty scratch of
+      // the new size is all it needs.
+      session.buffers = { front, back: createGrid(cols, rows) };
       // A shrink clips cells, so the population is republished with the size.
-      const population = derivePopulation(session.buffers.front, session.organisms);
+      const population = derivePopulation(front, session.key.organisms);
       setView((prev) => ({ ...prev, cycle: session.cycle, population, liveSize: { cols, rows } }));
     },
-    [requireSession],
+    [requireSession, paintFull],
   );
 
   // Memoised so a consumer's effect over the result re-runs only when a published value changed.
