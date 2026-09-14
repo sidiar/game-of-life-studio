@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { colourStateAt, resetColourStateWarnings, EMPTY_COLOUR_STATE } from './colourStateGroups';
 import {
@@ -226,7 +227,9 @@ describe("selectChangedCells — playback's whole-grid sweep (Story 3.9 Task 1, 
   it('does not report age 7 -> 8 (shade saturates), but DOES report age 6 -> 7', () => {
     const before6 = grid(1, 1, [1], [6]);
     const baselineAt6 = baselineFor(before6, table);
-    expect(selectChangedCells(grid(1, 1, [1], [7]), table, baselineAt6)).toHaveLength(1);
+    expect(selectChangedCells(grid(1, 1, [1], [7]), table, baselineAt6)).toEqual([
+      { index: 0, colourState: fillGroupOf(table, 1, 7) },
+    ]);
 
     const before7 = grid(1, 1, [1], [7]);
     const baselineAt7 = baselineFor(before7, table);
@@ -244,9 +247,18 @@ describe("selectChangedCells — playback's whole-grid sweep (Story 3.9 Task 1, 
   });
 
   it('throws when the buffer lengths disagree with the declared dimensions, naming both counts', () => {
-    const shortOccupant = grid(4, 3, new Array(11).fill(0));
+    const shortOccupant: ReturnType<typeof grid> = {
+      width: 4,
+      height: 3,
+      occupant: new Uint8Array(11),
+      age: new Uint16Array(12),
+    };
     const baseline = new Uint16Array(12);
-    expect(() => selectChangedCells(shortOccupant, table, baseline)).toThrow(/12.*occupant.*11/);
+    // Anchored on BOTH counts so the message has to name the short buffer as the short one — a
+    // looser `/12.*occupant.*11/` also matches "occupant has 12 and age has 11".
+    expect(() => selectChangedCells(shortOccupant, table, baseline)).toThrow(
+      /needs 12 cells, but occupant has 11 and age has 12/,
+    );
 
     const shortAge: ReturnType<typeof grid> = {
       width: 4,
@@ -254,7 +266,19 @@ describe("selectChangedCells — playback's whole-grid sweep (Story 3.9 Task 1, 
       occupant: new Uint8Array(12),
       age: new Uint16Array(11),
     };
-    expect(() => selectChangedCells(shortAge, table, baseline)).toThrow(/12.*age.*11/);
+    expect(() => selectChangedCells(shortAge, table, baseline)).toThrow(
+      /needs 12 cells, but occupant has 12 and age has 11/,
+    );
+  });
+
+  it('throws when the baseline is shorter than the grid, rather than reporting every cell past its end', () => {
+    // Past the end of a short baseline, `lastColourState[index]` is undefined and equals no colour
+    // state — every such cell would report as changed on every frame, a full repaint per step that
+    // looks like a working diff. GridRenderer never hands it one, but the function is public.
+    const shortBaseline = new Uint16Array(11);
+    expect(() =>
+      selectChangedCells(grid(4, 3, new Array(12).fill(0)), table, shortBaseline),
+    ).toThrow(/needs 12 baseline entries, but lastColourState has 11/);
   });
 
   it('returns repaints in ascending index order with no sort step', () => {
@@ -273,5 +297,35 @@ describe("selectChangedCells — playback's whole-grid sweep (Story 3.9 Task 1, 
 
     expect(selectChangedCells(after, table, baseline)).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  // The property the whole sweep reduces to (story Dev Notes: "cheap and honest"): for ANY two
+  // grids of one shape, the report is exactly the ascending indices whose colour state differs,
+  // each carrying the NEW state — no more, no fewer, no sort.
+  it('reports exactly the indices whose colourStateAt differs, for any pair of grids', () => {
+    const cells = (n: number) =>
+      fc.tuple(
+        fc.array(fc.integer({ min: 0, max: 2 }), { minLength: n, maxLength: n }),
+        fc.array(fc.integer({ min: 0, max: 9 }), { minLength: n, maxLength: n }),
+      );
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 6 }), fc.integer({ min: 1, max: 6 }), (w, h) =>
+        fc.assert(
+          fc.property(cells(w * h), cells(w * h), ([o1, a1], [o2, a2]) => {
+            const before = grid(w, h, o1, a1);
+            const after = grid(w, h, o2, a2);
+            const expected = Array.from({ length: w * h }, (_, index) => index)
+              .filter(
+                (index) =>
+                  colourStateAt(after, table, index) !== colourStateAt(before, table, index),
+              )
+              .map((index) => ({ index, colourState: colourStateAt(after, table, index) }));
+            expect(selectChangedCells(after, table, baselineFor(before, table))).toEqual(expected);
+          }),
+          { numRuns: 25 },
+        ),
+      ),
+      { numRuns: 8 },
+    );
   });
 });

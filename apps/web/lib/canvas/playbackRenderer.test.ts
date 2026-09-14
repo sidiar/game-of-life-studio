@@ -15,7 +15,8 @@ describe('toStepRenderer (Story 3.9 Task 3)', () => {
     const stepRenderer = toStepRenderer(fakeRenderer);
     stepRenderer.draw(grid);
 
-    expect(calls).toEqual([grid]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toBe(grid); // identity, not deep equality — a cloning adapter must fail here
   });
 
   it('satisfies the StepRenderer port — createSimulationLoop drives it through one real frame', () => {
@@ -60,6 +61,7 @@ describe('toStepRenderer (Story 3.9 Task 3)', () => {
     fireFrame(50); // exactly one cycle's worth of delta -> exactly one step
 
     expect(stepCalls).toBe(1);
-    expect(drawDiffCalls).toEqual([stepGrid]); // the loop calls draw(), which forwards to drawDiff()
+    expect(drawDiffCalls).toHaveLength(1); // the loop calls draw(), which forwards to drawDiff()
+    expect(drawDiffCalls[0]).toBe(stepGrid); // with the very grid step() returned, uncopied
   });
 });

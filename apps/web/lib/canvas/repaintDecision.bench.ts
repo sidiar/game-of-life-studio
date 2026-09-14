@@ -135,7 +135,7 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
   /**
    * The Edit-mode `draw` (dirty) path's decision cost when EVERY cell is a candidate — which is
    * what a playback frame *would have been* under the `markDirty`-everything adapter Story 3.9's
-   * FD1 rejected (option (c); ~480k `CellCoord` objects/sec at 200x60 x 20 gen/sec, against
+   * FD1 rejected (option (c); ~480k `CellCoord` objects/sec at 200x120 x 20 gen/sec, against
    * NFR-1.1's 0.67 ms "buffer for GC"). `repaint-diff-path` below is what a playback frame
    * ACTUALLY runs.
    *
@@ -156,7 +156,7 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
   );
 
   /**
-   * ⚠️ THE GATED QUANTITY'S REPAINT HALF, as of Story 3.9 (FD3 (a)). `selectChangedCells` is
+   * ⚠️ THE GATED QUANTITY'S REPAINT HALF, as of Story 3.9 (FD3 (a); AR-43). `selectChangedCells` is
    * `GridRenderer.drawDiff`'s decision — the whole-grid sweep against the retained
    * `lastColourState` baseline, which is what a running simulation actually calls once per step
    * (`toStepRenderer`, `playbackRenderer.ts`; `drawFull` no longer runs on the cycle rate).

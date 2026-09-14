@@ -221,7 +221,8 @@ confirmation, not search.
 | `ref-to-fill-group-build` | 0.003 | **once per battle**, not per frame |
 | `library-filter 1000 organisms` | 0.022 – 0.024 | `<OrganismSearchAdd>`'s per-render scan |
 
-Two serialized runs on the corrected fixture (2026-09-10, code review). **The whole repaint
+Two serialized runs on the corrected fixture (2026-09-10, code review), ranges widened by Story 3.9's
+run of 2026-09-14 where it landed outside them. **The whole repaint
 decision is ~0.4% of the frame.** The renderer's brain is not where the budget
 goes, and no render-side redesign in Epic 3 can buy back a meaningful fraction of it.
 

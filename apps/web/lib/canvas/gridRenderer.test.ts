@@ -970,6 +970,7 @@ describe('drawDiff — the playback repaint (Story 3.9)', () => {
     const ctx = installRecordingContext2d(canvas);
     const renderer = new GridRenderer(canvas, { cols: 100, rows: 60 }, DIRTY_TABLE, {
       colors: COLORS,
+      showGridLines: false, // so the only fillRect below is the cell's own background
     });
     renderer.drawFull(makeGrid(100, 60, new Array(6000).fill(0)));
     ctx.calls.length = 0;
@@ -980,8 +981,14 @@ describe('drawDiff — the playback repaint (Story 3.9)', () => {
     // Deliberately no markDirty() — drawDiff derives its own candidates from the whole grid.
     renderer.drawDiff(makeGrid(100, 60, painted));
 
-    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(1);
-    expect(ctx.calls.filter((c) => c.op === 'fillRect')).toHaveLength(1); // the cell background
+    // A 100x60 canvas for a 100x60 grid: 1px cells at origin (0, 0), so the changed cell
+    // (col 17, row 42) is the pixel at (17, 42) — WHICH cell, not just how many.
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toEqual([
+      { op: 'rect', args: [17, 42, 1, 1] },
+    ]);
+    expect(ctx.calls.filter((c) => c.op === 'fillRect')).toEqual([
+      { op: 'fillRect', args: [17, 42, 1, 1] }, // the cell background
+    ]);
     expect(ctx.fillStyleWrites).toHaveLength(2); // background + one colour group
   });
 
@@ -1026,9 +1033,11 @@ describe('drawDiff — the playback repaint (Story 3.9)', () => {
     expect(ctx.calls.filter((c) => c.op === 'fill')).toHaveLength(1);
     expect(ctx.fillStyleWrites).toHaveLength(2); // background + one group
 
-    // The control: two DIFFERENT tokens must produce two groups, in ascending groupId order.
+    // The control: two DIFFERENT tokens must produce two groups, in ascending groupId order —
+    // ref 2 (token 9) placed at index 0 and ref 1 (token 5) at index 1, so first-seen order is
+    // the REVERSE of groupId order and only a real sort produces the expected sequence.
     const control = primedRenderer({ showGridLines: false });
-    control.renderer.drawDiff(makeGrid(2, 1, [1, 2]));
+    control.renderer.drawDiff(makeGrid(2, 1, [2, 1]));
 
     expect(control.ctx.calls.filter((c) => c.op === 'beginPath')).toHaveLength(2);
     expect(control.ctx.calls.filter((c) => c.op === 'fill')).toHaveLength(2);
@@ -1064,7 +1073,9 @@ describe('drawDiff — the playback repaint (Story 3.9)', () => {
       age[index] = shade;
       expectedGroups.add(tokenIndex[ref] * 8 + shade);
     }
-    expect(expectedGroups.size).toBeLessThanOrEqual(160);
+    // lcm(255, 8) = 2040 < 6000, so every (ref, shade) pair occurs and the palette bound is
+    // actually REACHED — a folding bug that produced 159 groups would fail the equality below.
+    expect(expectedGroups.size).toBe(160);
 
     const canvas = makeCanvas(cols, rows);
     const ctx = installRecordingContext2d(canvas);
@@ -1078,12 +1089,12 @@ describe('drawDiff — the playback repaint (Story 3.9)', () => {
 
     renderer.drawDiff(makeGrid(cols, rows, occupant, age));
 
-    // fillStyleWrites[0] is the background; one more per distinct (tokenIndex, shade) group.
-    expect(ctx.fillStyleWrites.length - 1).toBe(expectedGroups.size);
-    expect(ctx.fillStyleWrites.length - 1).toBeLessThanOrEqual(160);
+    // fillStyleWrites[0] is the background; one more per distinct (tokenIndex, shade) group —
+    // 160 for a 255-organism roster, never 255.
+    expect(ctx.fillStyleWrites.length - 1).toBe(160);
   });
 
-  it('consumes outstanding markDirty() marks — a following draw() is a no-op', () => {
+  it('consumes outstanding markDirty() marks — a following draw() has no candidates left', () => {
     const { ctx, renderer } = primedRenderer({ showGridLines: false });
 
     renderer.markDirty([{ col: 0, row: 0 }]); // never consumed by a draw()
@@ -1091,7 +1102,11 @@ describe('drawDiff — the playback repaint (Story 3.9)', () => {
     ctx.calls.length = 0;
     ctx.fillStyleWrites.length = 0;
 
-    renderer.draw(makeGrid(2, 1, [1, 1])); // same content drawDiff already painted
+    // The marked cell DOES differ from what drawDiff painted, so the only thing standing between
+    // draw() and a repaint is whether the mark survived: a surviving mark repaints cell 0, a
+    // consumed one leaves draw() with no candidates at all. (With identical content this test
+    // could not fail — draw() would filter the mark out on colour state either way.)
+    renderer.draw(makeGrid(2, 1, [2, 1]));
 
     expect(ctx.calls).toHaveLength(0);
     expect(ctx.fillStyleWrites).toHaveLength(0);
@@ -1109,6 +1124,31 @@ describe('drawDiff — the playback repaint (Story 3.9)', () => {
     renderer.drawDiff(makeGrid(2, 1, [1, 1])); // no drawFull/renderStatic ever happened
 
     // The full-backing-store background fill is the tell — the diff path only ever fills cells.
+    expect(ctx.calls[0]).toEqual({ op: 'fillRect', args: [0, 0, 20, 10] });
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(2);
+
+    // ...and that fallback PRIMED the baseline: the next drawDiff is incremental, not another
+    // full paint — otherwise every playback frame after an unprimed mount would repaint the dish.
+    ctx.calls.length = 0;
+    renderer.drawDiff(makeGrid(2, 1, [1, 2]));
+    expect(ctx.calls.filter((c) => c.op === 'fillRect')).toEqual([
+      { op: 'fillRect', args: [10, 0, 10, 10] }, // cell 1's background only
+    ]);
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(1);
+  });
+
+  it('after renderStatic (which primes no baseline) the first drawDiff is a full paint (Trap 2)', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+    renderer.renderStatic(makeGrid(2, 1, [1, 1]));
+    ctx.calls.length = 0;
+
+    renderer.drawDiff(makeGrid(2, 1, [1, 1])); // same content — a primed renderer would no-op
+
     expect(ctx.calls[0]).toEqual({ op: 'fillRect', args: [0, 0, 20, 10] });
     expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(2);
   });

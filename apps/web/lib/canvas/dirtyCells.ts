@@ -124,11 +124,14 @@ export function selectDirtyCells(
  * EVERY cell is a candidate: this sweeps `0..width*height` once, applying the same "dirty on
  * occupant OR age-shade change" rule (Decision B.4) `selectDirtyCells` applies to a `Set`.
  *
- * The O(cells) compare against the retained baseline (~0.08 ms at 100x60, the `colour-state-
- * reprime` figure) is the cheapest CORRECT way to derive a playback dirty set — cheaper than
- * marking all 6,000 coordinates through a `Set` (~0.7 ms, a `CellCoord` allocation per cell per
- * frame) and cheaper to DECIDE than a full repaint, though a full repaint rasterizes strictly
- * less — see this story's FD1 for the rejected alternatives.
+ * The O(cells) compare against the retained baseline (`repaint-diff-path`: ~0.16 ms at 100x60 at
+ * its upper bound, every cell changed — the bare compare is the ~0.08 ms `colour-state-reprime`
+ * figure, the rest is one `push` per changed cell) is the cheapest CORRECT way to derive a
+ * playback dirty set: ~4x cheaper than marking all 6,000 coordinates through a `Set` (~0.7 ms, a
+ * `CellCoord` allocation per cell per frame), and a wash against `drawFull`'s decision
+ * (`groupByColourState` ~0.08 + the re-prime ~0.08 ms) — which then rasterizes the whole dish
+ * every step where this rasterizes only the changed cells (AR-23). See this story's FD1 for the
+ * rejected alternatives.
  *
  * Ascending order falls out of the loop for free — unlike `selectDirtyCells`, which sorts a `Set`
  * whose iteration order is insertion order, not index order, this never needs to.
@@ -140,12 +143,21 @@ export function selectChangedCells(
 ): DirtyCellRepaint[] {
   // Bound the sweep by the DECLARED dimensions, the same guard groupByColourState applies as a
   // public function reachable without GridRenderer's assertGridMatchesSize: a short age buffer is
-  // silent otherwise — age[index] reads undefined, becomes NaN, and clamps to shade 0.
+  // silent otherwise — age[index] reads undefined, becomes NaN, and clamps to shade 0. The
+  // baseline gets the same guard for the mirror-image reason: past its end `lastColourState[index]`
+  // reads undefined, which equals no colour state, so every cell beyond it reports as changed on
+  // every frame — a full repaint per step that looks like a working diff.
   const cellCount = grid.width * grid.height;
   if (grid.occupant.length < cellCount || grid.age.length < cellCount) {
     throw new Error(
       `selectChangedCells: grid ${grid.width}x${grid.height} needs ${cellCount} cells, but ` +
         `occupant has ${grid.occupant.length} and age has ${grid.age.length}`,
+    );
+  }
+  if (lastColourState.length < cellCount) {
+    throw new Error(
+      `selectChangedCells: grid ${grid.width}x${grid.height} needs ${cellCount} baseline ` +
+        `entries, but lastColourState has ${lastColourState.length}`,
     );
   }
 

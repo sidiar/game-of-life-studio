@@ -4,7 +4,7 @@ baseline_commit: 1e70bcdf4fd18f12a48c58f01df1888aa7877237
 
 # Story 3.9: Colour-State Batch Rendering
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -242,6 +242,41 @@ that path*, not on the Edit-mode path where they were first proven.
     code, the `bench:check` table and the `bundle:check` headroom in the Dev Agent Record. `/battle`
     had ~4.7 KB gzip headroom after 3.8; this story adds code to that chunk — if `bundle:check` goes
     red, **stop and report**, do not raise the budget (Sidiar's ratchet rule).
+
+### Review Findings
+
+Code review 2026-09-14 (Claude Opus 5 over the dev pass; layers: Blind Hunter, Edge Case Hunter,
+Acceptance Auditor, plus the reviewer's own read). 0 `decision-needed`, 24 `patch` (all applied),
+0 `defer`, 11 dismissed as noise.
+
+- [x] [Review][Patch] "consumes outstanding marks" test could not fail — passed with `dirtyCells.clear()` deleted (mutation-verified); follow-up `draw` now receives a grid whose marked cell differs [apps/web/lib/canvas/gridRenderer.test.ts]
+- [x] [Review][Patch] `selectChangedCells` guarded `occupant`/`age` length but not `lastColourState` — a short baseline reports every cell past its end as changed every frame; guard + test added [apps/web/lib/canvas/dirtyCells.ts]
+- [x] [Review][Patch] AC4 "ascending groupId" fixture coincided with first-seen order (`[1, 2]`); now `[2, 1]` so only a real sort passes [gridRenderer.test.ts]
+- [x] [Review][Patch] 255-ref test asserted `<= 160` twice, true by construction; now asserts the bound is REACHED (`toBe(160)`, lcm(255, 8) = 2040 < 6000) [gridRenderer.test.ts]
+- [x] [Review][Patch] "repaints ONLY the changed cells" counted ops but never asserted WHICH cell; now asserts the `rect`/`fillRect` coordinates, `showGridLines` explicit [gridRenderer.test.ts]
+- [x] [Review][Patch] Fallback test never checked the fallback primed the baseline; second `drawDiff` now asserted incremental, plus the Trap 2 `renderStatic` → `drawDiff` case ("test it both ways") [gridRenderer.test.ts]
+- [x] [Review][Patch] Length-mismatch regexes `/12.*occupant.*11/` matched either buffer being short; anchored on both counts [dirtyCells.test.ts]
+- [x] [Review][Patch] Age 6→7 test checked `toHaveLength(1)` only; now the exact entry [dirtyCells.test.ts]
+- [x] [Review][Patch] Optional fast-check property (Dev Notes "add it if it stays under 20 lines") neither added nor declined; added [dirtyCells.test.ts]
+- [x] [Review][Patch] AC6 colour capture read `fillStyleWrites[1]` after `length > 0`, laundering a background-only frame to `null`; now asserts exactly 0 or 2 writes and pairs `rect` count with background-fill count so an erroneous erase is visible [playbackRendering.test.ts]
+- [x] [Review][Patch] Shared-token test's `rectIndices` filter would miss an erroneous erase of block B (erases emit `fillRect`, not `rect`); background-fill count now asserted equal to repaint count [playbackRendering.test.ts]
+- [x] [Review][Patch] AC5 Conway zero-touch asserted `ctx.calls` only; `fillStyleWrites` added [playbackRendering.test.ts]
+- [x] [Review][Patch] Comment said "index 1 is the background write, index 2 the colour" while code read `[1]`; corrected to 0/1 and asserted the full pair [playbackRendering.test.ts]
+- [x] [Review][Patch] AC7 describe title said "drawDiff through real engine cycles" but the test never touches the renderer (by spec); retitled [playbackRendering.test.ts]
+- [x] [Review][Patch] Adapter tests used `toEqual([grid])` where identity is the claim; now `toBe` [playbackRenderer.test.ts]
+- [x] [Review][Patch] `selectChangedCells` head comment cited ~0.08 ms for a function measured at 0.159 ms and said "a full repaint rasterizes strictly less" — inverted; rewritten with the measured pair and AR-23 [dirtyCells.ts]
+- [x] [Review][Patch] Trap 2 sentence in `drawDiff`'s fallback comment did not parse; rewritten [gridRenderer.ts]
+- [x] [Review][Patch] Post-throw comment said "nothing left to retry" without the actual reason (baseline not advanced → next `drawDiff` re-detects); stated [gridRenderer.ts]
+- [x] [Review][Patch] Dev Notes "say so in the `lastGrid` comment" (playback borrow of the front buffer, paused-only readers) not done; added [gridRenderer.ts]
+- [x] [Review][Patch] `markDirty` doc still said marks survive "until the next `draw`/`drawFull`"; `drawDiff` added [gridRenderer.ts]
+- [x] [Review][Patch] Bench comment "~480k `CellCoord` objects/sec at 200x60" — 200x120 (200·120·20 = 480k); `AR-43` cited on the gated bench [repaintDecision.bench.ts]
+- [x] [Review][Patch] `deferred-work.md` said `drawDiff` is "the cheaper *decision* always (O(changed) vs. O(cells))" — both are O(cells) and the doc's own numbers (0.159 vs 0.083 + 0.08) show a wash; corrected, and the adjacent "buys nothing" sentence reconciled with the O(changed) `push` [deferred-work.md]
+- [x] [Review][Patch] Repaint-table caption still attributed widened ranges to the 2026-09-10 runs; caption now says which run widened them [performance-baseline-validation.md]
+- [x] [Review][Patch] Dev Agent Record claimed both bench tables are in the baseline doc (only the standalone one is) and a `ready-for-dev → review` flip (it was `backlog → review`); corrected [this file]
+
+Dismissed (noise): plain `Error` vs. a typed error (story said to mirror `groupByColourState`, which throws plain `Error`); per-iteration `Uint16Array` allocation inside the gated bench (sibling `repaint-dirty-path` does the same — the like-for-like the story asked for); detached-method `this` through `Pick<GridRenderer, 'drawDiff'>` (story-specified type; caller misuse); NaN/negative dims; DPR/origin assumption in `rectIndices` (jsdom DPR 1, stated in the fixture); `renderStatic` between frames (pre-existing for `draw`, documented static-tile contract); RFC-002 §"3." vs §5 and "one-line" vs "three-line" wording; sprint-status flip riding in the feature commit (house convention); "owns no scheduling state" title (Story 2.3's own title, repeated by instruction); `try/catch` around `paintDirtyCells` (playback self-heals from the un-advanced baseline — comment now says so).
+
+Not a finding, surfaced for the PR: **FD3 (a) gate-mechanism change** (`GATED_TASKS` → `step + repaint-diff-path`) — the story pre-flagged it for Sidiar at PR time; budget and fixture untouched. **`component-tree-battle-page.md` §5 amendment** — candidate line in `deferred-work.md`, Sidiar's call.
 
 ## Dev Notes
 
@@ -602,8 +637,9 @@ silently matched.
   x20` **0.159 ms**; frame (`step` 6.447 + `repaint-diff-path` 0.159) = **6.606 ms** against 16.667
   ms, **10.061 ms headroom (60.4%)**. In the full `npm run ci` position (heavier machine load):
   `step` 9.408 + `repaint-diff-path` 0.187 = **9.595 ms**, **7.072 ms headroom (42.4%)** — still
-  comfortably green; see `docs/implementation-artifacts/performance-baseline-validation.md`'s new
-  "Story 3.9" subsection for both tables.
+  comfortably green. `docs/implementation-artifacts/performance-baseline-validation.md`'s new
+  "Story 3.9" subsection carries the standalone table; the CI-position figures are recorded here
+  only.
 - `npm run ci > /tmp/ci-3-9.log 2>&1; echo $?` — **first run: exit 1**, on `format:check` alone
   (two new/modified test files needed a Prettier pass; every other stage — typecheck, lint,
   spec:check, boundary:check, coverage, build, bundle:check, bench, bench:check — was already
@@ -682,6 +718,9 @@ silently matched.
   the rejected `markDirty`-everything adapter. Option (b) (an `EMPTY`-filled third, tracked bench)
   was NOT added — not asked for beyond "if you want it," and the zero-filled number alone answers
   AC8/FD3.
+- **Optional fast-check property** (External dependencies note) — not added by the dev pass; added
+  in review (`dirtyCells.test.ts`, "reports exactly the indices whose colourStateAt differs, for any
+  pair of grids", ~25 lines).
 
 ### Spec-conflict flags raised
 
@@ -723,7 +762,7 @@ Both already anticipated by the story itself; recorded here as confirmed, not ne
 - `docs/implementation-artifacts/3-9-colour-state-batch-rendering.md` (this file — frontmatter,
   task checkboxes, Dev Agent Record, Status)
 - `docs/implementation-artifacts/sprint-status.yaml` (`3-9-colour-state-batch-rendering:
-  ready-for-dev` → `review`)
+  backlog` → `review`)
 
 ### Change Log
 
@@ -731,6 +770,9 @@ Both already anticipated by the story itself; recorded here as confirmed, not ne
   `toStepRenderer` playback adapter, engine-driven AC5/AC6/AC7 tests, the `repaint-diff-path` bench
   and gate-mechanism move (FD3), and the bookkeeping this story's own AC9 names. `npm run ci` green
   (see Debug Log References). Status → review.
+- 2026-09-14 — Code review (Opus over the dev pass): 24 patches applied, 0 decision-needed (see
+  Review Findings). Full gate re-run green: exit 0, spec:check 214/214, web 989 tests, `/battle`
+  4.1 KB gzip headroom, frame 9.463 ms (43.2% headroom), e2e 364 passed. Status → done.
 
 Dev Model: sonnet   # follows patterns this file already settles rather than setting one: `drawDiff` is `draw`'s body with `selectChangedCells` in place of the marks (2.3's shape), the adapter is three lines over 3.8's port, the tests are 2.3's call-log style walked through 3.8's `stepGridBuffers`, and the one gate change is spelled out to the task name — every open call (FD1 method-vs-identity, FD2 reuse, FD3 gated pair, FD4 baseline) carries a recommendation and a named test; the 3.8 precedent, not the 3.7 one
 Proposed lane gate: none

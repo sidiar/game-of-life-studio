@@ -55,7 +55,11 @@ function lutFor(roster: readonly Organism[]) {
   );
 }
 
-/** `ctx.rect(...)` calls, converted back to flat grid indices via the CELL_SIZE convention above. */
+/**
+ * `ctx.rect(...)` calls, converted back to flat grid indices via the CELL_SIZE convention above.
+ * A `rect` is a COLOUR repaint only — an erase paints background (`fillRect`) and no `rect` — so
+ * every assertion below pairs this with `backgroundFills`: equal counts prove nothing was erased.
+ */
 function rectIndices(ctx: RecordingContext2D, cols: number): number[] {
   return ctx.calls
     .filter((call) => call.op === 'rect')
@@ -64,6 +68,11 @@ function rectIndices(ctx: RecordingContext2D, cols: number): number[] {
       return (y / CELL_SIZE) * cols + x / CELL_SIZE;
     })
     .sort((a, b) => a - b);
+}
+
+/** Per-cell background fills — with grid lines off, the only `fillRect`s paintDirtyCells makes. */
+function backgroundFills(ctx: RecordingContext2D): number {
+  return ctx.calls.filter((call) => call.op === 'fillRect').length;
 }
 
 afterEach(() => {
@@ -103,10 +112,15 @@ describe('drawDiff through real engine cycles — AC6: the aging ramp is what pl
 
       // The block never moves and never dies — a repaint here can only be the age-shade changing,
       // and (one still life, one colour group) it is always all four cells or none of them.
-      expect(rectIndices(ctx, 4)).toEqual(cycle <= 7 ? blockIndices : []);
+      const repainted = rectIndices(ctx, 4);
+      expect(repainted).toEqual(cycle <= 7 ? blockIndices : []);
+      expect(backgroundFills(ctx)).toBe(repainted.length); // every repaint carried a colour
+      // A frame either wrote nothing or exactly [background, one colour group] — a frame that
+      // wrote only the background would otherwise launder to `null` below and read as silence.
+      expect(ctx.fillStyleWrites).toHaveLength(repainted.length === 0 ? 0 : 2);
       // fillStyleWrites is typed for the general CanvasGradient/CanvasPattern case; this renderer
       // only ever writes strings (RecordingContext2D never sees anything else from gridRenderer.ts).
-      const colourWrite = ctx.fillStyleWrites.length > 0 ? ctx.fillStyleWrites[1] : null;
+      const colourWrite = ctx.fillStyleWrites.length === 2 ? ctx.fillStyleWrites[1] : null;
       paintedColours.push(typeof colourWrite === 'string' ? colourWrite : null);
     }
 
@@ -141,9 +155,9 @@ describe('drawDiff through real engine cycles — AC5: non-aging organisms fold 
     });
     renderer.drawFull(buffers.front);
 
-    // drawFull's own paint already proves the age-cap identity (Story 1.8/1.7): index 1 is the
-    // background write, index 2 the block's one colour group.
-    expect(ctx.fillStyleWrites[1]).toBe(displayColorAt(tokenIndex, 7));
+    // drawFull's own paint already proves the age-cap identity (Story 1.8/1.7): index 0 is the
+    // background write, index 1 the block's one colour group (grid lines are off).
+    expect(ctx.fillStyleWrites).toEqual([COLORS.background, displayColorAt(tokenIndex, 7)]);
 
     for (let cycle = 1; cycle <= 10; cycle++) {
       buffers = stepGridBuffers(buffers, deps);
@@ -153,6 +167,7 @@ describe('drawDiff through real engine cycles — AC5: non-aging organisms fold 
       renderer.drawDiff(buffers.front);
 
       expect(ctx.calls).toHaveLength(0); // Trap 6: non-aging is shade 7, never a change to shade 0
+      expect(ctx.fillStyleWrites).toHaveLength(0);
     }
   });
 
@@ -187,6 +202,7 @@ describe('drawDiff through real engine cycles — AC5: non-aging organisms fold 
       renderer.drawDiff(buffers.front);
 
       const repainted = rectIndices(ctx, 7);
+      expect(backgroundFills(ctx)).toBe(repainted.length); // nothing erased — B's cells included
       for (const index of blockBIndices) expect(repainted).not.toContain(index); // never, any cycle
       if (cycle <= 7) {
         expect(repainted).toEqual(blockAIndices);
@@ -197,7 +213,7 @@ describe('drawDiff through real engine cycles — AC5: non-aging organisms fold 
   });
 });
 
-describe('drawDiff through real engine cycles — AC7: the LUT and the interning share the roster order', () => {
+describe('the LUT through a real engine cycle — AC7: buildRefToFillGroup and internOrganismIds share the roster order', () => {
   it("a newborn cell resolves to the RIGHT organism's token; a LUT built from a reversed roster swaps them", () => {
     const organismA: Organism = {
       ...CONWAYS_CLASSIC,

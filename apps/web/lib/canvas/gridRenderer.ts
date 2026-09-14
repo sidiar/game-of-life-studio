@@ -129,7 +129,10 @@ export class GridRenderer {
   // A borrow, not ownership: kept only so resize()/setGridLines() can repaint the last grid they
   // were shown. The renderer never mutates it and never assumes it stays valid after the caller's
   // next mutation of the same buffer. Dropped the moment a resize() makes it the wrong shape —
-  // see resize().
+  // see resize(). In playback (Story 3.9's drawDiff) the borrow points at the engine's FRONT
+  // buffer, which the double-buffered step overwrites two cycles later — fine, because resize()
+  // and setGridLines() are its only readers and both are paused-only surfaces in Run mode
+  // (Story 3.16, FR-4.9); the diff itself reads `lastColourState`, never this reference.
   private lastGrid: RenderableGrid | null = null;
 
   // Dirty state (Story 2.3). Flat cell indices, not merged rectangles — see dirtyCells.ts for why
@@ -438,7 +441,8 @@ export class GridRenderer {
 
   /**
    * Accumulates dirty CANDIDATES between draws (AC2). Marking is legal before any draw; marks
-   * survive until the next `draw`/`drawFull` consumes them, and re-marking a cell is free.
+   * survive until the next `draw`/`drawFull`/`drawDiff` consumes them (the last subsumes them —
+   * every cell is its candidate, Story 3.9), and re-marking a cell is free.
    *
    * ⚠️ It marks only. It must never paint, never read the canvas, and never touch `lastGrid`:
    * Stories 2.5/2.6 call this once per cell during a drag, so a repaint in here converts one
@@ -508,8 +512,10 @@ export class GridRenderer {
     this.assertGridMatchesSize(grid);
 
     // No baseline to diff against — the renderer's first frame has nothing to be incremental
-    // against (same fallback draw() takes, Story 2.3 forced decision 3). Trap 2: this is what a
-    // playback canvas priming with `drawFull`, not this method, must not rely on to stay cheap.
+    // against (same fallback draw() takes, Story 2.3 forced decision 3). It primes the baseline
+    // too, so the NEXT drawDiff is incremental. Trap 2: `renderStatic` primes nothing, so a
+    // playback canvas must mount with `drawFull` (as the edit canvas does) rather than rely on
+    // this fallback — correct either way, but the fallback is a full paint, not a cheap frame.
     if (this.lastColourState === null) {
       this.paint(grid);
       return;
@@ -526,8 +532,10 @@ export class GridRenderer {
     if (repaints.length === 0) return;
 
     // Same not-optional ordering paintDirtyCells documents: background, then batched colour, then
-    // grid-line restoration. Marks are already cleared above (every cell was a candidate, so there
-    // is nothing left to retry on a throw here, unlike draw()'s caller-supplied subset).
+    // grid-line restoration. Marks are already cleared above, and unlike draw() nothing needs them
+    // for a retry: the baseline is advanced only AFTER a successful paint, so if paintDirtyCells
+    // throws partway the next drawDiff re-detects every cell of this frame from the baseline
+    // itself and repaints it — the sweep, not a mark set, is the record.
     this.paintDirtyCells(grid, repaints);
     for (const repaint of repaints) this.lastColourState[repaint.index] = repaint.colourState;
   }
