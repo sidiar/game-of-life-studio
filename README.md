@@ -30,27 +30,26 @@ npm install
 | `npm run bundle:check`            | Fails if the home route's first-load JS exceeds the budget |
 | `npm run ci`                      | **The full quality gate — see below**                      |
 
-## Local validation (no remote)
+## Quality gate & deployment
 
-This repository is **local-only — there is no GitHub remote yet**, so the GitHub Actions
-workflow in `.github/workflows/ci.yml` never runs on push. Quality is therefore enforced
-by running the gate yourself:
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs on every PR and on every push
+to `main`:
 
-- **`npm run ci`** runs the entire pipeline in the same order as `ci.yml`:
-  `typecheck → lint → test:coverage → build:standalone → bundle:check → e2e`, stopping at the
-  first failure. Run it before you consider a change done — the pre-commit hook does **not**
-  cover the whole gate.
+- **`npm run ci`** is the local mirror of that pipeline — same stages, same order (the stage
+  list lives in the header comment of `ci.yml`; keep the two in lockstep). Run it before opening
+  a PR — the pre-commit hook does **not** cover the whole gate.
 - **The husky pre-commit hook is the fast subset only** (`lint-staged`: ESLint + Prettier on
   changed files, then a project-wide `npm run typecheck`). It deliberately skips tests, e2e, and
-  the bundle check so commits stay quick. Running the heavy stages is on you until CI exists.
+  the bundle check so commits stay quick.
+- **Deploy.** On `main`, once `quality` and `e2e` are both green, the `deploy` job publishes the
+  static export to GitHub Pages at **<https://game-of-life-studio.com>**. A red run leaves the
+  previous deployment live. The custom domain is bound by `apps/web/public/CNAME`, which the
+  export copies into `out/` verbatim.
 - **Clean-room dry run (do this at epic boundaries).** A warm local tree hides "works on my
-  machine" bugs — stale `node_modules`, uncommitted files, env drift — that a clean CI checkout
-  would catch. Reproduce a clean checkout and run the gate:
+  machine" bugs — stale `node_modules`, uncommitted files, env drift — that the CI checkout
+  catches. Reproduce a clean checkout and run the gate:
 
   ```bash
   git archive --format=tar HEAD | (mkdir -p /tmp/gol-clean && tar -x -C /tmp/gol-clean)
   cd /tmp/gol-clean && npm ci && npm run ci
   ```
-
-When a GitHub remote is added, `ci.yml` runs automatically on push/PR and becomes the enforced
-gate; `npm run ci` stays the local mirror of it (keep the two in lockstep).
