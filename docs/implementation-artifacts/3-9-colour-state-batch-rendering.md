@@ -776,3 +776,18 @@ Both already anticipated by the story itself; recorded here as confirmed, not ne
 
 Dev Model: sonnet   # follows patterns this file already settles rather than setting one: `drawDiff` is `draw`'s body with `selectChangedCells` in place of the marks (2.3's shape), the adapter is three lines over 3.8's port, the tests are 2.3's call-log style walked through 3.8's `stepGridBuffers`, and the one gate change is spelled out to the task name — every open call (FD1 method-vs-identity, FD2 reuse, FD3 gated pair, FD4 baseline) carries a recommendation and a named test; the 3.8 precedent, not the 3.7 one
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 6m 22s | 32 | 7,418 | 22,613 | 897,556 | 927,619 |
+| Step 1 — create-story | opus-5 | 3 | 14m 25s | 350 | 120,744 | 1,436,617 | 24,298,643 | 25,856,354 |
+| Step 2 — dev-story | sonnet-5 | 1 | 27m 13s | 514 | 103,333 | 628,315 | 57,152,330 | 57,884,492 |
+| Step 3 — code review + PR | opus-5 | 4 | 32m 36s | 368 | 97,451 | 1,222,457 | 18,458,110 | 19,778,386 |
+| _of which the orchestrator_ | opus-5 | — | — | 62 | 14,176 | 42,925 | 1,879,458 | 1,936,621 |
+| **Total (create-story → PR ready)** | | 8 | **1h 20m** | 1,264 | 328,946 | 3,310,002 | 100,806,639 | **104,446,851** |
+
+Run started 2026-09-14 08:58 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
