@@ -4,6 +4,10 @@ import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { styled } from '@mui/material/styles';
+// A static import, not a second `dynamic()`: this file is already inside the lazy chunk
+// `<OrganismLibrary>` draws, so the layout rides along with it and a nested lazy boundary would
+// split a chunk for nothing.
+import OrganismEditorLayout from './OrganismEditorLayout';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -113,19 +117,21 @@ const Actions = styled('div')({
   alignItems: 'center',
 });
 
-// Story 4.4's three columns land here. Empty on purpose — a placeholder is chrome nobody asked for.
-// `minHeight: 0` is what lets the columns' own scroll regions shrink inside the flex column.
+// A flex row whose only item is the layout's root (Story 4.4). `minHeight: 0` is what lets the
+// columns' own scroll regions shrink inside the flex column.
 const EditorBody = styled('div')({
   flex: 1,
+  display: 'flex',
   overflow: 'hidden',
   minHeight: 0,
 });
 
 /**
- * The Organism Editor's full-screen shell (Story 4.3): the `Dialog`, its header and an empty body.
- * Holds no state and makes no repository call — the lifecycle (inert window, focus restore) is
- * `useOrganismEditorModal`'s, and the editor's own dirty scope (AR-33 — independent of the
- * battle's) arrives with Story 4.23 and will live in this shell.
+ * The Organism Editor's full-screen shell (Story 4.3): the `Dialog`, its header and a body that is
+ * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds no state and makes no repository
+ * call — the lifecycle (inert window, focus restore) is `useOrganismEditorModal`'s, and the
+ * editor's own dirty scope (AR-33 — independent of the battle's) arrives with Story 4.23 and will
+ * live in this shell.
  *
  * Header layout follows the epics AC / UX-DR5 (`organism-editor-design.md:101-126`): Back on the
  * left, centred title, Save + Close on the right. ⚠️ The 2026-06-01 mockup revision
@@ -198,7 +204,9 @@ export default function OrganismEditorModal({
             </IconButton>
           </Actions>
         </EditorHeader>
-        <EditorBody />
+        <EditorBody>
+          <OrganismEditorLayout />
+        </EditorBody>
       </Shell>
     </Dialog>
   );

@@ -250,6 +250,11 @@ a run that matches zero test files now fails, in all four workspaces.
   smoke-only.
 - Property tests (fast-check) cover engine invariants: determinism, no cell both born and
   dead in a cycle, extinction-only auto-stop, resize anchoring, round-trip identity.
+- ⚠️ **The four Playwright projects run at 1280×720 (desktop) and 1194×834 (tablet) — no default
+  project is ≥ 1400 or < 1024 wide.** A layout tier outside that band (the editor's full tier and
+  its fold, Story 4.4) is exercised only by a one-off `page.setViewportSize` before `goto` (the
+  Story 2.12 precedent), never a fifth project. A responsive test written against the defaults
+  compiles, passes, and has tested the compressed tier only.
 
 ### Code Quality & Style Rules
 
@@ -448,4 +453,4 @@ Following instinct here produces code that compiles, passes tests, and violates 
   toolchain stops being news; the `npm test` "vacuously green" warning was retired 2026-08-07,
   when the remote went live and CI started running for real.
 
-Last updated: 2026-09-10
+Last updated: 2026-09-14

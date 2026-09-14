@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
@@ -88,6 +88,19 @@ describe('OrganismEditorModal', () => {
 
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  // Story 4.4: the body is `<OrganismEditorLayout>`. Its own contract is that component's test;
+  // what the shell owes is that the three regions are INSIDE the dialog, in order. The axe test
+  // below now scans the columns for free.
+  it('renders the three editor columns inside the dialog, in order', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    const regions = within(screen.getByRole('dialog')).getAllByRole('region');
+    expect(regions).toHaveLength(3);
+    expect(regions[0]).toHaveAccessibleName('Basic Information');
+    expect(regions[1]).toHaveAccessibleName('Survival Rules');
+    expect(regions[2]).toHaveAccessibleName('Preview & Test');
   });
 
   it('open={false} renders no dialog at all (MUI unmounts by default)', () => {

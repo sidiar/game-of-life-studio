@@ -2,6 +2,26 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
 
+const CREATE = '+ Create New Organism';
+
+/** The dialog, settled: visible AND its Fade at opacity 1. `toBeVisible()` alone passes the
+ * instant the element has a bounding box, well before the ~225ms Fade ends
+ * (`deleteBattle.spec.ts`'s axe test records the measurement).
+ *
+ * ⚠️ The opacity is read off `.MuiDialog-container`, not the `role="dialog"` paper. MUI's `Fade`
+ * wraps the CONTAINER (Dialog.js renders Transition → Container → Paper) and `getComputedStyle`
+ * reports an element's OWN `opacity`, never an ancestor's — the paper's is `1` from its first
+ * frame, so a wait on the paper returns at once and "settled" would be a name, not a fact.
+ *
+ * Module scope (Story 4.4) so the layout block reuses it rather than forking it. */
+async function openEditor(page: Page) {
+  await page.getByRole('button', { name: CREATE }).click();
+  const dialog = page.getByRole('dialog', { name: 'Organism Editor' });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
+  return dialog;
+}
+
 // Thin e2e (RFC-008 Decision 2), same fixtures/patterns as home.spec.ts / appShell.spec.ts.
 test.describe('organisms route (Story 4.1)', () => {
   test('renders the Organism Library against the served static export, with zero console errors', async ({
@@ -244,24 +264,6 @@ test.describe('organism card grid (Story 4.2)', () => {
 });
 
 test.describe('editor modal shell (Story 4.3)', () => {
-  const CREATE = '+ Create New Organism';
-
-  /** The dialog, settled: visible AND its Fade at opacity 1. `toBeVisible()` alone passes the
-   * instant the element has a bounding box, well before the ~225ms Fade ends
-   * (`deleteBattle.spec.ts`'s axe test records the measurement).
-   *
-   * ⚠️ The opacity is read off `.MuiDialog-container`, not the `role="dialog"` paper. MUI's `Fade`
-   * wraps the CONTAINER (Dialog.js renders Transition → Container → Paper) and `getComputedStyle`
-   * reports an element's OWN `opacity`, never an ancestor's — the paper's is `1` from its first
-   * frame, so a wait on the paper returns at once and "settled" would be a name, not a fact. */
-  async function openEditor(page: Page) {
-    await page.getByRole('button', { name: CREATE }).click();
-    const dialog = page.getByRole('dialog', { name: 'Organism Editor' });
-    await expect(dialog).toBeVisible();
-    await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
-    return dialog;
-  }
-
   test('opens as a labelled full-screen dialog with the header controls, and zero console errors', async ({
     page,
   }) => {
@@ -443,5 +445,230 @@ test.describe('editor modal shell (Story 4.3)', () => {
     // `ssr: false` + a closed dialog: nothing of the modal reaches the static HTML.
     expect(html).not.toContain('role="dialog"');
     expect(html).not.toContain('Organism Editor');
+  });
+});
+
+test.describe('three-column layout (Story 4.4)', () => {
+  type Box = { x: number; y: number; width: number; height: number };
+  type Region = ReturnType<Page['getByRole']>;
+
+  /** `boundingBox()` is `null` for a detached or hidden node — throw (the `battleRoute.spec.ts`
+   * idiom) rather than optional-chain into a 0×0 box that passes every upper bound. */
+  async function boxOf(locator: Region, label: string): Promise<Box> {
+    const box = await locator.boundingBox();
+    if (box === null) throw new Error(`${label} has no layout box`);
+    return box;
+  }
+
+  /** `/organisms` hydrated (the Story 4.1 hydration signal), the editor open and settled, and the
+   * three regions located by their accessible names — the names the layout's unit test pins. */
+  async function openLayout(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    return {
+      dialog,
+      basic: dialog.getByRole('region', { name: 'Basic Information' }),
+      rules: dialog.getByRole('region', { name: 'Survival Rules' }),
+      preview: dialog.getByRole('region', { name: 'Preview & Test' }),
+    };
+  }
+
+  const documentOverflow = (page: Page) =>
+    page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+
+  // ⚠️ No default Playwright project is ≥ 1400 wide (1280×720 desktop, 1194×834 tablet), so the
+  // full tier exists only behind this one-off `setViewportSize` — the Story 2.12 precedent, never
+  // a fifth project. `setViewportSize` precedes `goto` so the first layout is already at 1440.
+  test('full tier (≥ 1400): 320 / flexible ≤ 800 / 400, one row, zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const viewport = { width: 1440, height: 900 };
+    await page.setViewportSize(viewport);
+    const { basic, rules, preview } = await openLayout(page);
+
+    await expect(basic).toBeVisible();
+    await expect(rules).toBeVisible();
+    await expect(preview).toBeVisible();
+
+    const basicBox = await boxOf(basic, 'Basic Information');
+    const rulesBox = await boxOf(rules, 'Survival Rules');
+    const previewBox = await boxOf(preview, 'Preview & Test');
+
+    expect(basicBox.width).toBeCloseTo(320, 0);
+    expect(previewBox.width).toBeCloseTo(400, 0);
+    expect(previewBox.x + previewBox.width).toBeCloseTo(viewport.width, 0);
+    // The flexible column sits between the fixed two and never exceeds the mockup's cap (FD1);
+    // at 1440 it measures 1440 − 320 − 400 = 720, so it also has real width, not a collapse.
+    expect(rulesBox.x).toBeGreaterThanOrEqual(basicBox.x + basicBox.width);
+    expect(rulesBox.x + rulesBox.width).toBeLessThanOrEqual(previewBox.x);
+    expect(rulesBox.width).toBeLessThanOrEqual(800);
+    expect(rulesBox.width).toBeGreaterThan(600);
+    // One row: same top, same height (`align-items: stretch`).
+    expect(rulesBox.y).toBeCloseTo(basicBox.y, 0);
+    expect(previewBox.y).toBeCloseTo(basicBox.y, 0);
+    expect(rulesBox.height).toBeCloseTo(basicBox.height, 0);
+    expect(previewBox.height).toBeCloseTo(basicBox.height, 0);
+    expect(basicBox.height).toBeGreaterThan(100);
+
+    expect(errors).toEqual([]);
+  });
+
+  // "Stay put" in its observable form (FD2): scrolling the Rules column moves nothing else, the
+  // dialog stays exactly the viewport and the document never grows. There is no rule content to
+  // overflow with until Story 4.10, so a tall probe node is appended to the region — a
+  // MEASUREMENT of the scroll container, never a rendered placeholder — and removed at the end.
+  // No axe in this test: the probe is not part of the page.
+  test('the Rules column scrolls independently; Basic Information and Preview stay put', async ({
+    page,
+  }) => {
+    const viewport = { width: 1440, height: 900 };
+    await page.setViewportSize(viewport);
+    const { dialog, basic, rules, preview } = await openLayout(page);
+
+    const basicBefore = await boxOf(basic, 'Basic Information');
+    const previewBefore = await boxOf(preview, 'Preview & Test');
+
+    const PROBE_ID = 'story-4-4-scroll-probe';
+    const probeIn = (region: Region) =>
+      region.evaluate((el, id) => {
+        const probe = document.createElement('div');
+        probe.id = id;
+        probe.style.height = '4000px';
+        el.appendChild(probe);
+        return { scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+      }, PROBE_ID);
+    const removeProbe = () =>
+      page.evaluate((id) => document.getElementById(id)?.remove(), PROBE_ID);
+
+    const rulesSize = await probeIn(rules);
+    expect(rulesSize.clientHeight).toBeGreaterThan(0);
+    expect(rulesSize.scrollHeight).toBeGreaterThan(rulesSize.clientHeight);
+
+    const scrollTop = await rules.evaluate((el) => {
+      el.scrollTop = 500;
+      return el.scrollTop;
+    });
+    expect(scrollTop).toBeGreaterThan(0);
+
+    expect(await boxOf(basic, 'Basic Information')).toEqual(basicBefore);
+    expect(await boxOf(preview, 'Preview & Test')).toEqual(previewBefore);
+    const dialogBox = await boxOf(dialog, 'dialog');
+    expect(Math.round(dialogBox.height)).toBe(viewport.height);
+    const overflow = await documentOverflow(page);
+    expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+    await removeProbe();
+
+    // FD2's other half: each column is its OWN scroll container, so the Basic Information column
+    // overflows in place too rather than growing the row.
+    const basicSize = await probeIn(basic);
+    expect(basicSize.scrollHeight).toBeGreaterThan(basicSize.clientHeight);
+    expect(await boxOf(basic, 'Basic Information')).toEqual(basicBefore);
+    await removeProbe();
+  });
+
+  // The projects' own viewports (1280×720 desktop, 1194×834 tablet) are all inside the 1024–1400
+  // band, so this is the tier EVERY other e2e in this file already runs in — no `setViewportSize`.
+  test('compressed tier (1024–1400): 280 / flexible / 350, one row, no horizontal overflow', async ({
+    page,
+  }) => {
+    const viewport = page.viewportSize();
+    if (viewport === null) throw new Error('project has no viewport');
+    expect(viewport.width).toBeGreaterThanOrEqual(1024);
+    expect(viewport.width).toBeLessThan(1400);
+
+    const { basic, rules, preview } = await openLayout(page);
+    const basicBox = await boxOf(basic, 'Basic Information');
+    const rulesBox = await boxOf(rules, 'Survival Rules');
+    const previewBox = await boxOf(preview, 'Preview & Test');
+
+    expect(basicBox.width).toBeCloseTo(280, 0);
+    expect(previewBox.width).toBeCloseTo(350, 0);
+    expect(previewBox.x + previewBox.width).toBeCloseTo(viewport.width, 0);
+    expect(rulesBox.x).toBeGreaterThanOrEqual(basicBox.x + basicBox.width);
+    expect(rulesBox.x + rulesBox.width).toBeLessThanOrEqual(previewBox.x);
+    expect(rulesBox.width).toBeGreaterThan(300);
+    expect(rulesBox.y).toBeCloseTo(basicBox.y, 0);
+    expect(previewBox.y).toBeCloseTo(basicBox.y, 0);
+    expect(rulesBox.height).toBeCloseTo(basicBox.height, 0);
+
+    const overflow = await documentOverflow(page);
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+  });
+
+  // < 1024 is below NFR-3.1's supported floor: a graceful degradation, smoke-tested only (AC4) —
+  // Basic Information stacked over Rules on the left (FD3), Preview at 350 on the right, every
+  // region still in the tree, and no horizontal document overflow. No axe here.
+  test('fold tier (< 1024): Basic Information stacks over Rules, Preview stays at 350', async ({
+    page,
+  }) => {
+    const viewport = { width: 1000, height: 800 };
+    await page.setViewportSize(viewport);
+    const { basic, rules, preview } = await openLayout(page);
+
+    await expect(basic).toBeVisible();
+    await expect(rules).toBeVisible();
+    await expect(preview).toBeVisible();
+
+    const basicBox = await boxOf(basic, 'Basic Information');
+    const rulesBox = await boxOf(rules, 'Survival Rules');
+    const previewBox = await boxOf(preview, 'Preview & Test');
+
+    expect(previewBox.width).toBeCloseTo(350, 0);
+    expect(previewBox.x + previewBox.width).toBeCloseTo(viewport.width, 0);
+    expect(rulesBox.x).toBeCloseTo(basicBox.x, 0);
+    expect(rulesBox.width).toBeCloseTo(basicBox.width, 0);
+    expect(rulesBox.y).toBeGreaterThanOrEqual(basicBox.y + basicBox.height);
+    expect(basicBox.width).toBeGreaterThan(300);
+    expect(basicBox.height).toBeGreaterThan(40);
+
+    const overflow = await documentOverflow(page);
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+  });
+
+  // The Story 4.3 block's axe test already scans the columns at the projects' default (compressed)
+  // viewport; the full tier is reachable only here.
+  test('has no axe violations at the full tier with the editor open and settled', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openLayout(page);
+    // Button's colour transition (250ms) is unsynchronised with the Dialog's Fade — the same wait
+    // the Story 4.3 axe test records.
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('heading order inside the dialog is one <h2> then three <h3>s', async ({ page }) => {
+    const { dialog } = await openLayout(page);
+
+    await expect(dialog.getByRole('heading', { level: 2 })).toHaveCount(1);
+    const columnHeadings = dialog.getByRole('heading', { level: 3 });
+    await expect(columnHeadings).toHaveCount(3);
+    await expect(columnHeadings).toHaveText([
+      'Basic Information',
+      'Survival Rules',
+      'Preview & Test',
+    ]);
   });
 });
