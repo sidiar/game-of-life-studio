@@ -15,7 +15,10 @@
 //      does more, and frames that do no simulation work do not bound anything.
 //   3. Therefore the gated quantity is `step() + repaint at 100x60 x 20 organisms <= 16.67 ms`, and
 //      the margin RFC-008 Risk 6 asks for is the headroom UNDER that number, not an allowance added
-//      on top of it. This script prints the headroom for exactly that reason.
+//      on top of it. This script prints the headroom for exactly that reason. As of Story 3.9, "one
+//      repaint" is `GridRenderer.drawDiff`'s whole-grid diff (`repaint-diff-path`) — the repaint the
+//      simulation loop's `StepRenderer` adapter actually calls once per step — not `drawFull`'s
+//      decision (`repaint-decision`), which now runs only on mount/resize/grid-lines-toggle.
 //
 // Two derivations considered and rejected, recorded so the next reader does not re-derive them:
 //   - NOT 16.67 / 3. The 20 generations/second ladder maximum is one step per 50 ms; frames that
@@ -63,6 +66,7 @@ const SOURCES = [
     command: 'npm run bench',
     required: [
       'repaint-decision 100x60 x20',
+      'repaint-diff-path 100x60 x20',
       'repaint-dirty-path 100x60 x20',
       'colour-state-reprime 100x60 x20',
       'ref-to-fill-group-build x20',
@@ -75,7 +79,13 @@ const SOURCES = [
 // different workspaces because the engine has no DOM types and the renderer's decision logic lives
 // in apps/web. Both are driven from the SAME fixture (@gol/test-utils' benchmark roster at the same
 // preset and the same seed), which is what makes the sum describe one battle.
-const GATED_TASKS = ['step 100x60 x20', 'repaint-decision 100x60 x20'];
+//
+// ⚠️ Story 3.9 (FD3 (a)) moved the repaint half from `repaint-decision` (`groupByColourState`, the
+// `drawFull` decision) to `repaint-diff-path` (`selectChangedCells`, `GridRenderer.drawDiff`'s
+// decision) — the repaint a running simulation actually calls once per step, now that Story 3.8's
+// loop and Story 3.9's adapter exist. `repaint-decision` stays required and printed: it is still
+// the mount/resize/grid-lines-toggle repaint, just no longer the one this gate sums.
+const GATED_TASKS = ['step 100x60 x20', 'repaint-diff-path 100x60 x20'];
 
 // Measured, printed, and deliberately NOT gated (Decision A.4 graceful degradation, RFC-008 Risk 6
 // on how environment-sensitive large-grid numbers are).

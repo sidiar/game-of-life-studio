@@ -16,6 +16,10 @@
  * state. Pure caller-trust would make an already-empty erase repaint; pure renderer-side diffing
  * would make `markDirty` dead weight and require copying both typed arrays every draw, against
  * NFR-1.1.
+ *
+ * **Story 3.9 adds `selectChangedCells`** — playback's own brain, beside `selectDirtyCells`
+ * rather than routed through it: nobody marks cells in Run mode (Story 3.8 AC5), so there are no
+ * caller candidates to filter, and every cell is one instead (Decision B.4).
  */
 import { colourStateAt, EMPTY_COLOUR_STATE } from './colourStateGroups';
 import type { RefToFillGroup } from './refToFillGroup';
@@ -110,4 +114,46 @@ export function selectDirtyCells(
     repaints.push({ index, colourState });
   }
   return repaints.sort((a, b) => a.index - b.index);
+}
+
+/**
+ * The playback repaint's brain (Story 3.9 Task 1, AC2, AR-42) — `selectDirtyCells`'s sibling for
+ * a caller with no candidates to hand it. `markDirty` (Edit mode) takes candidates from the
+ * pointer; the engine publishes no change list at all (`threePhaseStep` returns a whole grid, not
+ * a diff — Story 3.6 FD1), and Story 3.8's loop marks nothing by design (its AC5). So in playback
+ * EVERY cell is a candidate: this sweeps `0..width*height` once, applying the same "dirty on
+ * occupant OR age-shade change" rule (Decision B.4) `selectDirtyCells` applies to a `Set`.
+ *
+ * The O(cells) compare against the retained baseline (~0.08 ms at 100x60, the `colour-state-
+ * reprime` figure) is the cheapest CORRECT way to derive a playback dirty set — cheaper than
+ * marking all 6,000 coordinates through a `Set` (~0.7 ms, a `CellCoord` allocation per cell per
+ * frame) and cheaper to DECIDE than a full repaint, though a full repaint rasterizes strictly
+ * less — see this story's FD1 for the rejected alternatives.
+ *
+ * Ascending order falls out of the loop for free — unlike `selectDirtyCells`, which sorts a `Set`
+ * whose iteration order is insertion order, not index order, this never needs to.
+ */
+export function selectChangedCells(
+  grid: RenderableGrid,
+  lut: RefToFillGroup,
+  lastColourState: Uint16Array,
+): DirtyCellRepaint[] {
+  // Bound the sweep by the DECLARED dimensions, the same guard groupByColourState applies as a
+  // public function reachable without GridRenderer's assertGridMatchesSize: a short age buffer is
+  // silent otherwise — age[index] reads undefined, becomes NaN, and clamps to shade 0.
+  const cellCount = grid.width * grid.height;
+  if (grid.occupant.length < cellCount || grid.age.length < cellCount) {
+    throw new Error(
+      `selectChangedCells: grid ${grid.width}x${grid.height} needs ${cellCount} cells, but ` +
+        `occupant has ${grid.occupant.length} and age has ${grid.age.length}`,
+    );
+  }
+
+  const repaints: DirtyCellRepaint[] = [];
+  for (let index = 0; index < cellCount; index++) {
+    const colourState = colourStateAt(grid, lut, index);
+    if (colourState === lastColourState[index]) continue;
+    repaints.push({ index, colourState });
+  }
+  return repaints;
 }

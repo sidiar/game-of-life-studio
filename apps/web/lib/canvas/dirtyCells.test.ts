@@ -3,6 +3,7 @@ import { colourStateAt, resetColourStateWarnings, EMPTY_COLOUR_STATE } from './c
 import {
   DirtyCellRangeError,
   markDirtyCells,
+  selectChangedCells,
   selectDirtyCells,
   toFlatIndex,
   type CellCoord,
@@ -183,5 +184,94 @@ describe('selectDirtyCells — AC1: dirty on occupant OR age-shade change', () =
 
     expect(selectDirtyCells([0, 1, 2], after, table, baseline)).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(2); // once for ref 7, once for ref 8 — not once globally
+  });
+});
+
+describe("selectChangedCells — playback's whole-grid sweep (Story 3.9 Task 1, AC2)", () => {
+  const table = lut([0, 5, 9], [1, 1, 1]); // ref 1 -> token 5, ref 2 -> token 9, both aging
+
+  afterEach(() => {
+    resetColourStateWarnings();
+    vi.restoreAllMocks();
+  });
+
+  it('reports nothing for an identical grid', () => {
+    const before = grid(4, 3, [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    const after = grid(4, 3, [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline)).toEqual([]);
+  });
+
+  it('reports exactly one entry, carrying the NEW colour state, for a single-cell change', () => {
+    const before = grid(4, 3, new Array(12).fill(0));
+    const after = grid(4, 3, [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline)).toEqual([
+      { index: 5, colourState: fillGroupOf(table, 1, 0) },
+    ]);
+  });
+
+  it('reports occupied -> empty with the EMPTY_COLOUR_STATE sentinel', () => {
+    const before = grid(4, 3, [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    const after = grid(4, 3, new Array(12).fill(0));
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline)).toEqual([
+      { index: 5, colourState: EMPTY_COLOUR_STATE },
+    ]);
+  });
+
+  it('does not report age 7 -> 8 (shade saturates), but DOES report age 6 -> 7', () => {
+    const before6 = grid(1, 1, [1], [6]);
+    const baselineAt6 = baselineFor(before6, table);
+    expect(selectChangedCells(grid(1, 1, [1], [7]), table, baselineAt6)).toHaveLength(1);
+
+    const before7 = grid(1, 1, [1], [7]);
+    const baselineAt7 = baselineFor(before7, table);
+    expect(selectChangedCells(grid(1, 1, [1], [8]), table, baselineAt7)).toEqual([]);
+    expect(selectChangedCells(grid(1, 1, [1], [99]), table, baselineAt7)).toEqual([]);
+  });
+
+  it('two organisms sharing a colorToken swapping places reports nothing (Decision B.2 folding)', () => {
+    const shared = lut([0, 5, 5], [1, 1, 1]); // ref 1 and ref 2 both render at token 5, same age
+    const before = grid(4, 3, [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const after = grid(4, 3, [2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const baseline = baselineFor(before, shared);
+
+    expect(selectChangedCells(after, shared, baseline)).toEqual([]);
+  });
+
+  it('throws when the buffer lengths disagree with the declared dimensions, naming both counts', () => {
+    const shortOccupant = grid(4, 3, new Array(11).fill(0));
+    const baseline = new Uint16Array(12);
+    expect(() => selectChangedCells(shortOccupant, table, baseline)).toThrow(/12.*occupant.*11/);
+
+    const shortAge: ReturnType<typeof grid> = {
+      width: 4,
+      height: 3,
+      occupant: new Uint8Array(12),
+      age: new Uint16Array(11),
+    };
+    expect(() => selectChangedCells(shortAge, table, baseline)).toThrow(/12.*age.*11/);
+  });
+
+  it('returns repaints in ascending index order with no sort step', () => {
+    const before = grid(4, 3, new Array(12).fill(0));
+    const after = grid(4, 3, [0, 1, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0]);
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline).map((c) => c.index)).toEqual([1, 5, 8]);
+  });
+
+  it('treats an out-of-range ref as empty and warns once per distinct ref', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const before = grid(4, 3, new Array(12).fill(0));
+    const after = grid(4, 3, [7, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // 7, 8 both > lut.size
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2);
   });
 });

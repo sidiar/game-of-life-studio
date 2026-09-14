@@ -2,7 +2,15 @@
  * GridRenderer — the frozen contract (`component-tree-battle-page.md#5`), whose six methods land
  * across three epics. Story 1.8 shipped `drawFull` + `renderStatic` (plus `resize`/`setGridLines`,
  * which both need); **Story 2.3 adds the dirty-region editing paths** (`draw` + `markDirty`).
- * Epic 3 wraps it with the loop, adding nothing to it.
+ *
+ * **Story 3.9 adds a seventh method, `drawDiff`, and here is why the "adding nothing to it" line
+ * above no longer holds literally.** The contract's `draw(grid)` is "pure repaint of dirty
+ * regions" and presumes a dirty SET already exists; in Edit mode `markDirty` builds one from the
+ * pointer. In playback nobody does (Story 3.8's loop calls `renderer.draw(grid)` once per step and
+ * marks nothing, by design — its AC5), so the renderer derives its own dirty set instead of
+ * trusting a caller for one (Decision B.4; `component-tree-battle-page.md` §5; RFC-002 §"3."). The
+ * contract's SUBSTANCE — no scheduling, no sim state, no aging logic, batched by colour state — is
+ * unchanged; only the method count moved. See this story's Dev Notes spec-conflict section.
  *
  * A class, deliberately: the "no classes" rule (project-context.md) is scoped to the engine
  * (packages/simulation, the rules layer); this is the one place in apps/web a class is correct —
@@ -36,6 +44,7 @@ import {
 } from './colourStateGroups';
 import {
   markDirtyCells,
+  selectChangedCells,
   selectDirtyCells,
   type CellCoord,
   type DirtyCellRepaint,
@@ -383,10 +392,12 @@ export class GridRenderer {
    * UPPER BOUND — every cell marked and every occupied cell reading as changed, ~0.7 ms — because
    * `markDirty` allocates a coordinate per cell and routes it through a `Set`. (Figures are the
    * report's, taken on the pinned 30% fill after Story 3.7's review corrected the fixture; a live
-   * frame diffs against the previous one and sits below that bound.) The recommendation still
-   * stands the other way — `draw` repaints
-   * only the cells that changed, and RASTERIZATION is the half no off-browser harness can measure
-   * (jsdom has no canvas) — but Story 3.8 now has both numbers instead of an assumption. See
+   * frame diffs against the previous one and sits below that bound.) The recommendation stood the
+   * other way regardless — RASTERIZATION is the half no off-browser harness can measure (jsdom has
+   * no canvas), and repainting only the cells that changed is strictly less of it — and **Story 3.9
+   * took `drawDiff`** against exactly these figures (FD1 (a), the recommended option): this same
+   * sweep, reused as `selectChangedCells`, diffed against this baseline, feeding the same
+   * `paintDirtyCells` `draw` already uses. See
    * docs/implementation-artifacts/performance-baseline-validation.md.
    */
   private resetDirtyState(grid: RenderableGrid): void {
@@ -461,7 +472,10 @@ export class GridRenderer {
     const repaints = selectDirtyCells(this.dirtyCells, grid, this.palette, this.lastColourState);
     this.lastGrid = grid;
     // RFC-002 §"Only redraw dirty regions": nothing survived, so the context is not touched at
-    // all — this is the property Decision D.3 relies on to make idle playback frames free.
+    // all. Since Story 3.8, an IDLE frame never reaches the renderer at all — the loop repaints
+    // only after a step (its AC5), so this no-op is now the *no-change* frame's property: a
+    // still-life stepped through `drawDiff` (Story 3.9) touches the context zero times too, for
+    // the same reason, on the playback path this method never runs on.
     if (repaints.length === 0) {
       this.dirtyCells.clear();
       return;
@@ -473,6 +487,48 @@ export class GridRenderer {
     // repaint with no record left to recover it.
     this.paintDirtyCells(grid, repaints);
     this.dirtyCells.clear();
+    for (const repaint of repaints) this.lastColourState[repaint.index] = repaint.colourState;
+  }
+
+  /**
+   * The playback repaint (Story 3.9, AC1/AC4) — `draw`'s sibling for a caller with no marks to
+   * give it. Story 3.8's loop calls `renderer.draw(grid)` once per step against a `StepRenderer`
+   * port and marks nothing (its AC5): a raw `GridRenderer` type-checks there and paints nothing
+   * ever again (`simulationLoop.ts` Trap 1). `drawDiff` is the method Task 3's adapter
+   * (`playbackRenderer.ts`) hands the loop instead — every cell is a candidate, diffed by
+   * `selectChangedCells` against the same `lastColourState` baseline `draw` reads, then painted
+   * through the identical `paintDirtyCells` batching (AR-23, Decision B.2). See this story's FD1
+   * for the rejected alternatives (widening `draw` by object identity, a `markDirty`-everything
+   * adapter, `drawFull` every step, an engine-emitted change list) and Traps 1-2-3-5-6 for the
+   * failure modes this method exists to avoid.
+   */
+  drawDiff(grid: RenderableGrid): void {
+    // Same guard draw() and drawFull() apply, for the same reason: a mismatched grid corrupts more
+    // silently through an incremental repaint than a full one.
+    this.assertGridMatchesSize(grid);
+
+    // No baseline to diff against — the renderer's first frame has nothing to be incremental
+    // against (same fallback draw() takes, Story 2.3 forced decision 3). Trap 2: this is what a
+    // playback canvas priming with `drawFull`, not this method, must not rely on to stay cheap.
+    if (this.lastColourState === null) {
+      this.paint(grid);
+      return;
+    }
+
+    const repaints = selectChangedCells(grid, this.palette, this.lastColourState);
+    this.lastGrid = grid;
+    // Every cell was a candidate here, so any outstanding markDirty() marks are strictly a subset
+    // of what was just considered — subsumed, not merely stale. Clearing them is what keeps a
+    // LATER draw() from misfiring against a baseline drawDiff has already brought current.
+    this.dirtyCells.clear();
+    // RFC-002 §"Only redraw dirty regions": nothing changed (a still-life frame, Traps 5/6), so
+    // the context is not touched at all — the playback analogue of draw()'s no-op above.
+    if (repaints.length === 0) return;
+
+    // Same not-optional ordering paintDirtyCells documents: background, then batched colour, then
+    // grid-line restoration. Marks are already cleared above (every cell was a candidate, so there
+    // is nothing left to retry on a throw here, unlike draw()'s caller-supplied subset).
+    this.paintDirtyCells(grid, repaints);
     for (const repaint of repaints) this.lastColourState[repaint.index] = repaint.colourState;
   }
 
@@ -537,8 +593,9 @@ export class GridRenderer {
    * (jsdom's `getContext()` is unimplemented), so a benchmark would time a test double's method
    * calls, not the browser's. What CAN be stated exactly is the call count, which is what the entry
    * is really about: **4 `fillRect`s per repainted cell instead of 2**, deterministically, on every
-   * cell except the last column and row. Deciding it needs a real browser (Story 3.9's batching
-   * work, or a Playwright measurement), not this harness. Kept as-is; see FD2 in
+   * cell except the last column and row. Deciding it needs a real browser (a Playwright
+   * measurement — Story 3.9 reused this routine verbatim on the playback path too, FD2 (a), and
+   * jsdom still has no canvas to rasterize into), not this harness. Kept as-is; see FD2 in
    * docs/implementation-artifacts/performance-baseline-validation.md.
    *
    * Bar segments rather than a sub-rectangle `drawImage` of the cached overlay: the 9-argument
