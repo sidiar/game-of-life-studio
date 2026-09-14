@@ -725,3 +725,33 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   moving — `Story 4.10` adds the rules sentence and `Story 4.20` the usage line. **Pick this up
   with whichever of those settles the card's stat block**, and decide the cell semantics once for
   all three rows.
+
+## Deferred from: Story 4-3-editor-modal-shell (2026-09-14)
+
+- **The Organism Editor's header/footer layout is specified three ways, and the UX docs need a
+  reconciliation touch** (FD1). `organism-editor-design.md:101-126` and `epics.md:230` (UX-DR5)
+  put **Back / centred title / Save + Close** in a header bar, and this story's readiness-reviewed
+  AC says the same; `ORGANISM-EDITOR-UPDATES.md:9-20` (2026-06-01) and the shipped mockup
+  `organism-editor.html:895-903,1222-1234` instead put the organism **name** in the header, Back in
+  the left sidebar's footer, Save in an editor footer beside the FR-1.7 usage indicator, and drop
+  Close. The story followed the AC (spec-authority order; it is also the form that gives
+  Escape/Close a visible control per UX-DR17) and shipped the header only — no footer, which is
+  `Story 4.20`'s surface. **Not a code change, and not for a story to resolve by editing either
+  spec:** the next UX touch should settle which form is canonical and update the losing document.
+  If the mockup wins, 4.20 moves Save beside the usage indicator and 4.5 puts the name in the
+  header; if the AC wins, `ORGANISM-EDITOR-UPDATES.md` is superseded.
+- **Save's disabled→enabled edge is a cross-fade trap handed to `Story 4.16`** (FD4). The header's
+  Save is a MUI `<Button variant="contained" disabled>`, and MUI `Button` ships its OWN
+  `background-color`/`color`/`box-shadow` transition (`duration.short`, 250ms). In this story the
+  state never flips, so nothing is patched. The story that enables it becomes the first MUI
+  `Button` whose enabled state flips on an axe-scanned route — the same class of mid-fade failure
+  `EditorStatusBar.tsx`'s UNDO/SAVE notes record at 2.54:1 / 3.76:1. Re-read those before adding
+  any state flip, and expect to need `transition: 'none'` on this button's `sx`.
+- **Tab order across the toolbar: the story text was self-contradictory and the mockup won.** AC6
+  and Task 4 said `search input → create button → first card`; Task 3 said the button is the
+  **first** child of `<ToolbarLeft>` (mockup `organism-library.html:405-406`, button before the
+  search container). Both cannot hold. The button was placed first — DOM order matches visual
+  order (SC 2.4.3), which a CSS `order` swap would have broken — so the real order is `create
+  button → search input → first card`, and the unit + e2e tests pin that. **For the reviewer:** if
+  the AC's order was the intent, the button moves after the search field and both tests retarget;
+  nothing else changes.
