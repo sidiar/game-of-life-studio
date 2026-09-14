@@ -9,8 +9,11 @@
 #   typecheck -> lint -> format:check -> spec:check -> boundary:check -> test:coverage
 #     -> build:standalone -> bundle:check -> bench -> bench:check -> e2e (+axe)
 #
-# Deployment is intentionally NOT part of this workflow: no static host is chosen
-# yet ($0 static deploy lands when one exists).
+# Deployment: the `deploy` job publishes `apps/web/out` to GitHub Pages
+# (https://game-of-life-studio.com) on `main` pushes only, and only after BOTH
+# `quality` and `e2e` are green — the live site never runs ahead of the gate.
+# `apps/web/public/CNAME` is what binds the Pages site to the custom domain; the
+# export copies it verbatim into `out/`, so it must stay in `public/`.
 
 name: CI
 
@@ -28,7 +31,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Explicit least-privilege default; jobs here only read the repo and upload
-# artifacts, never write to it.
+# artifacts, never write to it. `deploy` widens this at the job level (pages +
+# id-token) — never here.
 permissions:
   contents: read
 
@@ -96,6 +100,15 @@ jobs:
       - name: Frame budget (AR-43 / NFR-1.1)
         run: npm run bench:check
 
+      # Hand the exact bytes the gates above measured to `deploy`. Skipped on PRs:
+      # nothing consumes it there. Kept in THIS job (not rebuilt in `deploy`) so
+      # what goes live is byte-identical to what `bundle:check` measured.
+      - name: Upload static export for Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/out
+
   # E2E + a11y (Playwright, 3 browsers + tablet, axe on key screens). Runs after
   # the cheaper gates pass.
   e2e:
@@ -159,3 +172,23 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
           retention-days: 7
+
+  # $0 static deploy to GitHub Pages (custom domain via apps/web/public/CNAME).
+  # `main` only, and gated on the full pipeline — a red e2e keeps the previous
+  # deployment live. Pages source must be set to "GitHub Actions" in the repo
+  # settings for `deploy-pages` to be accepted.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
