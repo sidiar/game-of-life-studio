@@ -44,7 +44,8 @@ to `main`:
 - **Deploy.** On `main`, once `quality` and `e2e` are both green, the `deploy` job publishes the
   static export to GitHub Pages at **<https://game-of-life-studio.com>**. A red run leaves the
   previous deployment live. The custom domain is bound by `apps/web/public/CNAME`, which the
-  export copies into `out/` verbatim.
+  export copies into `out/` verbatim. Domain, DNS, Pages settings, rollback and troubleshooting
+  live in [`docs/ops.md`](./docs/ops.md).
 - **Clean-room dry run (do this at epic boundaries).** A warm local tree hides "works on my
   machine" bugs — stale `node_modules`, uncommitted files, env drift — that the CI checkout
   catches. Reproduce a clean checkout and run the gate:
