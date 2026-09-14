@@ -17,8 +17,8 @@ import type { Tool } from '@/lib/battle/tool';
 const RESIZE_DEBOUNCE_MS = 150;
 
 // component-tree-battle-page.md#3.10 names this component and assigns three variants across three
-// epics: static -> Epic 1 (Story 1.11), edit -> Epic 2 (this story), playback -> 3.11. Shared props
-// stay common across the union; the variant tag decides the lifecycle. `tool` + `onStrokeCommit`
+// epics: static -> Epic 1 (Story 1.11), edit -> Epic 2 (Story 2.5), playback -> Epic 3 (Story
+// 3.11). Shared props stay common across the union; the variant tag decides the lifecycle. `tool` + `onStrokeCommit`
 // joined the EDIT member in Story 2.5, which is what makes it structurally different from
 // `static` for the first time.
 interface PetriDishCanvasSharedProps {
@@ -55,14 +55,29 @@ export type PetriDishCanvasProps = PetriDishCanvasSharedProps &
         toolRef: number | null;
         onStrokeCommit(next: RenderableGrid): void;
       }
+    | {
+        /**
+         * Story 3.11 (spec §3.10's third member, Story 3.10 AC9): the RUN surface. The canvas
+         * builds and retains a `GridRenderer` and hands it OUT — `onRendererReady(renderer)`
+         * right after construction, `onRendererReady(null)` in the cleanup — and never paints a
+         * cell itself. `useSimulation.attachRenderer` has exactly this `| null` signature, so
+         * the prop is a pass-through, not an adapter (spec §3.10 wrote `onRendererReady(r:
+         * GridRenderer)`; the nullable form is recorded as an amendment candidate).
+         *
+         * No `grid`: the hook owns the front buffer and primes/repaints through the renderer it
+         * was handed (`paintFull` / `drawDiff`), so this canvas never sees a grid at all. No
+         * pointer handlers: Run mode does not edit (FR-4.8 — the live grid is discarded on
+         * Run -> Lab, so there is nothing a stroke could commit to).
+         */
+        variant: 'playback';
+        onRendererReady(renderer: GridRenderer | null): void;
+      }
   );
-// 'playback' (3.11) joins this union next: its `onRendererReady(r)` goes straight to
-// `useSimulation.attachRenderer(r)`, and its cleanup to `attachRenderer(null)` (Story 3.10 AC9).
 
-// Exhaustiveness guard for `variant`. Its job is to stop COMPILING the moment 3.11's 'playback'
-// joins the union without a matching dispatch arm below — without it, a widened union
-// type-checks unchanged and the new variant silently renders as whichever arm happens to be last,
-// no error, no test failure.
+// Exhaustiveness guard for `variant`. Its job is to stop COMPILING the moment a variant joins the
+// union without a matching dispatch arm below (it did its job for 'playback' in Story 3.11) —
+// without it, a widened union type-checks unchanged and the new variant silently renders as
+// whichever arm happens to be last, no error, no test failure.
 function assertUnhandledVariant(variant: never): never {
   throw new Error(`Unhandled PetriDishCanvas variant: ${String(variant)}`);
 }
@@ -764,6 +779,149 @@ function EditDish({
   );
 }
 
+type PlaybackDishProps = PetriDishCanvasSharedProps & {
+  onRendererReady(renderer: GridRenderer | null): void;
+};
+
+/**
+ * The Run surface's retained-renderer lifecycle (Story 3.11, AC4). `EditDish`'s shape —
+ * construct once per `[size, palette, colors]`, `setGridLines` on change, parent-observing
+ * `ResizeObserver` calling `renderer.resize(size)` — with three deliberate absences: no
+ * `drawFull` in the construction effect, no grid effect, no pointer handlers. This canvas paints
+ * NOTHING itself; it hands the renderer to whoever asked for it and that party (the hook) primes
+ * with `drawFull` and repaints with `drawDiff`. Story 3.10 Trap 1: the hand-off and the hook's
+ * session effect may land in either order (a child's effects run before its parent's), and the
+ * hook handles both, so nothing here delays the call.
+ *
+ * Forced decision 6, option (a): `size` IS a construction dep, as in `EditDish`. `<BattleSimulationView>`
+ * passes `sim.liveSize`, so Story 3.16's ephemeral resize rebuilds this canvas at the live size
+ * and re-attaches — the path the hook's head comment plans on. The alternative (size owned by the
+ * hook alone) leaves the observer's `renderer.resize(size)` closing over a stale mount-time size.
+ */
+function PlaybackDish({
+  size,
+  palette,
+  showGridLines,
+  colors,
+  className,
+  onRendererReady,
+}: PlaybackDishProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Held for the grid-lines and resize effects below — a ref, never React state (project-context
+  // "hot simulation state lives in refs").
+  const rendererRef = useRef<GridRenderer | null>(null);
+  // Routes an observer-time (macrotask) resize failure into React's own error channel, mirroring
+  // both siblings.
+  const [, setPaintError] = useState<null>(null);
+
+  // Trap 2 (Story 3.11): the LATEST `onRendererReady`, for the construction cleanup that outlives
+  // the render that registered it. The prop is deliberately NOT a construction dep — listing it
+  // would tear down and rebuild the renderer on every new callback identity — and calling the
+  // prop directly in the cleanup would detach through a stale closure (the same staleness
+  // `endStrokeRef` exists for, Story 2.8 Task 5). Declared FIRST so the refresh lands before the
+  // construction effect in the same commit; assigned in an effect, never during render
+  // (`react-hooks/refs`).
+  const onRendererReadyRef = useRef(onRendererReady);
+  useEffect(() => {
+    onRendererReadyRef.current = onRendererReady;
+  });
+
+  // Construction effect. Deps are the three constructor arguments with no setter (`EditDish`'s
+  // exact reasoning); see forced decision 6 above for why `size` is one of them here too.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+
+    try {
+      const renderer = new GridRenderer(canvas, size, palette, { colors, showGridLines });
+      rendererRef.current = renderer;
+      // ❌ No `drawFull` here — that is the difference from `EditDish`. The receiver paints.
+      onRendererReadyRef.current(renderer);
+    } catch (error) {
+      // getContext('2d') returns null under jsdom always, and can return null in a real browser
+      // past the canvas-memory budget. Leave the dish blank and hand the receiver NOTHING — a
+      // hook with no renderer runs headless, its documented state — rather than throwing out of
+      // the effect and unmounting the Run view.
+      if (!(error instanceof GridRendererContextError)) throw error;
+      rendererRef.current = null;
+    }
+
+    return () => {
+      // Detach BEFORE dropping: the receiver's `attachRenderer(null)` is what stops the loop's
+      // forwarding `drawDiff` from reaching a renderer whose canvas is about to be unmounted (or
+      // rebuilt at a new size). Through the ref, so a cleanup registered several renders ago
+      // still detaches through the CURRENT callback.
+      if (rendererRef.current !== null) onRendererReadyRef.current(null);
+      rendererRef.current = null;
+    };
+    // `showGridLines` is read above but deliberately absent from deps: it is served by
+    // `setGridLines` (the effect below), and listing it would reconstruct the renderer — and
+    // re-attach it, re-priming the whole colour-state baseline — for a change the setter already
+    // serves. `onRendererReady` is absent for the reason on `onRendererReadyRef`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size, palette, colors]);
+
+  // Grid-lines effect. `setGridLines` is a no-op when the value is unchanged (gridRenderer.ts),
+  // so this is safe on every mount, including the one right after construction.
+  useEffect(() => {
+    rendererRef.current?.setGridLines(showGridLines);
+  }, [showGridLines]);
+
+  // Immediate container re-fit, no debounce — `EditDish`'s effect minus the stroke terminate
+  // (there is no stroke). The parent is observed, not the canvas (Story 2.4 Task 4's loop fix).
+  //
+  // ⚠️ Playback `resize()` repaints `lastGrid`, and in this variant `lastGrid` is a BORROWED
+  // engine buffer — after a swap it is the buffer the engine writes into next (`gridRenderer.ts`'s
+  // `lastGrid` comment assumes a paused-only reader). JS is single-threaded, so this observer
+  // callback never interleaves a step: the worst case is one frame painted from the previous
+  // cycle's contents, and the next `drawDiff` corrects it (it re-primes off `lastColourState`,
+  // not off `lastGrid`). This is the only place that assumption is stretched, and Stories 3.16
+  // and 3.18 inherit it. ❌ Nothing else in the Run view may call `renderer.resize` — the hook
+  // owns the renderer's grid size from attach on (Story 3.10 review).
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    if (typeof ResizeObserver === 'undefined') return; // absent in jsdom.
+
+    const target = canvas.parentElement ?? canvas;
+    let lastWidth = target.clientWidth;
+    let lastHeight = target.clientHeight;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries.at(-1);
+      if (entry === undefined) return;
+      const { width, height } = entry.contentRect;
+      if (width === lastWidth && height === lastHeight) return;
+      lastWidth = width;
+      lastHeight = height;
+
+      const renderer = rendererRef.current;
+      if (renderer === null) return;
+      try {
+        renderer.resize(size);
+      } catch (error) {
+        setPaintError(() => {
+          throw error;
+        });
+      }
+    });
+    observer.observe(target);
+
+    return () => observer.disconnect();
+  }, [size]);
+
+  // role="img" + aria-label, as the edit dish (Story 2.4 Dev Notes trap 9): the running dish IS
+  // the page's subject. No pointer props and no `tabIndex` — nothing to paint, nothing to focus.
+  return (
+    <canvas
+      ref={canvasRef}
+      role="img"
+      aria-label={`Petri dish, ${size.cols} by ${size.rows} cells`}
+      className={className}
+    />
+  );
+}
+
 export default function PetriDishCanvas(props: PetriDishCanvasProps) {
   const { variant } = props;
   switch (variant) {
@@ -771,6 +929,8 @@ export default function PetriDishCanvas(props: PetriDishCanvasProps) {
       return <StaticDish {...props} />;
     case 'edit':
       return <EditDish {...props} />;
+    case 'playback':
+      return <PlaybackDish {...props} />;
     default:
       return assertUnhandledVariant(variant);
   }

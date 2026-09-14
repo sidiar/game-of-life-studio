@@ -23,7 +23,7 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useLeaveGuard } from '@/lib/battle/useLeaveGuard';
 import { useUndoableGrid } from '@/lib/battle/useUndoableGrid';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
-import BattleHeader from './BattleHeader';
+import BattleHeader, { type BattleMode } from './BattleHeader';
 import BattleEditorView from './editor/BattleEditorView';
 
 const Body = styled('div')({
@@ -48,6 +48,32 @@ const Body = styled('div')({
  * stack back into the route's HTML, which is the cost this avoids.
  */
 const UnsavedChangesDialog = dynamic(() => import('./UnsavedChangesDialog'), { ssr: false });
+
+/**
+ * Story 3.11 forced decision 1, option (a): the Run view — and with it THE ENGINE — is loaded ON
+ * DEMAND, the shape the two dialogs above and `<OrganismLibrary>`'s editor already use.
+ * `<BattleSimulationView>` is the only importer of `useSimulation`, which imports
+ * `compileSession`, `threePhaseStep`, `createSimulationLoop` and `derivePopulation`; statically
+ * imported, all of that rides in `/battle`'s first-load payload, against **3.9 KB gzip of
+ * headroom** (deferred-work.md, 3-10; `/battle` measured 306.1 KB against 310 in Story 4.3).
+ * `check-bundle-size.mjs` measures the scripts the route's HTML references, and a dynamic chunk is
+ * not one: the engine is fetched on the first Lab -> Run toggle and cached thereafter. AR-35
+ * sanctions the shape ("dynamic import for heavy components"), and Sidiar's ratchet rule is the
+ * reason the alternative — raise the 310 — was not taken: change the mechanism, never the
+ * threshold. Measured in this story's Dev Agent Record.
+ *
+ * `loading` IS set here, where the dialogs (Story 4.3 FD7) chose none: a closed dialog's chunk
+ * resolving shows nothing missing, but here the editor UNMOUNTS on the flip and this chunk is the
+ * whole chassis — without a fallback the page shows a header over nothing for the fetch duration.
+ * `RunLoading` spells it the way `BattleLoading` does (`role="status"`, polite).
+ *
+ * `ssr: false` for the same reason as the dialogs: this app is a static export, and the Run view
+ * is never part of the first paint (`mode` starts `'lab'`).
+ */
+const BattleSimulationView = dynamic(() => import('./simulation/BattleSimulationView'), {
+  ssr: false,
+  loading: RunLoading,
+});
 
 // The composition root's own flex column (mockup's `.app-container`). The header is this column's
 // first row; Story 2.9's sidebar+main row is the second, and it is declared inside
@@ -93,6 +119,15 @@ export function BattleLoading() {
   );
 }
 
+/** The `loading` fallback for the lazy Run view (see the `dynamic()` call above). */
+function RunLoading() {
+  return (
+    <Body role="status" aria-live="polite">
+      Loading simulation…
+    </Body>
+  );
+}
+
 export interface BattlePageProps {
   // The DI seam (AR-2/AR-27), typed to the interface. This component never imports a concrete
   // repository and never calls createRepositories() itself — the page boundary does that once.
@@ -111,10 +146,13 @@ export interface BattlePageProps {
 const NO_ROSTER: readonly string[] = [];
 
 export default function BattlePage({ repositories, battleId }: BattlePageProps) {
-  // AR-28: modes are local state, not routes. Epic 2 populates only 'lab' — the setter and the
-  // 'run' branch arrive in Epic 3, and until then the route renders no toggle and no fullscreen
-  // affordance at all (NFR-4.1: a rendered-but-inert control is worse than an absent one).
-  const [mode] = useState<'lab'>('lab');
+  // AR-28 / RFC-005 Decision 3 / Decision K: modes are local STATE, not routes — the URL never
+  // changes on a flip, this component never unmounts, and none of its state cells key on `mode`
+  // (AC9: undo ring, dirty flag, name, session roster and save stamp all survive a round trip).
+  // Story 2.1 declared this with only `'lab'` populated and rendered no toggle (NFR-4.1); Story
+  // 3.11 widened it, gave `<BattleHeader>` the toggle, and added the `'run'` branch below. The
+  // fullscreen affordance is still absent (Story 3.18).
+  const [mode, setMode] = useState<BattleMode>('lab');
 
   // Story 2.16 forced decision 1, option (a): the repo's FIRST programmatic navigation.
   //
@@ -273,6 +311,16 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     if (savingRef.current) return;
     setNameState((previous) => ({ value: name, seed: previous.seed }));
     setIsDirty(true);
+  }, []);
+
+  // Story 3.11 (AC2, trap 10): the flip. The same ref-based lock `handleNameChange` reads, for the
+  // same reason — a click dispatched in the tick a save starts reads `isSaving === false` and
+  // `disabled={isSaving}` on the RUN button (the visible half) cannot catch it. A mode flip
+  // mid-write would unmount the editor while `saveBattle` still holds its `grid`: harmless for the
+  // write, wrong for the user's model of what "saved" means.
+  const handleModeToggle = useCallback((next: BattleMode) => {
+    if (savingRef.current) return;
+    setMode(next);
   }, []);
 
   /**
@@ -479,6 +527,33 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     const organismsById = new Map((organisms ?? []).map((o) => [o.id, o] as const));
     return buildRefToFillGroup(rosterIds, organismsById);
   }, [rosterIds, organisms]);
+
+  // Story 3.11 forced decision 4, option (a): the roster the RUN needs — one domain `Organism` per
+  // slot, in `rosterIds` order (`useSimulation` obligation 2, M14) — or `null` when ANY id has no
+  // record behind it. Reachable: a failed `organisms.list()` (`libraryUnavailable`, AC7's degraded
+  // roster), an imported or hand-edited workspace with a dangling id (Story 5.11 owns the
+  // user-facing story), the pre-seed empty-library window. When null the RUN button is disabled
+  // with a reason (NFR-4.1 forbids INERT controls, not explained ones).
+  //
+  // ❌ Not a fallback organism: `compileSession` compiles what it is given, and a placeholder would
+  // have to invent rules and a `colorToken` for an organism nobody authored. ❌ Not the resolved
+  // ids only: dropping a hole shifts every later ref by one (Story 2.10 trap 1 — the grid would run
+  // with the wrong organisms in the wrong cells).
+  // ⚠️ Over `rosterIds`, never `draft.organismIds`: session entries are part of the encoding (Story
+  // 2.10 trap 8), and `palette` above is built over this SAME array — a LUT and a session compiled
+  // from different arrays disagree by ref. ⚠️ Never `roster`: `resolveDisplayOrganisms`
+  // de-duplicates, so it is not indexable by ref (Story 2.9 trap 2).
+  //
+  // Same deps as `palette`, so the same identity lifetime: the hook keys its session on this
+  // reference (Story 3.10 FD2), and a fresh array per render restarts the run every render — as a
+  // hard crash, not a slow loop ("Too many re-renders"). `BattlePage.modeToggle.test.tsx` pins it.
+  const runOrganisms = useMemo<readonly Organism[] | null>(() => {
+    const byId = new Map((organisms ?? []).map((o) => [o.id, o] as const));
+    const list: (Organism | undefined)[] = rosterIds.map((id) => byId.get(id));
+    return list.every((organism): organism is Organism => organism !== undefined) ? list : null;
+  }, [rosterIds, organisms]);
+  const runDisabledReason =
+    runOrganisms === null ? 'Some organisms in this battle could not be loaded' : undefined;
 
   // Story 2.8: THE grid state, and the only one (AC1). `useState` + a `lastSeedRef` re-seed used
   // to live here inline; both moved inside the hook, which now owns the async-seed adoption AND
@@ -738,8 +813,8 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
   // `grid` is non-null here too: it is null only when `draft` is, and that branch already
   // returned above.
   return (
-    // mode is read here so the state cell is not merely declared, and so Epic 3's Run mode has a
-    // switch to flip on the chassis the Lab sidebar and status bar now hang off.
+    // `data-mode` is read by nothing in code and by two tests (trap 11): it is the e2e's only
+    // handle on the mode, and it reflects BOTH values now that the toggle flips it (Story 3.11).
     //
     // Story 2.11 forced decision 3: `data-dirty`, mirroring `data-mode` above — `isDirty` has no
     // UI consumer yet in this story (SAVE is 2.13; the unsaved-changes guard is 2.16), so this is
@@ -749,10 +824,20 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
     <Root data-mode={mode} data-dirty={isDirty}>
       {/* AC2: the header tracks the LIVE edited value, not the stored `draft.name` — typing in the
           sidebar updates the header on the same paint, with no save, no blur and no debounce. */}
-      <BattleHeader battleTitle={battleDisplayName(battleName)} />
+      <BattleHeader
+        battleTitle={battleDisplayName(battleName)}
+        /* Story 3.11 (FR-3.10, spec §3.2): the toggle renders now that both are supplied. `disabled`
+           is the visible half of the edit lock (AC2) OR the roster refusal (AC7) — it reaches RUN
+           only; LAB is always the way back. */
+        mode={mode}
+        onModeToggle={handleModeToggle}
+        disabled={isSaving || runOrganisms === null}
+        disabledReason={runDisabledReason}
+      />
       {/* `grid` is non-null whenever draft is (the seed memo above) — the check exists for
-          TypeScript, not because the two can disagree at runtime. */}
-      {grid !== null && (
+          TypeScript, not because the two can disagree at runtime. It is the OUTER guard for both
+          branches below. */}
+      {grid !== null && mode === 'lab' && (
         <BattleEditorView
           grid={grid}
           size={size}
@@ -782,6 +867,29 @@ export default function BattlePage({ repositories, battleId }: BattlePageProps) 
           /* Story 2.16 (FR-7.10, spec §3.3): the ONLY new prop on this interface. The guard itself
              runs here — `<BattleEditorView>` forwards the press and interprets nothing. */
           onBack={handleBack}
+        />
+      )}
+      {/* Story 3.11 (AC3, AC6): the Run chassis, MOUNTED in place of the editor — not beside it,
+          not hidden. Run -> Lab unmounts it, which is the hook's own cleanup (stop, detach, drop
+          the session — Story 3.10 AC10), and the editor remounts over the SAME `grid` object.
+          `runOrganisms` is non-null here by AC7 (the toggle refuses otherwise); the guard narrows
+          it for TypeScript and renders nothing rather than reaching for `!`. `grid` is the hook's
+          `initialGrid` and is stable for the whole stay in Run mode by construction — the editor
+          is unmounted, so nothing commits (trap 4; ❌ never clone it "for safety" — the hook does,
+          and a second clone per render would be a new session key per render). */}
+      {grid !== null && mode === 'run' && runOrganisms !== null && (
+        <BattleSimulationView
+          initialGrid={grid}
+          organisms={runOrganisms}
+          startingSpeed={settings.defaultSpeed}
+          showGridLines={settings.gridLines}
+          /* The SAME LUT the editor paints with, built over `rosterIds` (trap 5, M14). */
+          palette={palette}
+          colors={colors}
+          /* The same `handleBack`, so the FR-7.9 dirty guard works from Run mode (AC9); its
+             dialog's Save writes `initialGrid`, which is the correct grid (A-2). */
+          onBack={handleBack}
+          backDisabled={isSaving}
         />
       )}
       {/* Mounted only while a confirmation is in flight, which is also what keeps the lazy chunk
