@@ -705,3 +705,18 @@ Claude Opus 5 (claude-opus-5), via `bmad-dev-story` on branch `story/4-3-editor-
 
 Dev Model: opus   # architecture-shaping: fixes the lazy-load boundary, the parent-side lifecycle hook (useOrganismEditorModal), the origin seam 4.24/4.25 plug into, the components/organisms/editor/ home and the header contract that 4.4-4.25 build on, and resolves a header-vs-footer spec divergence (FD1) rather than following an existing pattern
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 23s | 12 | 2,164 | 4,114 | 360,786 | 367,076 |
+| Step 1 — create-story | opus-5 | 1 | 10m 48s | 166 | 46,577 | 485,412 | 12,555,577 | 13,087,732 |
+| Step 2 — dev-story | opus-5 | 1 | 16m 42s | 262 | 59,218 | 288,786 | 19,665,231 | 20,013,497 |
+| Step 3 — code review + PR | fable-5-1 | 5 | 1h 58m | 6,568 | 133,141 | 2,540,815 | 25,666,176 | 28,346,700 |
+| _of which the orchestrator_ | opus-5 | — | — | 72 | 12,844 | 112,428 | 2,410,506 | 2,535,850 |
+| **Total (create-story → PR ready)** | | 7 | **2h 25m** | 7,008 | 241,100 | 3,319,127 | 58,247,770 | **61,815,005** |
+
+Run started 2026-09-14 11:24 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
