@@ -23,6 +23,19 @@ describe('NotFound', () => {
     expect(screen.getByText(/Game of Life Studio/)).toBeInTheDocument();
   });
 
+  // Story 4.1 AC1/AC2: the 404 wears the shell, so it shows both nav links — and with no matched
+  // route, NEITHER may claim aria-current. This is the third "no entry is active" surface after
+  // /battle (AppNav.test.tsx), and the only one that goes through the real not-found tree.
+  it('renders both nav links with none of them current', () => {
+    render(<NotFound />);
+
+    const links = screen.getByRole('navigation').querySelectorAll('a');
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link).not.toHaveAttribute('aria-current');
+    }
+  });
+
   it('owns the document heading and offers a way back to the Gallery', () => {
     const { container } = render(<NotFound />);
 
