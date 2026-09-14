@@ -344,8 +344,9 @@ Hunter + Acceptance Auditor, 32 raw findings, 12 dismissed as noise or spec-mand
 - [x] [Review][Patch] Completion Notes labelled Task 5's deferred-work items as if all three were
       delivered as listed; items (2) and (3) were folded into one bullet and the tab-order item
       added [docs/implementation-artifacts/4-3-editor-modal-shell.md:604-606]
-- [ ] [Review][Patch] AC8 / Task 5's last sub-item is ticked while the record says the CI check
-      is "pending, not done" — performed by this review once the PR exists; result recorded below
+- [x] [Review][Patch] AC8 / Task 5's last sub-item is ticked while the record says the CI check
+      is "pending, not done" — performed by this review once the PR exists: run `34839513811`
+      on `0ea9392`, quality + e2e success; recorded in the Dev Agent Record
       [docs/implementation-artifacts/4-3-editor-modal-shell.md:300-302,575-576]
 - [x] [Review][Defer] `useOrganismEditorModal.test.tsx`'s `afterEach` removes every
       `[aria-hidden="true"]` node in the document — including the still-mounted dialog's glyph
@@ -627,8 +628,10 @@ Claude Opus 5 (claude-opus-5), via `bmad-dev-story` on branch `story/4-3-editor-
   reported not gated) · build · bundle (the four lines above, all ✓) · bench + bench:check
   (`✓ within budget (9.025 ms headroom, 54.2% of the frame)`) · e2e **412 passed (2.7 m)** across
   all four projects.
-- **`gh run list --limit 1`** — not run here: the PR is opened by a later step of the lane, and
-  the CI check belongs with it. Recorded as pending, not done.
+- **`gh run list --limit 1`** — not run by the dev step (the PR is opened by the lane's review
+  step, and the CI check belongs with it). **Done in review, 2026-09-14:** PR #33 → run
+  `34839513811` on `0ea9392` — `quality` success, `e2e` success, `deploy` skipped (`gh run view
+  34839513811`). Read, not inferred.
 
 ### Completion Notes List
 
