@@ -750,3 +750,18 @@ Recorded in `deferred-work.md` in case a consumer ever needs a seed-stable Stop.
 
 Dev Model: opus   # architecture-shaping: the first hook to own hot refs + the loop, and the React↔engine contract that 3.11–3.19 and 4.15 all consume; it settles new calls (session keying, cadence-by-cycle, ref-forwarding renderer, throw-on-misuse) rather than following a pattern that already exists
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 15s | 8 | 1,142 | 4,112 | 213,290 | 218,552 |
+| Step 1 — create-story | opus-5 | 2 | 14m 33s | 338 | 86,683 | 861,746 | 23,976,971 | 24,925,738 |
+| Step 2 — dev-story | opus-5 | 1 | 18m 43s | 178 | 65,338 | 289,880 | 12,709,783 | 13,065,179 |
+| Step 3 — code review + PR | fable-5-1 | 8 | 1h 56m | 6,878 | 164,465 | 2,920,293 | 21,959,419 | 25,051,055 |
+| _of which the orchestrator_ | opus-5 | — | — | 64 | 15,521 | 139,567 | 1,906,940 | 2,062,092 |
+| **Total (create-story → PR ready)** | | 11 | **2h 30m** | 7,402 | 317,628 | 4,076,031 | 58,859,463 | **63,260,524** |
+
+Run started 2026-09-14 11:24 CEST; wall clock runs to the point the run stopped for Sidiar's review. Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
