@@ -40,8 +40,24 @@ file is **none of this lane's business** — never report it as a blocker, never
   worktree session into the other lane's epic, and the branch guard cannot catch two
   Step 0s that start inside the same ten minutes. Fail closed; the flag is cheap.
 - **One lane per working tree.** The primary checkout holds one lane; every other lane
-  runs in its own worktree (Sidiar starts that session with "use a worktree named
-  `lane-epic-N`", then `npm ci` inside it). The skill never creates worktrees itself.
+  runs in its own worktree. The skill never creates worktrees itself, so the session for
+  an additional lane has to be *in* one before Step 0 runs. The recipe, three separate
+  prompts in a fresh session opened in the primary checkout:
+
+  ```
+  use a worktree named lane-epic-N
+  ! npm ci
+  implement next story --epic N
+  ```
+
+  The worktree line goes first and alone — folded into the skill call, Step 0 can fire
+  before the tree switch lands. `npm ci` because a fresh worktree has no `node_modules`,
+  and the dev agent's first `typecheck` would fail for reasons unrelated to the story.
+  Every later run of that lane goes in that same worktree session. The lane that was
+  opened first stays bare in the primary checkout. Two lanes launched bare in the same
+  checkout pass each other's Step 0 unnoticed (the tree is still clean when the second
+  one checks), and the first lane's `feat:` commit then sweeps in the second lane's
+  story-status lines — which is how this recipe came to be written down.
 - Branch names are the lane's namespace: `story/{E}-*`. The lane-scoping query used
   throughout is `startswith("story/{E}-")` — the trailing dash matters, or lane 3 would
   match `story/30-*` one day and, more to the point, `story/3-` would not match `story/4-`.
@@ -238,6 +254,18 @@ and 3 — always pass the story file path. On the epic's first story, create-sto
 ```bash
 python3 .claude/skills/implement-next-story/story-run-stats.py mark step2
 ```
+
+Before spawning, re-verify the tree is still yours — Step 0's guard ran ten minutes ago,
+and another lane launched bare in the same checkout would have passed it unseen:
+
+```bash
+git branch --show-current   # must print nothing (detached) or `main`
+git status --porcelain      # must list only this story's file and sprint-status.yaml
+```
+
+Anything else — a `story/*` branch checked out, foreign untracked files — means two lanes
+share this working tree. STOP and report the branch and files; do not branch on top of
+them. Recovery (a worktree for one of the lanes) is Sidiar's call.
 
 Read the `Dev Model:` line from the story file just written. Spawn a subagent with
 that model and tell it to:
