@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC, createFakeRepositories, createMockOrganisms } from '@gol/test-utils';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
+import { sortLibrary } from '@/lib/organisms/sortLibrary';
 import OrganismLibrary from './OrganismLibrary';
 
 // jsdom normalises an inline `hsl(...)` `style.background` to `rgb(...)` on the way in
@@ -79,14 +80,19 @@ describe('OrganismLibrary', () => {
 
     // Chips are DOM-order == grid order (headings above already pinned to case-folded name);
     // matched by index against the same ordering rather than by name, since the chip itself
-    // carries no accessible text. Scoped to the grid — the toolbar's search icon is ALSO
-    // aria-hidden, and an unscoped query would pick it up as a phantom fourth "chip".
-    const sortedMocks = [...mocks].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    // carries no accessible text. Ordered by the component's own `sortLibrary`, not a raw `<`
+    // sort, so a fixture differing only by case can never desync the index map. Scoped to the
+    // grid — the toolbar's search icon is ALSO aria-hidden, and an unscoped query would pick it up
+    // as a phantom fourth "chip".
+    const sortedMocks = sortLibrary(mocks);
     const grid = screen.getByRole('list', { name: 'Organisms' });
     const chips = grid.querySelectorAll('[aria-hidden="true"]');
     expect(chips).toHaveLength(mocks.length);
     sortedMocks.forEach((organism, i) => {
       const chip = chips[i] as HTMLElement;
+      // Guard first: if jsdom failed to parse the LUT's hsl string, BOTH sides would be '' and
+      // the equality below would pass on nothing.
+      expect(chip.style.background).not.toBe('');
       expect(chip.style.background).toBe(
         jsdomNormalizedColor(displayColor(organism.colorToken, MAX_AGE_SHADE)),
       );
@@ -183,7 +189,8 @@ describe('OrganismLibrary', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('listitem')).toHaveLength(4);
     });
-    expect(screen.getByRole('status')).toHaveTextContent('4 Organisms');
+    // Exact, not substring: the pre-clear text '1 of 4 Organisms' also contains '4 Organisms'.
+    expect(screen.getByRole('status')).toHaveTextContent(/^4 Organisms$/);
   });
 
   it('shows a message, not an empty control, when the search matches nothing — the input stays and keeps focus', async () => {
@@ -214,6 +221,7 @@ describe('OrganismLibrary', () => {
     const list = vi.spyOn(organisms, 'list');
     const save = vi.spyOn(organisms, 'save');
     const del = vi.spyOn(organisms, 'delete');
+    const replaceAll = vi.spyOn(organisms, 'replaceAll');
 
     render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
 
@@ -228,6 +236,7 @@ describe('OrganismLibrary', () => {
     expect(list).toHaveBeenCalledTimes(1);
     expect(save).not.toHaveBeenCalled();
     expect(del).not.toHaveBeenCalled();
+    expect(replaceAll).not.toHaveBeenCalled();
   });
 
   it('tabs from the search input to the first card, then the second, in grid order', async () => {

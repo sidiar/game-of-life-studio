@@ -141,13 +141,21 @@ test.describe('organism card grid (Story 4.2)', () => {
     const card = page.getByRole('article', { name: "Conway's Classic" });
     await expect(card).toBeVisible();
     await expect(card.getByText('SYSTEM')).toBeVisible();
-    await expect(card).toContainText('Dominance');
-    await expect(card).toContainText('50');
-    await expect(card).toContainText('Aging');
-    await expect(card).toContainText('No');
+    // Exact text matches, not `toContainText` substrings: 'No' is also inside 'No rules', and '50'
+    // inside '150' — a loose match would pass on the wrong cell. Values come from the fixture.
+    await expect(card.getByText('Dominance', { exact: true })).toBeVisible();
+    await expect(card.getByText(String(CONWAYS_CLASSIC.dominance), { exact: true })).toBeVisible();
+    await expect(card.getByText('Aging', { exact: true })).toBeVisible();
+    await expect(
+      card.getByText(CONWAYS_CLASSIC.agingEnabled ? 'Yes' : 'No', { exact: true }),
+    ).toBeVisible();
     // Production build → no AR-45 dev fixtures (epics.md:426), so Conway's Classic is the ONLY
-    // organism and its own two rules are the count.
-    await expect(card).toContainText(`${CONWAYS_CLASSIC.survivalRules.length} rules`);
+    // organism and its own rules are the count. Pluralised the way `ruleCountLabel` does, so the
+    // assertion survives a fixture with one rule.
+    const ruleCount = CONWAYS_CLASSIC.survivalRules.length;
+    const ruleLabel =
+      ruleCount === 0 ? 'No rules' : ruleCount === 1 ? '1 rule' : `${ruleCount} rules`;
+    await expect(card.getByText(ruleLabel, { exact: true })).toBeVisible();
 
     await expect(page.getByRole('status')).toHaveText('1 Organism');
 
@@ -165,6 +173,9 @@ test.describe('organism card grid (Story 4.2)', () => {
     await expect(page.getByText("Conway's Classic")).toBeVisible();
 
     const before = await page.evaluate(() => localStorage.getItem('gol:organisms'));
+    // The byte-identity check below is vacuous if the key is wrong (null === null) — prove the
+    // seed actually wrote it first.
+    expect(before).not.toBeNull();
 
     const search = page.getByRole('textbox', { name: 'Search organisms' });
     await search.fill('zzz');

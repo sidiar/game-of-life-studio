@@ -31,8 +31,10 @@ function ruleCountLabel(count: number): string {
 // `position: relative` (the SYSTEM tag's containing block), enumerated transitions, the
 // hover/focus-within lift and its reduced-motion escape — plus a real `:focus-visible` ring, which
 // `<BattleTile>` does not need because ITS focusable element is the nested title link, not the
-// article itself. **No `cursor: pointer`**: this card has no click action until Story 4.17, and a
-// pointer cursor on a non-interactive surface is a dead affordance (NFR-4.1).
+// article itself. `:focus-within` matches the article ITSELF when it is the focused element, which
+// is what gives the keyboard path the same state as hover (the Story 1.9 parity rule). **No
+// `cursor: pointer`**: this card has no click action until Story 4.17, and a pointer cursor on a
+// non-interactive surface is a dead affordance (NFR-4.1).
 const Card = styled('article')({
   background: 'var(--gol-bg-secondary)',
   border: '1px solid var(--gol-border)',
@@ -44,8 +46,9 @@ const Card = styled('article')({
     transform: 'translateY(-2px)',
     boxShadow: 'var(--gol-shadow-tile-hover)',
   },
-  // The rest border for the protected default (AC3, M9) — `:focus-within` above would otherwise
-  // win/lose this fight with `data-system` on every hover, since both set `borderColor`.
+  // The rest border for the protected default (AC3, M9). Same value as the hover/focus rule above,
+  // so a system card's border simply stays accent — its hover feedback is the lift + shadow alone
+  // (mockup `.preloaded`, `:213-215`, does the same).
   '&[data-system]': {
     borderColor: 'var(--gol-accent)',
   },
@@ -134,7 +137,11 @@ const RulesLine = styled('p')({
 
 // Mockup: .organism-card.preloaded::before (:220-232) — reimplemented as REAL TEXT, not a
 // pseudo-element, so it is in the accessibility tree and a screen reader hears why Delete will be
-// disabled once Story 4.22 adds it (AC3, M9). `--gol-accent-tint` is a new token (FD6): the
+// disabled once Story 4.22 adds it (AC3, M9). No `aria-label` on it (Story 4.2 review): a
+// role-less `<span>` is ARIA `generic`, where `aria-label` is PROHIBITED — assistive tech ignores
+// it and reads the text node anyway, and axe only files it as "needs review" (not a violation)
+// because the span has text, which is why the `[]`-violations assertions never caught it. The
+// visible text IS the accessible text. `--gol-accent-tint` is a new token (FD6): the
 // mockup's fill is `rgba(0, 212, 255, 0.1)`, a raw literal AR-46 bans in this file, and
 // `--gol-bg-hover` is the wrong token to reuse — that is a neutral surface, not an accent.
 const SystemTag = styled('span')({
@@ -160,7 +167,7 @@ export interface OrganismCardProps {
 }
 
 /**
- * One organism in the Library grid (AC1, AC2, AC3, AC6; `Story 4.2`). `organism` is a plain
+ * One organism in the Library grid (AC1, AC2, AC3, AC6; `Story 4.2`, `FR-1.1`). `organism` is a plain
  * domain value, never a repository (`AR-2`, `AR-27`) — the Library injects repositories at the
  * page boundary and passes down resolved records, never a repository reference, to this component.
  */
@@ -188,7 +195,7 @@ export default function OrganismCard({ organism, system = false }: OrganismCardP
         </StatItem>
       </CardStats>
       <RulesLine>{ruleCountLabel(organism.survivalRules.length)}</RulesLine>
-      {system && <SystemTag aria-label="System organism">SYSTEM</SystemTag>}
+      {system && <SystemTag>SYSTEM</SystemTag>}
     </Card>
   );
 }

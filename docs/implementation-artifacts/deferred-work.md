@@ -676,3 +676,16 @@ Review Findings; these are the items consciously left open.
   unchanged from Story 4.1's deferral; still blocked behind `Story 3.17`'s Gallery change (the
   parallel Epic 3 lane's surface) landing first, so the lift does not collide with it. **Pick this
   up in the first story after 3.17 that touches both files.**
+
+## Deferred from: code review of 4-2-organism-card-grid (2026-09-14)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers
+(13 patches applied in the review commit; the item below is the one consciously left open).
+
+- **`<OrganismCard>`'s Dominance / Aging stat cells are label/value `<div>` stacks with no
+  semantic association** — a screen reader gets "Dominance", "50", "Aging", "No" as four unrelated
+  strings; a `<dl>`/`<dt>`/`<dd>` (or `aria-labelledby` from value to label) would pair them. Not
+  patched here because the mockup and Task 3 specify the div shape and the card's content is still
+  moving — `Story 4.10` adds the rules sentence and `Story 4.20` the usage line. **Pick this up
+  with whichever of those settles the card's stat block**, and decide the cell semantics once for
+  all three rows.

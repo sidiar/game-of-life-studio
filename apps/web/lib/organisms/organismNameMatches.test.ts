@@ -13,8 +13,10 @@ describe('organismNameMatches', () => {
     ['', '', true],
   ] as const)('organismNameMatches(%j, %j) -> %s', (name, query, expected) => {
     // The query is normalised by the CALLER in real use (organismNameMatches assumes it is
-    // already normalised) — but this table also proves the function is safe to call directly
-    // with a raw query, since it re-normalises the name side regardless.
+    // already normalised), so every row goes through `normalizeOrganismSearch` first — exactly
+    // the call sequence `<OrganismLibrary>` and `<OrganismRoster>` perform. The 'CON ' row is
+    // therefore a test of the pair, not of `organismNameMatches` alone: passed a RAW 'CON ' it
+    // returns false, by design.
     expect(organismNameMatches(name, normalizeOrganismSearch(query))).toBe(expected);
   });
 

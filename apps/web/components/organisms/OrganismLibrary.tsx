@@ -44,6 +44,9 @@ const SectionSubtitle = styled('p')({
 
 const StatusText = styled('p')({
   color: 'var(--gol-text-secondary)',
+  // The zero-match message quotes the raw query back; a pasted no-space string must wrap rather
+  // than push the page into horizontal scroll (Story 4.2 review).
+  overflowWrap: 'anywhere',
 });
 
 // Mockup: .toolbar (organism-library.html:105-113). The FULL band rules ship on day one — unlike
@@ -198,9 +201,10 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
         <SectionSubtitle>Create and manage your life forms</SectionSubtitle>
       </SectionHeader>
       {/* OUTSIDE the aria-busy wrapper below (deferred-work.md:187's mistake, not repeated here):
-          the search input and the count badge must never be withheld from the accessibility tree
-          while the list loads, and the input must never unmount under the user's focus
-          (deferred-work.md:327's trap, FD4). */}
+          the search input must never be withheld from the accessibility tree while the list loads,
+          and must never unmount under the user's focus (deferred-work.md:327's trap, FD4). The count
+          badge is deliberately NOT rendered until `ready` — there is no count to announce before
+          the list exists, and an empty live region would misreport the page's state. */}
       <Toolbar>
         <ToolbarLeft>
           <SearchField role="search">

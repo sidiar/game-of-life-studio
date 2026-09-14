@@ -26,6 +26,9 @@ describe('OrganismCard', () => {
     const { container } = render(<OrganismCard organism={CONWAYS_CLASSIC} />);
 
     const chip = container.querySelector('[aria-hidden="true"]') as HTMLElement;
+    // Guard first: if jsdom failed to parse the LUT's hsl string, BOTH sides would be '' and the
+    // equality below would pass on nothing.
+    expect(chip.style.background).not.toBe('');
     expect(chip.style.background).toBe(
       jsdomNormalizedColor(displayColor(CONWAYS_CLASSIC.colorToken, MAX_AGE_SHADE)),
     );

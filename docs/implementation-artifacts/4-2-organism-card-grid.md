@@ -4,7 +4,7 @@ baseline_commit: 1e70bcdf4fd18f12a48c58f01df1888aa7877237
 
 # Story 4.2: Organism Card Grid
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -311,6 +311,81 @@ next touches the search predicate".
         `gh run list --limit 1` after the PR opens (the workflow is `main` + `pull_request` only —
         Story 4.1 review note).
 
+### Review Findings
+
+Reviewed on **Opus** (claude-opus-5) against the **Sonnet** implementation at `bbf150b`, via the
+three parallel adversarial layers (Blind Hunter — diff only; Edge Case Hunter — diff + repo read;
+Acceptance Auditor — diff + this story + `project-context.md`). Static checks and the touched unit
+suites were re-run independently before triage (green). 0 `decision-needed`, 13 `patch`,
+1 `defer`, 16 dismissed.
+
+- [x] [Review][Patch] `aria-label="System organism"` on the role-less `<SystemTag>` span is
+      prohibited ARIA (role `generic`); assistive tech ignores it and reads the text node, and
+      axe-core 4.12 files it only as *incomplete* because the span has text — which is why every
+      `violations == []` assertion stayed green. Attribute dropped; the visible `SYSTEM` text is the
+      accessible text (AC3's intent holds). **Deviates from Task 3's own prescription**, which was
+      wrong on this point. [apps/web/components/organisms/OrganismCard.tsx:198]
+- [x] [Review][Patch] AC4 / Task 4(d) name four spies; the view-only test spied on
+      `list`/`save`/`delete` only while its title claimed `replaceAll`. Spy added.
+      [apps/web/components/organisms/OrganismLibrary.test.tsx:217]
+- [x] [Review][Patch] `toHaveTextContent('4 Organisms')` after `clear()` is a substring match that
+      `'1 of 4 Organisms'` also satisfies — a stale badge could not fail it. Now `/^4 Organisms$/`.
+      [apps/web/components/organisms/OrganismLibrary.test.tsx:190]
+- [x] [Review][Patch] Chip-colour assertions in both test files pass on `'' === ''` if jsdom ever
+      fails to parse the LUT's `hsl()` string. `not.toBe('')` guard added before the equality.
+      [apps/web/components/organisms/OrganismCard.test.tsx:33, OrganismLibrary.test.tsx:91]
+- [x] [Review][Patch] The chip-order test sorted fixtures with a raw `<` on `name`, not the
+      component's case-folded `sortLibrary`; a fixture differing only by case would desync the
+      index map. Now `sortLibrary(mocks)`. [apps/web/components/organisms/OrganismLibrary.test.tsx:86]
+- [x] [Review][Patch] `organismNameMatches.test.ts` comment claimed the table "proves the function
+      is safe to call directly with a raw query" — every row normalises the query first, and a raw
+      `'CON '` returns `false`. Comment corrected. [apps/web/lib/organisms/organismNameMatches.test.ts:16]
+- [x] [Review][Patch] e2e localStorage byte-identity proof was vacuous on a wrong key
+      (`null === null`). `expect(before).not.toBeNull()` added. [apps/web/e2e/organisms.spec.ts:175]
+- [x] [Review][Patch] e2e card assertions used `toContainText('No')` / `'50'` (substrings of
+      `'No rules'` / `'150'`) and a `\`${n} rules\`` template that reads `'1 rules'` for a one-rule
+      fixture. Now exact `getByText` matches, values from the fixture, pluralised like
+      `ruleCountLabel`. [apps/web/e2e/organisms.spec.ts:144-155]
+- [x] [Review][Patch] Toolbar comment said the count badge is "never withheld ... while the list
+      loads"; the code (per Task 4, correctly) mounts it only when `ready`. Comment now states the
+      deliberate choice. [apps/web/components/organisms/OrganismLibrary.tsx:203]
+- [x] [Review][Patch] `[data-system]` comment described a cascade "fight" that does not exist —
+      both rules set the same `var(--gol-accent)`. Reworded to the real consequence (system card's
+      hover feedback is lift + shadow only, as the mockup's `.preloaded`).
+      [apps/web/components/organisms/OrganismCard.tsx:48]
+- [x] [Review][Patch] Task 3 ticked two sub-items the diff did not deliver: the `(FR-1.1)` citation
+      and the "`:focus-within` matches the article itself — Story 1.9 parity rule" comment. Both
+      added. [apps/web/components/organisms/OrganismCard.tsx:33, :170]
+- [x] [Review][Patch] `StatusText` had no wrap rule; a pasted no-space query echoed in the
+      zero-match message pushes the page into horizontal scroll. `overflowWrap: 'anywhere'`.
+      [apps/web/components/organisms/OrganismLibrary.tsx:47]
+- [x] [Review][Patch] Dev Agent Record prose said `/` "unchanged" while its own table records
+      +0.2 KB. Prose corrected. [docs/implementation-artifacts/4-2-organism-card-grid.md]
+- [x] [Review][Defer] Dominance / Aging stat cells are label/value `<div>` stacks with no semantic
+      association (a `<dl>`/`<dt>`/`<dd>` would pair them for screen readers)
+      [apps/web/components/organisms/OrganismCard.tsx:182-196] — deferred: the mockup and Task 3
+      specify the div shape, and the card's content is still moving (4.10 rules sentence, 4.20
+      usage line); revisit the cell semantics once it settles. Recorded in `deferred-work.md`.
+
+**Dismissed (16, with the reason):** empty-library branch ×2 (M9 — the story forbids building it);
+`<article>` as a do-nothing tab stop (FD5, already in `deferred-work.md` for 4.17); chip border
+"invisible" (mockup `.organism-color:240-246` sets the same colour for fill and border — exact
+copy); "rules count only counts `survivalRules`" (it is the only rule collection —
+`organismSchema.ts:30`); `sortLibrary`'s `toLocaleLowerCase()` fold "varies by machine" ×2 (spec
+choice — it follows the *user's* locale, stably for that user; the `localeCompare` warning is about
+ICU builds on runners, a different axis); "normalise once" rationale hollow (the per-name
+normalisation is unavoidable — the comment is about not repeating the *query's*);
+`toDisplayOrganism` built twice per organism per keystroke (spec-exact, and the 3.7 measurement
+covers it); zero-match message echoes untrimmed input ×2 (verbatim roster parity, per AC5; a
+whitespace-only query never reaches that branch); typing while `loading` shows nothing (transient
+— the badge and grid arrive on `ready`); zero-width-only names bypass `trim()` (pre-existing 2.9
+guard; the name floor is Stories 5.7/5.8's, `displayOrganisms.ts:55-58`); e2e keyboard loop bound
+of 5 ×2 (Task 6 prescribes it; the unit test pins the exact input → card → card order); `chip` null
+`TypeError` (still a failing test); a future second `role="status"` (none exists on the route).
+
+**AC9 — CI on the pushed branch:** no run existed at review time (the workflow triggers on
+`pull_request` / `main` only). The run for the PR is recorded in the PR body.
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -608,7 +683,8 @@ compared against Story 4.1's last recorded baseline (`4-1-organisms-route-top-na
 
 All four deltas land inside the story's own predicted ranges (`/organisms` +2–4 KB for the styled
 card/toolbar primitives and two helpers; `/battle` and `/battle/new` ±0.5 KB for the shared
-`organismNameMatches` import; `/` unchanged). No budget raised anywhere (AC8).
+`organismNameMatches` import; `/` +0.2 KB — `themes.css` is global CSS and gained one token, so
+"unchanged" was the prediction, not the measurement). No budget raised anywhere (AC8).
 
 **Verification summary (final `npm run ci`, exit 0):**
 ```
