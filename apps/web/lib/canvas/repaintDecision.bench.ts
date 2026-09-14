@@ -28,7 +28,7 @@ import { gridFromDense } from '@gol/simulation';
 import { bench, describe } from 'vitest';
 import { buildRefToFillGroup } from './refToFillGroup';
 import { colourStateAt, groupByColourState } from './colourStateGroups';
-import { markDirtyCells, selectDirtyCells } from './dirtyCells';
+import { markDirtyCells, selectChangedCells, selectDirtyCells } from './dirtyCells';
 import type { RenderableGrid } from './renderableGrid';
 
 // The gate sums this file's `repaint-decision` against the engine bench's `step` at the SAME
@@ -105,20 +105,24 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
     );
   }
 
-  // Every cell as a dirty candidate, built once — Story 3.8's loop would rebuild this per frame,
-  // but the allocation of the coordinate list is that story's cost to shape, not this one's.
+  // Every cell as a dirty candidate, built once — the cost of the `markDirty`-everything adapter
+  // Story 3.9's FD1 REJECTED (option (c)): a `CellCoord` per cell, routed through a `Set`, is
+  // exactly what `repaint-dirty-path` below still measures, kept as the rejected alternative's
+  // number rather than deleted with it.
   const allCells = Array.from({ length: cellCount }, (_, index) => ({
     col: index % COLS,
     row: Math.floor(index / COLS),
   }));
 
   /**
-   * ⚠️ THE GATED QUANTITY'S REPAINT HALF. `groupByColourState` is the full-repaint path's whole
-   * decision: one `colourStateAt` per cell, folded into (colorToken, ageShade) batches.
+   * `groupByColourState` is the full-repaint (`drawFull`) path's whole decision: one
+   * `colourStateAt` per cell, folded into (colorToken, ageShade) batches.
    *
-   * Chosen as the gated repaint rather than the dirty path deliberately: it is the repaint decision
-   * whose cost does not depend on which call Story 3.8's loop ends up making, so the gate keeps
-   * meaning the same thing after 3.8 lands. Both alternatives are measured below.
+   * Printed and required, but no longer the gated repaint half (Story 3.9 FD3) — it was gated as
+   * "the repaint decision whose cost does not depend on which call Story 3.8's loop ends up
+   * making", a placeholder until that call was made. It is made: playback calls `drawDiff`, and
+   * `drawFull` is now mount / resize / grid-lines-toggle only. `repaint-diff-path` below is the
+   * gated quantity.
    */
   bench(
     `repaint-decision ${BENCHMARK_GATED_PRESET} x${BENCHMARK_ROSTER_SIZE}`,
@@ -129,10 +133,11 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
   );
 
   /**
-   * The `draw` (dirty) path's decision cost when EVERY cell is a candidate — which is what a
-   * playback frame is, since a step can change any cell and the engine publishes no change list.
-   * deferred-work.md (2.3 review) asks Story 3.7 to confirm Story 3.8's loop calls `draw` rather
-   * than `drawFull`; this is the number that answers it, against the one above.
+   * The Edit-mode `draw` (dirty) path's decision cost when EVERY cell is a candidate — which is
+   * what a playback frame *would have been* under the `markDirty`-everything adapter Story 3.9's
+   * FD1 rejected (option (c); ~480k `CellCoord` objects/sec at 200x120 x 20 gen/sec, against
+   * NFR-1.1's 0.67 ms "buffer for GC"). `repaint-diff-path` below is what a playback frame
+   * ACTUALLY runs.
    *
    * ⚠️ AN UPPER BOUND, labelled as one (Story 3.7 code review): the baseline is zeroed per
    * iteration, so every occupied cell reads as changed — the most the diff can ever report — and
@@ -146,6 +151,26 @@ describe('repaint decision — the measurable half of the NFR-1.1 frame', () => 
       markDirtyCells(marks, { cols: COLS, rows: ROWS }, allCells);
       const baseline = new Uint16Array(cellCount);
       selectDirtyCells(marks, grid, lut, baseline);
+    },
+    BENCHMARK_RUN_OPTIONS,
+  );
+
+  /**
+   * ⚠️ THE GATED QUANTITY'S REPAINT HALF, as of Story 3.9 (FD3 (a); AR-43). `selectChangedCells` is
+   * `GridRenderer.drawDiff`'s decision — the whole-grid sweep against the retained
+   * `lastColourState` baseline, which is what a running simulation actually calls once per step
+   * (`toStepRenderer`, `playbackRenderer.ts`; `drawFull` no longer runs on the cycle rate).
+   *
+   * The baseline is ZERO-FILLED per iteration — `repaint-dirty-path`'s own convention (FD4 (a)):
+   * every cell, including empties, reads as changed (6,000 repaints, the sweep's upper bound), so
+   * the two functions are measured against the SAME candidate set through two mechanisms, a
+   * like-for-like comparison of the rejected adapter against the shipped one.
+   */
+  bench(
+    `repaint-diff-path ${BENCHMARK_GATED_PRESET} x${BENCHMARK_ROSTER_SIZE}`,
+    () => {
+      const baseline = new Uint16Array(cellCount);
+      selectChangedCells(grid, lut, baseline);
     },
     BENCHMARK_RUN_OPTIONS,
   );

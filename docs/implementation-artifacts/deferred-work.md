@@ -200,7 +200,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **`drawFull` re-primes the whole colour-state baseline on every call — O(cells) plus one allocation per grid shape** — `resetDirtyState()` sweeps all `width * height` cells through `colourStateAt` after every full repaint, and `resize()`/`setGridLines()` both route through it. At 100×60 that is a 6000-iteration pass and a 12 KB `Uint16Array`, which is affordable precisely because it runs on mount/resize/toggle and never on the per-edit `draw` path. Epic 3 changes the shape of that claim: **Decision D.3 repaints after every step**, and if Story 3.8's loop reaches for `drawFull` rather than `markDirty` + `draw`, this sweep lands at the cycle rate. Correctness is not in question. **Revisit with Story 3.7** (the `vitest bench` harness and the 100×60 performance gate), which is the first place a measurement would justify a change — and check Story 3.8's loop calls `draw`, not `drawFull`, while you are there. — **✅ CLOSED in Story 3.7: measured, affordable, and the `draw`-vs-`drawFull` question is answered with both numbers.** The O(cells) re-prime costs **~0.08 ms** at 100×60 — 0.5% of a 16.667 ms frame — so it would be affordable even at the cycle rate Decision D.3 implies. On *decision* cost alone `drawFull` is in fact CHEAPER (groupByColourState ~0.07 + this ~0.08 ≈ 0.15 ms) than the dirty path's UPPER BOUND with every cell marked and every occupied cell reading as changed (**~0.7 ms**), because `markDirty` allocates a coordinate per cell and routes it through a `Set`. ⚠️ **The recommendation is still `draw`**, for the half no off-browser harness can measure: `draw` touches the canvas only for cells whose colour state actually changed, while `drawFull` repaints the whole background, every cell and every grid line every frame — and jsdom has no canvas to rasterize into. **Story 3.8 now has both numbers instead of an assumption**; if it takes `drawFull` it should say so against these figures and measure the paint in a browser. Full table: `docs/implementation-artifacts/performance-baseline-validation.md`.
 
-- **The dirty path's grid-line restoration redraws four bar segments per repainted cell, two of which are guaranteed no-ops** — `restoreGridLinesOver()` redraws the left, right, top and bottom bars bordering each dirty cell. Only the left and top bars actually fall inside the filled cell rect (the rect spans `[col * cellSize, (col+1) * cellSize)`); the right and bottom bars land on the *next* cell's first pixel, which was never overpainted — except on the last column/row, where the closing-bar clamp pulls them back inside and they are load-bearing. So two `fillRect`s per cell are redundant everywhere but the grid's right and bottom edge. Kept deliberately: the four-bar form is trivially the same geometry `drawGridLinesInto` produces, and a conditional version has to encode the clamp's edge case correctly to stay correct at all. The cost is 4 rather than 2 `fillRect`s per painted cell — invisible for a click, ~2x the line-restoration call count for a long drag stroke. **Revisit with Story 3.9 / 3.7** if the playback batching work measures it as material; the alternative is a 9-argument `drawImage` of the cached overlay's sub-rectangle, which needs both the `Canvas2D` alias and `RecordingContext2D.drawImage` widened. — **⏭️ Story 3.7 could NOT measure this, and says so rather than inventing a number.** The cost is entirely `fillRect` calls, i.e. RASTERIZATION, and jsdom's `getContext()` is unimplemented — a Vitest benchmark here would time a test double's method calls, not the browser's (story AC3/FD2). What Story 3.7 *can* state exactly is the call count the entry is really about: **4 `fillRect`s per repainted cell instead of 2**, deterministically, on every cell except the last column and row. Deciding it needs a real browser. **Stays open, now assigned to Story 3.9 alone** (the playback batching work), or to a Playwright measurement.
+- **The dirty path's grid-line restoration redraws four bar segments per repainted cell, two of which are guaranteed no-ops** — `restoreGridLinesOver()` redraws the left, right, top and bottom bars bordering each dirty cell. Only the left and top bars actually fall inside the filled cell rect (the rect spans `[col * cellSize, (col+1) * cellSize)`); the right and bottom bars land on the *next* cell's first pixel, which was never overpainted — except on the last column/row, where the closing-bar clamp pulls them back inside and they are load-bearing. So two `fillRect`s per cell are redundant everywhere but the grid's right and bottom edge. Kept deliberately: the four-bar form is trivially the same geometry `drawGridLinesInto` produces, and a conditional version has to encode the clamp's edge case correctly to stay correct at all. The cost is 4 rather than 2 `fillRect`s per painted cell — invisible for a click, ~2x the line-restoration call count for a long drag stroke. **Revisit with Story 3.9 / 3.7** if the playback batching work measures it as material; the alternative is a 9-argument `drawImage` of the cached overlay's sub-rectangle, which needs both the `Canvas2D` alias and `RecordingContext2D.drawImage` widened. — **⏭️ Story 3.7 could NOT measure this, and says so rather than inventing a number.** The cost is entirely `fillRect` calls, i.e. RASTERIZATION, and jsdom's `getContext()` is unimplemented — a Vitest benchmark here would time a test double's method calls, not the browser's (story AC3/FD2). What Story 3.7 *can* state exactly is the call count the entry is really about: **4 `fillRect`s per repainted cell instead of 2**, deterministically, on every cell except the last column and row. Deciding it needs a real browser. **Stays open, now assigned to Story 3.9 alone** (the playback batching work), or to a Playwright measurement. — **⏭️ Story 3.9 could NOT measure this either, for the same reason, and reused `paintDirtyCells` verbatim rather than re-deriving it for `drawDiff`** (FD2 (a) — byte-identical restoration to Edit mode's, one routine to keep correct). Reassigned to a Playwright measurement, with the crossover it would answer stated so the next reader does not have to re-derive it: with grid lines on, a changed cell costs 6 context calls under `drawDiff` (1 background fill, 1 `rect` sharing a group's `beginPath`/`fill`, 4 line bars) against 1 under `drawFull` (the cell's `rect` alone, background and lines painted once for the whole grid) — so on the *decision* side the two are a wash (both O(cells): `repaint-diff-path` 0.159 ms vs. `repaint-decision` 0.083 + `colour-state-reprime` 0.08 ms), and `drawDiff` is the cheaper *raster* only below some changed-cell fraction this harness cannot locate (jsdom has no canvas).
 
 ## Deferred from: code review of 2-3-renderer-dirty-region-editing-paths (2026-08-26)
 
@@ -612,7 +612,43 @@ Review Findings; these are the items consciously left open.
   adapter (`markDirty` vs. a whole-grid diff vs. `drawFull`, per `simulationLoop.ts`'s Trap 1) and
   is where a live-frame measurement would actually apply. (`apps/web/lib/canvas/repaintDecision.bench.ts`
   lines ~108–120 still say "Story 3.8's loop would rebuild this per frame … that story's cost to
-  shape" — Story 3.9's to reword when it touches the file; `apps/web` was out of 3.8's scope.)
+  shape" — Story 3.9's to reword when it touches the file; `apps/web` was out of 3.8's scope.) —
+  **✅ CLOSED in Story 3.9.** `GridRenderer.drawDiff` (`selectChangedCells`) is the repaint adapter,
+  reused `paintDirtyCells` for the paint half (FD1 (a), the recommended option), and
+  `repaint-diff-path` is the new gated repaint measured against the SAME zero-filled-baseline
+  convention as `repaint-dirty-path`, so the two remain a like-for-like comparison of the shipped
+  mechanism against the rejected one — **0.159 ms vs. 0.575 ms** this run (a live frame changes a
+  fraction of the cells and diffs against the PREVIOUS frame, so this is still each mechanism's
+  upper bound, not a live-frame number; the *decision* cost is dominated by the O(cells) sweep regardless of how many
+  cells actually changed — the compare is the fixed ~0.08 ms, the one `push` per changed cell is
+  the rest, so "a fraction of cells changed" buys at most the difference between 0.159 and 0.08 ms
+  there. It buys everything on the RASTER side, which this harness still cannot
+  measure — jsdom has no canvas). `repaintDecision.bench.ts`'s stale comment lines are reworded;
+  see `scripts/check-bench-budget.mjs`'s `GATED_TASKS` for the gate-mechanism change itself.
+
+## Deferred from: Story 3-9 Colour-State Batch Rendering (2026-09-14)
+
+- **`component-tree-battle-page.md` §5's frozen-contract line, "Epic 3 wraps it with the loop,
+  adding nothing to it," is now stale** — Story 3.9 added `GridRenderer`'s seventh method,
+  `drawDiff` (FD1 (a), the playback repaint the contract's `draw` cannot serve because it presumes
+  a caller-supplied dirty set and playback has none — Decision B.4, RFC-002 §5). Not edited here
+  (planning artifact; Sidiar's call, the M14/M15 precedent). Candidate one-line amendment:
+  *"Epic 3 wraps it with the loop and adds `drawDiff(grid): void` — the playback repaint: every
+  cell a candidate, diffed against the last paint (Decision B.4)."*
+- **`architecture.md` Runtime Architecture step 3 (`:127`) and the system-overview diagram (`:44`)
+  still describe batching as "by `(organism, ageShade)`"** — pre-revision wording Decision B.2
+  (2026-07-09) replaced with `(colorToken, min(age, 7))`; the code follows B.2. Not this story's to
+  edit (already flagged once, Story 1.8/2.3 era); recorded again because this story's `drawDiff`
+  is a second, independent reader of the same two stale lines. Fold into whichever story next
+  touches `architecture.md`'s Runtime Architecture section.
+- **Story 3.10 must hand the loop `toStepRenderer(gridRenderer)`, never the raw `GridRenderer`.**
+  `apps/web/lib/canvas/playbackRenderer.ts`'s `toStepRenderer` is the three-line adapter this story
+  built for exactly that call — `useSimulation`'s `createSimulationLoop({ renderer:
+  toStepRenderer(rendererRef.current), ... })`, not `renderer: rendererRef.current`. A raw
+  `GridRenderer` type-checks as the loop's `StepRenderer` port (it has a `draw(grid)` method) and
+  is the freeze `simulationLoop.ts`'s Trap 1 and `3-8-simulationloop.md`'s Dev Notes both name —
+  `draw` is the marks-only Edit path (Story 2.3) and the loop marks nothing (Story 3.8 AC5), so a
+  raw renderer paints nothing after the first step, with nothing thrown.
 
 ## Deferred from: Story 3-8 SimulationLoop (2026-09-13)
 

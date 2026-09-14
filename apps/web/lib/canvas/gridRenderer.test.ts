@@ -31,6 +31,7 @@ const NO_SCHEDULING_SOURCES = [
   'gridLayout.ts',
   'refToFillGroup.ts',
   'renderableGrid.ts',
+  'playbackRenderer.ts',
 ];
 const COLORS = { background: '#0a0a0a', gridLine: '#333333' };
 
@@ -94,6 +95,8 @@ describe('AC3 — the frozen contract: no scheduling, ever', () => {
     // Story 2.3 grew the surface — markDirty and draw run inside the same promise (AC3).
     renderer.markDirty([{ col: 0, row: 0 }]);
     renderer.draw(makeGrid(2, 1, [0, 1]));
+    // Story 3.9 grows it again — drawDiff is the playback repaint (AC3).
+    renderer.drawDiff(makeGrid(2, 1, [1, 0]));
     renderer.resize({ cols: 2, rows: 1 });
     renderer.setGridLines(false);
 
@@ -129,6 +132,7 @@ describe('AC3 — the frozen contract: no scheduling, ever', () => {
       { col: 1, row: 0 },
     ]);
     renderer.draw(grid);
+    renderer.drawDiff(grid);
     renderer.resize({ cols: 2, rows: 1 });
     renderer.setGridLines(false);
     renderer.setGridLines(true);
@@ -953,5 +957,227 @@ describe('grid-line overlay cache — Story 2.3 Task 5', () => {
 
     const overlays = ctx.calls.filter((c) => c.op === 'drawImage').map((c) => c.args[0]);
     expect(new Set(overlays).size).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Story 3.9 — the playback repaint
+// ---------------------------------------------------------------------------------------------
+
+describe('drawDiff — the playback repaint (Story 3.9)', () => {
+  it('repaints ONLY the changed cells of a 100x60 grid, with NO marks (AC1/AC4)', () => {
+    const canvas = makeCanvas(100, 60);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 100, rows: 60 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false, // so the only fillRect below is the cell's own background
+    });
+    renderer.drawFull(makeGrid(100, 60, new Array(6000).fill(0)));
+    ctx.calls.length = 0;
+    ctx.fillStyleWrites.length = 0;
+
+    const painted = new Array(6000).fill(0);
+    painted[42 * 100 + 17] = 1;
+    // Deliberately no markDirty() — drawDiff derives its own candidates from the whole grid.
+    renderer.drawDiff(makeGrid(100, 60, painted));
+
+    // A 100x60 canvas for a 100x60 grid: 1px cells at origin (0, 0), so the changed cell
+    // (col 17, row 42) is the pixel at (17, 42) — WHICH cell, not just how many.
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toEqual([
+      { op: 'rect', args: [17, 42, 1, 1] },
+    ]);
+    expect(ctx.calls.filter((c) => c.op === 'fillRect')).toEqual([
+      { op: 'fillRect', args: [17, 42, 1, 1] }, // the cell background
+    ]);
+    expect(ctx.fillStyleWrites).toHaveLength(2); // background + one colour group
+  });
+
+  it('a still-life frame — same content, a NEW grid object — touches the context zero times', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    renderer.drawDiff(makeGrid(2, 1, [0, 0])); // primedRenderer already drew [0, 0]; same content
+
+    expect(ctx.calls).toHaveLength(0);
+    expect(ctx.fillStyleWrites).toHaveLength(0);
+  });
+
+  it('an erased cell gets background + line restoration, and no colour', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: true,
+    });
+    renderer.drawFull(makeGrid(2, 1, [1, 0]));
+    ctx.calls.length = 0;
+    ctx.fillStyleWrites.length = 0;
+
+    renderer.drawDiff(makeGrid(2, 1, [0, 0]));
+
+    expect(ctx.calls).toEqual([
+      { op: 'fillRect', args: [0, 0, 10, 10] }, // (a) cell background — no colour group follows
+      { op: 'fillRect', args: [0, 0, 1, 10] }, // (c) left bar
+      { op: 'fillRect', args: [10, 0, 1, 10] }, // right bar
+      { op: 'fillRect', args: [0, 0, 10, 1] }, // top bar
+      { op: 'fillRect', args: [0, 9, 10, 1] }, // bottom bar, pulled back inside the rectangle
+    ]);
+    expect(ctx.fillStyleWrites).toEqual([COLORS.background, COLORS.gridLine]);
+  });
+
+  it('batches a mixed frame by colour state — one beginPath/fill/fillStyle per group, ascending groupId (AC4)', () => {
+    const { ctx, renderer } = primedRenderer({ showGridLines: false });
+
+    renderer.drawDiff(makeGrid(2, 1, [1, 1])); // both cells the same organism -> one group
+
+    expect(ctx.calls.filter((c) => c.op === 'beginPath')).toHaveLength(1);
+    expect(ctx.calls.filter((c) => c.op === 'fill')).toHaveLength(1);
+    expect(ctx.fillStyleWrites).toHaveLength(2); // background + one group
+
+    // The control: two DIFFERENT tokens must produce two groups, in ascending groupId order —
+    // ref 2 (token 9) placed at index 0 and ref 1 (token 5) at index 1, so first-seen order is
+    // the REVERSE of groupId order and only a real sort produces the expected sequence.
+    const control = primedRenderer({ showGridLines: false });
+    control.renderer.drawDiff(makeGrid(2, 1, [2, 1]));
+
+    expect(control.ctx.calls.filter((c) => c.op === 'beginPath')).toHaveLength(2);
+    expect(control.ctx.calls.filter((c) => c.op === 'fill')).toHaveLength(2);
+    // DIRTY_TABLE has aging ON for every ref, and makeGrid defaults age to 0 -> shade 0.
+    expect(control.ctx.fillStyleWrites.slice(1)).toEqual([
+      displayColorAt(5, 0),
+      displayColorAt(9, 0),
+    ]);
+  });
+
+  it('a 255-ref LUT folded onto 20 tokens x 8 shades yields <= 160 fillStyle colour writes (AC4 bound)', () => {
+    // The roster is at the 255-organism cap (Decision G.3/M6) but the palette has only 20 tokens
+    // x 8 age shades — the bound is the PALETTE, never the roster (AC4).
+    const ROSTER_SIZE = 255;
+    const tokenIndex = new Uint8Array(ROSTER_SIZE + 1);
+    const aging = new Uint8Array(ROSTER_SIZE + 1);
+    for (let ref = 1; ref <= ROSTER_SIZE; ref++) {
+      tokenIndex[ref] = (ref - 1) % 20;
+      aging[ref] = 1; // every organism aging, so age drives the shade directly
+    }
+    const table: RefToFillGroup = { tokenIndex, aging, size: ROSTER_SIZE + 1 };
+
+    const cols = 100;
+    const rows = 60;
+    const cellCount = cols * rows;
+    const occupant = new Array<number>(cellCount);
+    const age = new Array<number>(cellCount);
+    const expectedGroups = new Set<number>();
+    for (let index = 0; index < cellCount; index++) {
+      const ref = (index % ROSTER_SIZE) + 1;
+      const shade = index % 8;
+      occupant[index] = ref;
+      age[index] = shade;
+      expectedGroups.add(tokenIndex[ref] * 8 + shade);
+    }
+    // lcm(255, 8) = 2040 < 6000, so every (ref, shade) pair occurs and the palette bound is
+    // actually REACHED — a folding bug that produced 159 groups would fail the equality below.
+    expect(expectedGroups.size).toBe(160);
+
+    const canvas = makeCanvas(cols, rows);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols, rows }, table, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+    renderer.drawFull(makeGrid(cols, rows, new Array(cellCount).fill(0)));
+    ctx.calls.length = 0;
+    ctx.fillStyleWrites.length = 0;
+
+    renderer.drawDiff(makeGrid(cols, rows, occupant, age));
+
+    // fillStyleWrites[0] is the background; one more per distinct (tokenIndex, shade) group —
+    // 160 for a 255-organism roster, never 255.
+    expect(ctx.fillStyleWrites.length - 1).toBe(160);
+  });
+
+  it('consumes outstanding markDirty() marks — a following draw() has no candidates left', () => {
+    const { ctx, renderer } = primedRenderer({ showGridLines: false });
+
+    renderer.markDirty([{ col: 0, row: 0 }]); // never consumed by a draw()
+    renderer.drawDiff(makeGrid(2, 1, [1, 1]));
+    ctx.calls.length = 0;
+    ctx.fillStyleWrites.length = 0;
+
+    // The marked cell DOES differ from what drawDiff painted, so the only thing standing between
+    // draw() and a repaint is whether the mark survived: a surviving mark repaints cell 0, a
+    // consumed one leaves draw() with no candidates at all. (With identical content this test
+    // could not fail — draw() would filter the mark out on colour state either way.)
+    renderer.draw(makeGrid(2, 1, [2, 1]));
+
+    expect(ctx.calls).toHaveLength(0);
+    expect(ctx.fillStyleWrites).toHaveLength(0);
+  });
+
+  it('falls back to a FULL repaint when no baseline has been primed yet', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+    ctx.calls.length = 0;
+
+    renderer.drawDiff(makeGrid(2, 1, [1, 1])); // no drawFull/renderStatic ever happened
+
+    // The full-backing-store background fill is the tell — the diff path only ever fills cells.
+    expect(ctx.calls[0]).toEqual({ op: 'fillRect', args: [0, 0, 20, 10] });
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(2);
+
+    // ...and that fallback PRIMED the baseline: the next drawDiff is incremental, not another
+    // full paint — otherwise every playback frame after an unprimed mount would repaint the dish.
+    ctx.calls.length = 0;
+    renderer.drawDiff(makeGrid(2, 1, [1, 2]));
+    expect(ctx.calls.filter((c) => c.op === 'fillRect')).toEqual([
+      { op: 'fillRect', args: [10, 0, 10, 10] }, // cell 1's background only
+    ]);
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(1);
+  });
+
+  it('after renderStatic (which primes no baseline) the first drawDiff is a full paint (Trap 2)', () => {
+    const canvas = makeCanvas(20, 10);
+    const ctx = installRecordingContext2d(canvas);
+    const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, DIRTY_TABLE, {
+      colors: COLORS,
+      showGridLines: false,
+    });
+    renderer.renderStatic(makeGrid(2, 1, [1, 1]));
+    ctx.calls.length = 0;
+
+    renderer.drawDiff(makeGrid(2, 1, [1, 1])); // same content — a primed renderer would no-op
+
+    expect(ctx.calls[0]).toEqual({ op: 'fillRect', args: [0, 0, 20, 10] });
+    expect(ctx.calls.filter((c) => c.op === 'rect')).toHaveLength(2);
+  });
+
+  it('rejects a mis-shaped grid before touching the context', () => {
+    const { ctx, renderer } = primedRenderer();
+
+    expect(() => renderer.drawDiff(makeGrid(2, 3, new Array(6).fill(0)))).toThrow(
+      GridRendererDimensionMismatchError,
+    );
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it('owns no scheduling state — the same drawFull/drawDiff sweep produces identical call logs', () => {
+    const table = lut([0, 5, 9], [1, 1, 1]);
+
+    function sweep() {
+      const canvas = makeCanvas(20, 10);
+      const double = installRecordingContext2d(canvas);
+      const renderer = new GridRenderer(canvas, { cols: 2, rows: 1 }, table, { colors: COLORS });
+      renderer.drawFull(makeGrid(2, 1, [0, 0]));
+      renderer.drawDiff(makeGrid(2, 1, [1, 2]));
+      return double;
+    }
+
+    const doubleA = sweep();
+    const doubleB = sweep();
+
+    expect(doubleA.calls).toEqual(doubleB.calls);
+    expect(doubleA.fillStyleWrites).toEqual(doubleB.fillStyleWrites);
   });
 });

@@ -1,8 +1,10 @@
+import fc from 'fast-check';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { colourStateAt, resetColourStateWarnings, EMPTY_COLOUR_STATE } from './colourStateGroups';
 import {
   DirtyCellRangeError,
   markDirtyCells,
+  selectChangedCells,
   selectDirtyCells,
   toFlatIndex,
   type CellCoord,
@@ -183,5 +185,147 @@ describe('selectDirtyCells — AC1: dirty on occupant OR age-shade change', () =
 
     expect(selectDirtyCells([0, 1, 2], after, table, baseline)).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(2); // once for ref 7, once for ref 8 — not once globally
+  });
+});
+
+describe("selectChangedCells — playback's whole-grid sweep (Story 3.9 Task 1, AC2)", () => {
+  const table = lut([0, 5, 9], [1, 1, 1]); // ref 1 -> token 5, ref 2 -> token 9, both aging
+
+  afterEach(() => {
+    resetColourStateWarnings();
+    vi.restoreAllMocks();
+  });
+
+  it('reports nothing for an identical grid', () => {
+    const before = grid(4, 3, [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    const after = grid(4, 3, [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline)).toEqual([]);
+  });
+
+  it('reports exactly one entry, carrying the NEW colour state, for a single-cell change', () => {
+    const before = grid(4, 3, new Array(12).fill(0));
+    const after = grid(4, 3, [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline)).toEqual([
+      { index: 5, colourState: fillGroupOf(table, 1, 0) },
+    ]);
+  });
+
+  it('reports occupied -> empty with the EMPTY_COLOUR_STATE sentinel', () => {
+    const before = grid(4, 3, [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+    const after = grid(4, 3, new Array(12).fill(0));
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline)).toEqual([
+      { index: 5, colourState: EMPTY_COLOUR_STATE },
+    ]);
+  });
+
+  it('does not report age 7 -> 8 (shade saturates), but DOES report age 6 -> 7', () => {
+    const before6 = grid(1, 1, [1], [6]);
+    const baselineAt6 = baselineFor(before6, table);
+    expect(selectChangedCells(grid(1, 1, [1], [7]), table, baselineAt6)).toEqual([
+      { index: 0, colourState: fillGroupOf(table, 1, 7) },
+    ]);
+
+    const before7 = grid(1, 1, [1], [7]);
+    const baselineAt7 = baselineFor(before7, table);
+    expect(selectChangedCells(grid(1, 1, [1], [8]), table, baselineAt7)).toEqual([]);
+    expect(selectChangedCells(grid(1, 1, [1], [99]), table, baselineAt7)).toEqual([]);
+  });
+
+  it('two organisms sharing a colorToken swapping places reports nothing (Decision B.2 folding)', () => {
+    const shared = lut([0, 5, 5], [1, 1, 1]); // ref 1 and ref 2 both render at token 5, same age
+    const before = grid(4, 3, [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const after = grid(4, 3, [2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const baseline = baselineFor(before, shared);
+
+    expect(selectChangedCells(after, shared, baseline)).toEqual([]);
+  });
+
+  it('throws when the buffer lengths disagree with the declared dimensions, naming both counts', () => {
+    const shortOccupant: ReturnType<typeof grid> = {
+      width: 4,
+      height: 3,
+      occupant: new Uint8Array(11),
+      age: new Uint16Array(12),
+    };
+    const baseline = new Uint16Array(12);
+    // Anchored on BOTH counts so the message has to name the short buffer as the short one — a
+    // looser `/12.*occupant.*11/` also matches "occupant has 12 and age has 11".
+    expect(() => selectChangedCells(shortOccupant, table, baseline)).toThrow(
+      /needs 12 cells, but occupant has 11 and age has 12/,
+    );
+
+    const shortAge: ReturnType<typeof grid> = {
+      width: 4,
+      height: 3,
+      occupant: new Uint8Array(12),
+      age: new Uint16Array(11),
+    };
+    expect(() => selectChangedCells(shortAge, table, baseline)).toThrow(
+      /needs 12 cells, but occupant has 12 and age has 11/,
+    );
+  });
+
+  it('throws when the baseline is shorter than the grid, rather than reporting every cell past its end', () => {
+    // Past the end of a short baseline, `lastColourState[index]` is undefined and equals no colour
+    // state — every such cell would report as changed on every frame, a full repaint per step that
+    // looks like a working diff. GridRenderer never hands it one, but the function is public.
+    const shortBaseline = new Uint16Array(11);
+    expect(() =>
+      selectChangedCells(grid(4, 3, new Array(12).fill(0)), table, shortBaseline),
+    ).toThrow(/needs 12 baseline entries, but lastColourState has 11/);
+  });
+
+  it('returns repaints in ascending index order with no sort step', () => {
+    const before = grid(4, 3, new Array(12).fill(0));
+    const after = grid(4, 3, [0, 1, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0]);
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline).map((c) => c.index)).toEqual([1, 5, 8]);
+  });
+
+  it('treats an out-of-range ref as empty and warns once per distinct ref', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const before = grid(4, 3, new Array(12).fill(0));
+    const after = grid(4, 3, [7, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // 7, 8 both > lut.size
+    const baseline = baselineFor(before, table);
+
+    expect(selectChangedCells(after, table, baseline)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  // The property the whole sweep reduces to (story Dev Notes: "cheap and honest"): for ANY two
+  // grids of one shape, the report is exactly the ascending indices whose colour state differs,
+  // each carrying the NEW state — no more, no fewer, no sort.
+  it('reports exactly the indices whose colourStateAt differs, for any pair of grids', () => {
+    const cells = (n: number) =>
+      fc.tuple(
+        fc.array(fc.integer({ min: 0, max: 2 }), { minLength: n, maxLength: n }),
+        fc.array(fc.integer({ min: 0, max: 9 }), { minLength: n, maxLength: n }),
+      );
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 6 }), fc.integer({ min: 1, max: 6 }), (w, h) =>
+        fc.assert(
+          fc.property(cells(w * h), cells(w * h), ([o1, a1], [o2, a2]) => {
+            const before = grid(w, h, o1, a1);
+            const after = grid(w, h, o2, a2);
+            const expected = Array.from({ length: w * h }, (_, index) => index)
+              .filter(
+                (index) =>
+                  colourStateAt(after, table, index) !== colourStateAt(before, table, index),
+              )
+              .map((index) => ({ index, colourState: colourStateAt(after, table, index) }));
+            expect(selectChangedCells(after, table, baselineFor(before, table))).toEqual(expected);
+          }),
+          { numRuns: 25 },
+        ),
+      ),
+      { numRuns: 8 },
+    );
   });
 });

@@ -153,6 +153,36 @@ Earlier isolated runs on the same tree reached as low as **12.4 ms**. Every *sta
 the run that mattered — the benchmark in its actual CI position — did not. That is what stopped the
 story, and what FD7 fixed.
 
+### Story 3.9 — the gated repaint half moves to `repaint-diff-path`
+
+`scripts/check-bench-budget.mjs`'s `GATED_TASKS` changed from `repaint-decision` to
+`repaint-diff-path` (FD3 (a)). **The budget, the fixture, and 100×60 as the gated preset are all
+unchanged** — only which function counts as "one repaint" moved, because Story 3.8's loop and Story
+3.9's `toStepRenderer` adapter now exist: a running simulation calls `GridRenderer.drawDiff` once
+per step (`selectChangedCells`'s whole-grid sweep, `repaint-diff-path`), never `drawFull`
+(`groupByColourState`, `repaint-decision`, which is mount/resize/grid-lines-toggle only from here
+on). `repaint-decision` stays required and printed — it did not stop being real, it stopped being
+the thing the gate sums.
+
+`npm run bench` + `npm run bench:check`, this story:
+
+| | ms |
+|---|---|
+| `step 100x60 x20` | **6.447** |
+| `repaint-diff-path 100x60 x20` | **0.159** |
+| **= frame** | **6.606** |
+| budget (1000 / 60) | 16.667 |
+| **headroom** | **10.061 ms (60.4%)** |
+
+Moved by **−0.154 ms** against the FD7 frame this table already carried (6.760 ms with
+`repaint-decision`, before this story) — inside the "< 0.2 ms" swing the story predicted, and inside
+the machine's own run-to-run spread (`step` alone moved from 6.713 to 6.447 ms between these two
+measurements). `repaint-diff-path` (0.159 ms) is ~2× `repaint-decision` (0.083 ms this run) — the
+sweep plus a `push` per changed cell against a bare `colourStateAt` loop — and still two orders of
+magnitude under the frame budget. Diagnostic, unchanged: `repaint-dirty-path` (the rejected
+`markDirty`-everything adapter, FD1 (c)) is **0.575 ms** this run, ~3.6× `repaint-diff-path` — the
+number FD1's rejection cites.
+
 ### The tracked presets (measured, never gated)
 
 | preset | before FD7 | **after FD7** | vs 100×60 |
@@ -184,13 +214,15 @@ confirmation, not search.
 
 | task | ms | note |
 |---|---|---|
-| `repaint-decision` (`groupByColourState`) | 0.071 – 0.072 | the gated repaint half (was 0.044 – 0.048 on the collapsed fixture) |
-| `repaint-dirty-path` (mark all 6,000 + `selectDirtyCells`) | 0.70 – 0.75 | **upper bound** — every occupied cell reads as changed; ~10× the above |
-| `colour-state-reprime` (`drawFull`'s O(cells) sweep) | 0.076 – 0.083 | |
+| `repaint-decision` (`groupByColourState`) | 0.071 – 0.083 | `drawFull`'s decision — mount/resize/grid-lines-toggle only since Story 3.9; no longer gated |
+| `repaint-diff-path` (`selectChangedCells`, zero-filled baseline) | **0.159** | **the gated repaint half as of Story 3.9** — `GridRenderer.drawDiff`'s decision, what a playback frame actually runs; upper bound, same zero-filled convention as the row below |
+| `repaint-dirty-path` (mark all 6,000 + `selectDirtyCells`) | 0.575 – 0.75 | the REJECTED `markDirty`-everything adapter (FD1 (c)) — upper bound, ~3.6× `repaint-diff-path` |
+| `colour-state-reprime` (`drawFull`'s O(cells) sweep) | 0.076 – 0.089 | |
 | `ref-to-fill-group-build` | 0.003 | **once per battle**, not per frame |
-| `library-filter 1000 organisms` | 0.022 – 0.023 | `<OrganismSearchAdd>`'s per-render scan |
+| `library-filter 1000 organisms` | 0.022 – 0.024 | `<OrganismSearchAdd>`'s per-render scan |
 
-Two serialized runs on the corrected fixture (2026-09-10, code review). **The whole repaint
+Two serialized runs on the corrected fixture (2026-09-10, code review), ranges widened by Story 3.9's
+run of 2026-09-14 where it landed outside them. **The whole repaint
 decision is ~0.4% of the frame.** The renderer's brain is not where the budget
 goes, and no render-side redesign in Epic 3 can buy back a meaningful fraction of it.
 
