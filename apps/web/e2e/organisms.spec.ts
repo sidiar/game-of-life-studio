@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { CONWAYS_CLASSIC } from '@gol/test-utils';
 
 // Thin e2e (RFC-008 Decision 2), same fixtures/patterns as home.spec.ts / appShell.spec.ts.
 test.describe('organisms route (Story 4.1)', () => {
@@ -15,7 +16,7 @@ test.describe('organisms route (Story 4.1)', () => {
     await page.goto('/organisms');
 
     await expect(page.getByRole('heading', { level: 1, name: 'Organism Library' })).toBeVisible();
-    // The hydration signal: the prerendered HTML says "Loading organisms…", so this list item is
+    // The hydration signal: the prerendered HTML says "Loading organisms…", so this card is
     // only reachable once useWorkspaceSeed's and OrganismLibrary's own load effect have both run
     // — every assertion on errors/axe below must come AFTER it, or it races hydration exactly as
     // appShell.spec.ts explains.
@@ -120,5 +121,121 @@ test.describe('organisms route (Story 4.1)', () => {
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
+  });
+});
+
+test.describe('organism card grid (Story 4.2)', () => {
+  test('renders the SYSTEM card with its stats and the count badge, against the production seed', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/organisms');
+    // Hydration signal, same discipline as the describe block above.
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const card = page.getByRole('article', { name: "Conway's Classic" });
+    await expect(card).toBeVisible();
+    await expect(card.getByText('SYSTEM')).toBeVisible();
+    // Exact text matches, not `toContainText` substrings: 'No' is also inside 'No rules', and '50'
+    // inside '150' — a loose match would pass on the wrong cell. Values come from the fixture.
+    await expect(card.getByText('Dominance', { exact: true })).toBeVisible();
+    await expect(card.getByText(String(CONWAYS_CLASSIC.dominance), { exact: true })).toBeVisible();
+    await expect(card.getByText('Aging', { exact: true })).toBeVisible();
+    await expect(
+      card.getByText(CONWAYS_CLASSIC.agingEnabled ? 'Yes' : 'No', { exact: true }),
+    ).toBeVisible();
+    // Production build → no AR-45 dev fixtures (epics.md:426), so Conway's Classic is the ONLY
+    // organism and its own rules are the count. Pluralised the way `ruleCountLabel` does, so the
+    // assertion survives a fixture with one rule.
+    const ruleCount = CONWAYS_CLASSIC.survivalRules.length;
+    const ruleLabel =
+      ruleCount === 0 ? 'No rules' : ruleCount === 1 ? '1 rule' : `${ruleCount} rules`;
+    await expect(card.getByText(ruleLabel, { exact: true })).toBeVisible();
+
+    await expect(page.getByRole('status')).toHaveText('1 Organism');
+
+    expect(errors).toEqual([]);
+  });
+
+  test('search filters the grid live and never writes to localStorage', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const before = await page.evaluate(() => localStorage.getItem('gol:organisms'));
+    // The byte-identity check below is vacuous if the key is wrong (null === null) — prove the
+    // seed actually wrote it first.
+    expect(before).not.toBeNull();
+
+    const search = page.getByRole('textbox', { name: 'Search organisms' });
+    await search.fill('zzz');
+
+    await expect(page.getByText('No organisms match “zzz”.')).toBeVisible();
+    await expect(page.getByRole('article')).toHaveCount(0);
+    await expect(page.getByRole('status')).toHaveText('0 of 1 Organism');
+    await expect(search).toBeFocused();
+
+    await search.fill('con');
+    await expect(page.getByRole('article', { name: "Conway's Classic" })).toBeVisible();
+
+    await search.fill('');
+    await expect(page.getByRole('status')).toHaveText('1 Organism');
+
+    const after = await page.evaluate(() => localStorage.getItem('gol:organisms'));
+    expect(after).toBe(before);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('is keyboard-reachable from the search input to the card', async ({ page, browserName }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const search = page.getByRole('textbox', { name: 'Search organisms' });
+    await search.click();
+
+    // WebKit needs Alt+Tab to reach a tabIndex stop the same way it needs it for a plain link
+    // (`:48-89` above) — Safari's default with "Press Tab to highlight each item" off leaves a
+    // plain Tab from a focused text input on the input itself.
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    const card = page.getByRole('article', { name: "Conway's Classic" });
+
+    let reached = false;
+    for (let i = 0; i < 5; i += 1) {
+      await page.keyboard.press(tabKey);
+      const isFocused = await card.evaluate((el) => el === document.activeElement);
+      if (isFocused) {
+        reached = true;
+        break;
+      }
+    }
+    expect(reached).toBe(true);
+  });
+
+  test('has no axe accessibility violations after hydration or in the zero-match state', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const ready = await new AxeBuilder({ page }).analyze();
+    expect(ready.violations).toEqual([]);
+
+    const search = page.getByRole('textbox', { name: 'Search organisms' });
+    await search.fill('zzz');
+    await expect(page.getByText('No organisms match “zzz”.')).toBeVisible();
+
+    const zeroMatch = await new AxeBuilder({ page }).analyze();
+    expect(zeroMatch.violations).toEqual([]);
   });
 });

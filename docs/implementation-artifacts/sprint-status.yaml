@@ -114,7 +114,7 @@ development_status:
   # Epic 4: Custom Organisms & the Shared Library
   epic-4: in-progress
   4-1-organisms-route-top-navigation: done
-  4-2-organism-card-grid: backlog
+  4-2-organism-card-grid: done
   4-3-editor-modal-shell: backlog
   4-4-three-column-responsive-layout: backlog
   4-5-organism-name-field: backlog

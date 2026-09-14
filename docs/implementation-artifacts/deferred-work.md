@@ -332,7 +332,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 - **Two library organisms with the same name are indistinguishable in the add dropdown** — `OrganismSchema.name` is `z.string().max(50)` with no uniqueness constraint, and an empty name resolves to the shared "Unnamed organism" fallback, so duplicates are reachable. `<option>` renders `organism.name` alone; the `DisplayOrganism`'s `color`/`colorToken` are resolved for the dropdown and then never used, and an `<option>` cannot carry the `<ColorChip>` a roster row uses. The user cannot tell which one they are adding, and the roster then shows two identically-named rows, possibly with an immediate "Shared colour" warning they had no forewarning of. **Pick this up in Epic 4** (Stories 4.24/4.25 own organism identity in the UI), or sooner if the `<select>` decision above replaces it with a custom listbox, which could carry a chip.
 
-- **The search predicate does no Unicode normalisation and uses `toLowerCase`, not `toLocaleLowerCase`** — the review trimmed the query (the whitespace half was a live defect) but left these two. A decomposed "é" (NFD) never matches a precomposed one (NFC), and locale-sensitive casing (Turkish dotted/dotless i) is wrong under `toLowerCase`. Organism names are free user text, so both are reachable, just narrowly. `searchText.trim().normalize('NFC').toLocaleLowerCase()` against a likewise-normalised name is the whole fix. **Pick this up in whichever story next touches the search predicate**, or with Epic 6's i18n pass if one materialises.
+- ~~**The search predicate does no Unicode normalisation and uses `toLowerCase`, not `toLocaleLowerCase`** — the review trimmed the query (the whitespace half was a live defect) but left these two. A decomposed "é" (NFD) never matches a precomposed one (NFC), and locale-sensitive casing (Turkish dotted/dotless i) is wrong under `toLowerCase`. Organism names are free user text, so both are reachable, just narrowly. `searchText.trim().normalize('NFC').toLocaleLowerCase()` against a likewise-normalised name is the whole fix. **Pick this up in whichever story next touches the search predicate**, or with Epic 6's i18n pass if one materialises.~~ **✅ Resolved in Story 4.2** — `lib/organisms/organismNameMatches.ts` (NFC + `toLocaleLowerCase`), consumed by `<OrganismLibrary>` and `<OrganismRoster>`.
 
 - **`filtered` is an unmemoised scan of the UNCAPPED workspace library on every render of `<OrganismSearchAdd>`** — `library.filter(...)` runs per render, and every keystroke re-renders the full `<option>` list. `<BattlePage>`'s own comment states the workspace library is uncapped (Decision G.3/M6), so unlike the 255-bounded `resolveSelectedTool` scan this has no upper bound at all. Not a measured problem — the list is tiny in every fixture — and recorded only because the sibling entry above (`resolveSelectedTool` re-derives over the whole roster) was annotated during this same story to say the search box did NOT introduce a per-render scan, which is true of `roster` and not of `library`. **Revisit with Story 3.7** (`vitest bench`), or the first time a workspace holds enough organisms to measure. — **✅ CLOSED in Story 3.7: measured, no `useMemo` warranted.** Benched at `apps/web/lib/canvas/repaintDecision.bench.ts`'s `library-filter 1000 organisms` (the predicate copied verbatim from `<OrganismSearchAdd>`, the inner component of `OrganismRoster.tsx` where the scan lives): **~0.02–0.04 ms for a library of 1,000**, far past any realistic workspace. That is a scan that runs once per render, not in a loop; a `useMemo` would cost a dependency array and a cache to reason about in exchange for tens of microseconds. Annotated in code at the call site.
 
@@ -695,3 +695,33 @@ Review Findings; these are the items consciously left open.
   one branch. **Pick up with the first story that gives the factory a second branch** (Connected
   mode) or with Story 6.5's unrecognised-theme handling, whichever first makes a thrown construction
   a real path.
+
+## Deferred from: Story 4-2-organism-card-grid implementation (2026-09-14)
+
+- **The rules-preview natural-language summary is not on the card** (FD1) — the mockup shows
+  `Born: 3 neighbors | Survive: 2-3 neighbors`; the card ships a count only (`N rules`) because the
+  sentence needs a summariser over action/condition vocabulary that `Story 4.10` defines. Writing a
+  one-off version in `<OrganismCard>` would mean writing it twice. **Pick this up in Story 4.10**,
+  once the rule-summary vocabulary exists.
+- **The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
+  `tabIndex={0}` because it has no inner control to be the keyboard stop instead (organism cards
+  open a modal in `Story 4.17`, which does not exist yet). Once Edit lands inside the card, a stop
+  wrapping a stop is legal but noisy. **Story 4.17 decides** whether the article stays a tab stop
+  once it has focusable children.
+- **`SectionHeader` stays duplicated between `<OrganismLibrary>` and `<BattleGallery>`** (FD9) —
+  unchanged from Story 4.1's deferral; still blocked behind `Story 3.17`'s Gallery change (the
+  parallel Epic 3 lane's surface) landing first, so the lift does not collide with it. **Pick this
+  up in the first story after 3.17 that touches both files.**
+
+## Deferred from: code review of 4-2-organism-card-grid (2026-09-14)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers
+(13 patches applied in the review commit; the item below is the one consciously left open).
+
+- **`<OrganismCard>`'s Dominance / Aging stat cells are label/value `<div>` stacks with no
+  semantic association** — a screen reader gets "Dominance", "50", "Aging", "No" as four unrelated
+  strings; a `<dl>`/`<dt>`/`<dd>` (or `aria-labelledby` from value to label) would pair them. Not
+  patched here because the mockup and Task 3 specify the div shape and the card's content is still
+  moving — `Story 4.10` adds the rules sentence and `Story 4.20` the usage line. **Pick this up
+  with whichever of those settles the card's stat block**, and decide the cell semantics once for
+  all three rows.

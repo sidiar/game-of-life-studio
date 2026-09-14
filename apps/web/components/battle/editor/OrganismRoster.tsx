@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { MAX_ROSTER_SIZE } from '@/lib/canvas/refToFillGroup';
 import type { DisplayOrganism } from '@/lib/displayOrganisms';
+import { normalizeOrganismSearch, organismNameMatches } from '@/lib/organisms/organismNameMatches';
 import { ERASER_TOOL, type Tool } from '@/lib/battle/tool';
 
 /**
@@ -340,16 +341,10 @@ function OrganismSearchAdd({
     );
   }
 
-  // Case-insensitive substring on the organism name (AC2's predicate — the story's own pick,
-  // recorded here rather than left implicit).
-  //
-  // Story 2.10 code review: TRIMMED. The comment that stood here justified leaving whitespace in
-  // on the claim that "a search of all spaces is a substring of every name" — which is false for
-  // any single-word name, and irrelevant to the case that actually bites: mobile keyboards append
-  // a space after an accepted word, and a pasted name carries its own. Untrimmed, "conway " then
-  // reports "No organisms match" with the organism sitting right there in the library, and the
-  // offending character is invisible in the message that quotes it back.
-  const query = searchText.trim().toLowerCase();
+  // AC2's predicate is `organismNameMatches` (`lib/organisms/organismNameMatches.ts`), shared with
+  // `<OrganismLibrary>` (Story 4.2) — see that module for the trim/NFC/toLocaleLowerCase rationale
+  // (resolves `deferred-work.md:335`).
+  const query = normalizeOrganismSearch(searchText);
   // ⚠️ UNMEMOISED, ON PURPOSE — MEASURED IN STORY 3.7 (deferred-work.md, 2.10 review, which flagged
   // this as a per-render scan of the UNCAPPED workspace library, Decision G.3/M6). Benched at
   // `lib/canvas/repaintDecision.bench.ts`'s `library-filter 1000 organisms`: **~0.02-0.04 ms** for
@@ -357,7 +352,7 @@ function OrganismSearchAdd({
   // budget spent on a scan that runs once per render, not in a loop. A `useMemo` here would cost a
   // dependency array and a cache to reason about in exchange for tens of microseconds. Closed, not
   // deferred again. (The report carries the canonical figure.)
-  const filtered = library.filter((organism) => organism.name.toLowerCase().includes(query));
+  const filtered = library.filter((organism) => organismNameMatches(organism.name, query));
 
   return (
     <AddContainer>
