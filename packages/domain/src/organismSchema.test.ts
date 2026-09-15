@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   EditableGridPresetSchema,
+  MAX_DOMINANCE,
   MAX_ORGANISM_NAME_LENGTH,
+  MIN_DOMINANCE,
+  NEW_ORGANISM_DOMINANCE,
   OrganismSchema,
 } from './organismSchema';
 
@@ -74,16 +77,35 @@ describe('OrganismSchema', () => {
     expect(MAX_ORGANISM_NAME_LENGTH).toBe(50);
   });
 
-  it('rejects dominance of 0', () => {
-    rejects({ ...validOrganism, dominance: 0 }, 'dominance');
+  // FR-2.2 (Story 4.6): the boundaries are derived from the schema's OWN constants, so a drift
+  // in the constant fails HERE — in the package that owns it — rather than in a slider.
+  it('rejects dominance below MIN_DOMINANCE', () => {
+    rejects({ ...validOrganism, dominance: MIN_DOMINANCE - 1 }, 'dominance');
   });
 
-  it('rejects dominance of 101', () => {
-    rejects({ ...validOrganism, dominance: 101 }, 'dominance');
+  it('rejects dominance above MAX_DOMINANCE', () => {
+    rejects({ ...validOrganism, dominance: MAX_DOMINANCE + 1 }, 'dominance');
   });
 
   it('rejects a non-integer dominance', () => {
-    rejects({ ...validOrganism, dominance: 5.5 }, 'dominance');
+    rejects({ ...validOrganism, dominance: MIN_DOMINANCE + 0.5 }, 'dominance');
+  });
+
+  it('accepts dominance of exactly MIN_DOMINANCE', () => {
+    const result = OrganismSchema.safeParse({ ...validOrganism, dominance: MIN_DOMINANCE });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts dominance of exactly MAX_DOMINANCE', () => {
+    const result = OrganismSchema.safeParse({ ...validOrganism, dominance: MAX_DOMINANCE });
+    expect(result.success).toBe(true);
+  });
+
+  // Pins the numbers UX-DR8 states, once, so a drift fails here and not in a slider.
+  it('MIN_DOMINANCE is 1, MAX_DOMINANCE is 100, NEW_ORGANISM_DOMINANCE is 5', () => {
+    expect(MIN_DOMINANCE).toBe(1);
+    expect(MAX_DOMINANCE).toBe(100);
+    expect(NEW_ORGANISM_DOMINANCE).toBe(5);
   });
 
   it('rejects an invalid colorToken type', () => {
