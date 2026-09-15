@@ -795,3 +795,18 @@ accurate during implementation; none needed a new flag.
 
 Dev Model: sonnet   # follows settled patterns: the in-flow bottom bar (2.8), barButtonBase (2.13), the accent/secondary/danger button pairs, role="group" naming (3.11), real-disabled policy — the bar's props are spec §3.13 verbatim and the hook already owns every verb; nothing here picks a pattern later stories build on
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 17s | 17s | 10 | 1,041 | 6,026 | 271,512 | 278,589 |
+| Step 1 — create-story | opus-5 | 3 | 16m 30s | 16m 30s | 420 | 115,132 | 1,123,536 | 19,068,206 | 20,307,294 |
+| Step 2 — dev-story | sonnet-5 | 1 | 20m 11s | 20m 11s | 694 | 88,117 | 1,292,896 | 76,288,233 | 77,669,940 |
+| Step 3 — code review + PR | opus-5 | 4 | 20m 51s | 20m 51s | 388 | 85,134 | 881,281 | 17,930,625 | 18,897,428 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 64 | 8,247 | 28,384 | 2,005,395 | 2,042,090 |
+| **Total (create-story → PR ready)** | | 8 | **57m 48s** | 57m 48s | 1,512 | 289,424 | 3,303,739 | 113,558,576 | **117,153,251** |
+
+Run started 2026-09-15 08:20 CEST; wall clock runs to the point the run stopped for Sidiar's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
