@@ -316,7 +316,12 @@ describe('useBattleDraft', () => {
     }
     render(<AliasProbe />);
 
-    await waitFor(() => expect(screen.getByTestId('ready')).toHaveTextContent('yes'));
-    expect(seen).toBe(loaded!.gridState);
+    // `seen` is published from a PASSIVE effect, which can still be pending when the committed
+    // `ready` text is already in the DOM — so the aliasing assertion has to be the thing waited
+    // on, not something checked after an unrelated wait resolves (flaked once in CI under load).
+    await waitFor(() => {
+      expect(screen.getByTestId('ready')).toHaveTextContent('yes');
+      expect(seen).toBe(loaded!.gridState);
+    });
   });
 });
