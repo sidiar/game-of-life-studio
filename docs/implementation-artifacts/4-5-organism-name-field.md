@@ -745,3 +745,18 @@ Modified:
 
 Dev Model: opus   # architecture-shaping: introduces the editor's draft-state seam (`OrganismDraft` in the shell, seeded by a factory) that 4.6–4.8, 4.16, 4.17 and 4.23 build on, the shared validator/inline-error idiom 4.11/4.13 reuse, and consciously reverses Story 2.11's ratified clamp — three patterns picked, not followed
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 23s | 23s | 10 | 1,552 | 3,447 | 302,412 | 307,421 |
+| Step 1 — create-story | opus-5, sonnet-5 | 3 | 12m 34s | 12m 34s | 368 | 83,306 | 691,233 | 15,179,943 | 15,954,850 |
+| Step 2 — dev-story | opus-5 | 1 | 18m 49s | 18m 49s | 222 | 54,454 | 277,457 | 15,196,205 | 15,528,338 |
+| Step 3 — code review + PR | fable-5-1 | 4 | 25m 53s | 25m 53s | 5,130 | 98,026 | 2,028,590 | 23,169,400 | 25,301,146 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 50 | 9,312 | 22,188 | 1,681,675 | 1,713,225 |
+| **Total (create-story → PR ready)** | | 8 | **57m 39s** | 57m 39s | 5,730 | 237,338 | 3,000,727 | 53,847,960 | **57,091,755** |
+
+Run started 2026-09-15 09:16 CEST; wall clock runs to the point the run stopped for Sidiar's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
