@@ -1,0 +1,38 @@
+# lane-gates.yaml — cross-epic dependency gates for parallel lanes.
+#
+# `implement-next-story` runs one epic per lane, and story order inside a lane cannot say
+# "4-15 needs 3-15". This file can. It is read on `main` at every Step 0 by
+# `lane-gates.py`, and it is versioned like everything else: rows arrive on `main`
+# through a PR, never by hand-editing a checkout. Its path is `gates_file` in
+# implement-next-story.toml.
+#
+# SHAPE (kept deliberately small — the reader is strict and rejects anything else):
+#   analysed: one entry per epic PAIR that has had a dependency analysis. Opening a lane
+#             for epic N while epic M is in progress requires an entry for {N, M}.
+#   gates:    one entry per (story, prerequisite). `requires` is either a story key, which
+#             must be `done` on main, or `epic-N`, meaning every `N-*` story is `done` —
+#             NOT the `epic-N: done` row, which only flips in the owner's manual close-out.
+#             A story with several prerequisites has several entries.
+#
+# LIFECYCLE: created when a lane opens (Opening a lane, SKILL.md); rows proposed by
+# create-story, code-review, or a Step S sync that hit a code conflict; every row and
+# every `analysed` entry is the owner's approval, recorded in `approved_by`/`date`.
+#
+# Values are plain scalars or `>-` / `|` block scalars; nested mappings are not supported.
+
+analysed:
+  - lane: 4
+    against: 3
+    date: 2026-09-13
+    approved_by: the owner
+
+gates:
+  - story: 4-15-preview-simulation
+    requires: 3-15-extinction-auto-pause
+    why: >-
+      The preview is a second simulation hook and must follow the transport, speed-ladder
+      and auto-pause semantics epic 3 is still defining, not define them.
+  - story: 4-24-edit-organism-from-battle
+    requires: epic-3
+    why: >-
+      A modal over a page that epic 3's remaining stories are still reshaping.

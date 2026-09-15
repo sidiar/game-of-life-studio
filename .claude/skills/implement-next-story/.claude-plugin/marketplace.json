@@ -1,0 +1,14 @@
+{
+  "name": "implement-next-story",
+  "owner": {
+    "name": "Ariel Sidi"
+  },
+  "description": "Self-hosted marketplace for the implement-next-story plugin.",
+  "plugins": [
+    {
+      "name": "implement-next-story",
+      "source": "./",
+      "description": "One story → one PR on Claude Code: create, implement, review on a different model, stop for the human merge. Built on BMad Method v6."
+    }
+  ]
+}

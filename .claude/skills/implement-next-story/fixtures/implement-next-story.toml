@@ -1,0 +1,13 @@
+# fixtures/implement-next-story.toml — tiny project layout used by the test suite
+# (tests/test_lane_gates.py) and as a demo for the README. Mirrors the shape of
+# implement-next-story.example.toml, scaled down to a generic web app.
+
+[paths]
+status_file = "docs/implementation-artifacts/sprint-status.yaml"
+stories_dir = "docs/implementation-artifacts"
+epics_file  = "docs/planning-artifacts/epics.md"
+gates_file  = "docs/implementation-artifacts/lane-gates.yaml"
+
+[[sync.rules]]
+file = "docs/implementation-artifacts/deferred-work.md"
+rule = "Keep both hunks, main's first, ours after it. Nothing is ever dropped."
