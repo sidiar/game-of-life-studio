@@ -782,3 +782,113 @@ test.describe('three-column layout (Story 4.4)', () => {
     ]);
   });
 });
+
+test.describe('organism name field (Story 4.5)', () => {
+  /** `/organisms` hydrated, the editor open and settled, and the field located THROUGH the
+   * Basic Information region — so a field that rendered in another column would not be found. */
+  async function openNameField(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const input = dialog
+      .getByRole('region', { name: 'Basic Information' })
+      .getByRole('textbox', { name: 'Organism Name' });
+    return { dialog, input };
+  }
+
+  test('is labelled, required and counted inside Basic Information, with zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { dialog, input } = await openNameField(page);
+
+    await expect(input).toBeVisible();
+    await expect(input).toHaveAttribute('aria-required', 'true');
+    await expect(dialog.getByText('0 / 50')).toBeVisible();
+
+    await input.fill('Aggressive Colonizer');
+
+    await expect(dialog.getByText('20 / 50')).toBeVisible();
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+    await expect(input).not.toHaveAttribute('aria-invalid', 'true');
+    expect(errors).toEqual([]);
+  });
+
+  // FD1's real-browser pin. `fill()` sets the value and dispatches `input` — the bypass path a
+  // native `maxlength` attribute does not cover and a clamp would truncate — so `toHaveValue` on
+  // the EXACT 51-character string fails under either mechanism, which is the point.
+  test('over-limit is an error, not a truncation; emptied is required; valid clears', async ({
+    page,
+  }) => {
+    const { dialog, input } = await openNameField(page);
+    const overLimit = 'x'.repeat(51);
+
+    await input.fill(overLimit);
+
+    await expect(input).toHaveValue(overLimit);
+    await expect(dialog.getByRole('alert')).toHaveText(/Name cannot exceed 50 characters/);
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    await expect(dialog.getByText('51 / 50')).toBeVisible();
+
+    await input.fill('');
+
+    await expect(dialog.getByRole('alert')).toHaveText(/Organism name is required/);
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    await input.fill('Glider');
+
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+    await expect(input).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  // The scan that measures `--gol-danger` for real: the error text and the over-limit counter on
+  // the column's `--gol-bg-secondary` (4.90:1), and the invalid border on `--gol-bg-hover` (a
+  // non-text boundary, 4.48:1 ≥ 3:1). jsdom skips `color-contrast`, so only this proves it. The
+  // input has no transition (FD5), so nothing is mid-fade once `fill()` has resolved; the 300ms
+  // wait is the header Button's own colour transition, the Story 4.3 measurement.
+  test('has no axe violations with the over-limit error visible', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { dialog, input } = await openNameField(page);
+    await input.fill('x'.repeat(51));
+    await expect(dialog.getByRole('alert')).toBeVisible();
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  // Every `aria-describedby` id resolves to a node in the DOM, and the order is error-then-counter.
+  // Ids come from `useId()` (`:r1:`-style, colons included), so an attribute selector — a CSS `#`
+  // selector cannot take a colon unescaped.
+  test('the counter, and the error while visible, are associated through aria-describedby', async ({
+    page,
+  }) => {
+    const { input } = await openNameField(page);
+
+    const clean = ((await input.getAttribute('aria-describedby')) ?? '').split(/\s+/);
+    expect(clean).toHaveLength(1);
+    await expect(page.locator(`[id="${clean[0]}"]`)).toHaveText('0 / 50');
+
+    await input.fill('x'.repeat(51));
+
+    const withError = ((await input.getAttribute('aria-describedby')) ?? '').split(/\s+/);
+    expect(withError).toHaveLength(2);
+    await expect(page.locator(`[id="${withError[0]}"]`)).toHaveText(
+      /Name cannot exceed 50 characters/,
+    );
+    expect(await page.locator(`[id="${withError[0]}"]`).getAttribute('role')).toBe('alert');
+    await expect(page.locator(`[id="${withError[1]}"]`)).toHaveText('51 / 50');
+    expect(withError[1]).toBe(clean[0]);
+  });
+});

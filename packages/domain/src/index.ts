@@ -1,7 +1,11 @@
 export { ConditionSchema, SurvivalRuleSchema, SurvivalRulesSchema } from './survivalRuleSchema';
 export type { Condition, SurvivalRule, SurvivalRules } from './survivalRuleSchema';
 
-export { OrganismSchema, EditableGridPresetSchema } from './organismSchema';
+export {
+  OrganismSchema,
+  EditableGridPresetSchema,
+  MAX_ORGANISM_NAME_LENGTH,
+} from './organismSchema';
 export type { Organism, EditableGridPreset } from './organismSchema';
 
 export { BattleSchema, BattleSummarySchema, MAX_BATTLE_NAME_LENGTH } from './battleSchema';

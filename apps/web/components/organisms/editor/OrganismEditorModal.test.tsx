@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
+import { MAX_ORGANISM_NAME_LENGTH } from '@gol/domain';
 import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
 
 /**
@@ -101,6 +102,42 @@ describe('OrganismEditorModal', () => {
     expect(regions[0]).toHaveAccessibleName('Basic Information');
     expect(regions[1]).toHaveAccessibleName('Survival Rules');
     expect(regions[2]).toHaveAccessibleName('Preview & Test');
+  });
+
+  // Story 4.5: the name field lands in the Basic Information column THROUGH the layout's
+  // `basicInfo` slot — addressed by name, so it cannot land in another column. The field's own
+  // contract is `OrganismNameField.test.tsx`'s.
+  it('mounts the organism name field in Basic Information and nowhere else (Story 4.5)', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    const dialog = screen.getByRole('dialog');
+    const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
+    expect(within(basic).getByRole('textbox', { name: 'Organism Name' })).toBeInTheDocument();
+    for (const name of ['Survival Rules', 'Preview & Test']) {
+      expect(
+        within(within(dialog).getByRole('region', { name })).queryByRole('textbox'),
+      ).toBeNull();
+    }
+  });
+
+  // The draft lives in the MODAL (FD3): typing round-trips through its own state, not a prop.
+  it('holds the draft: typing into the name field round-trips through the modal (Story 4.5)', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    const input = screen.getByRole('textbox', { name: 'Organism Name' });
+    await user.type(input, 'Glider');
+
+    expect(input).toHaveValue('Glider');
+    expect(screen.getByText(`6 / ${MAX_ORGANISM_NAME_LENGTH}`)).toBeInTheDocument();
+  });
+
+  // FD2: a fresh editor does not open red.
+  it('opens with the name field free of any error (Story 4.5)', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Organism Name' })).not.toBeInvalid();
   });
 
   it('open={false} renders no dialog at all (MUI unmounts by default)', () => {

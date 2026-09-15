@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { SurvivalRulesSchema } from './survivalRuleSchema';
 
+// FR-2.1 (Story 4.5): the single source for the organism name cap — the "50 char max" UX-DR14
+// states. `OrganismSchema.name` enforces it below and `apps/web`'s `<OrganismNameField>` imports it
+// rather than re-typing `50`, the same "cap lives in the schema, the component borrows it" rule
+// `battleSchema.ts` applies to `MAX_BATTLE_NAME_LENGTH` (whose comment already records that the
+// mockup's "/ 50" belongs to organism names, not battles). Counted in UTF-16 code units, which is
+// what `z.string().max()` measures.
+export const MAX_ORGANISM_NAME_LENGTH = 50;
+
 export const OrganismSchema = z.object({
   // Write-time stamp updated by RFC-006's formatVersion chain and asserted at load
   // (Decision I.4) — never branched on independently. Floored at 1 because the migration
@@ -11,7 +19,7 @@ export const OrganismSchema = z.object({
   // 1.5) uses a stable well-known id ('conways-classic'), not a UUID. Non-empty because the
   // library is keyed by id, and every empty id would collide with every other.
   id: z.string().min(1),
-  name: z.string().max(50),
+  name: z.string().max(MAX_ORGANISM_NAME_LENGTH),
   // Stable palette token (RFC-007); resolved to hex at render time — NOT a raw hex. The `#`
   // guard is the enforceable half of AR-46 outside apps/web, where the no-raw-hex lint rule
   // does not reach. Resolution against the real palette registry (apps/web/lib/paletteRegistry.ts,
