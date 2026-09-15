@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import type { Organism } from '@gol/domain';
@@ -117,10 +117,11 @@ describe('BattleSimulationView (Story 3.11)', () => {
     expect(root(container)).toHaveAttribute('data-cycle', '0');
   });
 
-  // AC10, converted for Story 3.12: the transport bar is here now (four buttons total) — speed
-  // (3.13), the counter/stats (3.14) and grid size (3.16) are still absent, and the sidebar still
-  // carries no section heading.
-  it('renders the footer’s Back button and the transport bar: four buttons, no h2, no slider', () => {
+  // AC10, converted for Story 3.13: the transport bar (3.12) and the Speed section (3.13) are
+  // here now — four buttons, ONE h2, ONE slider. The counter/stats (3.14) and grid size (3.16) are
+  // still absent, and this is written so 3.14's two headings and 3.16's second slider fail it and
+  // convert it, rather than sail past a `>= 1`.
+  it('renders the footer’s Back button, the transport bar and the Speed section: four buttons, one h2, one slider', () => {
     render(view());
 
     expect(screen.getAllByRole('button')).toHaveLength(4);
@@ -128,8 +129,11 @@ describe('BattleSimulationView (Story 3.11)', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Next cycle' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Stop & reset' })).toBeEnabled();
-    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0);
-    expect(screen.queryByRole('slider')).toBeNull();
+    const headings = screen.queryAllByRole('heading', { level: 2 });
+    expect(headings).toHaveLength(1);
+    expect(headings[0]).toHaveTextContent('Speed');
+    expect(screen.getAllByRole('slider')).toHaveLength(1);
+    expect(screen.getByRole('slider', { name: 'Generations per second' })).toBeInTheDocument();
   });
 
   it('forwards the footer’s press to onBack, and `backDisabled` disables it', async () => {
@@ -407,6 +411,187 @@ describe('BattleSimulationView — transport (Story 3.12)', () => {
     expect((await axe(container)).violations).toEqual([]);
 
     act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});
+
+describe('BattleSimulationView — speed control (Story 3.13)', () => {
+  const speedSlider = () => screen.getByRole('slider', { name: 'Generations per second' });
+
+  // (a): the prop reaches the control through the hook's published `genPerSec`, not directly —
+  // the slider is the only observable, so that is what is asserted.
+  it('mounts the slider at the starting speed’s ladder index (AC2)', () => {
+    installContexts();
+    const { unmount } = render(view({ startingSpeed: 10 }));
+    expect(speedSlider()).toHaveValue('3');
+    expect(speedSlider()).toHaveAttribute('aria-valuetext', '10 generations per second');
+    unmount();
+
+    render(view({ startingSpeed: 2 }));
+    expect(speedSlider()).toHaveValue('1');
+    expect(speedSlider()).toHaveAttribute('aria-valuetext', '2 generations per second');
+  });
+
+  // (b): the live path (AR-34, FR-4.2 "without pausing"). A speed change is a ref write the loop
+  // reads on its NEXT frame — nothing is cancelled, nothing is re-requested, nothing is re-cloned.
+  // Reddens if a speed change restarts the loop (`cancelAnimationFrame` called, or the pending
+  // handle changes) or re-clones (`drawFull` +1). Trap 1: at 20 gen/sec `cyclesPerPublish` is 2, so
+  // `data-cycle` shows EVEN cycles only — "one step per frame" is asserted on `drawDiff`.
+  it('changes speed while playing without cancelling or re-requesting the frame, and steps at the new period from the next frame (AC4, AC5)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const drawDiffSpy = vi.spyOn(GridRenderer.prototype, 'drawDiff');
+    const { container } = render(view({ startingSpeed: 10 }));
+    expect(drawFullSpy).toHaveBeenCalledTimes(1); // the mount prime
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0); // prime the clock
+    driver.frame(100); // one cycle at 10 gen/sec
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
+    expect(drawDiffSpy).toHaveBeenCalledTimes(1);
+    const handleBefore = driver.lastHandle();
+    const rafCallsBefore = driver.raf.mock.calls.length;
+
+    fireEvent.change(speedSlider(), { target: { value: '4' } });
+
+    expect(speedSlider()).toHaveValue('4');
+    expect(speedSlider()).toHaveAttribute('aria-valuetext', '20 generations per second');
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
+    expect(driver.caf).not.toHaveBeenCalled();
+    expect(driver.pending()).toBe(1);
+    expect(driver.lastHandle()).toBe(handleBefore); // the SAME chain
+    expect(driver.raf.mock.calls.length).toBe(rafCallsBefore);
+    expect(drawFullSpy).toHaveBeenCalledTimes(1); // no re-clone
+
+    // From the next frame the period is 50 ms: one step per 50 ms frame (D.2's `if`, never a
+    // `while`), so 50 ms is a whole cycle where it was half of one at 10 gen/sec.
+    driver.frame(150);
+    expect(drawDiffSpy).toHaveBeenCalledTimes(2);
+    expect(root(container)).toHaveAttribute('data-cycle', '2'); // even: published
+
+    driver.frame(200);
+    expect(drawDiffSpy).toHaveBeenCalledTimes(3);
+    expect(root(container)).toHaveAttribute('data-cycle', '2'); // cycle 3 stepped, NOT published
+
+    driver.frame(250);
+    expect(drawDiffSpy).toHaveBeenCalledTimes(4);
+    expect(root(container)).toHaveAttribute('data-cycle', '4');
+  });
+
+  // (c), trap 3: slowing DOWN (10 -> 1 gen/sec) never lets the old cadence "finish its cycle" —
+  // the next 100 ms frame steps nothing against the new 1000 ms period, and the next full period
+  // steps exactly once (every cycle publishes at 1 gen/sec, so `data-cycle` is exact here).
+  it('slowing down while playing steps nothing on the next 100 ms frame and once on the next full period (AC4)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const drawDiffSpy = vi.spyOn(GridRenderer.prototype, 'drawDiff');
+    const { container } = render(view({ startingSpeed: 10 }));
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+    driver.frame(200);
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+    expect(drawDiffSpy).toHaveBeenCalledTimes(2);
+
+    fireEvent.change(speedSlider(), { target: { value: '0' } }); // 1 gen/sec = 1000 ms
+    expect(speedSlider()).toHaveValue('0');
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+
+    driver.frame(300); // 100 ms of a 1000 ms period: no step
+    expect(drawDiffSpy).toHaveBeenCalledTimes(2);
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+
+    driver.frame(1300); // one full period: exactly one step, published (every cycle at 1 gen/sec)
+    expect(drawDiffSpy).toHaveBeenCalledTimes(3);
+    expect(root(container)).toHaveAttribute('data-cycle', '3');
+  });
+
+  // (c'), Story 3.8 FD3 through the slider: the accumulator cap is a no-op when `ms` GROWS (test
+  // (c) above), and bites when it SHRINKS — a bank built at 1 gen/sec (up to 999 ms) drained at
+  // 20 gen/sec would otherwise be ~18 steps in 18 frames, the burst Decision D.3 forbids reached
+  // through the slider instead of a suspended tab. Frames are 16 ms here, below the 50 ms period,
+  // so a drained bank would show as a step on EVERY frame; with the cap it is one step for the
+  // bank, then one per ~3 frames. Reddens if the loop's `Math.min(accumulator, ms)` is removed.
+  it('speeding up while playing drains at most one banked step, never a burst (AC4)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const drawDiffSpy = vi.spyOn(GridRenderer.prototype, 'drawDiff');
+    const { container } = render(view({ startingSpeed: 1 }));
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    let now = 0;
+    for (let frame = 0; frame < 9; frame += 1) {
+      now += 100; // bank 900 ms without reaching a 1000 ms cycle
+      driver.frame(now);
+    }
+    expect(drawDiffSpy).not.toHaveBeenCalled();
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+
+    fireEvent.change(speedSlider(), { target: { value: '4' } }); // 20 gen/sec = 50 ms
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+
+    for (let frame = 0; frame < 6; frame += 1) {
+      now += 16;
+      driver.frame(now);
+    }
+    // Cap: min(900, 50) + 16 = 66 -> one step (carry 16); then 32, 48, 64 -> step (carry 14);
+    // 30, 46 -> none. Two steps in six frames; an uncapped bank would have stepped on all six.
+    expect(drawDiffSpy).toHaveBeenCalledTimes(2);
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+  });
+
+  // (d): while paused the change is a ref write and a state publish, nothing more — no frame is
+  // requested — and the next Play runs at the new speed from its first frame.
+  it('changes speed while paused without requesting a frame; the next Play runs at the new speed (AC4)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(view({ startingSpeed: 10 }));
+
+    fireEvent.change(speedSlider(), { target: { value: '4' } });
+
+    expect(speedSlider()).toHaveValue('4');
+    expect(driver.raf).not.toHaveBeenCalled();
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(50); // cycle 1 — unpublished at 20 gen/sec (trap 1)
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+    driver.frame(100); // cycle 2 — published
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+  });
+
+  // (e): `stop()` touches buffers, seed and cycle — never `genPerSec`. The intuitive "reset
+  // everything" edit is one line away in the hook, and this is the test that reddens.
+  it('Stop & reset keeps the chosen speed (AC4)', () => {
+    installContexts();
+    installFrameDriver();
+    render(view({ startingSpeed: 10 }));
+
+    fireEvent.change(speedSlider(), { target: { value: '4' } });
+    expect(speedSlider()).toHaveValue('4');
+
+    act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());
+
+    expect(speedSlider()).toHaveValue('4');
+    expect(speedSlider()).toHaveAttribute('aria-valuetext', '20 generations per second');
+  });
+
+  // (f): AC7 — axe-clean with the section present, paused and playing, and after a live move.
+  it('has no axe violations with the Speed section present, paused and playing', async () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(view());
+    expect((await axe(container)).violations).toEqual([]);
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    fireEvent.change(speedSlider(), { target: { value: '4' } });
     expect((await axe(container)).violations).toEqual([]);
   });
 });

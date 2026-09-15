@@ -9,7 +9,9 @@ import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { useSimulation, type GenPerSec } from '@/lib/battle/useSimulation';
 import PetriDishCanvas from '../../PetriDishCanvas';
 import SidebarFooter from '../SidebarFooter';
+import SidebarSection from '../SidebarSection';
 import SimulationControlBar from './SimulationControlBar';
+import SpeedControl from './SpeedControl';
 
 /**
  * The Run chassis (spec §3.11, RFC-005 Decision 5): "the only component that touches
@@ -29,13 +31,13 @@ import SimulationControlBar from './SimulationControlBar';
  *    (stop the loop, detach the renderer, drop the session — Story 3.10 AC10), and nothing here
  *    writes to `initialGrid` (FR-4.8, AR-31).
  *
- * Deliberately ABSENT, by story: `<SpeedControl>` (3.13), `<CycleCounter>` / `<PopulationStats>`
- * (3.14), the extinction stop (3.15 — the hook's), `<GridSizeControl>` (3.16), fullscreen (3.18),
- * hotkeys (3.19). The transport bar shipped this story (3.12): `<SimulationControlBar>` is the
- * only thing that moves the view off paused-at-cycle-0, and `handlePlayPause` below is the one
- * derivation genuinely new here — which verb Play/Pause means, decided from `status` (FD3, the
- * story Dev Notes). Forced decision 7, option (a): the sidebar is the chassis with the footer
- * alone — an honest skeleton, not placeholder copy 3.14 would delete.
+ * Deliberately ABSENT, by story: `<CycleCounter>` / `<PopulationStats>` (3.14), the extinction
+ * stop (3.15 — the hook's), `<GridSizeControl>` (3.16), fullscreen (3.18), hotkeys (3.19). The
+ * transport bar shipped in 3.12: `<SimulationControlBar>` is the only thing that moves the view
+ * off paused-at-cycle-0, and `handlePlayPause` below is the one derivation genuinely new there —
+ * which verb Play/Pause means, decided from `status` (3.12 FD3). The Speed section shipped in
+ * 3.13: `<SpeedControl>` reads `sim.genPerSec` and hands `sim.setSpeed` straight through — the
+ * view holds NO speed state of its own (3.10 FD6: the hook is the only holder of the speed).
  *
  * Forced decision 5, option (a): props are `{ initialGrid, organisms, startingSpeed,
  * showGridLines, palette, colors, onBack, backDisabled }`. Not spec §3.11's `onExitToLab` (the
@@ -51,7 +53,7 @@ export interface BattleSimulationViewProps {
   initialGrid: RenderableGrid;
   /** One domain `Organism` per roster slot, in `rosterIds` order (M14) — `runOrganisms`. */
   organisms: readonly Organism[];
-  /** The INITIAL speed only (Story 3.10 obligation 6); Story 3.13's control changes it live. */
+  /** The INITIAL speed only (Story 3.10 obligation 6); `<SpeedControl>` changes it live. */
   startingSpeed: GenPerSec;
   showGridLines: boolean; // FR-8.7
   /** `<BattlePage>`'s LUT over `rosterIds` — never rebuilt here (trap 5). */
@@ -92,8 +94,8 @@ const SimulationSidebar = styled('aside')({
   overflowY: 'hidden',
 });
 
-// Rendered EMPTY this story. It is the `flex: 1` scroll region whose PRESENCE pins the footer at
-// the same place as the Lab sidebar's; Stories 3.13/3.14/3.16 drop their sections into its `gap`
+// The `flex: 1` scroll region whose PRESENCE pins the footer at the same place as the Lab
+// sidebar's. It holds the Speed section (3.13); 3.14 and 3.16 drop theirs into the same `gap`
 // exactly as 2.11/2.14/2.15 did on the Lab side.
 const SidebarContent = styled('div')({
   flex: 1,
@@ -185,7 +187,17 @@ export default function BattleSimulationView({
     // to a test with the wrong selector).
     <SimulationLayout data-status={sim.status} data-cycle={sim.cycle}>
       <SimulationSidebar>
-        <SidebarContent />
+        <SidebarContent>
+          {/* Spec §2's sidebar order is Population Analysis (3.14), Cycle Count (3.14), Speed,
+              Grid Size (3.16): 3.14 inserts ABOVE this section, 3.16 below it. The title is
+              "Speed", not the mockup's "Speed Multiplier" — a gen/sec value multiplies nothing
+              (3.13 FD3). `sim.setSpeed` is `useCallback`-stable with no deps (Story 3.10), so it
+              is passed STRAIGHT THROUGH; a wrapper keyed on `sim` would be a fresh closure per
+              published cycle (trap 4 — the churn 3.12's review caught in `handlePlayPause`). */}
+          <SidebarSection title="Speed">
+            <SpeedControl genPerSec={sim.genPerSec} onChange={sim.setSpeed} />
+          </SidebarSection>
+        </SidebarContent>
         {/* The second caller `simulation/README.md` promised — the LAST child of the sidebar and a
             SIBLING of the content region (the pin — SidebarFooter.tsx's own comment). No prop
             added for Run mode; the same `handleBack` reaches the same FR-7.9 guard (AC9). */}

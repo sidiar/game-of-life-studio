@@ -3,10 +3,34 @@ import type { Settings } from '@gol/domain';
 /**
  * The FR-4.2 / FR-8.12 speed ladder has ONE source and it is the schema: `SettingsSchema`'s
  * `defaultSpeed` literal union (`packages/domain/src/settingsSchema.ts`). Deriving the type from it
- * — rather than writing `1 | 2 | 5 | 10 | 20` a second time here — means the transport control
- * (Story 3.13), the settings page and this hook can never disagree about which speeds exist.
+ * — rather than writing `1 | 2 | 5 | 10 | 20` a second time here — means the speed control
+ * (Story 3.13's `<SpeedControl>`), the settings page (Story 6.9) and the hook can never disagree
+ * about which speeds exist. Both of those controls index `SPEED_LADDER` below for the ORDER a
+ * slider needs; neither spells the ladder itself.
  */
 export type GenPerSec = Settings['defaultSpeed'];
+
+/**
+ * The ladder as a runtime tuple, in slider order (Story 3.13, AR-34). The schema's union is a
+ * type only — a slider needs positions, so this is the one place the order is written down.
+ * Both directions hold at compile time: `satisfies` rejects a member the schema lacks, and
+ * `MissingFromLadder` below rejects a schema member this tuple lacks. The schema stays the
+ * authority (the head comment); this array is only the ORDER.
+ */
+export const SPEED_LADDER = [1, 2, 5, 10, 20] as const satisfies readonly GenPerSec[];
+
+type MissingFromLadder = Exclude<GenPerSec, (typeof SPEED_LADDER)[number]>;
+const ladderIsExhaustive: MissingFromLadder extends never ? true : never = true;
+void ladderIsExhaustive;
+
+/**
+ * The ladder position of a speed — what a detented slider carries as its value (Story 3.13 FD1:
+ * the mockup's own `min="0" max="4"` scheme). Typed input means the speed is always a member, so
+ * there is no `-1` branch to handle.
+ */
+export function speedIndex(genPerSec: GenPerSec): number {
+  return SPEED_LADDER.indexOf(genPerSec);
+}
 
 /**
  * Decision D.1: the loop's period is `1000 / genPerSec` ms.

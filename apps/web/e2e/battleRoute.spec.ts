@@ -138,6 +138,11 @@ const labButton = (page: Page): Locator => page.getByRole('button', { name: 'Lab
 const dish = (page: Page): Locator => page.getByRole('img', { name: /petri dish/i });
 const sidebarHeadings = (page: Page): Locator =>
   page.getByRole('complementary').getByRole('heading', { level: 2 });
+// Story 3.13: the Run sidebar's speed slider, by its accessible name. The `{ name }` is not
+// optional — Story 3.16's Grid Size control is a second `role="slider"` in the same sidebar, and a
+// bare `getByRole('slider')` stops being unambiguous the day it lands.
+const speedSlider = (page: Page): Locator =>
+  page.getByRole('slider', { name: 'Generations per second' });
 
 /** Every test using this asserts a clean console: the Run toggle mounts a lazy chunk and a second
  * canvas, and both `buildRefToFillGroup`'s warn-once and the ResizeObserver loop report there, not
@@ -1995,9 +2000,10 @@ test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
     // FR-3.10 "the playback canvas painted": the hook's prime reached the Run dish.
     await expect(dish(page)).toBeVisible();
     expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
-    // The skeleton: no sidebar section headings, one <main>-equivalent chassis, one <h1>, and the
-    // editor's controls are gone rather than hidden.
-    await expect(sidebarHeadings(page)).toHaveCount(0);
+    // The chassis: one sidebar section (Speed — Story 3.13 added the first; the 3.11 skeleton had
+    // none), one <main>-equivalent chassis, one <h1>, and the editor's controls are gone rather
+    // than hidden.
+    await expect(sidebarHeadings(page)).toHaveText(['Speed']);
     await expect(page.getByRole('main')).toHaveCount(1);
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Undo' })).toHaveCount(0);
@@ -2269,6 +2275,148 @@ test.describe('Transport controls (Story 3.12)', () => {
     await expect(dish(page)).toBeVisible();
     expect(await distinctColorCount(dish(page))).toBe(beforeColors);
     await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Speed control (Story 3.13)', () => {
+  const playPauseButton = (page: Page): Locator =>
+    page.getByRole('button', { name: /^(play|pause)$/i });
+  const view = (page: Page): Locator => page.locator('[data-status]');
+  const cycle = async (page: Page): Promise<number> =>
+    Number(await view(page).getAttribute('data-cycle'));
+
+  async function enterRun(page: Page): Promise<void> {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+  }
+
+  // (a) AC1/AC2: the first Run-sidebar section, and the slider at the ladder's default.
+  test('the Speed section is the Run sidebar’s one section, with the slider at 10 gen/s (AC1, AC2)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await expect(sidebarHeadings(page)).toHaveText(['Speed']);
+    await expect(speedSlider(page)).toHaveValue('3');
+    await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '10 generations per second');
+    await expect(page.getByText('10 gen/s')).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+
+  // (b) AC7, trap 2: the keyboard semantics are the browser's own — none re-implemented — which is
+  // exactly why they are pinned here and not under jsdom, which does not step a range input.
+  test('End, Home and the arrow keys move the slider one detent at a time, and Tab lands on Back to Battles (AC7)', async ({
+    page,
+    browserName,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await speedSlider(page).focus();
+    await expect(speedSlider(page)).toBeFocused();
+
+    await page.keyboard.press('End');
+    await expect(speedSlider(page)).toHaveValue('4');
+    await expect(page.getByText('20 gen/s')).toBeVisible();
+
+    await page.keyboard.press('Home');
+    await expect(speedSlider(page)).toHaveValue('0');
+    await expect(page.getByText('1 gen/s')).toBeVisible();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(speedSlider(page)).toHaveValue('1');
+    await expect(page.getByText('2 gen/s')).toBeVisible();
+
+    await page.keyboard.press('ArrowLeft');
+    await expect(speedSlider(page)).toHaveValue('0');
+
+    // The footer is the LAST child of the sidebar: the slider tabs straight to Back to Battles,
+    // before the transport bar in document order. WebKit needs `Alt+Tab` (the Story 4.1 idiom in
+    // `organisms.spec.ts`): measured locally, a plain Tab from a range input leaves
+    // `document.activeElement` on `<body>` on macOS WebKit, while Option+Tab — what a real Safari
+    // user presses — walks DOM order on every WebKit port. Chromium and Firefox use plain Tab.
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(page.getByRole('button', { name: 'Back to Battles' })).toBeFocused();
+
+    expect(errors).toEqual([]);
+  });
+
+  // (c) AC4: a move while PLAYING is a ref write the loop reads on its next frame — the run keeps
+  // going, at the new speed, with nothing paused. Playwright drives a range input through `fill`
+  // (it dispatches `input` and `change`). The slow half is the visible side of Story 3.8 FD3: at 1
+  // gen/sec two reads 400 ms apart can differ by at most one cycle — a burst would show as more.
+  test('moving the slider while playing keeps the run going at the new speed, without a burst on the way down (AC4)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await playPauseButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect(view(page)).not.toHaveAttribute('data-cycle', '0');
+
+    await speedSlider(page).fill('4');
+    await expect(speedSlider(page)).toHaveValue('4');
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect(page.getByText('20 gen/s')).toBeVisible();
+    const fastFirst = await cycle(page);
+    await page.waitForTimeout(300);
+    expect(await cycle(page)).toBeGreaterThan(fastFirst);
+
+    await speedSlider(page).fill('0');
+    await expect(speedSlider(page)).toHaveValue('0');
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect(page.getByText('1 gen/s')).toBeVisible();
+    const slowFirst = await cycle(page);
+    await page.waitForTimeout(400);
+    expect(await cycle(page)).toBeLessThanOrEqual(slowFirst + 1);
+
+    expect(errors).toEqual([]);
+  });
+
+  // (d) AC7: axe on the route in Run mode after a slider move while PLAYING.
+  test('has no axe violations in Run mode after a slider move while playing (AC7)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await playPauseButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await speedSlider(page).fill('4');
+    await expect(speedSlider(page)).toHaveValue('4');
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    expect(errors).toEqual([]);
+  });
+
+  // (e) FR-8.12: a live speed change is run-local. It never dirties the battle, and a new Run
+  // session starts at `startingSpeed` again — the SETTING is where a preference lives (Story 6.9).
+  test('a speed change never dirties the battle, and a new Run session starts back at 10 gen/s (AC4)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await speedSlider(page).fill('4');
+    await expect(speedSlider(page)).toHaveValue('4');
+
+    await labButton(page).click();
+    await expect(sidebarHeadings(page)).toHaveCount(4);
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(speedSlider(page)).toHaveValue('3');
+    await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '10 generations per second');
 
     expect(errors).toEqual([]);
   });

@@ -84,7 +84,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - ~~**Nav active-matching is exact-equality, so nested routes highlight nothing** — `apps/web/components/AppNav.tsx:43` computes `active` as `pathname === item.href`. ~~Once Story 1.11 introduces `/battles/<id>`~~ — **correction (Story 1.11 review, 2026-08-08): Story 1.11 introduces no route.** It renders on-demand thumbnails inside the existing Gallery tiles only; the nested battle route is **Story 2.1**. Once that (or Story 4.1's Organisms nav destination) lands, no nav item is active on the new routes and the header reads "you are nowhere"; a host that normalises trailing slashes does the same to `/`. A plain prefix match is not a valid substitute while the only `href` is `/` — it matches every route — so this needs a per-entry match strategy (exact vs prefix) carried in `NAV_ITEMS`. **Re-pointed to Story 4.1** (Story 2.1 review of this entry, 2026-08-26). Story 2.1 was the "whichever lands first" candidate and did land first, but it cannot design the fix: under its route-group split `AppNav` is not rendered on the battle route **at all** (the battle chassis has no nav), so the "you are nowhere" symptom does not arise there, and — with the battle route carrying no nav entry — there is still exactly one `href` and therefore still no second case to design a per-entry match strategy against. Inventing exact-vs-prefix from one entry would be guessing. **Story 4.1** (Organisms) is the first story that adds a second nav destination. Not closed. `AppNav.tsx` is untouched by Story 1.11 and by Story 2.1.~~ **✅ Resolved in Story 4.1** — per-entry `match: 'exact' | 'prefix'` in `NAV_ITEMS`, `lib/layout/navMatch.ts`.
 
-- **MUI's derived component tokens are silently no-op'd by `lighten`/`darken` on `var()` values** — deferred from this review's decision item (Sidiar, 2026-08-07). `cssVariables: true` removes the `alpha()` throw but not `lighten`/`darken`; `private_safeLighten/Darken` return their input unchanged when no warning string is passed, so `createThemeWithVars.js` emits `--mui-palette-Slider-primaryTrack: var(--gol-accent)` (identical to the active track), `--mui-palette-LinearProgress-primaryBg: var(--gol-accent)`, `--mui-palette-Switch-primaryDisabledColor: var(--gol-accent)` and `--mui-palette-SnackbarContent-bg: var(--gol-bg-primary)` — all verified in the shipped `apps/web/out/index.html`. Consequence per component: a Slider whose inactive track is invisible, a disabled Switch that looks enabled, a Snackbar the colour of the page. The fix is one authored `--gol-*` shade plus a `styleOverride` per component, but the shade values are a design call no mockup currently specifies. **Pick each up in the story that first renders that component: Slider → Epic 4 (speed control), Switch → Epic 6 (settings toggles); LinearProgress and Snackbar have no scheduled consumer.** The `theme.ts` comment claiming "zero JS colour math" was corrected in this review.
+- **MUI's derived component tokens are silently no-op'd by `lighten`/`darken` on `var()` values** — deferred from this review's decision item (Sidiar, 2026-08-07). `cssVariables: true` removes the `alpha()` throw but not `lighten`/`darken`; `private_safeLighten/Darken` return their input unchanged when no warning string is passed, so `createThemeWithVars.js` emits `--mui-palette-Slider-primaryTrack: var(--gol-accent)` (identical to the active track), `--mui-palette-LinearProgress-primaryBg: var(--gol-accent)`, `--mui-palette-Switch-primaryDisabledColor: var(--gol-accent)` and `--mui-palette-SnackbarContent-bg: var(--gol-bg-primary)` — all verified in the shipped `apps/web/out/index.html`. Consequence per component: a Slider whose inactive track is invisible, a disabled Switch that looks enabled, a Snackbar the colour of the page. The fix is one authored `--gol-*` shade plus a `styleOverride` per component, but the shade values are a design call no mockup currently specifies. **Pick each up in the story that first renders that component: Slider → its first MUI consumer, if one arrives — the speed control was Story 3.13 (Epic 3, 2026-09-15), and it ships a native `<input type="range">` (its FD1: index-valued, `aria-valuetext`-labelled, tokenised track/thumb in `SpeedControl.tsx`) precisely because this rail-token gap is a design call no mockup specifies, so MUI Slider still has NO consumer; the first candidate is now Story 4.6's dominance slider IF that story chooses MUI over copying 3.13's native idiom; Switch → Epic 6 (settings toggles); LinearProgress and Snackbar have no scheduled consumer.** The `theme.ts` comment claiming "zero JS colour math" was corrected in this review.
 
 - **`error` / `warning` / `info` / `success` / `grey` / `common` / `Alert-*` / `FilledInput-*` / `Tooltip-bg` remain Material defaults** — deferred from this review's decision item (Sidiar, 2026-08-07); `action.*` was pinned to tokens in the same pass, which is where the split was drawn. `apps/web/lib/theme.ts` sets only `background`, `primary`, `secondary`, `text`, `divider` and `action`, so the shipped `:root` still carries `--mui-palette-error-main:#f44336`, `--mui-palette-Tooltip-bg:rgba(97,97,97,0.92)` and the full `grey-50…A700` ramp — raw literals AR-46 cannot see, because they never appear in our source, and which a `data-theme` flip will not change. This matters for Story 6.1's stated test ("zero component files change") and for AC3 as worded. **Partly resolved in Story 1.13**: `error` is now pinned (`--gol-danger`/`--gol-danger-hover`/`--gol-on-danger`, gated in `themeTokens.test.ts`) — the delete-confirmation dialog's filled Button is the first `color="error"` consumer. **`Tooltip-bg` resolved 2026-08-25**: BattleTile's organism-dot tooltip moved from a hand-rolled `styled('span')` to `@mui/material/Tooltip` (reversing Story 1.10's rejection of it), and `theme.ts`'s new `MuiTooltip.styleOverrides.tooltip` pins `background`/`border`/`color` to `--gol-bg-primary`/`--gol-accent`/`--gol-accent` — the first real MuiTooltip consumer this entry called for. `warning` / `info` / `success` / `grey` / `common` / `Alert-*` / `FilledInput-*` remain Material defaults with no consumer; **pick those up in the story that first renders one.**
 
@@ -875,6 +875,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   6. **Checked by Story 3.12 (2026-09-15): §3.13's `SimulationControlBarProps` shipped exactly as
      specced** — `{ status, onPlayPause(), onStep(), onStop() }`, no fifth prop and no deviation.
      `<SimulationControlBar>` never sees `sim` (FD3); the view alone decides what Play/Pause means.
+  7. **Checked by Story 3.13 (2026-09-15): §3.12's `SpeedControlProps` shipped exactly as
+     specced** — `{ genPerSec: GenPerSec; onChange(v: GenPerSec): void }`, no `disabled` (FR-4.2:
+     live during playback is the feature) and no deviation. `<SpeedControl>` never sees `sim`; the
+     view passes `sim.setSpeed` straight through, and item 5 above is now exercised in code.
 - **`<BattleHeader>`'s `disabled` collapses two facts into one attribute.** `disabled={isSaving ||
   runOrganisms === null}` — the edit lock and the unresolvable roster — reach the RUN button as one
   boolean, and only the roster case carries a `title`. While a save is in flight the button is
@@ -968,6 +972,38 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   cycle goes from enabled to `disabled` the instant `status` flips to `'playing'`), and nothing
   today moves focus anywhere on that transition. **Story 3.19 decides** whether to move focus (to
   Play/Pause, the bar's next enabled control) when this happens, alongside the hotkeys it adds.
+
+## Deferred from: Story 3-13-speed-control implementation (2026-09-15)
+
+- **The mockup's section title "Speed Multiplier" (`petri-dish-play-mode.html:645`) is the
+  0.5×–3× era's name — FD3 (a) ships "Speed".** The mockup's own annotation (`:768`) says the
+  control "now uses the canonical generations-per-second ladder … rather than an abstract
+  0.5x–3x multiplier", and a gen/sec value multiplies nothing. **Mockup-refresh candidate**
+  (planning artifact, not edited), not blocking: rename the section, the `.speed-label` ("Generations
+  / sec" → "Generations per second", the accessible-name spelling FD2 chose) and drop the
+  multiplier vocabulary.
+- **`aria-valuenow` on the speed slider is the ladder INDEX, not the speed.** The native range
+  input exposes its `value` (0–4) as `aria-valuenow`; `aria-valuetext` ("10 generations per
+  second") is the WAI-ARIA mechanism for exactly this and every conforming screen reader prefers it.
+  A screen reader that ignores valuetext hears "3 of 4" for 10 gen/sec. **Joins Story 6.11's
+  route-wide a11y sweep** as a fact to verify against real AT, not a fix — the alternative (a
+  slider whose value IS the speed, `min 1 max 20`) loses the detents the epic AC requires.
+- **Story 3.16's Grid Size slider: share a `<LadderSlider>` primitive or copy the styled blocks?**
+  `SpeedControl.tsx`'s `Slider` / `Marks` / `Label` / `Value` blocks are exactly what a detented
+  slider over four grid presets needs, and the `aria-valuetext` + `aria-hidden` marks idiom is
+  the same. Two options, **3.16's decision**: (a) promote a `<LadderSlider>` to `simulation/`
+  (both consumers are Run-mode, so no boundary crosses) and have `<SpeedControl>` become its
+  first caller; or (b) copy the blocks with a pointer comment — `barButtonBase`'s precedent in
+  `<SimulationControlBar>`, chosen there because the wall between `editor/` and `simulation/`
+  was the reason; here there is no wall, which weakens the case for copying. If 4.15's preview
+  panel and 6.9's settings control also want the idiom, (a) is the cheaper path by then.
+- **The 3.12 keyboard e2e ("Tab reaches Play, Next cycle, Stop & reset in order") fails on the
+  LOCAL WebKit and tablet projects with plain Tab** — `document.activeElement` lands on `<body>`
+  from any button on macOS WebKit — while CI's Linux WebKit passes it (main is green through
+  #39). Story 4.1's `Alt+Tab` idiom (`organisms.spec.ts`) moves focus on every WebKit port and is
+  what this story's own Tab assertion uses. **Pre-existing and CI-green, so not changed here**;
+  whichever story next touches the 3.12 block should switch its three Tab presses to the same
+  `browserName === 'webkit' ? 'Alt+Tab' : 'Tab'` so the local four-project matrix is green too.
 
 ## Deferred from: Story 4-5-organism-name-field (2026-09-15)
 
