@@ -22,7 +22,7 @@ them out of the orchestrator's context — only the aggregate is printed.
 Time is reported two ways. *Wall clock* is mark-to-mark. *Active* is the same
 window with idle gaps removed: every transcript entry (main session and every
 subagent) carries a timestamp, so a stretch with no entries at all — a usage-limit
-reset, the laptop asleep, Sidiar away — shows up as a gap in the event stream.
+reset, the laptop asleep, the owner away — shows up as a gap in the event stream.
 Any gap longer than `--idle-gap` minutes (default 15) is treated as idle and
 excluded; the excluded gaps are listed under the table so the number is auditable.
 The threshold sits well above the longest gap real work produces (a tool call or
@@ -327,7 +327,7 @@ def build_report(state: dict, idle_gap_minutes: float = IDLE_GAP_MINUTES) -> tup
             idle_note = "No idle gaps were excluded; Active and Wall clock agree. "
         lines.append(
             f"Run started {started:%Y-%m-%d %H:%M %Z}; wall clock runs to the point the run "
-            f"stopped for Sidiar's review. {idle_note}"
+            f"stopped for the owner's review. {idle_note}"
             f"(A gap counts as idle above {idle_gap_minutes:g} min.) Each phase row covers "
             "the phase agent, any agents it spawned, and the orchestrator's own turns in that "
             "window — the orchestrator row breaks its share out again, it is not additional. "

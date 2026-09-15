@@ -1,0 +1,38 @@
+# implement-next-story.toml — project configuration for the implement-next-story skill.
+#
+# Copy this file to the repo root as `implement-next-story.toml` and edit the paths.
+# SKILL.md reads it at the start of every run; lane-gates.py reads `[paths]` too, so
+# the layout is declared once. There are no defaults: a missing file or key stops the
+# run before Step 0 rather than guessing where a project keeps its artifacts.
+
+[paths]
+# All paths are relative to the repo root. The first two must match what BMad was
+# installed with — `implementation_artifacts` and `planning_artifacts` in
+# `_bmad/config.toml` (BMad Method v6).
+status_file = "docs/implementation-artifacts/sprint-status.yaml"   # BMad's story tracker, read on `main`
+stories_dir = "docs/implementation-artifacts"                      # where create-story writes {story_key}.md
+epics_file  = "docs/planning-artifacts/epics.md"                   # read only when opening a lane
+gates_file  = "docs/implementation-artifacts/lane-gates.yaml"      # this skill's cross-epic gates (see docs/lane-gates.example.yaml)
+
+# Step S — how a sync subagent may resolve a merge conflict in a given file, without a
+# human. Two rules ship with the skill and need no entry here: `status_file` (keep both
+# sides' status lines) and "anything unlisted → abort and hand back". Add one table per
+# file whose conflicts can be settled mechanically. `rule` is one sentence the subagent
+# follows verbatim; `check` (optional) is a command that must pass after the rule is
+# applied. If applying a rule would take judgement, it is not a rule — leave the file out
+# and let the sync abort.
+#
+# The three below are the worked example from the project this skill was extracted from.
+
+[[sync.rules]]
+file = "docs/implementation-artifacts/deferred-work.md"
+rule = "Keep both hunks, main's first, ours after it. Nothing is ever dropped."
+
+[[sync.rules]]
+file = "docs/planning-artifacts/architecture.md"
+rule = "Minor Spec Resolutions are numbered sequentially (M1, M2, …): if both sides minted the same M number, ours takes the next free number, and every citation of it in this branch's diff (code and docs) is renumbered."
+check = "npm run spec:check"
+
+[[sync.rules]]
+file = "docs/project-context.md"
+rule = "Keep both additions; if the same rule was added twice, keep main's wording."
