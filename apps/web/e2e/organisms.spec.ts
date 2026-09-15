@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
+import { MAX_ORGANISM_NAME_LENGTH } from '@gol/domain';
 
 const CREATE = '+ Create New Organism';
 
@@ -784,6 +785,11 @@ test.describe('three-column layout (Story 4.4)', () => {
 });
 
 test.describe('organism name field (Story 4.5)', () => {
+  // Derived, never `50` (AC2): the domain pin test owns the number; a drift must fail there once,
+  // not here a second time in six literal strings.
+  const MAX = MAX_ORGANISM_NAME_LENGTH;
+  const TOO_LONG = new RegExp(`Name cannot exceed ${MAX} characters`);
+
   /** `/organisms` hydrated, the editor open and settled, and the field located THROUGH the
    * Basic Information region — so a field that rendered in another column would not be found. */
   async function openNameField(page: Page) {
@@ -794,6 +800,14 @@ test.describe('organism name field (Story 4.5)', () => {
       .getByRole('region', { name: 'Basic Information' })
       .getByRole('textbox', { name: 'Organism Name' });
     return { dialog, input };
+  }
+
+  /** The input's `aria-describedby` tokens, asserting the attribute EXISTS first — `''.split()` is
+   * `['']`, length 1, which would let an absent attribute pass a length-1 check. */
+  async function describedByIds(input: Locator): Promise<string[]> {
+    const attr = await input.getAttribute('aria-describedby');
+    if (attr === null) throw new Error('aria-describedby is absent');
+    return attr.split(/\s+/);
   }
 
   test('is labelled, required and counted inside Basic Information, with zero console errors', async ({
@@ -809,11 +823,11 @@ test.describe('organism name field (Story 4.5)', () => {
 
     await expect(input).toBeVisible();
     await expect(input).toHaveAttribute('aria-required', 'true');
-    await expect(dialog.getByText('0 / 50')).toBeVisible();
+    await expect(dialog.getByText(`0 / ${MAX}`)).toBeVisible();
 
     await input.fill('Aggressive Colonizer');
 
-    await expect(dialog.getByText('20 / 50')).toBeVisible();
+    await expect(dialog.getByText(`${'Aggressive Colonizer'.length} / ${MAX}`)).toBeVisible();
     await expect(dialog.getByRole('alert')).toHaveCount(0);
     await expect(input).not.toHaveAttribute('aria-invalid', 'true');
     expect(errors).toEqual([]);
@@ -826,14 +840,14 @@ test.describe('organism name field (Story 4.5)', () => {
     page,
   }) => {
     const { dialog, input } = await openNameField(page);
-    const overLimit = 'x'.repeat(51);
+    const overLimit = 'x'.repeat(MAX + 1);
 
     await input.fill(overLimit);
 
     await expect(input).toHaveValue(overLimit);
-    await expect(dialog.getByRole('alert')).toHaveText(/Name cannot exceed 50 characters/);
+    await expect(dialog.getByRole('alert')).toHaveText(TOO_LONG);
     await expect(input).toHaveAttribute('aria-invalid', 'true');
-    await expect(dialog.getByText('51 / 50')).toBeVisible();
+    await expect(dialog.getByText(`${MAX + 1} / ${MAX}`)).toBeVisible();
 
     await input.fill('');
 
@@ -859,13 +873,30 @@ test.describe('organism name field (Story 4.5)', () => {
     page.on('pageerror', (err) => errors.push(err.message));
 
     const { dialog, input } = await openNameField(page);
-    await input.fill('x'.repeat(51));
+    await input.fill('x'.repeat(MAX + 1));
     await expect(dialog.getByRole('alert')).toBeVisible();
     await page.waitForTimeout(300);
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
     expect(errors).toEqual([]);
+  });
+
+  // The OTHER error state (AC7: "every state"), and the only one in which the placeholder is
+  // visible: `--gol-text-secondary` at 0.8 opacity on `--gol-bg-hover`, beside the danger border.
+  // The over-limit scan above has a value in the input, so it never measures that pairing.
+  test('has no axe violations with the required error visible and the placeholder showing', async ({
+    page,
+  }) => {
+    const { dialog, input } = await openNameField(page);
+    await input.fill('x');
+    await input.fill('');
+    await expect(dialog.getByRole('alert')).toHaveText(/Organism name is required/);
+    await expect(input).toHaveValue('');
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
   });
 
   // Every `aria-describedby` id resolves to a node in the DOM, and the order is error-then-counter.
@@ -876,19 +907,17 @@ test.describe('organism name field (Story 4.5)', () => {
   }) => {
     const { input } = await openNameField(page);
 
-    const clean = ((await input.getAttribute('aria-describedby')) ?? '').split(/\s+/);
+    const clean = await describedByIds(input);
     expect(clean).toHaveLength(1);
-    await expect(page.locator(`[id="${clean[0]}"]`)).toHaveText('0 / 50');
+    await expect(page.locator(`[id="${clean[0]}"]`)).toHaveText(`0 / ${MAX}`);
 
-    await input.fill('x'.repeat(51));
+    await input.fill('x'.repeat(MAX + 1));
 
-    const withError = ((await input.getAttribute('aria-describedby')) ?? '').split(/\s+/);
+    const withError = await describedByIds(input);
     expect(withError).toHaveLength(2);
-    await expect(page.locator(`[id="${withError[0]}"]`)).toHaveText(
-      /Name cannot exceed 50 characters/,
-    );
+    await expect(page.locator(`[id="${withError[0]}"]`)).toHaveText(TOO_LONG);
     expect(await page.locator(`[id="${withError[0]}"]`).getAttribute('role')).toBe('alert');
-    await expect(page.locator(`[id="${withError[1]}"]`)).toHaveText('51 / 50');
+    await expect(page.locator(`[id="${withError[1]}"]`)).toHaveText(`${MAX + 1} / ${MAX}`);
     expect(withError[1]).toBe(clean[0]);
   });
 });

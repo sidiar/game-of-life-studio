@@ -3,7 +3,7 @@
 import { useId, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { MAX_ORGANISM_NAME_LENGTH } from '@gol/domain';
-import { validateOrganismName } from '@/lib/organisms/organismName';
+import { exceedsOrganismNameLength, validateOrganismName } from '@/lib/organisms/organismName';
 
 // Mockup: `.form-field` (`clinical-lab-theme/organism-editor.html:153-208`, markup `:912-916`).
 const Field = styled('div')({
@@ -111,7 +111,9 @@ export interface OrganismNameFieldProps {
  * - FD1 — REFUSE, don't clamp: no `maxLength` attribute, no `.slice()`. Over-limit is a displayed
  *   error the AC and Story 4.13's Save gate both enumerate; a clamp makes it unreachable dead text.
  * - FD2 — the required error waits for the first edit (`touched`); the over-limit error is
- *   immediate, and can only arise through an edit anyway.
+ *   immediate and does NOT wait for `touched`: a value that arrives over the cap without an edit
+ *   (a seeded draft, a lowered cap) is flagged on mount, so the counter's `--gol-danger` and
+ *   `aria-invalid` can never disagree.
  * - FD3 — the draft lives in the modal, not here; this component holds only `touched`.
  * - FD4 — the error line is `role="alert"`, mounted only while an error is visible, so it announces
  *   once per transition and never per keystroke; the counter stays `aria-describedby`-only.
@@ -143,8 +145,12 @@ export default function OrganismNameField({
   // Story 4.13 adds the Save-time override; it is not a prop yet because nothing would read it.
   const [touched, setTouched] = useState(false);
   const error = validateOrganismName(value, maxLength);
-  const visibleError = touched ? error : null;
-  const overLimit = value.length > maxLength;
+  // The SAME predicate the validator uses (`organismName.ts`), so the counter's red and the error
+  // line cannot disagree. Over-limit bypasses `touched`: the required error is the only one an
+  // untouched field may hide — a value over the cap is wrong however it got there, and hiding the
+  // alert while the counter is already red would leave colour as the only indicator (SC 1.4.1).
+  const overLimit = exceedsOrganismNameLength(value, maxLength);
+  const visibleError = touched || overLimit ? error : null;
 
   return (
     <Field>
@@ -176,7 +182,9 @@ export default function OrganismNameField({
       <Meta>
         {visibleError !== null && (
           <ErrorText id={errorId} role="alert">
-            <span aria-hidden="true">⚠</span> {visibleError}
+            {/* U+FE0E pins TEXT presentation: bare U+26A0 is left to the platform, and an emoji
+                rendering paints its own colours, ignoring `--gol-danger`. */}
+            <span aria-hidden="true">{'\u26A0\uFE0E'}</span> {visibleError}
           </ErrorText>
         )}
         {/* ⚠️ `value.length` — UTF-16 code units, which is what Zod's `.max()` counts. Code

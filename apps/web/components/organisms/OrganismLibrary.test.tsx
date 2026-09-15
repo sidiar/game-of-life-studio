@@ -403,6 +403,33 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     expect(createButton()).toHaveFocus();
   });
 
+  // Story 4.5: "a fresh draft per open is the `mounted` gate's doing" is the modal's claim; only
+  // this file runs the real gate (`useOrganismEditorModal` + the conditional mount), so only here
+  // can it be pinned. Both the value AND the `touched` flag must reset — a surviving `touched`
+  // would reopen the editor red on an empty field (FD2).
+  it('reopens with an empty, error-free name field — the draft does not survive an exit (Story 4.5)', async () => {
+    const user = userEvent.setup();
+    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+
+    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+
+    await user.click(createButton());
+    await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.type(screen.getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+    expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('Glider');
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(createButton());
+    await screen.findByRole('dialog', { name: 'Organism Editor' });
+
+    expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Organism Name' })).not.toBeInvalid();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   // View-only proof: an open/close cycle must never write to the repository, and must not re-list.
   it('never calls save/delete/replaceAll across an open/close cycle — list() is called exactly once', async () => {
     const user = userEvent.setup();

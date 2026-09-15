@@ -4,7 +4,7 @@ baseline_commit: c8ffa1b
 
 # Story 4.5: Organism Name Field
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -354,6 +354,21 @@ impose on "the first story that puts a control inside the editor".
   - [x] `npm run ci > ci.log 2>&1; echo $?` — paste the exit code, the bundle lines, the domain
         coverage line (must still read 100 / 100) and the e2e summary into the Dev Agent Record.
         Push to `story/4-5-organism-name-field`; check `gh run list --limit 1` after the PR opens.
+
+### Review Findings
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers
+(Blind Hunter, Edge Case Hunter, Acceptance Auditor); 18 findings dismissed as noise.
+
+- [x] [Review][Patch] The over-limit error waits for `touched`, contradicting the component's own "immediate" claim — a value that arrives over the cap (a seed, a lowered cap) turns the counter red with `aria-invalid="false"` and no alert; and the counter's `overLimit` re-derives a predicate the validator already owns [apps/web/components/organisms/editor/OrganismNameField.tsx:151-154]
+- [x] [Review][Patch] No component test at the exact boundary (`value.length === maxLength` is valid, not red, not invalid) and none for the over-limit-on-mount path [apps/web/components/organisms/editor/OrganismNameField.test.tsx]
+- [x] [Review][Patch] "A fresh draft per open is the `mounted` gate's doing" is asserted in the modal's doc but no test opens, types, exits and reopens through the real gate [apps/web/components/organisms/OrganismLibrary.test.tsx]
+- [x] [Review][Patch] `(attr ?? '').split(/\s+/)` is `['']` for an absent attribute, so every `toHaveLength(1)` on `aria-describedby` passes with the attribute missing [apps/web/components/organisms/editor/OrganismNameField.test.tsx (e)(f)(i)(l), apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] AC7 says axe passes "in every state" in the served app, but the only real-browser scan is the over-limit state; the required state (placeholder visible beside the danger border) is never measured [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] "and nowhere else" asserts no textbox in the two other regions only — a second textbox in the header or footer would pass; assert exactly one in the dialog [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] `⚠` (U+26A0) is left to the platform's presentation choice; an emoji rendering ignores `--gol-danger`. Pin text presentation with U+FE0E [apps/web/components/organisms/editor/OrganismNameField.tsx:179]
+- [x] [Review][Patch] The e2e block re-types `50`/`51` six times while AC2 says nothing re-types `50` and the unit tests derive from `MAX_ORGANISM_NAME_LENGTH` [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Defer] The counter's description is the bare text "0 / 50" — a screen reader announces "zero slash fifty" with no unit [apps/web/components/organisms/editor/OrganismNameField.tsx] — deferred, pre-existing: the same shape `<BattleNameField>` ships (Story 2.11 FD4), so any wording change belongs to both fields at once
 
 ## Dev Notes
 
@@ -719,6 +734,14 @@ Modified:
   `<OrganismEditorModal>`; 16 field + 3 modal + 8 validator + 2 draft + 3 schema unit tests;
   4 e2e tests; `deferred-work.md` entry; `/organisms` first load unchanged at 295.3 KB, editor
   chunk +0.7 KB gzip; `npm run ci` exit 0. Status → review.
+- 2026-09-15 — Code review (Fable, three parallel adversarial layers; the implementation was Opus).
+  0 decision-needed, 8 patch (all applied), 1 defer, 18 dismissed. Patches: over-limit no longer
+  waits for `touched` and the counter shares the validator's `exceedsOrganismNameLength` predicate;
+  `⚠` pinned to text presentation (U+FE0E); tests added for the exact boundary, over-limit on
+  mount, and a reopen through the real `mounted` gate (`OrganismLibrary.test.tsx`); the
+  `aria-describedby` assertions can no longer pass on an absent attribute; the modal test asserts
+  exactly one textbox in the dialog; the e2e derives every number from `MAX_ORGANISM_NAME_LENGTH`
+  and gains a required-state axe scan (the placeholder pairing). Status → done.
 
 Dev Model: opus   # architecture-shaping: introduces the editor's draft-state seam (`OrganismDraft` in the shell, seeded by a factory) that 4.6–4.8, 4.16, 4.17 and 4.23 build on, the shared validator/inline-error idiom 4.11/4.13 reuse, and consciously reverses Story 2.11's ratified clamp — three patterns picked, not followed
 Proposed lane gate: none

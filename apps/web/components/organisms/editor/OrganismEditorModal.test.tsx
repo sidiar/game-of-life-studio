@@ -113,11 +113,9 @@ describe('OrganismEditorModal', () => {
     const dialog = screen.getByRole('dialog');
     const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
     expect(within(basic).getByRole('textbox', { name: 'Organism Name' })).toBeInTheDocument();
-    for (const name of ['Survival Rules', 'Preview & Test']) {
-      expect(
-        within(within(dialog).getByRole('region', { name })).queryByRole('textbox'),
-      ).toBeNull();
-    }
+    // "Nowhere else" means the whole dialog — header and footer included — not just the other two
+    // regions: exactly one textbox exists, and it is the one above.
+    expect(within(dialog).getAllByRole('textbox')).toHaveLength(1);
   });
 
   // The draft lives in the MODAL (FD3): typing round-trips through its own state, not a prop.

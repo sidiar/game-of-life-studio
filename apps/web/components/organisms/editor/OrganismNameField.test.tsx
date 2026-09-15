@@ -17,6 +17,15 @@ function ControlledHarness({ maxLength }: { maxLength?: number }) {
 
 const field = () => screen.getByRole('textbox', { name: 'Organism Name' });
 
+/** The input's `aria-describedby` tokens. Asserts the attribute EXISTS first: `''.split(/\s+/)`
+ * is `['']` — length 1 — so a bare split would let an absent attribute pass a length-1 check and
+ * fail only later, on `getElementById('')`, with a message that names the wrong problem. */
+function describedByIds(): string[] {
+  const attr = field().getAttribute('aria-describedby');
+  if (attr === null) throw new Error('aria-describedby is absent');
+  return attr.split(/\s+/);
+}
+
 describe('OrganismNameField', () => {
   // (a) The accessible name comes from `<label for>`, not text proximity or an `aria-label`
   // (SC 2.5.3) — the 4.4 review's id-equality lesson: match the id, not merely the text.
@@ -69,7 +78,7 @@ describe('OrganismNameField', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(input).not.toBeInvalid();
     // Exactly ONE describedby token — the counter's — and it resolves.
-    const ids = (input.getAttribute('aria-describedby') ?? '').split(/\s+/);
+    const ids = describedByIds();
     expect(ids).toHaveLength(1);
     expect(document.getElementById(ids[0] as string)).toHaveTextContent(
       `0 / ${MAX_ORGANISM_NAME_LENGTH}`,
@@ -89,7 +98,7 @@ describe('OrganismNameField', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Organism name is required');
     expect(field()).toBeInvalid();
-    const ids = (field().getAttribute('aria-describedby') ?? '').split(/\s+/);
+    const ids = describedByIds();
     expect(ids).toHaveLength(2);
     expect(ids[0]).toBe(alert.id);
     expect(document.getElementById(ids[1] as string)).toHaveTextContent(
@@ -111,6 +120,32 @@ describe('OrganismNameField', () => {
     expect(field()).toBeInvalid();
     const counter = screen.getByText('6 / 5');
     expect(counter).toHaveAttribute('data-over-limit');
+  });
+
+  // The boundary itself: exactly `maxLength` is valid — not red, not invalid, no alert. Pins the
+  // `>` in the shared predicate against an off-by-one to `>=`, which (g) alone would not catch.
+  it('treats exactly maxLength characters as valid — not over-limit (AC2, AC3)', async () => {
+    const user = userEvent.setup();
+    render(<ControlledHarness maxLength={5} />);
+
+    await user.type(field(), 'abcde');
+
+    expect(field()).toHaveValue('abcde');
+    expect(field()).not.toBeInvalid();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('5 / 5')).not.toHaveAttribute('data-over-limit');
+  });
+
+  // Over-limit does not wait for `touched` (FD2): a value that ARRIVES over the cap — a seeded
+  // draft, a lowered cap — is an error on mount. Without this the counter would already be red
+  // while `aria-invalid` said false and no alert existed: colour as the only indicator.
+  it('flags an over-limit value on mount, before any edit (AC3)', () => {
+    render(<OrganismNameField value="abcdef" onChange={() => {}} maxLength={5} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Name cannot exceed 5 characters');
+    expect(field()).toBeInvalid();
+    expect(screen.getByText('6 / 5')).toHaveAttribute('data-over-limit');
+    expect(describedByIds()[0]).toBe(screen.getByRole('alert').id);
   });
 
   // (h) Ordering: over-limit is reported before required, so a whitespace string over the cap is
@@ -137,7 +172,7 @@ describe('OrganismNameField', () => {
 
     expect(screen.queryByRole('alert')).toBeNull();
     expect(field()).not.toBeInvalid();
-    const ids = (field().getAttribute('aria-describedby') ?? '').split(/\s+/);
+    const ids = describedByIds();
     expect(ids).toHaveLength(1);
     expect(document.getElementById(ids[0] as string)).toHaveTextContent(
       `1 / ${MAX_ORGANISM_NAME_LENGTH}`,
@@ -188,7 +223,7 @@ describe('OrganismNameField', () => {
     await user.type(field(), 'a');
     await user.keyboard('{Backspace}');
 
-    const ids = (field().getAttribute('aria-describedby') ?? '').split(/\s+/);
+    const ids = describedByIds();
     const counter = document.getElementById(ids[1] as string);
     expect(counter).not.toHaveAttribute('aria-live');
     expect(counter).not.toHaveAttribute('role');

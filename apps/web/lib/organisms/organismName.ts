@@ -18,6 +18,19 @@ export function organismNameTooLong(maxLength: number): string {
 }
 
 /**
+ * The over-limit predicate on its own, because two callers need it and must agree: the validator
+ * below (the message) and `<OrganismNameField>`'s counter (the `--gol-danger` flip). Re-deriving
+ * `name.length > maxLength` in the component would be a second definition of "over the cap" that
+ * could drift from this one the day the measure changes (a trimmed length, a grapheme count).
+ */
+export function exceedsOrganismNameLength(
+  name: string,
+  maxLength: number = MAX_ORGANISM_NAME_LENGTH,
+): boolean {
+  return name.length > maxLength;
+}
+
+/**
  * `null` when valid, else the message to show. Length is UTF-16 code units — `String.prototype
  * .length`, which is what `OrganismSchema.name.max()` counts — so what this calls valid, the
  * schema parses.
@@ -31,7 +44,7 @@ export function validateOrganismName(
   name: string,
   maxLength: number = MAX_ORGANISM_NAME_LENGTH,
 ): string | null {
-  if (name.length > maxLength) return organismNameTooLong(maxLength);
+  if (exceedsOrganismNameLength(name, maxLength)) return organismNameTooLong(maxLength);
   if (name.trim().length === 0) return ORGANISM_NAME_REQUIRED;
   return null;
 }

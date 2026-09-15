@@ -966,3 +966,11 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   FD1) and the name lives in the Basic Information column, as this story's AC says. The story that
   resolves the header/footer divergence (the Story 4.3 entry above) decides whether the live draft
   name replaces the static title.
+
+## Deferred from: code review of 4-5-organism-name-field (2026-09-15)
+
+- **The name counter's `aria-describedby` text is the bare "N / 50" — no unit for AT.** A screen
+  reader announces "zero slash fifty" with nothing saying it is a character count. Pre-existing:
+  `<BattleNameField>`'s counter has the identical shape (Story 2.11 FD4 made it describedby-only,
+  which is right; the wording is the open half). Any change should land on both fields at once,
+  not fork them — and keep the counter silent (no `aria-live`, no `role`).
