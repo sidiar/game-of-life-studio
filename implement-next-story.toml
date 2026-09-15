@@ -1,0 +1,25 @@
+# implement-next-story.toml — project configuration for the implement-next-story skill
+# (.claude/skills/implement-next-story, a subtree of sidiar/implement-next-story).
+# SKILL.md reads it at the start of every run; lane-gates.py reads [paths].
+
+[paths]
+status_file = "docs/implementation-artifacts/sprint-status.yaml"
+stories_dir = "docs/implementation-artifacts"
+epics_file  = "docs/planning-artifacts/epics.md"
+gates_file  = "docs/implementation-artifacts/lane-gates.yaml"
+
+# Step S — mechanical conflict resolutions a sync subagent may apply without a human.
+# sprint-status.yaml (keep both sides) and "anything unlisted → abort" ship with the skill.
+
+[[sync.rules]]
+file = "docs/implementation-artifacts/deferred-work.md"
+rule = "Keep both hunks, main's first, ours after it. Nothing is ever dropped."
+
+[[sync.rules]]
+file = "docs/planning-artifacts/architecture.md"
+rule = "Minor Spec Resolutions are numbered sequentially (M1, M2, …): if both sides minted the same M number, ours takes the next free number, and every citation of it in this branch's diff (code and docs) is renumbered."
+check = "npm run spec:check"
+
+[[sync.rules]]
+file = "docs/project-context.md"
+rule = "Keep both additions; if the same rule was added twice, keep main's wording."
