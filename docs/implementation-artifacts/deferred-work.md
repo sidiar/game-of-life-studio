@@ -968,3 +968,37 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   cycle goes from enabled to `disabled` the instant `status` flips to `'playing'`), and nothing
   today moves focus anywhere on that transition. **Story 3.19 decides** whether to move focus (to
   Play/Pause, the bar's next enabled control) when this happens, alongside the hotkeys it adds.
+
+## Deferred from: Story 4-5-organism-name-field (2026-09-15)
+
+- **The mockup's `maxlength="50"` attribute is not reproduced (FD1).** `organism-editor.html:915`
+  carries a native `maxlength`, which would make over-limit unreachable through ordinary typing.
+  The AC (`epics.md:1050`), Story 4.13's AC (`:1148`) and the design doc (`:751-753`) all list
+  "over-limit" as a *displayed* error, so `<OrganismNameField>` refuses rather than clamps: the 51st
+  character is accepted, shown as an error, and Story 4.13's Save gate refuses it. This consciously
+  diverges from Story 2.11's ratified clamp on the battle name, which has no validating gate. The
+  next UX touch should either drop the attribute from the mockup or, if UA truncation *was* the
+  intent, say so — then this story flips (add `maxLength` + the 2.11 clamp, delete
+  `OrganismNameField.test.tsx`'s over-limit case and the e2e's exact-value assertion; ~10 lines).
+- **`OrganismSchema.name` still admits `''`.** `MAX_ORGANISM_NAME_LENGTH` landed but no `.min(1)`
+  did — that persisted-shape change stays with Stories 5.7/5.8 (the `.min(1)` entry above). The
+  editor's inline "required" error and 4.13's Save gate are the only enforcement; an imported
+  workspace with an empty organism name loads and renders an empty card title today.
+- **`role="alert"` per field vs. a Save-time summary.** The inline error line is `role="alert"`,
+  mounted once per transition (FD4). When Story 4.13 adds the summary announcement on Save, it
+  should decide whether the per-field alert stays (a double announcement when Save surfaces an
+  error already shown) or the inline line drops to `role="status"` and the summary alone is
+  assertive.
+- **The 2026-06-01 mockup header shows the organism name as display text**
+  (`organism-editor.html:49-55, 900`). The shell's title is the static "Organism Editor" (Story 4.3
+  FD1) and the name lives in the Basic Information column, as this story's AC says. The story that
+  resolves the header/footer divergence (the Story 4.3 entry above) decides whether the live draft
+  name replaces the static title.
+
+## Deferred from: code review of 4-5-organism-name-field (2026-09-15)
+
+- **The name counter's `aria-describedby` text is the bare "N / 50" — no unit for AT.** A screen
+  reader announces "zero slash fifty" with nothing saying it is a character count. Pre-existing:
+  `<BattleNameField>`'s counter has the identical shape (Story 2.11 FD4 made it describedby-only,
+  which is right; the wording is the open half). Any change should land on both fields at once,
+  not fork them — and keep the counter silent (no `aria-live`, no `role`).

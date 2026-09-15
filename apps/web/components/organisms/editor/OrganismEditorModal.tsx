@@ -1,13 +1,18 @@
 'use client';
 
+import { useCallback, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { styled } from '@mui/material/styles';
-// A static import, not a second `dynamic()`: this file is already inside the lazy chunk
-// `<OrganismLibrary>` draws, so the layout rides along with it and a nested lazy boundary would
-// split a chunk for nothing.
+// Static imports, not a second `dynamic()`: this file is already inside the lazy chunk
+// `<OrganismLibrary>` draws, so the layout, the field and the draft factory ride along with it and
+// a nested lazy boundary would split a chunk for nothing. ❌ None of these may be imported from
+// `OrganismLibrary.tsx` or `useOrganismEditorModal.ts` — that would pull them into `/organisms`'s
+// first load (the bundle gate is the measurement).
 import OrganismEditorLayout from './OrganismEditorLayout';
+import OrganismNameField from './OrganismNameField';
+import { createNewOrganismDraft, type OrganismDraft } from '@/lib/organisms/organismDraft';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -128,10 +133,13 @@ const EditorBody = styled('div')({
 
 /**
  * The Organism Editor's full-screen shell (Story 4.3): the `Dialog`, its header and a body that is
- * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds no state and makes no repository
- * call — the lifecycle (inert window, focus restore) is `useOrganismEditorModal`'s, and the
- * editor's own dirty scope (AR-33 — independent of the battle's) arrives with Story 4.23 and will
- * live in this shell.
+ * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds the editor's draft (`OrganismDraft`,
+ * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5) and nothing else — no
+ * repository call; the lifecycle (inert window, focus restore) stays `useOrganismEditorModal`'s,
+ * and a fresh draft per open is the `mounted` gate's doing (`<OrganismLibrary>` unmounts this
+ * modal after every exit, so there is no reset effect and no `key` trick). The editor's own dirty
+ * scope (AR-33 — independent of the battle's) arrives with Story 4.23, will live in this shell,
+ * and will diff this draft against its seed.
  *
  * Header layout follows the epics AC / UX-DR5 (`organism-editor-design.md:101-126`): Back on the
  * left, centred title, Save + Close on the right. ⚠️ The 2026-06-01 mockup revision
@@ -150,6 +158,13 @@ export default function OrganismEditorModal({
   onClose,
   onExited,
 }: OrganismEditorModalProps) {
+  // The lazy-initialiser form, so the factory runs once per mount, not once per render. One typed
+  // object that grows a field per story (FD3), never one `useState` per field.
+  const [draft, setDraft] = useState<OrganismDraft>(createNewOrganismDraft);
+  // A functional update, so Story 4.6's `setDominance` sibling cannot clobber a name change that
+  // landed in the same batch.
+  const setName = useCallback((name: string) => setDraft((d) => ({ ...d, name })), []);
+
   return (
     <Dialog
       fullScreen
@@ -188,9 +203,9 @@ export default function OrganismEditorModal({
             {/* Inert until Story 4.16 wires persistence; genuinely `disabled`, not a no-op,
                 because a control that looks live and does nothing is the worse lie (NFR-4.1). axe
                 exempts disabled controls from `color-contrast`, and MUI's own Button transition is
-                harmless here because this button never changes state in this story — the story
-                that enables it must re-read `EditorStatusBar.tsx`'s UNDO/SAVE transition notes
-                before adding any state flip. */}
+                harmless here because this button never changes state — the name's validity
+                (Story 4.5) does NOT toggle it; the story that enables it must re-read
+                `EditorStatusBar.tsx`'s UNDO/SAVE transition notes before adding any state flip. */}
             <Button type="button" variant="contained" disabled sx={BUTTON_SX}>
               Save
             </Button>
@@ -205,7 +220,9 @@ export default function OrganismEditorModal({
           </Actions>
         </EditorHeader>
         <EditorBody>
-          <OrganismEditorLayout />
+          <OrganismEditorLayout
+            basicInfo={<OrganismNameField value={draft.name} onChange={setName} />}
+          />
         </EditorBody>
       </Shell>
     </Dialog>

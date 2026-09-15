@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { EditableGridPresetSchema, OrganismSchema } from './organismSchema';
+import {
+  EditableGridPresetSchema,
+  MAX_ORGANISM_NAME_LENGTH,
+  OrganismSchema,
+} from './organismSchema';
 
 // A user-authored organism: UUID id, so the well-known-id test below varies from the fixture
 // instead of restating it.
@@ -50,8 +54,24 @@ describe('OrganismSchema', () => {
     rejects({ ...validOrganism, id: '' }, 'id');
   });
 
-  it('rejects a name over 50 characters', () => {
-    rejects({ ...validOrganism, name: 'x'.repeat(51) }, 'name');
+  // FR-2.1 (Story 4.5): the boundary is derived from the schema's OWN constant, so the test cannot
+  // silently pin a number the schema has drifted away from.
+  it('rejects a name over MAX_ORGANISM_NAME_LENGTH characters', () => {
+    rejects({ ...validOrganism, name: 'x'.repeat(MAX_ORGANISM_NAME_LENGTH + 1) }, 'name');
+  });
+
+  it('accepts a name of exactly MAX_ORGANISM_NAME_LENGTH characters', () => {
+    const result = OrganismSchema.safeParse({
+      ...validOrganism,
+      name: 'x'.repeat(MAX_ORGANISM_NAME_LENGTH),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  // Pins the number UX-DR14 states ("50 char max"), so a drift in the constant fails HERE — in the
+  // package that owns it — rather than in `apps/web`'s counter or e2e text.
+  it('MAX_ORGANISM_NAME_LENGTH is 50', () => {
+    expect(MAX_ORGANISM_NAME_LENGTH).toBe(50);
   });
 
   it('rejects dominance of 0', () => {
