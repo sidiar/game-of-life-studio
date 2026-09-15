@@ -119,6 +119,14 @@
      tokens), and authored here because AR-46 bans the rgb(...) literal in <OrganismCard>.tsx. */
   --gol-accent-tint: rgb(var(--gol-accent-channel) / 0.1);
 
+  /* Range-slider thumb glow (Story 4.6). Mockup: .dominance-slider::-webkit-slider-thumb,
+     box-shadow: 0 0 8px rgba(0, 212, 255, 0.3) (organism-editor.html:415). Same construction
+     as --gol-shadow-tile-hover — composed from --gol-accent-channel so Epic 6's override block
+     retunes it for free, authored here because AR-46 bans the literal in <DominanceField>.
+     Story 3.13's speed slider has no glow (its own mockup has none); the token is named for
+     the control class, not this field, so a later slider that wants it references it. */
+  --gol-shadow-slider-thumb: 0 0 8px rgb(var(--gol-accent-channel) / 0.3);
+
   /* Organism-dot tooltip drop shadow (Story 1.10). Mockup: .participant-dot::before,
      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8) (battle-gallery.html:366). Authored here for the
      same two reasons as the token above — AR-46 bans the rgba() literal in the component, and the

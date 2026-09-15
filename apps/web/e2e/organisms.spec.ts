@@ -1,7 +1,12 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
-import { MAX_ORGANISM_NAME_LENGTH } from '@gol/domain';
+import {
+  MAX_DOMINANCE,
+  MAX_ORGANISM_NAME_LENGTH,
+  MIN_DOMINANCE,
+  NEW_ORGANISM_DOMINANCE,
+} from '@gol/domain';
 
 const CREATE = '+ Create New Organism';
 
@@ -919,5 +924,143 @@ test.describe('organism name field (Story 4.5)', () => {
     expect(await page.locator(`[id="${withError[0]}"]`).getAttribute('role')).toBe('alert');
     await expect(page.locator(`[id="${withError[1]}"]`)).toHaveText(`${MAX + 1} / ${MAX}`);
     expect(withError[1]).toBe(clean[0]);
+  });
+});
+
+test.describe('dominance control (Story 4.6)', () => {
+  /** `/organisms` hydrated, the editor open and settled, and both controls located THROUGH the
+   * Basic Information region — so a control that rendered in another column would not be found. */
+  async function openDominanceControl(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
+    const slider = basicInfo.getByRole('slider', { name: 'Dominance' });
+    const textbox = basicInfo.getByRole('textbox', { name: 'Dominance value' });
+    return { dialog, slider, textbox };
+  }
+
+  test('opens at the default on both controls, description visible, zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { dialog, slider, textbox } = await openDominanceControl(page);
+
+    await expect(slider).toHaveValue(String(NEW_ORGANISM_DOMINANCE));
+    await expect(textbox).toHaveValue(String(NEW_ORGANISM_DOMINANCE));
+    await expect(slider).toHaveAttribute('min', String(MIN_DOMINANCE));
+    await expect(slider).toHaveAttribute('max', String(MAX_DOMINANCE));
+    await expect(
+      dialog.getByText('Priority in conflict resolution (1-100, higher wins)'),
+    ).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  // (3.13's e2e at `battleRoute.spec.ts:2316-2345`, verbatim shape.)
+  test('keyboard operates the slider and the textbox follows (AC6)', async ({
+    page,
+    browserName,
+  }) => {
+    const { slider, textbox } = await openDominanceControl(page);
+
+    await slider.focus();
+    await expect(slider).toBeFocused();
+
+    await page.keyboard.press('End');
+    await expect(slider).toHaveValue(String(MAX_DOMINANCE));
+    await expect(textbox).toHaveValue(String(MAX_DOMINANCE));
+
+    await page.keyboard.press('Home');
+    await expect(slider).toHaveValue(String(MIN_DOMINANCE));
+    await expect(textbox).toHaveValue(String(MIN_DOMINANCE));
+
+    await page.keyboard.press('ArrowRight');
+    await expect(slider).toHaveValue('2');
+    await expect(textbox).toHaveValue('2');
+
+    await page.keyboard.press('ArrowUp');
+    await expect(slider).toHaveValue('3');
+    await expect(textbox).toHaveValue('3');
+
+    await page.keyboard.press('ArrowLeft');
+    await expect(slider).toHaveValue('2');
+
+    await page.keyboard.press('ArrowDown');
+    await expect(slider).toHaveValue('1');
+
+    // WebKit needs Alt+Tab to move focus off a range input (the Story 4.1 idiom in this file).
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(textbox).toBeFocused();
+  });
+
+  test('typing syncs live, snaps on commit, and rejects non-integers', async ({ page }) => {
+    const { slider, textbox } = await openDominanceControl(page);
+
+    await textbox.fill('42');
+    await expect(slider).toHaveValue('42');
+
+    await textbox.fill('150');
+    await expect(slider).toHaveValue('42');
+
+    await page.keyboard.press('Tab');
+    await expect(textbox).toHaveValue(String(MAX_DOMINANCE));
+    await expect(slider).toHaveValue(String(MAX_DOMINANCE));
+
+    await textbox.fill('0');
+    await page.keyboard.press('Enter');
+    await expect(textbox).toHaveValue(String(MIN_DOMINANCE));
+    await expect(slider).toHaveValue(String(MIN_DOMINANCE));
+    await expect(textbox).toBeFocused();
+
+    await textbox.fill('5.5');
+    await page.keyboard.press('Tab');
+    await expect(textbox).toHaveValue(String(MIN_DOMINANCE));
+    await expect(slider).toHaveValue(String(MIN_DOMINANCE));
+
+    await textbox.fill('');
+    await page.keyboard.press('Tab');
+    await expect(textbox).toHaveValue(String(MIN_DOMINANCE));
+    await expect(slider).toHaveValue(String(MIN_DOMINANCE));
+  });
+
+  // Playwright sets a range's value and dispatches input/change (the 3.13 idiom) — the drag
+  // stand-in.
+  test('a slider drag path updates the textbox', async ({ page }) => {
+    const { slider, textbox } = await openDominanceControl(page);
+
+    await slider.fill('77');
+
+    await expect(textbox).toHaveValue('77');
+  });
+
+  // The scan that measures the description's --gol-text-tertiary on --gol-bg-secondary and the
+  // 16px/600 value text on --gol-bg-hover for real. No transition on the control, so no extra
+  // wait beyond openEditor's own settle.
+  test('has no axe violations after a keyboard slider move', async ({ page }) => {
+    const { slider } = await openDominanceControl(page);
+    await slider.focus();
+    await page.keyboard.press('End');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('both controls’ descriptions are associated through aria-describedby', async ({ page }) => {
+    const { slider, textbox } = await openDominanceControl(page);
+
+    const sliderDescribedBy = await slider.getAttribute('aria-describedby');
+    const textboxDescribedBy = await textbox.getAttribute('aria-describedby');
+    if (sliderDescribedBy === null || textboxDescribedBy === null) {
+      throw new Error('aria-describedby is absent');
+    }
+    expect(sliderDescribedBy).toBe(textboxDescribedBy);
+    await expect(page.locator(`[id="${sliderDescribedBy}"]`)).toHaveText(
+      'Priority in conflict resolution (1-100, higher wins)',
+    );
   });
 });

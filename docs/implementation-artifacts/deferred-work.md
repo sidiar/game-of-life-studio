@@ -1002,3 +1002,30 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `<BattleNameField>`'s counter has the identical shape (Story 2.11 FD4 made it describedby-only,
   which is right; the wording is the open half). Any change should land on both fields at once,
   not fork them — and keep the counter silent (no `aria-live`, no `role`).
+
+## Deferred from: Story 4-6-dominance-control (2026-09-15)
+
+- **The mockup's `<input type="number">` is not reproduced** — `<DominanceField>` ships
+  `type="text" inputMode="numeric"` (FD2). A mockup-refresh note, not a behaviour change: the
+  reasons (sanitised `.value`, Playwright's `fill()` throwing on non-numeric text for
+  `type="number"`, the Basic Information column's own scroll container, Firefox's lenient
+  `badInput`) are recorded in the component's header.
+- **The mockup's Color-before-Dominance order is not followed.** `organism-editor.html` places the
+  colour picker between Name and Dominance; this story mounts `name → dominance` in the
+  `basicInfo` fragment because Story 4.8 has not landed yet. Story 4.8 inserts `<ColorPicker>`
+  between `<OrganismNameField>` and `<DominanceField>` in that fragment — a pointer for that
+  story, not a divergence to fix here.
+- **`parseDominanceText` / `clampDominance` / `isDominanceInRange` are dominance-named**, living in
+  `apps/web/lib/organisms/dominance.ts`. Story 4.11's Age / Neighbor-count condition inputs want
+  the identical parse/clamp shape; generalise to `lib/organisms/integerInput.ts` when they become
+  the second caller (the Story 4.5 FD6 "no abstraction over one caller" reasoning).
+- **Story 4.13's "numeric invalidity" AC item does not apply to dominance.** `OrganismDraft.dominance`
+  is always a valid integer in `[MIN_DOMINANCE, MAX_DOMINANCE]` by construction (FD4) — the field
+  clamps before every commit and never writes an invalid value to the draft. When Story 4.13 builds
+  the Save gate, that AC item refers to Story 4.11's numeric condition inputs; 4.13 should confirm
+  this and not add a dominance-specific check.
+- **Story 6.9's default-speed setting and 3.16's Grid Size slider now have two native-range
+  precedents** (`SpeedControl.tsx`, `DominanceField.tsx`) and one shared thumb-glow token
+  (`--gol-shadow-slider-thumb`) between them. Whichever lands the `<LadderSlider>` /
+  `<RangeSlider>` promotion decision (3.13's deferred item, above) also decides whether the glow
+  becomes "the house thumb" for every native range or stays this control's own.

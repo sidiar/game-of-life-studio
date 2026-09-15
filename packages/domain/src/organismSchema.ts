@@ -9,6 +9,15 @@ import { SurvivalRulesSchema } from './survivalRuleSchema';
 // what `z.string().max()` measures.
 export const MAX_ORGANISM_NAME_LENGTH = 50;
 
+// FR-2.2 (Story 4.6): the dominance range, single-sourced — `OrganismSchema.dominance`
+// enforces it and `apps/web`'s `<DominanceField>` imports it rather than re-typing 1 / 100.
+export const MIN_DOMINANCE = 1;
+export const MAX_DOMINANCE = 100;
+// The value a NEW organism opens at in the editor (UX-DR8 "default 5") — a product default
+// like `DEFAULT_SETTINGS`, not a schema bound. NOT `CONWAYS_CLASSIC.dominance` (50,
+// FR-1.5): the protected default is deliberately mid-range; a new custom organism starts low.
+export const NEW_ORGANISM_DOMINANCE = 5;
+
 export const OrganismSchema = z.object({
   // Write-time stamp updated by RFC-006's formatVersion chain and asserted at load
   // (Decision I.4) — never branched on independently. Floored at 1 because the migration
@@ -33,7 +42,7 @@ export const OrganismSchema = z.object({
     .refine((t) => !t.startsWith('#'), {
       message: 'colorToken must be a palette token, not a raw hex value (AR-46)',
     }),
-  dominance: z.number().int().min(1).max(100), // FR-2.2
+  dominance: z.number().int().min(MIN_DOMINANCE).max(MAX_DOMINANCE), // FR-2.2
   agingEnabled: z.boolean(),
   survivalRules: SurvivalRulesSchema,
 });

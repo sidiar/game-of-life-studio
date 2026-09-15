@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { MAX_ORGANISM_NAME_LENGTH } from '@gol/domain';
+import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
 import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
 
 /**
@@ -104,18 +104,21 @@ describe('OrganismEditorModal', () => {
     expect(regions[2]).toHaveAccessibleName('Preview & Test');
   });
 
-  // Story 4.5: the name field lands in the Basic Information column THROUGH the layout's
-  // `basicInfo` slot — addressed by name, so it cannot land in another column. The field's own
-  // contract is `OrganismNameField.test.tsx`'s.
-  it('mounts the organism name field in Basic Information and nowhere else (Story 4.5)', () => {
+  // Story 4.5 / 4.6: the name field and the dominance control land in the Basic Information
+  // column THROUGH the layout's `basicInfo` slot fragment — addressed by name, so neither can
+  // land in another column. Each field's own contract is its own test file's.
+  it('mounts the name field and the dominance control in Basic Information and nowhere else (Story 4.5, Story 4.6)', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
 
     const dialog = screen.getByRole('dialog');
     const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
     expect(within(basic).getByRole('textbox', { name: 'Organism Name' })).toBeInTheDocument();
+    expect(within(basic).getByRole('slider', { name: 'Dominance' })).toBeInTheDocument();
+    expect(within(basic).getByRole('textbox', { name: 'Dominance value' })).toBeInTheDocument();
     // "Nowhere else" means the whole dialog — header and footer included — not just the other two
-    // regions: exactly one textbox exists, and it is the one above.
-    expect(within(dialog).getAllByRole('textbox')).toHaveLength(1);
+    // regions: exactly two textboxes and one slider exist, and both are the ones above.
+    expect(within(dialog).getAllByRole('textbox')).toHaveLength(2);
+    expect(within(dialog).getAllByRole('slider')).toHaveLength(1);
   });
 
   // The draft lives in the MODAL (FD3): typing round-trips through its own state, not a prop.
@@ -136,6 +139,44 @@ describe('OrganismEditorModal', () => {
 
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Organism Name' })).not.toBeInvalid();
+  });
+
+  // Story 4.6 AC3: a fresh editor opens with both dominance controls at the domain default.
+  it('opens the dominance control at NEW_ORGANISM_DOMINANCE on both the slider and the textbox (Story 4.6)', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue(
+      String(NEW_ORGANISM_DOMINANCE),
+    );
+    expect(screen.getByRole('textbox', { name: 'Dominance value' })).toHaveValue(
+      String(NEW_ORGANISM_DOMINANCE),
+    );
+  });
+
+  // A slider change round-trips through the modal's own state — the same draft the name field
+  // proves above, now for the sibling field.
+  it('holds the draft: a dominance slider change round-trips through the modal (Story 4.6)', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Dominance' }), {
+      target: { value: '42' },
+    });
+
+    expect(screen.getByRole('textbox', { name: 'Dominance value' })).toHaveValue('42');
+    expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('42');
+  });
+
+  // And the other direction: typing into the dominance textbox moves the slider live.
+  it('holds the draft: typing into the dominance textbox moves the slider (Story 4.6)', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    const input = screen.getByRole('textbox', { name: 'Dominance value' });
+    await user.click(input);
+    await user.clear(input);
+    await user.type(input, '17');
+
+    expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('17');
   });
 
   it('open={false} renders no dialog at all (MUI unmounts by default)', () => {
