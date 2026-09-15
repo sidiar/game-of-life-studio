@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Cross-epic dependency gates for implement-next-story lanes.
 
-Reads docs/implementation-artifacts/lane-gates.yaml and sprint-status.yaml from a checkout
-that is on `main` (Step 0 guarantees that) and answers two questions mechanically, so the
+Reads the project's lane-gates.yaml and sprint-status.yaml from a checkout that is on
+`main` (Step 0 guarantees that) and answers two questions mechanically, so the
 orchestrator never has to read a table and reason about it:
 
   check <story_key>      exit 0 "OPEN"  — no gate, or every prerequisite is done on main
@@ -15,6 +15,11 @@ orchestrator never has to read a table and reason about it:
 Any exit 1 is a parse or lookup error: the file is malformed, a key is unknown, a story is
 not in sprint-status. That is deliberate — a gate that cannot be read is not "open".
 
+Where the two files live comes from `[paths]` in implement-next-story.toml at the repo
+root (`--config` to point elsewhere), or from `--status-file` / `--gates-file`, which win
+over the config. Neither given is an error, not a default: the skill refuses to guess a
+project's layout. Paths in the config are relative to the repo root.
+
 No PyYAML in the stdlib, so this carries a strict reader for exactly the shape documented
 at the top of lane-gates.yaml (lists of flat mappings; `>-` / `|` block scalars). It rejects
 anything else rather than guessing.
@@ -26,9 +31,9 @@ import argparse
 import os
 import re
 import sys
+import tomllib
 
-GATES_FILE = os.path.join("docs", "implementation-artifacts", "lane-gates.yaml")
-STATUS_FILE = os.path.join("docs", "implementation-artifacts", "sprint-status.yaml")
+CONFIG_FILE = "implement-next-story.toml"
 
 STORY_KEY = re.compile(r"^(\d+)-(\d+)-[a-z0-9-]+$")
 EPIC_KEY = re.compile(r"^epic-(\d+)$")
@@ -39,6 +44,36 @@ class GateError(Exception):
 
 
 # ------------------------------------------------------------------ readers
+
+def read_config(root: str, explicit: str | None) -> dict[str, str]:
+    """`[paths]` from the project config, or {} when no config exists and none was named."""
+    path = explicit or os.path.join(root, CONFIG_FILE)
+    if explicit is None and not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "rb") as fh:
+            doc = tomllib.load(fh)
+    except OSError as exc:
+        raise GateError(f"cannot read {path}: {exc}")
+    except tomllib.TOMLDecodeError as exc:
+        raise GateError(f"{path}: not valid TOML: {exc}")
+    paths = doc.get("paths", {})
+    if not isinstance(paths, dict) or not all(isinstance(v, str) for v in paths.values()):
+        raise GateError(f"{path}: `[paths]` must be a table of strings")
+    return paths
+
+
+def resolve_files(args) -> tuple[str, str]:
+    """(gates path, status path) — flags win, then the config; nothing is guessed."""
+    paths = read_config(args.root, args.config)
+    gates = args.gates_file or paths.get("gates_file")
+    status = args.status_file or paths.get("status_file")
+    missing = [name for name, value in (("gates_file", gates), ("status_file", status)) if not value]
+    if missing:
+        raise GateError(f"no {' / '.join(missing)}: set it in {CONFIG_FILE} `[paths]` "
+                        f"or pass --{missing[0].replace('_', '-')}")
+    return (os.path.join(args.root, gates), os.path.join(args.root, status))
+
 
 def _strip_comment(line: str) -> str:
     # A `#` starts a comment at line start or after whitespace — the shape here never puts
@@ -230,14 +265,18 @@ def cmd_list(args, doc, status) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", default=".", help="repo checkout to read (must be on main)")
+    parser.add_argument("--config", help=f"project config (default: {CONFIG_FILE} under --root)")
+    parser.add_argument("--gates-file", help="lane-gates.yaml, relative to --root (overrides the config)")
+    parser.add_argument("--status-file", help="sprint-status.yaml, relative to --root (overrides the config)")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("check"); p.add_argument("story")
     p = sub.add_parser("analysed"); p.add_argument("--epic", type=int, required=True)
     sub.add_parser("list")
     args = parser.parse_args()
     try:
-        doc = read_lane_gates(os.path.join(args.root, GATES_FILE))
-        status = read_sprint_status(os.path.join(args.root, STATUS_FILE))
+        gates_path, status_path = resolve_files(args)
+        doc = read_lane_gates(gates_path)
+        status = read_sprint_status(status_path)
         return {"check": cmd_check, "analysed": cmd_analysed, "list": cmd_list}[args.command](args, doc, status)
     except GateError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
