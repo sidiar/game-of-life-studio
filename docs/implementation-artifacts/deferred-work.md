@@ -911,3 +911,32 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   unreachable. Same owner as the 4-1 `error.tsx` entry FD8 already extended for the
   `compileSession` throw: a second throw path under `(battle)`, to be settled with that entry, not
   separately.
+
+## Deferred from: Story 4-4-three-column-responsive-layout (2026-09-14)
+
+- **The Rules-column width is specified two ways.** `epics.md:230, 1037` (UX-DR5: "flexible
+  ~500–600px") vs `ORGANISM-EDITOR-UPDATES.md:39` "Rules (800px max)" and the mockup
+  (`organism-editor.html:113-119`, `max-width: 800px; margin: 0 auto`). This story took the AC's
+  band as what the column measures at the 1400px boundary (1400 − 320 − 400 = 680px outer, 620px
+  inside its padding) and the mockup's 800px cap as the ceiling above it (FD1). The same UX
+  reconciliation touch Story 4.3 already asked for (the header/footer divergence above) should
+  settle the wording — either the AC gains "capped at 800px" or the mockup's cap comes down.
+- **The compressed and fold tiers have no mockup.** `organism-editor-design.md:634-656` is prose
+  only, and neither theme's `organism-editor.html` has an `@media` rule. The 280 / flexible / 350
+  compressed widths and the stacked fold (Basic Information over Rules in one scroll region, FD3)
+  are implemented from that prose; they should get a mockup pass before Epic 6 restyles the editor,
+  since the Biotech Terminal theme will otherwise inherit a tier nobody drew. The same pass should
+  settle the exact-1400px boundary: the design doc's tiers read "Desktop (>1400px)" / "Tablet
+  (1024px-1400px)" (1400 itself compressed), `epics.md:1037` reads "≥ 1400px" (1400 itself full);
+  the code follows the AC (`max-width: 1399.98px`) and the e2e boundary test pins it that way.
+- **The `.rules-header` row** (`organism-editor.html:993-999`) puts "+ Add Rule" beside the
+  Survival Rules title. `<OrganismEditorLayout>` renders the heading pair itself and exposes no
+  header-action slot; Story 4.10 restructures the Rules column heading into that row and should add
+  the slot then (a `rulesAction` prop, or the heading pair moving into the `rules` slot's content),
+  not before.
+- **"Stay put" was read as *no shared scroll* (FD2).** Every column is its own `overflow-y: auto`
+  container and the proven property is that scrolling the Rules column moves neither of the other
+  two. If the UX intent was that Basic Information and Preview *never* scroll, the 4.5–4.9 content
+  (~700px: name + count, dominance, aging, swatch + 20 chips) has to fit 720px minus the ~70px
+  header first — a design question about content height, not a CSS one, and one that the desktop
+  Playwright projects at 1280×720 would fail loudly on.
