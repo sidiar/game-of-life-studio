@@ -167,15 +167,17 @@ export default function BattleSimulationView({
   // this button still reads "Pause", and pressing it calls `pause()` — which IS the correct
   // recovery (the loop is already stopped; the status write is what is stale) — so nothing here
   // needs to special-case it.
+  //
+  // Deps are the three members, not `sim`: `sim` is a NEW object on every publish (its `useMemo`
+  // keys on `view`, which carries `cycle`/`population` at up to 10 Hz), so `[sim]` would hand the
+  // bar a fresh `onPlayPause` per published cycle — the per-cycle churn AC9 rules out. Destructured
+  // first because `exhaustive-deps` treats `sim.pause()` as a method call on `sim` and demands the
+  // whole object otherwise. A `[]` array would call `play()` forever (trap 2).
+  const { status, play, pause } = sim;
   const handlePlayPause = useCallback(() => {
-    if (sim.status === 'playing') sim.pause();
-    else sim.play();
-    // `sim`, the whole memoised object (trap 2) — `sim.play`/`sim.pause` are individually stable
-    // (useSimulation's own `useCallback`s), but `sim` itself is a NEW object whenever `status`
-    // changes (its `useMemo` deps include `view`), so listing `sim` alone is both exhaustive and
-    // exactly what re-creates this closure on the one change that matters. A `[]` array here would
-    // call `play()` forever — `exhaustive-deps` is what catches that, not something to silence.
-  }, [sim]);
+    if (status === 'playing') pause();
+    else play();
+  }, [status, play, pause]);
 
   return (
     // AC3: `data-status` / `data-cycle` on the root, in EVERY state, until Story 3.14 renders

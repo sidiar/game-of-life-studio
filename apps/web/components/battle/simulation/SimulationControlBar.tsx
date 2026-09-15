@@ -59,7 +59,10 @@ const Transport = styled('div')({
  * must not reach into `editor/` (`simulation/README.md`'s "anything from `editor/` reached for out
  * of convenience... is a design change"). A plain style OBJECT, not a base component — spread into
  * three `styled('button')`s below, the cost of the wall paid once per file rather than tunnelled
- * through an import.
+ * through an import. Not byte-identical: the first three members (`display` / `alignItems` /
+ * `gap`) are this bar's additions for the glyph-plus-label layout (the mockup's `.control-btn`)
+ * and have no counterpart in the editor's object — everything from `fontSize` down matches it
+ * field for field.
  *
  * ❌ No raw hex or `rgb()` anywhere in this file — AR-46 is a live lint rule on `apps/web`, and
  * every colour below is an existing `--gol-*` token.
@@ -124,8 +127,8 @@ const StepButton = styled('button')({
 // surface stays `--gol-bg-secondary` throughout. Trap 11: `--gol-danger` on `--gol-bg-hover`
 // measures 4.48:1 and is deliberately excluded from the gate — a "fill the surface on hover"
 // treatment would paint danger text on exactly that background and fail AA. `--gol-danger-hover`
-// (#ff4477) measures ≈5.3:1 on `--gol-bg-secondary` and ≈6.0:1 on `--gol-bg-primary` — Task 3 gates
-// both as a fact, not an estimate.
+// measures ≈5.3:1 on `--gol-bg-secondary` and ≈6.0:1 on `--gol-bg-primary` — Task 3 gates both as
+// a fact, not an estimate.
 const StopButton = styled('button')({
   ...barButtonBase,
   background: 'transparent',

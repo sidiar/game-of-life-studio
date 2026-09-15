@@ -2257,6 +2257,9 @@ test.describe('Transport controls (Story 3.12)', () => {
     expect(beforeColors).toBeGreaterThan(2);
 
     await playPauseButton(page).click();
+    // Let the run actually move before stopping — a Stop at cycle 0 has nothing to discard, and
+    // this test is about the discard leaving `initialGrid` alone.
+    await expect(view(page)).not.toHaveAttribute('data-cycle', '0');
     await stopButton(page).click();
     await expect(view(page)).toHaveAttribute('data-cycle', '0');
 

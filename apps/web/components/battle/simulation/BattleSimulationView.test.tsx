@@ -88,7 +88,8 @@ function installFrameDriver() {
   return {
     raf,
     caf,
-    /** Fires every callback queued before this call, inside `act` (React 19 batches RAF too). */
+    /** Fires every callback queued before this call, inside `act` — the callbacks publish React
+     * state (`setView`), so the resulting re-render has to be flushed before the assertion. */
     frame(now: number): void {
       const batch = queue.splice(0);
       act(() => {
@@ -320,7 +321,7 @@ describe('BattleSimulationView — transport (Story 3.12)', () => {
     installFrameDriver();
     const drawDiffSpy = vi.spyOn(GridRenderer.prototype, 'drawDiff');
     const user = userEvent.setup();
-    render(view());
+    const { container } = render(view());
 
     act(() => screen.getByRole('button', { name: 'Play' }).click());
     const step = screen.getByRole('button', { name: 'Next cycle' });
@@ -329,7 +330,10 @@ describe('BattleSimulationView — transport (Story 3.12)', () => {
 
     await user.click(step);
 
+    // Both halves matter: no frame has fired, so `drawDiff` alone would also be zero if the click
+    // had reached `sim.step()` and thrown — `data-cycle` still "0" is what says nothing advanced.
     expect(drawDiffSpy).not.toHaveBeenCalled();
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
   });
 
   // (f): Stop from PLAYING halts the loop, resets to cycle 0, and repaints the INITIAL grid —
@@ -388,20 +392,21 @@ describe('BattleSimulationView — transport (Story 3.12)', () => {
     expect(drawFullSpy).toHaveBeenCalledTimes(3);
   });
 
-  // (h): axe-clean paused, playing, and after a Stop — the `unmount`-series pattern
-  // (`EditorStatusBar.test.tsx`).
+  // (h): axe-clean paused, playing, and after a Stop — ONE render driven through the three states
+  // (not the `unmount`-series pattern: the states here are transitions of a single mounted view,
+  // and a remount per state would lose exactly that).
   it('has no axe violations paused, playing, and after a Stop', async () => {
     installContexts();
     const driver = installFrameDriver();
 
-    const paused = render(view());
-    expect((await axe(paused.container)).violations).toEqual([]);
+    const { container } = render(view());
+    expect((await axe(container)).violations).toEqual([]);
 
     act(() => screen.getByRole('button', { name: 'Play' }).click());
     driver.frame(0);
-    expect((await axe(paused.container)).violations).toEqual([]);
+    expect((await axe(container)).violations).toEqual([]);
 
     act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());
-    expect((await axe(paused.container)).violations).toEqual([]);
+    expect((await axe(container)).violations).toEqual([]);
   });
 });

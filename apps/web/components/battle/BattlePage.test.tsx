@@ -2864,6 +2864,9 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     const view = await findRunView(container);
 
     expect(within(view).getAllByRole('button')).toHaveLength(4);
+    for (const name of ['Back to Battles', 'Play', 'Next cycle', 'Stop & reset']) {
+      expect(within(view).getByRole('button', { name })).toBeInTheDocument();
+    }
     expect(within(view).queryByRole('slider')).toBeNull();
   });
 });

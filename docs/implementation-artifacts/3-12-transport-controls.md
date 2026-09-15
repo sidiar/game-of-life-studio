@@ -4,7 +4,7 @@ baseline_commit: 01c52be1b0e9cee16d25ccbe04134696b6569296
 
 # Story 3.12: Transport Controls
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -303,6 +303,29 @@ no semantics to the hook and no state to the view — it is the first control su
   - [x] `npm run ci > /tmp/ci-3-12.log 2>&1; echo $?` — never pipe to `tail`. Record the exit
     code, `/battle` first-load gzip + headroom (AC10), the Run chunk size, `bench:check`
     (unchanged), and the unit/e2e counts in the Dev Agent Record.
+
+### Review Findings
+
+Reviewed 2026-09-15 on **Opus** against a **Sonnet** implementation, via three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 25 normalised findings: 10 `patch`
+(all applied), 0 `decision-needed`, 0 `defer`, 15 dismissed as noise. The dismissals worth a line:
+the disabled-Step `title` gap (FD6, already 6.11's), `onStep` passed raw (spec §3.13; the hook's
+throw is the guard-of-record), the e2e "baseline before prime" race (3.11's `toBeVisible` →
+immediate `distinctColorCount` pattern is CI-proven — the prime is synchronous with mount), the
+300 ms hold (Task 5 (a) prescribes it), the `▶ ⏸ ⏭ ⏹` glyphs (the mockup's own characters,
+`<SidebarFooter>` precedent), and the "other hover pairs ungated" claim (`on-accent` × `accent-hover`
+and `text-primary` × `bg-hover` are already rows in `themeTokens.test.ts`).
+
+- [x] [Review][Patch] `handlePlayPause` keyed on `[sim]` re-created the closure on EVERY publish (`sim`'s `useMemo` keys on `view`, i.e. `cycle`/`population` at ≤ 10 Hz), not "on the one change that matters" as its comment claimed — the per-cycle prop churn AC9 rules out and a silent deviation from Task 2's `[sim.status, sim.play, sim.pause]`. Root cause: `exhaustive-deps` treats `sim.pause()` as a method call and demands `sim`. Fixed by destructuring `{ status, play, pause }` first; lints clean, comment rewritten to say why [BattleSimulationView.tsx:170-180]
+- [x] [Review][Patch] `#ff4477` hex literal inside `StopButton`'s comment, in a file whose head comment says "No raw hex … anywhere in this file" — the number rots silently when the token moves; dropped, the ratios stay [SimulationControlBar.tsx:130]
+- [x] [Review][Patch] `barButtonBase` comment claims a copy of the editor's object but the object adds `display`/`alignItems`/`gap` — per Task 1, now said so in the comment so the next sync does not "fix" it either way [SimulationControlBar.tsx:62-65]
+- [x] [Review][Patch] Test (e) asserted only `drawDiff` not called — vacuous with no frame fired (a reached `sim.step()` throws, it does not draw). Added `data-cycle` still `"0"` [BattleSimulationView.test.tsx:333-336]
+- [x] [Review][Patch] Test (h)'s comment cited "the `unmount`-series pattern" and named its handle `paused` while driving one render through three states without unmounting — comment and name corrected [BattleSimulationView.test.tsx:395-412]
+- [x] [Review][Patch] `installFrameDriver` doc claimed "React 19 batches RAF too" — it does not; `act` is needed because the callbacks `setView`. Reworded [BattleSimulationView.test.tsx:91-92]
+- [x] [Review][Patch] The Run-mode count test's title named four buttons but asserted only `toHaveLength(4)`; four wrong buttons passed. Added the four name lookups [BattlePage.test.tsx:2867-2869]
+- [x] [Review][Patch] Round-trip e2e (f) clicked Stop straight after Play with no wait for `data-cycle` to move, so the Stop it tests may have had nothing to discard. Now waits for `data-cycle ≠ "0"` first [battleRoute.spec.ts:2260-2262]
+- [x] [Review][Patch] Dev Agent Record said "7 new Story 3.12 e2e tests"; the block has 6 (every Task 5 case (a)–(f) present). Corrected [3-12-transport-controls.md Debug Log]
+- [x] [Review][Patch] AC10/Task 7 require the Run chunk's new size in the Dev Agent Record; it was absent. Measured from the `out/` export built for the feat commit: **4.8 KB gzip (12.5 KB raw)**, up from 3.11's 4.2 KB (10.2 KB raw), and not referenced from `battle.html` — the bar rides in the dynamic chunk as AC10 requires. Recorded [3-12-transport-controls.md Completion Notes]
 
 ## Dev Notes
 
@@ -692,7 +715,7 @@ Claude Sonnet 5 (claude-sonnet-5), running the `bmad-dev-story` workflow directl
   194/460 total, all green, including every Story 3.12 case on both, before each kill).
 - `npx playwright test --project=chromium --workers=1` (apps/web), run standalone after the second
   kill to get one complete, unconstrained signal: **114 passed, 1 skipped (pre-existing,
-  unrelated), 0 failed** — exit 0. All 7 new Story 3.12 e2e tests included and green.
+  unrelated), 0 failed** — exit 0. All 6 new Story 3.12 e2e tests included and green.
 - Per `docs/project-context.md`'s own caveat ("a local green `npm run ci` is not proof CI is
   green"): webkit and tablet were not independently re-run locally after the OOM (chromium and
   firefox both confirmed clean; the four projects share one spec file and one fixture set, and
@@ -708,8 +731,11 @@ Claude Sonnet 5 (claude-sonnet-5), running the `bmad-dev-story` workflow directl
   (≈5.26:1) — both comfortably above 4.5:1, confirming FD2 (a) before it shipped.
 - Bundle: `/battle` moved 308.5 → 308.6 KB gzip (headroom 1.5 → 1.4 KB) and `/battle/new` stayed at
   308.5 KB (1.5 KB headroom) — within noise, as AC10 anticipated; the transport bar adds no new
-  dependency and rides entirely in the existing Run chunk. `bundle:check` and `bench:check` both
-  green, the latter unchanged in mechanism (nothing in `packages/*` touched).
+  dependency and rides entirely in the existing Run chunk. Run chunk (measured at review from the
+  `out/` export built for the feat commit — the chunk containing the "Simulation controls" group):
+  **4.8 KB gzip, 12.5 KB raw**, up from 3.11's 4.2 KB / 10.2 KB; not referenced from `battle.html`,
+  so it stays off the route's first load. `bundle:check` and `bench:check` both green, the latter
+  unchanged in mechanism (nothing in `packages/*` touched).
 - Coverage: `SimulationControlBar.tsx` and `BattleSimulationView.tsx` both 100/100/100/100
   (stmts/branch/funcs/lines) in the run's coverage report; `apps/web` carries no gate, but this is
   the honest number.
@@ -763,6 +789,9 @@ accurate during implementation; none needed a new flag.
   gated; transport unit tests (frame-driven Play/Pause/Resume/Step/Stop) and e2e tests added;
   `BattlePage.test.tsx` Run-mode button count converted; `deferred-work.md` bookkeeping closed.
   `npm run ci` green (e2e confirmed via chromium full run + partial firefox run, see Debug Log).
+- 2026-09-15 (review, Opus): 10 patches applied (see Review Findings) — `handlePlayPause` deps
+  narrowed to `[status, play, pause]` (AC9), four test strengthenings, three comment corrections,
+  two Dev Agent Record fixes (e2e count, Run chunk size). No decision-needed findings. Status → done.
 
 Dev Model: sonnet   # follows settled patterns: the in-flow bottom bar (2.8), barButtonBase (2.13), the accent/secondary/danger button pairs, role="group" naming (3.11), real-disabled policy — the bar's props are spec §3.13 verbatim and the hook already owns every verb; nothing here picks a pattern later stories build on
 Proposed lane gate: none
