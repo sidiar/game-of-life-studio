@@ -129,6 +129,30 @@ async function countChangedPixels(canvas: Locator): Promise<number> {
   });
 }
 
+// Hoisted to module scope (Story 3.12, Task 5): Story 3.11's Run-mode helpers, shared with 3.12's
+// transport-control block below rather than duplicated. `runButton` / `labButton` / `dish` /
+// `collectErrors` are the Run route's Lab⇄Run and playback-dish fixtures; both `test.describe`
+// blocks below use them.
+const runButton = (page: Page): Locator => page.getByRole('button', { name: 'Run' });
+const labButton = (page: Page): Locator => page.getByRole('button', { name: 'Lab' });
+const dish = (page: Page): Locator => page.getByRole('img', { name: /petri dish/i });
+const sidebarHeadings = (page: Page): Locator =>
+  page.getByRole('complementary').getByRole('heading', { level: 2 });
+
+/** Every test using this asserts a clean console: the Run toggle mounts a lazy chunk and a second
+ * canvas, and both `buildRefToFillGroup`'s warn-once and the ResizeObserver loop report there, not
+ * as test failures. */
+function collectErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error' || msg.text().includes('ResizeObserver loop')) {
+      errors.push(msg.text());
+    }
+  });
+  page.on('pageerror', (err) => errors.push(err.message));
+  return errors;
+}
+
 // The e2e serves the PRODUCTION static export (playwright.config.ts), which is the only place
 // Architecture Decision K can actually be proven: `/battle/[id]` does not merely misbehave under
 // `output: 'export'`, it fails the build — and a route shape that *builds* can still 404 on a
@@ -1940,26 +1964,6 @@ test.describe('back navigation & the unsaved-changes guard (Story 2.16)', () => 
 });
 
 test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
-  const runButton = (page: Page): Locator => page.getByRole('button', { name: 'Run' });
-  const labButton = (page: Page): Locator => page.getByRole('button', { name: 'Lab' });
-  const dish = (page: Page): Locator => page.getByRole('img', { name: /petri dish/i });
-  const sidebarHeadings = (page: Page): Locator =>
-    page.getByRole('complementary').getByRole('heading', { level: 2 });
-
-  /** Every test here asserts a clean console: the toggle mounts a lazy chunk and a second canvas,
-   * and both `buildRefToFillGroup`'s warn-once and the ResizeObserver loop report there, not as
-   * test failures. */
-  function collectErrors(page: Page): string[] {
-    const errors: string[] = [];
-    page.on('console', (msg) => {
-      if (msg.type() === 'error' || msg.text().includes('ResizeObserver loop')) {
-        errors.push(msg.text());
-      }
-    });
-    page.on('pageerror', (err) => errors.push(err.message));
-    return errors;
-  }
-
   // Three-Way Skirmish: all three roster organisms exist in the seeded library, so RUN is enabled.
   // (Grand Colony War carries the dangling Conway id in an e2e-seeded workspace — see the last
   // test, which uses exactly that.)
@@ -2106,6 +2110,162 @@ test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
     );
     await expect(labButton(page)).toBeEnabled();
     await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Transport controls (Story 3.12)', () => {
+  // Trap 12: `getByRole('button', { name: 'Play' })` finds nothing once the sim is running — the
+  // locator is lazy, so it must be re-resolved (or built with a state-agnostic name) per press.
+  const playPauseButton = (page: Page): Locator =>
+    page.getByRole('button', { name: /^(play|pause)$/i });
+  const stepButton = (page: Page): Locator => page.getByRole('button', { name: 'Next cycle' });
+  const stopButton = (page: Page): Locator => page.getByRole('button', { name: 'Stop & reset' });
+  const view = (page: Page): Locator => page.locator('[data-status]');
+
+  async function enterRun(page: Page): Promise<void> {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+  }
+
+  test('Play advances cycles, Pause holds them, and Play again resumes (AC4)', async ({ page }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+    await expect(dish(page)).toBeVisible();
+    await snapshotBaseline(dish(page));
+
+    await playPauseButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    // Playwright retries `toHaveAttribute` until the assertion holds — the cycle count is
+    // eventually-consistent with the RAF loop, never synchronous with the click.
+    await expect(view(page)).not.toHaveAttribute('data-cycle', '0');
+    await expect.poll(async () => countChangedPixels(dish(page))).toBeGreaterThan(0);
+
+    await playPauseButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    const pausedCycle = await view(page).getAttribute('data-cycle');
+    await page.waitForTimeout(300);
+    await expect(view(page)).toHaveAttribute('data-cycle', pausedCycle ?? '');
+
+    await playPauseButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect
+      .poll(async () => Number(await view(page).getAttribute('data-cycle')))
+      .toBeGreaterThan(Number(pausedCycle));
+
+    expect(errors).toEqual([]);
+  });
+
+  test('Next cycle steps exactly one cycle while paused, and is disabled while playing (AC5)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    const before = Number(await view(page).getAttribute('data-cycle'));
+    await stepButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', String(before + 1));
+
+    await playPauseButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect(stepButton(page)).toBeDisabled();
+
+    expect(errors).toEqual([]);
+  });
+
+  test('Stop & reset halts and repaints the dish byte-identical to cycle 0 (AC6)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+    await expect(dish(page)).toBeVisible();
+    await snapshotBaseline(dish(page));
+
+    await playPauseButton(page).click();
+    await expect.poll(async () => countChangedPixels(dish(page))).toBeGreaterThan(0);
+
+    await stopButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    // ⚠️ If this reads non-zero, that is a `drawFull` that does not clear first or an aliasing
+    // artefact (story Task 5c) — diagnose before weakening it to `distinctColorCount`.
+    await expect.poll(async () => countChangedPixels(dish(page))).toBe(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('Tab reaches Play, Next cycle, Stop & reset in order, and Enter on Play keeps focus on the (now Pause) button (AC8)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await page.getByRole('button', { name: 'Back to Battles' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(playPauseButton(page)).toBeFocused();
+    await expect(playPauseButton(page)).toHaveText(/play/i);
+    await page.keyboard.press('Tab');
+    await expect(stepButton(page)).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(stopButton(page)).toBeFocused();
+
+    await page.getByRole('button', { name: 'Play' }).focus();
+    await page.keyboard.press('Enter');
+
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect(page.getByRole('button', { name: 'Pause' })).toBeFocused();
+
+    expect(errors).toEqual([]);
+  });
+
+  test('has no axe violations while playing, and again after a Stop (AC8)', async ({ page }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await playPauseButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    await stopButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    expect(errors).toEqual([]);
+  });
+
+  // AC6 last sentence: transport presses never dirty the battle, and Stop does not touch
+  // `initialGrid` — the round trip back to Lab shows the same painted dish and the same (clean)
+  // dirty flag.
+  test('a Stop, then a round trip back to Lab, leaves the dish and the dirty flag unchanged (AC6)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+    await expect(dish(page)).toBeVisible();
+    const beforeColors = await distinctColorCount(dish(page));
+    expect(beforeColors).toBeGreaterThan(2);
+
+    await playPauseButton(page).click();
+    await stopButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+
+    await labButton(page).click();
+
+    await expect(sidebarHeadings(page)).toHaveCount(4);
+    await expect(dish(page)).toBeVisible();
+    expect(await distinctColorCount(dish(page))).toBe(beforeColors);
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
 
     expect(errors).toEqual([]);
   });

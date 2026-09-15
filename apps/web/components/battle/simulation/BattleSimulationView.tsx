@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import { styled } from '@mui/material/styles';
 import type { Organism } from '@gol/domain';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
@@ -8,6 +9,7 @@ import type { RenderableGrid } from '@/lib/canvas/renderableGrid';
 import { useSimulation, type GenPerSec } from '@/lib/battle/useSimulation';
 import PetriDishCanvas from '../../PetriDishCanvas';
 import SidebarFooter from '../SidebarFooter';
+import SimulationControlBar from './SimulationControlBar';
 
 /**
  * The Run chassis (spec §3.11, RFC-005 Decision 5): "the only component that touches
@@ -27,11 +29,13 @@ import SidebarFooter from '../SidebarFooter';
  *    (stop the loop, detach the renderer, drop the session — Story 3.10 AC10), and nothing here
  *    writes to `initialGrid` (FR-4.8, AR-31).
  *
- * Deliberately ABSENT, by story: the transport bar (3.12), `<SpeedControl>` (3.13),
- * `<CycleCounter>` / `<PopulationStats>` (3.14), the extinction stop (3.15 — the hook's),
- * `<GridSizeControl>` (3.16), fullscreen (3.18), hotkeys (3.19). `sim.play` is never called: this
- * view starts paused at cycle 0 and stays there. Forced decision 7, option (a): the sidebar is the
- * chassis with the footer alone — an honest skeleton, not placeholder copy 3.14 would delete.
+ * Deliberately ABSENT, by story: `<SpeedControl>` (3.13), `<CycleCounter>` / `<PopulationStats>`
+ * (3.14), the extinction stop (3.15 — the hook's), `<GridSizeControl>` (3.16), fullscreen (3.18),
+ * hotkeys (3.19). The transport bar shipped this story (3.12): `<SimulationControlBar>` is the
+ * only thing that moves the view off paused-at-cycle-0, and `handlePlayPause` below is the one
+ * derivation genuinely new here — which verb Play/Pause means, decided from `status` (FD3, the
+ * story Dev Notes). Forced decision 7, option (a): the sidebar is the chassis with the footer
+ * alone — an honest skeleton, not placeholder copy 3.14 would delete.
  *
  * Forced decision 5, option (a): props are `{ initialGrid, organisms, startingSpeed,
  * showGridLines, palette, colors, onBack, backDisabled }`. Not spec §3.11's `onExitToLab` (the
@@ -154,6 +158,25 @@ export default function BattleSimulationView({
   // obligation 6), so memoising it would be ceremony over nothing.
   const sim = useSimulation(initialGrid, organisms, { genPerSec: startingSpeed });
 
+  // FD3: the VIEW decides what Play/Pause means — `sim.status` is React's truth here, so the
+  // handler's closure is re-created on every status change, exactly when the label is supposed to
+  // flip. The bar itself never sees `sim` (spec §3.13 gives it ONE `onPlayPause`).
+  //
+  // Known gap, not guarded here (`deferred-work.md`, 3-10 review → Story 3.15): a throw inside the
+  // RAF step leaves `status: 'playing'` over a loop that has already stopped itself. In that state
+  // this button still reads "Pause", and pressing it calls `pause()` — which IS the correct
+  // recovery (the loop is already stopped; the status write is what is stale) — so nothing here
+  // needs to special-case it.
+  const handlePlayPause = useCallback(() => {
+    if (sim.status === 'playing') sim.pause();
+    else sim.play();
+    // `sim`, the whole memoised object (trap 2) — `sim.play`/`sim.pause` are individually stable
+    // (useSimulation's own `useCallback`s), but `sim` itself is a NEW object whenever `status`
+    // changes (its `useMemo` deps include `view`), so listing `sim` alone is both exhaustive and
+    // exactly what re-creates this closure on the one change that matters. A `[]` array here would
+    // call `play()` forever — `exhaustive-deps` is what catches that, not something to silence.
+  }, [sim]);
+
   return (
     // AC3: `data-status` / `data-cycle` on the root, in EVERY state, until Story 3.14 renders
     // them as text — the `data-dirty` precedent (an absent attribute and a wrong one look the same
@@ -185,6 +208,17 @@ export default function BattleSimulationView({
             )}
           </PetriDishBox>
         </GridContainer>
+        {/* `sim.step` / `sim.stop` are `useCallback`-stable (Story 3.10) — passed straight
+            through; a wrapper here would add a closure per render for nothing. Last child of
+            `<SimulationMain>`, in flow (the `<EditorStatusBar>` placement, never the mockup's
+            `position: fixed`), so the dish's `flex: 1` reserve is computed from the bar's real
+            height. */}
+        <SimulationControlBar
+          status={sim.status}
+          onPlayPause={handlePlayPause}
+          onStep={sim.step}
+          onStop={sim.stop}
+        />
       </SimulationMain>
     </SimulationLayout>
   );

@@ -2850,4 +2850,20 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     const results = await axe(container);
     expect(results.violations).toEqual([]);
   });
+
+  // Story 3.12 Task 6: the Run-mode describe had no total-count test until the transport bar
+  // arrived. Written so 3.13's speed slider and 3.18's fullscreen button fail this and get
+  // converted, the route's own convention (the Lab-mode counts above do the same). Scoped to the
+  // Run VIEW (`within`), not the whole page — the header's LAB/RUN toggle is a separate,
+  // already-counted control (the Lab-mode test above), and this count is about the Run chassis.
+  it('Run mode has exactly four buttons (Back, Play, Next cycle, Stop & reset) and no slider (Story 3.12)', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    await user.click(runButton());
+    const view = await findRunView(container);
+
+    expect(within(view).getAllByRole('button')).toHaveLength(4);
+    expect(within(view).queryByRole('slider')).toBeNull();
+  });
 });
