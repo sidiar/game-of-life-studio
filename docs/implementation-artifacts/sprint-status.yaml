@@ -102,7 +102,7 @@ development_status:
   3-10-usesimulation-hook: done
   3-11-mode-toggle-run-view-skeleton: done
   3-12-transport-controls: done
-  3-13-speed-control: backlog
+  3-13-speed-control: review
   3-14-cycle-counter-population-stats: backlog
   3-15-extinction-auto-pause: backlog
   3-16-play-mode-ephemeral-resize: backlog
