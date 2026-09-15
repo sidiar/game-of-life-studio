@@ -311,6 +311,56 @@ This story adds **no semantics to the hook** and **no state to the view**.
     code, `/battle` first-load gzip + headroom (AC9), the Run chunk size, `bench:check`
     (unchanged), and the unit/e2e counts in the Dev Agent Record.
 
+### Review Findings
+
+Code review 2026-09-15 — Fable, three parallel layers (Blind Hunter, Edge Case Hunter, Acceptance
+Auditor) against the Opus implementation; 13 raw findings, 1 merged, 1 dismissed. Patches landed in
+`fix: review patches (story 3.13)`; the decision item is the owner's and is what holds the status
+at `review`.
+
+- [ ] [Review][Decision] Focus-ring geometry — AC6 puts `:focus-visible` on the 6 px `<input>` at a
+  2 px offset, so the ring is a ~10 px band that the 16 px thumb overhangs top and bottom
+  (reproduced from the styled blocks alone and screenshotted in real Chromium and Firefox). SC 2.4.7
+  is met — the indicator is visible — and the mockup ships `outline: none`, so this is a design
+  call, not a defect. Options: (a) keep AC6's literal placement; (b) move the outline to the thumb
+  pseudo-elements (`:focus-visible::-webkit-slider-thumb` / `::-moz-range-thumb`); (c) grow the
+  input to the thumb's 16 px and paint the track through `::-webkit-slider-runnable-track` /
+  `::-moz-range-track`. Whichever ships is what 3.16's Grid Size slider copies.
+- [x] [Review][Patch] `aria-valuetext` read "1 generations per second" at the bottom detent — the one
+  string assistive tech hears for the position — and the unit test pinned the plural
+  [apps/web/components/battle/simulation/SpeedControl.tsx:165]
+- [x] [Review][Patch] e2e (c) slow half: the `+ 1` bound rested on a false premise (`setSpeed` never
+  publishes, so an odd cycle banked at 20 gen/sec surfaces as `+2`), and its comment claimed
+  coverage of the 3.8 FD3 cap, which slowing down cannot exercise (the cap is a no-op when `ms`
+  grows) — bound widened to `+ 2`, comment rewritten [apps/web/e2e/battleRoute.spec.ts:2393]
+- [x] [Review][Patch] e2e (c) fast half: a fixed 300 ms `waitForTimeout` against a 100 ms publish
+  cadence — replaced by `expect.poll`, the file's own idiom
+  [apps/web/e2e/battleRoute.spec.ts:2385]
+- [x] [Review][Patch] `simulationSpeed.test.ts` said the ladder's LENGTH "is not pinned" while its
+  sibling `toEqual` tables fail on a sixth member [apps/web/lib/battle/simulationSpeed.test.ts:13]
+- [x] [Review][Patch] The unit-tier heading assertions were substring matches —
+  `toHaveTextContent('Speed')` passes under "Speed Multiplier", the title FD3 rejected; now
+  `{ name: 'Speed' }` (exact) [apps/web/components/battle/BattlePage.test.tsx:2725,
+  apps/web/components/battle/simulation/BattleSimulationView.test.tsx:135]
+- [x] [Review][Patch] Head comment said 3.16 "copies this idiom" while `deferred-work.md` records
+  share-vs-copy as 3.16's open decision [apps/web/components/battle/simulation/SpeedControl.tsx:31]
+- [x] [Review][Patch] The `onChange` comment claimed an out-of-ladder index is impossible — true in
+  browsers (step snapping), false under jsdom, where `'2.6'` yields `onChange(undefined)` and a
+  `NaN` period that freezes the loop silently; comment scoped, no guard (the story forbids one)
+  [apps/web/components/battle/simulation/SpeedControl.tsx:150]
+- [x] [Review][Patch] Dev Agent Record test arithmetic: `simulationSpeed` went 6 → 10 and the view
+  15 → 22, so +23 on a 1211 baseline, not +21 on 1213 — corrected below
+  [docs/implementation-artifacts/3-13-speed-control.md]
+- [x] [Review][Patch] AC7 lists ArrowUp / ArrowDown; e2e (b) pressed only Right / Left — both added,
+  plus the singular valuetext at the bottom detent [apps/web/e2e/battleRoute.spec.ts:2341]
+- [x] [Review][Patch] AC2 says the accessible name is `Speed` while naming a `<label htmlFor>`
+  "Generations per second" as its source — a spec-authoring inconsistency the story's conflict list
+  did not flag; recorded under Spec-conflict flags [docs/implementation-artifacts/3-13-speed-control.md]
+- [x] [Review][Defer] AC10's literal "`npm run ci` exits 0" — the local gate exits 1 on Story 3.12's
+  "Tab reaches Play…" e2e on the macOS WebKit/tablet projects, reproduced on the untouched
+  baseline and already recorded in `deferred-work.md` (3-13 section); the remote gate runs on this
+  story's PR [docs/implementation-artifacts/deferred-work.md] — deferred, pre-existing
+
 ## Dev Notes
 
 ### Constraints the developer MUST follow
@@ -481,6 +531,11 @@ attributes right once.
   `Slider` may earn its weight. Record in `deferred-work.md` so 4.6 sees both facts.
 - **spec §3.12 `SpeedControlProps`** — matches what ships exactly; `GenPerSec` is imported from
   `@/lib/battle/useSimulation` (re-exported there) rather than re-declared.
+- **AC2's own wording (flagged in review, 2026-09-15):** it says the slider's "accessible name is
+  `Speed`" and, in the same sentence, that a visible `<label htmlFor>` reading "Generations per
+  second" is the name's source. A label association makes the label text the name, so the name is
+  "Generations per second" — FD2 (a), and every locator in the story. The AC's `Speed` is the stale
+  half; the section title is "Speed" (FD3), the control's name is not.
 
 ### What NOT to build
 
@@ -716,8 +771,9 @@ against its mutation and confirmed red, then the mutation reverted (details belo
   local-WebKit failures only.** Stage by stage: typecheck ✓ (5/5), lint ✓ (0 errors; 1
   pre-existing warning in `BattleGallery.tsx:248`), format:check ✓, spec:check ✓, boundary:check ✓,
   test:coverage ✓ — test-utils 89, domain 101, persistence 82, simulation 397, **web 83 files /
-  1234 tests** (was 1213 + the 21 this story adds: 10 → 10 in `simulationSpeed`, 12 new
-  `SpeedControl`, 8 new/converted in the view, 1 converted in `BattlePage`) — build:standalone ✓,
+  1234 tests** (was 1211 + the 23 this story adds: 6 → 10 in `simulationSpeed`, 12 new
+  `SpeedControl`, 7 new in the view plus 1 converted, 1 converted in `BattlePage` — counts
+  corrected in review) — build:standalone ✓,
   bundle:check ✓, bench ✓, bench:check ✓ (**6.924 ms, 9.743 ms headroom, 58.5 % of the 16.667 ms
   budget** — unchanged, nothing on the benchmarked path), e2e: **530 passed, 2 failed** of 536 —
   both failures are Story 3.12's "Tab reaches Play, Next cycle, Stop & reset in order" on
@@ -766,6 +822,10 @@ Not touched (as required): `apps/web/lib/battle/useSimulation.ts`, `packages/**`
   detented range slider, index-valued, `aria-valuetext`); wired as the Run sidebar's first section
   ("Speed") through `sim.genPerSec` / `sim.setSpeed`; unit, view and e2e tests; count tests
   converted; `deferred-work.md` updated. Status → review.
+- 2026-09-15 — Code review (Fable): 10 patches applied (singular `aria-valuetext` at 1 gen/sec,
+  e2e (c) bound and comment, `expect.poll`, exact heading names, ArrowUp/ArrowDown, four comment
+  corrections, Dev Record counts), 1 deferred (pre-existing local-WebKit 3.12 e2e), 1 decision
+  open (focus-ring geometry). Status stays `review` until the decision is taken.
 
 Dev Model: opus   # architecture-shaping: ships the detented ladder-slider idiom (native range, index value, aria-valuetext, tokenised track/thumb) that 3.16's Grid Size slider copies, 4.15 reuses outright and 4.6/6.9 should follow, plus the runtime SPEED_LADDER every later speed consumer indexes — patterns picked here, none existing in code to follow
 Proposed lane gate: `- story: 4-6-dominance-control / requires: 3-13-speed-control / why: 4.6 is the app's second slider (1–100 + synced numeric input) and lane 4's next story; 3.13 decides native range vs MUI Slider (FD1) and the token treatment for track/thumb, and the stale deferred-work pointer ("Slider → Epic 4") means 4.6 would otherwise make the same call in parallel with no idiom to follow — one slider idiom, decided once`

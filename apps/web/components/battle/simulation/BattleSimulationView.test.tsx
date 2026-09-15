@@ -129,9 +129,10 @@ describe('BattleSimulationView (Story 3.11)', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Next cycle' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Stop & reset' })).toBeEnabled();
-    const headings = screen.queryAllByRole('heading', { level: 2 });
-    expect(headings).toHaveLength(1);
-    expect(headings[0]).toHaveTextContent('Speed');
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(1);
+    // Exact name, not a substring: the mockup's "Speed Multiplier" (FD3 rejected it) would pass
+    // a `toHaveTextContent('Speed')`.
+    expect(screen.getByRole('heading', { level: 2, name: 'Speed' })).toBeInTheDocument();
     expect(screen.getAllByRole('slider')).toHaveLength(1);
     expect(screen.getByRole('slider', { name: 'Generations per second' })).toBeInTheDocument();
   });

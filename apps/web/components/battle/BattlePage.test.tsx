@@ -2720,7 +2720,9 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     // The editor is GONE — its four sections and its status bar — not merely hidden. The one h2
     // left is the Run sidebar's Speed section (Story 3.13); 3.14 raises this to three.
     expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(1);
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Speed');
+    // Exact name, not a substring: the mockup's "Speed Multiplier" (3.13 FD3 rejected it) would
+    // pass a `toHaveTextContent('Speed')`.
+    expect(screen.getByRole('heading', { level: 2, name: 'Speed' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     // Still exactly one <h1>, and it is the SAME element: `<BattleHeader>` never unmounted.

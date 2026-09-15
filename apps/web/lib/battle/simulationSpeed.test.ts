@@ -10,7 +10,9 @@ import {
 // Story 3.13 (AC3): `SPEED_LADDER` is the runtime ladder and the test's expectation is the ladder
 // itself — the schema (`SettingsSchema.defaultSpeed`) stays the authority through the `satisfies`
 // + exhaustiveness pair in the module, so a second spelling of `[1, 2, 5, 10, 20]` here would only
-// be a place for the two to disagree. Its LENGTH is not pinned: the type-level check owns that.
+// be a place for the two to disagree. Its LENGTH is owned by the type-level check; the `toEqual`
+// tables below (`msPerCycle`, `cyclesPerPublish`) also fail on a sixth member, incidentally —
+// they pin each member's VALUE, and would need a new row either way.
 const LADDER: readonly GenPerSec[] = SPEED_LADDER;
 
 describe('msPerCycle (Decision D.1)', () => {

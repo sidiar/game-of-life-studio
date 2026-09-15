@@ -2338,6 +2338,14 @@ test.describe('Speed control (Story 3.13)', () => {
     await page.keyboard.press('ArrowLeft');
     await expect(speedSlider(page)).toHaveValue('0');
 
+    await page.keyboard.press('ArrowUp');
+    await expect(speedSlider(page)).toHaveValue('1');
+
+    await page.keyboard.press('ArrowDown');
+    await expect(speedSlider(page)).toHaveValue('0');
+    // The bottom detent is the one place the announcement is singular.
+    await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '1 generation per second');
+
     // The footer is the LAST child of the sidebar: the slider tabs straight to Back to Battles,
     // before the transport bar in document order. WebKit needs `Alt+Tab` (the Story 4.1 idiom in
     // `organisms.spec.ts`): measured locally, a plain Tab from a range input leaves
@@ -2351,8 +2359,14 @@ test.describe('Speed control (Story 3.13)', () => {
 
   // (c) AC4: a move while PLAYING is a ref write the loop reads on its next frame — the run keeps
   // going, at the new speed, with nothing paused. Playwright drives a range input through `fill`
-  // (it dispatches `input` and `change`). The slow half is the visible side of Story 3.8 FD3: at 1
-  // gen/sec two reads 400 ms apart can differ by at most one cycle — a burst would show as more.
+  // (it dispatches `input` and `change`). The fast half POLLS rather than sleeping: at 20 gen/sec
+  // only even cycles publish (`cyclesPerPublish` is 2), so a fixed window is a bet on the runner's
+  // rAF cadence. The slow half proves the slowdown TOOK EFFECT — a loop still at 20 gen/sec moves
+  // `data-cycle` by ~8 in 400 ms — and NOT the Story 3.8 FD3 cap: slowing down banks nothing (the
+  // accumulator at 20 gen/sec is < 50 ms against a 1000 ms period), so the cap is a no-op on the
+  // way down; the burst it guards against is the way UP, pinned by the view test (c′). The +2:
+  // `setSpeed` never publishes, so an odd cycle stepped at 20 (unpublished) surfaces with the first
+  // 1 gen/sec step as a +2 jump, and a slow runner can reach that step inside the window.
   test('moving the slider while playing keeps the run going at the new speed, without a burst on the way down (AC4)', async ({
     page,
   }) => {
@@ -2368,8 +2382,7 @@ test.describe('Speed control (Story 3.13)', () => {
     await expect(view(page)).toHaveAttribute('data-status', 'playing');
     await expect(page.getByText('20 gen/s')).toBeVisible();
     const fastFirst = await cycle(page);
-    await page.waitForTimeout(300);
-    expect(await cycle(page)).toBeGreaterThan(fastFirst);
+    await expect.poll(() => cycle(page)).toBeGreaterThan(fastFirst);
 
     await speedSlider(page).fill('0');
     await expect(speedSlider(page)).toHaveValue('0');
@@ -2377,7 +2390,7 @@ test.describe('Speed control (Story 3.13)', () => {
     await expect(page.getByText('1 gen/s')).toBeVisible();
     const slowFirst = await cycle(page);
     await page.waitForTimeout(400);
-    expect(await cycle(page)).toBeLessThanOrEqual(slowFirst + 1);
+    expect(await cycle(page)).toBeLessThanOrEqual(slowFirst + 2);
 
     expect(errors).toEqual([]);
   });

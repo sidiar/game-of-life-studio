@@ -1005,6 +1005,16 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   whichever story next touches the 3.12 block should switch its three Tab presses to the same
   `browserName === 'webkit' ? 'Alt+Tab' : 'Tab'` so the local four-project matrix is green too.
 
+## Deferred from: code review of 3-13-speed-control (2026-09-15)
+
+- **AC10's literal "`npm run ci` exits 0" is not met locally, on a pre-existing failure.** The local
+  four-project matrix exits 1 on Story 3.12's "Tab reaches Play, Next cycle, Stop & reset in order"
+  e2e (macOS WebKit and tablet, plain Tab to `<body>`), reproduced on the untouched baseline
+  `14ac287`; every other stage and this story's own tests are green. The fact and the fix (the
+  `Alt+Tab` idiom) are recorded in the 3-13 implementation section above — this entry is the
+  review's acknowledgement that AC10 was accepted on the remote gate (the story's PR run), not the
+  local one, and that the 3.12 block is still the next editor's to switch.
+
 ## Deferred from: Story 4-5-organism-name-field (2026-09-15)
 
 - **The mockup's `maxlength="50"` attribute is not reproduced (FD1).** `organism-editor.html:915`

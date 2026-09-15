@@ -16,6 +16,10 @@ function renderControl(overrides: Partial<SpeedControlProps> = {}) {
 }
 
 const slider = () => screen.getByRole('slider', { name: 'Generations per second' });
+// What a screen reader hears at each detent — singular at the bottom of the ladder, because this
+// string is the ONLY announcement of the position (the visible value is `aria-hidden`).
+const valuetext = (speed: number) =>
+  speed === 1 ? '1 generation per second' : `${speed} generations per second`;
 
 describe('SpeedControl (Story 3.13)', () => {
   // AC2 / FD1: ONE native range input whose value is the ladder INDEX (`min 0`, `max 4`,
@@ -36,13 +40,16 @@ describe('SpeedControl (Story 3.13)', () => {
 
   // The rendered value and the valuetext must agree for every member — a control that indexes
   // the ladder can drift from the label it prints if either side is spelled separately.
-  it.each(SPEED_LADDER)('renders %i gen/s at its ladder index with matching valuetext', (speed) => {
-    renderControl({ genPerSec: speed });
+  it.each(SPEED_LADDER)(
+    'renders %i gen/s at its ladder index with grammatical valuetext',
+    (speed) => {
+      renderControl({ genPerSec: speed });
 
-    expect(slider()).toHaveValue(String(speedIndex(speed)));
-    expect(slider()).toHaveAttribute('aria-valuetext', `${speed} generations per second`);
-    expect(screen.getByText(`${speed} gen/s`)).toBeInTheDocument();
-  });
+      expect(slider()).toHaveValue(String(speedIndex(speed)));
+      expect(slider()).toHaveAttribute('aria-valuetext', valuetext(speed));
+      expect(screen.getByText(`${speed} gen/s`)).toBeInTheDocument();
+    },
+  );
 
   // Trap 2: jsdom does not step a range input from the keyboard, so `fireEvent.change` is how a
   // unit test moves it (keyboard semantics are pinned in Playwright). The handler maps the

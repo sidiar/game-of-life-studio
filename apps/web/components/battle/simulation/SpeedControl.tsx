@@ -28,7 +28,9 @@ import type { GenPerSec } from '@/lib/battle/useSimulation';
  * mockup locator; and `deferred-work.md` (Story 1.9 review) records that under `cssVariables:
  * true` MUI emits `--mui-palette-Slider-primaryTrack: var(--gol-accent)` — the inactive rail is
  * INVISIBLE until someone authors a shade token and a `styleOverride`, a design call no mockup
- * specifies. Story 3.16's Grid Size slider copies this idiom; 4.6 and 6.9 should follow it.
+ * specifies. Story 3.16's Grid Size slider takes this idiom — whether by promoting a shared
+ * `<LadderSlider>` or by copying these blocks is 3.16's call (`deferred-work.md`, the 3-13
+ * section); 4.6 and 6.9 should follow it too.
  */
 
 // Mockup: `.speed-control` (petri-dish-play-mode.html:246-250).
@@ -145,9 +147,14 @@ export default function SpeedControl({ genPerSec, onChange }: SpeedControlProps)
         <Value aria-hidden="true">{genPerSec} gen/s</Value>
       </LabelRow>
       {/* React's `onChange` on a range input fires on every `input` event — each detent crossed
-          during a drag — which is what "live during playback" means. The index is always in range
-          for a native range input with these attributes, so the tuple lookup needs no guard: a
-          runtime check would test for a state the element cannot be in. */}
+          during a drag — which is what "live during playback" means. Every browser sanitises a
+          range value to `min`/`max` AND to `step` before `input` fires, so the index is always a
+          ladder position and the tuple lookup needs no guard: a runtime check would test for a
+          state the element cannot be in. jsdom clamps but does NOT snap to `step` — a unit test
+          that writes `'2.6'` gets `onChange(undefined)` and a `NaN` period that silently freezes
+          the loop — so tests write integer strings, never fractions. `aria-valuetext` is the only
+          thing assistive tech hears for the position (the value span is hidden), so it must be
+          grammatical at 1 gen/sec too. */}
       <Slider
         id={id}
         type="range"
@@ -155,7 +162,7 @@ export default function SpeedControl({ genPerSec, onChange }: SpeedControlProps)
         max={SPEED_LADDER.length - 1}
         step={1}
         value={speedIndex(genPerSec)}
-        aria-valuetext={`${genPerSec} generations per second`}
+        aria-valuetext={`${genPerSec} ${genPerSec === 1 ? 'generation' : 'generations'} per second`}
         onChange={(event) => onChange(SPEED_LADDER[Number(event.currentTarget.value)])}
       />
       <Marks aria-hidden="true">
