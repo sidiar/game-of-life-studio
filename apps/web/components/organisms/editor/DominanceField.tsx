@@ -151,14 +151,18 @@ export interface DominanceFieldProps {
  *   `''`), which would make "non-integers are rejected" unobservable against what the user
  *   actually typed; Playwright's `fill()` throws on non-numeric text for `type="number"`; the
  *   Basic Information column scrolls (Story 4.4 FD2) and a focused number input can consume wheel
- *   events as value changes on some engines. No `role="spinbutton"` is claimed — the slider is the
- *   keyboard-stepping control.
+ *   events as value changes on some engines; and Firefox lets any text into a number input and
+ *   merely flags `badInput`, so the rejection would differ per engine. No `role="spinbutton"` is
+ *   claimed — the slider is the keyboard-stepping control.
  * - FD3 — live in range, snap on commit, revert on invalid; the buffer is `string | null`. `null`
  *   means "not editing": the input shows `String(value)` and follows the slider with no effect
  *   syncing the two — the derivation does. An in-range integer commits ON THE KEYSTROKE (that is
  *   what "in sync both ways" means); an out-of-range integer waits for blur/Enter and then snaps;
  *   invalid text (non-integer, empty) never reaches the draft and reverts silently on commit — the
- *   design doc specifies auto-correction here, not an error message.
+ *   design doc specifies auto-correction here, not an error message. A slider move DISCARDS the
+ *   buffer: engines that do not focus a range on pointer-down (WebKit) and touch drags move the
+ *   slider without blurring the textbox, and a kept buffer would show a stale number and then
+ *   commit it over the slider's value on the next blur.
  * - FD4 — the draft is the only holder and is valid by construction (`clampDominance` runs before
  *   every commit): 4.13's Save gate has nothing to check for this field.
  * - FD5 — the thumb glow is the authored token `--gol-shadow-slider-thumb` (`app/themes.css`),
@@ -168,8 +172,8 @@ export interface DominanceFieldProps {
  *   a second one (SC 2.5.3, Story 4.5 AC5's "no overriding name" rule) — "Dominance" is contained
  *   in it. The "1"/"100" marks are decorative and `aria-hidden` (3.13 trap 5).
  *
- * `useId()` for all three ids: unlike the modal's title this is not a singleton — Story 4.24's
- * battle-origin editor is a second instance. No `transition` anywhere in this control (Story 4.5
+ * `useId()` for both ids (the slider's, which the label targets, and the description's): unlike the
+ * modal's title this is not a singleton — Story 4.24's battle-origin editor is a second instance. No `transition` anywhere in this control (Story 4.5
  * FD5). Colours are `--gol-*` tokens throughout (AR-46).
  */
 export default function DominanceField({
@@ -199,7 +203,7 @@ export default function DominanceField({
     <Field>
       <Label htmlFor={sliderId}>Dominance</Label>
       <Description id={descriptionId}>
-        Priority in conflict resolution (1-100, higher wins)
+        Priority in conflict resolution ({min}-{max}, higher wins)
       </Description>
       <Row>
         <Slider
@@ -212,6 +216,9 @@ export default function DominanceField({
           aria-describedby={descriptionId}
           onChange={(event) => {
             const next = Number(event.currentTarget.value);
+            // The slider supersedes any in-progress text (FD3): without this a textbox that kept
+            // focus through the move would show a stale number and commit it on its next blur.
+            setText(null);
             if (next !== value) onChange(next);
           }}
         />

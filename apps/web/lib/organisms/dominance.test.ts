@@ -14,7 +14,9 @@ describe('parseDominanceText', () => {
     expect(parseDominanceText(text)).toBe(expected);
   });
 
-  it.each([['', ' ', '   ', 'abc', '5.5', '5.', '.5', '1e2', '+5', '5 5'] as const])(
+  // A flat array — one case per string. Wrapping it in a second pair of brackets makes it ONE
+  // row of ten columns, and only the first string is ever tested (the review's own finding).
+  it.each(['', ' ', '   ', 'abc', '5.5', '5.', '.5', '1e2', '+5', '5 5'])(
     'rejects %j as null',
     (text) => {
       expect(parseDominanceText(text)).toBeNull();
@@ -37,7 +39,10 @@ describe('clampDominance', () => {
     [100, 100],
     [Infinity, 100],
     [-Infinity, 1],
-  ])('clamps %j to %j', (n, expected) => {
+  ])('clamps %s to %s', (n, expected) => {
+    // `%s`, not `%j`: JSON serialises `Infinity` as `null`, so `%j` would title the two
+    // non-finite rows "clamps null to …".
+
     expect(clampDominance(n)).toBe(expected);
   });
 

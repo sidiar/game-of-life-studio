@@ -980,18 +980,18 @@ test.describe('dominance control (Story 4.6)', () => {
     await expect(textbox).toHaveValue(String(MIN_DOMINANCE));
 
     await page.keyboard.press('ArrowRight');
-    await expect(slider).toHaveValue('2');
-    await expect(textbox).toHaveValue('2');
+    await expect(slider).toHaveValue(String(MIN_DOMINANCE + 1));
+    await expect(textbox).toHaveValue(String(MIN_DOMINANCE + 1));
 
     await page.keyboard.press('ArrowUp');
-    await expect(slider).toHaveValue('3');
-    await expect(textbox).toHaveValue('3');
+    await expect(slider).toHaveValue(String(MIN_DOMINANCE + 2));
+    await expect(textbox).toHaveValue(String(MIN_DOMINANCE + 2));
 
     await page.keyboard.press('ArrowLeft');
-    await expect(slider).toHaveValue('2');
+    await expect(slider).toHaveValue(String(MIN_DOMINANCE + 1));
 
     await page.keyboard.press('ArrowDown');
-    await expect(slider).toHaveValue('1');
+    await expect(slider).toHaveValue(String(MIN_DOMINANCE));
 
     // WebKit needs Alt+Tab to move focus off a range input (the Story 4.1 idiom in this file).
     await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
@@ -1017,15 +1017,20 @@ test.describe('dominance control (Story 4.6)', () => {
     await expect(slider).toHaveValue(String(MIN_DOMINANCE));
     await expect(textbox).toBeFocused();
 
+    // The revert cases start from a MID-RANGE committed value, so "invalid text reverts" is
+    // distinguishable from "empty → 0 → clamped to the minimum" — from 1 the two look the same.
+    await textbox.fill('42');
+    await expect(slider).toHaveValue('42');
+
     await textbox.fill('5.5');
     await page.keyboard.press('Tab');
-    await expect(textbox).toHaveValue(String(MIN_DOMINANCE));
-    await expect(slider).toHaveValue(String(MIN_DOMINANCE));
+    await expect(textbox).toHaveValue('42');
+    await expect(slider).toHaveValue('42');
 
     await textbox.fill('');
     await page.keyboard.press('Tab');
-    await expect(textbox).toHaveValue(String(MIN_DOMINANCE));
-    await expect(slider).toHaveValue(String(MIN_DOMINANCE));
+    await expect(textbox).toHaveValue('42');
+    await expect(slider).toHaveValue('42');
   });
 
   // Playwright sets a range's value and dispatches input/change (the 3.13 idiom) — the drag

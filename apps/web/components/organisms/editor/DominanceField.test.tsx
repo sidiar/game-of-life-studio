@@ -8,9 +8,23 @@ import DominanceField, { type DominanceFieldProps } from './DominanceField';
 
 /** A real controlled round trip — the shape `<OrganismEditorModal>`'s `setDominance` provides —
  * the `OrganismNameField.test.tsx` / `BattleNameField.test.tsx` harness shape. */
-function ControlledHarness({ min, max }: Pick<DominanceFieldProps, 'min' | 'max'> = {}) {
+function ControlledHarness({
+  min,
+  max,
+  onChange,
+}: Partial<Pick<DominanceFieldProps, 'min' | 'max' | 'onChange'>> = {}) {
   const [value, setValue] = useState(NEW_ORGANISM_DOMINANCE);
-  return <DominanceField value={value} onChange={setValue} min={min} max={max} />;
+  return (
+    <DominanceField
+      value={value}
+      onChange={(next) => {
+        onChange?.(next);
+        setValue(next);
+      }}
+      min={min}
+      max={max}
+    />
+  );
 }
 
 const slider = () => screen.getByRole('slider', { name: 'Dominance' });
@@ -57,6 +71,18 @@ describe('DominanceField', () => {
     );
   });
 
+  it('derives the description, the marks and the slider bounds from min/max, not from literals', () => {
+    render(<DominanceField value={10} onChange={() => {}} min={10} max={20} />);
+
+    expect(slider()).toHaveAttribute('min', '10');
+    expect(slider()).toHaveAttribute('max', '20');
+    expect(
+      screen.getByText('Priority in conflict resolution (10-20, higher wins)'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('10', { selector: '[aria-hidden="true"] > span' })).toBeInTheDocument();
+    expect(screen.getByText('20', { selector: '[aria-hidden="true"] > span' })).toBeInTheDocument();
+  });
+
   // (d)
   it('renders "1" and "100" as decorative, aria-hidden end marks derived from the constants (AC1, AC7)', () => {
     const { container } = render(
@@ -72,7 +98,7 @@ describe('DominanceField', () => {
 
   // (e) jsdom does not step a range from the keyboard (3.13 trap 2) — `fireEvent.change` is the
   // unit-level "both ways" proof; the keyboard contract is Playwright's.
-  it('slider change calls onChange once and the textbox follows, through the harness (AC4, AC6)', () => {
+  it('slider change moves the textbox through the harness (AC4, AC6)', () => {
     render(<ControlledHarness />);
 
     fireEvent.change(slider(), { target: { value: '42' } });
@@ -106,40 +132,46 @@ describe('DominanceField', () => {
     expect(slider()).toHaveValue('42');
   });
 
-  // (g) out of range snaps on commit, never live.
+  // (g) out of range snaps on commit, never live. Through the harness, so the slider is proven to
+  // hold the LAST in-range prefix (`1`, then `15`) while `150` is pending — a component that
+  // clamped live would show 100 before the blur and fail the call-count assertions.
   it('an out-of-range typed value does not commit live; blur snaps it to the boundary (AC5)', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { rerender } = render(
-      <DominanceField value={NEW_ORGANISM_DOMINANCE} onChange={onChange} />,
-    );
+    render(<ControlledHarness onChange={onChange} />);
 
     await user.click(textbox());
     await user.clear(textbox());
     await user.type(textbox(), '150');
 
-    expect(onChange).not.toHaveBeenCalledWith(150);
-    expect(slider()).toHaveValue(String(NEW_ORGANISM_DOMINANCE));
+    expect(onChange.mock.calls).toEqual([[1], [15]]);
+    expect(slider()).toHaveValue('15');
+    expect(textbox()).toHaveValue('150');
 
     await user.tab();
 
-    expect(onChange).toHaveBeenCalledWith(MAX_DOMINANCE);
-    rerender(<DominanceField value={MAX_DOMINANCE} onChange={onChange} />);
+    expect(onChange.mock.calls).toEqual([[1], [15], [MAX_DOMINANCE]]);
     expect(textbox()).toHaveValue(String(MAX_DOMINANCE));
     expect(slider()).toHaveValue(String(MAX_DOMINANCE));
   });
 
-  it.each(['0', '-5'])('snaps %j to MIN_DOMINANCE on blur', async (typed) => {
+  it.each(['0', '-5'])('snaps %j to MIN_DOMINANCE on blur, on both controls', async (typed) => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<DominanceField value={NEW_ORGANISM_DOMINANCE} onChange={onChange} />);
+    render(<ControlledHarness onChange={onChange} />);
 
     await user.click(textbox());
     await user.clear(textbox());
     await user.type(textbox(), typed);
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(slider()).toHaveValue(String(NEW_ORGANISM_DOMINANCE));
+
     await user.tab();
 
-    expect(onChange).toHaveBeenCalledWith(MIN_DOMINANCE);
+    expect(onChange.mock.calls).toEqual([[MIN_DOMINANCE]]);
+    expect(textbox()).toHaveValue(String(MIN_DOMINANCE));
+    expect(slider()).toHaveValue(String(MIN_DOMINANCE));
   });
 
   // (h) non-integer is rejected and reverts.
@@ -168,19 +200,43 @@ describe('DominanceField', () => {
   it('Enter commits an out-of-range value without moving focus off the textbox (AC5)', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { rerender } = render(
-      <DominanceField value={NEW_ORGANISM_DOMINANCE} onChange={onChange} />,
-    );
+    render(<ControlledHarness onChange={onChange} />);
 
     await user.click(textbox());
     await user.clear(textbox());
     await user.type(textbox(), '150');
+    expect(onChange).not.toHaveBeenCalledWith(MAX_DOMINANCE);
+
     await user.keyboard('{Enter}');
 
-    expect(onChange).toHaveBeenCalledWith(MAX_DOMINANCE);
-    rerender(<DominanceField value={MAX_DOMINANCE} onChange={onChange} />);
+    expect(onChange).toHaveBeenLastCalledWith(MAX_DOMINANCE);
     expect(textbox()).toHaveValue(String(MAX_DOMINANCE));
+    expect(slider()).toHaveValue(String(MAX_DOMINANCE));
     expect(document.activeElement).toBe(textbox());
+  });
+
+  // A slider move while the textbox is mid-edit discards the buffer (FD3): WebKit does not focus a
+  // range on pointer-down and a touch drag never blurs the textbox, so without this the textbox
+  // would show the stale text and commit it over the slider's value on its next blur.
+  it('a slider move while the textbox holds uncommitted text makes the textbox follow the slider (AC4)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ControlledHarness onChange={onChange} />);
+
+    await user.click(textbox());
+    await user.clear(textbox());
+    await user.type(textbox(), '150');
+    expect(textbox()).toHaveValue('150');
+
+    fireEvent.change(slider(), { target: { value: '42' } });
+
+    expect(textbox()).toHaveValue('42');
+    expect(slider()).toHaveValue('42');
+
+    await user.tab();
+
+    expect(onChange).toHaveBeenLastCalledWith(42);
+    expect(textbox()).toHaveValue('42');
   });
 
   // (j) controlled, never a local mirror that drifts (Story 3.13 trap 9's shape).

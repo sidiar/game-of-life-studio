@@ -179,6 +179,19 @@ describe('OrganismEditorModal', () => {
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('17');
   });
 
+  // Story 4.6 AC6: the tab order inside Basic Information is name -> slider -> numeric input. The
+  // field's own test uses a stand-in button for the name field; this is the real column.
+  it('tabs from the name field to the dominance slider, then to its textbox (Story 4.6)', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    screen.getByRole('textbox', { name: 'Organism Name' }).focus();
+    await user.tab();
+    expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('textbox', { name: 'Dominance value' })).toHaveFocus();
+  });
+
   it('open={false} renders no dialog at all (MUI unmounts by default)', () => {
     render(<OrganismEditorModal open={false} origin="library" onClose={vi.fn()} />);
 

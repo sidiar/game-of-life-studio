@@ -136,12 +136,11 @@ const EditorBody = styled('div')({
  * The Organism Editor's full-screen shell (Story 4.3): the `Dialog`, its header and a body that is
  * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds the editor's draft (`OrganismDraft`,
  * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name` and Story 4.6's
- * `dominance`) and nothing else — no
- * repository call; the lifecycle (inert window, focus restore) stays `useOrganismEditorModal`'s,
- * and a fresh draft per open is the `mounted` gate's doing (`<OrganismLibrary>` unmounts this
- * modal after every exit, so there is no reset effect and no `key` trick). The editor's own dirty
- * scope (AR-33 — independent of the battle's) arrives with Story 4.23, will live in this shell,
- * and will diff this draft against its seed.
+ * `dominance`) and nothing else — no repository call; the lifecycle (inert window, focus restore)
+ * stays `useOrganismEditorModal`'s, and a fresh draft per open is the `mounted` gate's doing
+ * (`<OrganismLibrary>` unmounts this modal after every exit, so there is no reset effect and no
+ * `key` trick). The editor's own dirty scope (AR-33 — independent of the battle's) arrives with
+ * Story 4.23, will live in this shell, and will diff this draft against its seed.
  *
  * Header layout follows the epics AC / UX-DR5 (`organism-editor-design.md:101-126`): Back on the
  * left, centred title, Save + Close on the right. ⚠️ The 2026-06-01 mockup revision

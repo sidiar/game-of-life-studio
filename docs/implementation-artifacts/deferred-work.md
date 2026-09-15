@@ -1029,3 +1029,32 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   (`--gol-shadow-slider-thumb`) between them. Whichever lands the `<LadderSlider>` /
   `<RangeSlider>` promotion decision (3.13's deferred item, above) also decides whether the glow
   becomes "the house thumb" for every native range or stays this control's own.
+
+## Deferred from: code review of 4-6-dominance-control (2026-09-15)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **The dominance draft lags the textbox until blur/Enter.** `<DominanceField>` commits an
+  out-of-range or still-being-typed value only on blur or Enter (FD3), so any Save path that does
+  not first move focus — Story 4.13's gate reached by a hotkey, or Story 4.23's dirty diff run
+  while the textbox holds `'150'` — reads the pre-edit `draft.dominance`. A pointer click on Save
+  blurs the textbox first and is fine. 4.13/4.23 should either flush the field (a `commit` exposed
+  through a ref, or commit-on-unmount) or accept that pending text is discarded and say so; the
+  4.13 item above ("no dominance-specific check") stands, this is about *when* the draft is read,
+  not whether it is valid.
+- **`Field` / `Label` / `Slider` styled blocks now exist in three hand copies** —
+  `OrganismNameField.tsx` (Field, Label), `SpeedControl.tsx` (Slider) and `DominanceField.tsx`
+  (all three). Pre-existing by design (components split by mode; no abstraction over one caller);
+  the 3.16 `<LadderSlider>` / `<RangeSlider>` decision recorded in the 3-13 and 4-6 sections above
+  is where a shared `rangeInput` rule set would be born, and an `organisms/editor/fieldStyles.ts`
+  for `Field`/`Label` is the cheaper half whenever a third editor field (4.7's toggle, 4.8's
+  picker) copies them again.
+- **Task 8's "before" bundle measurement was partial.** The Dev Agent Record measured
+  `/organisms` on `main` only; `home` / `battle` / `battle/new` are declared "unchanged" without a
+  before figure, and the editor-chunk delta is against Story 4.5's *recorded* 3521 B. Harmless
+  here (the lazy chunk is unreachable from the other routes), but the next editor story should
+  record all four routes before and after, as the task says.
+- **`deferred-work.md:87` names Story 4.6 as the next MUI-Slider candidate "IF that story chooses
+  MUI"** — on the `story/3-13-speed-control` branch, not on `main` at 4.6's baseline, so this
+  story could not amend it. 4.6 went native (FD1). Whichever of #40 / this PR merges second
+  should append "4.6 also shipped native; MUI Slider still has no consumer" to that entry.

@@ -4,7 +4,7 @@ baseline_commit: 14ac287
 
 # Story 4.6: Dominance Control
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -419,6 +419,29 @@ gates already impose on "the second control inside the editor".
         so with the test name and confirm the remote run instead — never "fix" it here. Push to
         `story/4-6-dominance-control`; check `gh run list --limit 1` after the PR opens.
 
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (2026-09-15), via three parallel
+adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 0 `decision-needed`,
+13 `patch`, 3 `defer`, 17 dismissed.
+
+- [x] [Review][Patch] `parseDominanceText` rejection table is ONE row of ten columns — only `''` is ever asserted; `'abc'`, `'5.5'`, `'5.'`, `'.5'`, `'1e2'`, `'+5'`, `'5 5'` and whitespace-only never run (verbose run shows a single `rejects "" as null`; the record's "19 cases" is the collapsed count) [apps/web/lib/organisms/dominance.test.ts:17-22]
+- [x] [Review][Patch] A slider move while the textbox holds an in-progress buffer leaves the textbox stale and the next blur commits the stale number over the slider's value (engines that do not focus a range on pointer-down — WebKit — and touch drags); `setText(null)` in the slider's `onChange` + a unit test [apps/web/components/organisms/editor/DominanceField.tsx:539-542]
+- [x] [Review][Patch] Test (g) is weaker than specified: bare `vi.fn()` parent, so "slider still at the last in-range value (15)" and the post-blur `'100'` round trip are never proven, and a live-clamping implementation passes it; same hole in the `'0'`/`'-5'` variants and test (i) [apps/web/components/organisms/editor/DominanceField.test.tsx:171-245]
+- [x] [Review][Patch] Description hardcodes "(1-100, …)" while `min`/`max` props drive the slider and the marks — a non-default range lies in the description and `aria-describedby`; derive from the props, and exercise the props once (the harness accepts them but no test passes them) [apps/web/components/organisms/editor/DominanceField.tsx:527-529]
+- [x] [Review][Patch] e2e revert steps (`'5.5'`, `''`) run while the committed value is already `MIN_DOMINANCE`, so "invalid text reverts" is indistinguishable from "empty → 0 → clamp to 1"; run them from a mid-range committed value [apps/web/e2e/organisms.spec.ts:1021-1030]
+- [x] [Review][Patch] Keyboard e2e hardcodes `'2'`, `'3'`, `'1'` beside derived bounds; derive from `MIN_DOMINANCE` [apps/web/e2e/organisms.spec.ts:983-995]
+- [x] [Review][Patch] AC6's name → slider hop is never pinned in the real column (unit (l) uses a stand-in button, e2e starts from `slider.focus()`); one `user.tab()` test in the modal suite [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] `%j` serialises `Infinity` as `null` — the suite reports `clamps null to 100`; use `%s` [apps/web/lib/organisms/dominance.test.ts:32-33]
+- [x] [Review][Patch] Header says "`useId()` for all three ids"; the code mints two (slider, description) and the textbox has none [apps/web/components/organisms/editor/DominanceField.tsx:171]
+- [x] [Review][Patch] `deferred-work.md` says FD2's Firefox `badInput` reason "is recorded in the component's header"; the header lists three of the four facts [apps/web/components/organisms/editor/DominanceField.tsx:149-155]
+- [x] [Review][Patch] Test (e)'s title promises "once" but the call-count assertion lives in the next test; retitle [apps/web/components/organisms/editor/DominanceField.test.tsx:136]
+- [x] [Review][Patch] Reflowed doc comment strands "`dominance`) and nothing else — no" on its own line [apps/web/components/organisms/editor/OrganismEditorModal.tsx:138-140]
+- [x] [Review][Patch] `--gol-shadow-tooltip`'s comment cites "the same two reasons as the token above" — that now names the slider glow, whose comment gives different reasons (it was `--gol-accent-tint` before, also wrong); name `--gol-shadow-tile-hover` explicitly [apps/web/app/themes.css:130-134]
+- [x] [Review][Defer] The draft lags the textbox until blur/Enter: a keyboard-triggered Save (Story 4.13's gate, a future hotkey) or Story 4.23's dirty diff that runs while the textbox holds `'150'` sees the pre-edit value; the deferred-work item for 4.13 should say so [apps/web/components/organisms/editor/DominanceField.tsx:514-522] — deferred, owned by 4.13/4.23 (noted in deferred-work.md)
+- [x] [Review][Defer] Third hand-copied copy of the `Field`/`Label`/`Slider` styled blocks (`OrganismNameField`, `SpeedControl`, here) [apps/web/components/organisms/editor/DominanceField.tsx:11-91] — deferred, pre-existing: the `<LadderSlider>`/`<RangeSlider>` promotion is 3.16's call (deferred-work.md, 3-13 and 4-6 sections)
+- [x] [Review][Defer] Task 8's "before" bundle measurement recorded `/organisms` only; the chunk delta compares against 4.5's *recorded* 3521 B and the other three routes have no before figure [story Dev Agent Record] — deferred, record-only; the after figures are re-measured in this review
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -717,8 +740,9 @@ claude-sonnet-5 (dev-story)
   tests derive the boundary cases from the constants and pin all three numbers once.
   `defaultWorkspace.test.ts` (`CONWAYS_CLASSIC.dominance` = 50) left unchanged, as designed.
 - Pure `parseDominanceText` / `clampDominance` / `isDominanceInRange` helpers added in
-  `apps/web/lib/organisms/dominance.ts`, fully unit-tested (19 cases) including the 400-digit /
-  `Infinity` edge.
+  `apps/web/lib/organisms/dominance.ts`, fully unit-tested (28 cases after the review's `it.each`
+  fix — the dev run's 19 was one collapsed rejection row) including the 400-digit / `Infinity`
+  edge.
 - `OrganismDraft` grows `dominance`, seeded at `NEW_ORGANISM_DOMINANCE`, via a functional
   `setDraft` update mirroring `setName`.
 - `<DominanceField>` built as a native `<input type="range">` + `type="text" inputMode="numeric"`
@@ -726,7 +750,8 @@ claude-sonnet-5 (dev-story)
   with the editor mockup's own thumb (glow via the new `--gol-shadow-slider-thumb` token, FD5).
   Behaviour matches FD3 exactly: live commit while in range, snap-on-commit (blur/Enter) when out
   of range, silent revert on non-integer/empty text, guarded against no-op `onChange` calls.
-  21 unit tests cover cases (a)–(m) from the story's test list, plus the axe series.
+  23 unit tests (21 at dev, +2 in review: slider-supersedes-buffer, `min`/`max`-derived
+  description) cover cases (a)–(m) from the story's test list, plus the axe series.
 - Mounted in `<OrganismEditorModal>` directly under `<OrganismNameField>` in the `basicInfo`
   fragment; `OrganismEditorModal.test.tsx`'s "exactly one textbox" guard retargeted to "exactly
   two textboxes and one slider", plus new mount/round-trip/default-value assertions.
@@ -774,6 +799,12 @@ claude-sonnet-5 (dev-story)
   `npm run ci` green except the pre-existing, documented Story 3.12 local-WebKit/tablet `Tab`
   failure (reproduces on untouched `main`); bundle byte-identical on `/organisms` (295.3 KB);
   status → review.
+- 2026-09-15 — Code review (Opus, three adversarial layers): 13 patches applied (see Review
+  Findings) — the collapsed `it.each` rejection row, a slider move now discards the textbox's
+  in-progress buffer, tests (g)/(i) proven through the controlled harness, description derived
+  from `min`/`max`, e2e revert cases run from a mid-range value, derived arrow-key values, a
+  modal tab-order test, comment/title corrections; 3 items deferred to `deferred-work.md`;
+  status → done.
 
 Dev Model: sonnet   # follows patterns that already exist — 3.13's native-range slider block, 4.5's draft seam and lib-validator idiom — with the one new behaviour (numeric-text commit semantics) fully pinned in FD3 and the test list
 Proposed lane gate: story: 4-6-dominance-control / requires: 3-13-speed-control / why: 3.13 is the app's first range slider and its header names 4.6 as a follower of its native-range idiom (the Slider styled block, fireEvent.change and keyboard-e2e patterns); if 3.13's review reshapes that block after 4.6 copies it, the two sliders diverge on main — soft gate, decline if 3.13 merges before 4.6's dev step starts
