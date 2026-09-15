@@ -1,0 +1,522 @@
+---
+name: implement-next-story
+description: Implement exactly one story from sprint-status.yaml end to end — create-story, dev-story, code-review — each in a fresh subagent with its own model. Runs as a per-epic lane (`--epic N`) so two epics can proceed in parallel. Stops at review for approval; safe to re-run. Use when the user says "implement the next story".
+---
+
+# Implement Next Story
+
+Orchestrates **one** story through BMad's three steps. Does not implement anything
+itself — it spawns subagents and reads their artifacts off disk.
+
+One invocation = one story, ending with a PR open for Sidiar to merge. Repetition is
+the caller's job — normally just asking again.
+
+**Arguments:** `$ARGUMENTS` — optionally `--epic N`. See *Lanes* below.
+
+**Paths:** sprint status is `docs/implementation-artifacts/sprint-status.yaml`.
+Story files for every epic in progress sit flat beside it.
+
+**Gates:** cross-epic dependencies live in `docs/implementation-artifacts/lane-gates.yaml`
+and are checked by `lane-gates.py`, in this skill directory — see *Dependency gates*.
+
+**Stats:** every step is timed and token-counted by `story-run-stats.py`, in this skill
+directory. Call `mark` at each boundary as you go — a mark you skip is a phase you
+cannot reconstruct afterwards — and `report` at the end. See *Run stats* below.
+
+---
+
+## Lanes — one epic per session
+
+A **lane** is one epic worked by one session. Two lanes run in parallel when their epics
+are independent enough (Epic 3 and Epic 4 are — see *Dependency gates*). Everything in
+this skill that used to say "the epic in progress" now means **this lane's epic**, and
+every guard is scoped to it: another lane's open PR, dangling branch, or partial story
+file is **none of this lane's business** — never report it as a blocker, never touch it.
+
+- `--epic N` in `$ARGUMENTS` names the lane. **Without it**, the lane is the epic of the
+  first `backlog` story in `sprint-status.yaml` on current `main` — **but only when that
+  is the sole epic with a `backlog` story that is `in-progress`**. If two epics are
+  in progress, a bare call STOPs and asks for `--epic`: guessing would send the
+  worktree session into the other lane's epic, and the branch guard cannot catch two
+  Step 0s that start inside the same ten minutes. Fail closed; the flag is cheap.
+- **One lane per working tree.** The primary checkout holds one lane; every other lane
+  runs in its own worktree. The skill never creates worktrees itself, so the session for
+  an additional lane has to be *in* one before Step 0 runs. The recipe, three separate
+  prompts in a fresh session opened in the primary checkout:
+
+  ```
+  use a worktree named lane-epic-N
+  ! npm ci
+  implement next story --epic N
+  ```
+
+  The worktree line goes first and alone — folded into the skill call, Step 0 can fire
+  before the tree switch lands. `npm ci` because a fresh worktree has no `node_modules`,
+  and the dev agent's first `typecheck` would fail for reasons unrelated to the story.
+  Every later run of that lane goes in that same worktree session. The lane that was
+  opened first stays bare in the primary checkout. Two lanes launched bare in the same
+  checkout pass each other's Step 0 unnoticed (the tree is still clean when the second
+  one checks), and the first lane's `feat:` commit then sweeps in the second lane's
+  story-status lines — which is how this recipe came to be written down.
+- Branch names are the lane's namespace: `story/{E}-*`. The lane-scoping query used
+  throughout is `startswith("story/{E}-")` — the trailing dash matters, or lane 3 would
+  match `story/30-*` one day and, more to the point, `story/3-` would not match `story/4-`.
+- A worktree cannot check out `main` while the primary tree holds it. Step 0 handles
+  that; Step 2 branches from `origin/main`, never from a local `main`, for the same reason.
+
+---
+
+## Step 0 — Re-entry guard (always run first)
+
+Mark the clock before anything else, so a run that stops at the guard is still measured:
+
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark step0
+```
+
+**Get current.** `git fetch origin` first. A dirty working tree means Sidiar has work in
+progress: STOP, do not stash or clobber it. Then land on current `main`:
+
+```bash
+git checkout main && git pull --ff-only   # primary tree
+# If git refuses because `main` is checked out in another worktree, this tree is a lane
+# worktree — use the detached form instead. Same content, no branch to fight over:
+git switch --detach origin/main
+```
+
+Every read of `sprint-status.yaml` below is from this checkout — i.e. from `main`.
+
+**Resolve the lane** `{E}`: `--epic N` if given. Else, if exactly one epic is
+`in-progress` (or none — the board is between epics), `{E}` is the epic of the first
+`backlog` story top to bottom. Else → STOP: name the in-progress epics and ask for
+`--epic N`. Say which lane and why in one line.
+
+Then, in order — every check scoped to `story/{E}-*`:
+
+- **An open PR for this lane** →
+
+  ```bash
+  gh pr list --state open --json number,url,isDraft,headRefName,baseRefName \
+    --jq '[.[] | select(.headRefName | startswith("story/{E}-"))]'
+  ```
+
+  `--head` takes an exact branch name, not a prefix — `--head story/` matches nothing and
+  would fail open, starting a second story on top of an unmerged one.
+
+  If the PR's branch is **behind `origin/main`** — another lane merged since it was
+  cut — run **Step S (sync)** and stop there. Check with:
+
+  ```bash
+  git merge-base --is-ancestor origin/main origin/{headRefName} && echo current || echo behind
+  ```
+
+  Otherwise STOP: report the PR and that it is waiting on Sidiar. One open story PR
+  **per lane** at a time. If in a loop, `ScheduleWakeup` with `noop: true`.
+
+- **A `story/{E}-*` branch without an open PR** → STOP: a previous run died partway, most
+  likely on a usage limit. Report the branch, whether it has commits, and whether it is
+  pushed. Recovery is Sidiar's call — delete the branch to redo the story, or push and
+  open the PR by hand. Never resume into it and never delete it yourself.
+
+  ```bash
+  git branch -a --list '*story/{E}-*'
+  ```
+
+- **The first `backlog` story of epic {E} is not the lowest-numbered incomplete one in
+  epic {E}** → STOP. A story sitting at `ready-for-dev` or `in-progress` with no branch
+  means Step 1 died mid-write, leaving a partial story file. Report it; do not skip past
+  it to the next `backlog` story, which is what a naive scan would do.
+- **The lane pair is unanalysed** →
+
+  ```bash
+  python3 .claude/skills/implement-next-story/lane-gates.py analysed --epic {E}
+  ```
+
+  Exit 2 means another epic is in progress and `lane-gates.yaml` has no `analysed` entry
+  for the pair → go to **Opening a lane** below; no story starts until Sidiar has approved
+  that analysis. Exit 1 is a malformed file → STOP and report it.
+- **No `backlog` story left in epic {E}** → STOP. Report the epic is complete. If in a
+  loop, `ScheduleWakeup` with `stop: true`.
+- **Otherwise** the first `backlog` story of epic {E}, top to bottom, is the candidate —
+  and it still has to pass its gate:
+
+    ```bash
+    python3 .claude/skills/implement-next-story/lane-gates.py check {story_key}
+    ```
+
+    Exit 2 prints the prerequisite, its status on `main`, and why → STOP with that output.
+    Do **not** skip to a later story: order within a lane is still order. If in a loop,
+    `ScheduleWakeup` with `noop: true` — the other lane will clear it. Exit 1 → STOP, the
+    file is broken. Only exit 0 (`OPEN`) makes the candidate this run's target.
+
+**Why the PR and not the status field:** `sprint-status.yaml` is versioned, so it says
+different things on different refs. On a story branch, `done` means *implemented and
+reviewed* — a proposal. On `main`, `done` means *merged*, because merging is the only
+thing that writes it there. `main` is therefore the source of truth for epic state, and
+the set of open PRs is the source of truth for "is something awaiting approval." Two
+questions, two signals — don't try to answer one with the other.
+
+A PR closed without merging is a rejected story: its `done` never reaches `main`, the
+story stays `backlog` there, and the next run redoes it. That is correct, not a bug.
+
+**Why the extra checks:** a run halted by a usage limit stops wherever it was, with no
+wind-down. The open-PR check alone misses every state before the PR exists — a partial
+story file, an unpushed commit, a pushed branch. Each of those would otherwise cause the
+next run to silently skip a story or redo one. Assume any interruption is a limit hit
+and leave the wreckage for Sidiar rather than guessing at recovery.
+
+This guard is what makes the skill safe to fire repeatedly. Never skip it.
+
+### Dependency gates — `docs/implementation-artifacts/lane-gates.yaml`
+
+Cross-epic dependencies that story order inside one lane cannot express live in
+`lane-gates.yaml`, a cross-epic artifact at the root beside `sprint-status.yaml`,
+versioned on `main` like everything else. `lane-gates.py` reads it; nobody reads it by eye
+at Step 0. Its shape and the meaning of `requires` (a story key that must be `done`, or
+`epic-N` meaning every `N-*` story is `done` — never the `epic-N: done` row, which only
+flips in Sidiar's manual close-out commit) are documented in the file's header.
+
+The file has a lifecycle, and every step below plays a part in it:
+
+- **Created — Opening a lane** (next section), one `analysed` entry per epic pair.
+- **Updated — by the steps that see dependencies.** Step 1's create-story, Step 3's
+  review, and a Step S sync that aborted on a code conflict each propose rows; Sidiar
+  approves; the row rides the story's PR to `main` (edit `lane-gates.yaml` on the branch).
+- **Revisited — on two triggers.** When a lane hits a gate, re-read the row before
+  reporting it as the reason (is the prerequisite still the right one?), and after any
+  `correct-course` that touches an in-progress epic, since rows cite story keys that may
+  have moved. Both are Sidiar's to call; the run just names the trigger.
+
+Never enforce a dependency from memory: if it is not a row, it is not a gate.
+
+### Opening a lane
+
+Entered from Step 0 when `lane-gates.py analysed` exits 2: epic {E} is about to run beside
+an in-progress epic {M} that it has never been analysed against. This is the dependency
+analysis, done once per pair, and it is **not** part of any story run — no stats marks, no
+story branch, nothing implemented.
+
+First, `gh pr list --state open --head lane/{E}-gates`: an open PR means the analysis is
+done and waiting on Sidiar's merge → STOP (`noop: true` in a loop). Do not analyse twice.
+
+Otherwise spawn a subagent, `model: "opus"`, `subagent_type: "general-purpose"`, and tell it to:
+
+1. Read both epics' stories in `docs/planning-artifacts/epics.md` and every existing
+   `analysed`/`gates` entry in `lane-gates.yaml`.
+2. For each story of epic {E}, decide whether it **needs** an artifact a still-open story
+   of epic {M} will create (a hook, a module, a semantic it must follow rather than define),
+   or **reshapes a surface** an open {M} story is also reshaping (the same component, the
+   same route budget). Ground each finding in the code as it is on `main` — name the file.
+   Do the same in the other direction: {M} stories that depend on {E}.
+3. Report, tersely: the proposed `gates` rows in the file's exact shape (story, requires,
+   why — one sentence each), the stories found free, and any overlap that is *not* a gate
+   but will need a Step S sync (so Sidiar knows what to expect). Write nothing to the file.
+
+Hand the proposal to Sidiar and STOP. Once they approve, the run that follows adds the
+rows and the `analysed` entry (`lane`, `against`, `date`, `approved_by: Sidiar`) to
+`lane-gates.yaml` in a single `chore: open lane for epic {E} (gates vs epic {M})` commit
+on a branch `lane/{E}-gates`, opens a PR, and STOPs — Sidiar merges it like any other, and
+the first `--epic {E}` story run after that finds the pair analysed. If in a loop,
+`ScheduleWakeup` with `noop: true` until then.
+
+## Step 1 — Create the story (Opus)
+
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark step1
+```
+
+Spawn a subagent: `model: "opus"`, `subagent_type: "general-purpose"`.
+Do **not** use `fork` — it inherits context and ignores the model override.
+
+Tell it to invoke `bmad-create-story` **for the target story key, by name**, and to end
+its story file with one line naming the model the dev step should use:
+
+```
+Dev Model: sonnet   # one-line justification
+```
+
+Default `sonnet`. Choose `opus` only when the story is architecture-shaping — it
+picks a pattern that later stories build on, rather than following one that exists.
+
+Also tell it: **if this story depends on, or reshapes a surface used by, a story in
+another in-progress epic** (`sprint-status.yaml` says which epics those are), end the story
+file with a `Proposed lane gate:` line in `lane-gates.yaml`'s row shape — or `none`. That
+line is a proposal for Sidiar, carried to Step 5; the dev step does not act on it.
+
+Naming the story is not optional: `bmad-create-story`'s auto-discovery takes the first
+`backlog` story in the whole file, which with two epics in progress is the **other
+lane's** story. The same applies to `bmad-dev-story` and `bmad-code-review` in Steps 2
+and 3 — always pass the story file path. On the epic's first story, create-story flips
+`epic-{E}: backlog → in-progress` itself; that write is expected.
+
+## Step 2 — Implement (model from the story file)
+
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark step2
+```
+
+Before spawning, re-verify the tree is still yours — Step 0's guard ran ten minutes ago,
+and another lane launched bare in the same checkout would have passed it unseen:
+
+```bash
+git branch --show-current   # must print nothing (detached) or `main`
+git status --porcelain      # must list only this story's file and sprint-status.yaml
+```
+
+Anything else — a `story/*` branch checked out, foreign untracked files — means two lanes
+share this working tree. STOP and report the branch and files; do not branch on top of
+them. Recovery (a worktree for one of the lanes) is Sidiar's call.
+
+Read the `Dev Model:` line from the story file just written. Spawn a subagent with
+that model and tell it to:
+
+1. **First**, create and switch to the branch: `git switch -c story/{story_key} origin/main`
+   — from `origin/main`, not a local `main` (a lane worktree has none checked out). Do
+   this *before* any implementation, so a mid-story failure leaves `main` clean.
+2. Invoke `bmad-dev-story` on the story file path. It runs to completion on its own and
+   leaves the story at `review`. Let it — do not add your own checkpoints inside it.
+3. Commit the work in one commit, message `feat: {story title} (story {id})`.
+4. Push the branch to `origin`. **Never push to `main`.** The PR is Step 3's job.
+
+The push is what gets CI to run before anyone reviews — so the reviewer reads real
+lint/typecheck/test results rather than the dev agent's account of them.
+
+## Step 3 — Review (the model Step 2 did *not* use)
+
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark step3
+```
+
+Re-read the `Dev Model:` line from the story file and spawn a fresh subagent on the
+model this table pairs it with — a lookup, never a fixed choice:
+
+| Step 2 ran on | Step 3 reviews on |
+| --- | --- |
+| `sonnet` | `opus` |
+| `opus`   | `fable` |
+
+Never the same model twice. A model reviewing its own output re-runs the reasoning that
+produced the bug and agrees with itself; the split exists to break that. Escalating dev
+to Opus does **not** license an Opus review — it escalates the review too, to Fable. A
+story is on Opus because it is architecture-shaping, and that is the diff least worth
+handing to a weaker reviewer. State in the spawn prompt which model implemented the
+story and that this review is deliberately a different one, so the reviewer knows it is
+the second pair of eyes.
+
+`fable` is reachable only through the `opus` row, so it never touches the default path:
+most stories are `sonnet`, and Fable costs roughly double Opus per token before its
+longer turns are counted. When it is the reviewer, keep its spawn prompt shorter than
+the others — the goal, the branch, and the two hard rules below — and leave the method
+to it. Fable loses quality under step-by-step prescription in a way Opus and Sonnet
+do not.
+
+Before spawning, assert the choice out loud: *"Step 2 ran on X, so Step 3 spawns Y."*
+If X and Y are the same, you have mis-derived it — stop and recompute.
+
+**Auto-apply patches.** At `bmad-code-review`'s step 5 prompt, always choose
+**"Apply every patch"** — no per-finding confirmation. There is no human in this run to
+answer it, and the `patch` bucket is defined as fixes that are unambiguous without one.
+
+**Never auto-resolve `decision-needed` findings.** That bucket exists precisely because
+the correct fix needs Sidiar's intent. Leave them unresolved and carry them to the hand-back in Step 5.
+
+Tell it, too, to report any cross-epic dependency the diff reveals — a file this story
+changed that a story of the other in-progress epic will also need — as a proposed
+`lane-gates.yaml` row, alongside the `decision-needed` findings. Same rule: proposed, never
+written by the reviewer.
+
+Tell it to check the CI run for the pushed branch (`gh run list --branch story/{story_key}`)
+and treat a red run as a finding. If it fixes anything, that lands as its **own** commit
+on the same branch, pushed — never amended into the dev commit. The two-commit shape
+is the record of what was implemented versus what review changed.
+
+In that same commit, set the story to `done` in `sprint-status.yaml` — **but only if no
+`decision-needed` findings remain**. On the branch that reads as "implemented and
+reviewed"; it becomes true of the project when the PR merges, which is the point —
+Sidiar never hand-edits the status file. If decisions are outstanding the story is not
+done, so leave the status alone.
+
+Finally, open the PR with `gh pr create --base main --head story/{story_key}`
+(never `--auto`). Add `--draft` **iff** `decision-needed` findings remain: a draft PR
+means "Sidiar has calls to make before this can merge." Either way the PR opens, so the
+Step 0 guard sees it and no new story starts in this lane.
+
+Body follows the house shape — see PR #1:
+
+- one paragraph: what the story adds and why it lands now
+- **What's in it** — the two commits by SHA, each with its rationale
+- **Verification** — CI result for the branch, plus the ACs it satisfies
+- **Review** — patches applied, items deferred, and any `decision-needed` findings
+  written out as explicit questions for Sidiar
+
+Then **STOP**. Do not merge, do not enable auto-merge, do not approve your own PR.
+
+## Step 4 — Record the run stats
+
+The PR is open, so the run is over: stop the clock and write the numbers down.
+
+```bash
+python3 .claude/skills/implement-next-story/story-run-stats.py mark end
+python3 .claude/skills/implement-next-story/story-run-stats.py report \
+  --story-file docs/implementation-artifacts/{story_key}.md --write
+```
+
+That prints the table and appends it to the end of the story file under the line
+*"This story was implemented with the 'Implement next story' skill with the following
+stats:"*. Re-running replaces the previous block rather than stacking a second one, so a
+re-run of Step 4 is safe.
+
+Commit it on the story branch and push, so the PR carries it:
+
+```bash
+git add docs/implementation-artifacts/{story_key}.md
+git commit -m "docs: record implement-next-story run stats (story {id})"
+git push
+```
+
+This is a deliberate third commit. It does not blur the two-commit shape Step 3 protects —
+that split is about *implementation vs. review*, and this commit touches no code. Leave the
+PR body's two-commit list alone for the same reason: it describes the work, and this is
+bookkeeping about the run.
+
+Do this yourself. Do **not** spawn an agent for it: a fourth agent would add its own
+tokens to the very numbers it is reporting.
+
+## Step 5 — Hand back to Sidiar
+
+Report, briefly:
+
+- the lane, story id and title, and its status on the branch (`done`, or unchanged if
+  decisions are outstanding)
+- the PR number and URL, and CI status
+- which model implemented it, and which reviewed it — name both, so a collapsed
+  split is visible in the hand-back rather than only in the commit trailers
+- the file list
+- patches auto-applied, and any `decision-needed` findings awaiting Sidiar's call
+- any **proposed `lane-gates.yaml` rows** from Step 1 or Step 3, written out as the row
+  they would become — Sidiar approves or discards; an approved row is added on the story
+  branch before merge, so it reaches `main` with the story
+- **whether another lane also has an open PR** (`gh pr list --state open` filtered to
+  `story/`), because then whichever merges second needs a sync before it is safe — say so
+- the stats table — paste it into the hand-back as printed, so the active time and token
+  cost of the run are visible without opening the story file (quote Active, not wall clock)
+
+Then **STOP**. Nothing "waits" — the run simply ends, and the open PR is where the
+work sits until Sidiar merges it. The gate is the **merge**: nothing reaches `main`
+without their explicit go-ahead, and approval of one story's merge does not carry
+to the next.
+
+---
+
+## Step S — Sync an open PR with `main`
+
+Entered only from Step 0, when this lane's open PR is behind `origin/main`. It exists
+because the repo has no branch protection: two PRs can each be green against the `main`
+they were cut from and still merge to a red `main` — the bundle gate's ~12 KB headroom
+per route and the sequentially minted `M` numbers in `architecture.md` are the two known
+ways. So the PR that merges second must be re-tested against the merged state, and this
+is where that happens. Sidiar never resolves these conflicts by hand.
+
+Spawn a subagent, `model: "sonnet"`, `subagent_type: "general-purpose"`, and tell it to:
+
+1. `git fetch origin && git switch story/{story_key}` (create the local tracking branch if
+   the worktree lacks it), then `git merge --no-ff origin/main` — a **merge commit**, never a
+   rebase and never a squash: the story's commits are its record.
+2. Resolve conflicts **only** by these rules; anything else is a STOP:
+   - `docs/implementation-artifacts/sprint-status.yaml` — keep both sides' status lines;
+     `last_updated` becomes today's date.
+   - `docs/implementation-artifacts/deferred-work.md` — keep both hunks, `main`'s first,
+     ours after it. Nothing is ever dropped.
+   - `docs/planning-artifacts/architecture.md` Minor Spec Resolutions — if both sides
+     minted the same `M` number, ours takes the next free number, and every citation of it
+     in this branch's diff (`git diff origin/main...HEAD --name-only`, code and docs) is
+     renumbered. `npm run spec:check` must pass afterwards.
+   - `docs/project-context.md` — keep both additions; if the same rule was added twice,
+     keep `main`'s wording.
+   - Any conflict outside these files, or one inside them that the rule does not settle →
+     `git merge --abort`, report the file and the two sides, STOP. Sidiar decides. A code
+     conflict here is evidence of an overlap `lane-gates.yaml` does not know about: say
+     which two stories collided and propose the row that would have sequenced them.
+3. Commit as `chore: sync story/{story_key} with main after #{merged PR}` and push.
+4. Watch CI for the branch — `gh pr checks {pr number} --watch --fail-fast`
+   (ten-minute timeout; if it is still running when that expires, say so rather than
+   guessing). A red run here is a **finding about the merge**, not about the story:
+   report which gate failed and why, and STOP. Do not "fix" a bundle budget or a bench
+   budget from inside a sync — changing a gate is Sidiar's call, and the house rule is
+   to change the gate's mechanism rather than relax its threshold.
+5. Append one line to the PR body under **Verification**: the sync commit SHA, what it
+   merged, and the CI result.
+
+Then STOP and hand back: PR, sync commit, conflicts resolved (by rule) and CI result.
+No stats report — a sync is not a story run.
+
+---
+
+## Two lanes, one `main` — rules for the merge desk
+
+- **Merge one PR at a time.** After merging, the other lane's open PR is stale; its next
+  run (or a manual "implement the next story --epic N") syncs it and re-runs CI. Merge it
+  only once that sync is green. Never merge two PRs that were both cut before the other
+  landed.
+- Each lane's guard is independent: lane 3 waiting on a review never blocks lane 4 from
+  starting its next story, and vice versa.
+- Both epics' story files stay flat beside `sprint-status.yaml` until *that* epic is done
+  — the BMad globs are non-recursive (CLAUDE.md). Archive per epic, not per "phase".
+- The review load doubles; that is the intended bottleneck. So does CI usage — roughly
+  40 runner-minutes per story — worth watching against the plan's monthly cap.
+
+---
+
+## Run stats
+
+`story-run-stats.py mark <label>` stamps a boundary; `report` turns consecutive
+boundaries into phases. Labels, in order: `step0`, `step1`, `step2`, `step3`, `end`.
+Marks are kept in `$TMPDIR/implement-next-story-$CLAUDE_CODE_SESSION_ID.json` — keyed to
+the session, so two lanes never share a marks file.
+
+Each phase gets: active time, wall clock, the model(s) its agents ran on, and tokens
+split input / output / cache-write / cache-read. Token counts are the `usage` blocks the
+runtime already recorded per assistant message — measured, not estimated.
+
+Four things worth knowing about what the numbers mean:
+
+- **Active is the number to quote; wall clock is the raw mark-to-mark span.** A run
+  paused by a usage-limit reset, a sleeping laptop, or Sidiar stepping away still has
+  its marks hours apart. Active drops those pauses: every transcript entry (session and
+  subagents alike) is timestamped, so a stretch with no entries anywhere is idle, and any
+  such gap over 15 minutes is excluded (`--idle-gap MINUTES` to override). Real work never
+  goes that quiet — the longest gap a tool call or CI poll produces is ~10 minutes — while
+  the pauses worth excluding are 30 minutes to days. The footnote under the table lists
+  each excluded gap, so an Active figure is always auditable against its wall clock.
+- **A phase's cost is its whole subtree.** The report attributes every subagent
+  transcript that *started* inside a phase window, so `bmad-code-review`'s three
+  hunters count against Step 3, not against nothing. This works only because the
+  phases run strictly one after another — never overlap two spawns.
+- **The orchestrator is counted too**, folded into whichever phase window its turns
+  fall in, and broken out again in an *of which* row. That row is a subset, not an
+  addition — do not sum it into the total when narrating the table.
+- **Cache reads dominate and mean less than they look.** They are billed at a
+  fraction of input rate. Read Input and Output for real effort; treat the grand total
+  as a ceiling.
+
+The script reads the subagent transcripts under
+`~/.claude/projects/*/$CLAUDE_CODE_SESSION_ID/subagents/` and prints only the aggregate.
+Never `cat`, `tail`, or `Read` those files yourself — they are full JSONL transcripts and
+would blow out the context this skill exists to keep small.
+
+**A run split across sessions loses its marks** (they are keyed to the session id), and
+`report` then covers only the phases marked in the current session. That is a degraded
+report, not a failure — say so in the hand-back rather than presenting partial numbers as
+the whole run.
+
+## Subagent instructions — apply to all spawns
+
+- **Report terse.** The artifacts are on disk; the report is not the deliverable.
+  Status, files touched, blockers. No implementation narratives — they would
+  accumulate in this context across the epic and defeat the fresh-context design.
+- **Name the story.** Pass the story key / file path to every BMad skill. With two
+  epics in progress, a skill left to auto-discover finds the other lane's story.
+- **Commit only to `story/{story_key}`.** Never commit or push to `main`. Only Step 3
+  opens the PR, and no agent ever merges one — merging is Sidiar's, always.
+- **HALT conditions belong to the BMad skills.** If a subagent halts, surface the
+  reason and stop the run. Do not work around it.
