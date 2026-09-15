@@ -808,3 +808,18 @@ claude-sonnet-5 (dev-story)
 
 Dev Model: sonnet   # follows patterns that already exist — 3.13's native-range slider block, 4.5's draft seam and lib-validator idiom — with the one new behaviour (numeric-text commit semantics) fully pinned in FD3 and the test list
 Proposed lane gate: story: 4-6-dominance-control / requires: 3-13-speed-control / why: 3.13 is the app's first range slider and its header names 4.6 as a follower of its native-range idiom (the Slider styled block, fireEvent.change and keyboard-e2e patterns); if 3.13's review reshapes that block after 4.6 copies it, the two sliders diverge on main — soft gate, decline if 3.13 merges before 4.6's dev step starts
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 54s | 54s | 18 | 6,283 | 11,427 | 500,777 | 518,505 |
+| Step 1 — create-story | opus-5 | 1 | 15m 49s | 15m 49s | 176 | 71,017 | 335,675 | 11,347,153 | 11,754,021 |
+| Step 2 — dev-story | sonnet-5 | 1 | 25m 11s | 25m 11s | 452 | 61,422 | 464,711 | 38,032,199 | 38,558,784 |
+| Step 3 — code review + PR | opus-5 | 4 | 26m 16s | 26m 16s | 336 | 101,521 | 1,251,352 | 19,104,040 | 20,457,249 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 48 | 14,587 | 32,658 | 1,465,588 | 1,512,881 |
+| **Total (create-story → PR ready)** | | 6 | **1h 08m** | 1h 08m | 982 | 240,243 | 2,063,165 | 68,984,169 | **71,288,559** |
+
+Run started 2026-09-15 13:46 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
