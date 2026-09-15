@@ -1938,3 +1938,175 @@ test.describe('back navigation & the unsaved-changes guard (Story 2.16)', () => 
     expect(violations).toEqual([]);
   });
 });
+
+test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
+  const runButton = (page: Page): Locator => page.getByRole('button', { name: 'Run' });
+  const labButton = (page: Page): Locator => page.getByRole('button', { name: 'Lab' });
+  const dish = (page: Page): Locator => page.getByRole('img', { name: /petri dish/i });
+  const sidebarHeadings = (page: Page): Locator =>
+    page.getByRole('complementary').getByRole('heading', { level: 2 });
+
+  /** Every test here asserts a clean console: the toggle mounts a lazy chunk and a second canvas,
+   * and both `buildRefToFillGroup`'s warn-once and the ResizeObserver loop report there, not as
+   * test failures. */
+  function collectErrors(page: Page): string[] {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error' || msg.text().includes('ResizeObserver loop')) {
+        errors.push(msg.text());
+      }
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    return errors;
+  }
+
+  // Three-Way Skirmish: all three roster organisms exist in the seeded library, so RUN is enabled.
+  // (Grand Colony War carries the dangling Conway id in an e2e-seeded workspace — see the last
+  // test, which uses exactly that.)
+  test('flips to Run — paused at cycle 0, the playback dish painted, the editor gone, the URL unchanged — and back (AC1, AC2, AC3, AC5, AC6)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    const url = page.url();
+
+    // The toggle: a named group, LAB pressed, RUN enabled.
+    const toggle = page.getByRole('group', { name: 'Mode' });
+    await expect(toggle).toBeVisible();
+    await expect(labButton(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(runButton(page)).toHaveAttribute('aria-pressed', 'false');
+    await expect(runButton(page)).toBeEnabled();
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+
+    await runButton(page).click();
+
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'run');
+    await expect(runButton(page)).toHaveAttribute('aria-pressed', 'true');
+    // The Run view is behind a lazy chunk — wait for its root, then read its state.
+    const view = page.locator('[data-status]');
+    await expect(view).toHaveAttribute('data-status', 'paused');
+    await expect(view).toHaveAttribute('data-cycle', '0');
+    // FR-3.10 "the playback canvas painted": the hook's prime reached the Run dish.
+    await expect(dish(page)).toBeVisible();
+    expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
+    // The skeleton: no sidebar section headings, one <main>-equivalent chassis, one <h1>, and the
+    // editor's controls are gone rather than hidden.
+    await expect(sidebarHeadings(page)).toHaveCount(0);
+    await expect(page.getByRole('main')).toHaveCount(1);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Undo' })).toHaveCount(0);
+    await expect(page.getByRole('textbox')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Back to Battles' })).toHaveCount(1);
+    expect(page.url()).toBe(url);
+
+    await labButton(page).click();
+
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
+    await expect(page.locator('[data-status]')).toHaveCount(0);
+    await expect(dish(page)).toBeVisible();
+    expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('UNDO and the dirty flag survive a Run round trip, and the edit dish still shows the paint (AC6, AC9)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    // Paint in the top-left corner, where the seeded fixture places nothing.
+    const box = await dish(page).boundingBox();
+    if (box === null) throw new Error('the dish has no layout box');
+    await dish(page).click({ position: { x: box.width * 0.05, y: box.height * 0.05 } });
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+
+    await runButton(page).click();
+    await expect(page.locator('[data-status]')).toHaveAttribute('data-cycle', '0');
+    await labButton(page).click();
+
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+    await expect(dish(page)).toBeVisible();
+    expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('has no axe accessibility violations in Run mode, and again after returning to Lab (AC11)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await runButton(page).click();
+    await expect(page.locator('[data-status]')).toHaveAttribute('data-status', 'paused');
+    await expect(dish(page)).toBeVisible();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    await labButton(page).click();
+    await expect(sidebarHeadings(page)).toHaveCount(4);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    expect(errors).toEqual([]);
+  });
+
+  // The guard is Story 2.16's; what is new is the SECOND sidebar's footer reaching it.
+  test('Back from Run on a dirty battle opens the Unsaved Changes dialog (AC9)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Dirty in Run');
+
+    await runButton(page).click();
+    await expect(page.locator('[data-status]')).toHaveAttribute('data-status', 'paused');
+    await page.getByRole('button', { name: 'Back to Battles' }).click();
+
+    await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).toBeVisible();
+    // Still in Run, still dirty, underneath the dialog. Attribute reads, not role queries: MUI's
+    // modal marks everything outside the dialog `aria-hidden`, so `getByRole('heading')` cannot
+    // see the <h1> while the guard is open.
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'run');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+
+    expect(errors).toEqual([]);
+  });
+
+  // AC7 / forced decision 4: an e2e-seeded workspace has NO Conway's Classic, and Grand Colony
+  // War's roster names it — a genuinely dangling id. RUN is disabled with a reason, not hidden.
+  test('disables RUN, with a reason, when a roster id has no library record (AC7)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleB}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
+
+    await expect(runButton(page)).toBeVisible();
+    await expect(runButton(page)).toBeDisabled();
+    await expect(runButton(page)).toHaveAttribute(
+      'title',
+      'Some organisms in this battle could not be loaded',
+    );
+    await expect(labButton(page)).toBeEnabled();
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+
+    expect(errors).toEqual([]);
+  });
+});

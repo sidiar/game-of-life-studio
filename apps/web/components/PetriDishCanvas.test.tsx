@@ -2412,3 +2412,213 @@ describe('PetriDishCanvas (edit variant) — a live grid-dimension change (Story
     expect(canvas.releasePointerCapture).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * Story 3.11 (AC4, AC5): the THIRD variant. A retained-renderer lifecycle like `EditDish` —
+ * construct once per `[size, palette, colors]`, `setGridLines` on change, parent-observing
+ * `ResizeObserver` — with three differences this describe pins one by one: it PAINTS NOTHING
+ * itself (the hook that receives the renderer is what paints), it takes no grid and no pointer
+ * handlers, and it hands the renderer out through `onRendererReady` (a renderer after
+ * construction, `null` in the cleanup — `useSimulation.attachRenderer`'s own signature).
+ */
+describe('PetriDishCanvas (playback variant)', () => {
+  class FakeResizeObserver implements ResizeObserver {
+    static instances: FakeResizeObserver[] = [];
+    readonly observe = vi.fn();
+    readonly unobserve = vi.fn();
+    readonly disconnect = vi.fn();
+    constructor(private readonly callback: ResizeObserverCallback) {
+      FakeResizeObserver.instances.push(this);
+    }
+    trigger(width: number, height: number): void {
+      this.callback([{ contentRect: { width, height } } as ResizeObserverEntry], this);
+    }
+  }
+
+  afterEach(() => {
+    FakeResizeObserver.instances = [];
+    vi.unstubAllGlobals();
+    resetColourStateWarnings();
+  });
+
+  function renderPlayback(
+    onRendererReady: (renderer: GridRenderer | null) => void,
+    overrides: Partial<{
+      size: { cols: number; rows: number };
+      palette: RefToFillGroup;
+      colors: typeof COLORS;
+      showGridLines: boolean;
+    }> = {},
+  ) {
+    return (
+      <PetriDishCanvas
+        variant="playback"
+        size={overrides.size ?? SIZE}
+        palette={overrides.palette ?? PALETTE}
+        showGridLines={overrides.showGridLines ?? true}
+        colors={overrides.colors ?? COLORS}
+        onRendererReady={onRendererReady}
+      />
+    );
+  }
+
+  it('mounts a canvas with role="img" and the "Petri dish, C by R cells" name', () => {
+    installContexts();
+    const { container } = render(renderPlayback(vi.fn(), { size: { cols: 7, rows: 3 } }));
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toHaveAttribute('role', 'img');
+    expect(canvas).toHaveAttribute('aria-label', 'Petri dish, 7 by 3 cells');
+    // Not a paintable surface: no pointer plumbing, no focus stop.
+    expect(canvas).not.toHaveAttribute('tabindex');
+  });
+
+  it('calls onRendererReady once with a GridRenderer after mount, and once with null on unmount', () => {
+    installContexts();
+    const onRendererReady = vi.fn();
+    const { unmount } = render(renderPlayback(onRendererReady));
+
+    expect(onRendererReady).toHaveBeenCalledTimes(1);
+    expect(onRendererReady.mock.calls[0][0]).toBeInstanceOf(GridRenderer);
+
+    unmount();
+
+    expect(onRendererReady).toHaveBeenCalledTimes(2);
+    expect(onRendererReady.mock.calls[1][0]).toBeNull();
+  });
+
+  // The whole point of the variant: the CALLER paints. The canvas never issues a paint of its
+  // own — proven both negatively (zero prototype calls from the mount) and positively (a
+  // `drawFull` issued from the test's own `onRendererReady` reaches the recording context).
+  it('never paints itself — drawFull/renderStatic/draw are the caller’s, and the caller’s paint lands', () => {
+    const contexts = installContexts();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const renderStaticSpy = vi.spyOn(GridRenderer.prototype, 'renderStatic');
+    const drawSpy = vi.spyOn(GridRenderer.prototype, 'draw');
+
+    let received: GridRenderer | null = null;
+    const { container } = render(
+      renderPlayback((renderer) => {
+        received = renderer;
+      }),
+    );
+
+    expect(drawFullSpy).not.toHaveBeenCalled();
+    expect(renderStaticSpy).not.toHaveBeenCalled();
+    expect(drawSpy).not.toHaveBeenCalled();
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    const recording = contexts.get(canvas) as RecordingContext2D;
+    const fillsBefore = recording.calls.filter((call) => call.op === 'fillRect').length;
+    // The construction: the renderer's `applyDevicePixelSizing` + overlay build touch the canvas
+    // but paint no cell — a `fillRect` before the caller paints would be the canvas painting.
+    expect(fillsBefore).toBe(0);
+
+    (received as GridRenderer | null)?.drawFull(GRID);
+
+    expect(drawFullSpy).toHaveBeenCalledTimes(1);
+    const fillsAfter = recording.calls.filter((call) => call.op === 'fillRect').length;
+    expect(fillsAfter).toBeGreaterThan(0);
+  });
+
+  it('rebuilds on a `size` change: null, then a NEW renderer', () => {
+    installContexts();
+    const onRendererReady = vi.fn();
+    const { rerender } = render(renderPlayback(onRendererReady));
+    const first = onRendererReady.mock.calls[0][0] as GridRenderer;
+
+    rerender(renderPlayback(onRendererReady, { size: { cols: 4, rows: 4 } }));
+
+    expect(onRendererReady).toHaveBeenCalledTimes(3);
+    expect(onRendererReady.mock.calls[1][0]).toBeNull();
+    const second = onRendererReady.mock.calls[2][0] as GridRenderer;
+    expect(second).toBeInstanceOf(GridRenderer);
+    expect(second).not.toBe(first);
+  });
+
+  // Story 3.11 review: the construction key is the DIMENSIONS, not the object. `useSimulation.stop()`
+  // hands the view a fresh `liveSize` object at unchanged dimensions on every Stop; keyed on
+  // identity, each Stop would detach, rebuild and re-prime this renderer. Mutation-check: put
+  // `size` back in the construction deps and this reddens (three calls, not one).
+  it('a NEW `size` object with the SAME dimensions neither rebuilds nor re-calls', () => {
+    installContexts();
+    const onRendererReady = vi.fn();
+    const { rerender } = render(renderPlayback(onRendererReady, { size: { cols: 5, rows: 3 } }));
+    expect(onRendererReady).toHaveBeenCalledTimes(1);
+
+    rerender(renderPlayback(onRendererReady, { size: { cols: 5, rows: 3 } }));
+
+    expect(onRendererReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves a `showGridLines` change through setGridLines on the SAME instance, no rebuild', () => {
+    installContexts();
+    const setGridLinesSpy = vi.spyOn(GridRenderer.prototype, 'setGridLines');
+    const onRendererReady = vi.fn();
+    const { rerender } = render(renderPlayback(onRendererReady, { showGridLines: true }));
+    setGridLinesSpy.mockClear();
+
+    rerender(renderPlayback(onRendererReady, { showGridLines: false }));
+
+    expect(setGridLinesSpy).toHaveBeenCalledWith(false);
+    // One construction, one hand-off — the rerender neither detached nor rebuilt.
+    expect(onRendererReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-fits on a parent resize through resize(size) on the same instance', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    installContexts();
+    const resizeSpy = vi.spyOn(GridRenderer.prototype, 'resize');
+    const onRendererReady = vi.fn();
+    const { container } = render(renderPlayback(onRendererReady));
+
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    const observer = FakeResizeObserver.instances.at(-1);
+    expect(observer).toBeDefined();
+    // The PARENT is what is observed (Story 2.4 Task 4's loop fix, inherited).
+    expect(observer?.observe).toHaveBeenCalledWith(canvas.parentElement);
+    observer?.trigger(400, 240);
+
+    expect(resizeSpy).toHaveBeenCalledTimes(1);
+    expect(resizeSpy).toHaveBeenCalledWith(SIZE);
+    expect(onRendererReady).toHaveBeenCalledTimes(1);
+  });
+
+  // Real jsdom: `getContext('2d')` is null. The dish stays blank, nothing throws, and the hook is
+  // handed NOTHING — it runs headless, which is what every `<BattlePage>` test relies on.
+  it('with no 2D context: no onRendererReady call, no throw, the canvas still mounts', () => {
+    const onRendererReady = vi.fn();
+    let container: HTMLElement | undefined;
+    expect(() => {
+      container = render(renderPlayback(onRendererReady)).container;
+    }).not.toThrow();
+
+    expect(container?.querySelector('canvas')).not.toBeNull();
+    expect(onRendererReady).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Trap 2's tripwire. `onRendererReady` is read in the construction effect but is NOT one of its
+   * deps: listing it would tear the renderer down on every new callback identity, and calling
+   * the prop directly in the cleanup would detach through whichever render REGISTERED the effect.
+   * The `endStrokeRef` shape (Story 2.8 Task 5) is the answer. Mutation-check: drop the ref and
+   * call the prop in the cleanup, and the unmount below reaches `first`, not `second`.
+   */
+  it('a NEW onRendererReady identity neither rebuilds nor re-calls, and the unmount detaches through the NEW one', () => {
+    installContexts();
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender, unmount } = render(renderPlayback(first));
+    expect(first).toHaveBeenCalledTimes(1);
+
+    rerender(renderPlayback(second));
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledWith(null);
+  });
+});

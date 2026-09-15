@@ -14,6 +14,8 @@ drift.
 The Run subtree of the spec's §2 tree: `<BattleSimulationView>`, `<SimulationSidebar>` and its
 sections (`<PopulationStats>`, `<CycleCounter>`, `<SpeedControl>`), `<SimulationMain>`,
 `<SimulationControlBar>`, `<FullscreenStage>` and its two parts, plus `useSimulationHotkeys`.
+`<SimulationSidebar>` and `<SimulationMain>` are private layout children inside
+`BattleSimulationView.tsx` (spec §3.3's rule for their Lab counterparts), not exported components.
 
 `useSimulation` is a hook, so it goes to `lib/battle/` with the rest of the editor-and-runtime
 hooks — not here. `<BattleSimulationView>` is "the only component that touches the hook" (§3.11).
@@ -38,9 +40,9 @@ thing: **shared across modes**. Five files live there — `<BattlePage>`, `<Batt
 `<UnsavedChangesDialog>`, `<SidebarSection>`, `<SidebarFooter>` — and a component arriving at
 root is a claim that both modes render it.
 
-`<SidebarFooter>` is the clearest case: one importer today (`<BattleEditorView>`), but its FR
-traceability row reads "SidebarFooter Back (both modes) | 2, 3" in as many words. Story 3.11's
-`<SimulationSidebar>` is its second caller.
+`<SidebarFooter>` is the clearest case: its FR traceability row reads "SidebarFooter Back (both
+modes) | 2, 3" in as many words, and since Story 3.11 `<BattleSimulationView>` is its second
+caller.
 
 ⚠️ `<GridSizeControl>` (§3.12, FR-4.9) belongs HERE and is NOT `<GridSettingsSection>` under a
 variant. They share the preset MODEL, not a component — §3.12's last line says so, and the props
