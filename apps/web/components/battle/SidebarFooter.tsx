@@ -8,13 +8,18 @@ import { styled } from '@mui/material/styles';
  * the navigation, and this component only reports the press.
  *
  * Spec §8 lists it as a shared primitive (both sidebars, and Epic 4's Library), which is why it is
- * its own file rather than markup inside `<BattleEditorView>`. ❌ But NO run-mode prop, branch or
- * variant is added speculatively — Epic 3 mounts this same component in the Run sidebar and brings
- * whatever it needs with it, exactly as Story 2.14/2.15's sections did for this column.
+ * its own file rather than markup inside `<BattleEditorView>`. ❌ NO run-mode prop, branch or
+ * variant: Story 3.11's `<BattleSimulationView>` mounts this same component in the Run sidebar
+ * with no prop added — the two callers differ only in what they pass to `onBack`/`disabled`, and
+ * both pass the same `<BattlePage>` values. The two footers never coexist (`mode` is exclusive
+ * state and each branch renders one sidebar), which is what keeps the bare
+ * `[data-back-to-battles]` focus-restore query below unambiguous; `BattlePage.test.tsx` asserts
+ * it from Run mode.
  *
- * ⚠️ It is NOT a `<SidebarSection>` and carries no `<h2>` (trap 9). The route's heading structure
- * stays at four sidebar headings — Organisms, Battle Name, Grid Info, Tools — and both the unit
- * and e2e heading-order assertions still read four. A fifth means this was mounted wrong.
+ * ⚠️ It is NOT a `<SidebarSection>` and carries no `<h2>` (trap 9). The Lab route's heading
+ * structure stays at four sidebar headings — Organisms, Battle Name, Grid Info, Tools — and both
+ * the unit and e2e heading-order assertions still read four; the Run sidebar has none this story.
+ * An extra one means this was mounted wrong.
  */
 
 /**

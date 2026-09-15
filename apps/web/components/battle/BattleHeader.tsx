@@ -37,23 +37,152 @@ const Title = styled('h1')({
   overflowWrap: 'anywhere',
 });
 
+// Mockup: .header-actions (petri-dish-play-mode.html:55-59 / lab-mode:55-59) — the right-hand
+// cluster the mode toggle sits in. Its `gap` is what will space Story 3.18's fullscreen button off
+// the toggle; today it holds the toggle alone.
+const Actions = styled('div')({
+  display: 'flex',
+  gap: '15px',
+  alignItems: 'center',
+});
+
+// Mockup: .mode-toggle (:62-66). Story 3.11 forced decision 2, option (a): two plain `<button>`s
+// with `aria-pressed` inside a named group — the toggle-button pattern axe understands, and no MUI
+// import on the tightest bundle in the repo (`<EditorStatusBar>`'s FD2 made the same call for
+// UNDO/SAVE). ❌ Not `ToggleButtonGroup`: Story 2.7 shipped one and 2.9 removed it with its
+// `@mui/material` imports (BattleEditorView.tsx records why).
+const ModeToggle = styled('div')({
+  display: 'flex',
+  border: '1px solid var(--gol-border)',
+  background: 'var(--gol-bg-secondary)',
+});
+
+// Mockup: .mode-btn (:68-95) verbatim, minus `transition: all 0.2s` (the axe mid-fade trap
+// `<EditorStatusBar>` and `<SidebarFooter>` both record — a scan landing mid-fade measures a
+// contrast no settled state has) and minus `position: relative` (nothing is positioned against
+// it). The mockup's `:first-child` carries the divider between the pair; it is written as
+// `:first-of-type` here because Emotion warns on `:first-child` (unsafe under SSR, where an
+// inserted `<style>` sibling can precede the element) — the two siblings are both `<button>`s,
+// so the selectors agree.
+//
+// Forced decision 3, option (a): the ACTIVE colour is MODE-DEPENDENT, because the two mockups
+// disagree and both are right. The lab mockup's `.mode-btn.active` is neutral
+// (`--gol-bg-hover` / `--gol-text-primary`, :87-90); the play mockup's is accent
+// (`rgba(0, 212, 255, 0.1)` / `var(--accent)`, play-mode:87-90) — the same "the simulation is
+// live" signal that turns the play dish's border accent. `--gol-accent-tint` is that rgba as a
+// token (themes.css; Story 4.2 authored it for exactly this value — AR-46 forbids the literal).
+// The neutral rule is the base; the `data-mode-value="run"` selector layers the accent pair over
+// it for the RUN button only.
+//
+// `&:hover` is scoped to `:not([aria-pressed="true"]):not(:disabled)` — the mockup's
+// `.mode-btn:not(.active):hover`, plus the disabled exclusion the mockup never needed because it
+// never disabled anything. The disabled trio is the pre-validated set every control on this route
+// wears (`<SidebarFooter>`, `<EditorToolsSection>`, `<GridSettingsSection>`).
+const ModeButton = styled('button')({
+  background: 'transparent',
+  border: 'none',
+  color: 'var(--gol-text-secondary)',
+  padding: '8px 20px',
+  fontSize: '11px',
+  fontWeight: 600,
+  // Trap 15 (`<SidebarFooter>`): DOM text stays sentence case ("Lab", "Run") so the accessible
+  // names do; CSS renders the mockup's LAB / RUN.
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  '&:first-of-type': {
+    borderRight: '1px solid var(--gol-border)',
+  },
+  '&[aria-pressed="true"]': {
+    background: 'var(--gol-bg-hover)',
+    color: 'var(--gol-text-primary)',
+  },
+  '&[data-mode-value="run"][aria-pressed="true"]': {
+    background: 'var(--gol-accent-tint)',
+    color: 'var(--gol-accent)',
+  },
+  '&:hover:not([aria-pressed="true"]):not(:disabled)': {
+    background: 'var(--gol-bg-hover)',
+    color: 'var(--gol-text-primary)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+  '&:disabled': {
+    background: 'var(--gol-action-disabled-bg)',
+    borderColor: 'var(--gol-border)',
+    color: 'var(--gol-action-disabled)',
+    cursor: 'not-allowed',
+  },
+});
+
+export type BattleMode = 'lab' | 'run';
+
 export interface BattleHeaderProps {
   battleTitle: string;
-  // All three are ABSENT in Epic 2 and the header renders nothing for them — the mode toggle and
-  // the fullscreen button are Epic 3. A rendered-but-inert control is precisely what NFR-4.1
-  // forbids, so their absence is asserted in this component's tests rather than left implicit.
-  mode?: 'lab' | 'run';
-  onModeToggle?(next: 'lab' | 'run'): void;
+  /**
+   * Spec §3.2: both OPTIONAL, and the toggle renders only when BOTH are supplied — a `mode` with
+   * nothing wired behind it would be the rendered-but-inert control NFR-4.1 forbids (Story 2.1
+   * asserted zero controls for exactly that reason; Story 3.11 supplies both from `<BattlePage>`
+   * and the count test flipped to "exactly two buttons").
+   */
+  mode?: BattleMode;
+  onModeToggle?(next: BattleMode): void;
+  /**
+   * Story 3.11: the visible half of `<BattlePage>`'s edit lock (`isSaving`) AND the "this roster
+   * cannot run" refusal (AC7, forced decision 4). Reaches the RUN button only — LAB is always
+   * reachable from Run, because neither reason is a reason to trap the user there.
+   */
+  disabled?: boolean;
+  /** Lands as `title` on the RUN button, so a disabled control states WHY (NFR-4.1). */
+  disabledReason?: string;
+  /** Still ABSENT from the render — the fullscreen button is Story 3.18. */
   onEnterFullscreen?(): void;
 }
 
 // Display only (component-tree-battle-page.md §3.2): the title is TEXT, never an input.
 // In-place renaming is <BattleNameField> in the sidebar (Story 2.11), and no Save, Back or dirty
-// indicator belongs here either.
-export default function BattleHeader({ battleTitle }: BattleHeaderProps) {
+// indicator belongs here either. The one control it owns is the Lab⇄Run toggle (FR-3.10):
+// `<BattlePage>` owns `mode` and this component only reports the press (AR-28).
+export default function BattleHeader({
+  battleTitle,
+  mode,
+  onModeToggle,
+  disabled = false,
+  disabledReason,
+}: BattleHeaderProps) {
+  const showToggle = mode !== undefined && onModeToggle !== undefined;
   return (
     <Header>
       <Title>{battleTitle}</Title>
+      {showToggle && (
+        <Actions>
+          <ModeToggle role="group" aria-label="Mode">
+            {/* The ACTIVE button is a no-op, never a re-set: `onModeToggle` fires only for a
+                genuine change, so `<BattlePage>` never renders for a mode it is already in. */}
+            <ModeButton
+              type="button"
+              data-mode-value="lab"
+              aria-pressed={mode === 'lab'}
+              onClick={() => mode !== 'lab' && onModeToggle('lab')}
+            >
+              Lab
+            </ModeButton>
+            <ModeButton
+              type="button"
+              data-mode-value="run"
+              aria-pressed={mode === 'run'}
+              disabled={disabled}
+              title={disabled ? disabledReason : undefined}
+              onClick={() => mode !== 'run' && onModeToggle('run')}
+            >
+              Run
+            </ModeButton>
+          </ModeToggle>
+        </Actions>
+      )}
     </Header>
   );
 }

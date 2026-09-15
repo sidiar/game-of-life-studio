@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-09-14
+# last_updated: 2026-09-15
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-09-14
+last_updated: 2026-09-15
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -100,7 +100,7 @@ development_status:
   3-8-simulationloop: done
   3-9-colour-state-batch-rendering: done
   3-10-usesimulation-hook: done
-  3-11-mode-toggle-run-view-skeleton: backlog
+  3-11-mode-toggle-run-view-skeleton: done
   3-12-transport-controls: backlog
   3-13-speed-control: backlog
   3-14-cycle-counter-population-stats: backlog

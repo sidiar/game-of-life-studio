@@ -382,7 +382,11 @@ describe('BattlePage', () => {
     // Story 2.16 (trap 19): the sidebar footer's Back control — ENABLED on a clean draft, because
     // `disabled` here tracks a save in flight, not the dirty flag. Leaving is always available.
     expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeEnabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(6);
+    // Story 3.11: converted from 6 — the header's LAB and RUN toggle arrived (FR-3.10). RUN is
+    // enabled: Conway's Classic is in the library, so the seeded roster resolves (AC7).
+    expect(screen.getByRole('button', { name: 'Lab' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(8);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -423,8 +427,12 @@ describe('BattlePage', () => {
     await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
 
     expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+    // Scoped to the sidebar (Story 3.11): the header's mode toggle is a second `aria-pressed`
+    // group on the route now, and its pressed LAB is not a tool selection.
     expect(
-      screen.queryAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true'),
+      within(screen.getByRole('complementary'))
+        .queryAllByRole('button')
+        .filter((b) => b.getAttribute('aria-pressed') === 'true'),
     ).toHaveLength(1);
   });
 
@@ -499,17 +507,21 @@ describe('BattlePage', () => {
     expect(screen.queryByText(/organism library could not be read/i)).toBeNull();
   });
 
-  // AC2 / NFR-4.1 as a COUNT, not a presence check: `queryByRole('button', { name: /run/i })`
-  // being null still passes after someone adds a dead RUN button labelled differently, or a
-  // fullscreen button beside it. Story 2.9 replaced the provisional Draw/Erase pair with the real
-  // roster; 2.13 adds SAVE, 2.15 adds CLEAR and 2.16 adds BACK TO BATTLES, so the claim is now
-  // "this battle's three organisms, the eraser, UNDO, SAVE, CLEAR and BACK — nothing else". A
-  // NINTH button (Run, fullscreen, or Epic 4's per-row pencil) still fails here.
-  it('renders no Run, fullscreen, or any other button beyond the roster, UNDO, SAVE, CLEAR and BACK on the loaded route', async () => {
+  // AC2 / NFR-4.1 as a COUNT, not a presence check: a presence-only assertion still passes after
+  // someone adds a dead button labelled differently, or a fullscreen button beside the toggle.
+  // Story 2.9 replaced the provisional Draw/Erase pair with the real roster; 2.13 adds SAVE, 2.15
+  // adds CLEAR, 2.16 adds BACK TO BATTLES, and 3.11 adds the header's LAB + RUN toggle, so the
+  // claim is now "this battle's three organisms, the eraser, UNDO, SAVE, CLEAR, BACK, LAB and RUN
+  // — nothing else". An ELEVENTH button (fullscreen, or Epic 4's per-row pencil) still fails here.
+  it('renders exactly the roster, UNDO, SAVE, CLEAR, BACK and the Lab/Run toggle on the loaded route — no fullscreen', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
-    expect(screen.queryByRole('button', { name: /run/i })).not.toBeInTheDocument();
+    // Story 3.11: converted from an absence assertion — RUN has arrived (FR-3.10), enabled because
+    // every roster id resolves in the seeded library (AC7), and LAB is the pressed one.
+    expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Lab' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: /fullscreen/i })).not.toBeInTheDocument();
     // AC3: the deleted toggle, named rather than merely counted — a bare length check is
     // satisfied by a dead control replacing one of them, which is what this count exists to catch.
     expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
@@ -525,10 +537,10 @@ describe('BattlePage', () => {
     // Story 2.15: SKIRMISH places a roster, so CLEAR renders enabled.
     expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeEnabled();
     // Story 2.16: converted from this test's own "2.16's Back" prediction — the eighth button IS
-    // Back to Battles, and it is the last one this route expects. A NINTH (Run, fullscreen, or
-    // Epic 4's per-row pencil) still fails here.
+    // Back to Battles. Story 3.11: LAB and RUN make ten; an ELEVENTH (fullscreen — Story 3.18 —
+    // or Epic 4's per-row pencil) still fails here.
     expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeEnabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 5);
+    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 7);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
@@ -564,7 +576,9 @@ describe('BattlePage', () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
-    const pressed = screen
+    // Scoped to the sidebar (Story 3.11): the header's LAB/RUN toggle is a second `aria-pressed`
+    // group on the route, and its pressed LAB is not a tool selection.
+    const pressed = within(screen.getByRole('complementary'))
       .getAllByRole('button')
       .filter((button) => button.getAttribute('aria-pressed') === 'true');
     expect(pressed).toHaveLength(1);
@@ -2663,5 +2677,177 @@ describe('BattlePage — back navigation & the unsaved-changes guard (Story 2.16
     // `document.body`, not `container`: MUI portals the dialog out of `render()`'s own container,
     // so scoping this to `container` would silently scan a tree with no dialog in it.
     expect((await axe(document.body)).violations).toEqual([]);
+  });
+});
+
+describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
+  const modeValue = (container: HTMLElement) =>
+    container.querySelector('[data-mode]')?.getAttribute('data-mode');
+  const dirtyValue = (container: HTMLElement) =>
+    container.querySelector('[data-dirty]')?.getAttribute('data-dirty');
+  const runButton = () => screen.getByRole('button', { name: 'Run' });
+  const labButton = () => screen.getByRole('button', { name: 'Lab' });
+  const backButton = () => screen.getByRole('button', { name: 'Back to Battles' });
+  const nameField = () => screen.getByRole('textbox', { name: /battle name/i });
+
+  /** The Run view is behind `next/dynamic` (trap 8): its root arrives asynchronously, so every
+   * assertion on the run branch waits for it — in both the mocked and the real tests. */
+  async function findRunView(container: HTMLElement): Promise<HTMLElement> {
+    return await waitFor(() => {
+      const view = container.querySelector<HTMLElement>('[data-status]');
+      if (view === null) throw new Error('the Run view has not mounted yet');
+      return view;
+    });
+  }
+
+  // AC1, AC2, AC3: the flip is STATE — the URL is untouched, the header (its <h1>) stays the same
+  // element, the editor is unmounted (not hidden), and the Run view starts paused at cycle 0.
+  it('Lab → Run mounts the paused Run view in place of the editor, keeping the header mounted and the URL unchanged', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    await screen.findByRole('group', { name: 'Mode' });
+    const href = window.location.href;
+    expect(modeValue(container)).toBe('lab');
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(4);
+
+    await user.click(runButton());
+
+    expect(modeValue(container)).toBe('run');
+    const view = await findRunView(container);
+    expect(view).toHaveAttribute('data-status', 'paused');
+    expect(view).toHaveAttribute('data-cycle', '0');
+    // The editor is GONE — no sections, no status bar — not merely hidden.
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    // Still exactly one <h1>, and it is the SAME element: `<BattleHeader>` never unmounted.
+    expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toBe(heading);
+    expect(runButton()).toHaveAttribute('aria-pressed', 'true');
+    // The Run sidebar's footer — the second `<SidebarFooter>` caller.
+    expect(backButton()).toBeEnabled();
+    expect(window.location.href).toBe(href);
+
+    await user.click(labButton());
+
+    expect(modeValue(container)).toBe('lab');
+    await screen.findByRole('button', { name: 'Undo' });
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(4);
+    expect(container.querySelector('[data-status]')).toBeNull();
+  });
+
+  // AC9: everything `<BattlePage>` owns survives the round trip — undo ring, dirty flag, name.
+  it('a Lab → Run → Lab round trip keeps the undo ring, the dirty flag and a typed name (AC9)', async () => {
+    enableCanvasRendering();
+    installPerCanvasRecording();
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    const canvas = await findEditorCanvas(container);
+    stubCanvasRect(canvas);
+
+    // Paint an EMPTY cell: the seeded fixture places centrally, so (0, 0) is free.
+    click(canvas, centreOfCell(canvas, { cols: 50, rows: 30 }, 0, 0));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+    await user.type(nameField(), '!');
+    expect(dirtyValue(container)).toBe('true');
+
+    await user.click(runButton());
+    await findRunView(container);
+    await user.click(labButton());
+    await screen.findByRole('button', { name: 'Undo' });
+
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    expect(dirtyValue(container)).toBe('true');
+    expect(nameField()).toHaveValue('Three-Way Skirmish!');
+    // And the editor remounted over a grid that still holds the painted cell: undoing it is
+    // exactly one level deep.
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  // AC2, trap 10: the visible half of the edit lock.
+  it('disables RUN while a save is in flight', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    vi.spyOn(repositories.battles, 'save').mockReturnValue(new Promise<void>(() => {}));
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    expect(runButton()).toBeEnabled();
+
+    await user.type(nameField(), '!');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(runButton()).toBeDisabled());
+    expect(labButton()).toBeEnabled();
+  });
+
+  // AC7 / forced decision 4: a roster with a hole in it cannot enter Run — disabled WITH a
+  // reason, never hidden and never a placeholder organism.
+  it('disables RUN with a stated reason when a roster id has no library record', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles, organisms: [] })}
+        battleId={SKIRMISH.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(runButton()).toBeDisabled();
+    expect(runButton()).toHaveAttribute(
+      'title',
+      'Some organisms in this battle could not be loaded',
+    );
+    expect(labButton()).toBeEnabled();
+  });
+
+  it('disables RUN when the organism library itself fails to load (AC7’s degraded roster)', async () => {
+    render(<BattlePage repositories={withFailingOrganismList()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(runButton()).toBeDisabled();
+    expect(runButton()).toHaveAttribute(
+      'title',
+      'Some organisms in this battle could not be loaded',
+    );
+  });
+
+  // AC9 + the 2.16 deferred-work entry: the FR-7.9 guard works from Run mode, and after Cancel the
+  // focus-restore's bare `[data-back-to-battles]` query resolves to the RUN sidebar's footer —
+  // the two footers cannot coexist (`mode` is exclusive state; each branch renders one sidebar).
+  it('Back from Run on a dirty battle opens the guard, and Cancel restores focus to the Run footer', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    await user.type(nameField(), '!');
+    await user.click(runButton());
+    await findRunView(container);
+    // Exactly ONE Back control on the page in Run mode.
+    expect(screen.getAllByRole('button', { name: 'Back to Battles' })).toHaveLength(1);
+
+    await user.click(backButton());
+    const dialog = await screen.findByRole('dialog', { name: 'Unsaved Changes' });
+    expect(router.push).not.toHaveBeenCalled();
+    // Still in Run mode underneath the dialog.
+    expect(modeValue(container)).toBe('run');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(backButton()).toHaveFocus());
+    expect(modeValue(container)).toBe('run');
+    expect(dirtyValue(container)).toBe('true');
+  });
+
+  it('has no axe accessibility violations in Run mode', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    await user.click(runButton());
+    await findRunView(container);
+
+    const results = await axe(container);
+    expect(results.violations).toEqual([]);
   });
 });

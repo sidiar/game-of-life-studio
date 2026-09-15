@@ -244,7 +244,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **`releasePointerCapture` is called without a `hasPointerCapture` check on the cancel and lost-capture paths** — `endStroke` calls `canvasRef.current?.releasePointerCapture?.(stroke.pointerId)`; the `?.` guards the method being *absent* (jsdom 30, trap 1), not it *throwing*. Per the Pointer Events spec `releasePointerCapture` raises `NotFoundError` when the id matches no **active** pointer, and `endStroke` runs from `pointercancel` and `lostpointercapture` as well as `pointerup` — orderings where a touch pointer may already have left the active set and capture may already have been released implicitly. A throw there lands inside a React pointer handler. Confidence is low that it fires in practice (the pointer-up pattern is the one MDN documents), but the coverage is zero either way and cannot be added under jsdom: the method is `undefined`, so the `?.` short-circuits before any spec behaviour is reached, and no e2e fires a `pointercancel`. **Pick this up in Story 6.11** (accessibility/robustness validation) or in whichever story first runs a real touch gesture in Playwright, whichever comes first.
 
-- **Pointer capture — the mechanism AC5 rests on — has no test that would fail if it were deleted** — `setPointerCapture` is what makes moves and the final `pointerup` keep targeting the canvas after the pointer leaves it, and it is guarded with `?.` because jsdom has no implementation, which means the entire unit suite exercises the *no-capture* path. The test that names AC5 (`'pointerUp fired outside the canvas element still commits once'`) dispatches the event **at the canvas** with out-of-box coordinates — exactly what an uncaptured `pointerup` on the canvas looks like — so deleting the `setPointerCapture` line leaves it green. The e2e's drag never leaves the dish's box, so it does not cover it either. Closing this needs a Playwright drag that releases outside the canvas element (and, for AC8's real claim, a touch drag on the `tablet` project asserting the page did not scroll — today AC8 is pinned only by a jsdom computed-style check that the CSS is emitted). **Pick this up in Story 3.11** (the playback canvas) or 6.11, whichever first extends the dish's e2e coverage.
+- **Pointer capture — the mechanism AC5 rests on — has no test that would fail if it were deleted** — `setPointerCapture` is what makes moves and the final `pointerup` keep targeting the canvas after the pointer leaves it, and it is guarded with `?.` because jsdom has no implementation, which means the entire unit suite exercises the *no-capture* path. The test that names AC5 (`'pointerUp fired outside the canvas element still commits once'`) dispatches the event **at the canvas** with out-of-box coordinates — exactly what an uncaptured `pointerup` on the canvas looks like — so deleting the `setPointerCapture` line leaves it green. The e2e's drag never leaves the dish's box, so it does not cover it either. Closing this needs a Playwright drag that releases outside the canvas element (and, for AC8's real claim, a touch drag on the `tablet` project asserting the page did not scroll — today AC8 is pinned only by a jsdom computed-style check that the CSS is emitted). ~~**Pick this up in Story 3.11** (the playback canvas) or 6.11, whichever first extends the dish's e2e coverage.~~ **Reassigned to Story 6.11 by Story 3.11** (2026-09-14): 3.11's e2e extends the PLAYBACK dish's coverage (paint at cycle 0, round-trip survival), not the EDIT dish's drag path — the playback canvas has no pointer handlers at all, so a release-outside-the-canvas drag is not something its story can exercise. The one-test fix the entry spells out is unchanged and still owed.
 
 - ~~**Task 4's forced decision — a mid-stroke re-layout ends the stroke — ships untested**~~ — **✅ Closed in Story 2.14 (2026-08-29).** — jsdom has no `ResizeObserver`, so the `if (strokeRef.current !== null) endStroke(true)` line in the resize effect cannot be reached from a component test, and deleting it breaks nothing. The decision is implemented and recorded as the story required; only the pin is missing. A fake `ResizeObserver` in the test setup (constructed, callback captured, invoked by hand) would close this and would also unlock the two `StaticDish`/`EditDish` re-fit paths that are currently only reachable through e2e. ~~**Pick this up in Story 2.14**, which makes a live `size` change a real user action for the first time.~~ The pin is written: `PetriDishCanvas.test.tsx`'s "ends and COMMITS an in-progress stroke on a mid-stroke re-layout" opens a real stroke on an EMPTY cell (a stroke that changed nothing commits nothing anyway, which would pass for the wrong reason), triggers the fake observer with a changed box, and asserts BOTH halves of `endStroke(true)` — one `onStrokeCommit` and one `releasePointerCapture`. Mutation-checked: deleting the `if (strokeRef.current !== null) endStrokeRef.current(true);` line reddens it. ⚠️ The fake is `vi.stubGlobal`-scoped to its describe, **not** added to `apps/web/vitest.setup.ts` as this entry suggested: a global `ResizeObserver` changes every test that relies on `typeof ResizeObserver === 'undefined'` taking the early-return branch, and `PetriDishCanvas.test.tsx` alone has two other describes that do exactly that (and already establish the per-describe fake as this file's idiom). The `StaticDish` / `EditDish` re-fit paths this entry hoped to unlock are therefore still e2e-only, which is a smaller residual than the blast radius of the global.
 
@@ -286,7 +286,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - ~~**Both toggle buttons carry an `aria-label` duplicating their visible text**~~ — **✅ Closed in Story 2.9 (AC3)** by deleting the control. The replacement took the lesson rather than the markup: every `<OrganismRoster>` row is named by its VISIBLE text and carries no `aria-label` at all, so users and tests query the same string by construction. `OrganismRoster.test.tsx` asserts the absence of `aria-label` on every row, which is what stops the pattern coming back.
 
-- **`tool` remains a declared-but-unread prop on `<PetriDishCanvas>`'s edit variant** — Story 2.6's comment promised "Story 2.7's eraser is what makes it load-bearing"; Story 2.7 correctly kept the canvas tool-agnostic (AC6) and rewrote the comment to point at "a future variant that genuinely needs the organism id". It is now carried on §3.10 shape-conformance alone, with no story attached. Either a later variant reads it or it should go. **Pick this up in Epic 3**, whose playback variant is the next one to touch this union.
+- **`tool` remains a declared-but-unread prop on `<PetriDishCanvas>`'s edit variant** — Story 2.6's comment promised "Story 2.7's eraser is what makes it load-bearing"; Story 2.7 correctly kept the canvas tool-agnostic (AC6) and rewrote the comment to point at "a future variant that genuinely needs the organism id". It is now carried on §3.10 shape-conformance alone, with no story attached. Either a later variant reads it or it should go. ~~**Pick this up in Epic 3**, whose playback variant is the next one to touch this union.~~ **Settled as "go" by Story 3.11, removal reassigned** (2026-09-14, FD9 option (a)): the `'playback'` member does not read `tool` either — it takes no grid and no tool at all — so no variant will. Removing it edits `<BattleEditorView>`'s `EditorMain` and every edit-variant test's props, in a Run-mode story that otherwise touches nothing under `editor/`; **pick up the removal in whichever story next edits the edit member.**
 
 ## Deferred from: Story 2-8-undo implementation (2026-08-27)
 
@@ -442,9 +442,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 ## Deferred from: Story 2-16-back-navigation-unsaved-changes-guard implementation (2026-08-31)
 
-- **A Save & Leave that is REFUSED (rather than failing) closes the guard with nothing said** — `<BattlePage>`'s `saveBattle()` returns `false` for two different facts: the write threw (reported through Story 2.13's `role="alert"` line, forced decision 5a) and the write was never attempted (`savingRef` re-entrancy, or `grid === null`). `handleSaveAndLeave` treats them the same — no navigation, close the dialog — which is right for the first and silent for the second: the user pressed Save & Leave, nothing was written, nothing was said, and they are back on the editor with the dialog gone. **Unreachable today, by construction rather than by luck:** the Back control is `disabled={isSaving}` (forced decision 3a) so the guard cannot open while another save is in flight, the dialog's own three buttons are `disabled` while `pending`, and `grid` is non-null on every branch that renders the footer. It becomes reachable the moment forced decision 3 is revisited — option (b), "always enabled", is exactly the change the story's own text says would need the dialog to handle "refused because a save is already running" as its own outcome. **Pick this up in whichever story revisits the Back control's `disabled` state** (Epic 3's Run-mode Back is the first candidate, since it inherits `<SidebarFooter>`), or drop it if that decision is reaffirmed. The cheap fix if it is ever needed: distinguish the two by returning a reason rather than a boolean, and route "refused" to the same `role="alert"` surface.
+- **A Save & Leave that is REFUSED (rather than failing) closes the guard with nothing said** — `<BattlePage>`'s `saveBattle()` returns `false` for two different facts: the write threw (reported through Story 2.13's `role="alert"` line, forced decision 5a) and the write was never attempted (`savingRef` re-entrancy, or `grid === null`). `handleSaveAndLeave` treats them the same — no navigation, close the dialog — which is right for the first and silent for the second: the user pressed Save & Leave, nothing was written, nothing was said, and they are back on the editor with the dialog gone. **Unreachable today, by construction rather than by luck:** the Back control is `disabled={isSaving}` (forced decision 3a) so the guard cannot open while another save is in flight, the dialog's own three buttons are `disabled` while `pending`, and `grid` is non-null on every branch that renders the footer. It becomes reachable the moment forced decision 3 is revisited — option (b), "always enabled", is exactly the change the story's own text says would need the dialog to handle "refused because a save is already running" as its own outcome. **Pick this up in whichever story revisits the Back control's `disabled` state** (Epic 3's Run-mode Back is the first candidate, since it inherits `<SidebarFooter>`), or drop it if that decision is reaffirmed. **Story 3.11 (2026-09-14) REAFFIRMED forced decision 3a for the Run footer** — `<BattleSimulationView>` receives `backDisabled={isSaving}` and passes it straight to `<SidebarFooter>`, so the refused path stays unreachable from Run mode too. Left OPEN, not dropped: the decision was reaffirmed for a second caller, not revisited, and the entry's trigger ("always enabled") is still a live option for a later story. The cheap fix if it is ever needed: distinguish the two by returning a reason rather than a boolean, and route "refused" to the same `role="alert"` surface.
 
-- **`<BattlePage>` finds the Back button by a bare `[data-back-to-battles]` document query** — the focus-restore effect resolves its target with `document.querySelector('[data-back-to-battles]')`, which is the route's established idiom (`data-delete-battle-id`, `data-grid-preset`) and is deliberately a DOM lookup rather than a captured element (WebKit does not focus a `<button>` on click). Unlike those two, this selector carries no discriminator, so it would resolve to the FIRST such control if a page ever rendered two — which Epic 3 makes possible in principle, since spec §8 lists `<SidebarFooter>` as a shared primitive mounted in BOTH sidebars. It is not possible today: modes are exclusive state (`mode: 'lab' | 'run'`), so only one sidebar is ever mounted. **Pick this up in Story 3.x when the Run sidebar mounts `<SidebarFooter>`**, and confirm there that the two footers cannot coexist — if they can, the attribute needs a value the way the other two have one.
+- **`<BattlePage>` finds the Back button by a bare `[data-back-to-battles]` document query** — the focus-restore effect resolves its target with `document.querySelector('[data-back-to-battles]')`, which is the route's established idiom (`data-delete-battle-id`, `data-grid-preset`) and is deliberately a DOM lookup rather than a captured element (WebKit does not focus a `<button>` on click). Unlike those two, this selector carries no discriminator, so it would resolve to the FIRST such control if a page ever rendered two — which Epic 3 makes possible in principle, since spec §8 lists `<SidebarFooter>` as a shared primitive mounted in BOTH sidebars. It is not possible today: modes are exclusive state (`mode: 'lab' | 'run'`), so only one sidebar is ever mounted. ~~**Pick this up in Story 3.x when the Run sidebar mounts `<SidebarFooter>`**, and confirm there that the two footers cannot coexist — if they can, the attribute needs a value the way the other two have one.~~ **✅ Closed by Story 3.11** (2026-09-14): they cannot. `mode` is exclusive state and `<BattlePage>` renders `<BattleEditorView>` OR `<BattleSimulationView>` — never both — so exactly one `[data-back-to-battles]` exists at any time, and the bare query is unambiguous by construction. Asserted from Run mode in `BattlePage.test.tsx` ("Back from Run on a dirty battle opens the guard, and Cancel restores focus to the Run footer"): one Back control on the page, and the focus-restore lands on it after Cancel. `SidebarFooter.tsx`'s head comment records the invariant.
 
 ## Deferred from: code review of 3-4-precompiled-evaluators-organism-interning (2026-09-09)
 
@@ -712,7 +712,13 @@ Review Findings; these are the items consciously left open.
   a second surface with the same exposure. Not reachable today — the factory is a mode switch with
   one branch. **Pick up with the first story that gives the factory a second branch** (Connected
   mode) or with Story 6.5's unrecognised-theme handling, whichever first makes a thrown construction
-  a real path.
+  a real path. **Story 3.11 (FD8, option (a)) adds a second exposure under `(battle)`:** Run mode
+  now has a throw path from `useSimulation`'s session effect (`compileSession` on a schema-invalid
+  rule or a > 255 roster — both unreachable from schema-validated storage, and the 255 cap is
+  UI-enforced at add time), still with no boundary nearer than `GlobalError`. Deferred with the
+  same owner rather than adding `app/(battle)/error.tsx` now: it is a route-level affordance with
+  its own copy and its own static-import cost on the tightest route, and both route groups' need
+  should be settled together.
 
 ## Deferred from: Story 4-2-organism-card-grid implementation (2026-09-14)
 
@@ -794,14 +800,19 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 ## Deferred from: Story 3-10-usesimulation-hook implementation (2026-09-14)
 
-- **⚠️ Story 3.11 will pull the whole engine into `/battle`, and the bundle gate has 3.8 KB gzip
-  of headroom.** This story adds no route import (`bundle:check` is unchanged), but
+- ~~**⚠️ Story 3.11 will pull the whole engine into `/battle`, and the bundle gate has 3.8 KB gzip
+  of headroom.**~~ This story adds no route import (`bundle:check` is unchanged), but
   `<BattleSimulationView>` importing `useSimulation` imports `compileSession`, `threePhaseStep`,
   `createSimulationLoop`, `cloneGrid`/`resizeGrid` and the population derivation into the `/battle`
   chunk — almost certainly more than 3.8 KB. Story 3.11 must plan a gate conversation BEFORE
   `npm run ci` discovers it, under Sidiar's ratchet rule (change the mechanism, not the threshold —
   e.g. a `next/dynamic` split of the Run view so the engine loads on the first mode toggle, or a
-  per-route budget that names the engine as expected weight).
+  per-route budget that names the engine as expected weight). **✅ Closed by Story 3.11** (2026-09-14,
+  FD1 option (a)): `<BattleSimulationView>` is reached through `next/dynamic(() => import(...),
+  { ssr: false, loading: RunLoading })` from `<BattlePage>` — the shape the route's two dialogs
+  already use — so the engine rides in the Run view's chunk, fetched on the first Lab → Run toggle
+  and never referenced from the route's HTML. `check-bundle-size.mjs` is unchanged and the 310
+  ceiling stands. Measured (`npm run ci`, 2026-09-14): `/battle` **308.5 KB gzip against 310 — 1.5 KB headroom** (from 306.1 / 3.9 on `main`), `/battle/new` 308.5, `/` 333.3 / 340, `/organisms` 295.3 / 305. The run-view chunk (`<BattleSimulationView>` + `useSimulation` + `simulationSpeed` + `population`) is **4.2 KB gzip** (10.2 KB raw) and the engine proper (`compileSession`, `threePhaseStep`, the RNG) is a second **5.4 KB gzip** chunk it pulls in — one Turbopack already emits for `/organisms` (the rule editor's shared `@gol/simulation` slice), so it is fetched once and shared. Neither is referenced from `/battle.html`, and `bundle:check` passes unchanged. ⚠️ The route still moved +2.4 KB, more than the toggle's ~1 KB, because **`PlaybackDish` rides in the route's first-load payload**: `<PetriDishCanvas>` is ONE module, statically imported by `<BattleEditorView>` (and `<BattleTile>`, which is why `/` moved +1.8 KB too), so its third variant lands beside the other two regardless of the `dynamic()` boundary around the view. Splitting the variants into separate modules is the next mechanism if the 1.5 KB runs out before the growth-baseline redesign of `check-bundle-size.mjs` — noted below under this story's own section.
 - **`component-tree-battle-page.md` §4 / §3.11 amendment candidates** (planning artifact, not edited
   — Sidiar's call, the M14/M15 precedent). What shipped diverges from the spec's sketch in four
   places, each recorded in the story's Dev Agent Record:
@@ -836,6 +847,70 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   and needing `status` to follow, so the thunk→`'paused'` path should be built once there and
   cover both the extinction stop and the error stop (the seam comment in the thunk marks the
   spot). Until then a mid-run throw is a programming error whose only symptom is a frozen dish.
+
+## Deferred from: Story 3-11-mode-toggle-run-view-skeleton implementation (2026-09-14)
+
+- **`PlaybackDish` is in `/battle`'s first-load payload, not the Run chunk, and the route is at 1.5 KB of headroom.** `<PetriDishCanvas>` is one module holding all three variants; `<BattleEditorView>` and `<BattleTile>` import it statically, so the `dynamic()` boundary around `<BattleSimulationView>` moves the hook and the engine off the route but not the canvas variant that receives them (~1.4 KB gzip of the +2.4 KB this story cost the route; `/` paid +1.8 KB for the same reason). **The next mechanism, if a 3.12–3.19 story runs the route out of headroom:** split the variants into their own modules (`petriDishCanvas/static.tsx` / `edit.tsx` / `playback.tsx` behind the same union and dispatcher) so the playback lifecycle loads with the view. Under Sidiar's ratchet rule this is the change to make, not a threshold move; the growth-baseline redesign `check-bundle-size.mjs` names in its own comment would make the whole question moot.
+- **`component-tree-battle-page.md` §3.10 / §3.11 amendment candidates** (planning artifact, not
+  edited — the M14/M15 and Story 3.10 precedent). What shipped diverges from the spec's sketch in
+  five places, each recorded in the story's Dev Agent Record (FD5, FD6):
+  1. §3.11's `onExitToLab` has no caller and is not a prop: the header owns the toggle (§3.2) and
+     `<BattlePage>` flips `mode` itself. RFC-005 Decision 3's snippet put it on the view because its
+     sketch had no header.
+  2. §3.11's `cellAnimation` (FR-8.8) is not threaded: nothing consumes it until Story 6.7, and a
+     prop nothing reads is the dead-affordance rule applied to code.
+  3. §3.11 gains `palette: RefToFillGroup`, `colors: GridRendererColors | null`, `onBack(): void`
+     and `backDisabled?: boolean` — the same additive deviations `<BattleEditorView>` already carries
+     for the same reasons (the LUT and the resolved tokens are built once in `<BattlePage>`; the
+     footer needs its callback and the edit lock's visible half).
+  4. §3.10's playback member: `onRendererReady(r: GridRenderer)` → `onRendererReady(r: GridRenderer
+     | null)`, mirroring `useSimulation.attachRenderer(PlaybackRenderer | null)` so the prop is a
+     pass-through (`null` on cleanup detaches).
+  5. §3.11's `startingSpeed` is the INITIAL speed only (Story 3.10 obligation 6) — a changed prop is
+     not observed; Story 3.13's control goes through `setSpeed`.
+- **`<BattleHeader>`'s `disabled` collapses two facts into one attribute.** `disabled={isSaving ||
+  runOrganisms === null}` — the edit lock and the unresolvable roster — reach the RUN button as one
+  boolean, and only the roster case carries a `title`. While a save is in flight the button is
+  disabled with NO reason shown, which is consistent with every other `disabled={isSaving}`
+  control on the route (none explain the lock) but is the one place the two reasons could deserve
+  different copy. **Pick up if a user-facing "why is Run disabled" question ever arrives**; until then
+  the roster reason is the only one a user can do anything about.
+- **The `PlaybackDish` observer stretches `gridRenderer.ts`'s "paused-only reader" assumption on
+  `lastGrid`.** A window resize while PLAYING calls `renderer.resize(size)`, which repaints
+  `lastGrid` — after a swap, the buffer the engine writes into next. Safe today by
+  single-threading (the observer callback never interleaves a step; worst case one frame of the
+  previous cycle, corrected by the next `drawDiff`), documented at the call site, and inherited
+  unchanged by Story 3.16 (ephemeral resize rebuilds the canvas) and 3.18 (fullscreen re-layout).
+  **Revisit only if a Web Worker ever moves the step off the main thread** — the documented escape
+  hatch, not a plan.
+
+## Deferred from: code review of 3-11-mode-toggle-run-view-skeleton (2026-09-14)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+
+- **`mode === 'run' && runOrganisms === null` renders a header over nothing, and nothing flips
+  `mode` back.** The Run branch's `runOrganisms !== null` guard is there for TypeScript (the story
+  prescribed "renders nothing rather than `!`"), which is correct only while the state is
+  unreachable — and today it is: `organismsResource` has fixed deps and never re-lists, and
+  `rosterIds` changes only through the editor, which is unmounted in Run mode. It stops being
+  unreachable the moment a story changes the library while `<BattlePage>` is mounted — Stories
+  4.24 / 4.25 (edit / create organism from the battle, gated on `epic-3`) are the first. **Pick
+  this up there:** either flip to `'lab'` when the roster becomes unresolvable (an effect, so mind
+  `react-hooks/set-state-in-effect`) or render the same disabled-with-reason notice the header
+  shows, and add the test the guard cannot have today.
+- **The disabled RUN button states its reason only through `title`.** A `disabled` `<button>` is
+  not focusable, so a keyboard user never meets the tooltip; screen readers do expose `title` as
+  the accessible description, so the gap is sighted keyboard use. This is the route's policy
+  rather than this story's: every `disabled={isSaving}` control on `/battle` explains nothing at
+  all, and the story's AC7 prescribed `title`. **Pick this up in Story 6.11** with the rest of the
+  route's disabled-state a11y (the `aria-disabled` + `aria-describedby` shape keeps the control
+  focusable and the reason reachable, at the cost of a click that must refuse by hand).
+- **A rejected `import()` of the Run chunk has no boundary nearer than `GlobalError`.** Offline,
+  or a deploy that rotated chunk hashes under an open tab, makes `next/dynamic`'s promise reject
+  after the editor has already unmounted — the whole page goes to Next's error surface with Lab
+  unreachable. Same owner as the 4-1 `error.tsx` entry FD8 already extended for the
+  `compileSession` throw: a second throw path under `(battle)`, to be settled with that entry, not
+  separately.
 
 ## Deferred from: Story 4-4-three-column-responsive-layout (2026-09-14)
 
