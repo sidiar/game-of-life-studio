@@ -829,3 +829,18 @@ Not touched (as required): `apps/web/lib/battle/useSimulation.ts`, `packages/**`
 
 Dev Model: opus   # architecture-shaping: ships the detented ladder-slider idiom (native range, index value, aria-valuetext, tokenised track/thumb) that 3.16's Grid Size slider copies, 4.15 reuses outright and 4.6/6.9 should follow, plus the runtime SPEED_LADDER every later speed consumer indexes — patterns picked here, none existing in code to follow
 Proposed lane gate: `- story: 4-6-dominance-control / requires: 3-13-speed-control / why: 4.6 is the app's second slider (1–100 + synced numeric input) and lane 4's next story; 3.13 decides native range vs MUI Slider (FD1) and the token treatment for track/thumb, and the stale deferred-work pointer ("Slider → Epic 4") means 4.6 would otherwise make the same call in parallel with no idiom to follow — one slider idiom, decided once`
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 17s | 17s | 10 | 1,109 | 5,019 | 276,770 | 282,908 |
+| Step 1 — create-story | opus-5 | 1 | 9m 40s | 9m 40s | 142 | 43,197 | 444,360 | 8,890,162 | 9,377,861 |
+| Step 2 — dev-story | opus-5 | 1 | 23m 29s | 23m 29s | 358 | 70,001 | 576,318 | 27,706,498 | 28,353,175 |
+| Step 3 — code review + PR | fable-5-1 | 4 | 26m 33s | 26m 33s | 5,504 | 132,418 | 1,786,403 | 21,430,038 | 23,354,363 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 44 | 5,924 | 29,228 | 1,343,901 | 1,379,097 |
+| **Total (create-story → PR ready)** | | 6 | **59m 59s** | 59m 59s | 6,014 | 246,725 | 2,812,100 | 58,303,468 | **61,368,307** |
+
+Run started 2026-09-15 13:05 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
