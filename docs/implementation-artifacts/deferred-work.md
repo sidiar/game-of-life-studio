@@ -847,6 +847,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   and needing `status` to follow, so the thunk→`'paused'` path should be built once there and
   cover both the extinction stop and the error stop (the seam comment in the thunk marks the
   spot). Until then a mid-run throw is a programming error whose only symptom is a frozen dish.
+  **Noted by Story 3.12** (2026-09-15): `<SimulationControlBar>`'s Play/Pause button reads
+  "Pause" in this state (`status` is still `'playing'`), and pressing it calls `pause()` — the
+  correct recovery, since the loop is already stopped and only the status write is stale — so the
+  view's `handlePlayPause` needs no guard for it. Still 3.15's to fix at the thunk.
 
 ## Deferred from: Story 3-11-mode-toggle-run-view-skeleton implementation (2026-09-14)
 
@@ -868,6 +872,9 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
      pass-through (`null` on cleanup detaches).
   5. §3.11's `startingSpeed` is the INITIAL speed only (Story 3.10 obligation 6) — a changed prop is
      not observed; Story 3.13's control goes through `setSpeed`.
+  6. **Checked by Story 3.12 (2026-09-15): §3.13's `SimulationControlBarProps` shipped exactly as
+     specced** — `{ status, onPlayPause(), onStep(), onStop() }`, no fifth prop and no deviation.
+     `<SimulationControlBar>` never sees `sim` (FD3); the view alone decides what Play/Pause means.
 - **`<BattleHeader>`'s `disabled` collapses two facts into one attribute.** `disabled={isSaving ||
   runOrganisms === null}` — the edit lock and the unresolvable roster — reach the RUN button as one
   boolean, and only the roster case carries a `title`. While a save is in flight the button is
@@ -940,6 +947,27 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   (~700px: name + count, dominance, aging, swatch + 20 chips) has to fit 720px minus the ~70px
   header first — a design question about content height, not a CSS one, and one that the desktop
   Playwright projects at 1280×720 would fail loudly on.
+
+## Deferred from: Story 3-12-transport-controls implementation (2026-09-15)
+
+- **The mockup's amber Next-cycle colour (`#ffaa00`) has no token — FD2 (b) taken instead.** The
+  route's secondary/neutral outline (`UndoButton`'s pair) ships for Next cycle rather than a new
+  `--gol-warning` family for one control: mockup-faithful amber measures ≈9:1 on the bar and
+  ≈7.6:1 on its own tint, but a new colour FAMILY for one button, an override Story 6.1 would then
+  owe the Biotech block, and a name ("warning") that is not what MUI's own `palette.warning`
+  means, together outweigh the fidelity gain. **Pick this up in Epic 6's theme pass**, where a
+  `--gol-warning` / `--gol-warning-hover` family added once could serve both themes and any future
+  caution-shaped control, not just this one.
+- **`<SimulationControlBar>`'s disabled Next cycle states its reason only through `title`** — the
+  same gap `deferred-work.md`'s 3-11 review entry already records for the header's RUN button (a
+  `disabled` control is not focusable, so a keyboard user never reaches the tooltip). **Joins
+  Story 6.11's route-wide disabled-state a11y sweep**, not a separate fix.
+- **SPACE while Next cycle is focused disables the focused element — focus falls to `<body>`.**
+  Pressing Stop while Play/Pause is focused, or pressing Play while Next cycle is focused and then
+  playing starts, both remove the focused control from the accessible tree mid-interaction (Next
+  cycle goes from enabled to `disabled` the instant `status` flips to `'playing'`), and nothing
+  today moves focus anywhere on that transition. **Story 3.19 decides** whether to move focus (to
+  Play/Pause, the bar's next enabled control) when this happens, alongside the hotkeys it adds.
 
 ## Deferred from: Story 4-5-organism-name-field (2026-09-15)
 

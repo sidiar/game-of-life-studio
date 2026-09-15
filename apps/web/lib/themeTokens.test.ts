@@ -107,6 +107,17 @@ describe('Clinical Lab token layer — WCAG AA (AC5)', () => {
         const ratio = contrastRatio(tok('danger'), tok(bg));
         expect(ratio).toBeGreaterThanOrEqual(4.5);
       });
+
+      // Story 3.12 FD2 (a): `<SimulationControlBar>`'s Stop & reset brightens the TEXT/border on
+      // hover to `--gol-danger-hover` rather than tinting the surface — the mockup's 10% danger
+      // tint measures under 4.5:1 for danger text on `--gol-bg-secondary` (the same trap the
+      // `bg-hover` exclusion above records for `--gol-danger`), so a filled/tinted hover would
+      // ship an AA failure. These two rows are what make that choice a gated fact, not an
+      // estimate: measured ≈5.3:1 on bg-secondary and ≈6.0:1 on bg-primary.
+      it(`danger-hover on ${bg}`, () => {
+        const ratio = contrastRatio(tok('danger-hover'), tok(bg));
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      });
     }
   });
 
