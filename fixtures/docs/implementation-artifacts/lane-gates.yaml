@@ -1,0 +1,19 @@
+# lane-gates.yaml — fixture copy for the test suite. Same shape as
+# docs/lane-gates.example.yaml, scaled down: one analysed pair, two gates (one
+# story-key gate that is currently GATED, one epic-N gate that is open).
+
+analysed:
+  - lane: 3
+    against: 2
+    date: 2026-01-10
+    approved_by: the owner
+
+gates:
+  - story: 3-2-widget-grid
+    requires: 2-3-password-reset
+    why: >-
+      The widget grid renders account state that the password-reset flow in
+      epic 2 may still change the shape of.
+  - story: 3-1-dashboard-layout
+    requires: epic-1
+    why: Dashboard layout reuses the scaffold and CI pipeline epic 1 finished.

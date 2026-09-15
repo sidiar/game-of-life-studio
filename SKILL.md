@@ -323,9 +323,9 @@ handing to a weaker reviewer. State in the spawn prompt which model implemented 
 story and that this review is deliberately a different one, so the reviewer knows it is
 the second pair of eyes.
 
-`fable` is reachable only through the `opus` row, so it never touches the default path:
-most stories are `sonnet`, and Fable costs roughly double Opus per token (as of
-2026-09) before its longer turns are counted. When it is the reviewer, keep its spawn prompt shorter than
+`fable` is reachable only through the `opus` row, so it never touches the default path —
+`sonnet` is the default, and Fable costs roughly double Opus per token (as of 2026-09)
+before its longer turns are counted. When it is the reviewer, keep its spawn prompt shorter than
 the others — the goal, the branch, and the two hard rules below — and leave the method
 to it. Fable loses quality under step-by-step prescription in a way Opus and Sonnet
 do not.
