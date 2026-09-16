@@ -47,12 +47,13 @@ root is a claim that both modes render it.
 modes) | 2, 3" in as many words, and since Story 3.11 `<BattleSimulationView>` is its second
 caller.
 
-⚠️ `<GridSizeControl>` (§3.12, FR-4.9) belongs HERE and is NOT `<GridSettingsSection>` under a
-variant. They share the preset MODEL, not a component — §3.12's last line says so, and the props
-differ: `<GridSettingsSection>` takes the two-preset edit subset plus stats and commits undoably,
-while `<GridSizeControl>` is a detented slider over all four presets with a `disabled` flag,
-calling `useSimulation.resizeLive`. Reaching for the edit-mode component here would be a design
-change, not reuse.
+`<GridSizeControl>` (§3.12, FR-4.9) lives HERE, shipped by Story 3.16 as specced, and is NOT
+`<GridSettingsSection>` under a variant. They share the preset MODEL (`lib/battle/gridPresets.ts`,
+tied to the editor's two-preset subset by a compile-time assertion, not an import), not a component
+— §3.12's last line says so, and the props differ: `<GridSettingsSection>` takes the edit subset
+plus stats and commits undoably, while `<GridSizeControl>` is a detented slider over all four
+presets with a `disabled` flag, handed `useSimulation.resizeLive`. Reaching for the edit-mode
+component here would have been a design change, not reuse.
 
 ## When moving files across the boundary
 

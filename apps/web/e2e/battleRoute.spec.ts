@@ -2782,7 +2782,13 @@ test.describe('Play-mode ephemeral resize (Story 3.16)', () => {
     await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '150 by 90 cells');
 
     await labButton(page).click();
-    await expect(sidebarHeadings(page)).toHaveCount(4);
+    // The LAB's four sections by name, not a count the Run sidebar's four would also satisfy.
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
     await expect(
       page.getByRole('complementary').getByRole('group', { name: /^Grid Size: / }),
     ).toHaveAttribute('aria-label', 'Grid Size: 50 by 30');
@@ -2790,7 +2796,9 @@ test.describe('Play-mode ephemeral resize (Story 3.16)', () => {
 
     await runButton(page).click();
     await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    // `'0'` AND the valuetext: an off-ladder live size would also clamp the thumb to 0 (FD4).
     await expect(gridSizeSlider(page)).toHaveValue('0');
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '50 by 30 cells');
 
     expect(errors).toEqual([]);
   });

@@ -210,9 +210,10 @@ export default function BattleSimulationView({
       <SimulationSidebar>
         <SidebarContent>
           {/* Spec §2's sidebar order is Population Analysis, Cycle Count (both 3.14), Speed
-              (3.13), Grid Size (3.16). All four sections are pure reads of `sim.population` /
-              `sim.cycle` / `sim.genPerSec` / `sim.liveSize` — none of them sees `sim` itself
-              (spec §3.12's props exactly). */}
+              (3.13), Grid Size (3.16). The first two are pure reads (`sim.population` /
+              `sim.cycle`); Speed and Grid Size each read one published value (`sim.genPerSec` /
+              `sim.liveSize`) and hand ONE stable hook callback straight through (`setSpeed` /
+              `resizeLive`). None of the four sees `sim` itself (spec §3.12's props exactly). */}
           <SidebarSection title="Population Analysis">
             <PopulationStats entries={sim.population} totalLiving={totalLiving} />
           </SidebarSection>

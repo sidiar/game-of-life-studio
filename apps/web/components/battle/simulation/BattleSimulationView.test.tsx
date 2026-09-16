@@ -956,9 +956,10 @@ describe('Play-mode ephemeral resize (Story 3.16)', () => {
     // Trap 4: TWO drawFulls for this one resize — resizeLive's own paintFull on the OLD renderer,
     // then the rebuild's attachRenderer priming the NEW one. Both paint the SAME 150x90 grid.
     expect(drawFullSpy).toHaveBeenCalledTimes(3); // mount prime + the two from this resize
-    const painted = drawFullSpy.mock.calls[2][0];
-    expect([painted.width, painted.height]).toEqual([150, 90]);
-    expectTopLeftPreserved(painted, GRID);
+    for (const [painted] of drawFullSpy.mock.calls.slice(1)) {
+      expect([painted.width, painted.height]).toEqual([150, 90]);
+      expectTopLeftPreserved(painted, GRID);
+    }
 
     // A grow clips nothing, so the published population is unchanged.
     expect(screen.getByText('Total Living Cells').nextElementSibling?.textContent).toBe(
@@ -974,6 +975,7 @@ describe('Play-mode ephemeral resize (Story 3.16)', () => {
     const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
     const drawDiffSpy = vi.spyOn(GridRenderer.prototype, 'drawDiff');
     const { container } = render(view());
+    const canvas = screen.getByRole('img', { name: 'Petri dish, 7 by 5 cells' });
 
     act(() => fireEvent.change(gridSizeSlider(), { target: { value: '3' } })); // 200x120
     expect(gridSizeSlider()).toHaveValue('3');
@@ -988,6 +990,9 @@ describe('Play-mode ephemeral resize (Story 3.16)', () => {
     driver.frame(100);
     expect(root(container)).toHaveAttribute('data-status', 'playing');
     expect(Number(root(container).getAttribute('data-cycle'))).toBeGreaterThan(1);
+    // The loop's own frames paint the RESIZED grid, not just the manual step above.
+    const playedDiff = drawDiffSpy.mock.calls.at(-1)?.[0];
+    expect([playedDiff?.width, playedDiff?.height]).toEqual([200, 120]);
 
     act(() => screen.getByRole('button', { name: 'Pause' }).click());
     expect(root(container)).toHaveAttribute('data-status', 'paused');
@@ -997,7 +1002,8 @@ describe('Play-mode ephemeral resize (Story 3.16)', () => {
     expect(root(container)).toHaveAttribute('data-cycle', '0');
     expect(gridSizeSlider()).toHaveValue('0');
     expect(gridSizeSlider()).toHaveAttribute('aria-valuetext', '7 by 5 cells');
-    expect(screen.getByRole('img', { name: 'Petri dish, 7 by 5 cells' })).toBeInTheDocument();
+    // The same `<canvas>` element, renamed back — Stop's shrink rebuilds the renderer, not the DOM.
+    expect(screen.getByRole('img', { name: 'Petri dish, 7 by 5 cells' })).toBe(canvas);
     const lastFullCall = drawFullSpy.mock.calls.at(-1);
     if (lastFullCall === undefined) throw new Error('drawFull was never called');
     const lastFull = lastFullCall[0];
@@ -1018,7 +1024,9 @@ describe('Play-mode ephemeral resize (Story 3.16)', () => {
     const LONE_GRID = gridFromDense(gridFromPattern(['...', '.x.', '...'], { '.': 0, x: 1 }));
     installContexts();
 
-    render(view({ organisms: CONWAY_ORGANISMS, initialGrid: LONE_GRID, palette: CONWAY_PALETTE }));
+    const { container } = render(
+      view({ organisms: CONWAY_ORGANISMS, initialGrid: LONE_GRID, palette: CONWAY_PALETTE }),
+    );
 
     expect(gridSizeSlider()).toBeEnabled();
     expect(screen.getByText('Adjustable while paused')).toBeInTheDocument();
@@ -1035,6 +1043,9 @@ describe('Play-mode ephemeral resize (Story 3.16)', () => {
     driver.frame(0); // primes the clock
     driver.frame(100); // cycle 1: the lone cell dies — auto-pause (Story 3.15)
 
+    // The re-enable is observed THROUGH the auto-pause, not through some other re-render.
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
     expect(gridSizeSlider()).toBeEnabled();
   });
 
@@ -1046,6 +1057,7 @@ describe('Play-mode ephemeral resize (Story 3.16)', () => {
 
     act(() => screen.getByRole('button', { name: 'Play' }).click());
     driver.frame(0);
+    expect(gridSizeSlider()).toBeDisabled(); // the second scan IS the disabled leg
     expect((await axe(container)).violations).toEqual([]);
   });
 });

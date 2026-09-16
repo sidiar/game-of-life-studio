@@ -21,7 +21,9 @@ import LadderSlider from './LadderSlider';
  * The "Adjustable while paused" hint renders ALWAYS, not only while `disabled` (FD3) — the mockup
  * shows it unconditionally, and a hint that appears only on disable is a sidebar layout shift on
  * every Play/Pause. It is wired as the slider's `aria-describedby` regardless, so the reason is in
- * the accessibility tree whether or not the control is currently reachable.
+ * the accessibility tree in both states — but it is ANNOUNCED on focus only while enabled, since
+ * a natively disabled input is out of the tab order (the Story 6.11 sweep, `deferred-work.md`'s
+ * 3-16 section).
  *
  * `disabled` is the native attribute (FR-4.9's "only while paused", the route's disabled-state
  * policy — `<GridSettingsSection>`'s preset radios, `<SimulationControlBar>`'s Next-cycle button —

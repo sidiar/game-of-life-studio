@@ -2907,8 +2907,10 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     await user.click(runButton());
     const view = await findRunView(container);
     const gridSizeSlider = within(view).getByRole('slider', { name: 'Grid dimensions' });
-    // SKIRMISH (`MOCK_BATTLE_IDS.battleA`) is 50x30 — the ladder's index 0.
+    // SKIRMISH (`MOCK_BATTLE_IDS.battleA`) is 50x30 — the ladder's index 0. The valuetext too:
+    // an off-ladder size also sits at thumb 0 (FD4), so `'0'` alone does not prove 50x30.
     expect(gridSizeSlider).toHaveValue('0');
+    expect(gridSizeSlider).toHaveAttribute('aria-valuetext', '50 by 30 cells');
 
     fireEvent.change(gridSizeSlider, { target: { value: '3' } }); // 200x120
     expect(gridSizeSlider).toHaveValue('3');
@@ -2922,6 +2924,8 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
 
     await user.click(runButton());
     const secondView = await findRunView(container);
-    expect(within(secondView).getByRole('slider', { name: 'Grid dimensions' })).toHaveValue('0');
+    const freshSlider = within(secondView).getByRole('slider', { name: 'Grid dimensions' });
+    expect(freshSlider).toHaveValue('0');
+    expect(freshSlider).toHaveAttribute('aria-valuetext', '50 by 30 cells');
   });
 });

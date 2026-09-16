@@ -9,8 +9,12 @@ import { styled } from '@mui/material/styles';
  * caller and `<GridSizeControl>` its second — both are Run-mode, so no `editor/` <-> `simulation/`
  * wall crosses (the `barButtonBase` copy in `<SimulationControlBar>` exists BECAUSE that wall does;
  * here there is no wall, which is what tips the choice from copying to promoting). The refactor's
- * own proof is `SpeedControl.test.tsx` passing UNCHANGED: this file holds exactly the DOM, ARIA and
- * styles `SpeedControl.tsx` (pre-3.16) had, generalised over props, not redesigned.
+ * own proof is `SpeedControl.test.tsx` passing UNCHANGED: this file holds the DOM and ARIA
+ * `SpeedControl.tsx` (pre-3.16) had, generalised over props, not redesigned, and its styles moved
+ * verbatim. Two additions are `<GridSizeControl>`'s alone and never fire for `<SpeedControl>`: the
+ * `:disabled` rules (it never passes `disabled`) and `aria-describedby` (omitted when `describedBy`
+ * is undefined). What the unchanged test pins is DOM + ARIA; jsdom computes no pseudo-element
+ * style, so "same styles" rests on the verbatim move, not on a test.
  *
  * The index-valued native `<input type="range">` idiom (Story 3.13 FD1): the value is a LADDER
  * POSITION, not the underlying value, which makes it detented by construction (no in-between
@@ -205,8 +209,10 @@ export default function LadderSlider({
         onChange={(event) => onIndexChange(Number(event.currentTarget.value))}
       />
       <Marks aria-hidden="true">
-        {marks.map((mark) => (
-          <span key={mark}>{mark}</span>
+        {/* Keyed by ladder POSITION: the label is decoration a caller may repeat (two rungs
+            spelled alike), the index is the identity. */}
+        {marks.map((mark, position) => (
+          <span key={position}>{mark}</span>
         ))}
       </Marks>
     </Control>
