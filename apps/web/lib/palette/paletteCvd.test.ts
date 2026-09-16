@@ -151,10 +151,10 @@ describe('G5 — visibility under CVD simulation', () => {
     '$id: contrast >= 2.5 vs #0a0a0a at every shade, under all 3 CVD simulations',
     (color) => {
       for (const mode of CVD_TYPES) {
+        const simulatedBg = simulateCvd(bgLinear, mode);
         for (let shade = 0; shade <= MAX_AGE_SHADE; shade++) {
           const pixelLinear = hexToLinearRgb(pixelHexAt(color.id, shade));
           const simulatedPixel = simulateCvd(pixelLinear, mode);
-          const simulatedBg = simulateCvd(bgLinear, mode);
           expect(contrastRatioOfLinear(simulatedPixel, simulatedBg)).toBeGreaterThanOrEqual(2.5);
         }
       }

@@ -340,7 +340,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 - **The DISABLED Undo button fails axe's `color-contrast` at 2.9:1, which makes every route-level axe scan a landmine** — surfaced by a flaky failure during this review's `npm run ci`: `battleRoute.spec.ts`'s "has no axe accessibility violations on /battle/new after a drag" failed once in a full parallel run with `#7a7a7a` on `#343434` (2.9:1 against the 4.5 threshold for 11px text) on `<button>Undo</button>`, then passed 3/3 when re-run in isolation, and the whole suite passed on the re-run. The flake itself is the known parallel-contention one already recorded above (the drag occasionally does not register, so `canUndo` stays false); what it EXPOSED is the real fact: `--gol-action-disabled` (white @ 30%) on `--gol-action-disabled-bg` (white @ 12%) is 2.9:1, so **any** axe scan that happens to run while Undo is disabled fails. WCAG 1.4.3 exempts inactive components and axe flags them anyway, so this is a tooling-vs-spec disagreement rather than a genuine AA failure — but it means the axe scans are only green by luck about which state the button is in. Not this story's code (Story 2.8 owns the button, Story 1.9's palette owns the tokens) and not patched here. **Pick this up in Story 6.11** (the palette/contrast re-confirmation) alongside the `--gol-danger`-as-text entry above — either retune `--gol-action-disabled` to clear 4.5:1 on its own disabled surface, or exclude disabled controls from the `color-contrast` rule explicitly and say why in the AxeBuilder call, so the exemption is a decision rather than a coincidence.
 
-- ~~**No test adds a colour-colliding organism THROUGH the add control**~~ — **✅ Resolved in Story 4.9.** the story's own Dev Notes called this out ("a colliding add should mark BOTH rows — a cheap extra assertion worth having since Story 2.9 could only prove it at the unit level") and it was not written. Every "Shared colour" assertion on the branch pre-dates this story and uses a hand-fed twin roster. `findDuplicateColorIds` is unchanged and the derivation is proven, so this is a missing end-to-end assertion rather than a suspected bug. **Pick this up in whichever story next touches the same-colour warning** — Story 4.9's CVD work is the natural home. `BattleEditorView.test.tsx`'s add-control `describe` now has "a colliding add marks BOTH rows once the parent hands back the updated roster" — a roster organism and the add library's `New Arrival` share `vermillion`, added through the combobox, and both rows read "Shared colour" after the parent's rerender. No production file under `components/battle/**` changed.
+- ~~**No test adds a colour-colliding organism THROUGH the add control**~~ — **✅ Resolved in Story 4.9.** The story's own Dev Notes called this out ("a colliding add should mark BOTH rows — a cheap extra assertion worth having since Story 2.9 could only prove it at the unit level") and it was not written. Every "Shared colour" assertion on the branch pre-dates this story and uses a hand-fed twin roster. `findDuplicateColorIds` is unchanged and the derivation is proven, so this is a missing end-to-end assertion rather than a suspected bug. **Pick this up in whichever story next touches the same-colour warning** — Story 4.9's CVD work is the natural home. `BattleEditorView.test.tsx`'s add-control `describe` now has "a colliding add marks BOTH rows once the parent hands back the updated roster" — a roster organism and the add library's `New Arrival` share `vermillion`, added through the combobox, and both rows read "Shared colour" after the parent's rerender. No production file under `components/battle/**` changed.
 
 ## Deferred from: code review of 2-11-battle-name-dirty-tracking (2026-08-27)
 
@@ -1320,3 +1320,19 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   not record whether `#0a0a0a` itself went through `simulateCvd` before the comparison; G5 now does
   this on both sides, always. Record which the gate does so the next re-tune compares like with
   like — noted here and in `palette-cvd-validation.md`'s Story 4.9 re-confirmation section.
+
+## Deferred from: code review of 4-9-color-reuse-warning-cvd-validation (2026-09-16)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **Two organisms sharing a display name (or both "Unnamed organism") read "A and A already use
+  this color", and a second collision whose sentence is byte-identical is not re-announced** —
+  `usersByColorToken` keys names, not ids, and `colorReuseWarning` interpolates them raw, so two
+  records named alike (the schema has no uniqueness rule on `name`; Story 2.9's display fallback
+  makes every blank name identical) produce a sentence that is true but cannot say *which* records
+  collide. The live-region corollary: picking token A then token B, each used by one organism
+  with the same display name, leaves the `role="status"` text unchanged, so nothing is announced
+  the second time. Pre-existing naming model, not this story's; disambiguating (an id suffix, a
+  count, a `key` on the region) is a product call. **Pick this up with Story 4.17** (edit flow —
+  the first place a user sees their own duplicate names beside each other) or whichever story
+  next touches the sentence.

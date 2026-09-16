@@ -348,15 +348,16 @@ describe('ColorPickerField', () => {
     unmountSecond();
   });
 
-  // Story 4.9 — the fixture reused by cases (k)-(q). Names are literals here — they are test data,
-  // not `PALETTE` values.
+  // Story 4.9 — the fixture reused by cases (4.9 k)-(4.9 q); prefixed because 4.8's FD7 cases
+  // above already hold (k) and (l). Names are literals here — they are test data, not `PALETTE`
+  // values.
   const USERS: ReadonlyMap<string, readonly string[]> = new Map([
     [PALETTE[0].id, ["Conway's Classic"]],
     [PALETTE[2].id, ['A', 'B']],
     [PALETTE[3].id, ['A', 'B', 'C']],
   ]);
 
-  // (k)
+  // (4.9 k)
   it('warns on a colliding pick', async () => {
     const user = userEvent.setup();
     render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
@@ -367,6 +368,8 @@ describe('ColorPickerField', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       "Conway's Classic already uses this color.",
     );
+    // The pick proceeded exactly as an unwarned one: the chip moved with it.
+    expect(selectedName()).toHaveTextContent(PALETTE[0].name);
     // Reopen: a pointer pick collapsed the palette (FD7).
     await openPalette(user);
     expect(radio(PALETTE[0].name)).toBeChecked();
@@ -376,7 +379,7 @@ describe('ColorPickerField', () => {
     expect(radios.every((r) => (r as HTMLInputElement).disabled === false)).toBe(true);
   });
 
-  // (l)
+  // (4.9 l)
   it('the sentence scales with the number of users', async () => {
     const user = userEvent.setup();
     render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
@@ -390,22 +393,22 @@ describe('ColorPickerField', () => {
     expect(screen.getByRole('status')).toHaveTextContent('A, B and 1 more already use this color.');
   });
 
-  // (m)
+  // (4.9 m)
   it('clears on a non-conflicting pick', async () => {
     const user = userEvent.setup();
     render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
     await openPalette(user);
     await user.click(radio(PALETTE[0].name));
-    expect(screen.getByRole('status')).not.toHaveTextContent('');
+    expect(screen.getByRole('status')).not.toBeEmptyDOMElement();
 
     await openPalette(user);
     await user.click(radio(PALETTE[5].name));
 
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(document.querySelector('[data-color-reuse-warning]')).toBeNull();
   });
 
-  // (n)
+  // (4.9 n)
   it('is silent on the seed, even when it is in use', async () => {
     const user = userEvent.setup();
 
@@ -416,7 +419,7 @@ describe('ColorPickerField', () => {
       usersByToken: USERS,
       seedValue: PALETTE[0].id,
     });
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     direct.unmount();
 
     // Through the harness: pick something else (warns), then re-pick the seed (FD2 — silent).
@@ -427,10 +430,10 @@ describe('ColorPickerField', () => {
 
     await openPalette(user);
     await user.click(radio(PALETTE[0].name));
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
-  // (o)
+  // (4.9 o)
   it('marks every in-use swatch with the dot, and the accessible name never gains it', async () => {
     const user = userEvent.setup();
     render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
@@ -445,17 +448,19 @@ describe('ColorPickerField', () => {
       expect(label).toHaveAttribute('data-in-use', expected);
     }
 
+    // jsdom does not compute generated content, so this cannot see a `::before` glyph join the
+    // name — the browser-side guard is the e2e `toHaveAccessibleName` (Story 4.9 review).
     expect(checkedRadio()).toHaveAccessibleName(PALETTE[1].name);
   });
 
-  // (p)
+  // (4.9 p)
   it('the status region is mounted before any warning exists', () => {
     renderField({ value: PALETTE[0].id, onChange: () => {} });
 
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
-  // (q)
+  // (4.9 q)
   it('has no axe violations with the warning visible and the dot painted', async () => {
     const user = userEvent.setup();
     const { container } = render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);

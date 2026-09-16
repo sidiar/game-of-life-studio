@@ -40,17 +40,19 @@ import { colorReuseWarning } from '@/lib/organisms/colorReuse';
  *   channels (WCAG 1.4.1): the native `checked` state, the accent border, and the `✓`. The chip,
  *   the selected swatch's fill and the aging strip's cap cell are all `displayColor(token,
  *   MAX_AGE_SHADE)` — the identity shade, the SAME string every one of them paints (AC4).
- * - FD1 — two REQUIRED props, `usersByToken` and `seedValue` (Story 4.9): required, not
+ * - 4.9 FD1 — two REQUIRED props, `usersByToken` and `seedValue`: required, not
  *   optional-with-default, because an optional prop is how a later picker forgets to wire them and
  *   ships one that never warns.
- * - FD3 — the reuse warning lives in an always-mounted `role="status"` region (Story 4.9): a live
- *   region has to exist before its content changes to be announced reliably.
- * - FD4 — the in-use dot is a CSS pseudo-element on the swatch label, never a DOM node, never a
- *   `title` (Story 4.9): a `<span>` inside the label would join the radio's accessible NAME.
- * - FD5 — the warning text is `--gol-danger` on the column's own background, with NO tint (Story
- *   4.9): the mockup's translucent danger tint measures under the AA floor.
- * - FD6 — the reuse status region sits AFTER the swatch grid, inside the fieldset (Story 4.9): after
- *   the chip row it would shift the grid under a roving keyboard focus.
+ * - 4.9 FD3 — the reuse warning lives in an always-mounted `role="status"` region: a live region
+ *   has to exist before its content changes to be announced reliably.
+ * - 4.9 FD4 — the in-use dot is a CSS pseudo-element on the swatch label with EMPTY alt text
+ *   (`content: "•" / ""`), never a `title`: generated content otherwise joins the radio's
+ *   accessible NAME (accname §2F.ii), exactly as an un-hidden `<span>` would.
+ * - 4.9 FD5 — the warning text is `--gol-danger` on the column's own background, with NO tint:
+ *   the mockup's translucent danger tint measures under the AA floor.
+ * - 4.9 FD6 — the reuse status region sits AFTER the swatch grid, inside the fieldset: after the
+ *   chip row it would shift the grid under a roving keyboard focus.
+ *   (The unprefixed FD1/FD4/FD7 above and below are Story 4.8's.)
  * - FD7 — the mockup's disclosure: the grid is `display: none` until "Change Color ▾" opens it, and
  *   a POINTER pick collapses it again with focus handed to the button (the mockup's script
  *   `:1280-1283`). A keyboard pick (arrow keys, Space) leaves it open — collapsing under a roving
@@ -185,11 +187,14 @@ const Swatch = styled('label')({
   },
   // `.in-use::after` (`:275-286`), moved to `::before`: `::after` is already the selected glow
   // above, and a selected in-use swatch has to show both (Story 4.9, FD4). The mockup's `#fff` /
-  // `rgba(0,0,0,0.9)` become `--gol-text-primary` / `--gol-bg-primary` (AR-46). Decorative — a
-  // pseudo-element is outside the accessibility tree by construction, which is the whole point:
-  // the in-use fact reaches assistive tech through the FD3 status region instead.
+  // `rgba(0,0,0,0.9)` become `--gol-text-primary` / `--gol-bg-primary` (AR-46). Decorative — but
+  // NOT outside the accessibility tree by construction: accname §2F.ii folds generated `content`
+  // into a label's text alternative, and every engine does (a bare `"•"` names the radio
+  // "• Sky Blue" — Story 4.9 review, measured in Chromium's own AX tree). The `/ ""` alt-text form
+  // is what keeps it out of the name; where an engine lacks it the declaration drops and the dot
+  // simply does not paint. The in-use fact reaches assistive tech through the FD3 status region.
   '&[data-in-use="true"]::before': {
-    content: '"•"',
+    content: '"•" / ""',
     position: 'absolute',
     top: '-1px',
     right: '3px',
@@ -239,10 +244,6 @@ const SelectedMark = styled('span')({
   color: 'var(--gol-bg-primary)',
   pointerEvents: 'none',
 });
-
-// FD3: the live region itself carries no styles of its own — it exists purely so its content can
-// change (the box appearing/disappearing) and be announced. Always mounted, whether empty or not.
-const ReuseStatus = styled('div')({});
 
 // `.color-reuse-warning` (`:288-297`) minus the mockup's translucent tint (FD5 — measured under
 // the AA floor on this surface). `--gol-danger` for the text (the mockup's `--warning` IS
@@ -378,14 +379,15 @@ export default function ColorPickerField({
       </SwatchGrid>
       {/* FD3/FD6: always mounted, after the grid, inside the fieldset — visible whether the
           palette is collapsed (under the chip row) or open (under the swatches a keyboard user is
-          arrowing through), and it never shifts the grid under a roving focus. */}
-      <ReuseStatus role="status" data-color-reuse-status>
+          arrowing through), and it never shifts the grid under a roving focus. A plain div: the
+          region carries no styles of its own, so a `styled()` wrapper would be a class for nothing. */}
+      <div role="status" data-color-reuse-status>
         {warning !== null && (
           <ReuseWarning data-color-reuse-warning>
             <span aria-hidden="true">{'⚠︎'}</span> {warning}
           </ReuseWarning>
         )}
-      </ReuseStatus>
+      </div>
     </Fieldset>
   );
 }

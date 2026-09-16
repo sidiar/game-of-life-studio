@@ -4,7 +4,7 @@ baseline_commit: 457b232
 
 # Story 4.9: Color Reuse Warning & CVD Validation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -464,6 +464,30 @@ this story by name, and the CI gates impose.
         `story/4-9-color-reuse-warning-cvd-validation`; check `gh run list --limit 1` after the PR
         opens.
 
+### Review Findings
+
+Reviewed on **Opus** (2026-09-16) against the **Sonnet** implementation in `2889375`, via three
+parallel adversarial layers (Blind Hunter — diff only; Edge Case Hunter — diff + repo; Acceptance
+Auditor — diff + this file + `project-context.md`). Diff: `main...HEAD` (merge base `457b232`).
+CI on the pushed branch (PR #49, dev commit `2889375`): `quality` green (2m43s), `e2e` green (10m11s, Linux — which confirms the two local `battleRoute.spec.ts:2218` WebKit/tablet failures are the documented macOS-only flake, `deferred-work.md:1008-1016`, not a regression).
+
+- [x] [Review][Patch] The in-use `::before` bullet JOINS the radio's accessible name in every browser — FD4's core premise is wrong [apps/web/components/organisms/editor/ColorPickerField.tsx:192] — accname §2F.ii includes CSS generated `content` in a label's text alternative, and all three engines implement it. Verified empirically with a minimal page in Chromium (CDP `Accessibility.getFullAXTree` names the radio `"• Sky Blue"`), and in Chromium/Firefox/WebKit via Playwright's name computation (`getByRole('radio', { name: 'Sky Blue', exact: true })` finds **0**, `'• Sky Blue'` finds 1). jsdom cannot observe generated content, so test (o) is vacuous on the point it is named for, and the e2e `getByRole('radio', { name })` calls are substring matches that pass either way. Fix: the CSS alt-text form `content: '"•" / ""'` — supported by all three bundled engines (computed `content` retained, name clean) and degrades to "no dot" where unsupported; FD4's mechanism (pseudo-element, no DOM node) is kept. Add a Playwright `toHaveAccessibleName('Sky Blue')` on the in-use radio — the guard that can actually fail — and correct the FD4 comment. (Also noted: the stated reason against the 4.8 `aria-hidden` span idiom — "a node axe still measures for contrast" — is false for this glyph: axe strips U+2022 as punctuation before measuring, which is why the `✓` node passes.)
+- [x] [Review][Patch] `palette-cvd-validation.md` attributes commit `44972dc` to "Story 4.9" twice [docs/implementation-artifacts/palette-cvd-validation.md:17, :201] — it is the 2026-08-25 "HITL refactor: group lib/ and components/ into feature folders", which this story's own AC6 names correctly. A reproduce-path doc now blames the wrong event for the move.
+- [x] [Review][Patch] The "imported ONLY by …" list is still not honest, in two places [apps/web/lib/palette/paletteCvd.ts:2, docs/implementation-artifacts/palette-cvd-validation.md:75] — `scripts/paletteCvdSweep.test.ts` (edited in this very diff) imports it and is named in neither; the two rewritten sentences also disagree with each other. Pre-existing omission, but Task 5 asked to make the list honest.
+- [x] [Review][Patch] AC8's jsdom clause "on the modal after a colliding pick → `[]`" is not implemented [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:561] — the field scan (q) and the e2e scan exist; the modal gains no axe run after a colliding pick (Task 3 never listed it — an AC/Task inconsistency, resolved here in AC8's favour).
+- [x] [Review][Patch] Modal test comments contradict the tests [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:581, :558] — "grows the 4.8 test … rather than a new test" sits on a new test; "the strip and chip still agree (the 4.8 round-trip assertion, reused)" is claimed but only `[data-selected-name]`, Save and the radio count are asserted. Add the cap-cell/probe assertion and fix the comment.
+- [x] [Review][Patch] Test (k) omits the `[data-selected-name]` moved assertion the story specifies [apps/web/components/organisms/editor/ColorPickerField.test.tsx:359] — Task 2 (k) lists it; the test never touches it.
+- [x] [Review][Patch] e2e test 2 is thinner than Task 4 specifies [apps/web/e2e/organisms.spec.ts:1419] — no `toBeChecked()` on the picked radio, and "Save's `disabled` attribute is unchanged before/after" is asserted as `toBeDisabled()` after only, which a *blocking* warning would also satisfy. Capture the attribute before the pick and compare.
+- [x] [Review][Patch] Duplicate case labels and a miscounting Dev Agent Record [apps/web/components/organisms/editor/ColorPickerField.test.tsx:359] — the file already has `(k)`/`(l)` (4.8's FD7 cases); the new block restarts at `(k)`. Completion Notes say "9 new cases (k–q) … 11 existing" — k–q is 7, `main` had 13 (20 total is right).
+- [x] [Review][Patch] `ReuseStatus = styled('div')({})` is a dead Emotion abstraction [apps/web/components/organisms/editor/ColorPickerField.tsx:246] — an empty styled component still registers a class and a wrapper for nothing, in a story that tracks the editor chunk to the byte. A plain `<div role="status">` does the same job.
+- [x] [Review][Patch] Unused `contrastRatio` import left in the sweep [apps/web/scripts/paletteCvdSweep.test.ts:22] — `minContrast` moved to `contrastRatioOfLinear`; nothing calls it now (ESLint has no unused-vars rule on this file).
+- [x] [Review][Patch] Empty-region assertions lean on jest-dom's `toHaveTextContent('')` special case [apps/web/components/organisms/editor/ColorPickerField.test.tsx:404, :419, :430, :455; OrganismEditorModal.test.tsx:586, :609] — it works only because of an explicit branch whose failure message says to use `toBeEmptyDOMElement()`, the idiom this story's own Dev Notes name and never use.
+- [x] [Review][Patch] The silent-but-dotted seed state — the one state FD2 creates — is never asserted [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:592] — the colliding-default test proves silence but not that the selected seed swatch carries `data-in-use="true"` while the status is empty.
+- [x] [Review][Patch] Doc and test nits, one commit [docs/implementation-artifacts/palette-cvd-validation.md:19, :125, :204; deferred-work.md:343; apps/web/lib/palette/paletteCvd.test.ts:157; apps/web/e2e/organisms.spec.ts:1437] — the "G5 all-shade floor per mode" line lists `normal`, which G5 does not gate (G2's); "the figures land on the same numbers recorded before this story" is true of the four shade-0 floors but the refreshed shade-3/7 CVD rows all changed (they were the reused normal-vision figure); the `**Date:** 2026-08-06` header now sits above 2026-09-16 content; `:343`'s "**✅ Resolved in Story 4.9.** the story's" is lowercase after the bold; G5 re-simulates the invariant background inside the innermost loop (the sweep hoists it); the e2e `toHaveCount(20)` lacks the 4.8 block's "20 = PALETTE.length" comment.
+- [x] [Review][Patch] FD numbering means two stories in one header [apps/web/components/organisms/editor/ColorPickerField.tsx:28-52] — 4.8's FD1/FD4 and 4.9's FD1/FD3/FD4/FD5/FD6 now share numbers in one list; the old 4.8 FD6 line was replaced by a 4.9 FD6 with unrelated content. Prefix the 4.9 entries so "FDn" is unambiguous.
+- [x] [Review][Defer] Two organisms sharing a display name (or both "Unnamed organism") read "A and A already use this color", and a second collision whose sentence is byte-identical is not re-announced by the live region [apps/web/lib/organisms/colorReuse.ts:39] — deferred, pre-existing: the schema allows duplicate names (Story 2.9's display rule), the sentence is still true, and disambiguating needs a product call (id suffix? count?) — recorded in `deferred-work.md`.
+
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -778,9 +802,9 @@ Claude Sonnet 5 (claude-sonnet-5).
   empty-name fallback sourced from `toDisplayOrganism` rather than a literal.
 - Task 2: `ColorPickerField` gained the two required props (`usersByToken`, `seedValue`), the
   in-use `::before` dot, the always-mounted `role="status"` reuse-warning region, and the AC4
-  description text. 9 new cases (k–q) added to its test file on top of the 11 existing 4.8 cases
+  description text. 7 new cases (k–q) added to its test file on top of the 13 existing 4.8 cases
   (all retargeted via a `renderField`/`NO_USERS` helper, mechanical only — no 4.8 assertion
-  content changed). 20/20 tests pass.
+  content changed). 20/20 tests pass. *(Counts corrected in review: the record said 9 + 11.)*
 - Task 3: `OrganismEditorModal` now holds a second `useState` for the seed draft and derives
   `usersByToken` from `library` per render (unmemoised, per FD — Story 3.7's measured 0.02–0.04 ms
   at 1,000 organisms). 3 new tests added (warn through the modal; M6 default silent at open; a
@@ -852,6 +876,16 @@ Claude Sonnet 5 (claude-sonnet-5).
   green except the pre-existing, documented WebKit/tablet transport-controls e2e flake
   (`deferred-work.md:1008-1016`), confirmed unrelated (all Story 4.9 e2e tests pass on all 4
   projects). Status → review.
+- 2026-09-16 — Code review (Opus, `bmad-code-review`, full mode; PR #49): 14 patches applied, 1
+  deferred, 13 dismissed, 0 decision-needed. The material finding: the in-use `::before` bullet
+  joined the radio's accessible name in every browser ("• Sky Blue") — fixed with the CSS alt-text
+  form `content: "•" / ""` and pinned by an exact `toHaveAccessibleName` e2e guard; plus AC8's
+  missing modal axe scan, the thinner-than-spec assertions in (k), the modal tests and e2e test 2,
+  the dead `styled('div')({})` wrapper, the `44972dc` misattribution and importer-list omissions
+  in `palette-cvd-validation.md` / `paletteCvd.ts`, and the duplicate (k)/(l) case labels. After
+  patches: typecheck/lint/format/spec green; 111/111 in the three touched unit files; 44/44 e2e
+  (4.8 + 4.9 blocks, all four projects); bundle within budget, editor chunk 6168 B gzip. Status →
+  done.
 
 Dev Model: sonnet   # follows the 4.5–4.8 editor-field pattern (two props on an existing controlled field, a pure helper in lib, a modal wiring change); the shaping choices — the held seed for 4.17/4.23, the usersByToken prop shape for 4.24/4.25, one announced channel, G5 — are pinned as FD1–FD7 so nothing is left for later stories to discover
 Proposed lane gate: none

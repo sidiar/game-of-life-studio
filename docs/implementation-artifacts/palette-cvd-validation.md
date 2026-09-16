@@ -14,11 +14,13 @@ by driving the same `displayColor` / `paletteCvd` modules the gates use — so t
 drift from the implementation. It is excluded from `npm test` and asserts nothing.
 
 ⚠️ Note the path is relative to `apps/web`, not the repo root, and is under `lib/palette/` since
-the Story 4.9 folder refactor (it was `lib/paletteCvd.test.ts` when this doc was first written).
+the HITL folder refactor of 2026-08-25 (`44972dc`; it was `lib/paletteCvd.test.ts` when this doc
+was first written).
 `npx vitest run apps/web/lib/palette/paletteCvd.test.ts` from inside `apps/web` matches nothing
 and **exits 0** — a green run that asserted nothing.
 
-**Date:** 2026-08-06 (revised after code review, same day)
+**Date:** 2026-08-06 (revised after code review, same day; G5 and the Story 4.9 re-confirmation
+appended 2026-09-16)
 
 ## What is being validated
 
@@ -73,7 +75,8 @@ worst-case contrast vs simulated `#0a0a0a` across all 20 tokens × 8 shades: nor
 clearing the 2.5 threshold on every mode.
 
 All math lives in `apps/web/lib/palette/paletteCvd.ts`, imported only by its own test,
-`themeTokens.test.ts`, and the Story 6.11 re-confirmation — never by component code.
+`themeTokens.test.ts`, the sweep (`scripts/paletteCvdSweep.test.ts`) and the Story 6.11
+re-confirmation — never by component code.
 
 ## The five hard gates (enforced in `paletteCvd.test.ts`)
 
@@ -122,9 +125,9 @@ this document used to record as an ungated path).
 | 7 | deutan | 17.04 (amber/yellow) | 1.32 (lavender/periwinkle) | 4.95 |
 | 7 | tritan | 9.00 (vermillion/coral-red) | 5.73 (teal/mint) | 5.07 |
 
-G5's all-shade floor per mode (what the gate actually asserts, sampling all 8 shades rather than
-the three rows above): normal **3.06** (shade 0), protan **3.23** (shade 0), deutan **2.96**
-(shade 0), tritan **3.06** (shade 0).
+All-shade contrast floor per mode, sampling all 8 shades rather than the three rows above:
+normal **3.06** (shade 0 — G2's gate, not G5's), protan **3.23** (shade 0), deutan **2.96**
+(shade 0), tritan **3.06** (shade 0). The three CVD floors are what G5 asserts.
 
 Worst case across **all eight shades** — what G4 actually gates on: core-8 protan **4.77**
 (`bluish-green`/`coral-red`, shade 5), tritan **6.65**, deutan **9.24**, normal **13.55**;
@@ -198,9 +201,9 @@ migration step per Decision I.4).
 
 Re-run against the shipped registry, ahead of the reuse-warning feature this story also ships.
 
-- **The registry hexes are unchanged since 2026-08-06.** `git log --follow -- apps/web/lib/palette/paletteRegistry.ts` shows exactly three commits: the two Story 1.7 commits (`86bfec7`, `8fd3da7`) and the Story 4.9-era folder refactor (`44972dc`, a pure move — `lib/paletteRegistry.ts` → `lib/palette/paletteRegistry.ts`). No hex, name or `id` has moved.
+- **The registry hexes are unchanged since 2026-08-06.** `git log --follow -- apps/web/lib/palette/paletteRegistry.ts` shows exactly three commits: the two Story 1.7 commits (`86bfec7`, `8fd3da7`) and the HITL folder refactor of 2026-08-25 (`44972dc`, a pure move — `lib/paletteRegistry.ts` → `lib/palette/paletteRegistry.ts`, three weeks before this story). No hex, name or `id` has moved.
 - **G1–G5 floors as measured today** (unchanged from the table above, now gated at G5 too): G1 **5.12** (`vermillion`), G2 **3.06** (`bluish-green`, shade 0), G3 **12.79** (`azure`/`indigo`), G4 **4.77** (protan, `bluish-green`/`coral-red`, shade 5), G5 **2.96** (deutan, `bluish-green`, shade 0).
 - **What changed in the code, not the palette:** `relativeLuminance(hex)` split into `luminanceOfLinear(LinearRgb)` + a thin hex wrapper; `contrastRatio(hexA, hexB)` split into `contrastRatioOfLinear(LinearRgb, LinearRgb)` + a thin hex wrapper; `paletteCvd.test.ts` gained the G5 `describe` block (20 new cases — every token, every shade, all 3 CVD types); `scripts/paletteCvdSweep.test.ts`'s `minContrast` takes an optional `CvdType` and simulates the background under it, so the worst-pair table's contrast column is per-row honest instead of reusing the normal-vision figure on every CVD row.
-- **G5 simulates the background too** (FD7) — the doc's original "measured manually" figures (normal 3.06, protan 3.23, deutan 2.96, tritan 3.06) did not record whether `#0a0a0a` itself went through `simulateCvd` before the comparison. It now does, on both sides, always. Practically the figures land on the same numbers recorded before this story (the Machado rows sum to ≈1, so a near-neutral background barely moves under simulation) — but the *method* is now pinned, so the next re-tune compares like with like rather than re-deriving the question.
+- **G5 simulates the background too** (FD7) — the doc's original "measured manually" figures (normal 3.06, protan 3.23, deutan 2.96, tritan 3.06) did not record whether `#0a0a0a` itself went through `simulateCvd` before the comparison. It now does, on both sides, always. Practically the four all-shade floors land on the same numbers recorded before this story (the Machado rows sum to ≈1, so a near-neutral background barely moves under simulation); the sampled shade-3 and shade-7 CVD rows in the worst-pair table did change, because those cells previously repeated the normal-vision figure rather than measuring anything. The *method* is now pinned, so the next re-tune compares like with like rather than re-deriving the question.
 - **All five gates are green on the current hexes.** No hex was re-tuned, no threshold was lowered, no token `id` was renamed — Task 5's stop rule was not triggered.
 - Pointer: Story 6.11 re-confirms this validation again, against the **final rendered output** (the epics.md reference this document already carries) — this section is Story 4.9's snapshot, not a claim that nothing will need re-measuring later.

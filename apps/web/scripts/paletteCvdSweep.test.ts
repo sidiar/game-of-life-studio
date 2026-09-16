@@ -19,7 +19,6 @@ import { hslToRgb, rgbToHex } from '../lib/palette/colorMath';
 import { displayColor, MAX_AGE_SHADE } from '../lib/palette/displayColor';
 import { PALETTE } from '../lib/palette/paletteRegistry';
 import {
-  contrastRatio,
   contrastRatioOfLinear,
   deltaE76,
   hexToLinearRgb,

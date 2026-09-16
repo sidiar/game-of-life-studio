@@ -1,8 +1,8 @@
 /**
  * CVD + dark-background validation math (Story 1.7 Task 4, AC1). Imported ONLY by its own test,
- * by `themeTokens.test.ts`, and by the Story 4.9 / 6.11 re-confirmations — never by component code
- * (no colour-science dependency is worth the bundle/audit surface for a check that only ever runs
- * in CI/tests).
+ * by `themeTokens.test.ts`, by `scripts/paletteCvdSweep.test.ts` (the report generator), and by
+ * the Story 4.9 / 6.11 re-confirmations — never by component code (no colour-science dependency
+ * is worth the bundle/audit surface for a check that only ever runs in CI/tests).
  *
  * ⚠️ Every function here operates on LINEARISED sRGB. Running the CVD matrices, the WCAG
  * luminance sum, or the Lab conversion on gamma-encoded 0-255 values produces plausible-looking

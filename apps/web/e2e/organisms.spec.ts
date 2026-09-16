@@ -1404,6 +1404,11 @@ test.describe('color reuse warning (Story 4.9)', () => {
     const inUse = basicInfo.locator('[data-in-use="true"]');
     await expect(inUse).toHaveCount(1);
     await expect(inUse).toHaveAttribute('data-color-token', 'sky-blue');
+    // The dot must NOT join the radio's accessible name. Generated `content` is part of a label's
+    // text alternative (accname §2F.ii) in every engine — a bare `"•"` names this radio
+    // "• Sky Blue" — and jsdom cannot see it, so this browser-side check is the only real guard
+    // (Story 4.9 review). Exact, not substring: `getByRole({ name })` alone would pass either way.
+    await expect(inUse.getByRole('radio')).toHaveAccessibleName(COLLIDING_NAME);
     const describedBy = await basicInfo
       .getByRole('radiogroup', { name: 'Organism Color' })
       .getAttribute('aria-describedby');
@@ -1417,6 +1422,8 @@ test.describe('color reuse warning (Story 4.9)', () => {
 
   test('a colliding pick warns and proceeds', async ({ page }) => {
     const { basicInfo, toggle, radiogroup, status, expandPalette } = await openColorPicker(page);
+    const saveButton = page.getByRole('button', { name: 'Save' });
+    const saveBefore = await saveButton.evaluate((el) => el.outerHTML);
 
     await expandPalette();
     await radiogroup.getByRole('radio', { name: COLLIDING_NAME }).click();
@@ -1428,12 +1435,17 @@ test.describe('color reuse warning (Story 4.9)', () => {
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(toggle).toBeFocused();
     await expect(basicInfo.locator('[data-selected-name]')).toHaveText(COLLIDING_NAME);
-    const saveButton = page.getByRole('button', { name: 'Save' });
+    // "Save is unaffected" as a before/after comparison: `toBeDisabled()` alone would also hold if
+    // the warning had disabled it (it is Story 4.16's inert button either way).
     await expect(saveButton).toBeDisabled();
+    expect(await saveButton.evaluate((el) => el.outerHTML)).toBe(saveBefore);
     // The warning is still visible under the chip row while the palette is collapsed.
     await expect(status).toContainText(COLLISION_SENTENCE);
 
     await expandPalette();
+    await expect(radiogroup.getByRole('radio', { name: COLLIDING_NAME })).toBeChecked();
+    // 20 = PALETTE.length — this spec does not import `apps/web/lib` (the 4.7 precedent); counted
+    // as `:enabled` to 20, never `:disabled` to 0, which a selector matching nothing also passes.
     await expect(radiogroup.locator('input[type="radio"]:enabled')).toHaveCount(20);
   });
 

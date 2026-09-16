@@ -250,13 +250,15 @@ describe('OrganismEditorModal', () => {
   });
 
   // Story 4.9: a colliding pick warns through the whole modal, not just the field in isolation —
-  // the strip and chip still agree (the 4.8 round-trip assertion, reused), and nothing about Save
-  // moves.
+  // the chip and the aging strip still repaint together (the 4.8 round-trip probe, reused), Save's
+  // DOM is byte-for-byte what it was before the pick, and axe is clean with the warning showing
+  // (AC8's modal scan).
   it('warns through the modal on a colliding pick (Story 4.9)', async () => {
     const user = userEvent.setup();
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const dialog = screen.getByRole('dialog');
+    const saveBefore = within(dialog).getByRole('button', { name: 'Save' }).outerHTML;
     await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
     // Conway's Classic's own token (`sky-blue`, PALETTE[0]) — a deliberate collision.
     const conwaysColorName = resolvePaletteColor(CONWAYS_CLASSIC.colorToken).name;
@@ -265,19 +267,35 @@ describe('OrganismEditorModal', () => {
     expect(within(dialog).getByRole('status')).toHaveTextContent(
       `${CONWAYS_CLASSIC.name} already uses this color.`,
     );
-    const selectedName = dialog.querySelector('[data-selected-name]');
-    expect(selectedName).toHaveTextContent(conwaysColorName);
-    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(dialog.querySelector('[data-selected-name]')).toHaveTextContent(conwaysColorName);
+    const selectedSwatch = dialog.querySelector('[data-selected-swatch]') as HTMLElement | null;
+    if (selectedSwatch === null) throw new Error('the selected swatch is not in the dialog');
+    const capCell = dialog.querySelector<HTMLElement>(
+      `[data-aging-example] [data-age="${MAX_AGE_SHADE}"]`,
+    );
+    if (capCell === null) throw new Error('the cap-age cell is not in the strip');
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = displayColor(CONWAYS_CLASSIC.colorToken, MAX_AGE_SHADE);
+    expect(probe.style.backgroundColor).not.toBe('');
+    expect(selectedSwatch.style.backgroundColor).toBe(probe.style.backgroundColor);
+    expect(capCell.style.backgroundColor).toBe(probe.style.backgroundColor);
+    // "Save is unaffected" as a before/after comparison — a `toBeDisabled()` alone would also pass
+    // if the warning had disabled it (it is Story 4.16's inert button either way).
+    expect(within(dialog).getByRole('button', { name: 'Save' }).outerHTML).toBe(saveBefore);
     await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
     expect(within(dialog).getAllByRole('radio')).toHaveLength(PALETTE.length);
+
+    expect((await axe(document.body)).violations).toEqual([]);
   });
 
-  // Story 4.9: the M6 default is silent on open, even though it is derived from `library` — the
-  // 4.8 "opens on the M6 default" test grows this one assertion rather than a new test.
+  // Story 4.9: the M6 default is silent on open. A separate test rather than a line grown onto the
+  // 4.8 "opens on the M6 default" case, so that case stays unedited (AC9). With LIBRARY the default
+  // is an unused token, so this pins the region's mounted-and-empty state; the seed rule itself is
+  // proven by the colliding-default test below.
   it('the M6 default is silent at open (Story 4.9)', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
-    expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent('');
+    expect(within(screen.getByRole('dialog')).getByRole('status')).toBeEmptyDOMElement();
   });
 
   // Story 4.9, FD2: a default that COLLIDES (every token in use) is still silent — the seed
@@ -300,10 +318,17 @@ describe('OrganismEditorModal', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={fullLibrary} />);
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('status')).toHaveTextContent('');
+    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
     expect(dialog.querySelector('[data-selected-name]')).toHaveTextContent(PALETTE[1].name);
 
     await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+    // The one state FD2 creates on purpose: the seed swatch is DOTTED (someone holds it) while
+    // the region stays silent (it is the default, not a pick).
+    expect(dialog.querySelector(`[data-color-token="${PALETTE[1].id}"]`)).toHaveAttribute(
+      'data-in-use',
+      'true',
+    );
+    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
     await user.click(within(dialog).getByRole('radio', { name: PALETTE[0].name }));
 
     expect(within(dialog).getByRole('status')).toHaveTextContent(
