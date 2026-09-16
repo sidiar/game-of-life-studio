@@ -2717,9 +2717,16 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     const view = await findRunView(container);
     expect(view).toHaveAttribute('data-status', 'paused');
     expect(view).toHaveAttribute('data-cycle', '0');
-    // The editor is GONE — its four sections and its status bar — not merely hidden. The one h2
-    // left is the Run sidebar's Speed section (Story 3.13); 3.14 raises this to three.
-    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(1);
+    // The editor is GONE — its four sections and its status bar — not merely hidden. The Run
+    // sidebar now carries three h2s: Population Analysis, Cycle Count (Story 3.14) and Speed
+    // (Story 3.13); 3.16 raises this to four.
+    const runHeadings = screen.queryAllByRole('heading', { level: 2 });
+    expect(runHeadings).toHaveLength(3);
+    expect(runHeadings.map((h) => h.textContent)).toEqual([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+    ]);
     // Exact name, not a substring: the mockup's "Speed Multiplier" (3.13 FD3 rejected it) would
     // pass a `toHaveTextContent('Speed')`.
     expect(screen.getByRole('heading', { level: 2, name: 'Speed' })).toBeInTheDocument();
