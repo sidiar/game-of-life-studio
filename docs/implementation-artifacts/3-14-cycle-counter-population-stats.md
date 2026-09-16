@@ -1025,3 +1025,18 @@ Nothing in `packages/*`; no planning artifact edited (per the story's own scope 
 
 Dev Model: sonnet   # follows patterns that exist (2.12's stats-row chip, 3.13's presentational-section wiring, the hook's published contract); every open call is resolved in FD1–FD9 above — nothing here is a pattern a later story builds on rather than one 3.18/4.15 already have specced shapes for
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 10m 55s | 10m 55s | 34 | 7,778 | 12,756 | 981,714 | 1,002,282 |
+| Step 1 — create-story | opus-5 | 2 | 15m 43s | 15m 43s | 262 | 87,079 | 668,486 | 15,899,748 | 16,655,575 |
+| Step 2 — dev-story | sonnet-5 | 1 | 54m 58s | 54m 58s | 602 | 84,779 | 822,953 | 61,024,882 | 61,933,216 |
+| Step 3 — code review + PR | opus-5 | 4 | 26m 15s | 26m 15s | 404 | 104,141 | 912,816 | 24,503,033 | 25,520,394 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 66 | 16,135 | 30,015 | 2,060,190 | 2,106,406 |
+| **Total (create-story → PR ready)** | | 7 | **1h 47m** | 1h 47m | 1,302 | 283,777 | 2,417,011 | 102,409,377 | **105,111,467** |
+
+Run started 2026-09-16 09:31 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
