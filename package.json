@@ -29,7 +29,9 @@
     "spec:check": "node scripts/check-spec-ids.mjs",
     "boundary:check": "node scripts/check-engine-boundary.mjs",
     "ci": "npm run typecheck && npm run lint && npm run format:check && npm run spec:check && npm run boundary:check && npm run test:coverage && npm run build:standalone && npm run bundle:check && npm run bench && npm run bench:check && npm run e2e",
-    "prepare": "husky"
+    "prepare": "husky",
+    "implement-next-story:pull": "cd \"$(git rev-parse --show-toplevel)\" && git subtree pull --prefix=.claude/skills/implement-next-story https://github.com/sidiar/implement-next-story.git main",
+    "implement-next-story:push": "cd \"$(git rev-parse --show-toplevel)\" && git subtree push --prefix=.claude/skills/implement-next-story https://github.com/sidiar/implement-next-story.git main"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
