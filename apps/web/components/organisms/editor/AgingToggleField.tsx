@@ -84,7 +84,8 @@ const Marks = styled('div')({
   marginTop: '4px',
 });
 
-// Mockup: `.example-strip` container for the eight cells.
+// No mockup element either — the eight-cell row is this story's own value (the 3px gap included;
+// `deferred-work.md`'s 4.7 section records the whole strip for the next mockup refresh).
 const Cells = styled('div')({
   display: 'flex',
   gap: '3px',

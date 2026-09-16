@@ -1088,12 +1088,17 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   through a ref, or commit-on-unmount) or accept that pending text is discarded and say so; the
   4.13 item above ("no dominance-specific check") stands, this is about *when* the draft is read,
   not whether it is valid.
-- ~~**`Field` / `Label` styled blocks now exist in hand copies**~~ — **✅ Resolved in Story 4.7
-  (`fieldStyles.ts`).** `OrganismNameField.tsx` and `DominanceField.tsx` now import
-  `Field`/`Label`/`Description` from `components/organisms/editor/fieldStyles.ts`;
-  `<AgingToggleField>` is the third caller. **`Slider` stays open** — it is 3.16's
-  `<LadderSlider>` / `<RangeSlider>` question, and `SpeedControl.tsx` is across the mode split
-  from `organisms/editor/`.
+- **`Field` / `Label` / `Slider` styled blocks now exist in three hand copies** —
+  `OrganismNameField.tsx` (Field, Label), `SpeedControl.tsx` (Slider) and `DominanceField.tsx`
+  (all three). Pre-existing by design (components split by mode; no abstraction over one caller);
+  the 3.16 `<LadderSlider>` / `<RangeSlider>` decision recorded in the 3-13 and 4-6 sections above
+  is where a shared `rangeInput` rule set would be born, ~~and an `organisms/editor/fieldStyles.ts`
+  for `Field`/`Label` is the cheaper half whenever a third editor field (4.7's toggle, 4.8's
+  picker) copies them again~~ — **✅ `Field`/`Label` half resolved in Story 4.7
+  (`fieldStyles.ts`):** `OrganismNameField.tsx` and `DominanceField.tsx` import
+  `Field`/`Label`/`Description` from it and `<AgingToggleField>` is the third caller. **The
+  `Slider` half stays open** — `SpeedControl.tsx` is across the mode split from
+  `organisms/editor/`, so it is still 3.16's question.
 - ~~**Task 8's "before" bundle measurement was partial.**~~ — **✅ Resolved in Story 4.7.** All
   four routes were measured on `main` (`ba8b4f7`) before this story's changes and again after:
   `home` 333.4 KB, `battle` 308.7 KB, `battle/new` 308.6 KB, `organisms` 295.3 KB — byte-identical

@@ -57,13 +57,13 @@ describe('AgingToggleField', () => {
     expect(button).not.toHaveAttribute('aria-label');
 
     const labelledBy = button.getAttribute('aria-labelledby');
-    const htmlFor = button.getAttribute('id');
-    if (labelledBy === null || htmlFor === null) {
+    const switchId = button.getAttribute('id');
+    if (labelledBy === null || switchId === null) {
       throw new Error('aria-labelledby or id is absent');
     }
     const label = document.getElementById(labelledBy);
     expect(label?.tagName).toBe('LABEL');
-    expect(label).toHaveAttribute('for', htmlFor);
+    expect(label).toHaveAttribute('for', switchId);
     expect(label).toHaveTextContent('Aging Degradation');
   });
 
@@ -102,9 +102,13 @@ describe('AgingToggleField', () => {
     render(<ControlledHarness onChange={onChange} />);
 
     await user.click(screen.getByText('Aging Degradation'));
-
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith(true);
+    expect(onChange).toHaveBeenLastCalledWith(true);
+
+    // And back: On -> Off through the label is the same single activation, not a stuck state.
+    await user.click(screen.getByText('Aging Degradation'));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith(false);
   });
 
   // (e)
@@ -175,6 +179,9 @@ describe('AgingToggleField', () => {
       );
 
     const offColors = readCells();
+    // "Flat" must mean one painted colour — eight empty `style.backgroundColor`s are also one
+    // distinct value, and would pass this test with the strip not painted at all.
+    expect(offColors[0]).not.toBe('');
     expect(new Set(offColors).size).toBe(1);
 
     rerender(<AgingToggleField value onChange={() => {}} colorToken={DEFAULT_COLOR_TOKEN} />);

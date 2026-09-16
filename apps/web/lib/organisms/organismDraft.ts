@@ -8,9 +8,10 @@ import { DEFAULT_COLOR_TOKEN } from '@/lib/palette/paletteRegistry';
  * `useState` per field: Story 4.17 seeds the whole draft from a loaded `Organism` in one
  * assignment, Story 4.23 diffs one object against one seed for the editor's own dirty scope
  * (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one field per story — 4.6
- * `dominance` and 4.7 `agingEnabled`/`colorToken` are done, the remaining is 4.10 `survivalRules`
- * — until it is `Omit<Organism, 'id' | 'schemaVersion'>`. A `Pick` of the domain entity so the
- * field types are the schema's, never re-declared. Mirror of `lib/battle/newBattleDraft.ts`.
+ * `dominance` and 4.7 `agingEnabled`/`colorToken` are done; 4.8 replaces the `colorToken` seed
+ * (and adds the picker) and 4.10 adds `survivalRules` — until it is
+ * `Omit<Organism, 'id' | 'schemaVersion'>`. A `Pick` of the domain entity so the field types are
+ * the schema's, never re-declared. Mirror of `lib/battle/newBattleDraft.ts`.
  */
 export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled' | 'colorToken'>;
 

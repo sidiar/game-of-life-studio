@@ -4,7 +4,7 @@ baseline_commit: ba8b4f7
 
 # Story 4.7: Aging Degradation Toggle
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -406,6 +406,31 @@ inside the editor".
         it here. Push to `story/4-7-aging-degradation-toggle`; check `gh run list --limit 1` after
         the PR opens.
 
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (2026-09-16), via three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 0 `decision-needed`, 11 `patch`, 0
+`defer`, 24 dismissed as noise (spec-mandated shapes, future-story concerns, pairs already gated by
+`themeTokens.test.ts`, claims the docs diff already answers). All patches applied in the review
+commit.
+
+- [x] [Review][Patch] `Cells` comment cited a mockup class (`.example-strip`) that does not exist — the mockup has no strip (FD4, this story's own deferred item 1) [apps/web/components/organisms/editor/AgingToggleField.tsx:87]
+- [x] [Review][Patch] `fieldStyles.ts` header claimed "no test of 4.5/4.6 is edited" while the same commit edits `OrganismEditorModal.test.tsx`; reworded to name the two field tests that actually run unedited [apps/web/components/organisms/editor/fieldStyles.ts:7]
+- [x] [Review][Patch] `fieldStyles.ts` `.form-field` mockup ref pointed at the dominance CSS (`:390-448`); `.form-field` is at `:153` (a `DominanceField.tsx` inaccuracy promoted to the shared module) [apps/web/components/organisms/editor/fieldStyles.ts:13]
+- [x] [Review][Patch] Modal doc block had a ~135-char unwrapped line after the Story 4.7 insertion; reflowed [apps/web/components/organisms/editor/OrganismEditorModal.tsx:139]
+- [x] [Review][Patch] `organismDraft.ts` "grows one field per story" list omitted 4.8 (Task 1 asked for it) [apps/web/lib/organisms/organismDraft.ts:10]
+- [x] [Review][Patch] Modal round-trip test indexed cell `7` as a literal and looked the strip up on `document.body`; now `MAX_AGE_SHADE`, scoped to the dialog, asserting the strip and its cell count exist before indexing (a TypeError is not a finding) [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:552]
+- [x] [Review][Patch] Off-state "flat strip" assertions were vacuous — eight empty `style.backgroundColor`s (jsdom) or eight `rgba(0, 0, 0, 0)`s (Playwright) are also "one distinct value"; both now assert the first cell is painted [apps/web/components/organisms/editor/AgingToggleField.test.tsx:206, apps/web/e2e/organisms.spec.ts:1107]
+- [x] [Review][Patch] Label-click test only proved Off → On; now clicks back and pins a single `onChange(false)` [apps/web/components/organisms/editor/AgingToggleField.test.tsx:128]
+- [x] [Review][Patch] Test (a) named the switch's `id` `htmlFor` and then compared it to the label's `for` — reads backwards; renamed `switchId` [apps/web/components/organisms/editor/AgingToggleField.test.tsx:89]
+- [x] [Review][Patch] Dev Agent Record said "six" deferred items; seven were written (the 4.13 Save-gate note was omitted) [docs/implementation-artifacts/4-7-aging-degradation-toggle.md Completion Notes]
+- [x] [Review][Patch] The 4.6 review's `Field`/`Label`/`Slider` item was rewritten wholesale instead of having its `Field`/`Label` half struck; original prose restored with the half struck and the `Slider` half left open, as Task 3 asked [docs/implementation-artifacts/deferred-work.md:1091]
+
+Noted, not patched: the strike of the 4.6 "before bundle measurement was partial" item was outside
+Task 3's instruction but is factually resolved by this story's Task 7 measurement — left in place.
+The two owner flags the story itself raised (FD4 live-preview vs permanent ramp; FD5 `colorToken`
+seed as a 4.8 stopgap) are recorded in `deferred-work.md` and are not review decisions.
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -769,7 +794,10 @@ Sonnet (claude-sonnet-5), via `bmad-dev-story`.
   24 new `aging degradation toggle` cases across all four projects, plus every retargeted
   4.5/4.6/reopen test — passed on every project, including both WebKit-based ones.
 - The remote gate (`gh run list --limit 1`) is checked once this branch has a PR — per this
-  worktree's instructions, opening the PR is the next step's job, not this one's.
+  worktree's instructions, opening the PR is the next step's job, not this one's. *(Review,
+  2026-09-16: PR #42 opened; run 35073064710 on `8b822fe` — `quality` pass 2m36s, `e2e` pass
+  8m22s. The macOS-only WebKit `Tab → <body>` failure did not reproduce on `ubuntu-latest`, as
+  `deferred-work.md`'s Story 3.12 entry predicts.)*
 
 ### Completion Notes List
 
@@ -796,10 +824,11 @@ Sonnet (claude-sonnet-5), via `bmad-dev-story`.
 - The persisted half of this AC (Story 4.16's Save parse, Story 4.17's load-time seed) is
   explicitly **not** built here — `OrganismSchema.agingEnabled` already existed since Story 1.3 and
   is untouched; only the draft-level round trip is this story's scope (AC6).
-- Six open items recorded in `deferred-work.md` under "Deferred from: Story
+- Seven open items recorded in `deferred-work.md` under "Deferred from: Story
   4-7-aging-degradation-toggle (2026-09-16)": the mockup's missing example strip, the FD6 token
   substitutions, no `transition` (FD5), the `colorToken` stopgap seed (FD5), the FD4 live-vs-
-  permanent-ramp flag for Sidiar, and the Epic 6 native-switch precedent.
+  permanent-ramp flag for Sidiar, the Epic 6 native-switch precedent, and the note that the 4.13
+  Save gate has nothing to check for a boolean.
 - `deferred-work.md:87`'s MUI-Switch trap entry was **not** edited, per the story's explicit "What
   NOT to build" instruction — this control still has no MUI consumer.
 
@@ -833,6 +862,9 @@ Sonnet (claude-sonnet-5), via `bmad-dev-story`.
   `OrganismEditorModal` and its tests retargeted/extended, plus the `OrganismLibrary` reopen test
   (Task 5); e2e block added across all four Playwright projects (Task 6); bundle measured before
   and after, `deferred-work.md` updated, `npm run ci` run (Task 7). Status → review.
+- 2026-09-16 — Code review (Opus, `bmad-code-review`): 11 patches applied (comment accuracy,
+  vacuous Off-strip assertions, literal cell index, label-click round trip, docs counts); CI on
+  PR #42 green (`quality` + `e2e`). Status → done.
 
 Dev Model: sonnet   # follows the 4.5/4.6 editor-field pattern (draft grows a field, controlled field in the basicInfo fragment, pure helper in lib, LUT already exists); the one new idiom — a native `<button role="switch">` and its naming — is fully pinned in FD1/FD2 with the axe fact behind it
 Proposed lane gate: none

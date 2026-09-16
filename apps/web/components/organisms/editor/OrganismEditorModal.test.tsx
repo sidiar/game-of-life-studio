@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
+import { MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
 
 /**
@@ -138,19 +139,22 @@ describe('OrganismEditorModal', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
 
     // MUI `Dialog` portals to `document.body`, not the render container (this file's own note
-    // above).
-    const strip = document.body.querySelector('[data-aging-example]');
-    const cellColor = (age: number) =>
-      (strip!.querySelectorAll('[data-age]')[age] as HTMLElement).style.backgroundColor;
+    // above) — so the strip is looked up through the dialog, not the container.
+    const strip = screen.getByRole('dialog').querySelector('[data-aging-example]');
+    if (strip === null) throw new Error('the aging example strip is not in the dialog');
+    const cells = strip.querySelectorAll<HTMLElement>('[data-age]');
+    expect(cells).toHaveLength(MAX_AGE_SHADE + 1);
+    const cellColor = (age: number) => cells[age].style.backgroundColor;
     const cell0Off = cellColor(0);
-    const cell7Off = cellColor(7);
-    expect(cell0Off).toBe(cell7Off);
+    const cellCapOff = cellColor(MAX_AGE_SHADE);
+    expect(cell0Off).not.toBe('');
+    expect(cell0Off).toBe(cellCapOff);
 
     await user.click(screen.getByRole('switch', { name: 'Aging Degradation' }));
 
     expect(screen.getByRole('switch', { name: 'Aging Degradation' })).toBeChecked();
     expect(screen.getByText('On')).toBeInTheDocument();
-    expect(cellColor(0)).not.toBe(cellColor(7));
+    expect(cellColor(0)).not.toBe(cellColor(MAX_AGE_SHADE));
   });
 
   // The draft lives in the MODAL (FD3): typing round-trips through its own state, not a prop.

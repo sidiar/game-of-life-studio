@@ -1107,6 +1107,9 @@ test.describe('aging degradation toggle (Story 4.7)', () => {
     const colors = await strip
       .locator('[data-age]')
       .evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+    // Eight unpainted cells are also "one distinct value" (`rgba(0, 0, 0, 0)`), so flat must
+    // also mean painted.
+    expect(colors[0]).not.toBe('rgba(0, 0, 0, 0)');
     expect(new Set(colors).size).toBe(1);
     expect(errors).toEqual([]);
   });

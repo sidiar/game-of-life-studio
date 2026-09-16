@@ -5,13 +5,16 @@ import { styled } from '@mui/material/styles';
  * pointer at this exact story: "a third editor field (4.7's toggle, 4.8's picker)" is the
  * three-callers threshold this repo uses before an abstraction is born, the same threshold Story
  * 4.5 FD6 records). Rule sets moved here byte-identical from `DominanceField.tsx` — nothing visual
- * changes, and the proof is that no test of 4.5/4.6 is edited. Stays inside
+ * changes, and the proof is that `OrganismNameField.test.tsx` and `DominanceField.test.tsx` run
+ * unedited (the 4.5/4.6 tests that ARE edited in Story 4.7 are retargeted for the new control's
+ * count and tab hop, not for this move). Stays inside
  * `components/organisms/editor/` — a sibling module, not a cross-mode primitive (`project-context.md`'s
  * "components split by mode" rule).
  */
 
-// Mockup: `.form-field` (`clinical-lab-theme/organism-editor.html:390-448, 954-964`). Same rule set
-// across every Basic Information field, so the column's vertical rhythm matches.
+// Mockup: `.form-field` (`clinical-lab-theme/organism-editor.html:153-156`; markup `:912-916`,
+// `:954-964`, `:968-976`). Same rule set across every Basic Information field, so the column's
+// vertical rhythm matches.
 export const Field = styled('div')({
   margin: '0 0 20px 0',
 });
