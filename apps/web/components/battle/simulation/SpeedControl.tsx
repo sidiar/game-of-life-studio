@@ -113,7 +113,17 @@ const Slider = styled('input')({
     background: 'var(--gol-border-control)',
     borderRadius: '3px',
   },
+  // The ring goes on the thumb, not the input: the input is the 6 px track, so an outline on it is
+  // a 10 px band the 16 px thumb overhangs (Story 3.13 review decision (b)). The input's own ring is
+  // suppressed only because the thumb's replaces it — SC 2.4.7 is met by the thumb ring.
   '&:focus-visible': {
+    outline: 'none',
+  },
+  '&:focus-visible::-webkit-slider-thumb': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+  '&:focus-visible::-moz-range-thumb': {
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '2px',
   },

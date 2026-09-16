@@ -4,7 +4,7 @@ baseline_commit: 14ac287fca18a89ea29d35a2c3ee264325665b4f
 
 # Story 3.13: Speed Control
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -87,7 +87,9 @@ This story adds **no semantics to the hook** and **no state to the view**.
    `--gol-text-secondary` — every pair already a gated row in `themeTokens.test.ts` (`accent` /
    `text-secondary` on `bg-primary` under text pairs; `border-control` / `accent` on `bg-primary`
    under control pairs). No new token, no new contrast row, no raw hex and no `rgb()` in the
-   `.tsx`. `:focus-visible` `2px solid var(--gol-accent)` at `outlineOffset: 2px` on the input.
+   `.tsx`. `:focus-visible` `2px solid var(--gol-accent)` at `outlineOffset: 2px` on the **thumb**
+   pseudo-elements (`::-webkit-slider-thumb` / `::-moz-range-thumb`), the input's own outline
+   suppressed — review decision (b): a ring on the 6 px input is a band the 16 px thumb overhangs.
    **No `transition`** (three stories on this route lost one to a mid-fade axe scan;
    `EditorStatusBar.tsx`'s comment block is the record). No `box-shadow` (the editor mockup's
    dominance thumb has an `rgba(…)` glow — not this control's, and AR-46 catches it anyway).
@@ -318,7 +320,8 @@ Auditor) against the Opus implementation; 13 raw findings, 1 merged, 1 dismissed
 `fix: review patches (story 3.13)`; the decision item is the owner's and is what holds the status
 at `review`.
 
-- [ ] [Review][Decision] Focus-ring geometry — AC6 puts `:focus-visible` on the 6 px `<input>` at a
+- [x] [Review][Decision] Focus-ring geometry — **resolved by Sidiar: (b), ring on the thumb** (commit on
+  this branch; AC6 reworded to match). — AC6 puts `:focus-visible` on the 6 px `<input>` at a
   2 px offset, so the ring is a ~10 px band that the 16 px thumb overhangs top and bottom
   (reproduced from the styled blocks alone and screenshotted in real Chromium and Firefox). SC 2.4.7
   is met — the indicator is visible — and the mockup ships `outline: none`, so this is a design
