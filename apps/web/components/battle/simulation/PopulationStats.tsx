@@ -91,6 +91,8 @@ const Skull = styled('span')({
   marginLeft: '5px',
 });
 
+// Always text-secondary (the mockup's `.pop-count`), living or extinct — the extinct step is
+// `Name`'s alone, so this carries no `data-extinct`.
 const Count = styled('span')({
   fontSize: '11px',
   color: 'var(--gol-text-secondary)',
@@ -172,7 +174,7 @@ export default function PopulationStats({ entries, totalLiving }: PopulationStat
                       </Skull>
                     )}
                   </Name>
-                  <Count data-extinct={entry.extinct}>
+                  <Count>
                     {entry.count.toLocaleString('en-US')} ({Math.round(entry.pct)}%)
                   </Count>
                 </Header>

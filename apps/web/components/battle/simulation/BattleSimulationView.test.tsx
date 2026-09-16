@@ -605,9 +605,10 @@ describe('BattleSimulationView — speed control (Story 3.13)', () => {
 describe('BattleSimulationView — cycle counter & population stats (Story 3.14)', () => {
   const speedSlider = () => screen.getByRole('slider', { name: 'Generations per second' });
   const rows = () => screen.getAllByRole('listitem');
-  // `<CycleCounter>`'s value node is a single-child ancestor chain (Counter > Value), so
-  // `getByText` matches the same collapsed text at two levels and throws "multiple elements" —
-  // `CycleCounter.test.tsx`'s own `valueNode` note. Read the digits directly off the section.
+  // `<CycleCounter>`'s glyph run is split across an `aria-hidden` padding span and a bare text
+  // node (FD6), so no element OWNS the string `0042`: RTL's default text matcher finds nothing
+  // and a `textContent` function matcher matches every ancestor (`CycleCounter.test.tsx`'s
+  // `valueNode` note). Read the digits directly off the section's Counter > Value instead.
   function cycleText(): string {
     const section = screen.getByRole('heading', { name: 'Cycle Count' }).closest('section');
     if (section === null) throw new Error('Cycle Count section not found');
@@ -746,6 +747,7 @@ describe('BattleSimulationView — cycle counter & population stats (Story 3.14)
     driver.frame(300); // cycle 3, published
     expect(onRender).toHaveBeenCalledTimes(3);
     expect(drawDiffSpy).toHaveBeenCalledTimes(3);
+    expect(cycleText()).toBe('0003'); // AC6: at 10 gen/sec the text follows every published cycle
 
     driver.frame(310); // below the 100 ms period at 10 gen/sec — no step, no commit
     expect(onRender).toHaveBeenCalledTimes(3);
@@ -755,10 +757,12 @@ describe('BattleSimulationView — cycle counter & population stats (Story 3.14)
     expect(onRender).toHaveBeenCalledTimes(4);
     onRender.mockClear(); // re-baseline after the speed-change commit
 
-    driver.frame(360);
-    driver.frame(410); // cycle 4, published (cyclesPerPublish(20) === 2)
-    driver.frame(460);
-    driver.frame(510); // cycle 6, published — 4 drawDiff calls, 2 commits
+    // The loop banked 10 ms at frame(310) and clamps the bank to the NEW 50 ms period before
+    // adding the delta (`simulationLoop.ts` FD3), so frame(360) already carries 60 ms and steps.
+    driver.frame(360); // cycle 4, published (cyclesPerPublish(20) === 2)
+    driver.frame(410); // cycle 5, not published
+    driver.frame(460); // cycle 6, published
+    driver.frame(510); // cycle 7, not published — 4 drawDiff calls, 2 commits
     expect(drawDiffSpy).toHaveBeenCalledTimes(3 + 4);
     expect(onRender).toHaveBeenCalledTimes(2);
     expect(cycleText()).toBe('0006');
@@ -772,12 +776,14 @@ describe('BattleSimulationView — cycle counter & population stats (Story 3.14)
   it('has no axe violations paused with an extinct row, playing, and after a Stop', async () => {
     installContexts();
     const driver = installFrameDriver();
-    const { container } = render(view());
+    const { container } = render(view({ startingSpeed: 10 }));
 
     expect((await axe(container)).violations).toEqual([]);
 
     act(() => screen.getByRole('button', { name: 'Play' }).click());
-    driver.frame(0);
+    driver.frame(0); // primes the clock only
+    driver.frame(100); // one stepped, PUBLISHED cycle — the scan sees a run's DOM, not the paused one
+    expect(cycleText()).toBe('0001');
     expect((await axe(container)).violations).toEqual([]);
 
     act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());

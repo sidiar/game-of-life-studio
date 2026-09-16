@@ -4,7 +4,7 @@ baseline_commit: ba8b4f746a2e312d08c75d7d0404ca7087c79e95
 
 # Story 3.14: Cycle Counter & Population Stats
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -406,6 +406,97 @@ filter or extinction logic to the components** (spec §3.12: "All pure presentat
     code, which e2e failed if any (expected: only 3.12's local-WebKit Tab test, by name), `/battle`
     first-load gzip + headroom (AC10), the Run chunk size, `bench:check` (unchanged), and the
     unit/e2e counts in the Dev Agent Record.
+
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (2026-09-16), via three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 0 `decision-needed`, 11 `patch` (all
+applied in the review commit), 1 `defer`, 15 dismissed as noise.
+
+- [x] [Review][Patch] Cadence test's frame-to-cycle comments were off by one frame — the loop banks
+  10 ms at `frame(310)` and clamps the bank to the NEW 50 ms period before adding the delta
+  (`simulationLoop.ts` FD3), so `frame(360)` already steps to cycle 4; 410/460/510 are cycles 5/6/7,
+  with 4 and 6 published. The assertions (`drawDiff` +4, commits +2, `0006`, `0007` on Pause) were
+  already consistent with the real arithmetic; the labels were not
+  [apps/web/components/battle/simulation/BattleSimulationView.test.tsx:758-761]
+- [x] [Review][Patch] The stated reason for avoiding `getByText` on the counter was wrong in three
+  files ("matches the same collapsed text at two ancestor levels"). RTL's default matcher reads an
+  element's OWN text nodes only, so a glyph run split across the `aria-hidden` padding span and a
+  bare text node (FD6) is simply never found as one string; a `textContent` function matcher is
+  what matches every ancestor. Comments rewritten to say what is true; `CycleCounter.test.tsx`'s
+  `valueNode` fallback (`div > div`) also hit Counter rather than Value from the RTL container —
+  now `div > div > div` in every case
+  [apps/web/components/battle/simulation/CycleCounter.test.tsx:6-12,
+  BattleSimulationView.test.tsx:608-610, apps/web/e2e/battleRoute.spec.ts:2445-2447]
+- [x] [Review][Patch] `toHaveTextContent` is a substring match, so `0042` accepted `00042` and
+  "12345 in full, with no truncation" accepted `012345` — every counter assertion is now exact
+  `textContent` equality, and the ad-hoc `.not.toContain('0000')` is gone
+  [apps/web/components/battle/simulation/CycleCounter.test.tsx:20-46]
+- [x] [Review][Patch] Task 1 (j)'s "mixed" axe fixture had no extinct row (one living entry), and the
+  all-extinct render was scanned with `totalLiving = 4` — an impossible state. The mix is now a real
+  living + extinct pair (the one row shape that puts text-secondary beside text-primary and adds
+  the skull `img`) and the all-extinct total is `0`
+  [apps/web/components/battle/simulation/PopulationStats.test.tsx:157-163]
+- [x] [Review][Patch] Task 5 (e)'s round trip clicked `Stop & reset` BEFORE leaving for Lab, so the
+  post-round-trip `0000` / `4 (33%)` were values the test had already forced — it could not tell a
+  new session from a preserved one. The test now leaves for Lab at cycle 1 (the story's literal
+  "after (b)'s steps" included the Stop; its stated intent, "a new session", did not survive it)
+  [apps/web/e2e/battleRoute.spec.ts:2569-2594]
+- [x] [Review][Patch] Test (f)'s "playing" axe scan ran after `frame(0)` alone — the clock prime, no
+  step, no publish — so the DOM scanned "while playing" was the paused DOM with a different button
+  label. One published cycle (`frame(100)` at 10 gen/sec, `0001` asserted) now precedes the scan
+  [apps/web/components/battle/simulation/BattleSimulationView.test.tsx:772-785]
+- [x] [Review][Patch] AC6's "Play + frames at 10 gen/sec → the text follows every published cycle"
+  was never asserted on the text (only on commit / `drawDiff` counts); `cycleText() === '0003'`
+  after `frame(300)` added [apps/web/components/battle/simulation/BattleSimulationView.test.tsx:748]
+- [x] [Review][Patch] AC8's e2e condition — "`AxeBuilder` … while PLAYING with an extinct row
+  present" — was split across (c) (playing, no extinct row) and (d) (extinct row, paused). (d) now
+  also presses Play, polls the counter past `0001`, scans with the skull row present, then pauses
+  [apps/web/e2e/battleRoute.spec.ts:2560-2564]
+- [x] [Review][Patch] Dead `data-extinct` attribute on `Count` — no `&[data-extinct]` rule exists on
+  it (it is always text-secondary), so it was emitted on every row for nothing while the `Name`
+  comment implied the attribute is what selects the extinct step. Removed, with a one-line comment
+  on `Count` saying the step is `Name`'s alone. (The story's own render snippet carried it — a
+  snippet slip, not a dev deviation.) [apps/web/components/battle/simulation/PopulationStats.tsx:175]
+- [x] [Review][Patch] Magic counts in a source comment ("the test handle 35 unit and 39 e2e
+  assertions already use") were already stale in the same diff that wrote them; dropped the numbers
+  [apps/web/components/battle/simulation/BattleSimulationView.tsx:200-201]
+- [x] [Review][Patch] Dev Agent Record arithmetic: "All eight recorded" — nine FDs (FD1–FD9) are
+  listed and taken; "records the five items Task 6 named" — Task 6 (5) names six and six bullets
+  were written. Corrected in place [this file, Completion Notes]
+- [x] [Review][Defer] `textTransform: uppercase` on the organism NAME in `<PopulationStats>` —
+  Chromium exposes the transformed string in the accessibility tree, so VoiceOver/NVDA can read
+  "PATIENT DEFENDER" as an acronym or spell it. This is the route-wide sentence-case-DOM /
+  uppercase-CSS convention (every `<SidebarSection>` `<h2>`, the Lab status bar) and not new here;
+  the fix is an AT sweep call, not an axe one [apps/web/components/battle/simulation/PopulationStats.tsx:71]
+  — deferred, pre-existing (Story 6.11's AT pass)
+
+Dismissed (recorded so the next reviewer does not re-raise them): `pct` NaN / negative / >100 and
+`cycle` negative / fractional / NaN guards (the hook's published contract — `derivePopulation`
+bounds `pct`, the loop's cycle is a non-negative int; the component is total over what it is
+given, not a validator); empty `name` / duplicate `organismId` (schema and `derivePopulation`'s
+de-duplication own those); e2e (d)'s `before = 2` literal (the file's own 2.9 precedent, same
+comment); `Skull` `marginLeft: 5px` inside `Name`'s `gap: 6px` (the mockup has both, `:363-368` /
+`:398-401`); `letterSpacing: 3px` centring skew (the mockup's treatment); the `drawDiff` prototype
+spy "never restored" (the file's `afterEach` runs `vi.restoreAllMocks()`); the structural
+`div > div` / `following-sibling::*[1]` handles (verified against `SidebarSection`'s
+`<section><h2/>{children}</section>` — a `data-testid` is not this codebase's idiom; `data-*`
+handles on the ROOT are); e2e (c) not asserting the counter holds after Pause (3.12's transport
+block owns that); `view`/`enterRun` duplicated per e2e describe (the file's per-block idiom);
+heading order asserted via `textContent` rather than accessible name (identical for these h2s);
+the redundant exact-name `Speed` assertion after the ordered array (harmless belt-and-braces);
+"`totalLiving` contract asserted in prose only" (FD3 is the story's decision and the §3.12
+clarification candidate is recorded); the story's own miscount ("two" `BattlePage.test.tsx`
+assertions to convert — the baseline had ONE `toHaveLength(1)` at `:2722`, the "sibling" is the
+Lab-side `4` that stays; four conversions total, not trap 6's five — a story-doc slip, the code is
+right).
+
+Verification by the reviewer: 46/46 unit tests in the three story files after the patches;
+`eslint` + `prettier --check` on every touched file clean; `spec:check` 245/245 ids resolve;
+`tsc --noEmit` on `apps/web` clean; the 3.14 e2e block ran green on `chromium` AND `webkit`
+(trap 5) locally before the patches (10/10) and the 3.11/3.13/3.14 blocks again after them. AC10's
+bundle numbers and AC11's `bench:check` are the remote gate's to confirm — see the PR's
+Verification section.
 
 ## Dev Notes
 
@@ -861,7 +952,7 @@ Claude Sonnet 5 (claude-sonnet-5), via `bmad-dev-story`.
   `aria-hidden` span; digits are plain text. **FD7(a)** `data-cycle`/`data-status` kept on the
   view root, comment rewritten. **FD8(a)** no live region, no `role="status"`, no `<output>`.
   **FD9(a)** native `styled('ul')`/`styled('li')`, no MUI list/progress components.
-  All eight recorded as taken exactly as the story's Dev Notes describe; no deviation.
+  All nine recorded as taken exactly as the story's Dev Notes describe; no deviation.
   Spec-conflict flags: none NEW beyond the ones the story already named (mockup opacity/colour/
   transition, the §3.12 `totalLiving` clarification candidate, the two corrected `deferred-work.md`
   pointers) — all resolved via the story's own FD calls, nothing left ambiguous.
@@ -894,7 +985,7 @@ Claude Sonnet 5 (claude-sonnet-5), via `bmad-dev-story`.
   surfaces agree; the 2-15 review entry (`<PetriDishCanvas>` CLEAR test gap) re-pointed to Story
   3.16 (this story never touches the canvas); the 3-11 amendment-candidate list got item 8 (props
   shipped to spec, the `totalLiving` clarification candidate); a new "Deferred from: Story 3-14"
-  section records the five items Task 6 named (mockup chrome/colour/motion, the compact-variant
+  section records the six items Task 6 named (mockup chrome/colour/motion, the compact-variant
   question, the FD5 rounding floor, the empty-battle copy).
 
 ### File List
@@ -927,6 +1018,10 @@ Nothing in `packages/*`; no planning artifact edited (per the story's own scope 
   under measured machine contention (see Debug Log); `npm run e2e` red on the two pre-existing
   local-WebKit/tablet `Tab` failures plus five environmental flakes that all passed on isolated
   re-run (see Debug Log). No spec conflict beyond the ones the story already flagged.
+- 2026-09-16 — Code review (Opus, three adversarial layers): 11 patches applied (test-strength and
+  comment-accuracy fixes, one dead attribute removed — see Review Findings), 1 item deferred to
+  Story 6.11, 0 decision-needed. Status -> done; the remote gate's `bench:check` / `bundle:check`
+  result is recorded on the PR.
 
 Dev Model: sonnet   # follows patterns that exist (2.12's stats-row chip, 3.13's presentational-section wiring, the hook's published contract); every open call is resolved in FD1–FD9 above — nothing here is a pattern a later story builds on rather than one 3.18/4.15 already have specced shapes for
 Proposed lane gate: none

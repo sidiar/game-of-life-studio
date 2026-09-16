@@ -3,12 +3,14 @@ import { render } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import CycleCounter from './CycleCounter';
 
-// The value node is the hidden span's parent — asserted directly rather than through
-// `getByText`, whose default matcher walks every ancestor and finds the same collapsed text at
-// each level of this single-child tree (a false "multiple elements" failure, not a real one).
+// The value node is Counter > Value (container > div > div) — read directly rather than through
+// `getByText`: the visible glyph run is split across the `aria-hidden` padding span and a bare
+// text node (FD6), so RTL's default matcher (an element's OWN text nodes only) never sees
+// `0042` as one string, and a `textContent` function matcher matches every ancestor instead.
+// Exact `textContent` equality below, not `toHaveTextContent` (a substring match that would
+// accept `00042` for `0042`).
 function valueNode(container: HTMLElement) {
-  const hidden = container.querySelector('[aria-hidden="true"]');
-  return hidden ? hidden.parentElement : container.querySelector('div > div');
+  return container.querySelector('div > div > div');
 }
 
 describe('CycleCounter (Story 3.14)', () => {
@@ -17,24 +19,23 @@ describe('CycleCounter (Story 3.14)', () => {
   it('renders 0 as 0000, with the hidden span holding only the padding zeros', () => {
     const { container } = render(<CycleCounter cycle={0} />);
 
-    expect(valueNode(container)).toHaveTextContent('0000');
+    expect(valueNode(container)?.textContent).toBe('0000');
     const hidden = container.querySelector('[aria-hidden="true"]');
-    expect(hidden).toHaveTextContent('000');
-    expect(hidden?.textContent).not.toContain('0000');
+    expect(hidden?.textContent).toBe('000');
   });
 
   it('zero-pads 42 to 0042', () => {
     const { container } = render(<CycleCounter cycle={42} />);
 
-    expect(valueNode(container)).toHaveTextContent('0042');
-    expect(container.querySelector('[aria-hidden="true"]')).toHaveTextContent('00');
+    expect(valueNode(container)?.textContent).toBe('0042');
+    expect(container.querySelector('[aria-hidden="true"]')?.textContent).toBe('00');
   });
 
   // A four-digit cycle needs no padding span at all.
   it('renders 9999 with no padding span', () => {
     const { container } = render(<CycleCounter cycle={9999} />);
 
-    expect(valueNode(container)).toHaveTextContent('9999');
+    expect(valueNode(container)?.textContent).toBe('9999');
     expect(container.querySelector('[aria-hidden="true"]')).not.toBeInTheDocument();
   });
 
@@ -42,7 +43,7 @@ describe('CycleCounter (Story 3.14)', () => {
   it('renders 12345 in full, with no truncation', () => {
     const { container } = render(<CycleCounter cycle={12345} />);
 
-    expect(valueNode(container)).toHaveTextContent('12345');
+    expect(valueNode(container)?.textContent).toBe('12345');
   });
 
   it('has no axe violations at 0 or 12345', async () => {

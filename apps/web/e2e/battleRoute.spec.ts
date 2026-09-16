@@ -2442,9 +2442,9 @@ test.describe('Speed control (Story 3.13)', () => {
 
 test.describe('Cycle counter & population stats (Story 3.14)', () => {
   const view = (page: Page): Locator => page.locator('[data-status]');
-  // The Counter div is the Cycle Count section's own <h2>'s sibling — reading it this way avoids
-  // Playwright's text locator matching the same collapsed text at more than one ancestor level
-  // (the same single-child-chain quirk `CycleCounter.test.tsx` documents for jsdom).
+  // The Counter div is the Cycle Count section's own <h2>'s sibling. The counter's glyph run is
+  // split across an `aria-hidden` padding span and a bare text node (FD6), so a text locator is
+  // the wrong handle for a string that is only whole at the element level — read the element.
   const cycleValue = (page: Page): Locator =>
     page
       .getByRole('heading', { level: 2, name: 'Cycle Count' })
@@ -2561,21 +2561,33 @@ test.describe('Cycle counter & population stats (Story 3.14)', () => {
     await expect(totalLivingValue(page)).toHaveText('0');
 
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    // AC8's literal condition — the scan WHILE PLAYING with the extinct row present. No auto-pause
+    // exists yet (3.15), so the empty dish simply keeps cycling under the skull row.
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect.poll(() => cycleValue(page).textContent()).not.toBe('0001');
+    await expect(populationRows(page).getByRole('img', { name: 'extinct' })).toHaveCount(1);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.getByRole('button', { name: 'Pause' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+
     expect(errors).toEqual([]);
   });
 
   // (e): a Lab -> Run round trip is a NEW session — the counter and the rows return to their
-  // mount values, not to wherever (b) left them.
+  // mount values, not to wherever the previous session was left.
   test('a Lab round trip resets the counter and the population to a fresh session (AC6)', async ({
     page,
   }) => {
     const errors = collectErrors(page);
     await enterRun(page);
 
+    // Leave for Lab at cycle 1, NOT after a Stop — a Stop would already restore the mount values,
+    // and the round trip would then prove nothing about the session being new.
     await page.getByRole('button', { name: 'Next cycle' }).click();
     await expect(view(page)).toHaveAttribute('data-cycle', '1');
-    await page.getByRole('button', { name: 'Stop & reset' }).click();
-    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(cycleValue(page)).toHaveText('0001');
 
     await labButton(page).click();
     await expect(sidebarHeadings(page)).toHaveCount(4);

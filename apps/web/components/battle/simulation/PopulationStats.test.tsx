@@ -152,12 +152,21 @@ describe('PopulationStats (Story 3.14)', () => {
     expect(screen.getByRole('list')).toHaveAttribute('role', 'list');
   });
 
-  // AC8: axe-clean with a living/extinct mix, all-extinct, and empty.
+  // AC8: axe-clean with a living/extinct mix (the one row shape that puts text-secondary beside
+  // text-primary and adds the skull `img`), all-extinct, and empty.
   it('has no axe violations mixed, all-extinct, or empty', async () => {
-    const mixed = [entry({ count: 4, pct: 100 })];
+    const mixed = [
+      entry({ count: 4, pct: 100 }),
+      entry({ organismId: chaotic.id, name: chaotic.name, count: 0, pct: 0, extinct: true }),
+    ];
     const allExtinct = [entry({ count: 0, pct: 0, extinct: true })];
-    for (const entries of [mixed, allExtinct, []]) {
-      const { container, unmount } = renderStats(entries, entries.length === 0 ? 0 : 4);
+    const cases: ReadonlyArray<readonly [readonly PopulationEntry[], number]> = [
+      [mixed, 4],
+      [allExtinct, 0],
+      [[], 0],
+    ];
+    for (const [entries, totalLiving] of cases) {
+      const { container, unmount } = renderStats(entries, totalLiving);
       expect((await axe(container)).violations).toEqual([]);
       unmount();
     }

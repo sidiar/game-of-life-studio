@@ -194,8 +194,8 @@ export default function BattleSimulationView({
   const totalLiving = sim.population.reduce((sum, entry) => sum + entry.count, 0);
 
   return (
-    // AC3: `data-status` / `data-cycle` on the root, in EVERY state — the test handle 35 unit and
-    // 39 e2e assertions already use (FD7). Story 3.14 renders the cycle as TEXT too (`<CycleCounter>`
+    // AC3: `data-status` / `data-cycle` on the root, in EVERY state — the test handle the unit and
+    // e2e suites already read (FD7). Story 3.14 renders the cycle as TEXT too (`<CycleCounter>`
     // below); the attributes were never promised to disappear, only to stop being the only
     // rendering — the `data-dirty` precedent (an absent attribute and a wrong one look the same to
     // a test with the wrong selector).

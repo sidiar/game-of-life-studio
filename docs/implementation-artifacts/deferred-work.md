@@ -1141,3 +1141,18 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **"No organisms in this battle" as a UX-copy candidate.** The empty-roster placeholder text is
   this story's own wording (no mockup covers an empty Run battle); revisit if a copy pass ever
   reaches the Run sidebar.
+
+## Deferred from: code review of 3-14-cycle-counter-population-stats (2026-09-16)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **`textTransform: uppercase` on the organism NAME in `<PopulationStats>` reaches the accessibility
+  tree in Chromium** — Chrome exposes the CSS-transformed string as the accessible text, so
+  VoiceOver/NVDA can read "PATIENT DEFENDER" as an acronym or spell it out, while Firefox exposes the
+  DOM's mixed case. This is the route-wide sentence-case-DOM / uppercase-CSS convention (every
+  `<SidebarSection>` `<h2>`, the Lab status bar's labels, the Total Living Cells row) applied to
+  one more surface, not something 3.14 introduced — and the name is the FR-4.6 disambiguator, so it
+  is the one uppercase run here that carries information rather than chrome. axe cannot referee
+  it. **Pick this up in Story 6.11** (the accessibility re-confirmation pass) alongside the 2-12
+  `role="group"` item: the same AT sweep answers both, and the fix — drop the transform on names,
+  or move it to a wrapper so the text node stays mixed-case — is a one-line call once measured.
