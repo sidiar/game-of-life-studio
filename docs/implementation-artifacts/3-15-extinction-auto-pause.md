@@ -808,3 +808,18 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` skill.
 
 Dev Model: sonnet   # a branch in an existing closure over contracts 3.8/3.10 already pinned (stop-from-inside-step, keyed publish, the marked seam); FD1–FD4 resolve every open call, and 4.15 consumes the hook, not a pattern
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 21s | 21s | 10 | 1,667 | 3,793 | 235,684 | 241,154 |
+| Step 1 — create-story | opus-5 | 1 | 12m 44s | 12m 44s | 184 | 53,972 | 425,344 | 12,492,339 | 12,971,839 |
+| Step 2 — dev-story | sonnet-5 | 1 | 30m 56s | 30m 56s | 546 | 92,604 | 1,307,907 | 48,758,927 | 50,159,984 |
+| Step 3 — code review + PR | opus-5 | 4 | 34m 35s | 34m 35s | 508 | 114,360 | 1,159,681 | 25,179,219 | 26,453,768 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 40 | 7,476 | 24,582 | 1,036,924 | 1,069,022 |
+| **Total (create-story → PR ready)** | | 6 | **1h 18m** | 1h 18m | 1,248 | 262,603 | 2,896,725 | 86,666,169 | **89,826,745** |
+
+Run started 2026-09-16 16:19 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
