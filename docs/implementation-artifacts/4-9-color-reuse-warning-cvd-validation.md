@@ -889,3 +889,18 @@ Claude Sonnet 5 (claude-sonnet-5).
 
 Dev Model: sonnet   # follows the 4.5–4.8 editor-field pattern (two props on an existing controlled field, a pure helper in lib, a modal wiring change); the shaping choices — the held seed for 4.17/4.23, the usersByToken prop shape for 4.24/4.25, one announced channel, G5 — are pinned as FD1–FD7 so nothing is left for later stories to discover
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 31s | 31s | 16 | 3,887 | 6,185 | 436,322 | 446,410 |
+| Step 1 — create-story | opus-5 | 1 | 15m 00s | 15m 00s | 158 | 66,473 | 405,029 | 11,654,628 | 12,126,288 |
+| Step 2 — dev-story | sonnet-5 | 1 | 26m 28s | 26m 28s | 732 | 92,482 | 1,259,727 | 83,377,542 | 84,730,483 |
+| Step 3 — code review + PR | opus-5 | 4 | 30m 38s | 30m 38s | 432 | 114,322 | 1,104,566 | 25,036,021 | 26,255,341 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 52 | 11,433 | 30,099 | 1,566,645 | 1,608,229 |
+| **Total (create-story → PR ready)** | | 6 | **1h 12m** | 1h 12m | 1,338 | 277,164 | 2,775,507 | 120,504,513 | **123,558,522** |
+
+Run started 2026-09-16 22:24 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
