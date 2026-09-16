@@ -4,21 +4,7 @@ import { useId, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { MAX_ORGANISM_NAME_LENGTH } from '@gol/domain';
 import { exceedsOrganismNameLength, validateOrganismName } from '@/lib/organisms/organismName';
-
-// Mockup: `.form-field` (`clinical-lab-theme/organism-editor.html:153-208`, markup `:912-916`).
-const Field = styled('div')({
-  margin: '0 0 20px 0',
-});
-
-// Mockup: `.field-label`, minus its 20px top margin — the column description above already
-// carries 20px, and the field is the first thing after it.
-const Label = styled('label')({
-  display: 'block',
-  fontSize: '13px',
-  fontWeight: 500,
-  color: 'var(--gol-text-primary)',
-  margin: '0 0 8px 0',
-});
+import { Field, Label } from './fieldStyles';
 
 // `<BattleNameField>`'s `Input` rule set (the reviewed idiom for this exact control — tokens,
 // focus ring, `--gol-border-control` in place of the decorative `--gol-border` the mockup uses,

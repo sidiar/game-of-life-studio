@@ -1098,18 +1098,54 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `OrganismNameField.tsx` (Field, Label), `SpeedControl.tsx` (Slider) and `DominanceField.tsx`
   (all three). Pre-existing by design (components split by mode; no abstraction over one caller);
   the 3.16 `<LadderSlider>` / `<RangeSlider>` decision recorded in the 3-13 and 4-6 sections above
-  is where a shared `rangeInput` rule set would be born, and an `organisms/editor/fieldStyles.ts`
+  is where a shared `rangeInput` rule set would be born, ~~and an `organisms/editor/fieldStyles.ts`
   for `Field`/`Label` is the cheaper half whenever a third editor field (4.7's toggle, 4.8's
-  picker) copies them again.
-- **Task 8's "before" bundle measurement was partial.** The Dev Agent Record measured
-  `/organisms` on `main` only; `home` / `battle` / `battle/new` are declared "unchanged" without a
-  before figure, and the editor-chunk delta is against Story 4.5's *recorded* 3521 B. Harmless
-  here (the lazy chunk is unreachable from the other routes), but the next editor story should
-  record all four routes before and after, as the task says.
+  picker) copies them again~~ — **✅ `Field`/`Label` half resolved in Story 4.7
+  (`fieldStyles.ts`):** `OrganismNameField.tsx` and `DominanceField.tsx` import
+  `Field`/`Label`/`Description` from it and `<AgingToggleField>` is the third caller. **The
+  `Slider` half stays open** — `SpeedControl.tsx` is across the mode split from
+  `organisms/editor/`, so it is still 3.16's question.
+- ~~**Task 8's "before" bundle measurement was partial.**~~ — **✅ Resolved in Story 4.7.** All
+  four routes were measured on `main` (`ba8b4f7`) before this story's changes and again after:
+  `home` 333.4 KB, `battle` 308.7 KB, `battle/new` 308.6 KB, `organisms` 295.3 KB — byte-identical
+  both times. The editor chunk moved 4226 B → 4744 B gzip (+518 B), measured against this story's
+  own "before" build, not a prior story's recorded figure.
 - **`deferred-work.md:87` names Story 4.6 as the next MUI-Slider candidate "IF that story chooses
   MUI"** — on the `story/3-13-speed-control` branch, not on `main` at 4.6's baseline, so this
   story could not amend it. 4.6 went native (FD1). Whichever of #40 / this PR merges second
   should append "4.6 also shipped native; MUI Slider still has no consumer" to that entry.
+
+## Deferred from: Story 4-7-aging-degradation-toggle (2026-09-16)
+
+- **The mockup has no example strip.** `organism-editor-design.md:271-273` sketches the ramp as
+  `░ ▒ ▓ █` only — no eight-cell strip, no 20px cell height, no 3px gap, no `--gol-border` edge and
+  no "Age 0 / Age 7" caption in either the mockup or the design doc. Every one of those values is
+  this story's own choice. A mockup-refresh note for the next UX touch, not a defect.
+- **The On knob is `--gol-on-accent`, not the mockup's `--text-primary` (FD6), and the track
+  border is `--gol-border-control`, not the mockup's decorative `--border`.** Both are the SC
+  1.4.11 substitutions every control boundary in this editor already makes (`<DominanceField>`,
+  `<OrganismNameField>`); a mockup-refresh note, not a divergence to resolve here.
+- **No `transition` on the switch** (the mockup's `all 0.3s`) — the Story 4.5 FD5 rule (an axe
+  scan landing mid-fade measures a ratio no settled state has), so the knob jumps instead of
+  sliding. A motion-design call for the UX touch, not a defect.
+- **`colorToken` is seeded at `DEFAULT_COLOR_TOKEN` as a stopgap** (`organismDraft.ts`, FD5).
+  Story 4.8 owns the M6 next-unused / least-used derivation and must **replace** the seed, not add
+  a second source. Until then a new organism's aging example strip is sky-blue — the same token as
+  Conway's Classic — and that coincidence carries no meaning.
+- **The strip is a live preview (flat when Off), not a permanent ramp** (FD4) — this story's
+  reconciliation of `epics.md:1074` ("shows the strip … when rendered") with
+  `organism-editor-design.md:271` ("Visual Example (when ON)"). **Flagged for Sidiar**: a permanent
+  ramp is a one-line change (`displayColor(colorToken, age)` in place of the `ageShadeFor` form in
+  `agingExampleColors`), and every Off-state test invariant in `AgingToggleField.test.tsx` and
+  `organisms.spec.ts` would need to flip alongside it.
+- **Epic 6's three Settings toggle rows (6.6 / 6.7 / 6.10) now have a native-switch precedent.**
+  The `Switch`/`StateText` blocks in `AgingToggleField.tsx` are copy candidates across the route
+  split (never imported — `components/organisms/editor/` and the settings route do not reach
+  across one another). Whether a shared `<ToggleSwitch>` is promoted, and where it would live, is
+  Story 6.6's call — the same shape as the 3.16 `<LadderSlider>` / `<RangeSlider>` question above.
+- **The 4.13 Save gate has nothing to check for `agingEnabled`.** It is a boolean the switch can
+  only set to `true`/`false` — there is no "invalid" state to guard against, unlike Story 4.11's
+  numeric condition inputs.
 
 ## Deferred from: Story 3-14-cycle-counter-population-stats (2026-09-16)
 
