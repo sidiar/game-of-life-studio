@@ -1037,3 +1037,18 @@ Sonnet (claude-sonnet-5), via `bmad-dev-story`.
 
 Dev Model: sonnet   # follows the 4.5/4.6/4.7 editor-field pattern (draft field already exists, controlled field in the basicInfo fragment, pure helper in lib, native radio group per the GridSettingsSection precedent); the two shaping choices — the modal's `library` prop / props-type split and the factory taking the library's tokens — are pinned in FD3/FD5, so nothing is left for later stories to discover
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 41s | 41s | 16 | 2,808 | 6,566 | 378,288 | 387,678 |
+| Step 1 — create-story | opus-5 | 1 | 18m 42s | 18m 42s | 182 | 81,843 | 890,109 | 13,821,212 | 14,793,346 |
+| Step 2 — dev-story | sonnet-5 | 1 | 36m 19s | 36m 19s | 522 | 87,309 | 1,374,536 | 58,372,744 | 59,835,111 |
+| Step 3 — code review + PR | opus-5 | 4 | 26m 48s | 26m 48s | 400 | 93,451 | 1,229,984 | 20,502,011 | 21,825,846 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 48 | 8,723 | 25,605 | 1,245,331 | 1,279,707 |
+| **Total (create-story → PR ready)** | | 6 | **1h 22m** | 1h 22m | 1,120 | 265,411 | 3,501,195 | 93,074,255 | **96,841,981** |
+
+Run started 2026-09-16 16:22 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
