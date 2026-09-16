@@ -3,6 +3,24 @@
 Dates are the dates the change landed in the source project; the skill was extracted
 with its history on 2026-09-15.
 
+## 1.1.1 — 2026-09-16
+
+Step 3 drives `bmad-code-review` by script rather than by the reviewer's judgement. Its
+last step halts four times for a human; the skill answered one (the patch menu) and left
+the reviewer to infer the rest — which it did correctly in the five draft-PR runs so far,
+but "Start the next story" at the final menu is auto-discovery, the other lane's story
+on this branch, and nothing said not to. Now every halt has its answer, and the reason
+the story file must be passed is stated: it is what keeps `decision-needed` findings
+from being silently reclassified.
+
+Step 3 also no longer writes the story's status — `bmad-code-review` does that itself
+(`done`, or `in-progress` with decisions left as action items), and the two instructions
+disagreed on the with-decisions case; the reviewer followed the skill and left `review`
+in the five runs above. The orchestrator now checks the result instead: `done` ⇔ no
+`decision-needed` findings, STOP on a mismatch; draft iff not `done`. Also written down:
+how a draft PR reaches `done` (the owner answers the decision items in the story file,
+then runs dev-story and code-review on the branch) — the skill never resumes one.
+
 ## 1.1.0 — 2026-09-16
 
 The working tree names the lane, and a tree can be held by one run at a time. After two

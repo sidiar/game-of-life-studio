@@ -380,12 +380,22 @@ do not.
 Before spawning, assert the choice out loud: *"Step 2 ran on X, so Step 3 spawns Y."*
 If X and Y are the same, you have mis-derived it — stop and recompute.
 
-**Auto-apply patches.** At `bmad-code-review`'s step 5 prompt, always choose
-**"Apply every patch"** — no per-finding confirmation. There is no human in this run to
-answer it, and the `patch` bucket is defined as fixes that are unambiguous without one.
+**Driving `bmad-code-review` with no human at the keyboard.** Pass it the story file
+path — that is what puts it in `full` review mode; without one it silently reclassifies
+every `decision-needed` finding as `patch` or `defer`, and the draft-PR rule below never
+fires. Its last step stops four times for a numbered answer. Answer as follows, and never
+otherwise:
 
-**Never auto-resolve `decision-needed` findings.** That bucket exists precisely because
-the correct fix needs the owner's intent. Leave them unresolved and carry them to the hand-back in Step 5.
+- **§4, resolve `decision-needed`** — do not. Leave each as an unchecked
+  `[Review][Decision]` item in the story file with the options laid out, and go on to
+  §5. BMad's "decisions before patches" rule assumes the decider is present; here the
+  decider is the owner, after the PR — the bucket exists because the fix needs their intent.
+- **§5, the `patch` menu** — **"Apply every patch"**, no per-finding confirmation. The
+  bucket is defined as fixes that are unambiguous without a human.
+- **§6, status** — let it write. Step 3 checks the result below.
+- **§7, next steps** — **"Done"**. Never "Start the next story": that runs dev-story on
+  the first `ready-for-dev` story in the file, which with two lanes in progress is the
+  other lane's — on this branch.
 
 Tell it, too, to report any cross-epic dependency the diff reveals — a file this story
 changed that a story of the other in-progress epic will also need — as a proposed
@@ -397,16 +407,26 @@ and treat a red run as a finding. If it fixes anything, that lands as its **own*
 on the same branch, pushed — never amended into the dev commit. The two-commit shape
 is the record of what was implemented versus what review changed.
 
-In that same commit, set the story to `done` in `{status_file}` — **but only if no
-`decision-needed` findings remain**. On the branch that reads as "implemented and
-reviewed"; it becomes true of the project when the PR merges, which is the point —
-the owner never hand-edits the status file. If decisions are outstanding the story is not
-done, so leave the status alone.
+`bmad-code-review` sets the story's status in `{status_file}` itself, in that same commit:
+`done` when nothing is left open, `in-progress` when `decision-needed` items were left as
+action items in the story file. Do not tell it otherwise, and do not correct it afterwards.
+When it returns, read `{status_file}` on the branch and check the two agree —
+**`done` ⇔ no `decision-needed` findings** — and STOP on a mismatch rather than editing
+the file. On the branch, `done` reads as "implemented and reviewed"; it becomes true of the
+project when the PR merges, which is the point — the owner never hand-edits the status
+file.
 
 Finally, open the PR with `gh pr create --base main --head story/{story_key}`
-(never `--auto`). Add `--draft` **iff** `decision-needed` findings remain: a draft PR
-means "the owner has calls to make before this can merge." Either way the PR opens, so the
-Step 0 guard sees it and no new story starts in this lane.
+(never `--auto`). Add `--draft` **iff** the story is not `done`: a draft PR means "the
+owner has calls to make before this can merge." Either way the PR opens, so the Step 0
+guard sees it and no new story starts in this lane.
+
+A draft PR leaves the branch at `in-progress` with the decisions written as unchecked
+`[Review][Decision]` items in the story file. That is BMad's resume state, not this
+skill's: once the owner has answered them there, they run `bmad-dev-story` and then
+`bmad-code-review` on that story file, on the branch — dev-story picks up the unchecked
+review items, and the second review flips the story to `done` — and undraft the PR. This
+skill never resumes a draft; Step 0 sees the open PR and stops, as for any other.
 
 Body, four sections, in this order:
 
@@ -453,7 +473,7 @@ tokens to the very numbers it is reporting.
 
 Report, briefly:
 
-- the lane, story id and title, and its status on the branch (`done`, or unchanged if
+- the lane, story id and title, and its status on the branch (`done`, or `in-progress` if
   decisions are outstanding)
 - the PR number and URL, and CI status
 - which model implemented it, and which reviewed it — name both, so a collapsed
@@ -604,8 +624,12 @@ and the rest of the skill is framework-agnostic.
   `ready-for-dev`, and flips `epic-N: backlog → in-progress` on the epic's first story.
   `bmad-dev-story` runs to completion, leaves the story at `review`, and HALTs on its own
   conditions. `bmad-code-review` triages findings into `patch` / `defer` /
-  `decision-needed` and offers the literal menu item **"Apply every patch"** — Step 3's
-  auto-apply, draft-PR, and `done`-only-if-no-decisions rules all hang on that vocabulary.
+  `decision-needed`, offers the literal menu item **"Apply every patch"**, and writes the
+  story's final status itself (`done`, or `in-progress` with decisions left as action
+  items) — Step 3's auto-apply, its `done` ⇔ no-decisions check, and the draft-PR rule all
+  hang on that vocabulary. Its last step halts four times for a human; Step 3 scripts
+  every answer, and `full` review mode (a story file passed) is what keeps
+  `decision-needed` from being reclassified.
 - **`{status_file}` shape.** A `development_status:` mapping whose keys are story keys
   matching `^(\d+)-(\d+)-[a-z0-9-]+$` (epic, story, slug — listed in order) and `epic-N`
   rows. Story statuses `backlog → ready-for-dev → in-progress → review → done`; epic
