@@ -143,6 +143,10 @@ const sidebarHeadings = (page: Page): Locator =>
 // bare `getByRole('slider')` stops being unambiguous the day it lands.
 const speedSlider = (page: Page): Locator =>
   page.getByRole('slider', { name: 'Generations per second' });
+// Story 3.14: the population rows, scoped to the sidebar — `getByRole('listitem')` alone would
+// also see any future list the main chassis grows.
+const populationRows = (page: Page): Locator =>
+  page.getByRole('complementary').getByRole('listitem');
 
 /** Every test using this asserts a clean console: the Run toggle mounts a lazy chunk and a second
  * canvas, and both `buildRefToFillGroup`'s warn-once and the ResizeObserver loop report there, not
@@ -2000,10 +2004,10 @@ test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
     // FR-3.10 "the playback canvas painted": the hook's prime reached the Run dish.
     await expect(dish(page)).toBeVisible();
     expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
-    // The chassis: one sidebar section (Speed — Story 3.13 added the first; the 3.11 skeleton had
-    // none), one <main>-equivalent chassis, one <h1>, and the editor's controls are gone rather
-    // than hidden.
-    await expect(sidebarHeadings(page)).toHaveText(['Speed']);
+    // The chassis: three sidebar sections (Population Analysis, Cycle Count — Story 3.14; Speed —
+    // Story 3.13; the 3.11 skeleton had none), one <main>-equivalent chassis, one <h1>, and the
+    // editor's controls are gone rather than hidden.
+    await expect(sidebarHeadings(page)).toHaveText(['Population Analysis', 'Cycle Count', 'Speed']);
     await expect(page.getByRole('main')).toHaveCount(1);
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Undo' })).toHaveCount(0);
@@ -2296,14 +2300,15 @@ test.describe('Speed control (Story 3.13)', () => {
     await expect(view(page)).toHaveAttribute('data-cycle', '0');
   }
 
-  // (a) AC1/AC2: the first Run-sidebar section, and the slider at the ladder's default.
-  test('the Speed section is the Run sidebar’s one section, with the slider at 10 gen/s (AC1, AC2)', async ({
+  // (a) AC1/AC2: the third Run-sidebar section (Story 3.14 inserted two above it), and the slider
+  // at the ladder's default.
+  test('the Speed section is the Run sidebar’s third section, with the slider at 10 gen/s (AC1, AC2)', async ({
     page,
   }) => {
     const errors = collectErrors(page);
     await enterRun(page);
 
-    await expect(sidebarHeadings(page)).toHaveText(['Speed']);
+    await expect(sidebarHeadings(page)).toHaveText(['Population Analysis', 'Cycle Count', 'Speed']);
     await expect(speedSlider(page)).toHaveValue('3');
     await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '10 generations per second');
     await expect(page.getByText('10 gen/s')).toBeVisible();
@@ -2430,6 +2435,172 @@ test.describe('Speed control (Story 3.13)', () => {
     await expect(view(page)).toHaveAttribute('data-status', 'paused');
     await expect(speedSlider(page)).toHaveValue('3');
     await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '10 generations per second');
+
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Cycle counter & population stats (Story 3.14)', () => {
+  const view = (page: Page): Locator => page.locator('[data-status]');
+  // The Counter div is the Cycle Count section's own <h2>'s sibling. The counter's glyph run is
+  // split across an `aria-hidden` padding span and a bare text node (FD6), so a text locator is
+  // the wrong handle for a string that is only whole at the element level — read the element.
+  const cycleValue = (page: Page): Locator =>
+    page
+      .getByRole('heading', { level: 2, name: 'Cycle Count' })
+      .locator('xpath=following-sibling::*[1]');
+  // Same reasoning: the Total Living Cells VALUE, read off its label's sibling rather than by
+  // text (the label span and the value span share no ancestor whose OWN text is just the number).
+  const totalLivingValue = (page: Page): Locator =>
+    page.getByText('Total Living Cells').locator('xpath=following-sibling::*[1]');
+
+  async function enterRun(page: Page): Promise<void> {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+  }
+
+  // (a): Three-Way Skirmish places three 2x2 blocks (4 cells each) — a three-way tie, so roster
+  // order — reading through the sidebar, the rows and the counter at mount.
+  test('mounts with the three sections, the rows in roster order, and the counter at 0000 (AC1, AC2, AC5)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await expect(sidebarHeadings(page)).toHaveText(['Population Analysis', 'Cycle Count', 'Speed']);
+
+    const rows = populationRows(page);
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText('Aggressive Colonizer');
+    await expect(rows.nth(0)).toContainText('4 (33%)');
+    await expect(rows.nth(1)).toContainText('Patient Defender');
+    await expect(rows.nth(1)).toContainText('4 (33%)');
+    await expect(rows.nth(2)).toContainText('Chaotic Spreader');
+    await expect(rows.nth(2)).toContainText('4 (33%)');
+    await expect(rows.getByRole('img', { name: 'extinct' })).toHaveCount(0);
+    await expect(page.getByText('Total Living Cells')).toBeVisible();
+    await expect(totalLivingValue(page)).toHaveText('12');
+    await expect(cycleValue(page)).toHaveText('0000');
+
+    expect(errors).toEqual([]);
+  });
+
+  // (b): manual steps publish unconditionally — the counter follows `data-cycle` exactly.
+  test('Next cycle advances the counter with data-cycle, and Stop & reset returns both to zero (AC6)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await page.getByRole('button', { name: 'Next cycle' }).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '1');
+    await expect(cycleValue(page)).toHaveText('0001');
+
+    await page.getByRole('button', { name: 'Stop & reset' }).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(cycleValue(page)).toHaveText('0000');
+
+    expect(errors).toEqual([]);
+  });
+
+  // (c): the counter moves once Play is running, axe stays clean while playing, then Pause.
+  test('the counter advances while playing, with a clean axe scan, then Pause holds it (AC6, AC7, AC8)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect.poll(() => cycleValue(page).textContent()).not.toBe('0000');
+
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    await page.getByRole('button', { name: 'Pause' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+
+    expect(errors).toEqual([]);
+  });
+
+  // (d): the extinct row, end to end. `/battle/new` seeds exactly one roster row — the default
+  // tool's organism, Conway's Classic (2.9's fixture) — so painting ONE cell there and stepping
+  // once reproduces Task 4 (c)'s lone-cell death at the route level, without reusing 2.10's
+  // heavier add-from-library flow (the story's documented fallback path; recorded in the Dev
+  // Agent Record which path shipped).
+  test('an extinct organism shows the skull, a zero count, and a clean axe scan (AC3, AC8)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    await canvas.click();
+    const before = 2;
+    await expect
+      .poll(async () => distinctColorCount(canvas), { timeout: 2000 })
+      .toBeGreaterThan(before);
+
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(populationRows(page)).toHaveCount(1);
+    await expect(populationRows(page).nth(0)).toContainText('1 (100%)');
+
+    await page.getByRole('button', { name: 'Next cycle' }).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '1');
+
+    await expect(populationRows(page).nth(0)).toContainText('0 (0%)');
+    await expect(populationRows(page).getByRole('img', { name: 'extinct' })).toHaveCount(1);
+    await expect(totalLivingValue(page)).toHaveText('0');
+
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    // AC8's literal condition — the scan WHILE PLAYING with the extinct row present. No auto-pause
+    // exists yet (3.15), so the empty dish simply keeps cycling under the skull row.
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect.poll(() => cycleValue(page).textContent()).not.toBe('0001');
+    await expect(populationRows(page).getByRole('img', { name: 'extinct' })).toHaveCount(1);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.getByRole('button', { name: 'Pause' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+
+    expect(errors).toEqual([]);
+  });
+
+  // (e): a Lab -> Run round trip is a NEW session — the counter and the rows return to their
+  // mount values, not to wherever the previous session was left.
+  test('a Lab round trip resets the counter and the population to a fresh session (AC6)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    // Leave for Lab at cycle 1, NOT after a Stop — a Stop would already restore the mount values,
+    // and the round trip would then prove nothing about the session being new.
+    await page.getByRole('button', { name: 'Next cycle' }).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '1');
+    await expect(cycleValue(page)).toHaveText('0001');
+
+    await labButton(page).click();
+    await expect(sidebarHeadings(page)).toHaveCount(4);
+
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(cycleValue(page)).toHaveText('0000');
+    const rows = populationRows(page);
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText('4 (33%)');
+    await expect(rows.nth(1)).toContainText('4 (33%)');
+    await expect(rows.nth(2)).toContainText('4 (33%)');
 
     expect(errors).toEqual([]);
   });

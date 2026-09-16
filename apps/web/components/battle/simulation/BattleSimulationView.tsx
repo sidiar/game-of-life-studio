@@ -10,6 +10,8 @@ import { useSimulation, type GenPerSec } from '@/lib/battle/useSimulation';
 import PetriDishCanvas from '../../PetriDishCanvas';
 import SidebarFooter from '../SidebarFooter';
 import SidebarSection from '../SidebarSection';
+import CycleCounter from './CycleCounter';
+import PopulationStats from './PopulationStats';
 import SimulationControlBar from './SimulationControlBar';
 import SpeedControl from './SpeedControl';
 
@@ -31,13 +33,16 @@ import SpeedControl from './SpeedControl';
  *    (stop the loop, detach the renderer, drop the session — Story 3.10 AC10), and nothing here
  *    writes to `initialGrid` (FR-4.8, AR-31).
  *
- * Deliberately ABSENT, by story: `<CycleCounter>` / `<PopulationStats>` (3.14), the extinction
- * stop (3.15 — the hook's), `<GridSizeControl>` (3.16), fullscreen (3.18), hotkeys (3.19). The
- * transport bar shipped in 3.12: `<SimulationControlBar>` is the only thing that moves the view
- * off paused-at-cycle-0, and `handlePlayPause` below is the one derivation genuinely new there —
- * which verb Play/Pause means, decided from `status` (3.12 FD3). The Speed section shipped in
- * 3.13: `<SpeedControl>` reads `sim.genPerSec` and hands `sim.setSpeed` straight through — the
- * view holds NO speed state of its own (3.10 FD6: the hook is the only holder of the speed).
+ * Deliberately ABSENT, by story: the extinction stop (3.15 — the hook's), `<GridSizeControl>`
+ * (3.16), fullscreen (3.18), hotkeys (3.19). The transport bar shipped in 3.12:
+ * `<SimulationControlBar>` is the only thing that moves the view off paused-at-cycle-0, and
+ * `handlePlayPause` below is the one derivation genuinely new there — which verb Play/Pause means,
+ * decided from `status` (3.12 FD3). The Speed section shipped in 3.13: `<SpeedControl>` reads
+ * `sim.genPerSec` and hands `sim.setSpeed` straight through — the view holds NO speed state of its
+ * own (3.10 FD6: the hook is the only holder of the speed). Story 3.14 added
+ * `<PopulationStats>` / `<CycleCounter>`, ABOVE the Speed section (spec §2): both are pure
+ * presentational reads of `sim.population` / `sim.cycle`, so the view gains a `totalLiving` reduce
+ * (FD3) and no hook, state, ref or effect of its own.
  *
  * Forced decision 5, option (a): props are `{ initialGrid, organisms, startingSpeed,
  * showGridLines, palette, colors, onBack, backDisabled }`. Not spec §3.11's `onExitToLab` (the
@@ -95,8 +100,8 @@ const SimulationSidebar = styled('aside')({
 });
 
 // The `flex: 1` scroll region whose PRESENCE pins the footer at the same place as the Lab
-// sidebar's. It holds the Speed section (3.13); 3.14 and 3.16 drop theirs into the same `gap`
-// exactly as 2.11/2.14/2.15 did on the Lab side.
+// sidebar's. It holds Population Analysis and Cycle Count (3.14) and Speed (3.13); 3.16 drops
+// Grid Size into the same `gap` exactly as 2.11/2.14/2.15 did on the Lab side.
 const SidebarContent = styled('div')({
   flex: 1,
   overflowY: 'auto',
@@ -181,19 +186,36 @@ export default function BattleSimulationView({
     else play();
   }, [status, play, pause]);
 
+  // FD3: `totalLiving` is not a hook member (§4's `RunView` publishes no such field) — it is the
+  // sum of the displayed counts, computed here as a plain render expression: O(roster) per publish
+  // (<= 255 terms), no `useMemo` (the view re-renders on every publish regardless, 3.12's review
+  // lesson on memoising against a value that changes as often as the render). Because it sums the
+  // SAME entries the bars render, the total and the bars can never disagree.
+  const totalLiving = sim.population.reduce((sum, entry) => sum + entry.count, 0);
+
   return (
-    // AC3: `data-status` / `data-cycle` on the root, in EVERY state, until Story 3.14 renders
-    // them as text — the `data-dirty` precedent (an absent attribute and a wrong one look the same
-    // to a test with the wrong selector).
+    // AC3: `data-status` / `data-cycle` on the root, in EVERY state — the test handle the unit and
+    // e2e suites already read (FD7). Story 3.14 renders the cycle as TEXT too (`<CycleCounter>`
+    // below); the attributes were never promised to disappear, only to stop being the only
+    // rendering — the `data-dirty` precedent (an absent attribute and a wrong one look the same to
+    // a test with the wrong selector).
     <SimulationLayout data-status={sim.status} data-cycle={sim.cycle}>
       <SimulationSidebar>
         <SidebarContent>
-          {/* Spec §2's sidebar order is Population Analysis (3.14), Cycle Count (3.14), Speed,
-              Grid Size (3.16): 3.14 inserts ABOVE this section, 3.16 below it. The title is
-              "Speed", not the mockup's "Speed Multiplier" — a gen/sec value multiplies nothing
-              (3.13 FD3). `sim.setSpeed` is `useCallback`-stable with no deps (Story 3.10), so it
-              is passed STRAIGHT THROUGH; a wrapper keyed on `sim` would be a fresh closure per
-              published cycle (trap 4 — the churn 3.12's review caught in `handlePlayPause`). */}
+          {/* Spec §2's sidebar order is Population Analysis, Cycle Count (both 3.14), Speed
+              (3.13), Grid Size (3.16). Both new sections are pure reads of `sim.population` /
+              `sim.cycle` — neither component sees `sim` (spec §3.12's props exactly). */}
+          <SidebarSection title="Population Analysis">
+            <PopulationStats entries={sim.population} totalLiving={totalLiving} />
+          </SidebarSection>
+          <SidebarSection title="Cycle Count">
+            <CycleCounter cycle={sim.cycle} />
+          </SidebarSection>
+          {/* The title is "Speed", not the mockup's "Speed Multiplier" — a gen/sec value
+              multiplies nothing (3.13 FD3). `sim.setSpeed` is `useCallback`-stable with no deps
+              (Story 3.10), so it is passed STRAIGHT THROUGH; a wrapper keyed on `sim` would be a
+              fresh closure per published cycle (trap 4 — the churn 3.12's review caught in
+              `handlePlayPause`). */}
           <SidebarSection title="Speed">
             <SpeedControl genPerSec={sim.genPerSec} onChange={sim.setSpeed} />
           </SidebarSection>

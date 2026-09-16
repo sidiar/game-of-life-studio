@@ -1,9 +1,9 @@
-import { StrictMode } from 'react';
+import { Profiler, StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import type { Organism } from '@gol/domain';
+import { CONWAYS_CLASSIC, type Organism } from '@gol/domain';
 import { gridFromDense } from '@gol/simulation';
 import { createMockOrganisms, gridFromPattern } from '@gol/test-utils';
 import { GridRenderer } from '@/lib/canvas/gridRenderer';
@@ -117,11 +117,11 @@ describe('BattleSimulationView (Story 3.11)', () => {
     expect(root(container)).toHaveAttribute('data-cycle', '0');
   });
 
-  // AC10, converted for Story 3.13: the transport bar (3.12) and the Speed section (3.13) are
-  // here now — four buttons, ONE h2, ONE slider. The counter/stats (3.14) and grid size (3.16) are
-  // still absent, and this is written so 3.14's two headings and 3.16's second slider fail it and
-  // convert it, rather than sail past a `>= 1`.
-  it('renders the footer’s Back button, the transport bar and the Speed section: four buttons, one h2, one slider', () => {
+  // AC10, converted for Story 3.14: Population Analysis and Cycle Count (3.14) join Speed (3.13)
+  // — four buttons, THREE h2s (named, in order), ONE slider. Grid size (3.16) is still absent, and
+  // this is written so 3.16's second slider fails it and converts it, rather than sail past a
+  // `>= 1`.
+  it('renders the footer’s Back button, the transport bar and three sidebar sections: four buttons, three h2s, one slider', () => {
     render(view());
 
     expect(screen.getAllByRole('button')).toHaveLength(4);
@@ -129,10 +129,15 @@ describe('BattleSimulationView (Story 3.11)', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Next cycle' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Stop & reset' })).toBeEnabled();
-    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(1);
-    // Exact name, not a substring: the mockup's "Speed Multiplier" (FD3 rejected it) would pass
-    // a `toHaveTextContent('Speed')`.
-    expect(screen.getByRole('heading', { level: 2, name: 'Speed' })).toBeInTheDocument();
+    // Exact names, not a substring, in order: the mockup's "Speed Multiplier" (FD3 rejected it)
+    // would pass a `toHaveTextContent('Speed')`.
+    const headings = screen.queryAllByRole('heading', { level: 2 });
+    expect(headings).toHaveLength(3);
+    expect(headings.map((h) => h.textContent)).toEqual([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+    ]);
     expect(screen.getAllByRole('slider')).toHaveLength(1);
     expect(screen.getByRole('slider', { name: 'Generations per second' })).toBeInTheDocument();
   });
@@ -593,6 +598,195 @@ describe('BattleSimulationView — speed control (Story 3.13)', () => {
     act(() => screen.getByRole('button', { name: 'Play' }).click());
     driver.frame(0);
     fireEvent.change(speedSlider(), { target: { value: '4' } });
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});
+
+describe('BattleSimulationView — cycle counter & population stats (Story 3.14)', () => {
+  const speedSlider = () => screen.getByRole('slider', { name: 'Generations per second' });
+  const rows = () => screen.getAllByRole('listitem');
+  // `<CycleCounter>`'s glyph run is split across an `aria-hidden` padding span and a bare text
+  // node (FD6), so no element OWNS the string `0042`: RTL's default text matcher finds nothing
+  // and a `textContent` function matcher matches every ancestor (`CycleCounter.test.tsx`'s
+  // `valueNode` note). Read the digits directly off the section's Counter > Value instead.
+  function cycleText(): string {
+    const section = screen.getByRole('heading', { name: 'Cycle Count' }).closest('section');
+    if (section === null) throw new Error('Cycle Count section not found');
+    return section.querySelector('div > div')?.textContent ?? '';
+  }
+
+  // The Total Living Cells VALUE, disambiguated from the Speed ladder marks (which include a
+  // bare "1" span of their own) by reading it off the label's sibling rather than by text alone.
+  function totalLivingText(): string {
+    return screen.getByText('Total Living Cells').nextElementSibling?.textContent ?? '';
+  }
+  // Task 4 (c)/(d): a lone-cell fixture under Conway's Classic — dies at cycle 1 with no RNG and
+  // no ties involved (3.12 trap 7's "count tests on Conway's Classic only" rule).
+  const LONE_GRID = gridFromDense(gridFromPattern(['...', '.x.', '...'], { '.': 0, x: 1 }));
+  const CONWAY_ORGANISMS: readonly Organism[] = [CONWAYS_CLASSIC];
+  const CONWAY_PALETTE = buildRefToFillGroup(
+    CONWAY_ORGANISMS.map((o) => o.id),
+    new Map(CONWAY_ORGANISMS.map((o) => [o.id, o] as const)),
+  );
+
+  // (a): mount — three h2s in order; three listitems in order a, b, c (living first, tie at 3 ->
+  // roster order, then extinct); c (unplaced, H.2) carries the skull from the first publish.
+  it('mounts with the three sections, the roster order and the extinct-at-cycle-0 case (AC1, AC3, AC5)', () => {
+    installContexts();
+    render(view());
+
+    const headings = screen.getAllByRole('heading', { level: 2 });
+    expect(headings.map((h) => h.textContent)).toEqual([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+    ]);
+
+    const items = rows();
+    expect(items).toHaveLength(3);
+    expect(within(items[0]).getByText('Aggressive Colonizer')).toBeInTheDocument();
+    expect(within(items[0]).getByText('3 (50%)')).toBeInTheDocument();
+    expect(within(items[0]).queryByRole('img', { name: 'extinct' })).not.toBeInTheDocument();
+    expect(within(items[1]).getByText('Patient Defender')).toBeInTheDocument();
+    expect(within(items[1]).getByText('3 (50%)')).toBeInTheDocument();
+    expect(within(items[1]).queryByRole('img', { name: 'extinct' })).not.toBeInTheDocument();
+    expect(within(items[2]).getByText('Chaotic Spreader')).toBeInTheDocument();
+    expect(within(items[2]).getByText('0 (0%)')).toBeInTheDocument();
+    expect(within(items[2]).getByRole('img', { name: 'extinct' })).toBeInTheDocument();
+
+    expect(screen.getByText('Total Living Cells')).toBeInTheDocument();
+    expect(totalLivingText()).toBe('6');
+    expect(cycleText()).toBe('0000');
+  });
+
+  // (b): manual steps publish unconditionally (Story 3.10 FD4) — the counter follows every one.
+  it('increments the counter on manual steps, in step with data-cycle (AC6)', () => {
+    installContexts();
+    const { container } = render(view());
+    const root = () => container.querySelector('[data-status]') as HTMLElement;
+
+    act(() => screen.getByRole('button', { name: 'Next cycle' }).click());
+    expect(cycleText()).toBe('0001');
+    expect(root()).toHaveAttribute('data-cycle', '1');
+
+    act(() => screen.getByRole('button', { name: 'Next cycle' }).click());
+    act(() => screen.getByRole('button', { name: 'Next cycle' }).click());
+    expect(cycleText()).toBe('0003');
+    expect(root()).toHaveAttribute('data-cycle', '3');
+  });
+
+  // (c): population follows a publish, deterministically, on Conway's Classic (3.12 trap 7).
+  it('publishes the population deterministically as a lone Conway cell dies (AC1, AC3, AC6)', () => {
+    installContexts();
+    render(
+      view({
+        organisms: CONWAY_ORGANISMS,
+        initialGrid: LONE_GRID,
+        palette: CONWAY_PALETTE,
+      }),
+    );
+
+    expect(rows()).toHaveLength(1);
+    expect(within(rows()[0]).getByText("Conway's Classic")).toBeInTheDocument();
+    expect(within(rows()[0]).getByText('1 (100%)')).toBeInTheDocument();
+    expect(within(rows()[0]).queryByRole('img', { name: 'extinct' })).not.toBeInTheDocument();
+    expect(totalLivingText()).toBe('1');
+    expect(cycleText()).toBe('0000');
+
+    act(() => screen.getByRole('button', { name: 'Next cycle' }).click());
+
+    expect(within(rows()[0]).getByText('0 (0%)')).toBeInTheDocument();
+    expect(within(rows()[0]).getByRole('img', { name: 'extinct' })).toBeInTheDocument();
+    expect(totalLivingText()).toBe('0');
+    expect(cycleText()).toBe('0001');
+  });
+
+  // (d): Stop repaints the initial dish, and the published population/cycle return with it.
+  it('resets the population and the counter on Stop & reset (AC6)', () => {
+    installContexts();
+    render(
+      view({
+        organisms: CONWAY_ORGANISMS,
+        initialGrid: LONE_GRID,
+        palette: CONWAY_PALETTE,
+      }),
+    );
+
+    act(() => screen.getByRole('button', { name: 'Next cycle' }).click());
+    act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());
+
+    expect(within(rows()[0]).getByText('1 (100%)')).toBeInTheDocument();
+    expect(within(rows()[0]).queryByRole('img', { name: 'extinct' })).not.toBeInTheDocument();
+    expect(totalLivingText()).toBe('1');
+    expect(cycleText()).toBe('0000');
+  });
+
+  // (e): AC7 — updates land at the publish cadence, never per frame. Commits counted with
+  // `<Profiler>`; `drawDiff` calls counted separately to confirm every frame still stepped once.
+  it('re-renders only at the publish cadence, never per stepped frame (AC7)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const drawDiffSpy = vi.spyOn(GridRenderer.prototype, 'drawDiff');
+    const onRender = vi.fn();
+
+    render(
+      <Profiler id="run" onRender={onRender}>
+        {view({ startingSpeed: 10 })}
+      </Profiler>,
+    );
+    onRender.mockClear(); // drop the mount commit — only commits AFTER Play are counted (trap 11)
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    onRender.mockClear(); // drop the Play commit (status: paused -> playing)
+
+    driver.frame(0); // primes the clock — contributes no delta, no publish
+    expect(onRender).not.toHaveBeenCalled();
+
+    driver.frame(100); // cycle 1, published
+    driver.frame(200); // cycle 2, published
+    driver.frame(300); // cycle 3, published
+    expect(onRender).toHaveBeenCalledTimes(3);
+    expect(drawDiffSpy).toHaveBeenCalledTimes(3);
+    expect(cycleText()).toBe('0003'); // AC6: at 10 gen/sec the text follows every published cycle
+
+    driver.frame(310); // below the 100 ms period at 10 gen/sec — no step, no commit
+    expect(onRender).toHaveBeenCalledTimes(3);
+    expect(drawDiffSpy).toHaveBeenCalledTimes(3);
+
+    fireEvent.change(speedSlider(), { target: { value: '4' } }); // 20 gen/sec: one commit of its own
+    expect(onRender).toHaveBeenCalledTimes(4);
+    onRender.mockClear(); // re-baseline after the speed-change commit
+
+    // The loop banked 10 ms at frame(310) and clamps the bank to the NEW 50 ms period before
+    // adding the delta (`simulationLoop.ts` FD3), so frame(360) already carries 60 ms and steps.
+    driver.frame(360); // cycle 4, published (cyclesPerPublish(20) === 2)
+    driver.frame(410); // cycle 5, not published
+    driver.frame(460); // cycle 6, published
+    driver.frame(510); // cycle 7, not published — 4 drawDiff calls, 2 commits
+    expect(drawDiffSpy).toHaveBeenCalledTimes(3 + 4);
+    expect(onRender).toHaveBeenCalledTimes(2);
+    expect(cycleText()).toBe('0006');
+
+    act(() => screen.getByRole('button', { name: 'Pause' }).click());
+    expect(onRender).toHaveBeenCalledTimes(3); // pause() publishes unconditionally (trap 1)
+    expect(cycleText()).toBe('0007');
+  });
+
+  // (f): AC8 — axe-clean paused (with the extinct row present), playing, and after a Stop.
+  it('has no axe violations paused with an extinct row, playing, and after a Stop', async () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(view({ startingSpeed: 10 }));
+
+    expect((await axe(container)).violations).toEqual([]);
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0); // primes the clock only
+    driver.frame(100); // one stepped, PUBLISHED cycle — the scan sees a run's DOM, not the paused one
+    expect(cycleText()).toBe('0001');
+    expect((await axe(container)).violations).toEqual([]);
+
+    act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());
     expect((await axe(container)).violations).toEqual([]);
   });
 });
