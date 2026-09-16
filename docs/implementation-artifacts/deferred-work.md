@@ -53,7 +53,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 - ~~**`displayColorAt` clamps a corrupt numeric index silently, with no diagnostic**~~ — **RESOLVED in Story 1.8** (code review 2026-08-06). The answer was not to instrument the clamp but to remove the path that reaches it: `buildRefToFillGroup` (`apps/web/lib/refToFillGroup.ts`) resolves every roster token through `paletteIndexOf` **once per battle** at LUT-build time, so the renderer's inner loop only ever holds indices already in `[0, PALETTE.length)`, and `groupByColourState` derives `ageShade` as `groupId - tokenIndex * 8 ∈ [0, 7]`. The warn-once diagnostic is affordable precisely because it no longer lives in the loop. The clamp stays as a last-resort guard; nothing reaches it during a real render.
 - **The warn-dedupe `Set` is unbounded and `colorToken` has no `.max()`** — `warnedUnknownTokens` grows for the process lifetime, keyed on strings from loaded user files, and `OrganismSchema.colorToken` is `z.string().min(1).refine(…)` with no length cap (unlike `name: z.string().max(50)` one line above). Bounded in practice by the 255-organisms-per-battle limit, but the import path is untrusted. Story 1.7 deliberately made **no** behavioural change to the schema, so the cap belongs with **Story 5.7** (migration/import hardening).
 - **Duplicate ids in `PALETTE_SOURCE` are swallowed at module init** — `new Map(PALETTE.map((c, i) => [c.id, i]))` keeps the *last* index for a repeated id, making the earlier `PALETTE` slot unreachable through `paletteIndexOf` with no init-time error. Only `paletteRegistry.test.ts`'s unique-ids test catches it. A one-line `paletteIndexById.size !== PALETTE.length` guard beside the Map would make it a build-time failure. Hardening, not a defect — revisit if the palette is ever extended.
-- **`contrastRatio` cannot accept a CVD-simulated colour — G1/G2 gate normal vision only** — `contrastRatio`/`relativeLuminance` take a hex string and re-linearise internally; `simulateCvd` returns `LinearRgb` and the module has no de-linearising function, so no call sequence produces a contrast number for a simulated colour. Measured manually, worst-case contrast vs `#0a0a0a` across 20 tokens × 8 shades is normal 3.06, protan 3.23, **deutan 2.96**, tritan 3.06 — deutan dips below the normal-vision worst case recorded in the validation doc but still clears the 2.5 G2 gate, so this is an ungated path rather than a live failure. Splitting `relativeLuminance(hex)` into `luminanceOfLinear(LinearRgb)` + a thin hex wrapper costs three lines. Pick up with **Stories 4.9 / 6.11**, which re-confirm the palette.
+- ~~**`contrastRatio` cannot accept a CVD-simulated colour — G1/G2 gate normal vision only**~~ — **✅ Resolved in Story 4.9.** `contrastRatio`/`relativeLuminance` take a hex string and re-linearise internally; `simulateCvd` returns `LinearRgb` and the module has no de-linearising function, so no call sequence produces a contrast number for a simulated colour. Measured manually, worst-case contrast vs `#0a0a0a` across 20 tokens × 8 shades is normal 3.06, protan 3.23, **deutan 2.96**, tritan 3.06 — deutan dips below the normal-vision worst case recorded in the validation doc but still clears the 2.5 G2 gate, so this is an ungated path rather than a live failure. Splitting `relativeLuminance(hex)` into `luminanceOfLinear(LinearRgb)` + a thin hex wrapper costs three lines. Pick up with **Stories 4.9 / 6.11**, which re-confirm the palette. Story 4.9 added `luminanceOfLinear`/`contrastRatioOfLinear` and a new G5 gate (every token, every shade, under CVD simulation, both sides simulated) — see `palette-cvd-validation.md`'s Story 4.9 re-confirmation section.
 - **`paletteTokenUsage.test.ts` is a hand-maintained list, not a scan** — it covers `CONWAYS_CLASSIC` and `createMockOrganisms()` only, which is exactly what Story 1.7 Task 5 specified. Four other fixture files carry `colorToken`s outside the guard: `packages/persistence/src/createLocalStorageRepositories.test.ts` and `localStorageOrganismRepository.test.ts` (`cyan`), `packages/domain/src/organismSchema.test.ts` (`coral-red`), `packages/test-utils/src/fakeRepositories.test.ts` (`vermillion`). All four are real tokens today, so nothing is broken — but a new fixture added anywhere outside the two enumerated sources gets no coverage from the guard that exists to catch exactly that.
 - **The AR-46 whitelist is file-granular** — `apps/web/lib/paletteRegistry.ts` in the block's `ignores` exempts the *whole file* from every rule in that block, present and future, not just the colour-literal selector. The block currently holds only `no-restricted-syntax`, so there is no live exposure; a future non-palette literal in the registry (a swatch background, a preview border) would go unflagged. A file-level `eslint-disable` for the specific rule would keep the exemption honest.
 - **`paletteCvd.ts`'s "test-only import" rule is enforced by a doc comment** — the file header states it must never be imported by component code, and the Story 1.7 bundle check confirms it currently isn't (246.7 KB gzip, unchanged). Nothing mechanically prevents a stray import from shipping colour-science math into the client bundle. A `no-restricted-imports` entry mirroring the `@gol/test-utils` boundary would enforce it; worth doing when the next bundle-sensitive story lands.
@@ -340,7 +340,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 - **The DISABLED Undo button fails axe's `color-contrast` at 2.9:1, which makes every route-level axe scan a landmine** — surfaced by a flaky failure during this review's `npm run ci`: `battleRoute.spec.ts`'s "has no axe accessibility violations on /battle/new after a drag" failed once in a full parallel run with `#7a7a7a` on `#343434` (2.9:1 against the 4.5 threshold for 11px text) on `<button>Undo</button>`, then passed 3/3 when re-run in isolation, and the whole suite passed on the re-run. The flake itself is the known parallel-contention one already recorded above (the drag occasionally does not register, so `canUndo` stays false); what it EXPOSED is the real fact: `--gol-action-disabled` (white @ 30%) on `--gol-action-disabled-bg` (white @ 12%) is 2.9:1, so **any** axe scan that happens to run while Undo is disabled fails. WCAG 1.4.3 exempts inactive components and axe flags them anyway, so this is a tooling-vs-spec disagreement rather than a genuine AA failure — but it means the axe scans are only green by luck about which state the button is in. Not this story's code (Story 2.8 owns the button, Story 1.9's palette owns the tokens) and not patched here. **Pick this up in Story 6.11** (the palette/contrast re-confirmation) alongside the `--gol-danger`-as-text entry above — either retune `--gol-action-disabled` to clear 4.5:1 on its own disabled surface, or exclude disabled controls from the `color-contrast` rule explicitly and say why in the AxeBuilder call, so the exemption is a decision rather than a coincidence.
 
-- **No test adds a colour-colliding organism THROUGH the add control** — the story's own Dev Notes called this out ("a colliding add should mark BOTH rows — a cheap extra assertion worth having since Story 2.9 could only prove it at the unit level") and it was not written. Every "Shared colour" assertion on the branch pre-dates this story and uses a hand-fed twin roster. `findDuplicateColorIds` is unchanged and the derivation is proven, so this is a missing end-to-end assertion rather than a suspected bug. **Pick this up in whichever story next touches the same-colour warning** — Story 4.9's CVD work is the natural home.
+- ~~**No test adds a colour-colliding organism THROUGH the add control**~~ — **✅ Resolved in Story 4.9.** the story's own Dev Notes called this out ("a colliding add should mark BOTH rows — a cheap extra assertion worth having since Story 2.9 could only prove it at the unit level") and it was not written. Every "Shared colour" assertion on the branch pre-dates this story and uses a hand-fed twin roster. `findDuplicateColorIds` is unchanged and the derivation is proven, so this is a missing end-to-end assertion rather than a suspected bug. **Pick this up in whichever story next touches the same-colour warning** — Story 4.9's CVD work is the natural home. `BattleEditorView.test.tsx`'s add-control `describe` now has "a colliding add marks BOTH rows once the parent hands back the updated roster" — a roster organism and the add library's `New Arrival` share `vermillion`, added through the combobox, and both rows read "Shared colour" after the parent's rerender. No production file under `components/battle/**` changed.
 
 ## Deferred from: code review of 2-11-battle-name-dirty-tracking (2026-08-27)
 
@@ -1175,8 +1175,12 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   display shows exactly what the grid paints. Flagged for the next UX touch.~~ — **✅ Resolved in
   Story 4.8 (2026-09-16):** 44×44 per the mockup. The full-opacity fill stands (the chip shows what
   the grid paints); the design doc's "60% opacity" remains the stale line.
-- **The description carries only the mockup's first sentence.** Story 4.9 appends the warning
-  sentence when the reuse warning exists (NFR-4.1: no copy promising behaviour the build lacks).
+- ~~**The description carries only the mockup's first sentence.**~~ — **✅ Resolved in Story 4.9.**
+  Story 4.9 appends the warning sentence when the reuse warning exists (NFR-4.1: no copy promising
+  behaviour the build lacks). Shipped unconditionally, not gated on whether a warning is currently
+  showing: AC4 asks for the mockup's second sentence verbatim, always, as a standing description of
+  the behaviour — not a sentence that appears and disappears with the warning box itself (that
+  would be a second, redundant announcement of the same fact the warning already carries).
 - **The seed is read once, at mount, from the library as loaded (FD9).** Opening the editor during
   the `loading`/`seeding` window (single-digit ms on localStorage) seeds from an empty list, i.e.
   `PALETTE[0]`, which always collides with Conway's Classic. If this is ever observed, the fix is
@@ -1287,3 +1291,32 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `implement-next-story` skill: derive the port from the worktree (e.g. `PLAYWRIGHT_PORT` set by
   the lane runner, or a hash of `process.cwd()`), or set `reuseExistingServer: false` and accept
   the rebuild — either makes "the e2e passed locally" mean this tree.
+
+## Deferred from: Story 4-9-color-reuse-warning-cvd-validation (2026-09-16)
+
+- **The mockup's per-swatch `title` hints are not built (FD4).** A `title` is not announced by
+  every screen reader and is invisible to touch (the `<OrganismRoster>` reasoning this story
+  reused). The dot itself is decorative and outside the accessibility tree by construction; the
+  in-use information reaches assistive tech only through the FD3 status region at selection time,
+  not per-swatch while browsing. A mockup-refresh note for the next UX touch, not a defect.
+- **The mockup's 8% danger tint is dropped (FD5).** Measured with the repo's own `contrastRatio`:
+  `--gol-danger` text on the mockup's tint blended over `--gol-bg-secondary` is 4.57:1 — one axe
+  rounding from the 4.5 AA floor — and the 10% variant Story 3.12 already rejected for the same
+  reason measures 4.45:1. If a tinted surface is wanted, it needs a `--gol-danger-text` token tuned
+  for it. **Pick this up in Story 6.11** (the palette/contrast re-confirmation).
+- **The in-use dot's non-text contrast is not gated.** `--gol-text-primary` over a
+  `--gol-bg-primary` text-shadow, on every palette fill — SC 1.4.11 reaches it only if the dot is
+  required to understand the control, and the status region already carries the same fact through
+  an accessible channel. Not measured here. **Story 6.11 may measure it.**
+- **Re-picking the seed token is silent (FD2's recorded consequence).** A token comparison cannot
+  distinguish "the default" from "the user deliberately chose the default" — PRD FR-2.3 is
+  satisfied either way, and the alternative is a provenance flag Story 4.8 AC3 already forbade.
+  Flagged for Sidiar as a product nuance, not a defect (also recorded in the story file's own "Open
+  flags for the owner").
+- **Story 4.17 must pass the library MINUS the organism under edit** to `usersByColorToken`, and
+  seed `seedValue` from the loaded record — otherwise every edit opens on a self-collision warning
+  (the organism warning about its own existing colour).
+- **G5 simulates the background too (FD7).** The doc's earlier manual figure (deutan ≈ 2.96) did
+  not record whether `#0a0a0a` itself went through `simulateCvd` before the comparison; G5 now does
+  this on both sides, always. Record which the gate does so the next re-tune compares like with
+  like — noted here and in `palette-cvd-validation.md`'s Story 4.9 re-confirmation section.

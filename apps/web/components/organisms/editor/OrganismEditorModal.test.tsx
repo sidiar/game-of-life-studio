@@ -249,6 +249,68 @@ describe('OrganismEditorModal', () => {
     expect(capCell.style.backgroundColor).toBe(probe.style.backgroundColor);
   });
 
+  // Story 4.9: a colliding pick warns through the whole modal, not just the field in isolation —
+  // the strip and chip still agree (the 4.8 round-trip assertion, reused), and nothing about Save
+  // moves.
+  it('warns through the modal on a colliding pick (Story 4.9)', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+    // Conway's Classic's own token (`sky-blue`, PALETTE[0]) — a deliberate collision.
+    const conwaysColorName = resolvePaletteColor(CONWAYS_CLASSIC.colorToken).name;
+    await user.click(within(dialog).getByRole('radio', { name: conwaysColorName }));
+
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      `${CONWAYS_CLASSIC.name} already uses this color.`,
+    );
+    const selectedName = dialog.querySelector('[data-selected-name]');
+    expect(selectedName).toHaveTextContent(conwaysColorName);
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(PALETTE.length);
+  });
+
+  // Story 4.9: the M6 default is silent on open, even though it is derived from `library` — the
+  // 4.8 "opens on the M6 default" test grows this one assertion rather than a new test.
+  it('the M6 default is silent at open (Story 4.9)', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent('');
+  });
+
+  // Story 4.9, FD2: a default that COLLIDES (every token in use) is still silent — the seed
+  // comparison does not care whether the least-used fallback happens to be shared. Picking a
+  // DIFFERENT, genuinely doubled token then warns with TWO names.
+  it('is silent on a colliding default, and warns with two names once something else is picked (Story 4.9)', async () => {
+    const user = userEvent.setup();
+    // Every PALETTE id used exactly once, PLUS a second organism on `sky-blue` (PALETTE[0]) — built
+    // from `PALETTE.map`, never 21 literals. Counts: sky-blue -> 2, everything else -> 1, so the
+    // M6 default (least-used, ties to registry order) is PALETTE[1] — itself in use once.
+    const fullLibrary = [
+      ...PALETTE.map((entry, index) => ({
+        ...CONWAYS_CLASSIC,
+        id: `full-${index}`,
+        name: `Organism ${index}`,
+        colorToken: entry.id,
+      })),
+      { ...CONWAYS_CLASSIC, id: 'full-extra', name: 'Extra Sky', colorToken: PALETTE[0].id },
+    ];
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={fullLibrary} />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('');
+    expect(dialog.querySelector('[data-selected-name]')).toHaveTextContent(PALETTE[1].name);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+    await user.click(within(dialog).getByRole('radio', { name: PALETTE[0].name }));
+
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      `${fullLibrary[0].name} and Extra Sky already use this color.`,
+    );
+  });
+
   // Story 4.6 AC3: a fresh editor opens with both dominance controls at the domain default.
   it('opens the dominance control at NEW_ORGANISM_DOMINANCE on both the slider and the textbox (Story 4.6)', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);

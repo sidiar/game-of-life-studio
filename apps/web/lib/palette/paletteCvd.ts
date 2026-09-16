@@ -1,7 +1,8 @@
 /**
- * CVD + dark-background validation math (Story 1.7 Task 4, AC1). Imported ONLY by its own test
- * and by the Story 4.9 / 6.11 re-confirmations — never by component code (no colour-science
- * dependency is worth the bundle/audit surface for a check that only ever runs in CI/tests).
+ * CVD + dark-background validation math (Story 1.7 Task 4, AC1). Imported ONLY by its own test,
+ * by `themeTokens.test.ts`, and by the Story 4.9 / 6.11 re-confirmations — never by component code
+ * (no colour-science dependency is worth the bundle/audit surface for a check that only ever runs
+ * in CI/tests).
  *
  * ⚠️ Every function here operates on LINEARISED sRGB. Running the CVD matrices, the WCAG
  * luminance sum, or the Lab conversion on gamma-encoded 0-255 values produces plausible-looking
@@ -41,19 +42,34 @@ export function hexToLinearRgb(hex: string): LinearRgb {
   };
 }
 
+/** WCAG 2.x relative luminance of an already-linearised colour — the entry point a CVD-simulated
+ * colour needs, since `simulateCvd` returns `LinearRgb` and there is no de-linearising function
+ * (nor should there be — see the header). `relativeLuminance` below is a thin hex wrapper over
+ * this (Story 4.9 — closes the ungated path `palette-cvd-validation.md` recorded: G1/G2 could not
+ * take a simulated colour because `contrastRatio` took hexes only). */
+export function luminanceOfLinear({ r, g, b }: LinearRgb): number {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 /** WCAG 2.x relative luminance, computed on linearised sRGB. */
 export function relativeLuminance(hex: string): number {
-  const { r, g, b } = hexToLinearRgb(hex);
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminanceOfLinear(hexToLinearRgb(hex));
+}
+
+/** WCAG 2.x contrast ratio on two already-linearised colours: (lighter + 0.05) / (darker + 0.05).
+ * The entry point G5 needs, since both sides may be CVD-simulated. `contrastRatio` below is a
+ * thin hex wrapper over this (Story 4.9). */
+export function contrastRatioOfLinear(a: LinearRgb, b: LinearRgb): number {
+  const luminanceA = luminanceOfLinear(a);
+  const luminanceB = luminanceOfLinear(b);
+  const lighter = Math.max(luminanceA, luminanceB);
+  const darker = Math.min(luminanceA, luminanceB);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 /** WCAG 2.x contrast ratio: (lighter + 0.05) / (darker + 0.05). */
 export function contrastRatio(hexA: string, hexB: string): number {
-  const luminanceA = relativeLuminance(hexA);
-  const luminanceB = relativeLuminance(hexB);
-  const lighter = Math.max(luminanceA, luminanceB);
-  const darker = Math.min(luminanceA, luminanceB);
-  return (lighter + 0.05) / (darker + 0.05);
+  return contrastRatioOfLinear(hexToLinearRgb(hexA), hexToLinearRgb(hexB));
 }
 
 // sRGB (D65) linear-RGB -> CIE XYZ, IEC 61966-2-1.

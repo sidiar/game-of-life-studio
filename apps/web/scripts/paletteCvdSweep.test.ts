@@ -20,6 +20,7 @@ import { displayColor, MAX_AGE_SHADE } from '../lib/palette/displayColor';
 import { PALETTE } from '../lib/palette/paletteRegistry';
 import {
   contrastRatio,
+  contrastRatioOfLinear,
   deltaE76,
   hexToLinearRgb,
   simulateCvd,
@@ -73,9 +74,20 @@ function worstPair(limit: number, shade: number, mode: Mode): WorstPair {
   return { deltaE, pair };
 }
 
-function minContrast(shade: number): number {
+// Story 4.9 (G5, FD7): under a CVD mode, BOTH the pixel and the background go through
+// `simulateCvd` before `contrastRatioOfLinear` — a contrast ratio is defined within one colour
+// space, and passing one simulated and one raw colour is the "plausible-looking but wrong" class
+// the module header warns about. `mode: undefined` (the 'normal' column) skips simulation
+// entirely, unchanged from before this story.
+function minContrast(shade: number, mode?: CvdType): number {
+  const bgLinear = hexToLinearRgb(CLINICAL_LAB_BG);
+  const simulatedBg = mode === undefined ? bgLinear : simulateCvd(bgLinear, mode);
   return Math.min(
-    ...PALETTE.map((color) => contrastRatio(pixelHexAt(color.id, shade), CLINICAL_LAB_BG)),
+    ...PALETTE.map((color) => {
+      const pixelLinear = hexToLinearRgb(pixelHexAt(color.id, shade));
+      const simulatedPixel = mode === undefined ? pixelLinear : simulateCvd(pixelLinear, mode);
+      return contrastRatioOfLinear(simulatedPixel, simulatedBg);
+    }),
   );
 }
 
@@ -90,15 +102,34 @@ describe('palette CVD sweep', () => {
     );
     out.push('|---|---|---|---|---|');
     for (const shade of REPORTED_SHADES) {
-      const contrast = f2(minContrast(shade));
       for (const mode of MODES) {
         const core = worstPair(CORE_SIZE, shade, mode);
         const all = worstPair(PALETTE.length, shade, mode);
+        // Story 4.9 (G5): per-row honest — the CVD rows now simulate the background too, rather
+        // than reusing the normal-vision figure for every row.
+        const contrast = f2(minContrast(shade, mode === 'normal' ? undefined : mode));
         out.push(
           `| ${shade} | ${mode} | ${f2(core.deltaE)} (${core.pair}) | ` +
             `${f2(all.deltaE)} (${all.pair}) | ${contrast} |`,
         );
       }
+    }
+
+    // Story 4.9 (G5): the all-shade contrast floor per mode — what the G5 gate actually asserts,
+    // as opposed to the three sampled shades above.
+    out.push('');
+    out.push('G5 — all-shade contrast floor vs `#0a0a0a` (simulated both sides):');
+    for (const mode of MODES) {
+      let floor = Infinity;
+      let floorAt = -1;
+      for (let shade = 0; shade <= MAX_AGE_SHADE; shade++) {
+        const contrast = minContrast(shade, mode === 'normal' ? undefined : mode);
+        if (contrast < floor) {
+          floor = contrast;
+          floorAt = shade;
+        }
+      }
+      out.push(`  ${mode.padEnd(7)} ${f2(floor)} (shade ${floorAt})`);
     }
 
     // Worst case across ALL eight shades — the doc's summary line. Sampling only shades 0/3/7

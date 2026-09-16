@@ -1354,9 +1354,141 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
     await expandPalette();
     const describedBy = await radiogroup.getAttribute('aria-describedby');
     if (describedBy === null) throw new Error('aria-describedby is absent');
-    // useId() ids carry colons, so the id must be quoted as an attribute selector.
+    // useId() ids carry colons, so the id must be quoted as an attribute selector. AC4 (Story
+    // 4.9): the description now carries the mockup's second sentence too.
     await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
-      'Pick any color — colors are reusable.',
+      'Pick any color — colors are reusable. If another organism already uses your pick, a ' +
+        "non-blocking warning appears (they'll share a color on the grid).",
     );
+  });
+});
+
+// Story 4.9. The production seed holds Conway's Classic on `sky-blue` (`:153-190`), so the
+// literals below are 'Sky Blue' (PALETTE[0] — the colliding pick), 'Amber' (PALETTE[3] — a free
+// pick) and the exact AC1 sentence — each a literal because this spec imports only `@gol/*` (the
+// 4.7/4.8 precedent). The status region is scoped to `basicInfo`: the page also has a count-badge
+// `status` behind the inert backdrop, and scoping to Basic Information keeps the locator
+// unambiguous.
+test.describe('color reuse warning (Story 4.9)', () => {
+  async function openColorPicker(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
+    const toggle = basicInfo.getByRole('button', { name: 'Change Color' });
+    const radiogroup = basicInfo.getByRole('radiogroup', { name: 'Organism Color' });
+    const status = basicInfo.getByRole('status');
+    const expandPalette = async () => {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await expect(radiogroup).toBeVisible();
+    };
+    return { dialog, basicInfo, toggle, radiogroup, status, expandPalette };
+  }
+
+  const COLLIDING_NAME = 'Sky Blue';
+  const FREE_NAME = 'Amber';
+  const COLLISION_SENTENCE = "Conway's Classic already uses this color.";
+
+  test('opens silent, dots mark the seed token only, zero console errors', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { basicInfo, status, expandPalette } = await openColorPicker(page);
+
+    await expect(status).toBeEmpty();
+    await expandPalette();
+    const inUse = basicInfo.locator('[data-in-use="true"]');
+    await expect(inUse).toHaveCount(1);
+    await expect(inUse).toHaveAttribute('data-color-token', 'sky-blue');
+    const describedBy = await basicInfo
+      .getByRole('radiogroup', { name: 'Organism Color' })
+      .getAttribute('aria-describedby');
+    if (describedBy === null) throw new Error('aria-describedby is absent');
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
+      'Pick any color — colors are reusable. If another organism already uses your pick, a ' +
+        "non-blocking warning appears (they'll share a color on the grid).",
+    );
+    expect(errors).toEqual([]);
+  });
+
+  test('a colliding pick warns and proceeds', async ({ page }) => {
+    const { basicInfo, toggle, radiogroup, status, expandPalette } = await openColorPicker(page);
+
+    await expandPalette();
+    await radiogroup.getByRole('radio', { name: COLLIDING_NAME }).click();
+
+    await expect(status).toContainText(COLLISION_SENTENCE);
+    await expect(basicInfo.locator('[data-color-reuse-warning]')).toBeVisible();
+    // The pick still proceeds exactly as an unwarned one would (FD7: a pointer pick collapses the
+    // palette and hands focus to the button).
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toBeFocused();
+    await expect(basicInfo.locator('[data-selected-name]')).toHaveText(COLLIDING_NAME);
+    const saveButton = page.getByRole('button', { name: 'Save' });
+    await expect(saveButton).toBeDisabled();
+    // The warning is still visible under the chip row while the palette is collapsed.
+    await expect(status).toContainText(COLLISION_SENTENCE);
+
+    await expandPalette();
+    await expect(radiogroup.locator('input[type="radio"]:enabled')).toHaveCount(20);
+  });
+
+  test('clears on a non-conflicting pick', async ({ page }) => {
+    const { radiogroup, status, expandPalette } = await openColorPicker(page);
+
+    await expandPalette();
+    await radiogroup.getByRole('radio', { name: COLLIDING_NAME }).click();
+    await expect(status).toContainText(COLLISION_SENTENCE);
+
+    await expandPalette();
+    await radiogroup.getByRole('radio', { name: FREE_NAME }).click();
+
+    await expect(status).toBeEmpty();
+  });
+
+  test('keyboard: a colliding pick warns and leaves the palette open; the seed is silent', async ({
+    page,
+    browserName,
+  }) => {
+    const { toggle, radiogroup, status } = await openColorPicker(page);
+    // WebKit needs Alt+Tab to move focus off a non-text control (the Story 4.8 idiom in this
+    // file).
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press(tabKey);
+    // The seed (Vermillion, PALETTE[1]) is checked at open — arrow-left moves to Sky Blue
+    // (PALETTE[0]), the colliding pick.
+    const checkedRadio = radiogroup.getByRole('radio', { name: 'Vermillion' });
+    await expect(checkedRadio).toBeFocused();
+
+    await page.keyboard.press('ArrowLeft');
+    await expect(radiogroup.getByRole('radio', { name: COLLIDING_NAME })).toBeChecked();
+    await expect(status).toContainText(COLLISION_SENTENCE);
+    // A keyboard pick leaves the palette open (FD7).
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    await page.keyboard.press('ArrowRight');
+    // Back on the seed — silent again (FD2).
+    await expect(radiogroup.getByRole('radio', { name: 'Vermillion' })).toBeChecked();
+    await expect(status).toBeEmpty();
+  });
+
+  test('axe with the warning visible', async ({ page }) => {
+    const { radiogroup, expandPalette } = await openColorPicker(page);
+
+    await expandPalette();
+    await radiogroup.getByRole('radio', { name: COLLIDING_NAME }).click();
+    await expandPalette();
+    await expect(radiogroup.getByRole('radio', { name: COLLIDING_NAME })).toBeChecked();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
   });
 });
