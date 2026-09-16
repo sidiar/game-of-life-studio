@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
+import { NEW_ORGANISM_DOMINANCE } from '@gol/domain';
 import { CONWAYS_CLASSIC, createFakeRepositories, createMockOrganisms } from '@gol/test-utils';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
@@ -418,6 +419,11 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     await screen.findByRole('dialog', { name: 'Organism Editor' });
     await user.type(screen.getByRole('textbox', { name: 'Organism Name' }), 'Glider');
     expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('Glider');
+    // Story 4.6: the draft's second field must not survive an exit either.
+    fireEvent.change(screen.getByRole('slider', { name: 'Dominance' }), {
+      target: { value: '77' },
+    });
+    expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('77');
 
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -428,6 +434,9 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('');
     expect(screen.getByRole('textbox', { name: 'Organism Name' })).not.toBeInvalid();
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue(
+      String(NEW_ORGANISM_DOMINANCE),
+    );
   });
 
   // View-only proof: an open/close cycle must never write to the repository, and must not re-list.

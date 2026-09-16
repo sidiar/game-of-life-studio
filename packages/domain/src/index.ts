@@ -5,6 +5,9 @@ export {
   OrganismSchema,
   EditableGridPresetSchema,
   MAX_ORGANISM_NAME_LENGTH,
+  MIN_DOMINANCE,
+  MAX_DOMINANCE,
+  NEW_ORGANISM_DOMINANCE,
 } from './organismSchema';
 export type { Organism, EditableGridPreset } from './organismSchema';
 
