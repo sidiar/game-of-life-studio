@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  OrganismEditorModalProps,
+  OrganismEditorLifecycleProps,
   OrganismEditorOrigin,
 } from '@/components/organisms/editor/OrganismEditorModal';
 import { useInertBackground } from '@/lib/useInertBackground';
@@ -40,8 +40,9 @@ export interface UseOrganismEditorModalResult {
    * `useLeaveGuard.confirming` contract).
    */
   mounted: boolean;
-  /** Spread onto `<OrganismEditorModal {...modalProps} />`. */
-  modalProps: OrganismEditorModalProps;
+  /** Spread onto `<OrganismEditorModal {...modalProps} library={…} />` — the data half is the
+   * caller's. */
+  modalProps: OrganismEditorLifecycleProps;
 }
 
 export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganismEditorModalResult {
@@ -117,7 +118,7 @@ export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganis
   // the focus restore. Clearing `mounted` does all three.
   const handleExited = useCallback(() => setMounted(false), []);
 
-  const modalProps = useMemo<OrganismEditorModalProps>(
+  const modalProps = useMemo<OrganismEditorLifecycleProps>(
     () => ({
       open: dialogOpen,
       origin,

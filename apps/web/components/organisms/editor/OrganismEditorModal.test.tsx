@@ -3,22 +3,33 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
-import { MAX_AGE_SHADE } from '@/lib/palette/displayColor';
+import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
+import { defaultColorToken } from '@/lib/palette/defaultColorToken';
+import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
+import { PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
 import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
 
 /**
  * Story 4.3's shell contract — the accessible names the rest of Epic 4 (and the e2e) will look the
- * modal up by, and the three close channels routing to ONE callback. The parent-side lifecycle
- * (inert window, focus restore) is `useOrganismEditorModal.test.tsx`'s; the real-browser facts
- * (Tab cycling, contrast, WebKit focus) are `e2e/organisms.spec.ts`'s.
+ * modal up by, and the three close channels routing to ONE callback. Story 4.8 adds the required
+ * `library` prop (every render below gains it) and the colour picker's own count/order/round-trip
+ * guard. The parent-side lifecycle (inert window, focus restore) is
+ * `useOrganismEditorModal.test.tsx`'s; the real-browser facts (Tab cycling, contrast, WebKit
+ * focus) are `e2e/organisms.spec.ts`'s.
  *
  * ⚠️ MUI `Dialog` portals to `document.body`, so every query goes through `screen`, never the
  * render `container` — a `container.querySelector('[role="dialog"]')` finds nothing and a test
  * written that way passes on `not.toBeInTheDocument()` for the wrong reason.
  */
+
+// [CONWAYS_CLASSIC (sky-blue), vermillion, azure, bluish-green] — a fixture that contains Conway's
+// Classic, so the M6 default it derives (PALETTE[3], amber) is a value the Story 4.7 seed stopgap
+// (`colorToken: DEFAULT_COLOR_TOKEN`, deleted in 4.8) could never have produced (FD8).
+const LIBRARY = [CONWAYS_CLASSIC, ...createMockOrganisms()];
+
 describe('OrganismEditorModal', () => {
   it('renders a dialog whose accessible name is the level-2 "Organism Editor" heading', () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     expect(screen.getByRole('dialog')).toHaveAccessibleName('Organism Editor');
     expect(screen.getByRole('heading', { level: 2, name: 'Organism Editor' })).toBeInTheDocument();
@@ -31,7 +42,7 @@ describe('OrganismEditorModal', () => {
     ['library', 'Back to Library'],
     ['battle', 'Back to Battle'],
   ] as const)('labels the back control for origin=%s as "%s"', (origin, label) => {
-    render(<OrganismEditorModal open origin={origin} onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin={origin} onClose={vi.fn()} library={LIBRARY} />);
 
     // Exact accessible name: the `←` glyph is aria-hidden and must not leak into it.
     expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
@@ -39,7 +50,7 @@ describe('OrganismEditorModal', () => {
   });
 
   it('renders Save as a genuinely disabled button and a Close button', () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
@@ -48,7 +59,7 @@ describe('OrganismEditorModal', () => {
   it('routes Back to onClose exactly once', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(<OrganismEditorModal open origin="library" onClose={onClose} />);
+    render(<OrganismEditorModal open origin="library" onClose={onClose} library={LIBRARY} />);
 
     await user.click(screen.getByRole('button', { name: 'Back to Library' }));
 
@@ -58,7 +69,7 @@ describe('OrganismEditorModal', () => {
   it('routes Close to onClose exactly once', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(<OrganismEditorModal open origin="library" onClose={onClose} />);
+    render(<OrganismEditorModal open origin="library" onClose={onClose} library={LIBRARY} />);
 
     await user.click(screen.getByRole('button', { name: 'Close' }));
 
@@ -68,7 +79,7 @@ describe('OrganismEditorModal', () => {
   it('routes Escape to onClose exactly once', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(<OrganismEditorModal open origin="library" onClose={onClose} />);
+    render(<OrganismEditorModal open origin="library" onClose={onClose} library={LIBRARY} />);
 
     // MUI's key handler listens on the focused element inside the dialog; the focus trap has
     // already put focus on the dialog container, which is enough.
@@ -84,7 +95,7 @@ describe('OrganismEditorModal', () => {
   // path that bypasses pointer-events, a synthetic click at the node.
   it('does nothing when Save is activated', () => {
     const onClose = vi.fn();
-    render(<OrganismEditorModal open origin="library" onClose={onClose} />);
+    render(<OrganismEditorModal open origin="library" onClose={onClose} library={LIBRARY} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -96,7 +107,7 @@ describe('OrganismEditorModal', () => {
   // what the shell owes is that the three regions are INSIDE the dialog, in order. The axe test
   // below now scans the columns for free.
   it('renders the three editor columns inside the dialog, in order', () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const regions = within(screen.getByRole('dialog')).getAllByRole('region');
     expect(regions).toHaveLength(3);
@@ -105,28 +116,32 @@ describe('OrganismEditorModal', () => {
     expect(regions[2]).toHaveAccessibleName('Preview & Test');
   });
 
-  // Story 4.5 / 4.6 / 4.7: the name field, the dominance control and the aging toggle land in the
-  // Basic Information column THROUGH the layout's `basicInfo` slot fragment — addressed by name,
-  // so none can land in another column. Each field's own contract is its own test file's.
-  it('mounts the name field, the dominance control and the aging toggle in Basic Information and nowhere else (Story 4.5, Story 4.6, Story 4.7)', () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+  // Story 4.5 / 4.6 / 4.7 / 4.8: the name field, the colour picker, the dominance control and the
+  // aging toggle land in the Basic Information column THROUGH the layout's `basicInfo` slot
+  // fragment — addressed by name, so none can land in another column. Each field's own contract
+  // is its own test file's; this retargets the count guard for the new radiogroup (AR-44).
+  it('mounts the name field, the colour picker, the dominance control and the aging toggle in Basic Information and nowhere else (Story 4.5, Story 4.6, Story 4.7, Story 4.8)', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const dialog = screen.getByRole('dialog');
     const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
     expect(within(basic).getByRole('textbox', { name: 'Organism Name' })).toBeInTheDocument();
+    expect(within(basic).getByRole('radiogroup', { name: 'Organism Color' })).toBeInTheDocument();
     expect(within(basic).getByRole('slider', { name: 'Dominance' })).toBeInTheDocument();
     expect(within(basic).getByRole('textbox', { name: 'Dominance value' })).toBeInTheDocument();
     expect(within(basic).getByRole('switch', { name: 'Aging Degradation' })).toBeInTheDocument();
     // "Nowhere else" means the whole dialog — header and footer included — not just the other two
-    // regions: exactly two textboxes, one slider and one switch exist, and all are the ones above.
+    // regions: exactly two textboxes, one slider, one switch and PALETTE.length radios exist, and
+    // all are the ones above.
     expect(within(dialog).getAllByRole('textbox')).toHaveLength(2);
     expect(within(dialog).getAllByRole('slider')).toHaveLength(1);
     expect(within(dialog).getAllByRole('switch')).toHaveLength(1);
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(PALETTE.length);
   });
 
   // Story 4.7 AC3: a fresh editor opens with the switch unchecked and "Off" showing.
   it('opens the aging toggle unchecked, showing "Off" (Story 4.7)', () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     expect(screen.getByRole('switch', { name: 'Aging Degradation' })).not.toBeChecked();
     expect(screen.getByText('Off')).toBeInTheDocument();
@@ -136,7 +151,7 @@ describe('OrganismEditorModal', () => {
   // above — and moves the example strip, which only re-renders from a real draft update.
   it('holds the draft: an aging toggle click round-trips through the modal (Story 4.7)', async () => {
     const user = userEvent.setup();
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     // MUI `Dialog` portals to `document.body`, not the render container (this file's own note
     // above) — so the strip is looked up through the dialog, not the container.
@@ -160,7 +175,7 @@ describe('OrganismEditorModal', () => {
   // The draft lives in the MODAL (FD3): typing round-trips through its own state, not a prop.
   it('holds the draft: typing into the name field round-trips through the modal (Story 4.5)', async () => {
     const user = userEvent.setup();
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const input = screen.getByRole('textbox', { name: 'Organism Name' });
     await user.type(input, 'Glider');
@@ -171,15 +186,60 @@ describe('OrganismEditorModal', () => {
 
   // FD2: a fresh editor does not open red.
   it('opens with the name field free of any error (Story 4.5)', () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Organism Name' })).not.toBeInvalid();
   });
 
+  // Story 4.8 AC3 / FD8: the seed is the M6 derivation over the library the editor was opened
+  // over, not a stopgap. With LIBRARY's four tokens (sky-blue, vermillion, azure, bluish-green),
+  // that is PALETTE[3] — a value the deleted 4.7 seed stopgap (DEFAULT_COLOR_TOKEN) could not
+  // produce, so this test would have gone red against it.
+  it('opens the colour picker on the M6 default derived from `library` (Story 4.8)', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const expectedToken = defaultColorToken(LIBRARY.map((organism) => organism.colorToken));
+    const expectedName = resolvePaletteColor(expectedToken).name;
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('radio', { checked: true })).toHaveAccessibleName(expectedName);
+  });
+
+  // AC4: a swatch pick updates the display, the name and the aging strip together, on the same
+  // commit — the draft's `colorToken` is the only channel any of them read.
+  it('holds the draft: a colour pick round-trips through the modal and repaints the aging strip on the same commit (Story 4.8)', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const target = PALETTE[9];
+    await user.click(within(dialog).getByRole('radio', { name: target.name }));
+
+    expect(within(dialog).getByRole('radio', { checked: true })).toHaveAccessibleName(target.name);
+    const selectedName = dialog.querySelector('[data-selected-name]');
+    if (selectedName === null) throw new Error('the selected-name node is not in the dialog');
+    expect(selectedName).toHaveTextContent(target.name);
+    const selectedSwatch = dialog.querySelector('[data-selected-swatch]') as HTMLElement | null;
+    if (selectedSwatch === null) throw new Error('the selected swatch is not in the dialog');
+
+    const strip = dialog.querySelector('[data-aging-example]');
+    if (strip === null) throw new Error('the aging example strip is not in the dialog');
+    const capCell = strip.querySelector<HTMLElement>(`[data-age="${MAX_AGE_SHADE}"]`);
+    if (capCell === null) throw new Error('the cap-age cell is not in the strip');
+
+    // Pinned to the LUT, not only to each other: two stale backgrounds also agree. jsdom
+    // normalises an inline `hsl()` to `rgb()`, so the expected string goes through the same
+    // `style` round trip (the `OrganismLibrary.test.tsx` probe).
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = displayColor(target.id, MAX_AGE_SHADE);
+    expect(probe.style.backgroundColor).not.toBe('');
+    expect(selectedSwatch.style.backgroundColor).toBe(probe.style.backgroundColor);
+    expect(capCell.style.backgroundColor).toBe(probe.style.backgroundColor);
+  });
+
   // Story 4.6 AC3: a fresh editor opens with both dominance controls at the domain default.
   it('opens the dominance control at NEW_ORGANISM_DOMINANCE on both the slider and the textbox (Story 4.6)', () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue(
       String(NEW_ORGANISM_DOMINANCE),
@@ -192,7 +252,7 @@ describe('OrganismEditorModal', () => {
   // A slider change round-trips through the modal's own state — the same draft the name field
   // proves above, now for the sibling field.
   it('holds the draft: a dominance slider change round-trips through the modal (Story 4.6)', () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     fireEvent.change(screen.getByRole('slider', { name: 'Dominance' }), {
       target: { value: '42' },
@@ -205,7 +265,7 @@ describe('OrganismEditorModal', () => {
   // And the other direction: typing into the dominance textbox moves the slider live.
   it('holds the draft: typing into the dominance textbox moves the slider (Story 4.6)', async () => {
     const user = userEvent.setup();
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const input = screen.getByRole('textbox', { name: 'Dominance value' });
     await user.click(input);
@@ -215,14 +275,17 @@ describe('OrganismEditorModal', () => {
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('17');
   });
 
-  // Story 4.6 / 4.7 AC6: the tab order inside Basic Information is name -> slider -> numeric
-  // input -> switch. The field's own test uses a stand-in button for the name field; this is the
-  // real column.
-  it('tabs from the name field to the dominance slider, its textbox, then the aging switch (Story 4.6, Story 4.7)', async () => {
+  // Story 4.6 / 4.7 / 4.8 AC6: the tab order inside Basic Information is name -> the checked radio
+  // -> slider -> numeric input -> switch. The field's own test uses a stand-in button for the name
+  // field; this is the real column.
+  it('tabs from the name field to the checked colour radio, the dominance slider, its textbox, then the aging switch (Story 4.6, Story 4.7, Story 4.8)', async () => {
     const user = userEvent.setup();
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
+    const dialog = screen.getByRole('dialog');
     screen.getByRole('textbox', { name: 'Organism Name' }).focus();
+    await user.tab();
+    expect(within(dialog).getByRole('radio', { checked: true })).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveFocus();
     await user.tab();
@@ -232,13 +295,15 @@ describe('OrganismEditorModal', () => {
   });
 
   it('open={false} renders no dialog at all (MUI unmounts by default)', () => {
-    render(<OrganismEditorModal open={false} origin="library" onClose={vi.fn()} />);
+    render(
+      <OrganismEditorModal open={false} origin="library" onClose={vi.fn()} library={LIBRARY} />,
+    );
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('has no axe violations with the dialog open', async () => {
-    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     // `document.body`, not the render container: the dialog is portalled, and the scan must see
     // the aria-hidden siblings MUI leaves behind alongside it.

@@ -75,7 +75,9 @@ function Probe() {
       <button type="button" data-testid="elsewhere">
         Elsewhere
       </button>
-      {result.mounted && <OrganismEditorModal {...result.modalProps} />}
+      {/* The hook's test is about lifecycle; an empty library is a legal, honest input here
+          (Story 4.8) — this file does not exercise the colour seed. */}
+      {result.mounted && <OrganismEditorModal {...result.modalProps} library={[]} />}
     </>
   );
 }
