@@ -4,34 +4,7 @@ import { useId, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { MAX_DOMINANCE, MIN_DOMINANCE } from '@gol/domain';
 import { clampDominance, isDominanceInRange, parseDominanceText } from '@/lib/organisms/dominance';
-
-// Mockup: `.form-field` (`clinical-lab-theme/organism-editor.html:390-448, 954-964`). Same rule
-// set as `<OrganismNameField>`'s `Field` — the 4.5 `.form-field` — so the two controls' vertical
-// rhythm in Basic Information matches.
-const Field = styled('div')({
-  margin: '0 0 20px 0',
-});
-
-// COPY of `<OrganismNameField>`'s `Label` rule set (13px / 500 / text-primary / margin 0 0 8px 0)
-// — the two labels must look identical, and importing across sibling field components would be a
-// coupling neither needs.
-const Label = styled('label')({
-  display: 'block',
-  fontSize: '13px',
-  fontWeight: 500,
-  color: 'var(--gol-text-primary)',
-  margin: '0 0 8px 0',
-});
-
-// Mockup: `.field-description` (`organism-editor.html:165-170`). `--gol-text-tertiary` is the
-// token themes.css raised to clear 4.5:1 for small text on `--gol-bg-secondary` (AR-46, the
-// gated pair `themeTokens.test.ts` already covers).
-const Description = styled('p')({
-  fontSize: '11px',
-  color: 'var(--gol-text-tertiary)',
-  margin: '4px 0 0 0',
-  lineHeight: 1.4,
-});
+import { Field, Label, Description } from './fieldStyles';
 
 // Mockup: `.dominance-container` (`:954-964`).
 const Row = styled('div')({
