@@ -44,8 +44,10 @@ otherwise violates while still compiling and passing tests. The load-bearing one
   `docs/project-context.md` on activation — you don't need to restate project facts to them.
 - `.claude/skills/implement-next-story/` is a **git subtree of
   [sidiar/implement-next-story](https://github.com/sidiar/implement-next-story)**, configured by
-  `implement-next-story.toml` at the repo root. Fix the skill upstream (or `git subtree push`);
-  `git subtree pull --prefix=.claude/skills/implement-next-story <url> main` brings it back.
+  `implement-next-story.toml` at the repo root. Fix the skill upstream, or fix it here and
+  `npm run implement-next-story:push` (straight to upstream `main`, no PR there);
+  `npm run implement-next-story:pull` brings upstream back as a merge commit — run it on a
+  `chore/` branch with a clean tree and PR it like anything else.
 - **Nothing reaches `main` without Sidiar's explicit go-ahead.** In direct work, present the
   file list and a suggested message, then wait. Story subagents running under
   `implement-next-story` may commit and push to their own `story/*` branch without asking —
