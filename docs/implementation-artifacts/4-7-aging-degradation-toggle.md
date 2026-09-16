@@ -868,3 +868,18 @@ Sonnet (claude-sonnet-5), via `bmad-dev-story`.
 
 Dev Model: sonnet   # follows the 4.5/4.6 editor-field pattern (draft grows a field, controlled field in the basicInfo fragment, pure helper in lib, LUT already exists); the one new idiom — a native `<button role="switch">` and its naming — is fully pinned in FD1/FD2 with the axe fact behind it
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 30s | 30s | 16 | 2,584 | 6,290 | 474,036 | 482,926 |
+| Step 1 — create-story | opus-5 | 1 | 15m 11s | 15m 11s | 150 | 68,288 | 349,698 | 10,165,523 | 10,583,659 |
+| Step 2 — dev-story | sonnet-5 | 1 | 31m 20s | 31m 20s | 588 | 65,138 | 662,229 | 56,442,809 | 57,170,764 |
+| Step 3 — code review + PR | opus-5 | 4 | 43m 41s | 43m 41s | 306 | 86,729 | 772,860 | 16,586,457 | 17,446,352 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 50 | 12,235 | 27,382 | 1,605,896 | 1,645,563 |
+| **Total (create-story → PR ready)** | | 6 | **1h 30m** | 1h 30m | 1,060 | 222,739 | 1,791,077 | 83,668,825 | **85,683,701** |
+
+Run started 2026-09-16 09:29 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
