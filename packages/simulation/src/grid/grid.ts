@@ -121,6 +121,33 @@ export function clearGrid(grid: Grid): Grid {
 }
 
 /**
+ * `clearGrid`'s query twin: `isGridEmpty(clearGrid(g)) === true` for every `g`, and this is the
+ * ONLY fact the predicate encodes (FR-4.7, Decision B.5). Plain emptiness — `true` iff every
+ * `occupant[i]` is `0` for `i < width * height` — with an early return on the first living cell.
+ *
+ * ⚠️ `width * height`, NOT `occupant.length` (the `computeEditorGridStats` / `clearGrid` scan
+ * shape) — the invariant above says the two are equal for every grid this package builds, but the
+ * predicate states its own bound rather than trusting a buffer someone handed it.
+ *
+ * ⚠️ Reads `occupant` ONLY — never `age`. Decision B.5 is an emptiness check, not a "nothing
+ * changed" check: a cell can carry a non-zero `age` under an `occupant` of `0` for exactly one
+ * cycle (a survivor that just died still has its pre-death age until the phase clears it — see the
+ * `age` field's doc comment), and reading `age` here would call that cell "alive" and defeat
+ * extinction auto-pause on the very cycle it exists to catch.
+ *
+ * A plain indexed loop, not `occupant.some(...)`: `TypedArray.prototype.some` allocates a callback
+ * closure per call on the hot per-cycle path this predicate is meant for (the hook calls it once
+ * per driven cycle, `useSimulation.ts`) — the `gridStats.ts` scan shape avoids the same cost.
+ */
+export function isGridEmpty(grid: Grid): boolean {
+  const cells = grid.width * grid.height;
+  for (let i = 0; i < cells; i++) {
+    if (grid.occupant[i] !== 0) return false;
+  }
+  return true;
+}
+
+/**
  * A deep copy at the same dimensions — RFC-005 Decision 4's "the live grid is cloned from
  * `initialGrid`" is the CALLER's step (`createGridBuffers` takes `front` by reference and says so),
  * and this is the one place that step is spelled for a `Grid` (Story 3.10, FD1). AR-31: the

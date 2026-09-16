@@ -1,7 +1,7 @@
 import { emptyGrid, gridFromPattern, placePattern } from '@gol/test-utils';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { clearGrid, cloneGrid, createGrid, gridFromDense, gridToDense } from './grid';
+import { clearGrid, cloneGrid, createGrid, gridFromDense, gridToDense, isGridEmpty } from './grid';
 
 // Grid dimensions are parameters, never constants (Decision A, AR-17). Every size below is
 // deliberately NOT one of the two editable presets except where a case is about the presets, so
@@ -219,6 +219,38 @@ describe('clearGrid', () => {
   });
 });
 
+describe('isGridEmpty (FR-4.7, Decision B.5, Story 3.15)', () => {
+  it("is `clearGrid`'s query twin — isGridEmpty(clearGrid(g)) === true", () => {
+    const grid = gridFromDense([
+      [1, 2],
+      [3, 4],
+    ]);
+
+    expect(isGridEmpty(clearGrid(grid))).toBe(true);
+  });
+
+  it('a 0x0 grid is empty', () => {
+    expect(isGridEmpty(createGrid(0, 0))).toBe(true);
+  });
+
+  it('a 3x3 grid with one cell at the LAST index (8) is not empty', () => {
+    const grid = createGrid(3, 3);
+    grid.occupant[8] = 1;
+
+    expect(isGridEmpty(grid)).toBe(false);
+  });
+
+  it('does not read `age` — a non-zero age under an all-zero occupant is still empty', () => {
+    // A survivor that just died still carries its pre-death age for exactly one cycle, until the
+    // phase that clears `occupant` clears `age` alongside it. The predicate must not treat that
+    // cell as alive — an age left standing under an empty cell is not life (Decision B.5).
+    const grid = createGrid(3, 3);
+    grid.age[4] = 12;
+
+    expect(isGridEmpty(grid)).toBe(true);
+  });
+});
+
 describe('cloneGrid (Story 3.10 Task 1, AR-31)', () => {
   it('is byte-equal to the source on both buffers and keeps its dimensions', () => {
     const grid = gridFromDense(placePattern(emptyGrid(5, 3), [[1, 2, 3]], 1, 1));
@@ -331,6 +363,66 @@ describe('grid properties (fast-check)', () => {
         expect(second.occupant).not.toBe(first.occupant);
         expect(second.age).not.toBe(first.age);
       }),
+    );
+  });
+
+  // AR-41's extinction-only property, engine-agnostic half (Story 3.15, AC5 (a)-(c)).
+  it('isGridEmpty(createGrid(w, h)) is always true — a freshly allocated grid is empty', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 12 }),
+        fc.integer({ min: 0, max: 12 }),
+        (width, height) => {
+          expect(isGridEmpty(createGrid(width, height))).toBe(true);
+        },
+      ),
+    );
+  });
+
+  it('isGridEmpty(gridFromDense(d)) === every cell of d being 0', () => {
+    fc.assert(
+      fc.property(arbDense, (dense) => {
+        const grid = gridFromDense(dense);
+
+        expect(isGridEmpty(grid)).toBe(dense.every((row) => row.every((cell) => cell === 0)));
+      }),
+    );
+  });
+
+  it('a grid with >= 1 non-zero cell, at ANY position including the last, is never empty', () => {
+    const arbGridAndLivingIndex = fc
+      .tuple(fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 12 }))
+      .chain(([width, height]) =>
+        fc.record({
+          width: fc.constant(width),
+          height: fc.constant(height),
+          index: fc.integer({ min: 0, max: width * height - 1 }),
+          ref: fc.integer({ min: 1, max: 255 }),
+        }),
+      );
+
+    fc.assert(
+      fc.property(arbGridAndLivingIndex, ({ width, height, index, ref }) => {
+        const grid = createGrid(width, height);
+        grid.occupant[index] = ref;
+
+        expect(isGridEmpty(grid)).toBe(false);
+      }),
+    );
+  });
+
+  it('the early-return scans to the LAST cell — a single living cell at width*height - 1', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 12 }),
+        fc.integer({ min: 1, max: 12 }),
+        (width, height) => {
+          const grid = createGrid(width, height);
+          grid.occupant[width * height - 1] = 1;
+
+          expect(isGridEmpty(grid)).toBe(false);
+        },
+      ),
     );
   });
 });

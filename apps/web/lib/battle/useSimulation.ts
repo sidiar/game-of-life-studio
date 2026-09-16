@@ -9,6 +9,7 @@ import {
   createGridBuffers,
   createRng,
   createSimulationLoop,
+  isGridEmpty,
   resizeGrid,
   stepGridBuffers,
   type CompiledSession,
@@ -62,6 +63,13 @@ export type { GenPerSec } from './simulationSpeed';
  *   reachable from a test, never a silent no-op. `step()` and `resizeLive()` while playing throw
  *   too (FD5): FR-4.3 and FR-4.9 make both paused-only and Stories 3.12/3.16 disable the controls,
  *   so a call that arrives anyway is a consumer bug.
+ * - **One keyed `settleStopped` for every "the loop stopped, `status` must follow" write (FD1,
+ *   Story 3.15).** The thunk's extinction branch, the two loop-facing error wrappers (FD3) and
+ *   `pause()` all call the SAME `settleStopped(session)` rather than each writing its own
+ *   `{ status: 'paused', cycle, population }` shape — one write that cannot drift into three, keyed
+ *   on `sameKey` for the same rebind window `publish` already guards (below). It never calls
+ *   `loop.stop()` itself; the three callers differ on whether the loop already stopped itself
+ *   (extinction, a throw) or needs to be told to (`pause()`).
  *
  * ## Consumer obligations (Story 3.11's `<BattleSimulationView>` inherits these)
  *
@@ -97,8 +105,8 @@ export type { GenPerSec } from './simulationSpeed';
  *
  * ## Not here
  *
- * No extinction check (Decision B.5, Story 3.15 — the seam is marked in the thunk), no hotkeys
- * (Story 3.19), no preset validation in `resizeLive` (Story 3.16's control), no component.
+ * No hotkeys (Story 3.19), no preset validation in `resizeLive` (Story 3.16's control), no
+ * component.
  */
 
 /** `Pick`, not the class: a test hands in a recording object and the hook never sees a canvas. */
@@ -121,6 +129,11 @@ export interface LiveSize {
 }
 
 export interface UseSimulationResult {
+  /**
+   * `'paused'` also after an extinction auto-pause (FR-4.7, Decision B.5) or a mid-frame throw
+   * (Story 3.15) — the union does not grow (spec §4): the extinction is already readable from
+   * `population` (every entry `extinct`) and the frozen `cycle`.
+   */
   readonly status: SimulationStatus;
   /** Published at <= 10 Hz while playing; exact after `pause()`, `step()` and `stop()`. */
   readonly cycle: number;
@@ -233,6 +246,8 @@ interface SessionInputs {
   readonly genPerSecRef: { readonly current: GenPerSec };
   readonly rendererRef: { readonly current: PlaybackRenderer | null };
   readonly publish: (session: SimulationSession) => void;
+  /** The one "the loop stopped, `status` must follow" write (FD1) — see the head comment. */
+  readonly settleStopped: (session: SimulationSession) => void;
 }
 
 function createSession(inputs: SessionInputs): SimulationSession {
@@ -245,9 +260,21 @@ function createSession(inputs: SessionInputs): SimulationSession {
   const compiled = compileSession(organisms);
 
   // FD3 — the forwarding renderer. `drawDiff`, never `draw` (Trap 2); optional chaining is the
-  // headless case, not a guard against a bug.
+  // headless case, not a guard against a bug. Wrapped (AC6, FD3 (a)): the loop clears its handle
+  // and rethrows on a throw from either loop-facing closure (`simulationLoop.ts`'s wedged-loop
+  // rule), but that leaves nothing to tell React the run stopped — without `settleStopped` here,
+  // `status` keeps reading `'playing'` over a dead loop (the 3-10 review finding: Play "does
+  // nothing", Next cycle stays disabled). The catch never swallows; the error still reaches the
+  // RAF callback exactly as before.
   const forwardingRenderer: StepRenderer = {
-    draw: (grid) => rendererRef.current?.drawDiff(grid),
+    draw: (grid) => {
+      try {
+        rendererRef.current?.drawDiff(grid);
+      } catch (error) {
+        inputs.settleStopped(session);
+        throw error;
+      }
+    },
   };
 
   const session: SimulationSession = {
@@ -263,16 +290,33 @@ function createSession(inputs: SessionInputs): SimulationSession {
       // Store the return value (Trap 4) — the pair is new, the old one's `front` is now scratch.
       session.buffers = stepGridBuffers(session.buffers, session.deps);
       session.cycle += 1;
-      // Story 3.15's extinction check goes HERE — after the step, before the publish — and must
-      // be its own per-cycle scan, not a reuse of the population pass below: that pass runs only
-      // at publish cadence, and an empty grid can be re-seeded by a `neighbors = 0` born rule, so
-      // an extinction observed one publish late is a wrong auto-stop (Decision B.5).
+      // FR-4.7 / Decision B.5's auto-pause: a plain per-cycle emptiness scan, not a reuse of the
+      // population pass below — that pass runs only at publish cadence, and an empty grid can be
+      // re-seeded by a `neighborCount = 0` born rule, so an extinction observed one publish late
+      // is a wrong auto-pause. `isRunning()` (Trap 4 of the story) is exactly "the loop drove this
+      // step" — `false` for manual `step()`, which already publishes on its own below and must not
+      // also take this branch (one sweep, never two). On the branch: stop the loop (the frame that
+      // called `step()` still paints this step's grid and requests no further one — Story 3.8
+      // AC7), then the one keyed `settleStopped` write instead of the cadence publish, so the
+      // exact extinction cycle is never lost to an off-cadence step (trap 2).
+      if (session.loop.isRunning() && isGridEmpty(session.buffers.front)) {
+        session.loop.stop();
+        inputs.settleStopped(session);
+        return session.buffers.front;
+      }
       if (isPublishCycle(session.cycle, genPerSecRef.current)) inputs.publish(session);
       return session.buffers.front;
     },
     loop: createSimulationLoop({
       renderer: forwardingRenderer,
-      step: () => session.step(),
+      step: () => {
+        try {
+          return session.step();
+        } catch (error) {
+          inputs.settleStopped(session);
+          throw error;
+        }
+      },
       msPerCycleRef,
       scheduler,
     }),
@@ -331,6 +375,23 @@ export function useSimulation(
     );
   }, []);
 
+  // The one "the loop stopped, `status` must follow" write (FD1 (a), Story 3.15): the thunk's
+  // extinction branch, the two loop-facing error wrappers (FD3, inside `createSession`) and
+  // `pause()` all call this SAME setter rather than each writing `{ status: 'paused', cycle,
+  // population }` themselves — one write that cannot drift into three. It does NOT call
+  // `loop.stop()` — the callers differ on whether the loop already stopped itself (extinction, a
+  // throw) or needs to be told to (`pause()`). Keyed on `sameKey` for the same rebind-window reason
+  // `publish` is above: this can fire from inside a RAF callback, exactly the window a rebind can
+  // straddle.
+  const settleStopped = useCallback((session: SimulationSession) => {
+    const population = derivePopulation(session.buffers.front, session.key.organisms);
+    setView((prev) =>
+      sameKey(prev.key, session.key)
+        ? { ...prev, status: 'paused', cycle: session.cycle, population }
+        : prev,
+    );
+  }, []);
+
   // The grid size the hook last put onto the attached renderer, or `null` when it has not sized it
   // yet. `GridRenderer` asserts every grid it paints against its own size, so a full repaint at a
   // size the renderer is not at throws — and only the hook knows when that is about to happen (a
@@ -358,6 +419,7 @@ export function useSimulation(
       genPerSecRef,
       rendererRef,
       publish,
+      settleStopped,
     });
     sessionRef.current = session;
     // Trap 1: a child's construction effect may already have attached a renderer. Prime it — on a
@@ -371,7 +433,7 @@ export function useSimulation(
       session.loop.stop();
       sessionRef.current = null;
     };
-  }, [initialGrid, organisms, seedOpt, scheduler, publish, paintFull]);
+  }, [initialGrid, organisms, seedOpt, scheduler, publish, settleStopped, paintFull]);
 
   // Unmount only: drop the renderer so the canvas it belongs to can go with the view.
   useEffect(
@@ -417,11 +479,11 @@ export function useSimulation(
   const pause = useCallback(() => {
     const session = requireSession('pause');
     session.loop.stop();
-    // Publish the exact paused cycle (FR-4.5): the last loop publish may be up to
-    // `cyclesPerPublish - 1` cycles stale.
-    const population = derivePopulation(session.buffers.front, session.key.organisms);
-    setView((prev) => ({ ...prev, status: 'paused', cycle: session.cycle, population }));
-  }, [requireSession]);
+    // The exact paused cycle (FR-4.5): the last loop publish may be up to `cyclesPerPublish - 1`
+    // cycles stale. `settleStopped` is the ONE write of this shape (FD1) — shared with the
+    // extinction branch and the error wrappers rather than a second, unkeyed one that could drift.
+    settleStopped(session);
+  }, [requireSession, settleStopped]);
 
   const step = useCallback(() => {
     const session = requireSession('step');

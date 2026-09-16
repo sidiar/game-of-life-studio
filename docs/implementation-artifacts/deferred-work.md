@@ -838,19 +838,24 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
 
-- **A throw inside the RAF step leaves `status: 'playing'` over a loop that has stopped itself.**
-  `createSimulationLoop` clears its handle and rethrows when `step()` or the forwarded `drawDiff`
-  throws (`simulationLoop.ts`, the wedged-loop rule), so `loop.isRunning()` is `false` while the
-  hook's `view.status` stays `'playing'` — `play()` then restarts silently and `step()` stops
-  throwing. Nothing in `useSimulation` observes a loop that stops from inside a frame. **Deferred
-  to Story 3.15**: extinction auto-pause is exactly a loop stopping itself from inside the thunk
-  and needing `status` to follow, so the thunk→`'paused'` path should be built once there and
-  cover both the extinction stop and the error stop (the seam comment in the thunk marks the
-  spot). Until then a mid-run throw is a programming error whose only symptom is a frozen dish.
-  **Noted by Story 3.12** (2026-09-15): `<SimulationControlBar>`'s Play/Pause button reads
+- ~~**A throw inside the RAF step leaves `status: 'playing'` over a loop that has stopped
+  itself.** `createSimulationLoop` clears its handle and rethrows when `step()` or the forwarded
+  `drawDiff` throws (`simulationLoop.ts`, the wedged-loop rule), so `loop.isRunning()` is `false`
+  while the hook's `view.status` stays `'playing'` — `play()` then restarts silently and `step()`
+  stops throwing. Nothing in `useSimulation` observes a loop that stops from inside a frame.
+  **Deferred to Story 3.15**: extinction auto-pause is exactly a loop stopping itself from inside
+  the thunk and needing `status` to follow, so the thunk→`'paused'` path should be built once
+  there and cover both the extinction stop and the error stop (the seam comment in the thunk marks
+  the spot). Until then a mid-run throw is a programming error whose only symptom is a frozen
+  dish. **Noted by Story 3.12** (2026-09-15): `<SimulationControlBar>`'s Play/Pause button reads
   "Pause" in this state (`status` is still `'playing'`), and pressing it calls `pause()` — the
   correct recovery, since the loop is already stopped and only the status write is stale — so the
-  view's `handlePlayPause` needs no guard for it. Still 3.15's to fix at the thunk.
+  view's `handlePlayPause` needs no guard for it. Still 3.15's to fix at the thunk.~~
+  **✅ Closed by Story 3.15.** `createSession`'s two loop-facing closures (the driver's `step` and
+  the forwarding renderer's `draw`) are wrapped in `try`/`catch` — a throw calls the same keyed
+  `settleStopped(session)` `pause()` and the extinction branch use, then rethrows unchanged, so the
+  loop still clears its handle and the caller still sees the error (FD3 (a), `useSimulation.ts`'s
+  `createSession`).
 
 ## Deferred from: Story 3-11-mode-toggle-run-view-skeleton implementation (2026-09-14)
 
@@ -1192,3 +1197,35 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   it. **Pick this up in Story 6.11** (the accessibility re-confirmation pass) alongside the 2-12
   `role="group"` item: the same AT sweep answers both, and the fix — drop the transform on names,
   or move it to a wrapper so the text node stays mixed-case — is a one-line call once measured.
+
+## Deferred from: Story 3-15-extinction-auto-pause (2026-09-16)
+
+- **An explicit "auto-paused" indicator or announcement (FD4).** Story 3.15 ships no new `status`
+  value, no indicator and no live region: the extinct rows, the frozen counter and the Play/Pause
+  button's label flip are the whole signal, and the Clinical Lab mockup (the Run authority) has no
+  auto-pause chrome. On auto-pause the FOCUSED Play/Pause button's accessible name flips from
+  "Pause" to "Play" with no announcement — whether that needs a polite live region is an AT-sweep
+  call (Story 6.11's re-confirmation pass), not something an axe scan can referee (3.14's FD8
+  rejected a live region on this sidebar at 10 Hz for the population rows; a once-per-event
+  announcement on a state CHANGE, rather than a per-publish one, is a different case and may well
+  be right).
+- **The `status` union candidate (`'extinct'` or a `pausedReason`).** Spec §4's union stays
+  `'paused' | 'playing'` here (FD4 (a)). Story 3.18's fullscreen HUD and Story 4.15's editor
+  preview — both gated on this story — inherit `status` through the hook unchanged; if either
+  wants to render WHY a run is paused (rather than just that it is), that is the story to widen
+  the union, not a retrofit here.
+- **Story 3.14 test (d)'s literal "scan while playing with an extinct row" is unreachable under
+  FR-4.7.** An extinct grid auto-pauses on the very next driven cycle, so a dish can never be
+  "playing" with every organism extinct for more than one cycle. The e2e (`battleRoute.spec.ts`,
+  `Cycle counter & population stats (Story 3.14)` describe block) was rewritten in place — its
+  first half is untouched, only the tail that used to click Play and scan "while playing" now
+  scans the auto-paused state instead. The 3.14 story file itself is not edited (Story-file-history
+  stays as written; the supersession is recorded here per project-context's "surface new conflicts,
+  don't silently pick one").
+- **The re-seeding property (Task 2 (d)'s optional test).** An organism whose only rule is `born`
+  on `cellState eq 'empty'` AND `neighborCount eq 0` would exercise the seam comment's stated
+  reason for checking emptiness PER CYCLE rather than at publish cadence (a check that runs one
+  publish late would treat a re-seeded grid as extinct). Not added: the fixture needs a rule shape
+  no existing test builds, and the per-cycle check's correctness is already pinned by the off-cadence
+  test (20 gen/sec, trap 2) and the engine-level property (`conwayGoldens.test.ts`, AC5 (d)) without
+  it. Revisit if a future story needs the re-seeding path exercised directly.
