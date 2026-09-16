@@ -24,9 +24,12 @@ and the CI gates already impose on "the fourth control inside the editor".
 
 1. **The Basic Information column renders an Organism Color control between the name field and
    the dominance control: a visible group label "Organism Color", the description "Pick any color
-   — colors are reusable.", the selected colour shown large (100×100, 3px border in the colour, a
-   soft glow in the colour) with the palette entry's `name` as visible text beside it, and every
-   one of the palette's tokens as a 40×40 swatch laid out in rows.** `<ColorPickerField>` (new,
+   — colors are reusable.", the selected colour as a 44×44 chip (3px border in the colour, a
+   soft glow in the colour) with the palette entry's `name` as visible text beside it and a
+   "Change Color ▾" disclosure button that opens the palette — collapsed at mount — as every one
+   of the palette's tokens in an 8-per-row swatch grid (the mockup, `organism-editor.html:212-254,
+   919-952`; the design doc's 100×100 / always-open layout is superseded — Sidiar, 2026-09-16).**
+   `<ColorPickerField>` (new,
    `components/organisms/editor/`) mounts through `<OrganismEditorLayout basicInfo={…}>` as the
    **second** child of the existing fragment — `name → color → dominance → aging`, the mockup's
    order (`organism-editor.html:919-952`), closing the 4.6 deferred item "the mockup's
@@ -87,9 +90,9 @@ and the CI gates already impose on "the fourth control inside the editor".
 
 5. **No swatch is ever disabled, greyed, hidden or filtered.** Every radio is enabled; the
    in-use state is **not** marked in this story (the mockup's `.in-use::after` dot and the
-   `title` hints are Story 4.9's colour-reuse surface — FD6); the mockup's "Change Color ▾"
-   collapse toggle is **not** built (the AC says all swatches display; the design doc's layout
-   `:170-182` shows them always visible — FD7). `disabled` is not a prop of `<ColorPickerField>`.
+   `title` hints are Story 4.9's colour-reuse surface — FD6). Collapsed is not hidden in this
+   sense: the mockup's "Change Color ▾" disclosure hides the whole grid until opened (FD7), never a
+   subset of it. `disabled` is not a prop of `<ColorPickerField>`.
    (M6, UX-DR7)
 
 6. **The picker is a thin controlled view; it holds no state of its own.** Props are exactly
@@ -267,7 +270,10 @@ and the CI gates already impose on "the fourth control inside the editor".
                                            span — font-size 13px; font-weight 500; color
                                            var(--gol-text-primary). Plain text — NOT a live region.
           </SelectedRow>
-          <SwatchGrid>                     div — `.color-palette` (`:246-250`) with a fixed cell:
+          <SwatchGrid>                     ⚠️ SUPERSEDED 2026-09-16 (see FD7 and the Change Log):
+                                           the shipped grid is the mockup's `repeat(8, 1fr)` behind
+                                           a "Change Color ▾" disclosure, the chip is 44×44.
+                                           div — `.color-palette` (`:246-250`) with a fixed cell:
                                            display grid; grid-template-columns repeat(auto-fill,
                                            40px); gap 8px. 40px is the design doc's swatch size
                                            (`:196`); auto-fill is what makes "rows" follow the
@@ -648,14 +654,25 @@ behaviour the task lists did not ask for; left as is.
   screen reader (the `<OrganismRoster>` warning's reasoning). The description therefore carries
   only the mockup's first sentence; the second promises the warning and lands with it (NFR-4.1).
 
-- **FD7 — All swatches always visible, 40×40, `repeat(auto-fill, 40px)`.** The AC ("all 20
-  palette swatches display in rows") and the design doc's layout (`:170-182`) show the grid
-  open; the mockup's "Change Color ▾" collapse (`:227-254, 1263-1269`) contradicts both and is
-  dropped. The mockup's `repeat(8, 1fr)` in a 320px column (270px inside the padding, 230px at
-  the compressed tier) yields 27px / 22px targets — below WCAG 2.5.8's 24px minimum on the tier
-  every Playwright project runs at. The design doc's 40px (`:196`) with `auto-fill` gives 5 per
-  row at the full tier, 4 at the compressed tier and as many as fit at the fold — "rows" without a
-  hard-coded column count, and the same DOM at every width (Story 4.4 FD4).
+- **FD7 — The mockup's disclosure: 44×44 chip, "Change Color ▾" button, palette collapsed at
+  mount, `repeat(8, 1fr)`.** *(Rewritten 2026-09-16.)* As created, this story dropped the
+  mockup's collapse (`:227-254, 1263-1269`) for the design doc's always-open 100×100 / 40px
+  layout (`:170-182, 196`) and the epic AC text derived from it; Sidiar overruled that on the
+  first review of the shipped column — the mockup is the authority where the two disagree, and
+  the epic AC wording is corrected to match. What ships: the `<fieldset>` is the group; the grid
+  is the `role="radiogroup"`, `hidden` until the button (`aria-expanded`, `aria-controls`) opens
+  it — a fieldset-as-radiogroup would announce an empty radio group while collapsed. A POINTER
+  pick (`MouseEvent.detail > 0`) collapses the grid again and a layout effect hands focus to the
+  button in the same commit — after the DOM update, so the label activation's own
+  focus-the-radio step (Chromium, Gecko) finds the radio unrenderable and the button keeps focus;
+  never `<body>`. A KEYBOARD pick (arrow keys, Space — `detail === 0`) leaves the grid open:
+  collapsing under a roving focus would drop the user between every arrow press. The mockup's
+  `repeat(8, 1fr)` gives ~27px cells in the 270px column and ~22px at the compressed tier; with
+  the 8px gap the centre-to-centre spacing is ≥ 30px, which is WCAG 2.5.8's spacing exception, so
+  the size objection the original FD7 raised does not hold. The open/closed flag is the field's
+  only local state — view chrome, never draft data. The selected swatch is the mockup's accent
+  border + accent glow (a pseudo-element at 0.4, FD4) + the `✓`; the hover is the mockup's accent
+  border + `scale(1.05)`, disabled under `prefers-reduced-motion`.
 
 - **FD8 — The M6 seed is tested against a fixture that contains Conway's Classic.**
   `createMockOrganisms()` uses `vermillion`, `azure`, `bluish-green` — none of them `sky-blue` —
@@ -875,9 +892,10 @@ keeps both hunks).
   disagree — `GridSettingsSection.tsx:106-110`).
 - ❌ No in-use dot, no `title` per swatch, no "[Organism] already uses this color" warning, no
   usage counting in the field — Story 4.9 (FD6).
-- ❌ No "Change Color ▾" collapse, no `.collapsed` state — FD7.
+- ❌ No collapse on a KEYBOARD pick, no `useState` for anything but the disclosure flag — FD7.
 - ❌ No `formatHsla`, no colour math for the glow, no new `--gol-*` token, no raw `rgba` — FD4.
-- ❌ No `transition`, no `:has()`, no `scale()` hover.
+- ❌ No `:has()`; the mockup's `transition` / `scale()` hover ship only under
+  `prefers-reduced-motion: no-preference`.
 - ❌ No live region on the selected name; no `role="img"` on the large display.
 - ❌ No effect that re-seeds `colorToken` when `library` changes — FD9.
 - ❌ No `usedColorTokens` prop on the field, no `library` read inside the field — AC6.
@@ -1034,6 +1052,13 @@ Sonnet (claude-sonnet-5), via `bmad-dev-story`.
 - 2026-09-16 — Code review (Opus, three adversarial layers): 8 patches applied in the review commit
   (test-fidelity gaps against Task 4/6, a property test whose least-used branch was unreachable,
   two comment corrections); 0 decision-needed; status → done.
+- 2026-09-16 — Owner review of PR #45 (Sidiar): the column did not match the mockup — FD7 had
+  followed the design doc's always-open 100×100 layout. Reworked to the mockup: 44×44 chip,
+  "Change Color ▾" disclosure (collapsed at mount, pointer pick collapses + focuses the button,
+  keyboard pick keeps it open), `repeat(8, 1fr)` grid, accent border + glow + `scale(1.05)`
+  hover on the swatches. AC1/AC5/FD7 rewritten, the three FD7 deferred-work bullets struck, the
+  epic AC wording corrected. Unit: 130/130 `components/organisms`; e2e block 24/24 on all four
+  projects; typecheck/lint/format clean.
 
 Dev Model: sonnet   # follows the 4.5/4.6/4.7 editor-field pattern (draft field already exists, controlled field in the basicInfo fragment, pure helper in lib, native radio group per the GridSettingsSection precedent); the two shaping choices — the modal's `library` prop / props-type split and the factory taking the library's tokens — are pinned in FD3/FD5, so nothing is left for later stories to discover
 Proposed lane gate: none

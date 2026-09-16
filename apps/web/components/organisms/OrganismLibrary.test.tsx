@@ -257,6 +257,7 @@ describe('OrganismLibrary', () => {
     await user.click(screen.getByRole('button', { name: '+ Create New Organism' }));
     const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
 
+    await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
     const checked = within(dialog).getByRole('radio', { checked: true });
     expect(checked).toHaveAccessibleName(PALETTE[3].name);
     expect(checked).not.toHaveAccessibleName(resolvePaletteColor(DEFAULT_COLOR_TOKEN).name);
@@ -451,9 +452,11 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     // real `mounted` gate.
     await user.click(screen.getByRole('switch', { name: 'Aging Degradation' }));
     expect(screen.getByRole('switch', { name: 'Aging Degradation' })).toBeChecked();
-    // Story 4.8: nor must the draft's fourth field.
+    // Story 4.8: nor must the draft's fourth field (the pointer pick collapses the palette, FD7,
+    // so the chip's name is the readable evidence here).
+    await user.click(screen.getByRole('button', { name: 'Change Color' }));
     await user.click(screen.getByRole('radio', { name: PALETTE[10].name }));
-    expect(screen.getByRole('radio', { name: PALETTE[10].name })).toBeChecked();
+    expect(document.querySelector('[data-selected-name]')).toHaveTextContent(PALETTE[10].name);
 
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -471,6 +474,7 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     const expectedName = resolvePaletteColor(
       defaultColorToken(mocks.map((organism) => organism.colorToken)),
     ).name;
+    await user.click(screen.getByRole('button', { name: 'Change Color' }));
     expect(screen.getByRole('radio', { checked: true })).toHaveAccessibleName(expectedName);
   });
 

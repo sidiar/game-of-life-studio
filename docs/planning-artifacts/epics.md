@@ -1083,7 +1083,7 @@ So that it's recognizable on the grid.
 
 **Acceptance Criteria:**
 
-**Given** the color picker, **When** rendered, **Then** all 20 palette swatches display in rows with the selected color shown large (100×100 with glow) (FR-2.3, UX-DR7)
+**Given** the color picker, **When** rendered, **Then** the selected color shows as a 44×44 chip with glow beside a "Change Color" button that opens all 20 palette swatches in rows of 8 (the mockup; corrected 2026-09-16 from the design doc's 100×100 always-open layout) (FR-2.3, UX-DR7)
 **Given** a new organism, **When** the editor opens, **Then** the default token is the next unused one, falling back to least-used when all are in use (FR-2.3, M6)
 **And** selecting a swatch updates the selected display, the aging example strip, and the preview grid immediately
 **And** no swatch is ever disabled (M6, UX-DR7)
