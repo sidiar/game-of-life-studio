@@ -12,8 +12,11 @@ drift.
 ## What goes here
 
 The Run subtree of the spec's §2 tree: `<BattleSimulationView>`, `<SimulationSidebar>` and its
-sections (`<PopulationStats>`, `<CycleCounter>`, `<SpeedControl>`), `<SimulationMain>`,
-`<SimulationControlBar>`, `<FullscreenStage>` and its two parts, plus `useSimulationHotkeys`.
+sections (`<PopulationStats>`, `<CycleCounter>`, `<SpeedControl>`, `<GridSizeControl>`),
+`<SimulationMain>`, `<SimulationControlBar>`, `<FullscreenStage>` and its two parts, plus
+`useSimulationHotkeys`. `<LadderSlider>` (Story 3.16 FD1 (a)) is the shared detented-slider
+primitive `<SpeedControl>` and `<GridSizeControl>` are both built on — promoted here rather than
+copied because both callers are Run-mode, so no `editor/` boundary crosses.
 `<SimulationSidebar>` and `<SimulationMain>` are private layout children inside
 `BattleSimulationView.tsx` (spec §3.3's rule for their Lab counterparts), not exported components.
 

@@ -117,11 +117,10 @@ describe('BattleSimulationView (Story 3.11)', () => {
     expect(root(container)).toHaveAttribute('data-cycle', '0');
   });
 
-  // AC10, converted for Story 3.14: Population Analysis and Cycle Count (3.14) join Speed (3.13)
-  // — four buttons, THREE h2s (named, in order), ONE slider. Grid size (3.16) is still absent, and
-  // this is written so 3.16's second slider fails it and converts it, rather than sail past a
-  // `>= 1`.
-  it('renders the footer’s Back button, the transport bar and three sidebar sections: four buttons, three h2s, one slider', () => {
+  // AC10, converted for Story 3.16 (trap 1): Grid Size joins Population Analysis, Cycle Count
+  // (3.14) and Speed (3.13) — four buttons, FOUR h2s (named, in order), TWO sliders. Written as
+  // exact counts, never `>= `, so the next section fails this first and converts it.
+  it('renders the footer’s Back button, the transport bar and four sidebar sections: four buttons, four h2s, two sliders', () => {
     render(view());
 
     expect(screen.getAllByRole('button')).toHaveLength(4);
@@ -132,14 +131,16 @@ describe('BattleSimulationView (Story 3.11)', () => {
     // Exact names, not a substring, in order: the mockup's "Speed Multiplier" (FD3 rejected it)
     // would pass a `toHaveTextContent('Speed')`.
     const headings = screen.queryAllByRole('heading', { level: 2 });
-    expect(headings).toHaveLength(3);
+    expect(headings).toHaveLength(4);
     expect(headings.map((h) => h.textContent)).toEqual([
       'Population Analysis',
       'Cycle Count',
       'Speed',
+      'Grid Size',
     ]);
-    expect(screen.getAllByRole('slider')).toHaveLength(1);
+    expect(screen.getAllByRole('slider')).toHaveLength(2);
     expect(screen.getByRole('slider', { name: 'Generations per second' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Grid dimensions' })).toBeInTheDocument();
   });
 
   it('forwards the footer’s press to onBack, and `backDisabled` disables it', async () => {
@@ -629,9 +630,10 @@ describe('BattleSimulationView — cycle counter & population stats (Story 3.14)
     new Map(CONWAY_ORGANISMS.map((o) => [o.id, o] as const)),
   );
 
-  // (a): mount — three h2s in order; three listitems in order a, b, c (living first, tie at 3 ->
-  // roster order, then extinct); c (unplaced, H.2) carries the skull from the first publish.
-  it('mounts with the three sections, the roster order and the extinct-at-cycle-0 case (AC1, AC3, AC5)', () => {
+  // (a): mount — four h2s in order (Story 3.16 adds Grid Size); three listitems in order a, b, c
+  // (living first, tie at 3 -> roster order, then extinct); c (unplaced, H.2) carries the skull
+  // from the first publish.
+  it('mounts with the four sections, the roster order and the extinct-at-cycle-0 case (AC1, AC3, AC5)', () => {
     installContexts();
     render(view());
 
@@ -640,6 +642,7 @@ describe('BattleSimulationView — cycle counter & population stats (Story 3.14)
       'Population Analysis',
       'Cycle Count',
       'Speed',
+      'Grid Size',
     ]);
 
     const items = rows();
@@ -871,6 +874,178 @@ describe('BattleSimulationView — cycle counter & population stats (Story 3.14)
     driver.frame(100);
     expect(cycleText()).toBe('0001');
 
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});
+
+describe('Play-mode ephemeral resize (Story 3.16)', () => {
+  const gridSizeSlider = () => screen.getByRole('slider', { name: 'Grid dimensions' });
+  const speedSlider = () => screen.getByRole('slider', { name: 'Generations per second' });
+
+  /**
+   * `installContexts()`'s shape, plus a per-canvas call COUNT: `<PlaybackDish>` keeps the same
+   * `<canvas>` element across a resize (only its internal `GridRenderer` is torn down and rebuilt,
+   * Story 3.11 forced decision 6), so counting canvas ELEMENTS (as the StrictMode test above does)
+   * cannot see a reconstruction here. Each `new GridRenderer(canvas, …)` calls
+   * `canvas.getContext('2d', …)` exactly once (`gridRenderer.ts:173`), so the call count keyed on
+   * THIS canvas is the renderer-construction count.
+   */
+  function installContextsWithCounts(): {
+    contexts: Map<HTMLCanvasElement, RecordingContext2D>;
+    callCounts: Map<HTMLCanvasElement, number>;
+  } {
+    const contexts = new Map<HTMLCanvasElement, RecordingContext2D>();
+    const callCounts = new Map<HTMLCanvasElement, number>();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      callCounts.set(this, (callCounts.get(this) ?? 0) + 1);
+      let context = contexts.get(this);
+      if (context === undefined) {
+        context = new RecordingContext2D();
+        contexts.set(this, context);
+      }
+      return context as unknown as CanvasRenderingContext2D;
+    });
+    return { contexts, callCounts };
+  }
+
+  /** The top-left `fixture.width` x `fixture.height` submatrix of `grid` equals `fixture`, byte
+   * for byte (`resizeGrid`'s row-major layout, `resized.occupant[row * width + col]`). */
+  function expectTopLeftPreserved(
+    grid: { occupant: Uint8Array; age: Uint16Array; width: number },
+    fixture: { occupant: Uint8Array; age: Uint16Array; width: number; height: number },
+  ): void {
+    for (let row = 0; row < fixture.height; row++) {
+      for (let col = 0; col < fixture.width; col++) {
+        const at = row * grid.width + col;
+        const fixtureAt = row * fixture.width + col;
+        expect(grid.occupant[at]).toBe(fixture.occupant[fixtureAt]);
+        expect(grid.age[at]).toBe(fixture.age[fixtureAt]);
+      }
+    }
+  }
+
+  // AC3, trap 4, trap 9: a move while PAUSED resizes the live grid, content preserved top-left;
+  // the canvas is rebuilt EXACTLY once; the cycle is untouched (a resize is not a step); population
+  // is unchanged on a GROW (nothing was clipped).
+  it('resizes on a slider move while paused: content preserved, canvas rebuilt once, cycle untouched (AC3)', () => {
+    const { callCounts } = installContextsWithCounts();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const { container } = render(view());
+    const canvas = screen.getByRole('img', {
+      name: 'Petri dish, 7 by 5 cells',
+    }) as HTMLCanvasElement;
+    expect(callCounts.get(canvas)).toBe(1); // the mount construction
+    const totalLivingBefore =
+      screen.getByText('Total Living Cells').nextElementSibling?.textContent;
+
+    // The 7x5 fixture is deliberately off-preset (AC8): the thumb starts at index 0, announcing
+    // the TRUE size, not `GRID_PRESETS[0]`'s 50x30.
+    expect(gridSizeSlider()).toHaveValue('0');
+    expect(gridSizeSlider()).toHaveAttribute('aria-valuetext', '7 by 5 cells');
+
+    act(() => fireEvent.change(gridSizeSlider(), { target: { value: '2' } })); // 150x90
+
+    expect(root(container)).toHaveAttribute('data-cycle', '0'); // trap 9: a resize is not a step
+    expect(gridSizeSlider()).toHaveValue('2');
+    expect(gridSizeSlider()).toHaveAttribute('aria-valuetext', '150 by 90 cells');
+    expect(screen.getByRole('img', { name: 'Petri dish, 150 by 90 cells' })).toBe(canvas);
+    expect(callCounts.get(canvas)).toBe(2); // rebuilt exactly once
+
+    // Trap 4: TWO drawFulls for this one resize — resizeLive's own paintFull on the OLD renderer,
+    // then the rebuild's attachRenderer priming the NEW one. Both paint the SAME 150x90 grid.
+    expect(drawFullSpy).toHaveBeenCalledTimes(3); // mount prime + the two from this resize
+    const painted = drawFullSpy.mock.calls[2][0];
+    expect([painted.width, painted.height]).toEqual([150, 90]);
+    expectTopLeftPreserved(painted, GRID);
+
+    // A grow clips nothing, so the published population is unchanged.
+    expect(screen.getByText('Total Living Cells').nextElementSibling?.textContent).toBe(
+      totalLivingBefore,
+    );
+  });
+
+  // AC4: stepping and playing continue on the resized grid; Stop restores the persisted size and
+  // the slider follows it back.
+  it('steps and plays on the resized grid; Stop restores the persisted size (AC4)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const drawDiffSpy = vi.spyOn(GridRenderer.prototype, 'drawDiff');
+    const { container } = render(view());
+
+    act(() => fireEvent.change(gridSizeSlider(), { target: { value: '3' } })); // 200x120
+    expect(gridSizeSlider()).toHaveValue('3');
+
+    act(() => screen.getByRole('button', { name: 'Next cycle' }).click());
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
+    const lastDiff = drawDiffSpy.mock.calls.at(-1)?.[0];
+    expect([lastDiff?.width, lastDiff?.height]).toEqual([200, 120]);
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+    expect(Number(root(container).getAttribute('data-cycle'))).toBeGreaterThan(1);
+
+    act(() => screen.getByRole('button', { name: 'Pause' }).click());
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+
+    act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());
+
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+    expect(gridSizeSlider()).toHaveValue('0');
+    expect(gridSizeSlider()).toHaveAttribute('aria-valuetext', '7 by 5 cells');
+    expect(screen.getByRole('img', { name: 'Petri dish, 7 by 5 cells' })).toBeInTheDocument();
+    const lastFullCall = drawFullSpy.mock.calls.at(-1);
+    if (lastFullCall === undefined) throw new Error('drawFull was never called');
+    const lastFull = lastFullCall[0];
+    expect([lastFull.width, lastFull.height]).toEqual([7, 5]);
+    expectTopLeftPreserved(lastFull, GRID);
+  });
+
+  // AC5: the control is disabled while playing, with the hint always present and wired as its
+  // description; the Speed slider stays enabled (FR-4.2 — live during playback); an extinction
+  // auto-pause re-enables the control through `status` alone.
+  it('disables Grid Size while playing (Speed stays enabled), and an auto-pause re-enables it (AC5)', () => {
+    const driver = installFrameDriver();
+    const CONWAY_ORGANISMS: readonly Organism[] = [CONWAYS_CLASSIC];
+    const CONWAY_PALETTE = buildRefToFillGroup(
+      CONWAY_ORGANISMS.map((o) => o.id),
+      new Map(CONWAY_ORGANISMS.map((o) => [o.id, o] as const)),
+    );
+    const LONE_GRID = gridFromDense(gridFromPattern(['...', '.x.', '...'], { '.': 0, x: 1 }));
+    installContexts();
+
+    render(view({ organisms: CONWAY_ORGANISMS, initialGrid: LONE_GRID, palette: CONWAY_PALETTE }));
+
+    expect(gridSizeSlider()).toBeEnabled();
+    expect(screen.getByText('Adjustable while paused')).toBeInTheDocument();
+    expect(gridSizeSlider()).toHaveAccessibleDescription('Adjustable while paused');
+    expect(screen.getByRole('button', { name: 'Next cycle' })).toBeEnabled();
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+
+    expect(gridSizeSlider()).toBeDisabled();
+    expect(speedSlider()).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Next cycle' })).toBeDisabled();
+    expect(screen.getByText('Adjustable while paused')).toBeInTheDocument();
+
+    driver.frame(0); // primes the clock
+    driver.frame(100); // cycle 1: the lone cell dies — auto-pause (Story 3.15)
+
+    expect(gridSizeSlider()).toBeEnabled();
+  });
+
+  it('has no axe violations with the Grid Size section present, enabled and disabled', async () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(view());
+    expect((await axe(container)).violations).toEqual([]);
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
     expect((await axe(container)).violations).toEqual([]);
   });
 });

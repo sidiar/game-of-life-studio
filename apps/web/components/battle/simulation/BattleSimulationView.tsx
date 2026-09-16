@@ -11,6 +11,7 @@ import PetriDishCanvas from '../../PetriDishCanvas';
 import SidebarFooter from '../SidebarFooter';
 import SidebarSection from '../SidebarSection';
 import CycleCounter from './CycleCounter';
+import GridSizeControl from './GridSizeControl';
 import PopulationStats from './PopulationStats';
 import SimulationControlBar from './SimulationControlBar';
 import SpeedControl from './SpeedControl';
@@ -33,7 +34,7 @@ import SpeedControl from './SpeedControl';
  *    (stop the loop, detach the renderer, drop the session — Story 3.10 AC10), and nothing here
  *    writes to `initialGrid` (FR-4.8, AR-31).
  *
- * Deliberately ABSENT, by story: `<GridSizeControl>` (3.16), fullscreen (3.18), hotkeys (3.19). The
+ * Deliberately ABSENT, by story: fullscreen (3.18), hotkeys (3.19). The
  * extinction auto-pause (FR-4.7, Decision B.5, Story 3.15) is the hook's alone — this component
  * gains no state, hook, effect or prop for it; it is observed through `status` exactly like a
  * manual pause. The transport bar shipped in 3.12:
@@ -44,7 +45,11 @@ import SpeedControl from './SpeedControl';
  * own (3.10 FD6: the hook is the only holder of the speed). Story 3.14 added
  * `<PopulationStats>` / `<CycleCounter>`, ABOVE the Speed section (spec §2): both are pure
  * presentational reads of `sim.population` / `sim.cycle`, so the view gains a `totalLiving` reduce
- * (FD3) and no hook, state, ref or effect of its own.
+ * (FD3) and no hook, state, ref or effect of its own. Story 3.16 added the Grid Size section,
+ * FOURTH after Speed: `<GridSizeControl>` reads `sim.liveSize` and hands `sim.resizeLive` straight
+ * through (both `useCallback`-stable / plain reads off the hook, Story 3.10), `disabled` is a
+ * render-time boolean off `sim.status` exactly like the transport bar's Next-cycle button — no new
+ * state, hook, ref or effect here either.
  *
  * Forced decision 5, option (a): props are `{ initialGrid, organisms, startingSpeed,
  * showGridLines, palette, colors, onBack, backDisabled }`. Not spec §3.11's `onExitToLab` (the
@@ -102,8 +107,8 @@ const SimulationSidebar = styled('aside')({
 });
 
 // The `flex: 1` scroll region whose PRESENCE pins the footer at the same place as the Lab
-// sidebar's. It holds Population Analysis and Cycle Count (3.14) and Speed (3.13); 3.16 drops
-// Grid Size into the same `gap` exactly as 2.11/2.14/2.15 did on the Lab side.
+// sidebar's. It holds Population Analysis and Cycle Count (3.14), Speed (3.13) and Grid Size
+// (3.16), in the same `gap` exactly as 2.11/2.14/2.15 did on the Lab side.
 const SidebarContent = styled('div')({
   flex: 1,
   overflowY: 'auto',
@@ -205,8 +210,9 @@ export default function BattleSimulationView({
       <SimulationSidebar>
         <SidebarContent>
           {/* Spec §2's sidebar order is Population Analysis, Cycle Count (both 3.14), Speed
-              (3.13), Grid Size (3.16). Both new sections are pure reads of `sim.population` /
-              `sim.cycle` — neither component sees `sim` (spec §3.12's props exactly). */}
+              (3.13), Grid Size (3.16). All four sections are pure reads of `sim.population` /
+              `sim.cycle` / `sim.genPerSec` / `sim.liveSize` — none of them sees `sim` itself
+              (spec §3.12's props exactly). */}
           <SidebarSection title="Population Analysis">
             <PopulationStats entries={sim.population} totalLiving={totalLiving} />
           </SidebarSection>
@@ -221,6 +227,18 @@ export default function BattleSimulationView({
           <SidebarSection title="Speed">
             <SpeedControl genPerSec={sim.genPerSec} onChange={sim.setSpeed} />
           </SidebarSection>
+          {/* Story 3.16: `sim.resizeLive` is passed STRAIGHT THROUGH (stable, Story 3.10); `disabled`
+              is a render-time boolean off `sim.status`, which follows the loop on every stop path
+              (3.15 FD1), so the control can never be enabled over a running loop for more than one
+              render — and the hook's FD5 throw (`resizeLive` while playing) is the tripwire if it
+              ever is. No `useState`, no effect, no ref. */}
+          <SidebarSection title="Grid Size">
+            <GridSizeControl
+              value={sim.liveSize}
+              onChange={sim.resizeLive}
+              disabled={sim.status === 'playing'}
+            />
+          </SidebarSection>
         </SidebarContent>
         {/* The second caller `simulation/README.md` promised — the LAST child of the sidebar and a
             SIBLING of the content region (the pin — SidebarFooter.tsx's own comment). No prop
@@ -230,10 +248,12 @@ export default function BattleSimulationView({
       <SimulationMain>
         <GridContainer>
           <PetriDishBox>
-            {/* `sim.liveSize`, not `initialGrid`'s dims: identical today, and Story 3.16's
-                ephemeral resize then rebuilds the canvas at the live size for free (forced decision
-                6). `attachRenderer` is `useCallback`-stable (Story 3.10 Task 4) and is passed
-                STRAIGHT THROUGH — a wrapper would defeat the stability `PlaybackDish` relies on. */}
+            {/* `sim.liveSize`, not `initialGrid`'s dims: identical at mount, and Story 3.16's
+                `<GridSizeControl>` resize rebuilds the canvas at the live size for free through
+                this same prop (forced decision 6 — `<PlaybackDish>` keys its construction on the
+                DIMENSIONS, Story 3.11). `attachRenderer` is `useCallback`-stable (Story 3.10 Task 4)
+                and is passed STRAIGHT THROUGH — a wrapper would defeat the stability `PlaybackDish`
+                relies on. */}
             {colors !== null && (
               <DishCanvas
                 variant="playback"
