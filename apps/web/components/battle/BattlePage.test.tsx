@@ -2717,8 +2717,12 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     const view = await findRunView(container);
     expect(view).toHaveAttribute('data-status', 'paused');
     expect(view).toHaveAttribute('data-cycle', '0');
-    // The editor is GONE — no sections, no status bar — not merely hidden.
-    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0);
+    // The editor is GONE — its four sections and its status bar — not merely hidden. The one h2
+    // left is the Run sidebar's Speed section (Story 3.13); 3.14 raises this to three.
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(1);
+    // Exact name, not a substring: the mockup's "Speed Multiplier" (3.13 FD3 rejected it) would
+    // pass a `toHaveTextContent('Speed')`.
+    expect(screen.getByRole('heading', { level: 2, name: 'Speed' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     // Still exactly one <h1>, and it is the SAME element: `<BattleHeader>` never unmounted.
@@ -2851,12 +2855,12 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     expect(results.violations).toEqual([]);
   });
 
-  // Story 3.12 Task 6: the Run-mode describe had no total-count test until the transport bar
-  // arrived. Written so 3.13's speed slider and 3.18's fullscreen button fail this and get
-  // converted, the route's own convention (the Lab-mode counts above do the same). Scoped to the
-  // Run VIEW (`within`), not the whole page — the header's LAB/RUN toggle is a separate,
+  // Story 3.12 Task 6, converted by 3.13: the Run chassis carries four buttons and now ONE slider
+  // (the Speed control). Written so 3.16's Grid Size slider and 3.18's fullscreen button fail this
+  // and get converted, the route's own convention (the Lab-mode counts above do the same). Scoped
+  // to the Run VIEW (`within`), not the whole page — the header's LAB/RUN toggle is a separate,
   // already-counted control (the Lab-mode test above), and this count is about the Run chassis.
-  it('Run mode has exactly four buttons (Back, Play, Next cycle, Stop & reset) and no slider (Story 3.12)', async () => {
+  it('Run mode has exactly four buttons (Back, Play, Next cycle, Stop & reset) and one slider (Story 3.13)', async () => {
     const user = userEvent.setup();
     const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
@@ -2867,6 +2871,9 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     for (const name of ['Back to Battles', 'Play', 'Next cycle', 'Stop & reset']) {
       expect(within(view).getByRole('button', { name })).toBeInTheDocument();
     }
-    expect(within(view).queryByRole('slider')).toBeNull();
+    expect(within(view).getAllByRole('slider')).toHaveLength(1);
+    expect(
+      within(view).getByRole('slider', { name: 'Generations per second' }),
+    ).toBeInTheDocument();
   });
 });
