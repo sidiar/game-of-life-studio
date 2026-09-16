@@ -5,7 +5,7 @@ import { axe } from 'vitest-axe';
 import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
 import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
-import { MAX_AGE_SHADE } from '@/lib/palette/displayColor';
+import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
 import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
 
@@ -23,8 +23,8 @@ import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
  */
 
 // [CONWAYS_CLASSIC (sky-blue), vermillion, azure, bluish-green] — a fixture that contains Conway's
-// Classic, so the M6 default it derives (PALETTE[3], amber) is a value the deleted
-// DEFAULT_COLOR_TOKEN stopgap could never have produced (FD8).
+// Classic, so the M6 default it derives (PALETTE[3], amber) is a value the Story 4.7 seed stopgap
+// (`colorToken: DEFAULT_COLOR_TOKEN`, deleted in 4.8) could never have produced (FD8).
 const LIBRARY = [CONWAYS_CLASSIC, ...createMockOrganisms()];
 
 describe('OrganismEditorModal', () => {
@@ -194,8 +194,8 @@ describe('OrganismEditorModal', () => {
 
   // Story 4.8 AC3 / FD8: the seed is the M6 derivation over the library the editor was opened
   // over, not a stopgap. With LIBRARY's four tokens (sky-blue, vermillion, azure, bluish-green),
-  // that is PALETTE[3] — a value the deleted DEFAULT_COLOR_TOKEN stopgap could not produce, so
-  // this test would have gone red against it.
+  // that is PALETTE[3] — a value the deleted 4.7 seed stopgap (DEFAULT_COLOR_TOKEN) could not
+  // produce, so this test would have gone red against it.
   it('opens the colour picker on the M6 default derived from `library` (Story 4.8)', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
@@ -227,8 +227,14 @@ describe('OrganismEditorModal', () => {
     const capCell = strip.querySelector<HTMLElement>(`[data-age="${MAX_AGE_SHADE}"]`);
     if (capCell === null) throw new Error('the cap-age cell is not in the strip');
 
-    expect(selectedSwatch.style.backgroundColor).not.toBe('');
-    expect(selectedSwatch.style.backgroundColor).toBe(capCell.style.backgroundColor);
+    // Pinned to the LUT, not only to each other: two stale backgrounds also agree. jsdom
+    // normalises an inline `hsl()` to `rgb()`, so the expected string goes through the same
+    // `style` round trip (the `OrganismLibrary.test.tsx` probe).
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = displayColor(target.id, MAX_AGE_SHADE);
+    expect(probe.style.backgroundColor).not.toBe('');
+    expect(selectedSwatch.style.backgroundColor).toBe(probe.style.backgroundColor);
+    expect(capCell.style.backgroundColor).toBe(probe.style.backgroundColor);
   });
 
   // Story 4.6 AC3: a fresh editor opens with both dominance controls at the domain default.

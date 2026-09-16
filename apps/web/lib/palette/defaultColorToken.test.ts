@@ -43,12 +43,26 @@ describe('defaultColorToken', () => {
     expect(defaultColorToken([PALETTE[1].id, PALETTE[1].id])).toBe(PALETTE[0].id);
   });
 
-  it('property: the result is always a PALETTE id, and matches the next-unused/least-used contract', () => {
-    const knownIds = PALETTE.map((entry) => entry.id);
-    fc.assert(
-      fc.property(
-        fc.array(fc.constantFrom(...knownIds, 'unknown-token-a', 'unknown-token-b')),
-        (usedColorTokens) => {
+  // Two arbitraries, not one: under fast-check's default size an array of 22 alternatives rarely
+  // reaches every one of PALETTE's ids, so the least-used branch would be checked by the three
+  // exact cases above only. The second arbitrary prepends every id once, which forces that branch
+  // on every run.
+  const knownIds = PALETTE.map((entry) => entry.id);
+  const anyUsage = fc.array(fc.constantFrom(...knownIds, 'unknown-token-a', 'unknown-token-b'), {
+    maxLength: 60,
+  });
+  const everyIdInUse = fc
+    .array(fc.constantFrom(...knownIds, 'unknown-token-a'), { maxLength: 60 })
+    .map((extra) => [...knownIds, ...extra]);
+
+  it.each([
+    ['any usage', anyUsage],
+    ['every id already in use', everyIdInUse],
+  ])(
+    'property (%s): the result is always a PALETTE id, and matches the next-unused/least-used contract',
+    (_label, usage) => {
+      fc.assert(
+        fc.property(usage, (usedColorTokens) => {
           const result = defaultColorToken(usedColorTokens);
           const resultIndex = PALETTE.findIndex((entry) => entry.id === result);
           expect(resultIndex).toBeGreaterThanOrEqual(0);
@@ -71,8 +85,8 @@ describe('defaultColorToken', () => {
               expect(earlierCount).toBeGreaterThan(resultCount);
             }
           }
-        },
-      ),
-    );
-  });
+        }),
+      );
+    },
+  );
 });

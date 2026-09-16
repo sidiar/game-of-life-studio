@@ -243,8 +243,9 @@ describe('OrganismLibrary', () => {
   });
 
   // Story 4.8 (M6): the fixture DELIBERATELY contains Conway's Classic (sky-blue), so the derived
-  // default is PALETTE[3] (amber) — a value only the derivation produces, never the deleted
-  // DEFAULT_COLOR_TOKEN stopgap (FD8).
+  // default is PALETTE[3] (amber) — a value only the derivation produces, never the Story 4.7
+  // seed stopgap (`colorToken: DEFAULT_COLOR_TOKEN`, deleted in 4.8 — the constant itself stays,
+  // it is the Decision I.4 fallback) (FD8).
   it('seeds the picker at the next unused token of the loaded library (M6) (Story 4.8)', async () => {
     const user = userEvent.setup();
     const fixture = [CONWAYS_CLASSIC, ...createMockOrganisms()];

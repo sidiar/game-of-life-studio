@@ -97,6 +97,15 @@ describe('ColorPickerField', () => {
     expect(checkedRadio()).toHaveAccessibleName(PALETTE[3].name);
     expect(selectedName()).toHaveTextContent(PALETTE[3].name);
 
+    // The ✓ (the third selection channel) moved too — a mark left on the old swatch would
+    // otherwise pass on the radio and name assertions alone.
+    const marks = screen.getAllByText('✓');
+    expect(marks).toHaveLength(1);
+    expect(marks[0].closest('[data-color-token]')).toHaveAttribute(
+      'data-color-token',
+      PALETTE[3].id,
+    );
+
     const largeBackground = selectedSwatch().style.background;
     const smallSwatch = document.querySelector(
       `[data-color-token="${PALETTE[3].id}"]`,
@@ -117,16 +126,21 @@ describe('ColorPickerField', () => {
   });
 
   // (e)
-  it('arrow keys move and select, wrapping at both ends', async () => {
+  it('arrow keys move focus and select through onChange', async () => {
     const user = userEvent.setup();
-    render(<ControlledHarness />);
+    const onChange = vi.fn();
+    render(<ControlledHarness onChange={onChange} />);
 
     radio(PALETTE[0].name).focus();
     await user.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith(PALETTE[1].id);
     expect(radio(PALETTE[1].name)).toBeChecked();
     expect(radio(PALETTE[1].name)).toHaveFocus();
 
     await user.keyboard('{ArrowLeft}');
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith(PALETTE[0].id);
     expect(radio(PALETTE[0].name)).toBeChecked();
   });
 

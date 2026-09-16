@@ -42,7 +42,9 @@ import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
  *   tier, below WCAG 2.5.8).
  *
  * One name, one group: a plain fieldset (`group`) wrapping a separate `role="radiogroup"` div
- * would announce "Organism Color" twice — the fieldset itself carries the role.
+ * would announce "Organism Color" twice — the fieldset itself carries the role. The selected
+ * entry's name is plain text, NOT a live region: the radio change already announces the new
+ * name, and a live region would read it a second time (the Story 3.13 trap).
  *
  * Followers: Story 4.9 adds the in-use marking and the reuse warning under the selected row;
  * Story 4.14 reads `draft.colorToken` for the preview grid; Story 4.17 seeds `value` from a

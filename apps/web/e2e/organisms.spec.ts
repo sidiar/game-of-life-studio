@@ -1228,7 +1228,9 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
     await expect(radiogroup).toBeVisible();
     // 20 = PALETTE.length — this spec does not import `apps/web/lib` (the 4.7 precedent).
     await expect(radiogroup.getByRole('radio')).toHaveCount(20);
-    await expect(radiogroup.locator('input[type="radio"]:disabled')).toHaveCount(0);
+    // `:enabled` counted to 20, not `:disabled` to 0 — a zero count also passes on a selector
+    // that matches nothing.
+    await expect(radiogroup.locator('input[type="radio"]:enabled')).toHaveCount(20);
     await expect(radiogroup.getByRole('radio', { name: DEFAULT_NAME })).toBeChecked();
     await expect(basicInfo.locator('[data-selected-name]')).toHaveText(DEFAULT_NAME);
     const describedBy = await radiogroup.getAttribute('aria-describedby');
@@ -1265,7 +1267,7 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
   });
 
   test('keyboard: one tab stop, arrow moves and selects', async ({ page, browserName }) => {
-    const { dialog, radiogroup } = await openColorPicker(page);
+    const { dialog, basicInfo, radiogroup } = await openColorPicker(page);
     const nameTextbox = dialog.getByRole('textbox', { name: 'Organism Name' });
 
     await nameTextbox.focus();
@@ -1276,9 +1278,12 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
     await expect(checkedRadio).toBeFocused();
 
     await page.keyboard.press('ArrowRight');
-    const nextRadio = radiogroup.getByRole('radio').nth(2); // PALETTE[2], bluish-green
+    // PALETTE[2] — the registry entry after DEFAULT_NAME's (PALETTE[1]); located by name so the
+    // assertion says which radio took the selection, not merely that some index did.
+    const nextRadio = radiogroup.getByRole('radio', { name: 'Bluish Green' });
     await expect(nextRadio).toBeChecked();
     await expect(nextRadio).toBeFocused();
+    await expect(basicInfo.locator('[data-selected-name]')).toHaveText('Bluish Green');
 
     await page.keyboard.press(tabKey);
     await expect(dialog.getByRole('slider', { name: 'Dominance' })).toBeFocused();

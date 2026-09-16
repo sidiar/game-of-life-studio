@@ -4,7 +4,7 @@ baseline_commit: ec350f8
 
 # Story 4.8: Color Picker & Selection Defaults
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -543,6 +543,32 @@ and the CI gates already impose on "the fourth control inside the editor".
         it here. Push to `story/4-8-color-picker-selection-defaults`; check `gh run list --limit
         1` after the PR opens.
 
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (2026-09-16), via three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 0 `decision-needed`, 8 `patch`, 0
+`defer`, 20 dismissed as noise (spec-mandated shapes — the derived expectations, the e2e literals,
+the `data-selected="false"` serialisation, the AC6 unknown-`value` path "not re-tested here";
+verified false positives — `sorted` is the unfiltered library, the ring gap's `--gol-bg-secondary`
+IS the column's background, 4.24/4.25 are both battle-origin instances; and jsdom timeouts that
+measure ≤ 250 ms per test standalone — a machine-load artefact of three reviewers and a full run
+sharing one CPU). All patches applied in the review commit; CI on the PR is the remote authority.
+
+- [x] [Review][Patch] Test (c) never asserted the `✓` moved (Task 4 (c) lists it among the four things that move); now pins exactly one mark, inside `PALETTE[3]`'s swatch [apps/web/components/organisms/editor/ColorPickerField.test.tsx:97]
+- [x] [Review][Patch] Test (e) had no `onChange` spy (Task 4 (e): "`onChange(PALETTE[1].id)`") and its title promised "wrapping at both ends" while the wrap lives in the next test; now asserts both callbacks and is retitled [apps/web/components/organisms/editor/ColorPickerField.test.tsx:127]
+- [x] [Review][Patch] The fast-check property's least-used branch was unreachable — a default-size `fc.array` over 22 alternatives almost never contains all 20 ids, so `someUnused` was always true; a second arbitrary prepends every id, forcing the branch on every run [apps/web/lib/palette/defaultColorToken.test.ts:44]
+- [x] [Review][Patch] e2e test 3 omitted "the name text changed" after `ArrowRight` (Task 6 test 3) and located the next radio by `nth(2)`; now by name (`Bluish Green`, PALETTE[2]) with the `[data-selected-name]` assertion [apps/web/e2e/organisms.spec.ts:1280]
+- [x] [Review][Patch] e2e test 1's `:disabled` count of 0 was vacuous (a selector matching nothing also counts 0); now `:enabled` counted to 20 [apps/web/e2e/organisms.spec.ts:1231]
+- [x] [Review][Patch] Modal round-trip test compared the display's background only to the strip's cap cell — two stale backgrounds also agree; now both are pinned to the normalised `displayColor(PALETTE[9].id, MAX_AGE_SHADE)` [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:227]
+- [x] [Review][Patch] Header comment lacked the "why the selected name is not live" sentence Task 4 lists; added [apps/web/components/organisms/editor/ColorPickerField.tsx:49]
+- [x] [Review][Patch] Three test comments said "the deleted `DEFAULT_COLOR_TOKEN` stopgap" while the constant still exists (it is the Decision I.4 fallback; only the 4.7 *seed* was deleted); reworded [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:25, apps/web/components/organisms/OrganismLibrary.test.tsx:245]
+
+Noted, not patched: the FD9 loading-window seed (an editor opened before `organisms.list()`
+resolves seeds `PALETTE[0]`) was raised independently by two layers; it is the story's own owner
+flag, already recorded in `deferred-work.md`'s 4-8 section with the one acceptable fix, and is not
+a review decision. AC2's "Space checks an unchecked focused radio" is asserted nowhere — native
+behaviour the task lists did not ask for; left as is.
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -1005,6 +1031,9 @@ Sonnet (claude-sonnet-5), via `bmad-dev-story`.
 - 2026-09-16 — Implemented (dev-story): all 7 tasks complete, `npm run ci` run locally (exit 1 on
   two pre-existing, unrelated Story 3.12 WebKit/tablet flakes only — see Debug Log References);
   status → review.
+- 2026-09-16 — Code review (Opus, three adversarial layers): 8 patches applied in the review commit
+  (test-fidelity gaps against Task 4/6, a property test whose least-used branch was unreachable,
+  two comment corrections); 0 decision-needed; status → done.
 
 Dev Model: sonnet   # follows the 4.5/4.6/4.7 editor-field pattern (draft field already exists, controlled field in the basicInfo fragment, pure helper in lib, native radio group per the GridSettingsSection precedent); the two shaping choices — the modal's `library` prop / props-type split and the factory taking the library's tokens — are pinned in FD3/FD5, so nothing is left for later stories to discover
 Proposed lane gate: none

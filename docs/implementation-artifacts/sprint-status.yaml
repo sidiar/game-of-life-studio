@@ -120,7 +120,7 @@ development_status:
   4-5-organism-name-field: done
   4-6-dominance-control: done
   4-7-aging-degradation-toggle: done
-  4-8-color-picker-selection-defaults: review
+  4-8-color-picker-selection-defaults: done
   4-9-color-reuse-warning-cvd-validation: backlog
   4-10-rule-cards-empty-state: backlog
   4-11-condition-builder: backlog
