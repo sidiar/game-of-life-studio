@@ -119,23 +119,29 @@ describe('OrganismEditorModal', () => {
   // Story 4.5 / 4.6 / 4.7 / 4.8: the name field, the colour picker, the dominance control and the
   // aging toggle land in the Basic Information column THROUGH the layout's `basicInfo` slot
   // fragment — addressed by name, so none can land in another column. Each field's own contract
-  // is its own test file's; this retargets the count guard for the new radiogroup (AR-44).
-  it('mounts the name field, the colour picker, the dominance control and the aging toggle in Basic Information and nowhere else (Story 4.5, Story 4.6, Story 4.7, Story 4.8)', () => {
+  // is its own test file's; this retargets the count guard for the new colour control (AR-44) —
+  // located by its "Change Color" disclosure button, since the radiogroup is collapsed at mount.
+  it('mounts the name field, the colour picker, the dominance control and the aging toggle in Basic Information and nowhere else (Story 4.5, Story 4.6, Story 4.7, Story 4.8)', async () => {
+    const user = userEvent.setup();
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const dialog = screen.getByRole('dialog');
     const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
     expect(within(basic).getByRole('textbox', { name: 'Organism Name' })).toBeInTheDocument();
-    expect(within(basic).getByRole('radiogroup', { name: 'Organism Color' })).toBeInTheDocument();
+    expect(within(basic).getByRole('group', { name: 'Organism Color' })).toBeInTheDocument();
+    expect(within(basic).getByRole('button', { name: 'Change Color' })).toBeInTheDocument();
     expect(within(basic).getByRole('slider', { name: 'Dominance' })).toBeInTheDocument();
     expect(within(basic).getByRole('textbox', { name: 'Dominance value' })).toBeInTheDocument();
     expect(within(basic).getByRole('switch', { name: 'Aging Degradation' })).toBeInTheDocument();
     // "Nowhere else" means the whole dialog — header and footer included — not just the other two
-    // regions: exactly two textboxes, one slider, one switch and PALETTE.length radios exist, and
-    // all are the ones above.
+    // regions: exactly two textboxes, one slider, one switch and (once the palette is open)
+    // PALETTE.length radios exist, and all are the ones above.
     expect(within(dialog).getAllByRole('textbox')).toHaveLength(2);
     expect(within(dialog).getAllByRole('slider')).toHaveLength(1);
     expect(within(dialog).getAllByRole('switch')).toHaveLength(1);
+    expect(within(dialog).queryAllByRole('radio')).toHaveLength(0);
+    await user.click(within(basic).getByRole('button', { name: 'Change Color' }));
+    expect(within(basic).getByRole('radiogroup', { name: 'Organism Color' })).toBeInTheDocument();
     expect(within(dialog).getAllByRole('radio')).toHaveLength(PALETTE.length);
   });
 
@@ -196,12 +202,15 @@ describe('OrganismEditorModal', () => {
   // over, not a stopgap. With LIBRARY's four tokens (sky-blue, vermillion, azure, bluish-green),
   // that is PALETTE[3] — a value the deleted 4.7 seed stopgap (DEFAULT_COLOR_TOKEN) could not
   // produce, so this test would have gone red against it.
-  it('opens the colour picker on the M6 default derived from `library` (Story 4.8)', () => {
+  it('opens the colour picker on the M6 default derived from `library` (Story 4.8)', async () => {
+    const user = userEvent.setup();
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const expectedToken = defaultColorToken(LIBRARY.map((organism) => organism.colorToken));
     const expectedName = resolvePaletteColor(expectedToken).name;
     const dialog = screen.getByRole('dialog');
+    expect(dialog.querySelector('[data-selected-name]')).toHaveTextContent(expectedName);
+    await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
     expect(within(dialog).getByRole('radio', { checked: true })).toHaveAccessibleName(expectedName);
   });
 
@@ -213,8 +222,11 @@ describe('OrganismEditorModal', () => {
 
     const dialog = screen.getByRole('dialog');
     const target = PALETTE[9];
+    await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
     await user.click(within(dialog).getByRole('radio', { name: target.name }));
 
+    // The pointer pick collapsed the palette (FD7); reopen it to read the checked radio back.
+    await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
     expect(within(dialog).getByRole('radio', { checked: true })).toHaveAccessibleName(target.name);
     const selectedName = dialog.querySelector('[data-selected-name]');
     if (selectedName === null) throw new Error('the selected-name node is not in the dialog');
@@ -275,17 +287,17 @@ describe('OrganismEditorModal', () => {
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('17');
   });
 
-  // Story 4.6 / 4.7 / 4.8 AC6: the tab order inside Basic Information is name -> the checked radio
-  // -> slider -> numeric input -> switch. The field's own test uses a stand-in button for the name
-  // field; this is the real column.
-  it('tabs from the name field to the checked colour radio, the dominance slider, its textbox, then the aging switch (Story 4.6, Story 4.7, Story 4.8)', async () => {
+  // Story 4.6 / 4.7 / 4.8 AC6: the tab order inside Basic Information is name -> the "Change
+  // Color" button (the palette is collapsed, FD7) -> slider -> numeric input -> switch. The
+  // field's own test covers the open palette's extra stop; this is the real column.
+  it('tabs from the name field to the Change Color button, the dominance slider, its textbox, then the aging switch (Story 4.6, Story 4.7, Story 4.8)', async () => {
     const user = userEvent.setup();
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const dialog = screen.getByRole('dialog');
     screen.getByRole('textbox', { name: 'Organism Name' }).focus();
     await user.tab();
-    expect(within(dialog).getByRole('radio', { checked: true })).toHaveFocus();
+    expect(within(dialog).getByRole('button', { name: 'Change Color' })).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveFocus();
     await user.tab();

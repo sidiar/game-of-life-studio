@@ -1154,19 +1154,27 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 ## Deferred from: Story 4-8-color-picker-selection-defaults (2026-09-16)
 
-- **The mockup's "Change Color ▾" collapse toggle and its `.collapsed` palette are not built**
+- ~~**The mockup's "Change Color ▾" collapse toggle and its `.collapsed` palette are not built**
   (FD7). The AC says every one of the 20 swatches displays, and the design doc's layout
   (`organism-editor-design.md:170-182`) shows the grid open; the mockup's collapse
   (`organism-editor.html:227-254, 1263-1269`) contradicts both. A mockup-refresh note for the next
-  UX touch, not a defect.
-- **The swatch grid is `repeat(auto-fill, 40px)`, not the mockup's `repeat(8, 1fr)`** (FD7 — the
+  UX touch, not a defect.~~ — **✅ Resolved in Story 4.8 (Sidiar, 2026-09-16): the mockup wins.**
+  The disclosure is built (collapsed at mount; a pointer pick collapses it and focuses the button,
+  a keyboard pick keeps it open); the epic AC wording was corrected, and the design doc's
+  always-open layout is the stale one. Rewritten FD7 in the story file has the detail.
+- ~~**The swatch grid is `repeat(auto-fill, 40px)`, not the mockup's `repeat(8, 1fr)`** (FD7 — the
   mockup's fixed 8-column grid yields 27px targets in a 320px column, 22px at the compressed tier,
   below WCAG 2.5.8's 24px minimum). The selected swatch's state is an inset ring + `✓`, not the
   mockup's accent border + `rgba` glow; the hover is a `:focus-within`/`:hover` outline, not the
-  mockup's scale transform. A mockup-refresh note.
-- **The large display is 100×100 per the AC / design doc, not the mockup's 44×44**, and its
+  mockup's scale transform. A mockup-refresh note.~~ — **✅ Resolved in Story 4.8 (2026-09-16):**
+  `repeat(8, 1fr)`, accent border + glow + `✓`, `scale(1.05)` hover (off under reduced motion). The
+  2.5.8 objection did not hold — ≥ 30px centre-to-centre spacing is the criterion's spacing
+  exception.
+- ~~**The large display is 100×100 per the AC / design doc, not the mockup's 44×44**, and its
   background is the identity colour at full opacity, not the design doc's "60% opacity" — the
-  display shows exactly what the grid paints. Flagged for the next UX touch.
+  display shows exactly what the grid paints. Flagged for the next UX touch.~~ — **✅ Resolved in
+  Story 4.8 (2026-09-16):** 44×44 per the mockup. The full-opacity fill stands (the chip shows what
+  the grid paints); the design doc's "60% opacity" remains the stale line.
 - **The description carries only the mockup's first sentence.** Story 4.9 appends the warning
   sentence when the reuse warning exists (NFR-4.1: no copy promising behaviour the build lacks).
 - **The seed is read once, at mount, from the library as loaded (FD9).** Opening the editor during

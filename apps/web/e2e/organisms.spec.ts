@@ -1197,14 +1197,22 @@ test.describe('aging degradation toggle (Story 4.7)', () => {
 test.describe('color picker & selection defaults (Story 4.8)', () => {
   /** `/organisms` hydrated, the editor open and settled, and the picker located THROUGH the
    * Basic Information region — so a control that rendered in another column would not be found.
-   * Mirrors `openDominanceControl` / `openAgingToggle` above. */
+   * Mirrors `openDominanceControl` / `openAgingToggle` above. The palette is collapsed at mount
+   * (FD7) — `expandPalette` is the mockup's "Change Color ▾" click, taken by the tests that need
+   * a radio. */
   async function openColorPicker(page: Page) {
     await page.goto('/organisms');
     await expect(page.getByText("Conway's Classic")).toBeVisible();
     const dialog = await openEditor(page);
     const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
+    const toggle = basicInfo.getByRole('button', { name: 'Change Color' });
     const radiogroup = basicInfo.getByRole('radiogroup', { name: 'Organism Color' });
-    return { dialog, basicInfo, radiogroup };
+    const expandPalette = async () => {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await expect(radiogroup).toBeVisible();
+    };
+    return { dialog, basicInfo, toggle, radiogroup, expandPalette };
   }
 
   // The production seed holds ONE organism, Conway's Classic, on token #1 (sky-blue) —
@@ -1223,9 +1231,15 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
     });
     page.on('pageerror', (err) => errors.push(err.message));
 
-    const { basicInfo, radiogroup } = await openColorPicker(page);
+    const { basicInfo, toggle, radiogroup, expandPalette } = await openColorPicker(page);
 
-    await expect(radiogroup).toBeVisible();
+    // Collapsed at mount (FD7): the chip and the button are what render, no radio is reachable.
+    await expect(basicInfo.locator('[data-selected-name]')).toHaveText(DEFAULT_NAME);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(radiogroup).toBeHidden();
+    await expect(basicInfo.getByRole('radio')).toHaveCount(0);
+
+    await expandPalette();
     // 20 = PALETTE.length — this spec does not import `apps/web/lib` (the 4.7 precedent).
     await expect(radiogroup.getByRole('radio')).toHaveCount(20);
     // `:enabled` counted to 20, not `:disabled` to 0 — a zero count also passes on a selector
@@ -1240,17 +1254,23 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
   });
 
   test('a pick updates the display, the name and the aging strip together', async ({ page }) => {
-    const { basicInfo, radiogroup } = await openColorPicker(page);
+    const { basicInfo, toggle, radiogroup, expandPalette } = await openColorPicker(page);
 
     const selectedSwatch = basicInfo.locator('[data-selected-swatch]');
     const capCell = basicInfo.locator('[data-aging-example] [data-age="7"]'); // MAX_AGE_SHADE
     const before = await selectedSwatch.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(before).not.toBe('rgba(0, 0, 0, 0)');
 
+    await expandPalette();
     await radiogroup.getByRole('radio', { name: PICKED_NAME }).click();
 
-    await expect(radiogroup.getByRole('radio', { name: PICKED_NAME })).toBeChecked();
+    // A pointer pick collapses the palette and hands focus to the button (FD7) — never `<body>`.
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(radiogroup).toBeHidden();
+    await expect(toggle).toBeFocused();
     await expect(basicInfo.locator('[data-selected-name]')).toHaveText(PICKED_NAME);
+    await expandPalette();
+    await expect(radiogroup.getByRole('radio', { name: PICKED_NAME })).toBeChecked();
 
     const [selectedColor, smallColor, capColor] = await Promise.all([
       selectedSwatch.evaluate((el) => getComputedStyle(el).backgroundColor),
@@ -1266,13 +1286,25 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
     expect(selectedColor).not.toBe(before);
   });
 
-  test('keyboard: one tab stop, arrow moves and selects', async ({ page, browserName }) => {
-    const { dialog, basicInfo, radiogroup } = await openColorPicker(page);
+  test('keyboard: the button is the stop, Enter opens, arrows move and select without collapsing', async ({
+    page,
+    browserName,
+  }) => {
+    const { dialog, basicInfo, toggle, radiogroup } = await openColorPicker(page);
     const nameTextbox = dialog.getByRole('textbox', { name: 'Organism Name' });
 
     await nameTextbox.focus();
     // WebKit needs Alt+Tab to move focus off a text input (the Story 4.1 idiom in this file).
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    await page.keyboard.press(tabKey);
+    // Collapsed: the button is the column's second stop and the slider its third.
+    await expect(toggle).toBeFocused();
+    await page.keyboard.press(tabKey);
+    await expect(dialog.getByRole('slider', { name: 'Dominance' })).toBeFocused();
+
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     await page.keyboard.press(tabKey);
     const checkedRadio = radiogroup.getByRole('radio', { name: DEFAULT_NAME });
     await expect(checkedRadio).toBeFocused();
@@ -1284,25 +1316,32 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
     await expect(nextRadio).toBeChecked();
     await expect(nextRadio).toBeFocused();
     await expect(basicInfo.locator('[data-selected-name]')).toHaveText('Bluish Green');
+    // A keyboard pick leaves the palette open (FD7): the roving focus is never dropped.
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
     await page.keyboard.press(tabKey);
     await expect(dialog.getByRole('slider', { name: 'Dominance' })).toBeFocused();
   });
 
   test('label click selects', async ({ page }) => {
-    const { dialog, radiogroup } = await openColorPicker(page);
+    const { dialog, basicInfo, radiogroup, expandPalette } = await openColorPicker(page);
 
+    await expandPalette();
     await dialog.locator('[data-color-token="teal"]').click();
 
+    await expect(basicInfo.locator('[data-selected-name]')).toHaveText('Teal');
+    await expandPalette();
     await expect(radiogroup.getByRole('radio', { name: 'Teal' })).toBeChecked();
   });
 
-  // The scan that measures the ✓ on a real fill and the ring for real. No transition on the
-  // control, so no extra wait beyond openEditor's settle.
+  // The scan that measures the ✓ on a real fill and the accent border for real, with the palette
+  // OPEN on the picked swatch (a collapsed palette would scan nothing).
   test('axe with a user-picked swatch', async ({ page }) => {
-    const { radiogroup } = await openColorPicker(page);
+    const { radiogroup, expandPalette } = await openColorPicker(page);
 
+    await expandPalette();
     await radiogroup.getByRole('radio', { name: PICKED_NAME }).click();
+    await expandPalette();
     await expect(radiogroup.getByRole('radio', { name: PICKED_NAME })).toBeChecked();
 
     const { violations } = await new AxeBuilder({ page }).analyze();
@@ -1310,8 +1349,9 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
   });
 
   test('the description is associated through aria-describedby', async ({ page }) => {
-    const { radiogroup } = await openColorPicker(page);
+    const { radiogroup, expandPalette } = await openColorPicker(page);
 
+    await expandPalette();
     const describedBy = await radiogroup.getAttribute('aria-describedby');
     if (describedBy === null) throw new Error('aria-describedby is absent');
     // useId() ids carry colons, so the id must be quoted as an attribute selector.

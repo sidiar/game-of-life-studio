@@ -34,26 +34,39 @@ function ControlledHarness({
   );
 }
 
+const group = () => screen.getByRole('group', { name: 'Organism Color' });
+const toggle = () => screen.getByRole('button', { name: 'Change Color' });
 const radiogroup = () => screen.getByRole('radiogroup', { name: 'Organism Color' });
 const radio = (name: string) => screen.getByRole('radio', { name });
 const checkedRadio = () => screen.getByRole('radio', { checked: true });
 const selectedName = () => document.querySelector('[data-selected-name]') as HTMLElement;
 const selectedSwatch = () => document.querySelector('[data-selected-swatch]') as HTMLElement;
 
+/** The mockup's disclosure (FD7): the palette is collapsed until "Change Color ▾" opens it, so
+ * every test that reaches a radio goes through the button first. */
+async function openPalette(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(toggle());
+  expect(toggle()).toHaveAttribute('aria-expanded', 'true');
+}
+
 describe('ColorPickerField', () => {
   // (a)
-  it('is a fieldset radiogroup named "Organism Color", described, with PALETTE.length radios in registry order', () => {
+  it('is a fieldset group named "Organism Color" whose radiogroup, once opened, is described and holds PALETTE.length radios in registry order', async () => {
+    const user = userEvent.setup();
     render(<ColorPickerField value={PALETTE[0].id} onChange={() => {}} />);
 
-    const group = radiogroup();
-    expect(group.tagName).toBe('FIELDSET');
-    const describedBy = group.getAttribute('aria-describedby');
+    expect(group().tagName).toBe('FIELDSET');
+    await openPalette(user);
+
+    const grid = radiogroup();
+    expect(grid.tagName).not.toBe('FIELDSET');
+    const describedBy = grid.getAttribute('aria-describedby');
     if (describedBy === null) throw new Error('aria-describedby is absent');
     expect(document.getElementById(describedBy)).toHaveTextContent(
       'Pick any color — colors are reusable.',
     );
 
-    const radios = within(group).getAllByRole('radio');
+    const radios = within(grid).getAllByRole('radio');
     expect(radios).toHaveLength(PALETTE.length);
     expect(radios.every((r) => (r as HTMLInputElement).disabled === false)).toBe(true);
     // DOM order == registry order (the AC) — checked by name, in order, never a literal count
@@ -64,8 +77,10 @@ describe('ColorPickerField', () => {
   });
 
   // (b)
-  it('initial state: PALETTE[0] checked, named, painted and marked', () => {
+  it('initial state: PALETTE[0] checked, named, painted and marked', async () => {
+    const user = userEvent.setup();
     render(<ColorPickerField value={PALETTE[0].id} onChange={() => {}} />);
+    await openPalette(user);
 
     const checked = checkedRadio();
     expect(checked).toHaveAccessibleName(PALETTE[0].name);
@@ -89,13 +104,17 @@ describe('ColorPickerField', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<ControlledHarness onChange={onChange} />);
+    await openPalette(user);
 
     await user.click(radio(PALETTE[3].name));
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(PALETTE[3].id);
-    expect(checkedRadio()).toHaveAccessibleName(PALETTE[3].name);
     expect(selectedName()).toHaveTextContent(PALETTE[3].name);
+    // A pointer pick collapses the palette (FD7) — reopen it to read the radios back.
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    await openPalette(user);
+    expect(checkedRadio()).toHaveAccessibleName(PALETTE[3].name);
 
     // The ✓ (the third selection channel) moved too — a mark left on the old swatch would
     // otherwise pass on the radio and name assertions alone.
@@ -119,6 +138,7 @@ describe('ColorPickerField', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<ColorPickerField value={PALETTE[0].id} onChange={onChange} />);
+    await openPalette(user);
 
     await user.click(radio(PALETTE[0].name));
 
@@ -130,6 +150,7 @@ describe('ColorPickerField', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<ControlledHarness onChange={onChange} />);
+    await openPalette(user);
 
     radio(PALETTE[0].name).focus();
     await user.keyboard('{ArrowRight}');
@@ -137,16 +158,20 @@ describe('ColorPickerField', () => {
     expect(onChange).toHaveBeenLastCalledWith(PALETTE[1].id);
     expect(radio(PALETTE[1].name)).toBeChecked();
     expect(radio(PALETTE[1].name)).toHaveFocus();
+    // A keyboard pick leaves the palette open (FD7): the roving focus stays where it is.
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true');
 
     await user.keyboard('{ArrowLeft}');
     expect(onChange).toHaveBeenCalledTimes(2);
     expect(onChange).toHaveBeenLastCalledWith(PALETTE[0].id);
     expect(radio(PALETTE[0].name)).toBeChecked();
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('arrow-right wraps from the last entry back to the first', async () => {
     const user = userEvent.setup();
     render(<ControlledHarness seed={PALETTE[PALETTE.length - 1].id} />);
+    await openPalette(user);
 
     radio(PALETTE[PALETTE.length - 1].name).focus();
     await user.keyboard('{ArrowRight}');
@@ -155,7 +180,7 @@ describe('ColorPickerField', () => {
   });
 
   // (f)
-  it('is one tab stop: the checked radio, not every radio', async () => {
+  it('is one tab stop collapsed (the button) and two open (the button, then the checked radio only)', async () => {
     const user = userEvent.setup();
     render(
       <>
@@ -167,9 +192,52 @@ describe('ColorPickerField', () => {
 
     screen.getByRole('button', { name: 'before' }).focus();
     await user.tab();
+    expect(toggle()).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'after' })).toHaveFocus();
+
+    await openPalette(user);
+    toggle().focus();
+    await user.tab();
     expect(checkedRadio()).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('button', { name: 'after' })).toHaveFocus();
+  });
+
+  // (k) — FD7, the disclosure itself.
+  it('starts collapsed: no radio is reachable, the button says so, and it toggles both ways', async () => {
+    const user = userEvent.setup();
+    render(<ColorPickerField value={PALETTE[0].id} onChange={() => {}} />);
+
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    // `aria-controls` names the grid, hidden or not.
+    const controls = toggle().getAttribute('aria-controls');
+    if (controls === null) throw new Error('aria-controls is absent');
+    expect(document.getElementById(controls)).toHaveAttribute('hidden');
+
+    await openPalette(user);
+    expect(document.getElementById(controls)).not.toHaveAttribute('hidden');
+    expect(radiogroup()).toBe(document.getElementById(controls));
+
+    await user.click(toggle());
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+  });
+
+  // (l) — FD7: a pointer pick collapses the palette and hands focus to the button, never `<body>`.
+  it('a pointer pick collapses the palette and focuses the button', async () => {
+    const user = userEvent.setup();
+    render(<ControlledHarness />);
+    await openPalette(user);
+
+    await user.click(radio(PALETTE[5].name));
+
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(toggle()).toHaveFocus();
+    expect(selectedName()).toHaveTextContent(PALETTE[5].name);
   });
 
   // (g)
@@ -177,8 +245,10 @@ describe('ColorPickerField', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const { rerender } = render(<ColorPickerField value={PALETTE[0].id} onChange={onChange} />);
+    await openPalette(user);
 
     await user.click(radio(PALETTE[2].name));
+    await openPalette(user);
     expect(checkedRadio()).toHaveAccessibleName(PALETTE[0].name);
 
     rerender(<ColorPickerField value={PALETTE[2].id} onChange={onChange} />);
@@ -204,6 +274,7 @@ describe('ColorPickerField', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<ColorPickerField value={PALETTE[0].id} onChange={onChange} />);
+    await openPalette(user);
 
     const label = document.querySelector(`[data-color-token="${PALETTE[4].id}"]`) as HTMLElement;
     await user.click(label);
@@ -213,7 +284,8 @@ describe('ColorPickerField', () => {
   });
 
   // (j)
-  it('has no axe violations at the default and at a later swatch', async () => {
+  it('has no axe violations collapsed at the default and open at a later swatch', async () => {
+    const user = userEvent.setup();
     const props: ColorPickerFieldProps = { value: PALETTE[0].id, onChange: () => {} };
     const { container: firstContainer, unmount: unmountFirst } = render(
       <ColorPickerField {...props} />,
@@ -224,6 +296,7 @@ describe('ColorPickerField', () => {
     const { container: secondContainer, unmount: unmountSecond } = render(
       <ColorPickerField value={PALETTE[7].id} onChange={() => {}} />,
     );
+    await openPalette(user);
     expect((await axe(secondContainer)).violations).toEqual([]);
     unmountSecond();
   });
