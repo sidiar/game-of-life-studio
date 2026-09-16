@@ -2652,9 +2652,12 @@ test.describe('Extinction auto-pause (Story 3.15)', () => {
     await expect(view(page)).toHaveAttribute('data-cycle', '2');
     await expect(view(page)).toHaveAttribute('data-status', 'paused');
     await expect(cycleValue(page)).toHaveText('0002');
+    await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Next cycle' })).toBeEnabled();
 
     await page.getByRole('button', { name: 'Stop & reset' }).click();
     await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
     await expect(cycleValue(page)).toHaveText('0000');
     await expect(populationRows(page).nth(0)).toContainText('1 (100%)');
     await expect(populationRows(page).getByRole('img', { name: 'extinct' })).toHaveCount(0);
@@ -2675,8 +2678,9 @@ test.describe('Extinction auto-pause (Story 3.15)', () => {
     await runButton(page).click();
     await expect(view(page)).toHaveAttribute('data-status', 'paused');
 
-    // 20 gen/sec so cycle 30 arrives in ~1.5s.
+    // 20 gen/sec (the ladder's top index, 3.13) so cycle 30 arrives in ~1.5s.
     await speedSlider(page).fill('4');
+    await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '20 generations per second');
     await page.getByRole('button', { name: 'Play' }).click();
     await expect(view(page)).toHaveAttribute('data-status', 'playing');
 

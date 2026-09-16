@@ -241,9 +241,11 @@ describe('isGridEmpty (FR-4.7, Decision B.5, Story 3.15)', () => {
   });
 
   it('does not read `age` — a non-zero age under an all-zero occupant is still empty', () => {
-    // A survivor that just died still carries its pre-death age for exactly one cycle, until the
-    // phase that clears `occupant` clears `age` alongside it. The predicate must not treat that
-    // cell as alive — an age left standing under an empty cell is not life (Decision B.5).
+    // The engine never produces this grid — every clearing phase writes `age = 0` with
+    // `occupant = 0` — so an `age`-reading "optimisation" would agree with `occupant` on every real
+    // grid and only this hand-built one can tell the two apart. Decision B.5 is emptiness, not
+    // age; the predicate must state that fact itself rather than borrow a different buffer's
+    // invariant.
     const grid = createGrid(3, 3);
     grid.age[4] = 12;
 

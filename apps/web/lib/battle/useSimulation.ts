@@ -48,8 +48,8 @@ export type { GenPerSec } from './simulationSpeed';
  *   <= 1 step per frame that is <= 10 Hz under any frame rate, needs no `performance.now()`, and is
  *   deterministic under the tests' fake scheduler. `pause()`, `step()` and `stop()` publish
  *   unconditionally so the displayed cycle is never stale while paused.
- * - **A ref-forwarding `StepRenderer` (FD3).** The loop is built once per session with
- *   `draw: (g) => rendererRef.current?.drawDiff(g)`, so a renderer that arrives AFTER the loop —
+ * - **A ref-forwarding `StepRenderer` (3.10 FD3).** The loop is built once per session with a
+ *   `draw` that forwards to `rendererRef.current?.drawDiff(g)`, so a renderer that arrives AFTER the loop —
  *   a child's construction effect fires before this hook's session effect — or is swapped (Story
  *   3.16's canvas rebuild, Story 3.18's fullscreen) never rebuilds the loop, and with no renderer
  *   the run keeps stepping headless (what the jsdom tests and Story 4.15's unmounted preview both
@@ -63,8 +63,8 @@ export type { GenPerSec } from './simulationSpeed';
  *   reachable from a test, never a silent no-op. `step()` and `resizeLive()` while playing throw
  *   too (FD5): FR-4.3 and FR-4.9 make both paused-only and Stories 3.12/3.16 disable the controls,
  *   so a call that arrives anyway is a consumer bug.
- * - **One keyed `settleStopped` for every "the loop stopped, `status` must follow" write (FD1,
- *   Story 3.15).** The thunk's extinction branch, the two loop-facing error wrappers (FD3) and
+ * - **One keyed `settleStopped` for every "the loop stopped, `status` must follow" write (3.15
+ *   FD1).** The thunk's extinction branch, the two loop-facing error wrappers (3.15 FD3) and
  *   `pause()` all call the SAME `settleStopped(session)` rather than each writing its own
  *   `{ status: 'paused', cycle, population }` shape — one write that cannot drift into three, keyed
  *   on `sameKey` for the same rebind window `publish` already guards (below). It never calls
@@ -259,8 +259,8 @@ function createSession(inputs: SessionInputs): SimulationSession {
   // the head comment.
   const compiled = compileSession(organisms);
 
-  // FD3 — the forwarding renderer. `drawDiff`, never `draw` (Trap 2); optional chaining is the
-  // headless case, not a guard against a bug. Wrapped (AC6, FD3 (a)): the loop clears its handle
+  // 3.10 FD3 — the forwarding renderer. `drawDiff`, never `draw` (Trap 2); optional chaining is
+  // the headless case, not a guard against a bug. Wrapped (3.15 AC6, FD3 (a)): the loop clears its handle
   // and rethrows on a throw from either loop-facing closure (`simulationLoop.ts`'s wedged-loop
   // rule), but that leaves nothing to tell React the run stopped — without `settleStopped` here,
   // `status` keeps reading `'playing'` over a dead loop (the 3-10 review finding: Play "does
@@ -375,8 +375,8 @@ export function useSimulation(
     );
   }, []);
 
-  // The one "the loop stopped, `status` must follow" write (FD1 (a), Story 3.15): the thunk's
-  // extinction branch, the two loop-facing error wrappers (FD3, inside `createSession`) and
+  // The one "the loop stopped, `status` must follow" write (3.15 FD1 (a)): the thunk's
+  // extinction branch, the two loop-facing error wrappers (3.15 FD3, inside `createSession`) and
   // `pause()` all call this SAME setter rather than each writing `{ status: 'paused', cycle,
   // population }` themselves — one write that cannot drift into three. It does NOT call
   // `loop.stop()` — the callers differ on whether the loop already stopped itself (extinction, a

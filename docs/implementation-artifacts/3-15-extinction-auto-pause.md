@@ -4,7 +4,7 @@ baseline_commit: ec350f825fe2bb2f6b2596317089bcb49220df44
 
 # Story 3.15: Extinction Auto-Pause
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -318,6 +318,20 @@ pure reducer — `threePhaseStep.ts:91-93`).
     into this branch (the 3.8 review reverted exactly that).
   - [x] (c) Dev Agent Record: FD1–FD4 options taken and why; the bundle numbers; the `npm run ci`
     exit code with named failures; which e2e projects the 3.14/3.15 blocks ran on.
+
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (2026-09-16), three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus an independent re-run of the gates.
+
+- [x] [Review][Patch] `isGridEmpty`'s doc comment and the `grid.test.ts` "does not read `age`" comment assert a one-cycle age lag the engine never produces — every clearing write is `occupant = 0; age = 0` together (`deathPhase.ts:91`, `conflictPhase.ts:69`, the `age` field's own doc) [packages/simulation/src/grid/grid.ts:131-136, packages/simulation/src/grid/grid.test.ts:244-246]
+- [x] [Review][Patch] The AC5 (d) glider on a 12×12 reaches row 11 at cycle 33 and is edge-mangled from cycle 37 (measured: 5 → 4 → 3 → 4 cells, a block by 39) — the "never reaches an edge across the 40-cycle span" comment is false (the AC's own arithmetic was off); the property still holds but is not testing a glider at the top of its range [packages/simulation/src/strategy/conwayGoldens.test.ts:188-190]
+- [x] [Review][Patch] Task 2 (d) is ticked but `initialGrid.occupant[4] === 1` (AR-31) is not asserted after the auto-pause, and AC2's "the seed is not re-minted" is not asserted either [apps/web/lib/battle/useSimulation.test.ts:808-828]
+- [x] [Review][Patch] The driver-side `step` error wrapper (`useSimulation.ts:312-319`) is untested and the Dev Agent Record calls its catch body "unreachable from a valid session" — it is reachable from a throwing cadence publish (`derivePopulation` is already spy-mocked in the test file) [apps/web/lib/battle/useSimulation.ts:312-319, apps/web/lib/battle/useSimulation.test.ts]
+- [x] [Review][Patch] e2e 3.15 (a) never asserts `data-status` after Stop & reset nor the Play label / enabled Next cycle after the second auto-pause; (b)'s `speedSlider(page).fill('4')` carries "20 gen/sec" only as a comment [apps/web/e2e/battleRoute.spec.ts:2620-2700]
+- [x] [Review][Patch] Comment/title nits that read as facts: `block()` "A 4x4 block" (it is a 2×2 block on a 4×4 field); the trap-2 test comment's "0, paused" (the mutation leaves `status` `'playing'`); the throw-test comment says production "behaves the same way" then describes the opposite; `isGridEmpty`'s "`some` allocates a callback closure per call" (the allocation is at the call site); the view test title "one commit" on a test that counts no commits; the hook head comment still quotes the unwrapped `draw: (g) => …` snippet; "FD3" names both 3.10's forwarding renderer and 3.15's wrappers [apps/web/lib/battle/useSimulation.test.ts, apps/web/lib/battle/useSimulation.ts:51-52, packages/simulation/src/grid/grid.ts, apps/web/components/battle/simulation/BattleSimulationView.test.tsx]
+- [x] [Review][Patch] Dev Agent Record omits AC10's Run-chunk gzip size and Task 1 (d)'s mutation confirmation ("reddens under an `age`-reading or early-stop mutation") [docs/implementation-artifacts/3-15-extinction-auto-pause.md]
+- [x] [Review][Defer] `apps/web/playwright.config.ts` pins `PORT = 4173` with `reuseExistingServer: !CI`, so a lane's local e2e silently runs against whichever worktree's `serve` holds the port — this review's first run of the 3.14/3.15 blocks was 4 red against the epic-4 lane's build (no 3.15 code) and 14/14 green against this tree on a private port [apps/web/playwright.config.ts:5,31] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -676,9 +690,9 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` skill.
 | format:check | exit 0 (after `prettier --write` on the three touched test/index files) |
 | spec:check | exit 0 — 250 cited ids resolve |
 | boundary:check | exit 0 |
-| test:coverage | exit 0 — 1351 tests passed; `packages/simulation` and `packages/domain` at 100% per file (gated, ≥90%); `apps/web`'s `useSimulation.ts` at 98.51%/96.22%/98.38% stmt/branch/line (no gate) — the two uncovered lines are the `step` wrapper's catch body for a `session.step()` throw, which the story's own Dev Notes say is unreachable from a valid session (M12 compiles the roster up front; only the `drawDiff`-throws path is reachable and is tested) |
+| test:coverage | exit 0 — 1351 tests passed; `packages/simulation` and `packages/domain` at 100% per file (gated, ≥90%); `apps/web`'s `useSimulation.ts` at 98.51%/96.22%/98.38% stmt/branch/line (no gate) — the two uncovered lines were the `step` wrapper's catch body. ~~The story's own Dev Notes say a `session.step()` throw is unreachable from a valid session~~ **Review correction:** it is reachable — the cadence publish's `derivePopulation` can throw, and the test file already spy-mocks it; the review added that test (`useSimulation.test.ts`, the error-stop describe) and the hook is now 100% lines |
 | build:standalone | exit 0 |
-| bundle:check | exit 0 — `/battle` 308.7 KB gzip (1.3 KB headroom, was 308.6/1.4 KB before 3.15 — +0.1 KB); `/battle/new` 308.6 KB gzip (1.4 KB headroom); `/` 333.4 KB (6.6 KB headroom); `/organisms` 295.3 KB (9.7 KB headroom) |
+| bundle:check | exit 0 — `/battle` 308.7 KB gzip (1.3 KB headroom, was 308.6/1.4 KB before 3.15 — +0.1 KB); `/battle/new` 308.6 KB gzip (1.4 KB headroom); `/` 333.4 KB (6.6 KB headroom); `/organisms` 295.3 KB (9.7 KB headroom). **Review addition (AC10):** the lazy Run chunk (the one carrying `settleStopped`) is 6.0 KB gzip (17.8 KB raw) — 5.9 KB after 3.14, +0.1 KB |
 | bench | exit 0 — `step 100x60 x20` mean 7.993 ms (the `isGridEmpty` scan runs in the hook's thunk, outside the benchmarked `threePhaseStep`, so it does not appear here) |
 | bench:check | exit 0 — frame 8.134 ms vs 16.667 ms budget, **51.2% headroom** (measured under `load averages: 6.07 4.21 3.75`) |
 | e2e | **exit 1** — 606 passed, 4 skipped, **2 failed**, both PRE-EXISTING and named by the story: `[webkit]` and `[tablet]` › `Transport controls (Story 3.12) › Tab reaches Play, Next cycle, Stop & reset in order, and Enter on Play keeps focus on the (now Pause) button (AC8)` — a focus-after-Tab assertion unrelated to this story's changes, not fixed here per the story's instruction |
@@ -688,6 +702,31 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` skill.
 `extinct organism shows the skull, a zero count, and a clean axe scan` (3.14, rewritten tail),
 `a lone painted cell auto-pauses at cycle 1, resumes and auto-pauses again, and Stop & reset undoes it`
 (3.15a), `Three-Way Skirmish keeps playing past cycle 30 once settled into still-lifes` (3.15b).
+
+**Review verification (Opus, 2026-09-16) — independent re-run, not the dev's account:**
+
+- `typecheck`, `lint`, `format:check`, `spec:check`, `test:coverage` all exit 0 on the dev commit
+  (1351 web tests; `packages/simulation` 100% per file); after the review patches: 407 simulation
+  tests, 82 hook + view tests, hook at 100% lines.
+- **Task 1 (d)'s mutations, now actually run:** (A) `|| grid.age[i] !== 0` in the predicate → the
+  "does not read `age`" test reddens (1 failed / 54 passed); (B) `i < cells - 1` → four tests
+  redden (the last-index example, the dense-equivalence property, the any-position property, the
+  last-cell property). The engine-level property in `conwayGoldens.test.ts` cannot redden under
+  (A) — the engine never leaves `age` standing under an empty cell — which is why the hand-built
+  `grid.test.ts` case exists.
+- The AC5 (d) glider, measured on the AC's 12×12: touches row 11 at cycle 33, edge-mangled from
+  cycle 37 (5 → 4 → 3 → 4 cells, a block by 39), never empty. Moved to 16×16 so the whole [0, 40]
+  range tests a glider.
+- e2e (b)'s premise measured: Three-Way Skirmish (`battleA`) over **300 seeds × 80 cycles** — 0
+  extinctions, minimum population 8 (from cycle 9). The test does not depend on the run's seed.
+- The 3.14 + 3.15 e2e blocks on `chromium` + `webkit` (`--workers=1`): **14/14 passed** against
+  this tree's own build — but only on a private port. The first attempt ran 4 red because
+  `playwright.config.ts`'s `reuseExistingServer` picked up the epic-4 lane worktree's `serve` on
+  4173 (a build with no 3.15 code); recorded as a deferred tooling item.
+- `build:standalone` + `bundle:check` exit 0 after the patches (numbers unchanged from the table).
+- The two PRE-EXISTING `[webkit]`/`[tablet]` "Tab reaches Play…" failures the dev names are the
+  local-macOS-WebKit condition `deferred-work.md` already records (3-13 sections); CI's Linux
+  WebKit passes them and `main` is green through #43. Not a finding about this story.
 
 ### Completion Notes List
 
@@ -759,6 +798,13 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` skill.
   `pause()` and two new error-stop wrappers (closing the 3-10 review's deferred item); view and
   route comments/tests updated to match; `deferred-work.md` updated. `npm run ci` green except the
   two pre-existing 3.12 webkit/tablet focus-order failures named in the story.
+- 2026-09-16 — Code review (Opus, `bmad-code-review`, three parallel layers): 7 patches applied
+  (the false `age`-lag rationale in `isGridEmpty`'s doc and test comment; the AC5 (d) glider moved
+  to 16×16 with the measured 12×12 edge contact recorded; AR-31 / seed assertions added to the
+  auto-pause hook test; a test for the driver-side `step` wrapper, which the record wrongly called
+  unreachable; e2e (a)/(b) assertions tightened; comment/title nits; Run-chunk size and mutation
+  confirmation added to the record), 1 deferred (the shared-port `reuseExistingServer` lane
+  hazard, pre-existing), 0 decisions outstanding. Status → done.
 
 Dev Model: sonnet   # a branch in an existing closure over contracts 3.8/3.10 already pinned (stop-from-inside-step, keyed publish, the marked seam); FD1–FD4 resolve every open call, and 4.15 consumes the hook, not a pattern
 Proposed lane gate: none

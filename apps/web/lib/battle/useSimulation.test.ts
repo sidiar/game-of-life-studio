@@ -109,7 +109,7 @@ function blinker(): Grid {
 function lone(): Grid {
   return gridFromDense(gridFromPattern(['...', '.a.', '...'], LEGEND));
 }
-/** A 4x4 block — a still-life (AC4): the picture never changes, but `age` keeps climbing. */
+/** A 2x2 block on a 4x4 field — a still-life (AC4): the picture never changes, but `age` keeps climbing. */
 function block(): Grid {
   return gridFromDense(gridFromPattern(['....', '.aa.', '.aa.', '....'], LEGEND));
 }
@@ -808,10 +808,13 @@ describe('useSimulation — extinction auto-pause (AC1, AC2, AC3, FR-4.7, Decisi
   it('a lone cell at 10 gen/sec auto-pauses at cycle 1: one keyed publish, loop stopped, empty grid painted', () => {
     const h = harness(10);
     const fake = createFakeRenderer({ cols: 3, rows: 3 });
-    const { result } = mount(lone(), CONWAY, h);
+    const initialGrid = lone();
+    const { result } = mount(initialGrid, CONWAY, h);
     act(() => result.current.attachRenderer(fake.renderer));
     act(() => result.current.play());
     vi.mocked(derivePopulation).mockClear();
+    // An auto-pause is a pause, not a Stop (AC2): the seed is not re-minted.
+    const random = vi.spyOn(Math, 'random');
 
     act(() => h.scheduler.frame(0));
     act(() => h.scheduler.frame(100));
@@ -827,6 +830,9 @@ describe('useSimulation — extinction auto-pause (AC1, AC2, AC3, FR-4.7, Decisi
     expect(fake.drawFull).toHaveLength(1);
     expect(result.current.liveSize).toEqual({ cols: 3, rows: 3 });
     expect(derivePopulation).toHaveBeenCalledTimes(1);
+    expect(random).not.toHaveBeenCalled();
+    // `initialGrid` is untouched (AR-31, FR-4.8): the live buffers went empty, the input did not.
+    expect(initialGrid.occupant[4]).toBe(1);
   });
 
   it('the auto-pause frame commits exactly ONCE — never a status commit plus a publish commit (trap 3)', () => {
@@ -850,8 +856,8 @@ describe('useSimulation — extinction auto-pause (AC1, AC2, AC3, FR-4.7, Decisi
 
   it('off-cadence extinction still publishes the EXACT cycle at 20 gen/sec (trap 2)', () => {
     // cyclesPerPublish(20) === 2; the lone cell dies at cycle 1, which is off the cadence. Without
-    // the stop path's unconditional publish, the cadence branch would not fire (1 is odd) and the
-    // view would show 0, paused — wrong by one.
+    // the stop path's own publish, the cadence branch would not fire (1 is odd) and the view would
+    // keep showing cycle 0 (and `status: 'playing'`) over a loop that has already stopped.
     const h = harness(20);
     const { result } = mount(lone(), CONWAY, h);
     act(() => result.current.play());
@@ -1005,10 +1011,10 @@ describe('useSimulation — the error-stop follows the same path (AC6, FD3, Stor
 
     // Caught INSIDE `act` (not let escape it): React's `act` only flushes pending state updates
     // when its callback returns normally (verified against `react/cjs/react.development.js`'s
-    // `act`: a callback that throws skips `flushActQueue` entirely). A real RAF callback that
-    // throws behaves the same way in production — the browser's default handling stops that call
-    // frame, but the `setView` dispatched from inside `settleStopped` already scheduled its update
-    // with React independently of the throw, and it flushes regardless.
+    // `act`: a callback that throws skips `flushActQueue` entirely). Production does NOT have
+    // this problem — a RAF callback that throws still leaves the `setView` dispatched from inside
+    // `settleStopped` scheduled with React, and it flushes regardless; only the test harness
+    // needs the error kept inside the callback.
     let caught: unknown;
     act(() => {
       try {
@@ -1021,6 +1027,38 @@ describe('useSimulation — the error-stop follows the same path (AC6, FD3, Stor
     expect(caught).toBe(boom);
     // The step completed before the paint threw — cycle 1 stands, and `status` follows to paused
     // instead of reading 'playing' over a dead loop (the 3-10 review finding).
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(1);
+    expect(h.scheduler.pending()).toBe(0);
+
+    act(() => result.current.play());
+    expect(h.scheduler.pending()).toBe(1);
+  });
+
+  it('a throw from inside the step thunk (a cadence publish that throws) takes the driver-side wrapper: status follows to paused, and play() resumes', () => {
+    // The only throw a valid session can raise from inside `session.step()` is the publish's own
+    // `derivePopulation` (M12 compiles the roster up front, so the strategy does not throw) —
+    // reachable here because `./population` is spy-mocked. The wrapper's `settleStopped` then
+    // sweeps again with the real implementation (`mockImplementationOnce` is consumed).
+    const h = harness(10);
+    const boom = new Error('publish boom');
+    const { result } = mount(blinker(), CONWAY, h);
+    act(() => result.current.play());
+    act(() => h.scheduler.frame(0));
+    vi.mocked(derivePopulation).mockImplementationOnce(() => {
+      throw boom;
+    });
+
+    let caught: unknown;
+    act(() => {
+      try {
+        h.scheduler.frame(100);
+      } catch (error) {
+        caught = error;
+      }
+    });
+
+    expect(caught).toBe(boom);
     expect(result.current.status).toBe('paused');
     expect(result.current.cycle).toBe(1);
     expect(h.scheduler.pending()).toBe(0);

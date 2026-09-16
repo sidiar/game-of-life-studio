@@ -172,7 +172,7 @@ export default function BattleSimulationView({
   // flip. The bar itself never sees `sim` (spec §3.13 gives it ONE `onPlayPause`).
   //
   // Gap closed by Story 3.15: the hook's thunk now publishes `status: 'paused'` itself on both an
-  // extinction auto-pause (FR-4.7) and a mid-frame throw (the loop-facing wrappers, FD3) — the same
+  // extinction auto-pause (FR-4.7) and a mid-frame throw (the loop-facing wrappers, 3.15 FD3) — the same
   // keyed `settleStopped` write `pause()` already used. `handlePlayPause` therefore needs no guard:
   // `status` is never stale over a loop that has already stopped itself, so a button that reads
   // "Pause" always means the loop really is running.

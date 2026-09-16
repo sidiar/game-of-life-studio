@@ -185,8 +185,12 @@ describe('extinction is a normal outcome, not an error (Decision B.5, Story 3.15
   const BLINKER_PATTERN = ['.....', '..X..', '..X..', '..X..', '.....'];
   const GLIDER_DENSE = gridFromPattern(['.X.', '..X', 'XXX'], LIVE);
 
-  // The glider on a 12x12 field, corner-placed so its bounding box never reaches an edge across
-  // the 40-cycle span this property draws from (a glider translates (1,1) every 4 cycles).
+  // The glider on a 16x16 field, corner-placed so it never reaches an edge across the 40-cycle span
+  // this property draws from: it translates (1,1) every 4 cycles, so by cycle 40 its 3x3 box sits
+  // at rows/cols 10-12 and the transitional phases reach 13. ⚠️ Not 12x12 as the story's AC5 (d)
+  // says — measured there, the glider touches row 11 at cycle 33 and is edge-mangled from cycle
+  // 37 (5 → 4 → 3 → 4 cells, a block by 39): still never empty, so the property held, but the top
+  // of the range was no longer testing a glider.
   const buildNonExtinguishingGolden = (index: 0 | 1 | 2 | 3): Grid => {
     switch (index) {
       case 0:
@@ -196,11 +200,11 @@ describe('extinction is a normal outcome, not an error (Decision B.5, Story 3.15
       case 2:
         return gridFromDense(gridFromPattern(BLINKER_PATTERN, LIVE));
       case 3:
-        return gridFromDense(placePattern(emptyGrid(12, 12), GLIDER_DENSE, 0, 0));
+        return gridFromDense(placePattern(emptyGrid(16, 16), GLIDER_DENSE, 0, 0));
     }
   };
 
-  it('a block, a beehive, a blinker, and a glider (12x12) are NEVER extinguished by any cycle count in [0, 40]', () => {
+  it('extinction-only auto-stop: a block, a beehive, a blinker, and a glider (16x16) are NEVER extinguished by any cycle count in [0, 40]', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 0, max: 40 }),
@@ -214,7 +218,7 @@ describe('extinction is a normal outcome, not an error (Decision B.5, Story 3.15
     );
   });
 
-  it('the lone cell is empty for every cycle count >= 1, and only for those', () => {
+  it('extinction-only auto-stop: the lone cell is empty for every cycle count >= 1, and only for those', () => {
     fc.assert(
       fc.property(fc.integer({ min: 0, max: 40 }), (cycles) => {
         const grid = gridFromDense(gridFromPattern(['...', '.X.', '...'], LIVE));

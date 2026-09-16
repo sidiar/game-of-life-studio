@@ -1229,3 +1229,19 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   no existing test builds, and the per-cycle check's correctness is already pinned by the off-cadence
   test (20 gen/sec, trap 2) and the engine-level property (`conwayGoldens.test.ts`, AC5 (d)) without
   it. Revisit if a future story needs the re-seeding path exercised directly.
+
+## Deferred from: code review of 3-15-extinction-auto-pause (2026-09-16)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **`apps/web/playwright.config.ts` pins `PORT = 4173` with `reuseExistingServer: !CI`, so a lane's
+  local e2e silently runs against whichever worktree's `serve` currently holds the port.** Observed
+  in this review: the 3.14/3.15 e2e blocks ran **4 red** (the lone cell reached cycle 49 still
+  `playing`) because the epic-4 lane worktree's `serve out -l 4173` was up — a build with no 3.15
+  code — and **14/14 green** against this tree's own build on a private port. Playwright's
+  `webServer.url` probe cannot tell one tree's `out/` from another's, and the dev agent's own green
+  run was equally at the mercy of which lane's server was up. Pre-existing (Story 1.2's config),
+  not this story's. Candidate fixes for whichever story next touches the e2e config or the
+  `implement-next-story` skill: derive the port from the worktree (e.g. `PLAYWRIGHT_PORT` set by
+  the lane runner, or a hash of `process.cwd()`), or set `reuseExistingServer: false` and accept
+  the rebuild — either makes "the e2e passed locally" mean this tree.

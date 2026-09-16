@@ -130,14 +130,15 @@ export function clearGrid(grid: Grid): Grid {
  * predicate states its own bound rather than trusting a buffer someone handed it.
  *
  * ⚠️ Reads `occupant` ONLY — never `age`. Decision B.5 is an emptiness check, not a "nothing
- * changed" check: a cell can carry a non-zero `age` under an `occupant` of `0` for exactly one
- * cycle (a survivor that just died still has its pre-death age until the phase clears it — see the
- * `age` field's doc comment), and reading `age` here would call that cell "alive" and defeat
- * extinction auto-pause on the very cycle it exists to catch.
+ * changed" check, and `age` is not a second copy of the occupancy: the phases clear the two
+ * together today (see the `age` field's doc comment), so an `age`-reading scan would happen to
+ * agree on every grid the engine produces — which is exactly why the "does not read `age`" test
+ * plants a non-zero `age` under an empty cell by hand. The predicate must keep stating B.5's own
+ * fact rather than an invariant of a different buffer that a future phase change could relax.
  *
- * A plain indexed loop, not `occupant.some(...)`: `TypedArray.prototype.some` allocates a callback
- * closure per call on the hot per-cycle path this predicate is meant for (the hook calls it once
- * per driven cycle, `useSimulation.ts`) — the `gridStats.ts` scan shape avoids the same cost.
+ * A plain indexed loop, not `occupant.some(...)`: this is the hot per-cycle path (the hook calls
+ * it once per driven cycle, `useSimulation.ts`), and a callback invocation per cell is the cost
+ * the `gridStats.ts` scan shape avoids for the same reason.
  */
 export function isGridEmpty(grid: Grid): boolean {
   const cells = grid.width * grid.height;

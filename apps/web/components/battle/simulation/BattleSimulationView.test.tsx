@@ -792,7 +792,7 @@ describe('BattleSimulationView — cycle counter & population stats (Story 3.14)
 
   // Extinction auto-pause (Story 3.15, FR-4.7, Decision B.5): no new state, hook, effect or prop —
   // observed through `status` exactly like a manual pause (AC8).
-  it('auto-pauses on the first extinct cycle: one commit, the skull row, Play resumable, Next cycle enabled', () => {
+  it('auto-pauses on the first extinct cycle: the skull row, Play resumable, Next cycle enabled, and Stop & reset undoes it', () => {
     installContexts();
     const driver = installFrameDriver();
     const { container } = render(
