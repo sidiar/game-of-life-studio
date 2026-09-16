@@ -76,6 +76,26 @@ The lesson generalises: a guard that runs once at the start is a guard against t
 the start. Anything that must hold at the moment of an irreversible step (branching,
 committing) is re-checked at that moment, cheaply, even though it "just passed".
 
+*Second incident, same shape.* On 2026-09-16 the recipe was followed — epic 4 had run in
+`lane-epic-4` for days — and then two terminals were opened in the primary checkout and told
+`--epic 3` and `--epic 4`. Nothing in the skill knew that epic 4 *had* a worktree: the
+mapping lived in the owner's head, and the pre-Step-2 check only fired once both runs had
+written into the tree. The fix has two parts, both in `lane-gates.py`:
+
+- `resolve` derives the lane from the tree. `git worktree list` already records every
+  `lane-epic-N` worktree, so that is the source of truth — nothing to configure, and it
+  goes away with the worktree. A `lane-epic-4` session needs no flag; the primary refuses
+  `--epic 4` while `lane-epic-4` exists. (`lane-gates.yaml` was the obvious home and the
+  wrong one: it is committed and shared, a worktree path is local to one clone.)
+- `lock` closes the window `resolve` cannot see — two sessions in the *same* tree for
+  epics that have no worktree yet. One file per working tree, in its git dir so no project
+  has to gitignore it, naming the session that holds it. The second Step 0 stops before
+  writing anything. A holder silent for an hour across its transcripts is presumed dead
+  and taken over, so a run killed by a usage limit does not hold the tree hostage; a holder
+  with no transcript at all is not presumed anything, and the owner decides.
+
+The pre-Step-2 re-check stays. The lock is a file; the tree is the evidence.
+
 ## Never the same model twice
 
 *Incident, then a second one.* Two commits, two weeks apart.

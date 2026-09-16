@@ -44,12 +44,18 @@ runs took 4 h 44 and 4 h 30 on the clock and 74 and 61 minutes of work.
   of open PRs is the source of truth for what awaits a human. A story branch's `done` is a
   proposal; it becomes fact when the PR merges. Nobody edits the status file by hand.
   ([why](DESIGN.md#the-pr-is-the-state-machine))
-- **The re-entry guard fails closed.** Every run starts by asking, in order: is there an open
-  PR for this lane, a dangling `story/*` branch, a half-written story file, an unanalysed
-  epic pair, a gate not yet satisfied? Any yes stops the run and hands back. That is what
-  makes it safe to fire on a loop — and the checks that matter most are re-run right before
-  the irreversible step. ([why](DESIGN.md#the-re-entry-guard-fails-closed),
+- **The re-entry guard fails closed.** Every run starts by asking, in order: is this the
+  right working tree for the lane, is the tree free, is there an open PR for this lane, a
+  dangling `story/*` branch, a half-written story file, an unanalysed epic pair, a gate not
+  yet satisfied? Any yes stops the run and hands back. That is what makes it safe to fire
+  on a loop — and the checks that matter most are re-run right before the irreversible
+  step. ([why](DESIGN.md#the-re-entry-guard-fails-closed),
   [the incident](DESIGN.md#one-lane-per-working-tree))
+- **The working tree names the lane.** A git worktree called `lane-epic-4` *is* epic 4's
+  lane: `git worktree list` is the record, so there is nothing to configure and nothing to
+  remember. A session in that worktree needs no `--epic`; the primary checkout refuses
+  `--epic 4` while that worktree exists. Each tree also carries a lock in its git dir, so
+  a second session landing in the same tree stops at Step 0 instead of colliding later.
 - **Never the same model twice.** The reviewer is derived from the implementer by a lookup
   table, not chosen: Sonnet → Opus, Opus → Fable. The premise is that a model reviewing its
   own output tends to re-run the reasoning that produced the bug; the rule became a table
@@ -100,9 +106,10 @@ implement the next story
 or `implement the next story --epic 4` to name the lane. It runs the guard, then
 create → dev → review, opens the PR, prints the stats table, and stops. Say it again for
 the next story, or put it on `/loop` (Claude Code's recurring-run mode) — the guard makes
-repeated firing safe. To run a second epic in parallel, open a git worktree in a fresh
-session and run the same phrase with the other `--epic`; SKILL.md's *Lanes* section has
-the recipe.
+repeated firing safe. To run a second epic in parallel, open a git worktree named
+`lane-epic-N` in a fresh session and say the same phrase there — the worktree's name is
+the lane, so `--epic` is only needed the first time, before the worktree exists;
+SKILL.md's *Lanes* section has the recipe.
 
 It is built to run unattended, with permission prompts bypassed: it creates branches,
 pushes them, and opens PRs without asking. It never merges, never pushes to `main`, and
@@ -113,6 +120,8 @@ draft.
 
 ```
 python3 lane-gates.py --root fixtures list
+python3 lane-gates.py resolve            # which lane this checkout serves
+python3 lane-gates.py lock status        # who, if anyone, is running in it
 python3 -m unittest
 ```
 

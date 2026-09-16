@@ -3,6 +3,23 @@
 Dates are the dates the change landed in the source project; the skill was extracted
 with its history on 2026-09-15.
 
+## 1.1.0 — 2026-09-16
+
+The working tree names the lane, and a tree can be held by one run at a time. After two
+terminals in the primary checkout were told `--epic 3` and `--epic 4` while epic 4's
+worktree sat idle beside them:
+
+- `lane-gates.py resolve [--epic N]` — the lane this working tree serves, from
+  `git worktree list`: a worktree named `lane-epic-N` is epic N's, a bare call inside it
+  needs no flag, and the primary checkout refuses `--epic N` while that worktree exists.
+  Step 0 runs it instead of reasoning about the board by eye.
+- `lane-gates.py lock acquire | release | status` — one lock per working tree, in its git
+  dir (`.git/` or `.git/worktrees/<name>/`), never tracked. Step 0 takes it, every exit
+  releases it, and a second session in the same tree stops at Step 0 with the holder's
+  session, epic, story and last activity. A holder silent for an hour is taken over.
+- Step 2's re-check now also asks `lock status`.
+- `fixtures/`-independent tests for both, on throwaway git repos with real worktrees.
+
 ## 1.0.0 — 2026-09-15
 
 First standalone release. The skill as it ran thirty stories in its source project,
