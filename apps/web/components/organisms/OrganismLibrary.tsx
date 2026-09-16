@@ -318,7 +318,10 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
       {/* Gated on `mounted`, not `open`, so the chunk is fetched on the first open only and the
           fade-out completes before unmount (the `useLeaveGuard` contract). The Dialog portals to
           `document.body` regardless of where this sits in the tree. */}
-      {editorMounted && <OrganismEditorModal {...modalProps} />}
+      {/* `sorted` is the same list the cards render, so the editor's default colour is derived
+          from exactly what the user sees (Story 4.8); unmemoised because the modal reads it once
+          (Story 4.9 reads it per render and that is still one prop). */}
+      {editorMounted && <OrganismEditorModal {...modalProps} library={sorted} />}
     </section>
   );
 }

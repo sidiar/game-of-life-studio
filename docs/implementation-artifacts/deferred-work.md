@@ -1062,11 +1062,11 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   reasons (sanitised `.value`, Playwright's `fill()` throwing on non-numeric text for
   `type="number"`, the Basic Information column's own scroll container, Firefox's lenient
   `badInput`) are recorded in the component's header.
-- **The mockup's Color-before-Dominance order is not followed.** `organism-editor.html` places the
-  colour picker between Name and Dominance; this story mounts `name → dominance` in the
+- ~~**The mockup's Color-before-Dominance order is not followed.** `organism-editor.html` places
+  the colour picker between Name and Dominance; this story mounts `name → dominance` in the
   `basicInfo` fragment because Story 4.8 has not landed yet. Story 4.8 inserts `<ColorPicker>`
   between `<OrganismNameField>` and `<DominanceField>` in that fragment — a pointer for that
-  story, not a divergence to fix here.
+  story, not a divergence to fix here.~~ — **✅ Resolved in Story 4.8.**
 - **`parseDominanceText` / `clampDominance` / `isDominanceInRange` are dominance-named**, living in
   `apps/web/lib/organisms/dominance.ts`. Story 4.11's Age / Neighbor-count condition inputs want
   the identical parse/clamp shape; generalise to `lib/organisms/integerInput.ts` when they become
@@ -1128,10 +1128,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **No `transition` on the switch** (the mockup's `all 0.3s`) — the Story 4.5 FD5 rule (an axe
   scan landing mid-fade measures a ratio no settled state has), so the knob jumps instead of
   sliding. A motion-design call for the UX touch, not a defect.
-- **`colorToken` is seeded at `DEFAULT_COLOR_TOKEN` as a stopgap** (`organismDraft.ts`, FD5).
+- ~~**`colorToken` is seeded at `DEFAULT_COLOR_TOKEN` as a stopgap** (`organismDraft.ts`, FD5).
   Story 4.8 owns the M6 next-unused / least-used derivation and must **replace** the seed, not add
   a second source. Until then a new organism's aging example strip is sky-blue — the same token as
-  Conway's Classic — and that coincidence carries no meaning.
+  Conway's Classic — and that coincidence carries no meaning.~~ — **✅ Resolved in Story 4.8.**
 - **The strip is a live preview (flat when Off), not a permanent ramp** (FD4) — this story's
   reconciliation of `epics.md:1074` ("shows the strip … when rendered") with
   `organism-editor-design.md:271` ("Visual Example (when ON)"). **Flagged for Sidiar**: a permanent
@@ -1146,6 +1146,40 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **The 4.13 Save gate has nothing to check for `agingEnabled`.** It is a boolean the switch can
   only set to `true`/`false` — there is no "invalid" state to guard against, unlike Story 4.11's
   numeric condition inputs.
+
+## Deferred from: Story 4-8-color-picker-selection-defaults (2026-09-16)
+
+- **The mockup's "Change Color ▾" collapse toggle and its `.collapsed` palette are not built**
+  (FD7). The AC says every one of the 20 swatches displays, and the design doc's layout
+  (`organism-editor-design.md:170-182`) shows the grid open; the mockup's collapse
+  (`organism-editor.html:227-254, 1263-1269`) contradicts both. A mockup-refresh note for the next
+  UX touch, not a defect.
+- **The swatch grid is `repeat(auto-fill, 40px)`, not the mockup's `repeat(8, 1fr)`** (FD7 — the
+  mockup's fixed 8-column grid yields 27px targets in a 320px column, 22px at the compressed tier,
+  below WCAG 2.5.8's 24px minimum). The selected swatch's state is an inset ring + `✓`, not the
+  mockup's accent border + `rgba` glow; the hover is a `:focus-within`/`:hover` outline, not the
+  mockup's scale transform. A mockup-refresh note.
+- **The large display is 100×100 per the AC / design doc, not the mockup's 44×44**, and its
+  background is the identity colour at full opacity, not the design doc's "60% opacity" — the
+  display shows exactly what the grid paints. Flagged for the next UX touch.
+- **The description carries only the mockup's first sentence.** Story 4.9 appends the warning
+  sentence when the reuse warning exists (NFR-4.1: no copy promising behaviour the build lacks).
+- **The seed is read once, at mount, from the library as loaded (FD9).** Opening the editor during
+  the `loading`/`seeding` window (single-digit ms on localStorage) seeds from an empty list, i.e.
+  `PALETTE[0]`, which always collides with Conway's Classic. If this is ever observed, the fix is
+  gating `requestCreate` on `status === 'ready'` in `<OrganismLibrary>` (with the `error` branch
+  handled), **never** re-seeding the draft in an effect. **Flagged for Sidiar.**
+- **`VisuallyHidden` / `HiddenRadio` now exist in two hand copies** (`GridSettingsSection.tsx`,
+  `ColorPickerField.tsx`) across the mode split. The third caller decides whether a
+  `components/a11y/` primitive is born — the same shape as the 3.16 `<LadderSlider>` /
+  `<RangeSlider>` question above.
+- **Story 4.13's "no color" validation item is unreachable by construction.** `draft.colorToken`
+  is always a `PALETTE` id (seeded by `defaultColorToken`, written only by a radio whose `value` is
+  a `PALETTE` id); 4.13 should confirm this and not add a colour-specific check — the same note the
+  4.6 section left for dominance.
+- **Story 4.25 must pass the battle's library** to `createNewOrganismDraft` / the modal's
+  `library` prop — the roster is not the library, and a default derived from the roster alone
+  would reuse a token another library organism holds.
 
 ## Deferred from: Story 3-14-cycle-counter-population-stats (2026-09-16)
 

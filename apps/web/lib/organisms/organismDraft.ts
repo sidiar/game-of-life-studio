@@ -1,5 +1,5 @@
 import { NEW_ORGANISM_DOMINANCE, type Organism } from '@gol/domain';
-import { DEFAULT_COLOR_TOKEN } from '@/lib/palette/paletteRegistry';
+import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 
 /**
  * The editor's unsaved organism (RFC-005 Decision 1: ephemeral UI state, local to the modal —
@@ -8,10 +8,10 @@ import { DEFAULT_COLOR_TOKEN } from '@/lib/palette/paletteRegistry';
  * `useState` per field: Story 4.17 seeds the whole draft from a loaded `Organism` in one
  * assignment, Story 4.23 diffs one object against one seed for the editor's own dirty scope
  * (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one field per story — 4.6
- * `dominance` and 4.7 `agingEnabled`/`colorToken` are done; 4.8 replaces the `colorToken` seed
- * (and adds the picker) and 4.10 adds `survivalRules` — until it is
- * `Omit<Organism, 'id' | 'schemaVersion'>`. A `Pick` of the domain entity so the field types are
- * the schema's, never re-declared. Mirror of `lib/battle/newBattleDraft.ts`.
+ * `dominance`, 4.7 `agingEnabled`/`colorToken` and 4.8's M6 colour seed are done; 4.10 adds
+ * `survivalRules` — until it is `Omit<Organism, 'id' | 'schemaVersion'>`. A `Pick` of the domain
+ * entity so the field types are the schema's, never re-declared. Mirror of
+ * `lib/battle/newBattleDraft.ts`.
  */
 export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled' | 'colorToken'>;
 
@@ -26,16 +26,17 @@ export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled'
  * "Aging: OFF" (`organism-editor-design.md:530`) — a boolean has no range to single-source, so
  * there is no `NEW_ORGANISM_AGING_ENABLED` constant (it would be a name for `false`); it happens
  * to equal `CONWAYS_CLASSIC.agingEnabled`, which is a coincidence, not a derivation. `colorToken`
- * seeds at `DEFAULT_COLOR_TOKEN` as a stopgap the Story 4.7 aging example strip needs today —
- * Story 4.8 replaces this seed with the M6 next-unused / least-used derivation; nothing else may
- * read the seed's VALUE as meaningful. A fresh object per call, because the draft is diffed
- * against its seed and a shared seed would move with every edit.
+ * is the M6 default for the library the editor opened over (Story 4.8, FR-2.3): `usedColorTokens`
+ * is one token per organism, taken from the caller's loaded library — Story 4.25's battle-origin
+ * editor passes the same list; Story 4.17 does not call this factory at all, it seeds from the
+ * record. A fresh object per call, because the draft is diffed against its seed and a shared seed
+ * would move with every edit.
  */
-export function createNewOrganismDraft(): OrganismDraft {
+export function createNewOrganismDraft(usedColorTokens: readonly string[]): OrganismDraft {
   return {
     name: '',
     dominance: NEW_ORGANISM_DOMINANCE,
     agingEnabled: false,
-    colorToken: DEFAULT_COLOR_TOKEN,
+    colorToken: defaultColorToken(usedColorTokens),
   };
 }

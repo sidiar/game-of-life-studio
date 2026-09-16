@@ -1193,3 +1193,125 @@ test.describe('aging degradation toggle (Story 4.7)', () => {
     );
   });
 });
+
+test.describe('color picker & selection defaults (Story 4.8)', () => {
+  /** `/organisms` hydrated, the editor open and settled, and the picker located THROUGH the
+   * Basic Information region — so a control that rendered in another column would not be found.
+   * Mirrors `openDominanceControl` / `openAgingToggle` above. */
+  async function openColorPicker(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
+    const radiogroup = basicInfo.getByRole('radiogroup', { name: 'Organism Color' });
+    return { dialog, basicInfo, radiogroup };
+  }
+
+  // The production seed holds ONE organism, Conway's Classic, on token #1 (sky-blue) —
+  // `apps/web/e2e/organisms.spec.ts:153-190` pins the seed. The M6 default is therefore the
+  // registry's SECOND entry, PALETTE[1] — written as the literal 'Vermillion' because this spec
+  // imports only `@gol/*` (the 4.7 precedent for literals), never `apps/web/lib`.
+  const DEFAULT_NAME = 'Vermillion';
+  const PICKED_NAME = 'Amber';
+
+  test('opens on the next unused token, all swatches enabled, zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { basicInfo, radiogroup } = await openColorPicker(page);
+
+    await expect(radiogroup).toBeVisible();
+    // 20 = PALETTE.length — this spec does not import `apps/web/lib` (the 4.7 precedent).
+    await expect(radiogroup.getByRole('radio')).toHaveCount(20);
+    await expect(radiogroup.locator('input[type="radio"]:disabled')).toHaveCount(0);
+    await expect(radiogroup.getByRole('radio', { name: DEFAULT_NAME })).toBeChecked();
+    await expect(basicInfo.locator('[data-selected-name]')).toHaveText(DEFAULT_NAME);
+    const describedBy = await radiogroup.getAttribute('aria-describedby');
+    if (describedBy === null) throw new Error('aria-describedby is absent');
+    await expect(page.locator(`[id="${describedBy}"]`)).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('a pick updates the display, the name and the aging strip together', async ({ page }) => {
+    const { basicInfo, radiogroup } = await openColorPicker(page);
+
+    const selectedSwatch = basicInfo.locator('[data-selected-swatch]');
+    const capCell = basicInfo.locator('[data-aging-example] [data-age="7"]'); // MAX_AGE_SHADE
+    const before = await selectedSwatch.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(before).not.toBe('rgba(0, 0, 0, 0)');
+
+    await radiogroup.getByRole('radio', { name: PICKED_NAME }).click();
+
+    await expect(radiogroup.getByRole('radio', { name: PICKED_NAME })).toBeChecked();
+    await expect(basicInfo.locator('[data-selected-name]')).toHaveText(PICKED_NAME);
+
+    const [selectedColor, smallColor, capColor] = await Promise.all([
+      selectedSwatch.evaluate((el) => getComputedStyle(el).backgroundColor),
+      basicInfo
+        .locator('[data-color-token="amber"]')
+        .evaluate((el) => getComputedStyle(el).backgroundColor),
+      capCell.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ]);
+
+    expect(selectedColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(selectedColor).toBe(smallColor);
+    expect(selectedColor).toBe(capColor);
+    expect(selectedColor).not.toBe(before);
+  });
+
+  test('keyboard: one tab stop, arrow moves and selects', async ({ page, browserName }) => {
+    const { dialog, radiogroup } = await openColorPicker(page);
+    const nameTextbox = dialog.getByRole('textbox', { name: 'Organism Name' });
+
+    await nameTextbox.focus();
+    // WebKit needs Alt+Tab to move focus off a text input (the Story 4.1 idiom in this file).
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    await page.keyboard.press(tabKey);
+    const checkedRadio = radiogroup.getByRole('radio', { name: DEFAULT_NAME });
+    await expect(checkedRadio).toBeFocused();
+
+    await page.keyboard.press('ArrowRight');
+    const nextRadio = radiogroup.getByRole('radio').nth(2); // PALETTE[2], bluish-green
+    await expect(nextRadio).toBeChecked();
+    await expect(nextRadio).toBeFocused();
+
+    await page.keyboard.press(tabKey);
+    await expect(dialog.getByRole('slider', { name: 'Dominance' })).toBeFocused();
+  });
+
+  test('label click selects', async ({ page }) => {
+    const { dialog, radiogroup } = await openColorPicker(page);
+
+    await dialog.locator('[data-color-token="teal"]').click();
+
+    await expect(radiogroup.getByRole('radio', { name: 'Teal' })).toBeChecked();
+  });
+
+  // The scan that measures the ✓ on a real fill and the ring for real. No transition on the
+  // control, so no extra wait beyond openEditor's settle.
+  test('axe with a user-picked swatch', async ({ page }) => {
+    const { radiogroup } = await openColorPicker(page);
+
+    await radiogroup.getByRole('radio', { name: PICKED_NAME }).click();
+    await expect(radiogroup.getByRole('radio', { name: PICKED_NAME })).toBeChecked();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('the description is associated through aria-describedby', async ({ page }) => {
+    const { radiogroup } = await openColorPicker(page);
+
+    const describedBy = await radiogroup.getAttribute('aria-describedby');
+    if (describedBy === null) throw new Error('aria-describedby is absent');
+    // useId() ids carry colons, so the id must be quoted as an attribute selector.
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
+      'Pick any color — colors are reusable.',
+    );
+  });
+});

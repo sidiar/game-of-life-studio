@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { NEW_ORGANISM_DOMINANCE } from '@gol/domain';
 import { CONWAYS_CLASSIC, createFakeRepositories, createMockOrganisms } from '@gol/test-utils';
+import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
+import { DEFAULT_COLOR_TOKEN, PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
 import OrganismLibrary from './OrganismLibrary';
 
@@ -240,6 +242,25 @@ describe('OrganismLibrary', () => {
     expect(replaceAll).not.toHaveBeenCalled();
   });
 
+  // Story 4.8 (M6): the fixture DELIBERATELY contains Conway's Classic (sky-blue), so the derived
+  // default is PALETTE[3] (amber) — a value only the derivation produces, never the deleted
+  // DEFAULT_COLOR_TOKEN stopgap (FD8).
+  it('seeds the picker at the next unused token of the loaded library (M6) (Story 4.8)', async () => {
+    const user = userEvent.setup();
+    const fixture = [CONWAYS_CLASSIC, ...createMockOrganisms()];
+    const { organisms } = createFakeRepositories({ organisms: fixture });
+
+    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(fixture.length));
+
+    await user.click(screen.getByRole('button', { name: '+ Create New Organism' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+
+    const checked = within(dialog).getByRole('radio', { checked: true });
+    expect(checked).toHaveAccessibleName(PALETTE[3].name);
+    expect(checked).not.toHaveAccessibleName(resolvePaletteColor(DEFAULT_COLOR_TOKEN).name);
+  });
+
   // Story 4.3 retargets this: the create button is the FIRST child of the toolbar's left group
   // (mockup `:405-406` — button before the search container), so DOM order and visual order agree
   // (SC 2.4.3) and it is the first stop.
@@ -410,10 +431,11 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
   // would reopen the editor red on an empty field (FD2).
   it('reopens with an empty, error-free name field — the draft does not survive an exit (Story 4.5)', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const mocks = createMockOrganisms();
+    const { organisms } = createFakeRepositories({ organisms: mocks });
 
     render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length));
 
     await user.click(createButton());
     await screen.findByRole('dialog', { name: 'Organism Editor' });
@@ -428,6 +450,9 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     // real `mounted` gate.
     await user.click(screen.getByRole('switch', { name: 'Aging Degradation' }));
     expect(screen.getByRole('switch', { name: 'Aging Degradation' })).toBeChecked();
+    // Story 4.8: nor must the draft's fourth field.
+    await user.click(screen.getByRole('radio', { name: PALETTE[10].name }));
+    expect(screen.getByRole('radio', { name: PALETTE[10].name })).toBeChecked();
 
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -442,6 +467,10 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
       String(NEW_ORGANISM_DOMINANCE),
     );
     expect(screen.getByRole('switch', { name: 'Aging Degradation' })).not.toBeChecked();
+    const expectedName = resolvePaletteColor(
+      defaultColorToken(mocks.map((organism) => organism.colorToken)),
+    ).name;
+    expect(screen.getByRole('radio', { checked: true })).toHaveAccessibleName(expectedName);
   });
 
   // View-only proof: an open/close cycle must never write to the repository, and must not re-list.

@@ -5,6 +5,7 @@ import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { styled } from '@mui/material/styles';
+import type { Organism } from '@gol/domain';
 // Static imports, not a second `dynamic()`: this file is already inside the lazy chunk
 // `<OrganismLibrary>` draws, so the layout, the field and the draft factory ride along with it and
 // a nested lazy boundary would split a chunk for nothing. ❌ None of these may be imported from
@@ -12,6 +13,7 @@ import { styled } from '@mui/material/styles';
 // first load (the bundle gate is the measurement).
 import OrganismEditorLayout from './OrganismEditorLayout';
 import OrganismNameField from './OrganismNameField';
+import ColorPickerField from './ColorPickerField';
 import DominanceField from './DominanceField';
 import AgingToggleField from './AgingToggleField';
 import { createNewOrganismDraft, type OrganismDraft } from '@/lib/organisms/organismDraft';
@@ -29,7 +31,8 @@ const BUTTON_SX = { fontSize: '13px', padding: '12px 24px' } as const;
 
 export type OrganismEditorOrigin = 'library' | 'battle';
 
-export interface OrganismEditorModalProps {
+/** The lifecycle half — what `useOrganismEditorModal` assembles and nothing more. */
+export interface OrganismEditorLifecycleProps {
   open: boolean;
   /** Drives the contextual back label (UX-DR5). 'battle' is Story 4.24's entry point. */
   origin: OrganismEditorOrigin;
@@ -40,6 +43,17 @@ export interface OrganismEditorModalProps {
    * restore focus (the `<UnsavedChangesDialog>` contract).
    */
   onExited?(): void;
+}
+
+export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
+  /**
+   * The loaded library — an entity list, never a repository (AR-2/AR-27: this modal still calls
+   * nothing that persists). Read ONCE, at mount, for the M6 default-colour seed (Story 4.8);
+   * Story 4.9 reads names for the reuse warning, 4.11 the organism-type dropdown, 4.17 excludes
+   * the organism under edit. The seed is taken from whatever the caller had loaded at open time
+   * (FD9).
+   */
+  library: readonly Organism[];
 }
 
 /**
@@ -137,12 +151,14 @@ const EditorBody = styled('div')({
  * The Organism Editor's full-screen shell (Story 4.3): the `Dialog`, its header and a body that is
  * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds the editor's draft (`OrganismDraft`,
  * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name`, Story 4.6's
- * `dominance` and Story 4.7's `agingEnabled`/`colorToken`) and nothing else — no repository call;
- * the lifecycle (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh draft
- * per open is the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after every
- * exit, so there is no reset effect and no `key` trick). The editor's own dirty scope (AR-33 —
- * independent of the battle's) arrives with
- * Story 4.23, will live in this shell, and will diff this draft against its seed.
+ * `dominance`, Story 4.7's `agingEnabled`/`colorToken` and Story 4.8's `colorToken` seed from
+ * `library`) and nothing else — no repository call; the lifecycle (inert window, focus restore)
+ * stays `useOrganismEditorModal`'s, and a fresh draft per open is the `mounted` gate's doing
+ * (`<OrganismLibrary>` unmounts this modal after every exit, so there is no reset effect and no
+ * `key` trick). The `useState` initialiser closes over the `library` prop — legitimate because it
+ * runs once per mount and the `mounted` gate guarantees a mount per open. The editor's own dirty
+ * scope (AR-33 — independent of the battle's) arrives with Story 4.23, will live in this shell,
+ * and will diff this draft against its seed.
  *
  * Header layout follows the epics AC / UX-DR5 (`organism-editor-design.md:101-126`): Back on the
  * left, centred title, Save + Close on the right. ⚠️ The 2026-06-01 mockup revision
@@ -160,13 +176,21 @@ export default function OrganismEditorModal({
   origin,
   onClose,
   onExited,
+  library,
 }: OrganismEditorModalProps) {
-  // The lazy-initialiser form, so the factory runs once per mount, not once per render. One typed
-  // object that grows a field per story (FD3), never one `useState` per field.
-  const [draft, setDraft] = useState<OrganismDraft>(createNewOrganismDraft);
+  // The lazy-initialiser form, so the factory runs once per mount, not once per render — reading
+  // `library` exactly once, at mount, for the M6 default-colour seed (FD9). One typed object that
+  // grows a field per story (FD3), never one `useState` per field.
+  const [draft, setDraft] = useState<OrganismDraft>(() =>
+    createNewOrganismDraft(library.map((organism) => organism.colorToken)),
+  );
   // A functional update, so `setDominance` below cannot clobber a name change that landed in the
   // same batch.
   const setName = useCallback((name: string) => setDraft((d) => ({ ...d, name })), []);
+  const setColorToken = useCallback(
+    (colorToken: string) => setDraft((d) => ({ ...d, colorToken })),
+    [],
+  );
   const setDominance = useCallback(
     (dominance: number) => setDraft((d) => ({ ...d, dominance })),
     [],
@@ -235,6 +259,7 @@ export default function OrganismEditorModal({
             basicInfo={
               <>
                 <OrganismNameField value={draft.name} onChange={setName} />
+                <ColorPickerField value={draft.colorToken} onChange={setColorToken} />
                 <DominanceField value={draft.dominance} onChange={setDominance} />
                 <AgingToggleField
                   value={draft.agingEnabled}
