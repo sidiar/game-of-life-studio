@@ -1069,3 +1069,124 @@ test.describe('dominance control (Story 4.6)', () => {
     );
   });
 });
+
+test.describe('aging degradation toggle (Story 4.7)', () => {
+  /** `/organisms` hydrated, the editor open and settled, and both the switch and the example
+   * strip located THROUGH the Basic Information region — so a control that rendered in another
+   * column would not be found. Mirrors `openDominanceControl` above. */
+  async function openAgingToggle(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
+    const toggle = basicInfo.getByRole('switch', { name: 'Aging Degradation' });
+    const strip = basicInfo.locator('[data-aging-example]');
+    return { dialog, basicInfo, toggle, strip };
+  }
+
+  test('opens Off, description visible, strip has eight equal cells, zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { dialog, basicInfo, toggle, strip } = await openAgingToggle(page);
+
+    await expect(toggle).not.toBeChecked();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await expect(basicInfo.getByText('Off', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Cells increase saturation as they age')).toBeVisible();
+    // 8 = MAX_AGE_SHADE + 1 (`apps/web/lib/palette/displayColor.ts`), which this spec does not
+    // import today (only `@gol/*`) — the literal is written the way `:1058-1070` writes the
+    // description string.
+    await expect(strip.locator('[data-age]')).toHaveCount(8);
+
+    const colors = await strip
+      .locator('[data-age]')
+      .evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+    expect(new Set(colors).size).toBe(1);
+    expect(errors).toEqual([]);
+  });
+
+  test('click toggles On and the strip becomes a ramp', async ({ page }) => {
+    const { basicInfo, toggle, strip } = await openAgingToggle(page);
+
+    const readColors = () =>
+      strip
+        .locator('[data-age]')
+        .evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+
+    const offColors = await readColors();
+
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+    await expect(basicInfo.getByText('On', { exact: true })).toBeVisible();
+
+    const onColors = await readColors();
+    expect(new Set(onColors).size).toBe(8);
+    expect(onColors[7]).toBe(offColors[7]);
+
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    await expect(basicInfo.getByText('Off', { exact: true })).toBeVisible();
+
+    const backToOffColors = await readColors();
+    expect(new Set(backToOffColors).size).toBe(1);
+  });
+
+  test('keyboard: Tab from the dominance textbox reaches the switch; Space/Enter toggle; ArrowRight does nothing', async ({
+    page,
+    browserName,
+  }) => {
+    const { dialog, toggle } = await openAgingToggle(page);
+    const dominanceTextbox = dialog.getByRole('textbox', { name: 'Dominance value' });
+
+    await dominanceTextbox.focus();
+    // WebKit needs Alt+Tab to move focus off a text input (the Story 4.1 idiom in this file).
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(toggle).toBeFocused();
+
+    await page.keyboard.press('Space');
+    await expect(toggle).toBeChecked();
+
+    await page.keyboard.press('Enter');
+    await expect(toggle).not.toBeChecked();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(toggle).not.toBeChecked();
+  });
+
+  test('label click toggles', async ({ page }) => {
+    const { dialog, toggle } = await openAgingToggle(page);
+
+    await dialog.getByText('Aging Degradation', { exact: true }).click();
+
+    await expect(toggle).toBeChecked();
+  });
+
+  // The scan that measures "On" in --gol-accent on --gol-bg-secondary for real. No transition on
+  // the control, so no extra wait beyond openEditor's own settle.
+  test('has no axe violations with the switch On', async ({ page }) => {
+    const { toggle } = await openAgingToggle(page);
+
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('the description is associated through aria-describedby', async ({ page }) => {
+    const { toggle } = await openAgingToggle(page);
+
+    const describedBy = await toggle.getAttribute('aria-describedby');
+    if (describedBy === null) throw new Error('aria-describedby is absent');
+    // useId() ids carry colons, so the id must be quoted as an attribute selector.
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
+      'Cells increase saturation as they age',
+    );
+  });
+});

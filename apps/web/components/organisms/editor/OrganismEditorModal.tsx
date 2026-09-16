@@ -13,6 +13,7 @@ import { styled } from '@mui/material/styles';
 import OrganismEditorLayout from './OrganismEditorLayout';
 import OrganismNameField from './OrganismNameField';
 import DominanceField from './DominanceField';
+import AgingToggleField from './AgingToggleField';
 import { createNewOrganismDraft, type OrganismDraft } from '@/lib/organisms/organismDraft';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
@@ -135,8 +136,8 @@ const EditorBody = styled('div')({
 /**
  * The Organism Editor's full-screen shell (Story 4.3): the `Dialog`, its header and a body that is
  * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds the editor's draft (`OrganismDraft`,
- * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name` and Story 4.6's
- * `dominance`) and nothing else — no repository call; the lifecycle (inert window, focus restore)
+ * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name`, Story 4.6's
+ * `dominance` and Story 4.7's `agingEnabled`/`colorToken`) and nothing else — no repository call; the lifecycle (inert window, focus restore)
  * stays `useOrganismEditorModal`'s, and a fresh draft per open is the `mounted` gate's doing
  * (`<OrganismLibrary>` unmounts this modal after every exit, so there is no reset effect and no
  * `key` trick). The editor's own dirty scope (AR-33 — independent of the battle's) arrives with
@@ -167,6 +168,10 @@ export default function OrganismEditorModal({
   const setName = useCallback((name: string) => setDraft((d) => ({ ...d, name })), []);
   const setDominance = useCallback(
     (dominance: number) => setDraft((d) => ({ ...d, dominance })),
+    [],
+  );
+  const setAgingEnabled = useCallback(
+    (agingEnabled: boolean) => setDraft((d) => ({ ...d, agingEnabled })),
     [],
   );
 
@@ -230,6 +235,11 @@ export default function OrganismEditorModal({
               <>
                 <OrganismNameField value={draft.name} onChange={setName} />
                 <DominanceField value={draft.dominance} onChange={setDominance} />
+                <AgingToggleField
+                  value={draft.agingEnabled}
+                  onChange={setAgingEnabled}
+                  colorToken={draft.colorToken}
+                />
               </>
             }
           />

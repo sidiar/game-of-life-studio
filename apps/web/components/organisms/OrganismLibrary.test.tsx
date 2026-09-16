@@ -424,6 +424,10 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
       target: { value: '77' },
     });
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('77');
+    // Story 4.7: nor must the draft's third field — this is the only test that goes through the
+    // real `mounted` gate.
+    await user.click(screen.getByRole('switch', { name: 'Aging Degradation' }));
+    expect(screen.getByRole('switch', { name: 'Aging Degradation' })).toBeChecked();
 
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -437,6 +441,7 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue(
       String(NEW_ORGANISM_DOMINANCE),
     );
+    expect(screen.getByRole('switch', { name: 'Aging Degradation' })).not.toBeChecked();
   });
 
   // View-only proof: an open/close cycle must never write to the repository, and must not re-list.

@@ -104,10 +104,10 @@ describe('OrganismEditorModal', () => {
     expect(regions[2]).toHaveAccessibleName('Preview & Test');
   });
 
-  // Story 4.5 / 4.6: the name field and the dominance control land in the Basic Information
-  // column THROUGH the layout's `basicInfo` slot fragment — addressed by name, so neither can
-  // land in another column. Each field's own contract is its own test file's.
-  it('mounts the name field and the dominance control in Basic Information and nowhere else (Story 4.5, Story 4.6)', () => {
+  // Story 4.5 / 4.6 / 4.7: the name field, the dominance control and the aging toggle land in the
+  // Basic Information column THROUGH the layout's `basicInfo` slot fragment — addressed by name,
+  // so none can land in another column. Each field's own contract is its own test file's.
+  it('mounts the name field, the dominance control and the aging toggle in Basic Information and nowhere else (Story 4.5, Story 4.6, Story 4.7)', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
 
     const dialog = screen.getByRole('dialog');
@@ -115,10 +115,42 @@ describe('OrganismEditorModal', () => {
     expect(within(basic).getByRole('textbox', { name: 'Organism Name' })).toBeInTheDocument();
     expect(within(basic).getByRole('slider', { name: 'Dominance' })).toBeInTheDocument();
     expect(within(basic).getByRole('textbox', { name: 'Dominance value' })).toBeInTheDocument();
+    expect(within(basic).getByRole('switch', { name: 'Aging Degradation' })).toBeInTheDocument();
     // "Nowhere else" means the whole dialog — header and footer included — not just the other two
-    // regions: exactly two textboxes and one slider exist, and both are the ones above.
+    // regions: exactly two textboxes, one slider and one switch exist, and all are the ones above.
     expect(within(dialog).getAllByRole('textbox')).toHaveLength(2);
     expect(within(dialog).getAllByRole('slider')).toHaveLength(1);
+    expect(within(dialog).getAllByRole('switch')).toHaveLength(1);
+  });
+
+  // Story 4.7 AC3: a fresh editor opens with the switch unchecked and "Off" showing.
+  it('opens the aging toggle unchecked, showing "Off" (Story 4.7)', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    expect(screen.getByRole('switch', { name: 'Aging Degradation' })).not.toBeChecked();
+    expect(screen.getByText('Off')).toBeInTheDocument();
+  });
+
+  // A click round-trips through the modal's own state, the same draft the sibling fields prove
+  // above — and moves the example strip, which only re-renders from a real draft update.
+  it('holds the draft: an aging toggle click round-trips through the modal (Story 4.7)', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
+
+    // MUI `Dialog` portals to `document.body`, not the render container (this file's own note
+    // above).
+    const strip = document.body.querySelector('[data-aging-example]');
+    const cellColor = (age: number) =>
+      (strip!.querySelectorAll('[data-age]')[age] as HTMLElement).style.backgroundColor;
+    const cell0Off = cellColor(0);
+    const cell7Off = cellColor(7);
+    expect(cell0Off).toBe(cell7Off);
+
+    await user.click(screen.getByRole('switch', { name: 'Aging Degradation' }));
+
+    expect(screen.getByRole('switch', { name: 'Aging Degradation' })).toBeChecked();
+    expect(screen.getByText('On')).toBeInTheDocument();
+    expect(cellColor(0)).not.toBe(cellColor(7));
   });
 
   // The draft lives in the MODAL (FD3): typing round-trips through its own state, not a prop.
@@ -179,9 +211,10 @@ describe('OrganismEditorModal', () => {
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('17');
   });
 
-  // Story 4.6 AC6: the tab order inside Basic Information is name -> slider -> numeric input. The
-  // field's own test uses a stand-in button for the name field; this is the real column.
-  it('tabs from the name field to the dominance slider, then to its textbox (Story 4.6)', async () => {
+  // Story 4.6 / 4.7 AC6: the tab order inside Basic Information is name -> slider -> numeric
+  // input -> switch. The field's own test uses a stand-in button for the name field; this is the
+  // real column.
+  it('tabs from the name field to the dominance slider, its textbox, then the aging switch (Story 4.6, Story 4.7)', async () => {
     const user = userEvent.setup();
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} />);
 
@@ -190,6 +223,8 @@ describe('OrganismEditorModal', () => {
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('textbox', { name: 'Dominance value' })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('switch', { name: 'Aging Degradation' })).toHaveFocus();
   });
 
   it('open={false} renders no dialog at all (MUI unmounts by default)', () => {
