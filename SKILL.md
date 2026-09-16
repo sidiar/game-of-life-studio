@@ -33,8 +33,8 @@ it once, at the start of Step 0; the `{…}` names used below are its `[paths]` 
 
 No file, or a key missing → STOP before Step 0 and say which; do not guess a layout.
 
-**Scripts:** `lane-gates.py` (gates) and `story-run-stats.py` (timing and tokens) live in
-this skill's directory, written `{skill_dir}` in every command below. Installed as a
+**Scripts:** `lane-gates.py` (gates, lane resolution, the per-tree lock) and
+`story-run-stats.py` (timing and tokens) live in this skill's directory, written `{skill_dir}` in every command below. Installed as a
 plugin that is `${CLAUDE_PLUGIN_ROOT}`; copied in, it is
 `.claude/skills/implement-next-story`. For stats, call `mark` at each boundary as you
 go — a mark you skip is a phase you cannot reconstruct afterwards — and `report` at the
@@ -51,16 +51,23 @@ gates*). Everything in this skill that used to say "the epic in progress" now me
 branch, or partial story file is **none of this lane's business** — never report it as a
 blocker, never touch it.
 
-- `--epic N` in `$ARGUMENTS` names the lane. **Without it**, the lane is the epic of the
-  first `backlog` story in `{status_file}` on current `main` — **but only when that
-  is the sole epic with a `backlog` story that is `in-progress`**. If two epics are
-  in progress, a bare call STOPs and asks for `--epic`: guessing would send the
-  worktree session into the other lane's epic, and the branch guard cannot catch two
-  Step 0s that start inside the same ten minutes. Fail closed; the flag is cheap.
-- **One lane per working tree.** The primary checkout holds one lane; every other lane
-  runs in its own worktree. The skill never creates worktrees itself, so the session for
-  an additional lane has to be *in* one before Step 0 runs. The recipe, three separate
-  prompts in a fresh session opened in the primary checkout:
+- **The working tree names the lane; `--epic N` only confirms it.** A worktree whose
+  directory is `lane-epic-N` *is* epic N's lane — `git worktree list` is the record, and
+  Step 0 reads it (`lane-gates.py resolve`). In such a worktree a bare call resolves to N,
+  and `--epic M` with M ≠ N is refused. In the primary checkout, `--epic N` is refused
+  when a `lane-epic-N` worktree exists (that epic lives there — open the session there),
+  and a bare call takes the one in-progress epic that has **no** lane worktree. Two
+  in-progress epics and neither housed → STOP and ask for `--epic`, because then the
+  primary cannot tell which one is its own. Fail closed; the flag is cheap.
+- **One lane per working tree, enforced by a lock.** The primary checkout holds one
+  lane; every other lane runs in its own worktree. Step 0 takes a per-tree lock
+  (`lane-gates.py lock acquire`) that lives in the tree's git dir — `.git/` for the
+  primary, `.git/worktrees/lane-epic-N/` for a worktree — so it is never committed and
+  needs no `.gitignore` line. A second session arriving in the same tree finds the lock
+  and STOPs at Step 0, before anything is written, instead of colliding minutes later.
+  The skill never creates worktrees itself, so the session for an additional lane has to
+  be *in* one before Step 0 runs. The recipe, three separate prompts in a fresh session
+  opened in the primary checkout:
 
   ```
   use a worktree named lane-epic-N
@@ -72,10 +79,11 @@ blocker, never touch it.
   before the tree switch lands. The install because a fresh worktree has no dependencies
   installed, and the dev agent's first typecheck or test run would fail for reasons
   unrelated to the story.
-  Every later run of that lane goes in that same worktree session. The lane that was
-  opened first stays bare in the primary checkout. Two lanes launched bare in the same
-  checkout pass each other's Step 0 unnoticed (the tree is still clean when the second
-  one checks), and the first lane's `feat:` commit then sweeps in the second lane's
+  Every later run of that lane goes in that same worktree session — and needs no
+  `--epic`, the directory name says it. The lane that was opened first stays bare in the
+  primary checkout. Before `resolve` and the lock existed, two lanes launched bare in the
+  same checkout passed each other's Step 0 unnoticed (the tree is still clean when the
+  second one checks), and the first lane's `feat:` commit then swept in the second lane's
   story-status lines — which is how this recipe came to be written down.
 - Branch names are the lane's namespace: `story/{E}-*`. The lane-scoping query used
   throughout is `startswith("story/{E}-")` — the trailing dash matters, or lane 3 would
@@ -105,10 +113,41 @@ git switch --detach origin/main
 
 Every read of `{status_file}` below is from this checkout — i.e. from `main`.
 
-**Resolve the lane** `{E}`: `--epic N` if given. Else, if exactly one epic is
-`in-progress` (or none — the board is between epics), `{E}` is the epic of the first
-`backlog` story top to bottom. Else → STOP: name the in-progress epics and ask for
-`--epic N`. Say which lane and why in one line.
+**Resolve the lane** `{E}` from the working tree and the board — never by eye:
+
+```bash
+python3 {skill_dir}/lane-gates.py resolve            # or: resolve --epic N
+```
+
+Exit 0 prints `LANE {E} — why`; repeat that line to the owner and use `{E}` below.
+Exit 2 is `WRONG_TREE` (epic N has a worktree of its own, or this worktree belongs to
+another epic — the output names where N runs) or `AMBIGUOUS` (two in-progress epics and
+neither has a worktree — ask for `--epic N`) → STOP with the script's output. Exit 1 →
+STOP, the tree or the board could not be read.
+
+**Lock the tree** for this run, so a second session landing in the same working tree
+stops here rather than after both have written:
+
+```bash
+python3 {skill_dir}/lane-gates.py lock acquire --epic {E}
+```
+
+Exit 2 is `BUSY`: another session owns this tree — the output names it, its epic and
+story, and when it was last active. STOP with that output and do not touch the tree;
+the fix is a worktree for one of the two lanes, or `lock release --force` if the owner
+knows that session is gone. (A holder silent for an hour is taken over automatically,
+with a note in the output — a run killed by a usage limit does not hold the tree
+forever.) Exit 1 → STOP.
+
+**The lock is released at every exit of this run** — the end of Step 5, the end of
+Step S, and every STOP in between, including the ones in this guard below:
+
+```bash
+python3 {skill_dir}/lane-gates.py lock release
+```
+
+Releasing is the last thing a run does; do not skip it on the STOP paths, or the next
+run in this tree waits an hour for a session that has already ended.
 
 Then, in order — every check scoped to `story/{E}-*`:
 
@@ -166,7 +205,12 @@ Then, in order — every check scoped to `story/{E}-*`:
     Exit 2 prints the prerequisite, its status on `main`, and why → STOP with that output.
     Do **not** skip to a later story: order within a lane is still order. If in a loop,
     `ScheduleWakeup` with `noop: true` — the other lane will clear it. Exit 1 → STOP, the
-    file is broken. Only exit 0 (`OPEN`) makes the candidate this run's target.
+    file is broken. Only exit 0 (`OPEN`) makes the candidate this run's target; record it
+    on the lock so a `BUSY` seen from elsewhere says which story this tree is on:
+
+    ```bash
+    python3 {skill_dir}/lane-gates.py lock acquire --epic {E} --story {story_key}
+    ```
 
 **Why the PR and not the status field:** `{status_file}` is versioned, so it says
 different things on different refs. On a story branch, `done` means *implemented and
@@ -275,17 +319,20 @@ and 3 — always pass the story file path. On the epic's first story, create-sto
 python3 {skill_dir}/story-run-stats.py mark step2
 ```
 
-Before spawning, re-verify the tree is still yours — Step 0's guard ran ten minutes ago,
-and another lane launched bare in the same checkout would have passed it unseen:
+Before spawning, re-verify the tree is still yours — Step 0's guard ran ten minutes ago.
+The lock should have kept every other session out, but the lock is a file and files can
+be forced; the tree itself is the evidence:
 
 ```bash
+python3 {skill_dir}/lane-gates.py lock status   # must print HELD (this session)
 git branch --show-current   # must print nothing (detached) or `main`
 git status --porcelain      # must list only this story's file and {status_file}
 ```
 
-Anything else — a `story/*` branch checked out, foreign untracked files — means two lanes
-share this working tree. STOP and report the branch and files; do not branch on top of
-them. Recovery (a worktree for one of the lanes) is the owner's call.
+Anything else — a `story/*` branch checked out, foreign untracked files, a lock that is
+not this session's — means two lanes share this working tree. STOP and report the
+branch, files and lock holder; do not branch on top of them. Recovery (a worktree for
+one of the lanes) is the owner's call.
 
 Read the `Dev Model:` line from the story file just written. Spawn a subagent with
 that model and tell it to:
@@ -421,7 +468,8 @@ Report, briefly:
 - the stats table — paste it into the hand-back as printed, so the active time and token
   cost of the run are visible without opening the story file (quote Active, not wall clock)
 
-Then **STOP**. Nothing "waits" — the run simply ends, and the open PR is where the
+Release the tree — `python3 {skill_dir}/lane-gates.py lock release` — and then
+**STOP**. Nothing "waits" — the run simply ends, and the open PR is where the
 work sits until the owner merges it. The gate is the **merge**: nothing reaches `main`
 without their explicit go-ahead, and approval of one story's merge does not carry
 to the next.
@@ -467,8 +515,9 @@ Spawn a subagent, `model: "sonnet"`, `subagent_type: "general-purpose"`, and tel
 5. Append one line to the PR body under **Verification**: the sync commit SHA, what it
    merged, and the CI result.
 
-Then STOP and hand back: PR, sync commit, conflicts resolved (by rule) and CI result.
-No stats report — a sync is not a story run.
+Then release the tree (`lane-gates.py lock release`), STOP and hand back: PR, sync
+commit, conflicts resolved (by rule) and CI result. No stats report — a sync is not a
+story run.
 
 ---
 

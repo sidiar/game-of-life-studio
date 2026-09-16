@@ -1,6 +1,6 @@
 {
   "name": "implement-next-story",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "One story → one PR on Claude Code: create, implement, review on a different model, stop for the human merge. Parallel epic lanes with dependency gates; per-phase time and token stats. Built on BMad Method v6.",
   "author": { "name": "Ariel Sidi" },
   "repository": "https://github.com/sidiar/implement-next-story",

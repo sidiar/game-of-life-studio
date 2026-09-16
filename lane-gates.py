@@ -12,8 +12,30 @@ orchestrator never has to read a table and reason about it:
                          exit 2 "UNANALYSED" — names the pair that has no analysis yet
   list                   prints every gate with its current verdict
 
+Two more answer "is this the right working tree, and is it free?" — the questions that
+two lanes launched in the same checkout used to get wrong:
+
+  resolve [--epic N]     exit 0 "LANE N — why"   — the lane this working tree serves
+                         exit 2 "WRONG_TREE …"   — epic N has its own worktree (or this
+                                                   worktree belongs to another epic)
+                         exit 2 "AMBIGUOUS …"    — bare call, several candidates: pass --epic
+  lock acquire --epic N  exit 0 "LOCKED …"       — this session now owns the working tree
+                         exit 2 "BUSY …"         — another live session owns it
+  lock release [--force] exit 0 "UNLOCKED …"     — drop this session's lock (--force: anyone's)
+  lock status            exit 0 free or ours, exit 2 held by another session
+
+`resolve` reads `git worktree list`: a worktree whose directory is named `lane-epic-N` is
+epic N's lane, and that is the whole record — nothing to configure, and it disappears with
+the worktree. `lock` keeps one file per working tree inside its git dir (`.git/` for the
+primary checkout, `.git/worktrees/<name>/` for a worktree), so it is never tracked and
+needs no .gitignore entry. The lock names the Claude Code session that holds it; a holder
+whose transcripts have been silent for --stale-after seconds (default one hour) is presumed
+dead and taken over, with a note. A holder with no transcript at all is not presumed
+anything: BUSY, and the owner decides.
+
 Any exit 1 is a parse or lookup error: the file is malformed, a key is unknown, a story is
-not in sprint-status. That is deliberate — a gate that cannot be read is not "open".
+not in sprint-status, git refused. That is deliberate — a gate that cannot be read is not
+"open", and a tree that cannot be identified is not "free".
 
 Where the two files live comes from `[paths]` in implement-next-story.toml at the repo
 root (`--config` to point elsewhere), or from `--status-file` / `--gates-file`, which win
@@ -28,15 +50,24 @@ anything else rather than guessing.
 from __future__ import annotations
 
 import argparse
+import glob
+import json
 import os
 import re
+import subprocess
 import sys
+import time
 import tomllib
+from datetime import datetime, timezone
 
 CONFIG_FILE = "implement-next-story.toml"
 
 STORY_KEY = re.compile(r"^(\d+)-(\d+)-[a-z0-9-]+$")
 EPIC_KEY = re.compile(r"^epic-(\d+)$")
+LANE_WORKTREE = re.compile(r"^lane-epic-(\d+)$")
+
+LOCK_FILE = "implement-next-story.lock"
+STALE_AFTER = 60 * 60  # seconds a lock holder may be silent before it is presumed dead
 
 
 class GateError(Exception):
@@ -63,16 +94,16 @@ def read_config(root: str, explicit: str | None) -> dict[str, str]:
     return paths
 
 
-def resolve_files(args) -> tuple[str, str]:
-    """(gates path, status path) — flags win, then the config; nothing is guessed."""
+def resolve_files(args, *keys: str) -> list[str]:
+    """One path per key (`gates_file`, `status_file`) — flags win, then the config;
+    nothing is guessed."""
     paths = read_config(args.root, args.config)
-    gates = args.gates_file or paths.get("gates_file")
-    status = args.status_file or paths.get("status_file")
-    missing = [name for name, value in (("gates_file", gates), ("status_file", status)) if not value]
+    found = {key: getattr(args, key) or paths.get(key) for key in keys}
+    missing = [key for key, value in found.items() if not value]
     if missing:
         raise GateError(f"no {' / '.join(missing)}: set it in {CONFIG_FILE} `[paths]` "
                         f"or pass --{missing[0].replace('_', '-')}")
-    return (os.path.join(args.root, gates), os.path.join(args.root, status))
+    return [os.path.join(args.root, found[key]) for key in keys]
 
 
 def _strip_comment(line: str) -> str:
@@ -262,6 +293,204 @@ def cmd_list(args, doc, status) -> int:
     return 0
 
 
+# ------------------------------------------------------------------ trees and locks
+
+def _git(root: str, *argv: str) -> str:
+    try:
+        done = subprocess.run(["git", "-C", root, *argv], capture_output=True, text=True, check=True)
+    except FileNotFoundError:
+        raise GateError("git is not on PATH")
+    except subprocess.CalledProcessError as exc:
+        raise GateError(f"git {' '.join(argv)}: {exc.stderr.strip() or exc}")
+    return done.stdout
+
+
+def this_tree(root: str) -> str:
+    return os.path.realpath(_git(root, "rev-parse", "--show-toplevel").strip())
+
+
+def worktrees(root: str) -> tuple[str, dict[int, str]]:
+    """(primary checkout, {epic: path} for every worktree whose directory is lane-epic-N)."""
+    paths = [line[len("worktree "):] for line in _git(root, "worktree", "list", "--porcelain").splitlines()
+             if line.startswith("worktree ")]
+    if not paths:
+        raise GateError("`git worktree list` returned nothing")
+    lanes: dict[int, str] = {}
+    for path in paths[1:]:  # the first entry is always the primary checkout
+        m = LANE_WORKTREE.match(os.path.basename(path.rstrip("/")))
+        if not m:
+            continue
+        epic = int(m.group(1))
+        if epic in lanes:
+            raise GateError(f"two worktrees are named lane-epic-{epic}: {lanes[epic]} and {path}")
+        lanes[epic] = os.path.realpath(path)
+    return os.path.realpath(paths[0]), lanes
+
+
+def cmd_resolve(args) -> int:
+    primary, lanes = worktrees(args.root)
+    here = this_tree(args.root)
+    here_epic = next((e for e, p in lanes.items() if p == here), None)
+
+    if here_epic is not None:
+        if args.epic is not None and args.epic != here_epic:
+            home = lanes.get(args.epic) or f"the primary checkout ({primary})"
+            print(f"WRONG_TREE this is lane-epic-{here_epic}'s worktree; epic {args.epic} belongs in {home}")
+            return 2
+        print(f"LANE {here_epic} — this worktree is lane-epic-{here_epic} ({here})")
+        return 0
+
+    where = f"the primary checkout ({here})" if here == primary else f"worktree {here} (not a lane worktree)"
+    if args.epic is not None:
+        if args.epic in lanes:
+            print(f"WRONG_TREE epic {args.epic} has a lane worktree at {lanes[args.epic]}; open the session there")
+            return 2
+        print(f"LANE {args.epic} — --epic given and no lane-epic-{args.epic} worktree exists, so it runs in {where}")
+        return 0
+
+    (status_path,) = resolve_files(args, "status_file")
+    status = read_sprint_status(status_path)
+    unhoused = [e for e in in_progress_epics(status) if e not in lanes]
+    if len(unhoused) > 1:
+        print(f"AMBIGUOUS epics {', '.join(map(str, unhoused))} are in progress and none has a "
+              f"lane worktree — pass --epic N (and give one of them a worktree)")
+        return 2
+    if unhoused:
+        print(f"LANE {unhoused[0]} — the only in-progress epic without a lane worktree, so it is {where}'s")
+        return 0
+    for key, state in status.items():
+        if STORY_KEY.match(key) and state == "backlog" and epic_of(key) not in lanes:
+            print(f"LANE {epic_of(key)} — no in-progress epic outside the lane worktrees; "
+                  f"the first backlog story elsewhere is {key}")
+            return 0
+    housed = "; ".join(f"epic {e} → {p}" for e, p in sorted(lanes.items())) or "no backlog story left"
+    print(f"NO_LANE nothing for {where}: {housed}")
+    return 2
+
+
+def lock_path(root: str) -> str:
+    git_dir = _git(root, "rev-parse", "--git-dir").strip()
+    return os.path.join(os.path.realpath(os.path.join(root, git_dir)), LOCK_FILE)
+
+
+def read_lock(path: str) -> dict | None:
+    try:
+        with open(path) as fh:
+            held = json.load(fh)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as exc:
+        raise GateError(f"unreadable lock {path}: {exc}")
+    if not isinstance(held, dict) or "session" not in held:
+        raise GateError(f"malformed lock {path}: {held!r}")
+    return held
+
+
+def write_lock(path: str, data: dict, exclusive: bool) -> None:
+    payload = json.dumps(data, indent=2) + "\n"
+    if exclusive:  # O_EXCL: two Step 0s racing for a free tree cannot both win
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(payload)
+        return
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        fh.write(payload)
+    os.replace(tmp, path)
+
+
+def session_id() -> str | None:
+    return os.environ.get("CLAUDE_CODE_SESSION_ID") or None
+
+
+def last_activity(session: str) -> float | None:
+    """Newest write to the session's transcript or any of its subagents' — None if no
+    transcript exists for it (a session from another machine, or one already deleted)."""
+    mains = glob.glob(os.path.expanduser(f"~/.claude/projects/*/{session}.jsonl"))
+    files = list(mains)
+    for main in mains:
+        files += glob.glob(os.path.join(os.path.dirname(main), session, "subagents", "*.jsonl"))
+    return max((os.path.getmtime(f) for f in files), default=None)
+
+
+def _fmt_age(seconds: float) -> str:
+    minutes = int(seconds // 60)
+    return f"{minutes // 60}h{minutes % 60:02d}m" if minutes >= 60 else f"{minutes}m"
+
+
+def describe_holder(held: dict) -> tuple[str, float | None]:
+    """(one line naming the holder and its last activity, idle seconds or None)."""
+    seen = last_activity(held["session"])
+    idle = None if seen is None else max(0.0, time.time() - seen)
+    story = f" story {held['story']}" if held.get("story") else ""
+    activity = (f"last active {_fmt_age(idle)} ago" if idle is not None
+                else "no transcript found for it — cannot tell whether it is alive")
+    return (f"session {held['session']} for epic {held.get('epic')}{story} "
+            f"since {held.get('acquired')} ({activity})"), idle
+
+
+def cmd_lock_acquire(args) -> int:
+    me = session_id()
+    if not me:
+        raise GateError("CLAUDE_CODE_SESSION_ID is not set — the lock needs a session to belong to")
+    path = lock_path(args.root)
+    note = ""
+    for _attempt in (1, 2):
+        held = read_lock(path)
+        if held is None:
+            data = {"epic": args.epic, "story": args.story, "session": me,
+                    "acquired": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "tree": this_tree(args.root)}
+            try:
+                write_lock(path, data, exclusive=True)
+            except FileExistsError:
+                continue  # lost the race — read who won and judge them below
+            print(f"LOCKED epic {args.epic} by session {me}{note} — {path}")
+            return 0
+        if held["session"] == me:
+            held.update(epic=args.epic, story=args.story or held.get("story"))
+            write_lock(path, held, exclusive=False)
+            print(f"LOCKED epic {args.epic} by session {me} (re-entered) — {path}")
+            return 0
+        who, idle = describe_holder(held)
+        if idle is None or idle < args.stale_after:
+            print(f"BUSY {path}\n  held by {who}\n"
+                  f"  another run owns this working tree: give one of the lanes its own worktree, "
+                  f"or `lock release --force` if that session is gone")
+            return 2
+        note = f" — took over from session {held['session']}, silent for {_fmt_age(idle)}"
+        os.remove(path)
+    raise GateError(f"could not acquire {path}: it keeps changing under us")
+
+
+def cmd_lock_release(args) -> int:
+    path = lock_path(args.root)
+    held = read_lock(path)
+    if held is None:
+        print(f"UNLOCKED (no lock) — {path}")
+        return 0
+    me = session_id()
+    if held["session"] != me and not args.force:
+        who, _ = describe_holder(held)
+        print(f"BUSY {path}\n  held by {who}\n  not this session's lock: pass --force to remove it anyway")
+        return 2
+    os.remove(path)
+    print(f"UNLOCKED {'(forced) ' if held['session'] != me else ''}— {path}")
+    return 0
+
+
+def cmd_lock_status(args) -> int:
+    path = lock_path(args.root)
+    held = read_lock(path)
+    if held is None:
+        print(f"FREE — {path}")
+        return 0
+    who, _ = describe_holder(held)
+    mine = held["session"] == session_id()
+    print(f"HELD {'(this session) ' if mine else ''}by {who} — {path}")
+    return 0 if mine else 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", default=".", help="repo checkout to read (must be on main)")
@@ -272,9 +501,23 @@ def main() -> int:
     p = sub.add_parser("check"); p.add_argument("story")
     p = sub.add_parser("analysed"); p.add_argument("--epic", type=int, required=True)
     sub.add_parser("list")
+    p = sub.add_parser("resolve", help="which lane this working tree serves")
+    p.add_argument("--epic", type=int, help="the lane asked for; omitted = work it out from the tree and the board")
+    p = sub.add_parser("lock", help="one-run-per-working-tree lock, kept in the git dir")
+    lock = p.add_subparsers(dest="action", required=True)
+    p = lock.add_parser("acquire"); p.add_argument("--epic", type=int, required=True)
+    p.add_argument("--story", help="record the story key once Step 0 has chosen it")
+    p.add_argument("--stale-after", type=int, default=STALE_AFTER, metavar="SECONDS",
+                   help=f"take over a holder silent for this long (default {STALE_AFTER})")
+    p = lock.add_parser("release"); p.add_argument("--force", action="store_true", help="remove another session's lock")
+    lock.add_parser("status")
     args = parser.parse_args()
     try:
-        gates_path, status_path = resolve_files(args)
+        if args.command == "resolve":
+            return cmd_resolve(args)
+        if args.command == "lock":
+            return {"acquire": cmd_lock_acquire, "release": cmd_lock_release, "status": cmd_lock_status}[args.action](args)
+        gates_path, status_path = resolve_files(args, "gates_file", "status_file")
         doc = read_lane_gates(gates_path)
         status = read_sprint_status(status_path)
         return {"check": cmd_check, "analysed": cmd_analysed, "list": cmd_list}[args.command](args, doc, status)
