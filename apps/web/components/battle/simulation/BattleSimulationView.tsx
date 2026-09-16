@@ -33,8 +33,10 @@ import SpeedControl from './SpeedControl';
  *    (stop the loop, detach the renderer, drop the session — Story 3.10 AC10), and nothing here
  *    writes to `initialGrid` (FR-4.8, AR-31).
  *
- * Deliberately ABSENT, by story: the extinction stop (3.15 — the hook's), `<GridSizeControl>`
- * (3.16), fullscreen (3.18), hotkeys (3.19). The transport bar shipped in 3.12:
+ * Deliberately ABSENT, by story: `<GridSizeControl>` (3.16), fullscreen (3.18), hotkeys (3.19). The
+ * extinction auto-pause (FR-4.7, Decision B.5, Story 3.15) is the hook's alone — this component
+ * gains no state, hook, effect or prop for it; it is observed through `status` exactly like a
+ * manual pause. The transport bar shipped in 3.12:
  * `<SimulationControlBar>` is the only thing that moves the view off paused-at-cycle-0, and
  * `handlePlayPause` below is the one derivation genuinely new there — which verb Play/Pause means,
  * decided from `status` (3.12 FD3). The Speed section shipped in 3.13: `<SpeedControl>` reads
@@ -169,11 +171,11 @@ export default function BattleSimulationView({
   // handler's closure is re-created on every status change, exactly when the label is supposed to
   // flip. The bar itself never sees `sim` (spec §3.13 gives it ONE `onPlayPause`).
   //
-  // Known gap, not guarded here (`deferred-work.md`, 3-10 review → Story 3.15): a throw inside the
-  // RAF step leaves `status: 'playing'` over a loop that has already stopped itself. In that state
-  // this button still reads "Pause", and pressing it calls `pause()` — which IS the correct
-  // recovery (the loop is already stopped; the status write is what is stale) — so nothing here
-  // needs to special-case it.
+  // Gap closed by Story 3.15: the hook's thunk now publishes `status: 'paused'` itself on both an
+  // extinction auto-pause (FR-4.7) and a mid-frame throw (the loop-facing wrappers, 3.15 FD3) — the same
+  // keyed `settleStopped` write `pause()` already used. `handlePlayPause` therefore needs no guard:
+  // `status` is never stale over a loop that has already stopped itself, so a button that reads
+  // "Pause" always means the loop really is running.
   //
   // Deps are the three members, not `sim`: `sim` is a NEW object on every publish (its `useMemo`
   // keys on `view`, which carries `cycle`/`population` at up to 10 Hz), so `[sim]` would hand the

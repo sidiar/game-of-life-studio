@@ -2562,15 +2562,14 @@ test.describe('Cycle counter & population stats (Story 3.14)', () => {
 
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
-    // AC8's literal condition — the scan WHILE PLAYING with the extinct row present. No auto-pause
-    // exists yet (3.15), so the empty dish simply keeps cycling under the skull row.
+    // Under FR-4.7 the run auto-pauses at the very next cycle: an extinct grid can never be
+    // "playing" for more than one cycle, so the scan below is of the auto-paused state — the state
+    // FR-4.7 makes reachable — rather than of a still-playing extinct dish (Story 3.15).
     await page.getByRole('button', { name: 'Play' }).click();
-    await expect(view(page)).toHaveAttribute('data-status', 'playing');
-    await expect.poll(() => cycleValue(page).textContent()).not.toBe('0001');
+    await expect(view(page)).toHaveAttribute('data-cycle', '2');
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
     await expect(populationRows(page).getByRole('img', { name: 'extinct' })).toHaveCount(1);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-    await page.getByRole('button', { name: 'Pause' }).click();
-    await expect(view(page)).toHaveAttribute('data-status', 'paused');
 
     expect(errors).toEqual([]);
   });
@@ -2601,6 +2600,99 @@ test.describe('Cycle counter & population stats (Story 3.14)', () => {
     await expect(rows.nth(0)).toContainText('4 (33%)');
     await expect(rows.nth(1)).toContainText('4 (33%)');
     await expect(rows.nth(2)).toContainText('4 (33%)');
+
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Extinction auto-pause (Story 3.15)', () => {
+  const view = (page: Page): Locator => page.locator('[data-status]');
+  const cycleValue = (page: Page): Locator =>
+    page
+      .getByRole('heading', { level: 2, name: 'Cycle Count' })
+      .locator('xpath=following-sibling::*[1]');
+  const totalLivingValue = (page: Page): Locator =>
+    page.getByText('Total Living Cells').locator('xpath=following-sibling::*[1]');
+
+  // (a): `/battle/new`'s single-organism roster, one cell painted — the 3.14 (d) recipe —
+  // proves the auto-pause end to end: reachable, resumable (not a reset), and undone by Stop &
+  // reset (FR-4.7).
+  test('a lone painted cell auto-pauses at cycle 1, resumes and auto-pauses again, and Stop & reset undoes it (AC1, AC2)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await seedConwaysClassic(page);
+    await page.goto('/battle/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Untitled Battle');
+
+    const canvas = page.getByRole('img', { name: /petri dish/i });
+    await canvas.click();
+    const before = 2;
+    await expect
+      .poll(async () => distinctColorCount(canvas), { timeout: 2000 })
+      .toBeGreaterThan(before);
+
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+
+    await page.getByRole('button', { name: 'Play' }).click();
+    // Assert `data-cycle` FIRST, then `data-status` (they land in one publish, and 'paused' is
+    // also the pre-Play value — a status-first assertion could pass against stale DOM).
+    await expect(view(page)).toHaveAttribute('data-cycle', '1');
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(cycleValue(page)).toHaveText('0001');
+    await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Next cycle' })).toBeEnabled();
+    await expect(totalLivingValue(page)).toHaveText('0');
+
+    // Resume, not reset — the second auto-pause lands one cycle later, not back at 0.
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '2');
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(cycleValue(page)).toHaveText('0002');
+    await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Next cycle' })).toBeEnabled();
+
+    await page.getByRole('button', { name: 'Stop & reset' }).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(cycleValue(page)).toHaveText('0000');
+    await expect(populationRows(page).nth(0)).toContainText('1 (100%)');
+    await expect(populationRows(page).getByRole('img', { name: 'extinct' })).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  // (b): the route-level "a static grid keeps running" check. Three-Way Skirmish settles into
+  // still-lifes at 8 cells from cycle 9 (measured) — it must NOT auto-pause, ever, no matter how
+  // long it plays.
+  test('Three-Way Skirmish keeps playing past cycle 30 once settled into still-lifes (AC4)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+
+    // 20 gen/sec (the ladder's top index, 3.13) so cycle 30 arrives in ~1.5s.
+    await speedSlider(page).fill('4');
+    await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '20 generations per second');
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+
+    await expect
+      .poll(async () => Number(await cycleValue(page).textContent()), { timeout: 5000 })
+      .toBeGreaterThan(30);
+    // Still playing at that point — the still-lifes it settled into never extinguish, so nothing
+    // in that span could have taken the auto-pause branch.
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+
+    await page.getByRole('button', { name: 'Pause' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
 
     expect(errors).toEqual([]);
   });

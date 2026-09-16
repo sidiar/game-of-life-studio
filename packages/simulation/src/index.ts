@@ -44,8 +44,17 @@ export type { Action, SurvivalPayload, SurvivalRule, SurvivalRules } from './gol
 // living in the caller's ref (Story 3.10), never in the loop. `apps/web` consumes `Grid` through its own
 // `RenderableGrid` alias (lib/canvas/renderableGrid.ts), which is now a re-export of this type
 // rather than a structural twin of it — Cross-RFC Reconciliation #3's runtime boundary lives here,
-// not in @gol/persistence, which must stay a leaf over @gol/domain (AR-2/27).
-export { clearGrid, cloneGrid, createGrid, gridFromDense, gridToDense } from './grid/grid';
+// not in @gol/persistence, which must stay a leaf over @gol/domain (AR-2/27). `isGridEmpty` is the
+// plain-emptiness predicate Decision B.5 names for extinction auto-pause (Story 3.15) — the loop
+// and the strategy still know nothing about it; the hook calls it per cycle after the step.
+export {
+  clearGrid,
+  cloneGrid,
+  createGrid,
+  gridFromDense,
+  gridToDense,
+  isGridEmpty,
+} from './grid/grid';
 export type { Grid } from './grid/grid';
 export { createGridBuffers, swapGridBuffers } from './grid/doubleBuffer';
 export type { GridBuffers } from './grid/doubleBuffer';

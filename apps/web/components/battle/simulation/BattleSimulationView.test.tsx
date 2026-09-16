@@ -789,4 +789,88 @@ describe('BattleSimulationView — cycle counter & population stats (Story 3.14)
     act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());
     expect((await axe(container)).violations).toEqual([]);
   });
+
+  // Extinction auto-pause (Story 3.15, FR-4.7, Decision B.5): no new state, hook, effect or prop —
+  // observed through `status` exactly like a manual pause (AC8).
+  it('auto-pauses on the first extinct cycle: the skull row, Play resumable, Next cycle enabled, and Stop & reset undoes it', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(
+      view({ organisms: CONWAY_ORGANISMS, initialGrid: LONE_GRID, palette: CONWAY_PALETTE }),
+    );
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0); // primes the clock — no step
+    driver.frame(100); // cycle 1: the lone cell dies, and the run auto-pauses
+
+    const el = root(container);
+    expect(el).toHaveAttribute('data-status', 'paused');
+    expect(el).toHaveAttribute('data-cycle', '1');
+    expect(cycleText()).toBe('0001');
+    expect(within(rows()[0]).getByText('0 (0%)')).toBeInTheDocument();
+    expect(within(rows()[0]).getByRole('img', { name: 'extinct' })).toBeInTheDocument();
+    expect(totalLivingText()).toBe('0');
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next cycle' })).not.toBeDisabled();
+
+    // (iii) resume, then auto-pause again on the still-empty grid at the next cycle.
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(200); // primes the restarted loop
+    driver.frame(300); // cycle 2, auto-paused again
+
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+    expect(cycleText()).toBe('0002');
+
+    // (iv) Stop & reset behaves exactly as it would after a manual pause — nothing carries over.
+    act(() => screen.getByRole('button', { name: 'Stop & reset' }).click());
+
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+    expect(cycleText()).toBe('0000');
+    expect(within(rows()[0]).getByText('1 (100%)')).toBeInTheDocument();
+    expect(within(rows()[0]).queryByRole('img', { name: 'extinct' })).not.toBeInTheDocument();
+  });
+
+  // (ii): the auto-pause frame is exactly ONE commit — never a status commit plus a publish commit
+  // (trap 3 of the story; the same shape AC7's cadence test pins for a manual pause).
+  it('the auto-pause frame commits exactly once', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const onRender = vi.fn();
+
+    render(
+      <Profiler id="run" onRender={onRender}>
+        {view({ organisms: CONWAY_ORGANISMS, initialGrid: LONE_GRID, palette: CONWAY_PALETTE })}
+      </Profiler>,
+    );
+    onRender.mockClear(); // drop the mount commit
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    onRender.mockClear(); // drop the Play commit (status: paused -> playing)
+
+    driver.frame(0); // primes the clock — no commit
+    expect(onRender).not.toHaveBeenCalled();
+
+    driver.frame(100); // cycle 1: extinct — the auto-pause frame
+
+    expect(onRender).toHaveBeenCalledTimes(1);
+    expect(cycleText()).toBe('0001');
+  });
+
+  // (v): axe-clean in the auto-paused state.
+  it('has no axe violations auto-paused with an extinct row', async () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(
+      view({ organisms: CONWAY_ORGANISMS, initialGrid: LONE_GRID, palette: CONWAY_PALETTE }),
+    );
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+    expect(cycleText()).toBe('0001');
+
+    expect((await axe(container)).violations).toEqual([]);
+  });
 });

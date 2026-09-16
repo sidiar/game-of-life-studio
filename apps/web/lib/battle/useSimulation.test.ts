@@ -1,7 +1,13 @@
 import { createElement, useEffect } from 'react';
 import type { Organism } from '@gol/domain';
 import { gridFromDense, type FrameScheduler, type Grid } from '@gol/simulation';
-import { CONWAYS_CLASSIC, FIXED_SEED, gridFromPattern } from '@gol/test-utils';
+import {
+  CONWAYS_CLASSIC,
+  FIXED_SEED,
+  emptyGrid,
+  gridFromPattern,
+  placePattern,
+} from '@gol/test-utils';
 import { act, render, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { derivePopulation } from './population';
@@ -98,6 +104,19 @@ function createFakeRenderer(size: { cols: number; rows: number } = { cols: 5, ro
 const LEGEND = { '.': 0, a: 1, b: 2 } as const;
 function blinker(): Grid {
   return gridFromDense(gridFromPattern(['.....', '..a..', '..a..', '..a..', '.....'], LEGEND));
+}
+/** A lone Conway cell — dies after exactly one cycle under B3/S23 (no neighbours to survive). */
+function lone(): Grid {
+  return gridFromDense(gridFromPattern(['...', '.a.', '...'], LEGEND));
+}
+/** A 2x2 block on a 4x4 field — a still-life (AC4): the picture never changes, but `age` keeps climbing. */
+function block(): Grid {
+  return gridFromDense(gridFromPattern(['....', '.aa.', '.aa.', '....'], LEGEND));
+}
+/** The canonical south-east glider on a 12x12 field, corner-placed clear of every edge for 20 cycles. */
+function glider12(): Grid {
+  const GLIDER = gridFromPattern(['.a.', '..a', 'aaa'], LEGEND);
+  return gridFromDense(placePattern(emptyGrid(12, 12), GLIDER, 0, 0));
 }
 const CONWAY: readonly Organism[] = [CONWAYS_CLASSIC];
 const ORGANISM_B: Organism = {
@@ -780,5 +799,271 @@ describe('useSimulation — the seed (AC11, RFC-008 Decision 4)', () => {
     expect(random).toHaveBeenCalledTimes(1);
     act(() => result.current.step());
     expect(result.current.cycle).toBe(1);
+  });
+});
+
+// ── Extinction auto-pause (FR-4.7, Decision B.5, Story 3.15) ─────────────────────────────────────
+
+describe('useSimulation — extinction auto-pause (AC1, AC2, AC3, FR-4.7, Decision B.5)', () => {
+  it('a lone cell at 10 gen/sec auto-pauses at cycle 1: one keyed publish, loop stopped, empty grid painted', () => {
+    const h = harness(10);
+    const fake = createFakeRenderer({ cols: 3, rows: 3 });
+    const initialGrid = lone();
+    const { result } = mount(initialGrid, CONWAY, h);
+    act(() => result.current.attachRenderer(fake.renderer));
+    act(() => result.current.play());
+    vi.mocked(derivePopulation).mockClear();
+    // An auto-pause is a pause, not a Stop (AC2): the seed is not re-minted.
+    const random = vi.spyOn(Math, 'random');
+
+    act(() => h.scheduler.frame(0));
+    act(() => h.scheduler.frame(100));
+
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(1);
+    expect(result.current.population).toHaveLength(1);
+    expect(result.current.population[0].extinct).toBe(true);
+    expect(h.scheduler.pending()).toBe(0);
+    expect(fake.drawDiff).toHaveLength(1);
+    expect(Array.from(fake.drawDiffSnapshots[0]).every((cell) => cell === 0)).toBe(true);
+    // The mount/attach prime only — no Stop-style repaint on an auto-pause.
+    expect(fake.drawFull).toHaveLength(1);
+    expect(result.current.liveSize).toEqual({ cols: 3, rows: 3 });
+    expect(derivePopulation).toHaveBeenCalledTimes(1);
+    expect(random).not.toHaveBeenCalled();
+    // `initialGrid` is untouched (AR-31, FR-4.8): the live buffers went empty, the input did not.
+    expect(initialGrid.occupant[4]).toBe(1);
+  });
+
+  it('the auto-pause frame commits exactly ONCE — never a status commit plus a publish commit (trap 3)', () => {
+    const h = harness(10);
+    let renders = 0;
+    const grid = lone();
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useSimulation(grid, CONWAY, h.opts);
+    });
+    act(() => result.current.play());
+    const rendersAfterPlay = renders;
+
+    act(() => h.scheduler.frame(0));
+    act(() => h.scheduler.frame(100));
+
+    expect(renders).toBe(rendersAfterPlay + 1);
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(1);
+  });
+
+  it('off-cadence extinction still publishes the EXACT cycle at 20 gen/sec (trap 2)', () => {
+    // cyclesPerPublish(20) === 2; the lone cell dies at cycle 1, which is off the cadence. Without
+    // the stop path's own publish, the cadence branch would not fire (1 is odd) and the view would
+    // keep showing cycle 0 (and `status: 'playing'`) over a loop that has already stopped.
+    const h = harness(20);
+    const { result } = mount(lone(), CONWAY, h);
+    act(() => result.current.play());
+
+    runCycles(h, 1, 20);
+
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(1);
+  });
+
+  it('resume after auto-pause: play() restarts the loop, and a still-empty grid auto-pauses again next cycle', () => {
+    const h = harness(10);
+    const fake = createFakeRenderer({ cols: 3, rows: 3 });
+    const { result } = mount(lone(), CONWAY, h);
+    act(() => result.current.attachRenderer(fake.renderer));
+    act(() => result.current.play());
+    act(() => h.scheduler.frame(0));
+    act(() => h.scheduler.frame(100));
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(1);
+
+    act(() => result.current.play());
+    expect(result.current.status).toBe('playing');
+    expect(h.scheduler.pending()).toBe(1);
+
+    act(() => h.scheduler.frame(200));
+    act(() => h.scheduler.frame(300));
+
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(2);
+    expect(h.scheduler.pending()).toBe(0);
+    expect(fake.drawDiff).toHaveLength(2);
+    expect(Array.from(fake.drawDiffSnapshots[1]).every((cell) => cell === 0)).toBe(true);
+  });
+
+  it('step() after an auto-pause advances one more cycle, stays paused, and does not throw (FD5 guard does not fire)', () => {
+    const h = harness(10);
+    const { result } = mount(lone(), CONWAY, h);
+    act(() => result.current.play());
+    act(() => h.scheduler.frame(0));
+    act(() => h.scheduler.frame(100));
+    expect(result.current.cycle).toBe(1);
+    vi.mocked(derivePopulation).mockClear();
+
+    act(() => result.current.step());
+
+    expect(result.current.cycle).toBe(2);
+    expect(result.current.status).toBe('paused');
+    expect(derivePopulation).toHaveBeenCalledTimes(1);
+  });
+
+  it('stop() after an auto-pause behaves exactly as today — fresh run at cycle 0, one drawFull, a new seed', () => {
+    const h = harness(10);
+    const fake = createFakeRenderer({ cols: 3, rows: 3 });
+    const { result } = mount(lone(), CONWAY, h);
+    act(() => result.current.attachRenderer(fake.renderer));
+    act(() => result.current.play());
+    act(() => h.scheduler.frame(0));
+    act(() => h.scheduler.frame(100));
+    expect(result.current.status).toBe('paused');
+    const drawFullBefore = fake.drawFull.length;
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    act(() => result.current.stop());
+
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(0);
+    expect(fake.drawFull).toHaveLength(drawFullBefore + 1);
+    expect(result.current.population[0].count).toBe(1);
+    expect(result.current.population[0].extinct).toBe(false);
+    expect(random).toHaveBeenCalledTimes(1);
+  });
+
+  it('manual step() onto an ALREADY-empty grid takes no stop path — one sweep, status unchanged', () => {
+    const h = harness(10);
+    const { result } = mount(lone(), CONWAY, h);
+    act(() => result.current.step());
+    expect(result.current.cycle).toBe(1);
+    vi.mocked(derivePopulation).mockClear();
+
+    act(() => result.current.step());
+
+    expect(derivePopulation).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(2);
+  });
+
+  // AC4: still-lifes, oscillators and gliders keep running — the intuitive "a static grid pauses"
+  // test is a spec violation (Decision B.5, project-context).
+  it('a block (still-life) never auto-pauses across 20 cycles — status stays playing, age still climbs', () => {
+    const h = harness(10);
+    const fake = createFakeRenderer({ cols: 4, rows: 4 });
+    const { result } = mount(block(), CONWAY, h);
+    act(() => result.current.attachRenderer(fake.renderer));
+    act(() => result.current.play());
+
+    runCycles(h, 20, 10);
+
+    expect(result.current.status).toBe('playing');
+    expect(h.scheduler.pending()).toBe(1);
+    expect(result.current.cycle).toBe(20);
+    // The grid that "did nothing" was still evolving: age saturates at maxRelevantAge = 7.
+    const last = fake.drawDiff[fake.drawDiff.length - 1];
+    expect(last.age[1 * 4 + 1]).toBe(7);
+  });
+
+  it('the blinker (period 2) never auto-pauses across 20 cycles', () => {
+    const h = harness(10);
+    const { result } = mount(blinker(), CONWAY, h);
+    act(() => result.current.play());
+
+    runCycles(h, 20, 10);
+
+    expect(result.current.status).toBe('playing');
+    expect(h.scheduler.pending()).toBe(1);
+    expect(result.current.cycle).toBe(20);
+  });
+
+  it('a glider (12x12) never auto-pauses across 20 cycles', () => {
+    const h = harness(10);
+    const { result } = mount(glider12(), CONWAY, h);
+    act(() => result.current.play());
+
+    runCycles(h, 20, 10);
+
+    expect(result.current.status).toBe('playing');
+    expect(h.scheduler.pending()).toBe(1);
+    expect(result.current.cycle).toBe(20);
+  });
+});
+
+// ── The error-stop follows the same path (AC6, FD3) ───────────────────────────────────────────────
+
+describe('useSimulation — the error-stop follows the same path (AC6, FD3, Story 3.15)', () => {
+  it('a renderer whose drawDiff throws once: the frame throws, status follows to paused, and play() resumes', () => {
+    const h = harness(10);
+    const boom = new Error('boom');
+    let calls = 0;
+    const throwingRenderer: PlaybackRenderer = {
+      drawDiff: () => {
+        calls += 1;
+        if (calls === 1) throw boom;
+      },
+      drawFull: () => {},
+      resize: () => {},
+    };
+    const { result } = mount(blinker(), CONWAY, h);
+    act(() => result.current.attachRenderer(throwingRenderer));
+    act(() => result.current.play());
+    act(() => h.scheduler.frame(0));
+
+    // Caught INSIDE `act` (not let escape it): React's `act` only flushes pending state updates
+    // when its callback returns normally (verified against `react/cjs/react.development.js`'s
+    // `act`: a callback that throws skips `flushActQueue` entirely). Production does NOT have
+    // this problem — a RAF callback that throws still leaves the `setView` dispatched from inside
+    // `settleStopped` scheduled with React, and it flushes regardless; only the test harness
+    // needs the error kept inside the callback.
+    let caught: unknown;
+    act(() => {
+      try {
+        h.scheduler.frame(100);
+      } catch (error) {
+        caught = error;
+      }
+    });
+
+    expect(caught).toBe(boom);
+    // The step completed before the paint threw — cycle 1 stands, and `status` follows to paused
+    // instead of reading 'playing' over a dead loop (the 3-10 review finding).
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(1);
+    expect(h.scheduler.pending()).toBe(0);
+
+    act(() => result.current.play());
+    expect(h.scheduler.pending()).toBe(1);
+  });
+
+  it('a throw from inside the step thunk (a cadence publish that throws) takes the driver-side wrapper: status follows to paused, and play() resumes', () => {
+    // The only throw a valid session can raise from inside `session.step()` is the publish's own
+    // `derivePopulation` (M12 compiles the roster up front, so the strategy does not throw) —
+    // reachable here because `./population` is spy-mocked. The wrapper's `settleStopped` then
+    // sweeps again with the real implementation (`mockImplementationOnce` is consumed).
+    const h = harness(10);
+    const boom = new Error('publish boom');
+    const { result } = mount(blinker(), CONWAY, h);
+    act(() => result.current.play());
+    act(() => h.scheduler.frame(0));
+    vi.mocked(derivePopulation).mockImplementationOnce(() => {
+      throw boom;
+    });
+
+    let caught: unknown;
+    act(() => {
+      try {
+        h.scheduler.frame(100);
+      } catch (error) {
+        caught = error;
+      }
+    });
+
+    expect(caught).toBe(boom);
+    expect(result.current.status).toBe('paused');
+    expect(result.current.cycle).toBe(1);
+    expect(h.scheduler.pending()).toBe(0);
+
+    act(() => result.current.play());
+    expect(h.scheduler.pending()).toBe(1);
   });
 });
