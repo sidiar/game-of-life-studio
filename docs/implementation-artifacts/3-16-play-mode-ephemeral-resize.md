@@ -823,3 +823,18 @@ Claude Sonnet 5 (claude-sonnet-5).
 
 Dev Model: sonnet   # a control and a section over contracts 3.10/3.11/3.13 already pinned (resizeLive/stop/liveSize, the canvas rebuild on dimensions, the native-range index idiom); FD1–FD4 resolve every open call, and the one refactor (LadderSlider) is proven by an untouched test file
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 20s | 20s | 8 | 1,275 | 4,299 | 198,592 | 204,174 |
+| Step 1 — create-story | opus-5 | 1 | 13m 46s | 13m 46s | 190 | 59,571 | 418,804 | 15,140,680 | 15,619,245 |
+| Step 2 — dev-story | sonnet-5 | 1 | 23m 49s | 23m 49s | 718 | 96,381 | 889,056 | 86,983,789 | 87,969,944 |
+| Step 3 — code review + PR | opus-5 | 4 | 25m 50s | 25m 50s | 386 | 100,557 | 834,649 | 17,716,990 | 18,652,582 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 42 | 10,059 | 25,316 | 1,163,382 | 1,198,799 |
+| **Total (create-story → PR ready)** | | 6 | **1h 03m** | 1h 03m | 1,302 | 257,784 | 2,146,808 | 120,040,051 | **122,445,945** |
+
+Run started 2026-09-16 18:21 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
