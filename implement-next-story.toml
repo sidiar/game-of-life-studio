@@ -2,6 +2,19 @@
 # (.claude/skills/implement-next-story, a subtree of sidiar/implement-next-story).
 # SKILL.md reads it at the start of every run; lane-gates.py reads [paths].
 
+[adapter]
+name = "bmad"               # adapters/bmad/adapter.md, shipped with the skill (written against BMad v6.8.0)
+
+[models]
+create        = "opus"     # Step 1 and Opening a lane
+dev           = "sonnet"   # Step 2 default
+dev_escalated = "opus"     # Step 2 when the story is architecture-shaping
+sync          = "sonnet"   # Step S
+
+[models.review]            # Step 3: reviewer per dev model — never the same, never weaker
+sonnet = "opus"
+opus   = "fable"
+
 [paths]
 status_file = "docs/implementation-artifacts/sprint-status.yaml"
 stories_dir = "docs/implementation-artifacts"
