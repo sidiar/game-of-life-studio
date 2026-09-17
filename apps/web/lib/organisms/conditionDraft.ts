@@ -112,10 +112,14 @@ export function cellStateLabel(state: CellState): string {
   }
 }
 
-/** `['eq']` for the two singletons, `NUMERIC_OPERATORS` otherwise (same reference — `withOperator`
- * and the tests rely on this being the literal array, not a fresh copy). */
+const SINGLETON_OPERATORS: readonly NumericOperator[] = ['eq'];
+
+/** `['eq']` for the two singletons, `NUMERIC_OPERATORS` otherwise — each the SAME reference on
+ * every call, so a `<select>` keyed on the result never sees a fresh array per render. */
 export function operatorsFor(property: ConditionProperty): readonly NumericOperator[] {
-  return property === 'cellState' || property === 'organismType' ? ['eq'] : NUMERIC_OPERATORS;
+  return property === 'cellState' || property === 'organismType'
+    ? SINGLETON_OPERATORS
+    : NUMERIC_OPERATORS;
 }
 
 // --- Bounds — editor tightening INSIDE the schema's 0..65534 (survivalRuleSchema.ts:3-5) --------
@@ -182,7 +186,8 @@ export function defaultConditionFor(
 }
 
 /** Same property, new operator: scalar<->scalar keeps `pattern`; to/from `range` resets it. The
- * SAME object comes back for a same-operator call, so a no-op re-render never fires. */
+ * SAME object comes back for a same-operator call, and `replaceCondition` passes that identity
+ * through, so a no-op change never reaches the modal's `setDraft` as a new draft. */
 export function withOperator(
   draft: NumericConditionDraft,
   operator: NumericOperator,
@@ -197,7 +202,8 @@ export function withOperator(
   return { id: draft.id, property: draft.property, operator, pattern: draft.pattern };
 }
 
-// --- List helpers — same-reference on an unknown id, other rows by reference (the ruleDraft.ts contract) --
+// --- List helpers — same reference on an unknown id or an identical row, other rows by reference
+// (the ruleDraft.ts contract) ---------------------------------------------------------------------
 
 export function appendCondition(
   conditions: readonly ConditionDraft[],
@@ -218,7 +224,10 @@ export function replaceCondition(
   conditions: readonly ConditionDraft[],
   next: ConditionDraft,
 ): readonly ConditionDraft[] {
-  if (!conditions.some((condition) => condition.id === next.id)) return conditions;
+  const current = conditions.find((condition) => condition.id === next.id);
+  // Unknown id, or the slot already holds this exact object (`withOperator`'s same-operator
+  // return): the same array, so `updateRuleConditions`' no-op guard trips all the way up.
+  if (current === undefined || current === next) return conditions;
   return conditions.map((condition) => (condition.id === next.id ? next : condition));
 }
 
@@ -344,8 +353,9 @@ export function conditionDraftFrom(condition: Condition, id: string): ConditionD
       // `operator` and `pattern` are independent fields on the schema's own (non-discriminated)
       // NumericCondition type, so TS cannot correlate them from `operator` alone — narrow on
       // `Array.isArray(pattern)` instead, which the schema's own refine guarantees agrees with
-      // `operator === 'range'`. The ternary below re-derives the same fact for `operator`'s type,
-      // without an `as` cast.
+      // `operator === 'range'`. The scalar branch re-checks `operator` only to narrow ITS type
+      // without an `as` cast; a `range` operator with a scalar pattern cannot pass the schema, so
+      // that path throws rather than quietly rewriting a record.
       const pattern = condition.pattern;
       if (Array.isArray(pattern)) {
         const [min, max] = pattern;
@@ -356,10 +366,13 @@ export function conditionDraftFrom(condition: Condition, id: string): ConditionD
           pattern: [String(min), String(max)],
         };
       }
+      if (condition.operator === 'range') {
+        throw new Error('range condition with a scalar pattern — ConditionSchema forbids this');
+      }
       return {
         id,
         property: condition.property,
-        operator: condition.operator === 'range' ? 'eq' : condition.operator,
+        operator: condition.operator,
         pattern: String(pattern),
       };
     }

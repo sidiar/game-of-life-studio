@@ -28,6 +28,8 @@ import ConditionRow from './ConditionRow';
  * (`<RulesEditor>`'s `focusIsLoose` idiom) targets the row now at the removed index, else the last
  * row, else `[data-add-condition]` when no row remains — every target is non-destructive (the
  * Story 4.10 AC5 reasoning); any other change moves nothing.
+ *
+ * (Story 4.11) (UX-DR10) (UX-DR17)
  */
 
 const AddConditionButton = styled('button')({

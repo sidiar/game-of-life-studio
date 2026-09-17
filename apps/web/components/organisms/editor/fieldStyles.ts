@@ -16,11 +16,12 @@ import { styled } from '@mui/material/styles';
  * `labelRules` is the one place the label typography lives — `Label` and `Legend` both read it.
  *
  * Story 4.11 lifts `controlRules` (and its `TextInput`/`SelectInput` wrappers) here too: the
- * three-callers threshold `RuleCard.tsx`'s own comment named is met by the condition builder's
- * inputs. Moved BYTE-IDENTICAL from `RuleCard.tsx` plus one rule
- * (`'&[aria-invalid="true"]'`), which is inert on `RuleCard`'s Summary/Action (neither ever sets
- * `aria-invalid`) — the proof that `RuleCard.test.tsx` runs unedited by this move (Story 4.7's
- * idiom).
+ * three-callers threshold `RuleCard.tsx`'s own comment named — its Summary/Action, the name
+ * field's `Input` (which keeps its own metrics and is NOT lifted), and the condition builder's
+ * inputs — is met. The rule set is `RuleCard.tsx`'s unchanged, with one rule appended
+ * (`'&[aria-invalid="true"]'`) that is inert on Summary/Action (neither ever sets `aria-invalid`)
+ * — the proof being that `RuleCard.test.tsx`'s pre-existing cases pass unedited by the move
+ * (Story 4.7's idiom; that file's edits in Story 4.11 are for the card's new props, not this).
  */
 
 // Mockup: `.form-field` (`clinical-lab-theme/organism-editor.html:153-156`; markup `:912-916`,
@@ -68,8 +69,8 @@ export const Description = styled('p')({
   lineHeight: 1.4,
 });
 
-// `RuleCard.tsx`'s `controlRules`, byte-identical, plus the aria-invalid border rule the condition
-// builder's numeric/range inputs need (Story 4.11). Third caller: `RuleCard`'s Summary/Action,
+// `RuleCard.tsx`'s `controlRules` as they were, plus the aria-invalid border rule the condition
+// builder's numeric/range inputs need (Story 4.11). Callers: `RuleCard`'s Summary/Action and
 // `<ConditionRow>`'s property/operator/value/min/max controls.
 export const controlRules = {
   width: '100%',

@@ -15,6 +15,7 @@ import {
   operatorLabel,
   operatorsFor,
   type OrganismOption,
+  ORGANISM_REQUIRED,
   validateConditionDraft,
   withOperator,
 } from '@/lib/organisms/conditionDraft';
@@ -138,8 +139,9 @@ export default function ConditionRow({
     error !== null && (error.field === 'pair' ? touched.min && touched.max : touched[error.field]);
   const errorField = visible ? error.field : null;
 
-  const invalidAttrs = (field: 'value' | 'min' | 'max' | 'pair') =>
-    errorField === field || (field !== 'pair' && errorField === 'pair')
+  // The visible error's own input(s) — `pair` names both range inputs.
+  const invalidAttrs = (field: 'value' | 'min' | 'max') =>
+    errorField === field || (field !== 'value' && errorField === 'pair')
       ? ({ 'aria-invalid': 'true' as const, 'aria-describedby': errorId } as const)
       : {};
 
@@ -173,7 +175,7 @@ export default function ConditionRow({
       >
         {!hasMatch && (
           <option value={draft.pattern}>
-            {draft.pattern === '' ? 'Select an organism' : 'Unknown organism'}
+            {draft.pattern === '' ? ORGANISM_REQUIRED : 'Unknown organism'}
           </option>
         )}
         {organisms.map((organism) => (

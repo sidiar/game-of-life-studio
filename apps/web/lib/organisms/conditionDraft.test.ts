@@ -105,12 +105,14 @@ describe('guards', () => {
     }
     expect(isNumericConditionProperty('')).toBe(false);
     expect(isNumericConditionProperty('cellState')).toBe(false);
+    expect(isNumericConditionProperty('Age')).toBe(false);
   });
 
   it('isNumericOperator is true for every member, false for junk', () => {
     for (const operator of NUMERIC_OPERATORS) expect(isNumericOperator(operator)).toBe(true);
     expect(isNumericOperator('')).toBe(false);
     expect(isNumericOperator('EQ')).toBe(false);
+    expect(isNumericOperator('cellState')).toBe(false);
   });
 
   it('isCellState is true for every member, false for junk', () => {
@@ -233,6 +235,13 @@ describe('list helpers', () => {
     expect(next[0]).toBe(replacement);
     expect(next[1]).toBe(B);
     expect(replaceCondition(conditions, { ...replacement, id: 'nope' })).toBe(conditions);
+  });
+
+  // The `withOperator` same-operator object, handed back unchanged, must not allocate — that is
+  // what lets `updateRuleConditions`' no-op guard trip.
+  it('replaceCondition returns the same reference when the slot already holds that object', () => {
+    const conditions = [A, B];
+    expect(replaceCondition(conditions, A)).toBe(conditions);
   });
 });
 
@@ -406,6 +415,8 @@ describe('round trip', () => {
   });
 
   it('fast-check: every schema-valid condition within the editor bounds round-trips', () => {
+    // Literals are drawn from EACH property's own bounds (age reaches 999, the neighbour counts
+    // 8), so the editor cap itself is on the path — not only the 0..8 slice they share.
     const editorValidCondition: fc.Arbitrary<Condition> = fc.oneof(
       fc
         .constantFrom(...CELL_STATES)
@@ -413,22 +424,25 @@ describe('round trip', () => {
       fc
         .string({ minLength: 1 })
         .map((pattern): Condition => ({ property: 'organismType', operator: 'eq', pattern })),
-      fc
-        .record({
-          property: scalarProperty,
-          pattern: fc.integer({ min: 0, max: MAX_NEIGHBOR_COUNT }),
-        })
-        .map(({ property, pattern }): Condition => {
-          const { max } = numericBoundsFor(property);
-          return { property, operator: 'eq', pattern: Math.min(pattern, max) };
-        }),
-      fc
-        .record({ property: scalarProperty, min: fc.integer({ min: 0, max: 7 }) })
-        .chain(({ property, min }) =>
-          fc
-            .integer({ min: min + 1, max: numericBoundsFor(property).max })
-            .map((max): Condition => ({ property, operator: 'range', pattern: [min, max] })),
-        ),
+      scalarProperty.chain((property) => {
+        const { min, max } = numericBoundsFor(property);
+        return fc
+          .record({
+            operator: fc.constantFrom(...NUMERIC_OPERATORS.filter((o) => o !== 'range')),
+            pattern: fc.integer({ min, max }),
+          })
+          .map(({ operator, pattern }): Condition => ({ property, operator, pattern }));
+      }),
+      scalarProperty.chain((property) => {
+        const { min, max } = numericBoundsFor(property);
+        return fc
+          .integer({ min, max: max - 1 })
+          .chain((lo) =>
+            fc
+              .integer({ min: lo + 1, max })
+              .map((hi): Condition => ({ property, operator: 'range', pattern: [lo, hi] })),
+          );
+      }),
     );
 
     fc.assert(

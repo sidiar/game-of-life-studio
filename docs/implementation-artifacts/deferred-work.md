@@ -45,12 +45,11 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 ## Deferred from: code review of 1-6-test-utilities-dev-fixture-workspace (2026-08-05)
 
-- ~~**The AR-45 coverage-matrix *universe* is hand-listed rather than derived from the schema**~~ —
+- ~~**The AR-45 coverage-matrix *universe* is hand-listed rather than derived from the schema** — `packages/test-utils/src/mockWorkspace.test.ts` correctly derives the *covered* property/operator sets from `createMockOrganisms()`'s actual conditions at run time (which is what Story 1.6 Task 6 asked for, and it means editing a fixture rule fails the test rather than passing silently). What is hand-listed is the expected universe: local `ALL_CONDITION_PROPERTIES` / `ALL_OPERATORS` literals, not the schema's own enums. If Epic 4 adds a seventh operator or a sixth condition property, `expect(coveredOperators).toEqual(new Set(ALL_OPERATORS))` stays green and the "AR-45 full coverage" claim quietly becomes false. Deriving them is not a one-liner: `survivalRuleSchema.ts` inlines both as `z.enum([...])` rather than exporting named constants, and the five properties span a discriminated union (`cellState`/`organismType` are separate members from the three numeric ones), so the fix belongs in `@gol/domain` — export the enum arrays (or read them off `ConditionSchema.options`) and consume them here. **Revisit with Story 4.11 (condition builder)**, which is the first place that needs the same universe for its UI and will otherwise hand-list it a third time.~~ —
   **✅ Resolved in Story 4.11.** `packages/domain/src/survivalRuleSchema.ts` now exports
   `CELL_STATES`, `NUMERIC_OPERATORS`, `NUMERIC_CONDITION_PROPERTIES` and `CONDITION_PROPERTIES`,
-  each read off the schema objects (`.options`/`.value`), and `mockWorkspace.test.ts` imports them
-  in place of its local `ALL_CONDITION_PROPERTIES`/`ALL_OPERATORS` literals — the prose above is
-  kept for context; the drift it warned about is what the derived constants now close. `packages/test-utils/src/mockWorkspace.test.ts` correctly derives the *covered* property/operator sets from `createMockOrganisms()`'s actual conditions at run time (which is what Story 1.6 Task 6 asked for, and it means editing a fixture rule fails the test rather than passing silently). What is hand-listed is the expected universe: local `ALL_CONDITION_PROPERTIES` / `ALL_OPERATORS` literals, not the schema's own enums. If Epic 4 adds a seventh operator or a sixth condition property, `expect(coveredOperators).toEqual(new Set(ALL_OPERATORS))` stays green and the "AR-45 full coverage" claim quietly becomes false. Deriving them is not a one-liner: `survivalRuleSchema.ts` inlines both as `z.enum([...])` rather than exporting named constants, and the five properties span a discriminated union (`cellState`/`organismType` are separate members from the three numeric ones), so the fix belongs in `@gol/domain` — export the enum arrays (or read them off `ConditionSchema.options`) and consume them here. **Revisit with Story 4.11 (condition builder)**, which is the first place that needs the same universe for its UI and will otherwise hand-list it a third time.
+  each read off the schema objects (`.options`/`.value`), and `mockWorkspace.test.ts` compares its
+  covered sets against them directly — the local literals are gone.
 
 - **`seedDevFixtures()` partial failure leaves a half-seeded, already-stamped workspace that never retries** — `packages/test-utils/src/seedDevFixtures.ts` writes 3 organisms then 2 battles in a bare `for … await` loop with no rollback. A rejection mid-loop (realistically `QuotaExceededError` on Battle B's 100×60 `gridState`) leaves an arbitrary prefix written; `gol:schema` is already stamped by then, so `isFreshWorkspace()` is `false` on the next load and the dev-fixture branch never runs again — the workspace is stuck half-seeded with no diagnostic beyond `workspace: error`. Story 1.6 put this out of scope explicitly ("❌ No quota-failure injection, no latency simulation, no call spies in this story … add them in the story that first needs one"), and it is dev-only data, so nothing user-facing depends on it. **Revisit with Story 5.8 (atomic import pipeline)**, which has to solve all-or-nothing multi-record writes properly for the real import path — whatever transactional shape lands there should be what this reuses.
 
@@ -1572,7 +1571,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   "greater than equals". A spelled-out label is a one-string change per operator in
   `operatorLabel` (`lib/organisms/conditionDraft.ts`).
 - **Age's editor cap is 999** (design doc) inside the schema's 65534 — the summary's 100/120 class.
-  A record over 999 arriving by import shows the bounds error in edit mode until changed.
+  A record over 999 arriving by import is invalid in edit mode until changed: the bounds error
+  shows once its input is touched, or at Story 4.13's Save-time show-everything override — never
+  on mount (4.5 FD2).
 - **Range validates `<` where the schema accepts `<=`** — same class as the age cap, deliberate
   (AC4/FD8): an `[n, n]` range still parses on import, it just cannot be typed in the editor.
 - **Condition delete has no confirmation and shares 4.10's pointer double-click cascade** (FD7) —

@@ -536,10 +536,14 @@ describe('OrganismEditorModal', () => {
 
     const value = within(rule1).getByRole('combobox', { name: 'Condition 1 value' });
     expect(value).toHaveValue(LIBRARY[0].id);
-    const optionTexts = within(value)
-      .getAllByRole('option')
-      .map((option) => option.textContent);
-    expect(optionTexts).toEqual(LIBRARY.map((organism) => organism.name));
+    const options = within(value).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual(
+      LIBRARY.map((organism) => organism.name),
+    );
+    // Decision E: the option VALUE is the library id — what the pattern persists.
+    expect(options.map((option) => (option as HTMLOptionElement).value)).toEqual(
+      LIBRARY.map((organism) => organism.id),
+    );
   });
 
   it('the range pair error appears inside the card, and clears when Max exceeds Min; deleting the rule clears it', async () => {
