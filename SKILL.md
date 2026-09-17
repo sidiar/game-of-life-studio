@@ -1,12 +1,14 @@
 ---
 name: implement-next-story
-description: Implement exactly one story from sprint-status.yaml end to end — create-story, dev-story, code-review — each in a fresh subagent with its own model. Runs as a per-epic lane (`--epic N`) so two epics can proceed in parallel. Stops at review for approval; safe to re-run. Use when the user says "implement the next story".
+description: Implement exactly one story from sprint-status.yaml end to end — create, implement, review, as the project's adapter defines them — each in a fresh subagent with its own model. Runs as a per-epic lane (`--epic N`) so two epics can proceed in parallel. Stops at review for approval; safe to re-run. Use when the user says "implement the next story".
 ---
 
 # Implement Next Story
 
-Orchestrates **one** story through BMad's three steps. Does not implement anything
-itself — it spawns subagents and reads their artifacts off disk.
+Orchestrates **one** story through three phases — create, implement, review — as the
+project's **adapter** defines them (`adapters/CONTRACT.md`; `bmad` ships with the skill).
+Does not implement anything itself — it spawns subagents and reads their artifacts off
+disk.
 
 One invocation = one story, ending with a PR open for the owner to merge. Repetition is
 the caller's job — normally just asking again.
@@ -18,20 +20,28 @@ them, and every STOP below hands back to them.
 
 ## Project configuration
 
-The project declares where its BMad artifacts live in `implement-next-story.toml` at the
-repo root (template: `implement-next-story.example.toml`, in this skill's directory). Read
-it once, at the start of Step 0; the `{…}` names used below are its `[paths]` keys, and
-`lane-gates.py` reads the same file, so nothing is declared twice.
+The project declares where its artifacts live, and which adapter drives the three
+phases, in `implement-next-story.toml` at the repo root (template:
+`implement-next-story.example.toml`, in this skill's directory). Read it once, at the
+start of Step 0; the `{…}` names used below are its `[paths]` keys, and `lane-gates.py`
+reads the same file, so nothing is declared twice.
 
 | Key | Meaning |
 | --- | --- |
-| `{status_file}` | BMad's `sprint-status.yaml` — read on `main`, always |
-| `{stories_dir}` | where create-story writes `{story_key}.md`; story files for every epic in progress sit flat here |
+| `{status_file}` | the board, `sprint-status.yaml` — this skill's format, which BMad writes natively (`adapters/CONTRACT.md` §3); read on `main`, always |
+| `{stories_dir}` | where Create writes `{story_key}.md`; story files for every epic in progress sit flat here |
 | `{gates_file}` | `lane-gates.yaml`, the cross-epic dependency gates — see *Dependency gates* |
-| `{epics_file}` | BMad's `epics.md`, read only when *Opening a lane* |
+| `{epics_file}` | the epics file, read only when *Opening a lane* |
+| `[adapter]` | `name = "bmad"` (shipped: `{skill_dir}/adapters/<name>/adapter.md`) or `dir = "…"` (project-local, relative to the repo root) — exactly one |
 | `[[sync.rules]]` | the project's own conflict rules for *Step S* — not a path |
 
 No file, or a key missing → STOP before Step 0 and say which; do not guess a layout.
+
+**The adapter file.** Read `adapter.md` once, with the TOML, and hold it for the run. Its
+`## Create`, `## Implement` and `## Review` sections are the spawn-prompt text Steps 1–3
+append — whole, verbatim, placeholders substituted — after the *Subagent instructions*
+below. Its `## Requires` and `## Notes` are for the owner. Missing `[adapter]`, both
+keys, neither, or no `adapter.md` at the path → STOP before Step 0, as for a path.
 
 **Scripts:** `lane-gates.py` (gates, lane resolution, the per-tree lock) and
 `story-run-stats.py` (timing and tokens) live in this skill's directory, written `{skill_dir}` in every command below. Installed as a
@@ -243,8 +253,8 @@ directory is the template.
 The file has a lifecycle, and every step below plays a part in it:
 
 - **Created — Opening a lane** (next section), one `analysed` entry per epic pair.
-- **Updated — by the steps that see dependencies.** Step 1's create-story, Step 3's
-  review, and a Step S sync that aborted on a code conflict each propose rows; the owner
+- **Updated — by the steps that see dependencies.** Step 1's Create, Step 3's
+  Review, and a Step S sync that aborted on a code conflict each propose rows; the owner
   approves; the row rides the story's PR to `main` (edit `{gates_file}` on the branch).
 - **Revisited — on two triggers.** When a lane hits a gate, re-read the row before
   reporting it as the reason (is the prerequisite still the right one?), and after any
@@ -292,8 +302,9 @@ python3 {skill_dir}/story-run-stats.py mark step1
 Spawn a subagent: `model: "opus"`, `subagent_type: "general-purpose"`.
 Do **not** use `fork` — it inherits context and ignores the model override.
 
-Tell it to invoke `bmad-create-story` **for the target story key, by name**, and to end
-its story file with one line naming the model the dev step should use:
+Its prompt is the *Subagent instructions* plus the adapter's `## Create` for
+`{story_key}`. Tell it, in addition, to end the story file with one line naming the
+model the dev step should use:
 
 ```
 Dev Model: sonnet   # one-line justification
@@ -307,11 +318,12 @@ another in-progress epic** (`{status_file}` says which epics those are), end the
 file with a `Proposed lane gate:` line in `{gates_file}`'s row shape — or `none`. That
 line is a proposal for the owner, carried to Step 5; the dev step does not act on it.
 
-Naming the story is not optional: `bmad-create-story`'s auto-discovery takes the first
-`backlog` story in the whole file, which with two epics in progress is the **other
-lane's** story. The same applies to `bmad-dev-story` and `bmad-code-review` in Steps 2
-and 3 — always pass the story file path. On the epic's first story, create-story flips
-`epic-{E}: backlog → in-progress` itself; that write is expected.
+Naming the story is not optional, here and in Steps 2 and 3: a method tool left to
+discover "the next story" finds the **other lane's** when two epics are in progress.
+The adapter's text names it; do not paraphrase that away. Create may dirty exactly
+`{story_file}` and `{status_file}` — the `ready-for-dev` line and, on the epic's first
+story, `epic-{E}: backlog → in-progress`, which is required: `lane-gates.py` derives the
+in-progress epics from those rows.
 
 ## Step 2 — Implement (model from the story file)
 
@@ -340,8 +352,9 @@ that model and tell it to:
 1. **First**, create and switch to the branch: `git switch -c story/{story_key} origin/main`
    — from `origin/main`, not a local `main` (a lane worktree has none checked out). Do
    this *before* any implementation, so a mid-story failure leaves `main` clean.
-2. Invoke `bmad-dev-story` on the story file path. It runs to completion on its own and
-   leaves the story at `review`. Let it — do not add your own checkpoints inside it.
+2. The adapter's `## Implement` for `{story_file}`. It runs to completion in one
+   execution and leaves the story at `review`. Let it — do not add your own checkpoints
+   inside it.
 3. Commit the work in one commit, message `feat: {story title} (story {id})`.
 4. Push the branch to `origin`. **Never push to `main`.** The PR is Step 3's job.
 
@@ -372,30 +385,27 @@ the second pair of eyes.
 
 `fable` is reachable only through the `opus` row, so it never touches the default path —
 `sonnet` is the default, and Fable costs roughly double Opus per token (as of 2026-09)
-before its longer turns are counted. When it is the reviewer, keep its spawn prompt shorter than
-the others — the goal, the branch, and the two hard rules below — and leave the method
+before its longer turns are counted. When it is the reviewer, keep your own framing shorter than
+for the others — the goal, the branch, and the two hard rules below — and leave the method
 to it. Fable loses quality under step-by-step prescription in a way Opus and Sonnet
-do not.
+do not. The adapter's `## Review` is still appended whole: its halt answers are the
+tool's menu, not method, and dropping them here would drop them where a wrong menu
+choice costs most.
 
 Before spawning, assert the choice out loud: *"Step 2 ran on X, so Step 3 spawns Y."*
 If X and Y are the same, you have mis-derived it — stop and recompute.
 
-**Driving `bmad-code-review` with no human at the keyboard.** Pass it the story file
-path — that is what puts it in `full` review mode; without one it silently reclassifies
-every `decision-needed` finding as `patch` or `defer`, and the draft-PR rule below never
-fires. Its last step stops four times for a numbered answer. Answer as follows, and never
-otherwise:
+**Driving a review tool with no human at the keyboard.** The prompt is the *Subagent
+instructions* plus the adapter's `## Review` for `{story_file}` — which, by contract,
+passes the story file and scripts every halt the tool presents. Two rules hold whatever
+the adapter says, and the spawn prompt states them:
 
-- **§4, resolve `decision-needed`** — do not. Leave each as an unchecked
-  `[Review][Decision]` item in the story file with the options laid out, and go on to
-  §5. BMad's "decisions before patches" rule assumes the decider is present; here the
-  decider is the owner, after the PR — the bucket exists because the fix needs their intent.
-- **§5, the `patch` menu** — **"Apply every patch"**, no per-finding confirmation. The
-  bucket is defined as fixes that are unambiguous without a human.
-- **§6, status** — let it write. Step 3 checks the result below.
-- **§7, next steps** — **"Done"**. Never "Start the next story": that runs dev-story on
-  the first `ready-for-dev` story in the file, which with two lanes in progress is the
-  other lane's — on this branch.
+- **Every `patch` is applied**, unattended — the bucket is defined as fixes that are
+  unambiguous without a human, so there is nobody to ask.
+- **Every `decision-needed` is left untouched** — written into the story file as an
+  unchecked `- [ ] [Review][Decision]` item with the options laid out, never resolved by
+  the reviewer. The bucket exists because the fix needs the owner's intent, and the
+  draft-PR rule below rests on it.
 
 Tell it, too, to report any cross-epic dependency the diff reveals — a file this story
 changed that a story of the other in-progress epic will also need — as a proposed
@@ -407,12 +417,12 @@ and treat a red run as a finding. If it fixes anything, that lands as its **own*
 on the same branch, pushed — never amended into the dev commit. The two-commit shape
 is the record of what was implemented versus what review changed.
 
-`bmad-code-review` sets the story's status in `{status_file}` itself, in that same commit:
+The review sets the story's status in `{status_file}` itself, in that same commit:
 `done` when nothing is left open, `in-progress` when `decision-needed` items were left as
 action items in the story file. Do not tell it otherwise, and do not correct it afterwards.
-When it returns, read `{status_file}` on the branch and check the two agree —
-**`done` ⇔ no `decision-needed` findings** — and STOP on a mismatch rather than editing
-the file. On the branch, `done` reads as "implemented and reviewed"; it becomes true of the
+When it returns, read `{status_file}` on the branch and count the unchecked
+`[Review][Decision]` lines in the story file, and check the two agree —
+**`done` ⇔ no open decision** — and STOP on a mismatch rather than editing the file. On the branch, `done` reads as "implemented and reviewed"; it becomes true of the
 project when the PR merges, which is the point — the owner never hand-edits the status
 file.
 
@@ -422,11 +432,10 @@ owner has calls to make before this can merge." Either way the PR opens, so the 
 guard sees it and no new story starts in this lane.
 
 A draft PR leaves the branch at `in-progress` with the decisions written as unchecked
-`[Review][Decision]` items in the story file. That is BMad's resume state, not this
-skill's: once the owner has answered them there, they run `bmad-dev-story` and then
-`bmad-code-review` on that story file, on the branch — dev-story picks up the unchecked
-review items, and the second review flips the story to `done` — and undraft the PR. This
-skill never resumes a draft; Step 0 sees the open PR and stops, as for any other.
+`[Review][Decision]` items in the story file. That is the method's resume state, not this
+skill's: the adapter's `## Notes` says what the owner does once they have answered them
+there, so the story reaches `done` on the branch — then they undraft the PR. This skill
+never resumes a draft; Step 0 sees the open PR and stops, as for any other.
 
 Body, four sections, in this order:
 
@@ -477,7 +486,8 @@ Report, briefly:
   decisions are outstanding)
 - the PR number and URL, and CI status
 - which model implemented it, and which reviewed it — name both, so a collapsed
-  split is visible in the hand-back rather than only in the commit trailers
+  split is visible in the hand-back rather than only in the commit trailers — and
+  which adapter drove the run
 - the file list
 - patches auto-applied, and any `decision-needed` findings awaiting the owner's call
 - any **proposed `{gates_file}` rows** from Step 1 or Step 3, written out as the row
@@ -549,10 +559,9 @@ story run.
   landed.
 - Each lane's guard is independent: lane 3 waiting on a review never blocks lane 4 from
   starting its next story, and vice versa.
-- Both epics' story files stay flat in `{stories_dir}` until *that* epic is done — the
-  BMad skills glob story files non-recursively, so a story moved into a subfolder is
-  invisible to create-story, dev-story and retrospective. Archive per epic, not per
-  "phase".
+- Both epics' story files stay flat in `{stories_dir}` until *that* epic is done. The
+  adapter's `## Notes` says why for its method (BMad's skills glob non-recursively);
+  archive per epic, not per "phase".
 - The review load doubles; that is the intended bottleneck. So does CI usage — measure
   your project's runner-minutes per story (ours ran about 40) against the plan's monthly
   cap.
@@ -581,8 +590,8 @@ Four things worth knowing about what the numbers mean:
   the pauses worth excluding are 30 minutes to days. The footnote under the table lists
   each excluded gap, so an Active figure is always auditable against its wall clock.
 - **A phase's cost is its whole subtree.** The report attributes every subagent
-  transcript that *started* inside a phase window, so `bmad-code-review`'s three
-  hunters count against Step 3, not against nothing. This works only because the
+  transcript that *started* inside a phase window, so a review tool's own sub-agents
+  (BMad's code review spawns three hunters) count against Step 3, not against nothing. This works only because the
   phases run strictly one after another — never overlap two spawns.
 - **The orchestrator is counted too**, folded into whichever phase window its turns
   fall in, and broken out again in an *of which* row. That row is a subset, not an
@@ -606,43 +615,42 @@ the whole run.
 - **Report terse.** The artifacts are on disk; the report is not the deliverable.
   Status, files touched, blockers. No implementation narratives — they would
   accumulate in this context across the epic and defeat the fresh-context design.
-- **Name the story.** Pass the story key / file path to every BMad skill. With two
-  epics in progress, a skill left to auto-discover finds the other lane's story.
+- **Name the story.** Pass the story key / file path to every method tool. With two
+  epics in progress, a tool left to auto-discover finds the other lane's story.
 - **Commit only to `story/{story_key}`.** Never commit or push to `main`. Only Step 3
   opens the PR, and no agent ever merges one — merging is the owner's, always.
-- **HALT conditions belong to the BMad skills.** If a subagent halts, surface the
-  reason and stop the run. Do not work around it.
+- **HALT conditions belong to the method's tools.** If a subagent halts, surface the
+  reason and stop the run. Do not work around it. The adapter scripts the answers to the
+  halts that have one; anything it does not answer is a blocker.
 
-## Adapter surface — what this skill assumes of BMad and the runtime
+## Adapter surface — what this skill assumes of the method, the forge and the runtime
 
-Written against BMad Method v6.8.0 and Claude Code as of 2026-09. Everything the skill
-depends on outside its own files is listed here; these are the seams a port would replace,
-and the rest of the skill is framework-agnostic.
+Written against Claude Code as of 2026-09. Everything the skill depends on outside its
+own files is listed here; these are the seams a port would replace, and the rest of the
+skill is agnostic.
 
-- **Three BMad skills, invoked by name with a story key or file path.**
-  `bmad-create-story` writes `{stories_dir}/{story_key}.md`, sets the story to
-  `ready-for-dev`, and flips `epic-N: backlog → in-progress` on the epic's first story.
-  `bmad-dev-story` runs to completion, leaves the story at `review`, and HALTs on its own
-  conditions. `bmad-code-review` triages findings into `patch` / `defer` /
-  `decision-needed`, offers the literal menu item **"Apply every patch"**, and writes the
-  story's final status itself (`done`, or `in-progress` with decisions left as action
-  items) — Step 3's auto-apply, its `done` ⇔ no-decisions check, and the draft-PR rule all
-  hang on that vocabulary. Its last step halts four times for a human; Step 3 scripts
-  every answer, and `full` review mode (a story file passed) is what keeps
-  `decision-needed` from being reclassified.
-- **`{status_file}` shape.** A `development_status:` mapping whose keys are story keys
-  matching `^(\d+)-(\d+)-[a-z0-9-]+$` (epic, story, slug — listed in order) and `epic-N`
-  rows. Story statuses `backlog → ready-for-dev → in-progress → review → done`; epic
-  statuses `backlog → in-progress → done`; a top-level `last_updated:` date.
-  `lane-gates.py` reads it with a strict stdlib parser — no PyYAML — and rejects anything
-  outside that shape.
-- **`{gates_file}` shape.** This skill's own file, not BMad's: `analysed:` and `gates:`
-  lists of flat mappings, documented in `lane-gates.example.yaml`.
+- **The method — the adapter.** Everything method-specific lives in the project's
+  `adapter.md`: the three spawn prompts, what must be installed, the resume path for a
+  draft PR. `adapters/CONTRACT.md` is the agreement — the board format and its transition
+  table, the story-file tolerances, the triage vocabulary (`patch` / `defer` /
+  `decision-needed`) and the `[Review][Decision]` marker, the every-halt-answered rule.
+  `adapters/bmad/` is the reference, written against BMad Method v6.8.0.
+- **`{status_file}` shape.** This skill's format (`CONTRACT.md` §3): a
+  `development_status:` mapping whose keys are story keys matching
+  `^(\d+)-(\d+)-[a-z0-9-]+$` (epic, story, slug — listed in order) and `epic-N` rows;
+  story statuses `backlog → ready-for-dev → in-progress → review → done`; epic statuses
+  `backlog → in-progress → done`; a top-level `last_updated:` date. `lane-gates.py`
+  reads it with a strict stdlib parser — no PyYAML — and rejects anything outside that
+  shape.
+- **`{gates_file}` shape.** This skill's own file: `analysed:` and `gates:` lists of
+  flat mappings, documented in `lane-gates.example.yaml`.
 - **Branches, PRs, and `gh`.** The default branch is `main`; story branches are
   `story/{story_key}`, lane-opening branches `lane/{E}-gates`. PRs are GitHub PRs driven
-  through the `gh` CLI, and a *draft* PR is the "decisions outstanding" signal.
+  through the `gh` CLI, and a *draft* PR is the "decisions outstanding" signal. Six `gh`
+  calls, all in this file — the seam for another forge.
 - **Claude Code runtime.** The `Agent` tool with a `model:` override and
   `subagent_type: "general-purpose"`; `ScheduleWakeup` when run under `/loop`; worktrees;
   `$CLAUDE_CODE_SESSION_ID`; and the transcript layout `story-run-stats.py` scrapes
   (`~/.claude/projects/*/{session}/subagents/*.jsonl`), which is undocumented and may
-  change with any release. The skill assumes it runs without permission prompts.
+  change with any release. The skill assumes it runs without permission prompts. Not a
+  seam: the runtime is the product.

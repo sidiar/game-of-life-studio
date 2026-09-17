@@ -2,6 +2,12 @@
 # (tests/test_lane_gates.py) and as a demo for the README. Mirrors the shape of
 # implement-next-story.example.toml, scaled down to a generic web app.
 
+[adapter]
+# The method that drives the three phases — create, implement, review. Exactly one of:
+name = "bmad"               # an adapter shipped with the skill: adapters/<name>/adapter.md
+# dir = "docs/my-adapter"   # a project-local one: <dir>/adapter.md, relative to the repo root
+# What an adapter must provide is in adapters/CONTRACT.md; `bmad` is written against v6.8.0.
+
 [paths]
 status_file = "docs/implementation-artifacts/sprint-status.yaml"
 stories_dir = "docs/implementation-artifacts"
