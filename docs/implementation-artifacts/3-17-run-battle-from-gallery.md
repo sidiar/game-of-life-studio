@@ -901,3 +901,18 @@ touched by the dev and reverted in review — lane 4's surface, and Task 5(a) ha
 
 Dev Model: sonnet   # every seam is already pinned (query-param route, mode-as-state, the lazy Run branch, the guarded Back, the tile's action band); FD1–FD5 resolve the one design call (an entry hint, read once) and the one reachable-on-mount hole, so the work is a link, a prop, a seed, one in-render adjust and tests over existing patterns
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 37s | 37s | 12 | 1,649 | 4,523 | 309,898 | 316,082 |
+| Step 1 — create-story | opus-5 | 4 | 19m 20s | 19m 20s | 500 | 134,346 | 1,406,469 | 30,579,855 | 32,121,170 |
+| Step 2 — dev-story | sonnet-5 | 1 | 53m 30s | 53m 30s | 894 | 113,789 | 797,556 | 115,709,236 | 116,621,475 |
+| Step 3 — code review + PR | opus-5 | 4 | 31m 41s | 31m 41s | 416 | 108,836 | 1,250,597 | 23,607,024 | 24,966,873 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 48 | 10,660 | 24,616 | 1,366,599 | 1,401,923 |
+| **Total (create-story → PR ready)** | | 9 | **1h 45m** | 1h 45m | 1,822 | 358,620 | 3,459,145 | 170,206,013 | **174,025,600** |
+
+Run started 2026-09-17 10:21 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
