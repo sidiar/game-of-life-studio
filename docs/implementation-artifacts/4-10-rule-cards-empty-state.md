@@ -821,7 +821,9 @@ Summary target the owner chose — the add move already focuses an input by desi
 
 **Third pass** — reviewed on **Opus** (2026-09-17) against the two docs-only commits `1041162`
 (decision 3 recorded: defer) and `0575e72` (Story 4.26 added), same three layers. Remote gate:
-PR #51's run on `0575e72` (see Change Log). The decision item is ticked with the owner's recorded
+PR #51's run `35231768952` on the patch commit `4dcb758` — quality + e2e **green** (`35230764687`
+on `0575e72` went quality-green, e2e cancelled by the next push under workflow concurrency; the
+code tree is identical). The decision item is ticked with the owner's recorded
 choice, the `deferred-work.md` entry sits under the right section and names Story 4.26, Story 4.26
 is well-formed against 1.13/4.24/4.25 and consistent with AC5 as amended by decision 2, the
 sprint-status row is in place, and no first- or second-pass patch regressed. What remains is
@@ -1317,6 +1319,11 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
 - 2026-09-17 — Story 4.26 Rule-Delete Confirmation Dialog created at the owner's direction
   (`0575e72`): added to `epics.md` after 4.25 and to `sprint-status.yaml` as `backlog`; the
   deferred entry now names it as the pick-up point.
+- 2026-09-17 — Third code-review pass (Opus) on the two docs commits: 0 `decision-needed`, 4
+  `patch` (applied in `4dcb758`: `→ Story 4.26` pointers at the three no-confirmation sites; this
+  file brought level with `deferred-work.md`; deferred-entry slips; two pick-up notes for 4.26's
+  create-story), 0 `defer`, 14 dismissed. Status → done; `sprint-status.yaml` synced. PR #51 run
+  `35231768952` on `4dcb758` green.
 
 Dev Model: sonnet   # follows the settled editor pattern (one draft field, controlled views, a layout slot, functional setters); every choice later stories build on — the RuleDraft shape, the three tokens, the diff-driven focus rule, the updater-style setter — is pinned as FD1–FD9 with the exact signatures, so the dev step executes rather than designs
 Proposed lane gate: none
