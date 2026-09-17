@@ -4,7 +4,7 @@ baseline_commit: 92a3d4dbf60b8bd7fee295aba1b1a6fcd703490f
 
 # Story 4.10: Rule Cards & Empty State
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -103,9 +103,12 @@ here touches a repository (AR-2 / AR-27) or the engine.
 
 5. **Delete removes the card immediately — no confirmation — renumbers the rest, and keeps
    focus in the column.** (`organism-editor-design.md:592-593`; readiness-report 2026-07-16 issue
-   #3, resolved in the story's favour.) After a delete, focus moves to the delete button of the
+   #3, resolved in the story's favour.) After a delete, focus moves to the **Summary** field of the
    card now occupying the removed index (the next card), or the last card's when the last was
-   removed, or the empty state's "+ Add Rule" when no card remains (FD6). Deleting rule 1 of
+   removed, or the empty state's "+ Add Rule" when no card remains (FD6) — the owner's review
+   decision (2026-09-17): a neighbouring Delete button was rejected because a held or
+   double-tapped Enter auto-repeats on keydown and would cascade deletions with no confirmation
+   and no undo; one Shift+Tab from the Summary reaches that card's Delete. Deleting rule 1 of
    three leaves "Rule 1" and "Rule 2" — the labels are positions.
 
 6. **The rules live in the draft, as `RuleDraft`s — not `SurvivalRule`s — and every mutation is
@@ -434,8 +437,10 @@ here touches a repository (AR-2 / AR-27) or the engine.
         - `ids.length === prev.length - 1`: `removedIndex` = the first position where `prev` and
           `ids` diverge; if `document.activeElement` is loose (`null`, `body`, or **outside
           `rootRef`** — the `<BattleEditorView>` `focusIsLoose` idiom, adapted: the deleted button
-          is gone, so focus has fallen to `body`), focus `[data-rule-delete]` at
-          `Math.min(removedIndex, ids.length - 1)`, or `[data-add-rule="empty"]` when the list is
+          is gone, so focus has fallen to `body`), focus `[data-rule-summary]` at
+          `Math.min(removedIndex, ids.length - 1)` — the owner's review decision (2026-09-17): a
+          neighbouring Delete button was rejected because Enter auto-repeats on keydown and would
+          cascade deletions with no confirmation — or `[data-add-rule="empty"]` when the list is
           now empty;
         - anything else (same length — 4.11's condition edits, 4.12's reorder, a summary
           keystroke): nothing.
@@ -465,8 +470,9 @@ here touches a repository (AR-2 / AR-27) or the engine.
             `Rule 2`, `Rule 3` in DOM order; badges `Born`, `Survive`, `Die`.
         (e) **delete the middle**: click `Delete rule 2` → two items, groups now `Rule 1` and
             `Rule 2`, the second's badge reads `Die` (the old third), and `document.activeElement`
-            is `Delete rule 2` (the card now at the removed index).
-        (f) **delete the last**: with `THREE`, click `Delete rule 3` → focus is `Delete rule 2`.
+            is `Rule 2`'s **Summary** textbox (the card now at the removed index — the owner's
+            review decision, 2026-09-17, non-destructive over another Delete button).
+        (f) **delete the last**: with `THREE`, click `Delete rule 3` → focus is `Rule 2`'s Summary.
         (g) **delete the only rule**: one rule → click its delete → the empty state is back and
             `document.activeElement` is its `+ Add Rule`.
         (h) **a summary keystroke round-trips through the harness and moves no focus**: focus the
@@ -579,15 +585,17 @@ here touches a repository (AR-2 / AR-27) or the engine.
            clicked three times → `Rule 1..3`, and after each click the **newest** card's Summary is
            focused (AC3 — from the header control too); set `Rule 2`'s Action to `Survive` and
            `Rule 3`'s to `Die` (`selectOption`); badges read Born / Survive / Die; click `Delete
-           rule 1` → two groups `Rule 1` (badge Survive) and `Rule 2` (badge Die); `Delete rule 1`
-           is **focused**.
+           rule 1` → two groups `Rule 1` (badge Survive) and `Rule 2` (badge Die); `Rule 1`'s
+           **Summary** is focused (the owner's review decision, 2026-09-17 — non-destructive over
+           another Delete button).
         4. **Summary clamps at 100 with the counter agreeing**: `fill` 120 characters into a
            Summary → value length **100**, counter reads `100 / 100`.
         5. **Keyboard**: the tab order inside a card is delete → Summary → Action (the handle is
            `disabled`, so it is skipped). With two cards, from `Rule 1`'s Summary: `Tab` → `Rule
            1`'s Action, `Tab` → `Delete rule 2`; WebKit via `Alt+Tab` (the 4.3 block's note).
-           `Enter` on the focused `Delete rule 2` removes it and `Delete rule 1` is focused (the
-           last card's — FD6's "last was removed" branch).
+           `Enter` on the focused `Delete rule 2` removes it and `Rule 1`'s **Summary** is focused
+           (the last card's — FD6's "last was removed" branch, landing on Summary per the owner's
+           review decision).
         6. **The handle is disabled**: `Reorder rule 1` `toBeDisabled()`.
         7. **axe in the empty state** and **axe with three cards** (Born / Survive / Die) → `[]`.
         Literals (`'Born'`, `'Survive'`, `'Die'`, the empty-state strings) each carry the 4.7/4.8
@@ -658,7 +666,7 @@ boundary:check → test:coverage, exit 0 (97 web test files). No GitHub Actions 
 branch at review time — `ci.yml` triggers on `main` pushes and `pull_request` only — so the remote
 gate is the PR's run, checked after this review.
 
-- [ ] [Review][Decision] Delete lands focus on another destructive control — after a delete, focus
+- [x] [Review][Decision] Delete lands focus on another destructive control — after a delete, focus
       moves to the neighbouring card's Delete button (AC5 / FD6, `organism-editor-design.md:592-593`),
       whose accessible name is now the same `Delete rule N` but refers to a different rule. Enter on a
       `<button>` activates on keydown and auto-repeats, so a held or double-tapped Enter cascades
@@ -669,6 +677,16 @@ gate is the PR's run, checked after this review.
       changes AC5, RulesEditor tests (e)/(f) and e2e tests 3/5; (3) keep the Delete target but ignore
       `event.repeat` on the delete button's keydown (stops the hold, not the double-tap); (4) land on
       the header "+ Add Rule" (outside the list). [`apps/web/components/organisms/editor/RulesEditor.tsx`]
+      **Owner decision (Sidiar, 2026-09-17): option 2.** After a delete, focus lands on the
+      neighbouring card's **Summary** field (same neighbour-selection rule as before: the card that
+      took the removed card's index, else the new last card; header "+ Add Rule" when the list is
+      empty). Update AC5 and FD6 in this file to say Summary, adjust RulesEditor tests (e)/(f) and
+      e2e tests 3/5 accordingly, and note that one Shift+Tab from the Summary reaches that card's
+      Delete.
+      **Resolved (dev-story, 2026-09-17):** `RulesEditor.tsx`'s delete-focus branch now targets
+      `[data-rule-summary]` instead of `[data-rule-delete]`; AC5, FD6, the Task 5 subtask text and
+      Task 8's test-3/5 descriptions updated to match; `RulesEditor.test.tsx` (e)/(f) and
+      `organisms.spec.ts` e2e tests 3 and 5 reassert focus on the neighbour's Summary.
 - [x] [Review][Patch] Rule ids are interpolated unescaped into attribute selectors in the focus
       effect — `RuleDraft.id` is `string` (`SurvivalRuleSchema` is `z.string().min(1)`, not a uuid),
       and Story 4.17 seeds ids from persisted records; an id holding `"` or `\` makes `querySelector`
@@ -796,16 +814,20 @@ until 4.12/4.17 seed or reorder, and same-length diffs are inert by design).
   the dialog. A styled paragraph carries the same text at the same weight with no landmark churn.
 
 - **FD6 — Focus follows the list diff, inside `<RulesEditor>`.** Three moves are required: to the
-  new card's Summary on add (design doc `:588`), to a neighbour's delete on delete (the deleted
-  button is gone, focus has fallen to `<body>`, "the tab order restarts at the top" — the failure
-  `useOrganismEditorModal` and `<BattleEditorView>` both guard), and to the empty CTA when the
-  last card goes. The header "+ Add Rule" lives in the layout's slot, outside `<RulesEditor>`, so
-  a `pendingFocus` ref set by handlers would need the modal to thread a token through two
+  new card's Summary on add (design doc `:588`), to a neighbour's **Summary** on delete (the
+  deleted button is gone, focus has fallen to `<body>`, "the tab order restarts at the top" — the
+  failure `useOrganismEditorModal` and `<BattleEditorView>` both guard), and to the empty CTA when
+  the last card goes. The header "+ Add Rule" lives in the layout's slot, outside `<RulesEditor>`,
+  so a `pendingFocus` ref set by handlers would need the modal to thread a token through two
   components; diffing `rules` against the previous ids inside one effect needs no coordination and
   is inert for every same-length change (4.11's condition edits, 4.12's reorder). `autoFocus` on
   the newest card is wrong twice: a seeded list (4.17) would focus its last card on mount, and it
   races MUI's focus trap on first paint. The delete move keeps the "loose focus" guard; the add
-  move is unconditional because it is the designed behaviour.
+  move is unconditional because it is the designed behaviour. **Owner decision (review,
+  2026-09-17): the delete move targets the neighbour's Summary field, not its Delete button** — a
+  `<button>` fires on keydown and auto-repeats, so a held or double-tapped Enter on a neighbouring
+  Delete would cascade deletions with no confirmation and no undo; landing on the Summary is
+  non-destructive, and one Shift+Tab from there reaches that card's Delete.
 
 - **FD7 — The mockup's per-action description paragraph is not built.** "The following rules apply
   to cells that are empty or occupied by another organism. Successful birth will depend on
@@ -1110,6 +1132,14 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
   on the inner `role="group"` div (as the Task 4 pseudocode's `<Group>` shows), not on the `<li>`
   — matches the story text exactly, called out here only because it is easy to misread as "the
   card wrapper."
+- 2026-09-17 — Resumed to resolve the one outstanding `[Review][Decision]` item: the owner picked
+  option 2 (neighbouring **Summary**, not another Delete button, after a delete). Changed
+  `RulesEditor.tsx`'s delete-focus branch to `[data-rule-summary]`; updated its FD6 header comment;
+  updated AC5, FD6, the Task 5 subtask bullet and Task 8's test-3/test-5 descriptions in this file
+  to say Summary; updated `RulesEditor.test.tsx` tests (e) and (f) and `organisms.spec.ts` e2e
+  tests 3 and 5 to assert focus on the neighbour's Summary textbox instead of its Delete button.
+  No other behaviour changed — the neighbour-selection rule (index-match, else new-last, else the
+  empty CTA) and the "loose focus" guard are untouched.
 
 ### File List
 
@@ -1146,6 +1176,10 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
   Findings), 1 deferred, 1 `decision-needed` left for the owner (focus landing on the neighbouring
   Delete after a delete); the Dev Agent Record's verification claims corrected; status →
   in-progress pending that decision.
+- 2026-09-17 — Resolved the outstanding review decision (option 2, Sidiar): delete-focus now
+  targets the neighbouring card's Summary field, not its Delete button; AC5, FD6, the Task 5/8
+  spec text, `RulesEditor.tsx`, `RulesEditor.test.tsx` (e)/(f) and `organisms.spec.ts` e2e tests
+  3/5 updated to match; status → review.
 
 Dev Model: sonnet   # follows the settled editor pattern (one draft field, controlled views, a layout slot, functional setters); every choice later stories build on — the RuleDraft shape, the three tokens, the diff-driven focus rule, the updater-style setter — is pinned as FD1–FD9 with the exact signatures, so the dev step executes rather than designs
 Proposed lane gate: none

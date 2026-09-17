@@ -1599,7 +1599,8 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
 
     await expect(cardGroup(rules, 1).locator('[data-rule-badge]')).toHaveText('Survive');
     await expect(cardGroup(rules, 2).locator('[data-rule-badge]')).toHaveText('Die');
-    await expect(rules.getByRole('button', { name: 'Delete rule 1', exact: true })).toBeFocused();
+    // Owner decision (review, 2026-09-17): the neighbour's Summary, not another Delete button.
+    await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
   });
 
   test('Summary clamps at 100 with the counter agreeing', async ({ page }) => {
@@ -1635,7 +1636,9 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await page.keyboard.press('Enter');
 
     await expect(cardGroup(rules, 2)).toHaveCount(0);
-    await expect(rules.getByRole('button', { name: 'Delete rule 1', exact: true })).toBeFocused();
+    // Owner decision (review, 2026-09-17): the neighbour's Summary, not another Delete button —
+    // one Shift+Tab from here reaches that card's Delete.
+    await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
   });
 
   test('the drag handle is disabled', async ({ page }) => {

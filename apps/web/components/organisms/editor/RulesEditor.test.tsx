@@ -141,7 +141,7 @@ describe('RulesEditor', () => {
     );
   });
 
-  it('deleting the middle renumbers and focuses the delete button now at that position', async () => {
+  it('deleting the middle renumbers and focuses the Summary of the card now at that position', async () => {
     const user = userEvent.setup();
     render(<Harness initial={THREE} />);
 
@@ -151,16 +151,19 @@ describe('RulesEditor', () => {
     expect(screen.getByRole('group', { name: 'Rule 1' })).toBeInTheDocument();
     const second = screen.getByRole('group', { name: 'Rule 2' });
     expect(within(second).getByRole('combobox')).toHaveValue('die');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete rule 2' }));
+    // Owner decision (review, 2026-09-17): the neighbour's Summary, not its Delete button — a
+    // held/double-tapped Enter on a destructive control would otherwise cascade deletions.
+    expect(document.activeElement).toBe(within(second).getByRole('textbox', { name: 'Summary' }));
   });
 
-  it('deleting the last focuses the new last card delete button', async () => {
+  it('deleting the last focuses the new last card Summary', async () => {
     const user = userEvent.setup();
     render(<Harness initial={THREE} />);
 
     await user.click(screen.getByRole('button', { name: 'Delete rule 3' }));
 
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete rule 2' }));
+    const second = screen.getByRole('group', { name: 'Rule 2' });
+    expect(document.activeElement).toBe(within(second).getByRole('textbox', { name: 'Summary' }));
   });
 
   it('deleting the only rule returns to the empty state, focused on Add Rule', async () => {
