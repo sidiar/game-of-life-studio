@@ -1149,3 +1149,18 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
 
 Dev Model: sonnet   # follows the settled editor pattern (one draft field, controlled views, a layout slot, functional setters); every choice later stories build on — the RuleDraft shape, the three tokens, the diff-driven focus rule, the updater-style setter — is pinned as FD1–FD9 with the exact signatures, so the dev step executes rather than designs
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 27s | 27s | 12 | 2,670 | 6,292 | 325,688 | 334,662 |
+| Step 1 — create-story | opus-5 | 1 | 20m 41s | 20m 41s | 208 | 88,981 | 993,315 | 17,614,883 | 18,697,387 |
+| Step 2 — dev-story | sonnet-5 | 1 | 40m 23s | 40m 23s | 776 | 107,383 | 1,424,690 | 91,376,167 | 92,909,016 |
+| Step 3 — code review + PR | opus-5 | 4 | 35m 55s | 35m 55s | 564 | 153,144 | 1,500,224 | 35,607,114 | 37,261,046 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 50 | 11,177 | 35,165 | 1,525,112 | 1,571,504 |
+| **Total (create-story → PR ready)** | | 6 | **1h 37m** | 1h 37m | 1,560 | 352,178 | 3,924,521 | 144,923,852 | **149,202,111** |
+
+Run started 2026-09-17 10:23 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
