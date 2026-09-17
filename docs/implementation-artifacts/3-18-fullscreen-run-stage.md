@@ -1126,3 +1126,18 @@ Modified:
 
 Dev Model: opus   # architecture-shaping: it decides where `fullscreen` lives (BattlePage, against spec §6), establishes the CSS-driven no-remount layout-swap pattern that 3.19's F key toggles and that React reconciliation can silently break, and factors <TransportControls>/<CycleDigits>/<PopulationPills> out of 3.12/3.14's files as the pieces 4.15 builds on
 Proposed lane gate: { story: 4-15-preview-simulation, requires: 3-18-fullscreen-run-stage, why: "3.18 lifts the transport trio out of <SimulationControlBar> (<TransportControls>), the zero-padded digits out of <CycleCounter> (<CycleDigits>) and ships <PopulationPills> as the compact population sibling — the preview panel (spec §8 / §3.12: SpeedControl + compact PopulationStats + cycle counter + Play/Stop/Step) is the third consumer of all three and must reuse them rather than re-author or edit the same simulation/ files concurrently" }
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 1m 12s | 1m 12s | 10 | 1,604 | 3,438 | 314,202 | 319,254 |
+| Step 1 — create | opus-5 | 1 | 26m 24s | 26m 24s | 206 | 96,090 | 1,201,504 | 19,215,980 | 20,513,780 |
+| Step 2 — implement | opus-5 | 1 | 26m 35s | 26m 35s | 336 | 104,528 | 479,649 | 35,070,066 | 35,654,579 |
+| Step 3 — review + PR | fable-5-1 | 4 | 16m 52s | 16m 52s | 5,560 | 134,218 | 2,924,600 | 28,803,104 | 31,867,482 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 52 | 15,053 | 38,227 | 1,855,935 | 1,909,267 |
+| **Total (create → PR ready)** | | 6 | **1h 11m** | 1h 11m | 6,112 | 336,440 | 4,609,191 | 83,403,352 | **88,355,095** |
+
+Run started 2026-09-17 19:32 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
