@@ -140,4 +140,16 @@
      battle-gallery.html:288-296). Composed from --gol-border-channel so the colour has one
      source of truth, and authored here because AR-46 bans the rgba() literal in .ts/.tsx. */
   --gol-grid-line: rgb(var(--gol-border-channel) / 0.3);
+
+  /* Rule-action colours (Story 4.10). Mockup: --action-born / --action-survive / --action-die
+     (clinical-lab-theme/organism-editor.html:16-18). Survive IS the accent and Die IS the danger
+     token in this theme, so those two are aliases — one name per action anyway, because Epic 6's
+     Biotech block retunes them independently (its survive is #00ffff, not its #00ff41 accent).
+     Born is a new hue: gated as small TEXT (the 10px badge) against all three backgrounds in
+     themeTokens.test.ts. Not --gol-success — MUI's palette.success stays a Material default until
+     something IS a success state — and not --gol-action-*, which is MUI's state-layer namespace
+     above. */
+  --gol-rule-born: #00ff41;
+  --gol-rule-survive: var(--gol-accent);
+  --gol-rule-die: var(--gol-danger);
 }

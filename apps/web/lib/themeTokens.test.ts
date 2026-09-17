@@ -64,7 +64,12 @@ describe('Clinical Lab token layer — WCAG AA (AC5)', () => {
   });
 
   describe('text pairs — SC 1.4.3, >= 4.5:1', () => {
-    const textTokens = ['text-primary', 'text-secondary', 'text-tertiary', 'accent'];
+    // 'rule-born' joins the loop (Story 4.10) — measured 14.50 / 12.75 / 11.65 on the three
+    // backgrounds, well above the 4.5 floor. Its two siblings, --gol-rule-survive and
+    // --gol-rule-die, are `var()` ALIASES the hex regex above cannot parse (they resolve to
+    // --gol-accent / --gol-danger, respectively) and are already gated through those targets —
+    // the same precedent --gol-action-active sets for an alias token.
+    const textTokens = ['text-primary', 'text-secondary', 'text-tertiary', 'accent', 'rule-born'];
 
     for (const text of textTokens) {
       for (const bg of BACKGROUNDS) {
@@ -220,6 +225,21 @@ describe('every --gol-* reference resolves to a defined token', () => {
 
   it('scanned the source tree', () => {
     expect(files.length).toBeGreaterThan(0);
+  });
+
+  // themes.css references its OWN tokens too — `--gol-rule-survive: var(--gol-accent)` and
+  // `--gol-rule-die: var(--gol-danger)` (Story 4.10), `--gol-action-active`, `--gol-grid-line`'s
+  // channel. The source scan below never reads the stylesheet, so before this case (review
+  // 2026-09-17) renaming `--gol-accent` left every alias dangling — both badges uncoloured — with
+  // a green run.
+  it('themes.css references only defined tokens', () => {
+    const referenced = [...stripComments(CSS).matchAll(/var\((--gol-[a-z0-9-]+)/g)].map(
+      (m) => m[1],
+    );
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const name of new Set(referenced)) {
+      expect(DEFINED, `${name} is not defined in themes.css`).toContain(name);
+    }
   });
 
   for (const file of files) {

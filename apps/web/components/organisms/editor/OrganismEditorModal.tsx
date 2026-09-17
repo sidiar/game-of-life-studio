@@ -16,8 +16,11 @@ import OrganismNameField from './OrganismNameField';
 import ColorPickerField from './ColorPickerField';
 import DominanceField from './DominanceField';
 import AgingToggleField from './AgingToggleField';
+import AddRuleButton from './AddRuleButton';
+import RulesEditor from './RulesEditor';
 import { createNewOrganismDraft, type OrganismDraft } from '@/lib/organisms/organismDraft';
 import { usersByColorToken } from '@/lib/organisms/colorReuse';
+import { appendRule, createNewRuleDraft, type RuleDraft } from '@/lib/organisms/ruleDraft';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -152,14 +155,14 @@ const EditorBody = styled('div')({
  * The Organism Editor's full-screen shell (Story 4.3): the `Dialog`, its header and a body that is
  * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds the editor's draft (`OrganismDraft`,
  * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name`, Story 4.6's
- * `dominance`, Story 4.7's `agingEnabled`/`colorToken` and Story 4.8's `colorToken` seed from
- * `library`) and its seed — no repository call; the lifecycle (inert window, focus restore)
- * stays `useOrganismEditorModal`'s, and a fresh draft per open is the `mounted` gate's doing
- * (`<OrganismLibrary>` unmounts this modal after every exit, so there is no reset effect and no
- * `key` trick). The `useState` initialiser closes over the `library` prop — legitimate because it
- * runs once per mount and the `mounted` gate guarantees a mount per open. The editor's own dirty
- * scope (AR-33 — independent of the battle's) arrives with Story 4.23, will live in this shell,
- * and will diff this draft against its seed.
+ * `dominance`, Story 4.7's `agingEnabled`/`colorToken`, Story 4.8's `colorToken` seed from
+ * `library` and Story 4.10's `survivalRules`) and its seed — no repository call; the lifecycle
+ * (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh draft per open is
+ * the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after every exit, so there
+ * is no reset effect and no `key` trick). The `useState` initialiser closes over the `library`
+ * prop — legitimate because it runs once per mount and the `mounted` gate guarantees a mount per
+ * open. The editor's own dirty scope (AR-33 — independent of the battle's) arrives with Story
+ * 4.23, will live in this shell, and will diff this draft against its seed.
  *
  * Header layout follows the epics AC / UX-DR5 (`organism-editor-design.md:101-126`): Back on the
  * left, centred title, Save + Close on the right. ⚠️ The 2026-06-01 mockup revision
@@ -210,6 +213,26 @@ export default function OrganismEditorModal({
     (agingEnabled: boolean) => setDraft((d) => ({ ...d, agingEnabled })),
     [],
   );
+  // One updater-style setter for the whole list (Story 4.10, FD8): `<RulesEditor>` passes the
+  // pure list helpers (`ruleDraft.ts`), and applying them inside the functional `setDraft` is what
+  // keeps two rule mutations in one batch from clobbering each other — the same reason
+  // `setDominance` above is functional. An update that hands back the SAME array (the helpers do,
+  // for an unknown id) hands back the same draft too: a fresh draft object for a no-op would be the
+  // spurious re-render the helpers' same-reference contract exists to avoid.
+  const setSurvivalRules = useCallback(
+    (update: (rules: readonly RuleDraft[]) => readonly RuleDraft[]) =>
+      setDraft((d) => {
+        const survivalRules = update(d.survivalRules);
+        return survivalRules === d.survivalRules ? d : { ...d, survivalRules };
+      }),
+    [],
+  );
+  // The id is minted HERE, outside the updater — React may run an updater twice in development,
+  // and an impure one would mint two ids and keep one at random.
+  const addRule = useCallback(() => {
+    const id = crypto.randomUUID();
+    setSurvivalRules((rules) => appendRule(rules, createNewRuleDraft(id)));
+  }, [setSurvivalRules]);
 
   return (
     <Dialog
@@ -283,6 +306,18 @@ export default function OrganismEditorModal({
                   colorToken={draft.colorToken}
                 />
               </>
+            }
+            rulesAction={
+              <AddRuleButton type="button" onClick={addRule} data-add-rule="header">
+                + Add Rule
+              </AddRuleButton>
+            }
+            rules={
+              <RulesEditor
+                rules={draft.survivalRules}
+                onRulesChange={setSurvivalRules}
+                onAddRule={addRule}
+              />
             }
           />
         </EditorBody>

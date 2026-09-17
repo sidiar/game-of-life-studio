@@ -1504,3 +1504,166 @@ test.describe('color reuse warning (Story 4.9)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+// Story 4.10. `rules.locator('[data-add-rule="…"]')` disambiguates the two "+ Add Rule" controls
+// that share one accessible name in the empty state (FD9) — `getByRole('button', { name: '+ Add
+// Rule' })` alone matches two and fails Playwright's strict mode. Every numbered name
+// (`getByRole(..., { name })`) is a case-insensitive SUBSTRING match unless `exact: true` is
+// passed — `'Rule 1'` would also match `Rule 10`+ and `'Delete rule 1'` would match `Delete rule
+// 12` — so every numbered lookup below passes `exact: true`.
+test.describe('rule cards & empty state (Story 4.10)', () => {
+  type Box = { x: number; y: number; width: number; height: number };
+
+  /** `boundingBox()` is `null` for a detached or hidden node — throw (the Story 4.4 `boxOf`
+   * idiom, forked here since that one is local to its own describe block) rather than
+   * optional-chain into a 0×0 box that passes every upper bound. */
+  async function boxOf(locator: Locator, label: string): Promise<Box> {
+    const box = await locator.boundingBox();
+    if (box === null) throw new Error(`${label} has no layout box`);
+    return box;
+  }
+
+  async function openRules(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const rules = dialog.getByRole('region', { name: 'Survival Rules' });
+    const headerAdd = rules.locator('[data-add-rule="header"]');
+    const emptyAdd = rules.locator('[data-add-rule="empty"]');
+    return { dialog, rules, headerAdd, emptyAdd };
+  }
+
+  function cardGroup(rules: Locator, n: number) {
+    return rules.getByRole('group', { name: `Rule ${n}`, exact: true });
+  }
+
+  test('opens in the empty state, both add controls visible, header action beside the heading, zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { rules, headerAdd, emptyAdd } = await openRules(page);
+
+    await expect(rules.locator('[data-rules-empty-state]')).toBeVisible();
+    await expect(rules.getByText('No Rules Defined')).toBeVisible();
+    await expect(headerAdd).toBeVisible();
+    await expect(emptyAdd).toBeVisible();
+    await expect(rules.getByRole('list')).toHaveCount(0);
+
+    const heading = rules.getByRole('heading', { name: 'Survival Rules' });
+    const headingBox = await boxOf(heading, 'Survival Rules heading');
+    const actionBox = await boxOf(headerAdd, 'header + Add Rule');
+    expect(actionBox.x).toBeGreaterThan(headingBox.x);
+    expect(Math.abs(actionBox.y - headingBox.y)).toBeLessThanOrEqual(4);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('the empty CTA adds and focuses the Summary', async ({ page }) => {
+    const { rules, emptyAdd } = await openRules(page);
+
+    await emptyAdd.click();
+
+    await expect(rules.locator('[data-rules-empty-state]')).toHaveCount(0);
+    const group = cardGroup(rules, 1);
+    await expect(group).toBeVisible();
+    await expect(
+      rules.getByRole('list', { name: 'Survival rules' }).getByRole('listitem'),
+    ).toHaveCount(1);
+    await expect(group.getByRole('textbox', { name: 'Summary' })).toBeFocused();
+    await expect(group.locator('[data-rule-badge]')).toHaveText('Born');
+    await expect(group.getByRole('combobox', { name: 'Action' })).toHaveValue('born');
+  });
+
+  test('the header action appends, and the cards renumber on delete', async ({ page }) => {
+    const { rules, headerAdd } = await openRules(page);
+
+    for (let i = 1; i <= 3; i++) {
+      await headerAdd.click();
+      const newest = cardGroup(rules, i);
+      await expect(newest.getByRole('textbox', { name: 'Summary' })).toBeFocused();
+    }
+
+    await cardGroup(rules, 2).getByRole('combobox', { name: 'Action' }).selectOption('survive');
+    await cardGroup(rules, 3).getByRole('combobox', { name: 'Action' }).selectOption('die');
+
+    await expect(cardGroup(rules, 1).locator('[data-rule-badge]')).toHaveText('Born');
+    await expect(cardGroup(rules, 2).locator('[data-rule-badge]')).toHaveText('Survive');
+    await expect(cardGroup(rules, 3).locator('[data-rule-badge]')).toHaveText('Die');
+
+    await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).click();
+
+    await expect(cardGroup(rules, 1).locator('[data-rule-badge]')).toHaveText('Survive');
+    await expect(cardGroup(rules, 2).locator('[data-rule-badge]')).toHaveText('Die');
+    // The neighbour's Summary, not another Delete button — a held Enter on one would cascade (AC5).
+    await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
+  });
+
+  test('Summary clamps at 100 with the counter agreeing', async ({ page }) => {
+    const { rules, emptyAdd } = await openRules(page);
+    await emptyAdd.click();
+
+    const summary = cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' });
+    await summary.fill('x'.repeat(120));
+
+    await expect(summary).toHaveValue('x'.repeat(100));
+    await expect(rules.getByText('100 / 100')).toBeVisible();
+  });
+
+  test('keyboard: delete -> Summary -> Action inside a card, and the handle is skipped', async ({
+    page,
+    browserName,
+  }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    await headerAdd.click();
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+
+    // Start on the card's first stop, its Delete — the handle before it is `disabled`, so Delete
+    // is where a Tab into the card lands — and walk Delete -> Summary -> Action -> next Delete.
+    await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).focus();
+    await page.keyboard.press(tabKey);
+    await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
+    await page.keyboard.press(tabKey);
+    await expect(cardGroup(rules, 1).getByRole('combobox', { name: 'Action' })).toBeFocused();
+    await page.keyboard.press(tabKey);
+    await expect(rules.getByRole('button', { name: 'Delete rule 2', exact: true })).toBeFocused();
+
+    await page.keyboard.press('Enter');
+
+    await expect(cardGroup(rules, 2)).toHaveCount(0);
+    // The neighbour's Summary, not another Delete button (AC5): a held Enter on a `<button>` would
+    // cascade deletions; that card's Delete is one Shift+Tab back.
+    await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
+  });
+
+  test('the drag handle is disabled', async ({ page }) => {
+    const { rules, emptyAdd } = await openRules(page);
+    await emptyAdd.click();
+
+    await expect(rules.getByRole('button', { name: 'Reorder rule 1', exact: true })).toBeDisabled();
+  });
+
+  test('axe in the empty state', async ({ page }) => {
+    await openRules(page);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('axe with three cards (Born / Survive / Die)', async ({ page }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    await headerAdd.click();
+    await headerAdd.click();
+    await cardGroup(rules, 2).getByRole('combobox', { name: 'Action' }).selectOption('survive');
+    await cardGroup(rules, 3).getByRole('combobox', { name: 'Action' }).selectOption('die');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

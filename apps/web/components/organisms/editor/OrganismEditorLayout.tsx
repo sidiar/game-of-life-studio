@@ -22,6 +22,8 @@ import { styled } from '@mui/material/styles';
  *   React state (RFC-005 Decision 1's three state categories have no slot for a viewport tier).
  * - FD5: plain elements in `styled()` + `--gol-*` tokens, no MUI `Grid`/`Stack`/`Box` — RFC-003
  *   Decision 3 puts static chrome in `styled()`, and MUI's own breakpoints match none of UX-DR5's.
+ * - FD6 (Story 4.10): three named optional slots plus one header action (`rulesAction`), no
+ *   `children` — the destination is explicit at the call site.
  *
  * 1024px is NFR-3.1's supported floor, so the fold tier is a degradation path, not a layout.
  * The preview slot is where the isolated simulation subtree (M3) mounts in Story 4.14/4.15.
@@ -46,8 +48,13 @@ const PREVIEW_ID = 'organism-editor-preview';
 export interface OrganismEditorLayoutProps {
   /** Column 1 content — Story 4.5 (name), 4.6, 4.7, 4.8/4.9 mount here. */
   basicInfo?: ReactNode;
-  /** Column 2 content — Story 4.10 (rule cards / empty state) mounts here. */
+  /** Column 2 content — mounted by Story 4.10 (rule cards / empty state). */
   rules?: ReactNode;
+  /**
+   * The Rules header's action — Story 4.10's persistent "+ Add Rule". Rendered beside the heading
+   * pair, outside the `rules` slot, so the list and the empty state below never own the header.
+   */
+  rulesAction?: ReactNode;
   /** Column 3 content — Story 4.14/4.15 (preview grid + isolated simulation, M3). */
   preview?: ReactNode;
 }
@@ -155,41 +162,74 @@ const ColumnTitle = styled('h3')({
 
 // Mockup: `.section-description` (`:145-149`). `--gol-text-secondary` on `--gol-bg-secondary` is a
 // validated pair (`clinical-lab-contrast-validation.md`); on `--gol-bg-primary` it is the pair the
-// Library's count badge already passes axe with.
+// Library's count badge already passes axe with. Margin is `0` (Story 4.10): the header row below
+// owns the 20px gap now, for every column, so Basic Information and Preview stay visually
+// identical while Rules gains an action beside its heading pair.
 const ColumnDescription = styled('p')({
   fontSize: '12px',
   color: 'var(--gol-text-secondary)',
-  margin: '0 0 20px 0',
+  margin: 0,
   lineHeight: 1.6,
 });
 
+// Mockup: `.rules-header` (`organism-editor.html:495-500`, Story 4.10) — the row that puts an
+// action beside a column's heading pair. Used by all three columns so their DOM shape stays
+// identical (SC 1.3.2 — the layout test's "no placeholder" guard moves one level down rather than
+// forking per column); only Rules fills the slot today. Carries the 20px the description used to.
+const ColumnHeader = styled('div')({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  gap: '16px',
+  marginBottom: '20px',
+});
+
+// `.rules-header-info` (`:502-504`). `minWidth: 0` so a long description wraps rather than pushing
+// the action out of the column at the fold tier.
+const ColumnHeaderInfo = styled('div')({ flex: 1, minWidth: 0 });
+
 /**
- * Three named optional slots, no `children` (FD6): the destination is explicit at the call site,
- * so Story 4.5 cannot land in the wrong column. An omitted slot renders nothing after the heading
- * pair — no placeholder, no "coming soon" (NFR-4.1). The component holds no state; the tier is CSS.
+ * Three named optional slots plus one header action, no `children` (FD6): the destination is
+ * explicit at the call site, so Story 4.5 cannot land in the wrong column. An omitted slot renders
+ * nothing after the heading pair — no placeholder, no "coming soon" (NFR-4.1). The component holds
+ * no state; the tier is CSS.
  */
 export default function OrganismEditorLayout({
   basicInfo,
   rules,
+  rulesAction,
   preview,
 }: OrganismEditorLayoutProps) {
   return (
     <Root>
       <MainGroup>
         <BasicInfoColumn aria-labelledby={BASIC_ID}>
-          <ColumnTitle id={BASIC_ID}>Basic Information</ColumnTitle>
-          <ColumnDescription>Define organism properties and appearance</ColumnDescription>
+          <ColumnHeader>
+            <ColumnHeaderInfo>
+              <ColumnTitle id={BASIC_ID}>Basic Information</ColumnTitle>
+              <ColumnDescription>Define organism properties and appearance</ColumnDescription>
+            </ColumnHeaderInfo>
+          </ColumnHeader>
           {basicInfo}
         </BasicInfoColumn>
         <RulesColumn aria-labelledby={RULES_ID}>
-          <ColumnTitle id={RULES_ID}>Survival Rules</ColumnTitle>
-          <ColumnDescription>Define when cells are born, survive, or die</ColumnDescription>
+          <ColumnHeader>
+            <ColumnHeaderInfo>
+              <ColumnTitle id={RULES_ID}>Survival Rules</ColumnTitle>
+              <ColumnDescription>Define when cells are born, survive, or die</ColumnDescription>
+            </ColumnHeaderInfo>
+            {rulesAction}
+          </ColumnHeader>
           {rules}
         </RulesColumn>
       </MainGroup>
       <PreviewColumn aria-labelledby={PREVIEW_ID}>
-        <ColumnTitle id={PREVIEW_ID}>Preview &amp; Test</ColumnTitle>
-        <ColumnDescription>Test organism behavior in isolation</ColumnDescription>
+        <ColumnHeader>
+          <ColumnHeaderInfo>
+            <ColumnTitle id={PREVIEW_ID}>Preview &amp; Test</ColumnTitle>
+            <ColumnDescription>Test organism behavior in isolation</ColumnDescription>
+          </ColumnHeaderInfo>
+        </ColumnHeader>
         {preview}
       </PreviewColumn>
     </Root>
