@@ -30,10 +30,15 @@ epic entry, tightened against what the code already does.
 
 ### References
 
-- `{epics_file}` — the entry this story was written from.
+- the epics file — the entry this story was written from, quoted or linked by heading.
 
 ## Dev Agent Record
 
 ### File List
 
 ### Completion Notes
+
+---
+
+The two lines below are the orchestrator's; Create writes them, Implement and Review leave
+them as they are, and the run stats are appended after them.
