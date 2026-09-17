@@ -94,6 +94,24 @@ async function enterRun(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByTestId('run');
 }
 
+// Story 3.17 (AC7(c), Trap 10): the OTHER entry — `initialMode="run"` — never mounts the editor at
+// all, so `renderSkirmish`'s own wait (`editorRenders.length > 0`) would time out here. This waits
+// on the RUN recorder instead, and the test using it asserts `editorRenders` is EMPTY at the
+// moment the run view is found — the proof that "opens directly in Play Mode" means the editor
+// never mounted, not merely that it was replaced.
+async function renderSkirmishInRun() {
+  render(
+    <BattlePage
+      repositories={createFakeRepositories({ battles, organisms, settings: SETTINGS })}
+      battleId={SKIRMISH.id}
+      initialMode="run"
+    />,
+  );
+  await screen.findByRole('group', { name: 'Mode' });
+  await waitFor(() => expect(runRenders.length).toBeGreaterThan(0));
+  await screen.findByTestId('run');
+}
+
 describe('BattlePage — what the Run view receives (Story 3.11)', () => {
   it('hands the Run view the editor’s last `grid` as `initialGrid`, and the seeded settings (AC3)', async () => {
     const user = await renderSkirmish();
@@ -184,5 +202,42 @@ describe('BattlePage — what the Run view receives (Story 3.11)', () => {
     // A CLEAN battle: the same `handleBack` navigates straight to the Gallery.
     run.onBack();
     await waitFor(() => expect(router.push).toHaveBeenCalledWith('/'));
+  });
+
+  // AC7(c) / Story 3.17: a run-first render receives the SAME props the toggle path receives —
+  // proof that the seed feeds the identical prop-building code, not a second one.
+  it('a run-first render (initialMode="run") never mounts the editor, and hands the Run view the same props the toggle path does (AC7(c))', async () => {
+    await renderSkirmishInRun();
+
+    expect(editorRenders).toHaveLength(0);
+    expect(screen.queryByTestId('editor')).toBeNull();
+
+    const run = runRenders.at(-1) as BattleSimulationViewProps;
+    expect(run.initialGrid.width).toBe(SKIRMISH.gridSize.cols);
+    expect(run.initialGrid.height).toBe(SKIRMISH.gridSize.rows);
+    expect(run.organisms.map((o) => o.id)).toEqual([...SKIRMISH.organismIds]);
+    expect(run.startingSpeed).toBe(5);
+    expect(run.showGridLines).toBe(false);
+    expect(run.backDisabled).toBe(false);
+  });
+
+  // AC6 / Story 3.17: the in-render adjust means the Run branch is never REACHED for a dangling
+  // roster — not merely gone by the time the DOM settles. Only this file can prove that: the
+  // recorder sees every render of the mocked view, including one that a later commit would remove,
+  // where `BattlePage.test.tsx`'s final-state `[data-status]` query cannot.
+  it('a run-first render over a dangling roster never renders the Run view, not even once (AC6)', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles, organisms: [], settings: SETTINGS })}
+        battleId={SKIRMISH.id}
+        initialMode="run"
+      />,
+    );
+    await screen.findByRole('group', { name: 'Mode' });
+    await waitFor(() => expect(editorRenders.length).toBeGreaterThan(0));
+
+    expect(runRenders).toHaveLength(0);
+    expect(screen.queryByTestId('run')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
   });
 });

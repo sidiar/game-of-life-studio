@@ -8,6 +8,7 @@ import type { Organism } from '@gol/domain';
 import type { BattleRepository } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { formatBattleDate } from '@/lib/gallery/formatBattleDate';
+import { battleHref } from '@/lib/battle/battleRoute';
 import { toThumbnailSource } from '@/lib/canvas/battleThumbnail';
 import type { GridRendererColors } from '@/lib/canvas/gridRenderer';
 import type { RefToFillGroup } from '@/lib/canvas/refToFillGroup';
@@ -81,10 +82,16 @@ const Tile = styled('article')({
 // instead, under the same hover/focus-within trigger `Tile` above already reacts to (via
 // `[data-tile-actions]`, set on this component below), giving the keyboard path the same reveal
 // the mouse path gets — the same parity fix the Story 1.9 review applied to AppNav.
+// Story 3.17: the band grows from one control to a row. `display: flex` + `gap` is the biotech
+// mockup's own band (`biotech-terminal-theme/battle-gallery.html:382-388`), lifted here now that
+// this repo actually renders two actions side by side; everything below (position, reveal, touch,
+// reduced-motion) is unchanged.
 const TileActions = styled('div')({
   position: 'absolute',
   top: '18px',
   right: '18px',
+  display: 'flex',
+  gap: '6px',
   // Above TitleLink's stretched overlay (this story). Without it the overlay — which covers the
   // whole tile — swallows every click aimed at Delete, and the destructive control silently
   // becomes a second "open this battle" button. `opacity: 0` does not remove an element from
@@ -112,7 +119,12 @@ const TileActions = styled('div')({
 //      --gol-border itself is the fix themeTokens.test.ts:99-115 explicitly forbids.
 //   2. This is the first real consumer of --gol-bg-hover (deferred from the Story 1.9 review) —
 //      painted here as a RESTING surface, not a hover state.
-const DeleteButton = styled('button')({
+//
+// Story 3.17: lifted into a plain object so Run (a link) and Delete (a button) share ONE
+// definition of this chrome — both ⚠️ notes above travel with it. `DeleteButton` still consumes it
+// through `styled('button')`; `RunLink` below adds only `textDecoration: 'none'`, which an anchor
+// needs and a button never did.
+const actionChrome = {
   background: 'var(--gol-bg-hover)',
   border: '1px solid var(--gol-border-control)',
   color: 'var(--gol-text-secondary)',
@@ -137,7 +149,17 @@ const DeleteButton = styled('button')({
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
   },
-});
+} as const;
+
+const DeleteButton = styled('button')(actionChrome);
+
+// The Run affordance (AC1, FD1(a)): pure navigation, so a `styled(Link)`, never a `<button>` +
+// `onClick` — the same Story 2.2 FD1 / 2.16 FD1 line `CreateBattleLink.tsx` draws. Shares Delete's
+// 28x28 chrome via `actionChrome`. Spread into ONE object rather than passed as a second styles
+// argument (which MUI's `styled()` does accept) so the override is visible in the same literal as
+// the chrome it overrides, not in a trailing argument the eye skips; `textDecoration: 'none'` is the
+// one addition an anchor needs that a button never did.
+const RunLink = styled(Link)({ ...actionChrome, textDecoration: 'none' });
 
 // `display: flex` stays even though TileTitle is now its only child (the grid-size stat that used
 // to sit beside it is gone — Sidiar, 2026-08-25, see the removal note on forced decision 2 in
@@ -149,15 +171,16 @@ const TileHeader = styled('header')({
   alignItems: 'center',
   marginBottom: '16px',
   // Reserves the band TileActions floats over. That control is absolutely positioned against the
-  // Tile's border box (right: 18px, 28px wide), so it occupies 18→46px from the tile's right edge
-  // while this header's content box stops at the Tile's own 20px padding — an overlap of 46 − 20 =
-  // 26px, plus 8px of breathing room. Until the 2026-08-25 review this was reserved only as a side
-  // effect of the grid-size stat sitting there: a `nowrap` sibling under `justify-content:
-  // space-between` shrank the title clear of the band. Removing the stat took the reservation with
-  // it, so a long name's first line ran under the delete button — permanently under
-  // `@media (hover: none)`, where the button never fades out. Padding, not a margin on TileTitle,
-  // so the reservation survives any future second child.
-  paddingRight: '34px',
+  // Tile's border box (right: 18px), and Story 3.17 widened it from one 28px control to a 6px-gap
+  // row of two: 18 + 28 + 6 + 28 = 80px from the tile's right edge, while this header's content box
+  // stops at the Tile's own 20px padding — an overlap of 80 − 20 = 60px, plus 8px of breathing room
+  // (the same margin the 2026-08-25 review derived for the single-control band). Until that review
+  // this was reserved only as a side effect of the grid-size stat sitting there: a `nowrap` sibling
+  // under `justify-content: space-between` shrank the title clear of the band. Removing the stat
+  // took the reservation with it, so a long name's first line ran under the delete button —
+  // permanently under `@media (hover: none)`, where the band never fades out. Padding, not a margin
+  // on TileTitle, so the reservation survives any future addition to the band.
+  paddingRight: '68px',
 });
 
 // The tile heading is <h2>: the page's only <h1> is "Battle Gallery" (Story 1.9). A tile <h3>
@@ -424,8 +447,10 @@ export default function BattleTile({
           {/* Architecture Decision K: the battle route takes the id as a QUERY PARAMETER, never as
               a dynamic path segment — `/battle/[id]` cannot be built under `output: 'export'` at
               all. The id is a uuid, so it needs no encoding, but encodeURIComponent is not free
-              insurance to skip: BattleSummary.id is only as trustworthy as the stored record. */}
-          <TitleLink href={`/battle?id=${encodeURIComponent(battleId)}`}>{displayName}</TitleLink>
+              insurance to skip: BattleSummary.id is only as trustworthy as the stored record.
+              Story 3.17: built through `battleHref` (`lib/battle/battleRoute.ts`) rather than an
+              inline template, so this link and Run's below cannot spell the param differently. */}
+          <TitleLink href={battleHref(battleId)}>{displayName}</TitleLink>
         </TileTitle>
       </TileHeader>
       <PetriDish ref={containerRef} aria-hidden="true">
@@ -464,16 +489,38 @@ export default function BattleTile({
       </TileFooter>
       {/* DOM-last, not DOM-first: `position: absolute` keeps it visually top-right (matching the
           mockup) independent of source order, and putting it after the dots in the DOM keeps
-          Delete as the tile's LAST tab stop. The full order is title link → organism dots →
-          Delete; Story 2.1 moved the FIRST stop off the leading dot when the title became a link,
-          and BattleTile.test.tsx pins the whole sequence. A destructive "delete this card" action
-          reads naturally last, and moving it earlier silently pulls focus in front of the rest. */}
+          Delete as the tile's LAST tab stop. The full order is title link → organism dots → Run →
+          Delete (Story 3.17, FD5); Story 2.1 moved the FIRST stop off the leading dot when the
+          title became a link, and BattleTile.test.tsx pins the whole sequence. A destructive
+          "delete this card" action reads naturally last, and moving it earlier silently pulls
+          focus in front of the rest. */}
       <TileActions data-tile-actions="">
+        {/* AC1, FD1(a)/FD4(a): pure navigation, so a link — never a button + router.push (2.2
+            FD1 / 2.16 FD1). `aria-label`/`title` carry `displayName` so every tile's Run is
+            distinct, the same reasoning Delete's own label uses below; the untitled fallback still
+            reads "Run Untitled Battle" (Trap 5). The glyph is the transport bar's own Play glyph
+            (`SimulationControlBar.tsx`) — the same verb reads as the same verb in both places
+            (FD4) — and `aria-hidden` for the same reason Delete's is: the `aria-label` IS the
+            name, and the glyph must never double into it. Unlike Delete's `×`, `▶` sits inside
+            axe-core's emoji range, so axe files its color-contrast check under `incomplete` rather
+            than evaluating it; FD4 accepts that here because the pair this control wears
+            (`--gol-text-secondary` / `--gol-border-control` on `--gol-bg-hover`) is a gated row in
+            `themeTokens.test.ts`, which is the stronger check.
+            ❌ No `data-run-battle-id`: nothing restores focus here, since a link navigates away
+            rather than opening a dialog to cancel (contrast Delete's own attribute below). */}
+        <RunLink
+          href={battleHref(battleId, { mode: 'run' })}
+          aria-label={`Run ${displayName}`}
+          title={`Run ${displayName}`}
+        >
+          <span aria-hidden="true">▶</span>
+        </RunLink>
         {/* aria-label carries the battle name so every tile's delete button has a distinct
             accessible name (AC1); `title` gives the pointer tooltip the mockup's `title="Actions"`
             provided. The glyph is deliberately a BMP character (Story 1.12 Dev Notes) — outside
             axe-core's ignoreUnicode/textIsEmojis range, so it gets a REAL color-contrast check
-            rather than landing in `incomplete`, which is what we want for a real control. */}
+            rather than landing in `incomplete`. Run's `▶` above cannot have that (the glyph is the
+            point), so its contrast leans on the `themeTokens.test.ts` gate instead. */}
         <DeleteButton
           type="button"
           // How <BattleGallery> finds this button again to restore focus to it after a cancelled

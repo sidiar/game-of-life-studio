@@ -2929,3 +2929,171 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     expect(freshSlider).toHaveAttribute('aria-valuetext', '50 by 30 cells');
   });
 });
+
+// Story 3.17 (FR-7.6): entering `<BattlePage>` from the OTHER side — a Gallery Run link, rather
+// than a toggle click. Helpers duplicated from the 3.11 describe above rather than imported across
+// describes (the story's own instruction); `runOrganisms !== null` here is proven by the toggle
+// suite above, so these tests are about the SEED and the AC6 guard, not the Run chassis itself.
+describe('BattlePage — Run from Gallery (Story 3.17)', () => {
+  const modeValue = (container: HTMLElement) =>
+    container.querySelector('[data-mode]')?.getAttribute('data-mode');
+  const dirtyValue = (container: HTMLElement) =>
+    container.querySelector('[data-dirty]')?.getAttribute('data-dirty');
+  const runButton = () => screen.getByRole('button', { name: 'Run' });
+  const labButton = () => screen.getByRole('button', { name: 'Lab' });
+  const backButton = () => screen.getByRole('button', { name: 'Back to Battles' });
+
+  async function findRunView(container: HTMLElement): Promise<HTMLElement> {
+    return await waitFor(() => {
+      const view = container.querySelector<HTMLElement>('[data-status]');
+      if (view === null) throw new Error('the Run view has not mounted yet');
+      return view;
+    });
+  }
+
+  // AC5: a resolvable roster opens DIRECTLY in Run, paused at cycle 0, with the same shape a
+  // toggle click produces — proving the seed (not a second code path) is what gets there.
+  it('initialMode="run" opens directly in the paused Run view, with the header already reflecting Run', async () => {
+    const { container } = render(
+      <BattlePage repositories={seeded()} battleId={SKIRMISH.id} initialMode="run" />,
+    );
+    // Trap 9: the loading gate returns before the header renders — await it before reading
+    // aria-pressed, as the 3.11 tests do.
+    await screen.findByRole('group', { name: 'Mode' });
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const view = await findRunView(container);
+    expect(view).toHaveAttribute('data-status', 'paused');
+    expect(view).toHaveAttribute('data-cycle', '0');
+    // Trap 17: data-mode is true from the FIRST commit, before the lazy chunk resolves — this
+    // assertion is AFTER findRunView specifically so it proves the settled state, not the seed
+    // alone.
+    expect(modeValue(container)).toBe('run');
+    expect(dirtyValue(container)).toBe('false');
+    expect(runButton()).toHaveAttribute('aria-pressed', 'true');
+    expect(labButton()).toHaveAttribute('aria-pressed', 'false');
+    const runHeadings = screen.queryAllByRole('heading', { level: 2 });
+    expect(runHeadings.map((h) => h.textContent)).toEqual([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Back to Battles' })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toBe(heading);
+
+    // The RunLoading fallback (`Loading simulation…`) is what shows between the resources
+    // settling and the chunk resolving — asserted gone now that the view has mounted, nothing
+    // more (it is mocked-synchronous elsewhere; here the real dynamic() chunk resolves).
+    expect(screen.queryByText('Loading simulation…')).toBeNull();
+  });
+
+  // AC6(a): a dangling roster reached ON MOUNT — the state the 3-11 review filed as unreachable
+  // "today" (deferred-work.md, "renders a header over nothing"), which a Gallery Run entry reaches
+  // first.
+  it('a Run entry with a dangling roster lands in Lab, RUN disabled with its reason, and never mounts the Run view', async () => {
+    const { container } = render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles, organisms: [] })}
+        battleId={SKIRMISH.id}
+        initialMode="run"
+      />,
+    );
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(modeValue(container)).toBe('lab');
+    // The Lab sidebar BY NAME — the Run sidebar also has exactly four h2s, so a bare count would
+    // pass in either mode.
+    expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
+    expect(runButton()).toBeDisabled();
+    expect(runButton()).toHaveAttribute(
+      'title',
+      'Some organisms in this battle could not be loaded',
+    );
+    expect(labButton()).toHaveAttribute('aria-pressed', 'true');
+    // The settled state has no Run view. A final-state query cannot see a transient mount — the
+    // proof that the Run branch never rendered at all (not even for one commit) is the
+    // recorder-based test in `BattlePage.modeToggle.test.tsx` (`runRenders` stays empty).
+    expect(container.querySelector('[data-status]')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 })).toBe(heading);
+  });
+
+  // AC6(b): the same guard, reached through the OTHER failure mode — the organism library itself
+  // failing to load — with the AC7 degraded-roster notice also present in the sidebar.
+  it('a Run entry over a failed organism library also lands in Lab, disabled, with the AC7 notice', async () => {
+    const { container } = render(
+      <BattlePage
+        repositories={withFailingOrganismList()}
+        battleId={SKIRMISH.id}
+        initialMode="run"
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(modeValue(container)).toBe('lab');
+    expect(runButton()).toBeDisabled();
+    expect(runButton()).toHaveAttribute(
+      'title',
+      'Some organisms in this battle could not be loaded',
+    );
+    expect(container.querySelector('[data-status]')).toBeNull();
+    expect(screen.getByText(/organism library could not be read/i)).toBeInTheDocument();
+  });
+
+  // AC7(a): Back from a Gallery-launched run returns straight to the Gallery — clean by
+  // construction, since the live grid never touched initialGrid.
+  it('Back from a Gallery-launched run pushes "/" with no Unsaved Changes dialog', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <BattlePage repositories={seeded()} battleId={SKIRMISH.id} initialMode="run" />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    await findRunView(container);
+
+    await user.click(backButton());
+
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledWith('/');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // AC7(b): Lab from a Gallery-launched run shows the persisted battle, clean — then RUN again
+  // starts a fresh paused session, the round trip entered from the OTHER side of the 3.11 tests.
+  it('Lab from a Gallery-launched run shows the persisted battle clean, and RUN again starts fresh', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <BattlePage repositories={seeded()} battleId={SKIRMISH.id} initialMode="run" />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    await findRunView(container);
+
+    await user.click(labButton());
+    await screen.findByRole('button', { name: 'Undo' });
+
+    expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
+    const gridSizeFact = within(screen.getByRole('complementary')).getByRole('group', {
+      name: /^Grid Size: /,
+    });
+    expect(gridSizeFact.getAttribute('aria-label')).toBe('Grid Size: 50 by 30');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(dirtyValue(container)).toBe('false');
+    expect(container.querySelector('[data-status]')).toBeNull();
+
+    await user.click(runButton());
+    const view = await findRunView(container);
+    expect(view).toHaveAttribute('data-status', 'paused');
+    expect(view).toHaveAttribute('data-cycle', '0');
+  });
+});
