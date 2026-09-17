@@ -5,12 +5,35 @@
 # the layout is declared once. There are no defaults: a missing file or key stops the
 # run before Step 0 rather than guessing where a project keeps its artifacts.
 
+[adapter]
+# The method that drives the three phases — create, implement, review. Exactly one of:
+name = "bmad"               # an adapter shipped with the skill: adapters/<name>/adapter.md
+# dir = "docs/my-adapter"   # a project-local one: <dir>/adapter.md, relative to the repo root
+# What an adapter must provide is in adapters/CONTRACT.md; `bmad` is written against v6.8.0.
+# An adapter's own settings go in [adapter.<name>]; the orchestrator ignores that table.
+#
+# [adapter.plain]
+# check = ["npm run lint", "npm test"]   # the `plain` adapter: commands that must pass before a story is done
+
+[models]
+# Claude Code model aliases (`model:` on the Agent tool) — roles, not favourites. Tiers come
+# and go; this table is where the project says which one plays which part, and SKILL.md
+# keeps the rules (a reviewer is never the dev model; escalating dev escalates the review).
+create        = "opus"     # Step 1 and Opening a lane: reads the plan, writes the spec
+dev           = "sonnet"   # Step 2 default
+dev_escalated = "opus"     # Step 2 when the story is architecture-shaping
+sync          = "sonnet"   # Step S
+
+[models.review]            # Step 3: the reviewer for each dev model — never the same, never weaker
+sonnet = "opus"
+opus   = "fable"
+
 [paths]
-# All paths are relative to the repo root. The first two must match what BMad was
-# installed with — `implementation_artifacts` and `planning_artifacts` in
-# `_bmad/config.toml` (BMad Method v6).
-status_file = "docs/implementation-artifacts/sprint-status.yaml"   # BMad's story tracker, read on `main`
-stories_dir = "docs/implementation-artifacts"                      # where create-story writes {story_key}.md
+# All paths are relative to the repo root. With the `bmad` adapter the first two must
+# match what BMad was installed with — `implementation_artifacts` and
+# `planning_artifacts` in `_bmad/config.toml` (BMad Method v6).
+status_file = "docs/implementation-artifacts/sprint-status.yaml"   # the board (this skill's format; BMad writes it), read on `main`
+stories_dir = "docs/implementation-artifacts"                      # where Create writes {story_key}.md
 epics_file  = "docs/planning-artifacts/epics.md"                   # read only when opening a lane
 gates_file  = "docs/implementation-artifacts/lane-gates.yaml"      # this skill's cross-epic gates (see docs/lane-gates.example.yaml)
 

@@ -10,7 +10,7 @@ Marks are wall-clock boundaries written to a per-session state file. `report`
 turns consecutive marks into phase windows, then attributes to each window:
 
   * every subagent transcript that STARTED inside it — including agents the
-    phase agent spawned itself (bmad-code-review's three hunters land flat in
+    phase agent spawned itself (a review tool's own sub-agents land flat in
     the same session-level subagents/ dir), so a phase's cost is the whole
     subtree, not just the top agent;
   * the orchestrator's own assistant turns in that window.
@@ -47,9 +47,9 @@ IDLE_GAP_MINUTES = 15.0
 # Ordered phase windows: (start mark, end mark, label)
 PHASES = [
     ("step0", "step1", "Step 0 — re-entry guard"),
-    ("step1", "step2", "Step 1 — create-story"),
-    ("step2", "step3", "Step 2 — dev-story"),
-    ("step3", "end", "Step 3 — code review + PR"),
+    ("step1", "step2", "Step 1 — create"),
+    ("step2", "step3", "Step 2 — implement"),
+    ("step3", "end", "Step 3 — review + PR"),
 ]
 
 
@@ -306,7 +306,7 @@ def build_report(state: dict, idle_gap_minutes: float = IDLE_GAP_MINUTES) -> tup
         f"{fmt_int(orch_totals['total'])} |"
     )
     lines.append(
-        f"| **Total (create-story → PR ready)** | | {sum(r['agents'] for r in rows)} | "
+        f"| **Total (create → PR ready)** | | {sum(r['agents'] for r in rows)} | "
         f"**{fmt_duration(total_active)}** | {fmt_duration(wall)} | {fmt_int(totals['input'])} | "
         f"{fmt_int(totals['output'])} | {fmt_int(totals['cache_write'])} | "
         f"{fmt_int(totals['cache_read'])} | **{fmt_int(totals['total'])}** |"
