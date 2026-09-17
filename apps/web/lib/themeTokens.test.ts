@@ -227,6 +227,21 @@ describe('every --gol-* reference resolves to a defined token', () => {
     expect(files.length).toBeGreaterThan(0);
   });
 
+  // themes.css references its OWN tokens too — `--gol-rule-survive: var(--gol-accent)` and
+  // `--gol-rule-die: var(--gol-danger)` (Story 4.10), `--gol-action-active`, `--gol-grid-line`'s
+  // channel. The source scan below never reads the stylesheet, so before this case (review
+  // 2026-09-17) renaming `--gol-accent` left every alias dangling — both badges uncoloured — with
+  // a green run.
+  it('themes.css references only defined tokens', () => {
+    const referenced = [...stripComments(CSS).matchAll(/var\((--gol-[a-z0-9-]+)/g)].map(
+      (m) => m[1],
+    );
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const name of new Set(referenced)) {
+      expect(DEFINED, `${name} is not defined in themes.css`).toContain(name);
+    }
+  });
+
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
     const referenced = [...source.matchAll(/var\((--gol-[a-z0-9-]+)/g)].map((m) => m[1]);

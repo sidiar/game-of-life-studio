@@ -1436,3 +1436,16 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   type is `readonly Condition[]` today because nothing here edits them.
 - **Story 4.17 seeds `survivalRules` by stripping `contentHash`** from the record's rules — and
   must not re-mint ids (identity is stable across edits, RFC-004 §2.4).
+
+## Deferred from: code review of 4-10-rule-cards-empty-state (2026-09-17)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **The story's `.btn-delete-condition` citation is off, and its values differ from the mockup's** —
+  AC4 / Task 4 cite `clinical-lab-theme/organism-editor.html:683-695` as "transparent, 1px
+  `--gol-border-control`, `--gol-text-secondary`, `padding: 6px 10px`"; the mockup's rule sits at
+  `:672-680` with `--text-tertiary`, `padding: 8px` and `border: var(--border)`. `<RuleCard>`'s
+  `DeleteButton` follows the story text (the reviewed authority), so this is create-story authoring
+  drift, not a code defect. Pre-existing in the story spec. **Pick this up in the next UX
+  reconciliation touch** (the one Stories 4.3 and 4.10 both asked for over the 2026-06-01 accordion
+  revision) — decide whether the delete button's paint follows the story or the mockup, in one place.

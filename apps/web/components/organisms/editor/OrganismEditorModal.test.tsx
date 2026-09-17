@@ -7,6 +7,7 @@ import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
+import { ruleActionLabel } from '@/lib/organisms/ruleDraft';
 import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
 
 /**
@@ -410,12 +411,22 @@ describe('OrganismEditorModal', () => {
     expect(results.violations).toEqual([]);
   });
 
-  // Story 4.10.
+  // Story 4.10. Both "+ Add Rule" controls share one accessible name (FD9); `data-add-rule` is the
+  // disambiguator, and the throw keeps the lookup typed without a non-null assertion.
+  function headerAddButton(rules: HTMLElement): HTMLElement {
+    const header = within(rules)
+      .getAllByRole('button', { name: '+ Add Rule' })
+      .find((b) => b.getAttribute('data-add-rule') === 'header');
+    if (!header) throw new Error('header add button not found');
+    return header;
+  }
+
   it('opens in the empty state with the header action', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
     const dialog = screen.getByRole('dialog');
     const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    expect(rules.querySelector('[data-rules-empty-state]')).not.toBeNull();
     expect(within(rules).getByText('No Rules Defined')).toBeInTheDocument();
     const addButtons = within(rules).getAllByRole('button', { name: '+ Add Rule' });
     expect(addButtons).toHaveLength(2);
@@ -436,11 +447,7 @@ describe('OrganismEditorModal', () => {
     const dialog = screen.getByRole('dialog');
     const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
     const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
-    const header = within(rules)
-      .getAllByRole('button', { name: '+ Add Rule' })
-      .find((b) => b.getAttribute('data-add-rule') === 'header');
-    if (!header) throw new Error('header add button not found');
-    await user.click(header);
+    await user.click(headerAddButton(rules));
 
     const group = within(rules).getByRole('group', { name: 'Rule 1' });
     expect(within(group).getByRole('textbox', { name: 'Summary' })).toHaveFocus();
@@ -455,9 +462,7 @@ describe('OrganismEditorModal', () => {
 
     const dialog = screen.getByRole('dialog');
     const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
-    const headerAdd = within(rules)
-      .getAllByRole('button', { name: '+ Add Rule' })
-      .find((b) => b.getAttribute('data-add-rule') === 'header')!;
+    const headerAdd = headerAddButton(rules);
 
     await user.click(headerAdd);
     await user.click(headerAdd);
@@ -468,14 +473,17 @@ describe('OrganismEditorModal', () => {
     await user.selectOptions(within(rule1).getByRole('combobox', { name: 'Action' }), 'die');
 
     expect(within(rule1).getByRole('combobox', { name: 'Action' })).toHaveValue('die');
+    expect(rule1.querySelector('[data-rule-badge]')).toHaveTextContent(ruleActionLabel('die'));
     expect(within(rule2).getByRole('textbox', { name: 'Summary' })).toHaveValue('hello');
     expect(within(rule2).getByRole('combobox', { name: 'Action' })).toHaveValue('born');
+    expect(rule2.querySelector('[data-rule-badge]')).toHaveTextContent(ruleActionLabel('born'));
 
     await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
 
     const survivor = within(rules).getByRole('group', { name: 'Rule 1' });
     expect(within(survivor).getByRole('textbox', { name: 'Summary' })).toHaveValue('hello');
     expect(within(survivor).getByRole('combobox', { name: 'Action' })).toHaveValue('born');
+    expect(survivor.querySelector('[data-rule-badge]')).toHaveTextContent(ruleActionLabel('born'));
   });
 
   it('has no axe violations after two adds and one action change', async () => {
@@ -484,9 +492,7 @@ describe('OrganismEditorModal', () => {
 
     const dialog = screen.getByRole('dialog');
     const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
-    const headerAdd = within(rules)
-      .getAllByRole('button', { name: '+ Add Rule' })
-      .find((b) => b.getAttribute('data-add-rule') === 'header')!;
+    const headerAdd = headerAddButton(rules);
     await user.click(headerAdd);
     await user.click(headerAdd);
     const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });

@@ -38,6 +38,9 @@ import { Field, Label } from './fieldStyles';
  *   `cellState`'s `empty`/`alive`/`occupied` meaning gets explained — is where that copy earns its
  *   place.
  *
+ * Followers: Story 4.11 adds "Conditions (all must match)" after Action, Story 4.12 removes the
+ * handle's `disabled` and adds the drag handlers, Story 4.13 flags a zero-condition card at Save.
+ *
  * `useId()` gives four ids per card (label, summary, counter, action) — the multi-instance case
  * `<OrganismNameField>`'s comment anticipated. Every decorative glyph (`⋮⋮`, `✕`) is a real
  * `aria-hidden` node inside a button whose accessible name comes from `aria-label` (the Story 4.9
@@ -139,11 +142,14 @@ const DeleteButton = styled('button')({
   },
 });
 
-// `.rule-body` (`:619-622`).
+// `.rule-body` (`:619-622`) is `padding: 0 18px 18px` — its zero TOP padding leans on the
+// mockup's `.field-label { margin-top: 20px }`, which `fieldStyles.ts`'s `Label` deliberately
+// dropped (the column description carries that gap in Basic Information). Inside a card there is
+// no description above the first field, so the body carries the gap itself: `18px`, the mockup's
+// own horizontal/bottom rhythm rather than the label's 20px.
 const CardBody = styled('div')({
-  padding: '0 18px 18px',
+  padding: '18px',
   borderTop: '1px solid var(--gol-border)',
-  paddingTop: '18px',
 });
 
 // Shared by `SummaryInput` and `ActionSelect` — below the three-callers lift threshold (Story 4.7

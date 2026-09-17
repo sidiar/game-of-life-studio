@@ -157,8 +157,8 @@ const EditorBody = styled('div')({
  * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name`, Story 4.6's
  * `dominance`, Story 4.7's `agingEnabled`/`colorToken`, Story 4.8's `colorToken` seed from
  * `library` and Story 4.10's `survivalRules`) and its seed — no repository call; the lifecycle
- * (inert window, focus restore)
- * stays `useOrganismEditorModal`'s, and a fresh draft per open is the `mounted` gate's doing
+ * (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh draft per open is
+ * the `mounted` gate's doing
  * (`<OrganismLibrary>` unmounts this modal after every exit, so there is no reset effect and no
  * `key` trick). The `useState` initialiser closes over the `library` prop — legitimate because it
  * runs once per mount and the `mounted` gate guarantees a mount per open. The editor's own dirty
@@ -217,10 +217,15 @@ export default function OrganismEditorModal({
   // One updater-style setter for the whole list (Story 4.10, FD8): `<RulesEditor>` passes the
   // pure list helpers (`ruleDraft.ts`), and applying them inside the functional `setDraft` is what
   // keeps two rule mutations in one batch from clobbering each other — the same reason
-  // `setDominance` above is functional.
+  // `setDominance` above is functional. An update that hands back the SAME array (the helpers do,
+  // for an unknown id) hands back the same draft too: a fresh draft object for a no-op would be the
+  // spurious re-render the helpers' same-reference contract exists to avoid.
   const setSurvivalRules = useCallback(
     (update: (rules: readonly RuleDraft[]) => readonly RuleDraft[]) =>
-      setDraft((d) => ({ ...d, survivalRules: update(d.survivalRules) })),
+      setDraft((d) => {
+        const survivalRules = update(d.survivalRules);
+        return survivalRules === d.survivalRules ? d : { ...d, survivalRules };
+      }),
     [],
   );
   // The id is minted HERE, outside the updater — React may run an updater twice in development,

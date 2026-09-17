@@ -1622,7 +1622,11 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await headerAdd.click();
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
 
-    await cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' }).focus();
+    // Start on the card's first stop, its Delete — the handle before it is `disabled`, so Delete
+    // is where a Tab into the card lands — and walk Delete -> Summary -> Action -> next Delete.
+    await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).focus();
+    await page.keyboard.press(tabKey);
+    await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
     await page.keyboard.press(tabKey);
     await expect(cardGroup(rules, 1).getByRole('combobox', { name: 'Action' })).toBeFocused();
     await page.keyboard.press(tabKey);

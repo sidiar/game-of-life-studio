@@ -6,8 +6,10 @@ import { CONWAYS_CLASSIC } from '@gol/test-utils';
 import { ruleActionLabel, RULE_ACTIONS, type RuleDraft } from '@/lib/organisms/ruleDraft';
 import RuleCard, { type RuleCardProps } from './RuleCard';
 
-// Conway's Born rule minus `contentHash` — a real `RuleDraft`.
-const { contentHash: _contentHash, ...RULE } = CONWAYS_CLASSIC.survivalRules[0];
+// Conway's Born rule minus `contentHash` — a real `RuleDraft`, typed by the destructure alone.
+const RULE: RuleDraft = (({ contentHash: _contentHash, ...draft }) => draft)(
+  CONWAYS_CLASSIC.survivalRules[0],
+);
 
 /** A lone `<li>` outside a `<ol role="list">` trips axe's `listitem` rule (the Story 4.8
  * `container` precedent) — render inside a real list wrapper here. */
@@ -15,7 +17,7 @@ function renderCard(overrides: Partial<RuleCardProps> = {}) {
   const onChange = vi.fn();
   const onDelete = vi.fn();
   const props: RuleCardProps = {
-    rule: RULE as RuleDraft,
+    rule: RULE,
     index: 0,
     onChange,
     onDelete,

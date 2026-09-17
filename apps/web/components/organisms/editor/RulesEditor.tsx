@@ -102,31 +102,39 @@ export default function RulesEditor({ rules, onRulesChange, onAddRule }: RulesEd
       return;
     }
 
+    // `CSS.escape`, because the id is a schema-level `string().min(1)`, not a uuid: this story
+    // mints uuids, but Story 4.17 seeds ids from persisted records, and a `"` or `\` in one would
+    // otherwise make `querySelector` throw inside this effect and unmount the editor.
+    const cardControl = (id: string, control: string) =>
+      root?.querySelector<HTMLElement>(`[data-rule-id="${CSS.escape(id)}"] ${control}`);
+
     if (ids.length === prev.length + 1) {
       const addedId = ids.find((id) => !prev.includes(id));
       if (addedId !== undefined) {
-        root
-          ?.querySelector<HTMLElement>(`[data-rule-id="${addedId}"] [data-rule-summary]`)
-          ?.focus();
+        cardControl(addedId, '[data-rule-summary]')?.focus();
       }
     } else if (ids.length === prev.length - 1) {
+      // The first position where the lists diverge is the removed card's — and when the LAST
+      // card went, it is `prev`'s last index, because `ids[i]` is `undefined` there.
       const removedIndex = prev.findIndex((id, i) => ids[i] !== id);
-      const index = removedIndex === -1 ? prev.length - 1 : removedIndex;
 
-      // "Loose" focus (`<BattleEditorView>`'s `focusIsLoose` idiom, adapted): the deleted button
-      // is gone, so the browser has already dropped focus to `<body>` — never steal focus the
-      // user placed somewhere real during the same tick.
+      // "Loose" focus (`<BattleEditorView>`'s `focusIsLoose` idiom, adapted). Focus on a real
+      // control INSIDE the list — a mouse-click Delete in a browser that does not focus buttons
+      // on click, with the user parked in another card — is left alone. Everything else counts
+      // as loose, including a focus OUTSIDE this component: the deleted button is gone, so focus
+      // has fallen to `<body>`, and MUI's `FocusTrap` polls every 50 ms and re-focuses the dialog
+      // root when it finds `<body>` — a race this effect can lose, which is why "outside the
+      // list" must also qualify, exactly as the battle editor's `closest('[role="dialog"]')` does.
       const active = document.activeElement;
       const focusIsLoose = active === null || active === document.body || !root?.contains(active);
       if (focusIsLoose) {
         if (ids.length === 0) {
           root?.querySelector<HTMLElement>('[data-add-rule="empty"]')?.focus();
         } else {
-          const target = Math.min(index, ids.length - 1);
-          const targetId = ids[target];
-          root
-            ?.querySelector<HTMLElement>(`[data-rule-id="${targetId}"] [data-rule-delete]`)
-            ?.focus();
+          const targetId = ids[Math.min(removedIndex, ids.length - 1)];
+          if (targetId !== undefined) {
+            cardControl(targetId, '[data-rule-delete]')?.focus();
+          }
         }
       }
     }
