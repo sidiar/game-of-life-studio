@@ -143,6 +143,9 @@ const sidebarHeadings = (page: Page): Locator =>
 // bare `getByRole('slider')` stops being unambiguous the day it lands.
 const speedSlider = (page: Page): Locator =>
   page.getByRole('slider', { name: 'Generations per second' });
+// Story 3.16: the Run sidebar's grid-size slider, mirroring `speedSlider` above.
+const gridSizeSlider = (page: Page): Locator =>
+  page.getByRole('slider', { name: 'Grid dimensions' });
 // Story 3.14: the population rows, scoped to the sidebar — `getByRole('listitem')` alone would
 // also see any future list the main chassis grows.
 const populationRows = (page: Page): Locator =>
@@ -2004,10 +2007,15 @@ test.describe('Lab⇄Run mode toggle (Story 3.11)', () => {
     // FR-3.10 "the playback canvas painted": the hook's prime reached the Run dish.
     await expect(dish(page)).toBeVisible();
     expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
-    // The chassis: three sidebar sections (Population Analysis, Cycle Count — Story 3.14; Speed —
-    // Story 3.13; the 3.11 skeleton had none), one <main>-equivalent chassis, one <h1>, and the
-    // editor's controls are gone rather than hidden.
-    await expect(sidebarHeadings(page)).toHaveText(['Population Analysis', 'Cycle Count', 'Speed']);
+    // The chassis: four sidebar sections (Population Analysis, Cycle Count — Story 3.14; Speed —
+    // Story 3.13; Grid Size — Story 3.16; the 3.11 skeleton had none), one <main>-equivalent
+    // chassis, one <h1>, and the editor's controls are gone rather than hidden.
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
     await expect(page.getByRole('main')).toHaveCount(1);
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Undo' })).toHaveCount(0);
@@ -2308,7 +2316,12 @@ test.describe('Speed control (Story 3.13)', () => {
     const errors = collectErrors(page);
     await enterRun(page);
 
-    await expect(sidebarHeadings(page)).toHaveText(['Population Analysis', 'Cycle Count', 'Speed']);
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
     await expect(speedSlider(page)).toHaveValue('3');
     await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '10 generations per second');
     await expect(page.getByText('10 gen/s')).toBeVisible();
@@ -2318,7 +2331,7 @@ test.describe('Speed control (Story 3.13)', () => {
 
   // (b) AC7, trap 2: the keyboard semantics are the browser's own — none re-implemented — which is
   // exactly why they are pinned here and not under jsdom, which does not step a range input.
-  test('End, Home and the arrow keys move the slider one detent at a time, and Tab lands on Back to Battles (AC7)', async ({
+  test('End, Home and the arrow keys move the slider one detent at a time, and Tab reaches the Grid Size slider then Back to Battles (AC7)', async ({
     page,
     browserName,
   }) => {
@@ -2351,12 +2364,18 @@ test.describe('Speed control (Story 3.13)', () => {
     // The bottom detent is the one place the announcement is singular.
     await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '1 generation per second');
 
-    // The footer is the LAST child of the sidebar: the slider tabs straight to Back to Battles,
-    // before the transport bar in document order. WebKit needs `Alt+Tab` (the Story 4.1 idiom in
-    // `organisms.spec.ts`): measured locally, a plain Tab from a range input leaves
-    // `document.activeElement` on `<body>` on macOS WebKit, while Option+Tab — what a real Safari
-    // user presses — walks DOM order on every WebKit port. Chromium and Firefox use plain Tab.
-    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    // Trap 7 (Story 3.16): the Grid Size slider now sits between Speed and the footer while
+    // PAUSED (a disabled range input is out of the tab order, so this stop only exists here, not
+    // while playing). The footer is still the LAST child of the sidebar, so the SECOND Tab reaches
+    // Back to Battles. WebKit needs `Alt+Tab` (the Story 4.1 idiom in `organisms.spec.ts`):
+    // measured locally, a plain Tab from a range input leaves `document.activeElement` on `<body>`
+    // on macOS WebKit, while Option+Tab — what a real Safari user presses — walks DOM order on
+    // every WebKit port. Chromium and Firefox use plain Tab.
+    const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    await page.keyboard.press(tab);
+    await expect(gridSizeSlider(page)).toBeFocused();
+
+    await page.keyboard.press(tab);
     await expect(page.getByRole('button', { name: 'Back to Battles' })).toBeFocused();
 
     expect(errors).toEqual([]);
@@ -2471,7 +2490,12 @@ test.describe('Cycle counter & population stats (Story 3.14)', () => {
     const errors = collectErrors(page);
     await enterRun(page);
 
-    await expect(sidebarHeadings(page)).toHaveText(['Population Analysis', 'Cycle Count', 'Speed']);
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
 
     const rows = populationRows(page);
     await expect(rows).toHaveCount(3);
@@ -2693,6 +2717,167 @@ test.describe('Extinction auto-pause (Story 3.15)', () => {
 
     await page.getByRole('button', { name: 'Pause' }).click();
     await expect(view(page)).toHaveAttribute('data-status', 'paused');
+
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Play-mode ephemeral resize (Story 3.16)', () => {
+  const view = (page: Page): Locator => page.locator('[data-status]');
+  const cycle = async (page: Page): Promise<number> =>
+    Number(await view(page).getAttribute('data-cycle'));
+
+  // (a): the fourth Run-sidebar section, at the persisted size; a move resizes the LIVE grid
+  // (never `initialGrid`), never steps a cycle, renames the dish, and Stop restores the persisted
+  // size — the slider following it back.
+  test('resizes among the four presets with the dish and slider following, without stepping a cycle (AC1, AC2, AC3, AC4)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`); // battleA: 50x30
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
+    await expect(gridSizeSlider(page)).toHaveValue('0');
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '50 by 30 cells');
+
+    await gridSizeSlider(page).fill('3');
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '200 by 120 cells');
+    await expect(dish(page)).toHaveAccessibleName('Petri dish, 200 by 120 cells');
+    // Trap 9: a resize is not a step.
+    expect(await cycle(page)).toBe(0);
+
+    await page.getByRole('button', { name: 'Next cycle' }).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '1');
+
+    await page.getByRole('button', { name: 'Stop & reset' }).click();
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(dish(page)).toHaveAccessibleName('Petri dish, 50 by 30 cells');
+    await expect(gridSizeSlider(page)).toHaveValue('0');
+
+    expect(errors).toEqual([]);
+  });
+
+  // (b): the resize is ephemeral — Lab shows the persisted size with no dirty indicator, and a
+  // fresh Run starts back at the ladder's bottom.
+  test('a resize never reaches the Lab: the Grid Info stays at the persisted size, nothing dirty (AC6)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+
+    await gridSizeSlider(page).fill('2');
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '150 by 90 cells');
+
+    await labButton(page).click();
+    // The LAB's four sections by name, not a count the Run sidebar's four would also satisfy.
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
+    await expect(
+      page.getByRole('complementary').getByRole('group', { name: /^Grid Size: / }),
+    ).toHaveAttribute('aria-label', 'Grid Size: 50 by 30');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    // `'0'` AND the valuetext: an off-ladder live size would also clamp the thumb to 0 (FD4).
+    await expect(gridSizeSlider(page)).toHaveValue('0');
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '50 by 30 cells');
+
+    expect(errors).toEqual([]);
+  });
+
+  // (c): the control is disabled while playing (Speed stays enabled — FR-4.2), with the hint
+  // visible in both states.
+  test('disables Grid Size while playing; Speed stays enabled; the hint is always visible (AC5)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(page.getByText('Adjustable while paused')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+
+    await expect(gridSizeSlider(page)).toBeDisabled();
+    await expect(speedSlider(page)).toBeEnabled();
+    await expect(page.getByText('Adjustable while paused')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Pause' }).click();
+    await expect(gridSizeSlider(page)).toBeEnabled();
+
+    expect(errors).toEqual([]);
+  });
+
+  // (d): the keyboard semantics are the browser's own — End/Home/ArrowRight over the four presets.
+  test('End, Home and ArrowRight move the Grid Size slider one detent at a time (AC7)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+
+    await gridSizeSlider(page).focus();
+    await expect(gridSizeSlider(page)).toBeFocused();
+
+    await page.keyboard.press('End');
+    await expect(gridSizeSlider(page)).toHaveValue('3');
+
+    await page.keyboard.press('Home');
+    await expect(gridSizeSlider(page)).toHaveValue('0');
+
+    await page.keyboard.press('ArrowRight');
+    await expect(gridSizeSlider(page)).toHaveValue('1');
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '100 by 60 cells');
+
+    expect(errors).toEqual([]);
+  });
+
+  // (e): the largest resize (battleB, 100x60 -> 200x120 = 24,000 cells) proves the resize path
+  // doesn't itself step a cycle, and axe stays clean at the largest live size.
+  test('a full-ladder resize on the 100x60 battle stays at cycle 0 and is axe-clean (AC3, AC9)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    // battleB's roster includes Conway's Classic (`rosterIdsWithConway`, `mockWorkspace.ts`),
+    // which `seedWorkspace` alone does not add to the organism library (`seedConwaysClassic`'s
+    // own head comment) — without this, RUN is disabled with "could not be loaded".
+    await seedConwaysClassic(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleB}`); // battleB: 100x60
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(gridSizeSlider(page)).toHaveValue('1');
+
+    await gridSizeSlider(page).fill('3');
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '200 by 120 cells');
+    expect(await cycle(page)).toBe(0);
+
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
     expect(errors).toEqual([]);
   });
