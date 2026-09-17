@@ -128,8 +128,7 @@ pushes them, and opens PRs without asking. It never merges, never pushes to `mai
 never resolves a review finding that needs a human decision — those open the PR as a
 draft.
 
-`fixtures/` is a three-epic toy project you can point the scripts at without a real one —
-and, with `name = "plain"` in its TOML, a project the skill can actually run on:
+`fixtures/` is a three-epic toy board you can point the scripts at without a real project:
 
 ```
 python3 lane-gates.py --root fixtures list
@@ -159,6 +158,37 @@ draft-PR rule counts, which phase may write which status — is the skill's, and
   vocabulary. The proof that the seam is real, and the way to use the skill without BMad.
 - **Yours** — `[adapter] dir = "docs/my-adapter"`; `tests/test_adapters.py` checks the
   shape, and a story run on a throwaway repo checks the rest.
+
+### The `plain` adapter's first run
+
+[`implement-next-story-on-plain`](https://github.com/sidiar/implement-next-story-on-plain)
+is a throwaway project — a stdlib Python todo CLI, `add` implemented, `list` / `done` /
+`remove` in the backlog, `python3 -m unittest` as the check, a two-line CI workflow. Its
+first story went through the skill on 2026-09-17, the day the adapter was written, with
+the orchestrator following `SKILL.md` and nothing done by hand between phases. The
+hand-back, as reported:
+
+> **Lane 2, story 2.2 `list-items`** — status on the branch: `done`. PR #1, not draft, CI
+> green on both pushes. Adapter `plain`; implemented on **Sonnet**, reviewed on **Opus**
+> (`lane-gates.py reviewer sonnet`). Files: `todo.py`, `test_todo.py`, the story file, the
+> board. Review: 1 patch applied (a missing test for AC 3's second clause), 1 deferred
+> (temp-dir leak, pre-existing from story 2-1), 0 decisions. Proposed gate rows: none.
+>
+> | Phase | Model | Active | Output tokens |
+> |---|---|---:|---:|
+> | Step 0 — re-entry guard | — | 9 s | 1,050 |
+> | Step 1 — create | opus-5 | 1 m 25 s | 6,157 |
+> | Step 2 — implement | sonnet-5 | 2 m 13 s | 12,085 |
+> | Step 3 — review + PR | opus-5 | 2 m 49 s | 10,855 |
+> | **Total (create → PR ready)** | | **6 m 37 s** | 30,147 |
+
+Six and a half minutes for a thirty-line story is the floor, not the norm — the thirty
+stories above took an hour each on a real codebase. What the run checked is the seam:
+`[adapter]` resolution, the `[models]` lookup, the `[Review][Decision]` done-check, the
+two-commit shape, CI as a finding, the stats — every rule the orchestrator applies held
+with a method that has no tooling of its own. The reviewer also found a place it could
+have raised a decision (`list extra` still lists) and correctly did not, because the
+story's dev notes allowed it.
 
 ## What it depends on
 

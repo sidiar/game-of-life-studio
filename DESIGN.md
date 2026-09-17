@@ -152,7 +152,10 @@ inferred was "start the next story", which is the other lane's story on this bra
 *an adapter states the answer to every halt its tool presents* is a contract obligation,
 and "the subagent will work it out" is named as the defect it is. The `plain` adapter is
 the second implementation, written so the seam is not imagined; whether it holds is a
-question for its first run.
+question for its first run — which happened the same day, on a throwaway todo CLI
+(README, *The `plain` adapter's first run*): one story, create → implement → review → PR,
+no hand between phases, one patch, one deferral, no decision. One run on a thirty-line
+story does not make the section *observed*; it does mean the seam is no longer imagined.
 
 ## Gates are rows, not memory
 

@@ -20,7 +20,9 @@ transition table (adapters own their status transitions, the orchestrator verifi
 story-file trailers, the three triage buckets and the `- [ ] [Review][Decision]` marker
 line the done-check counts, and the rule that every halt a tool presents has a scripted
 answer. `adapters/plain/` is the second adapter — no framework, a git repo and a
-Markdown plan — and the proof the seam is real; it has not yet had its first run.
+Markdown plan — and the proof the seam is real: its first run, on a throwaway todo CLI,
+went create → implement → review → PR in six and a half minutes with nothing done by
+hand between phases (README, *The `plain` adapter's first run*).
 
 Found on the way: `bmad-code-review` halts five times, not four — a checkpoint in its
 first step and a chunking offer for large diffs — and the `bmad` adapter now answers both.
