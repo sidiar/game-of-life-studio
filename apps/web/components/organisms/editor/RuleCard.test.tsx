@@ -3,26 +3,45 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
-import { ruleActionLabel, RULE_ACTIONS, type RuleDraft } from '@/lib/organisms/ruleDraft';
+import {
+  ruleActionLabel,
+  ruleDraftFrom,
+  RULE_ACTIONS,
+  type RuleDraft,
+} from '@/lib/organisms/ruleDraft';
 import RuleCard, { type RuleCardProps } from './RuleCard';
 
-// Conway's Born rule minus `contentHash` — a real `RuleDraft`, typed by the destructure alone.
-const RULE: RuleDraft = (({ contentHash: _contentHash, ...draft }) => draft)(
-  CONWAYS_CLASSIC.survivalRules[0],
-);
+// Deterministic id counter, never `crypto` — matches the `ruleDraft.test.ts` idiom.
+function counter() {
+  let n = 0;
+  return () => `c${++n}`;
+}
+
+// Conway's Born rule as a real `RuleDraft`, via the bridge (not a hand-destructure).
+const RULE: RuleDraft = ruleDraftFrom(CONWAYS_CLASSIC.survivalRules[0], counter());
+
+const ORGANISMS = [
+  { id: 'org-a', name: 'Alpha' },
+  { id: 'org-b', name: 'Beta' },
+];
 
 /** A lone `<li>` outside a `<ol role="list">` trips axe's `listitem` rule (the Story 4.8
  * `container` precedent) — render inside a real list wrapper here. The callbacks are not
  * overridable: the helper returns its own mocks, and an override would be asserted against a mock
  * that was never wired. */
-function renderCard(overrides: Partial<Omit<RuleCardProps, 'onChange' | 'onDelete'>> = {}) {
+function renderCard(
+  overrides: Partial<Omit<RuleCardProps, 'onChange' | 'onDelete' | 'onConditionsChange'>> = {},
+) {
   const onChange = vi.fn();
   const onDelete = vi.fn();
+  const onConditionsChange = vi.fn();
   const props: RuleCardProps = {
     rule: RULE,
     index: 0,
+    organisms: ORGANISMS,
     onChange,
     onDelete,
+    onConditionsChange,
     ...overrides,
   };
   const utils = render(
@@ -30,7 +49,7 @@ function renderCard(overrides: Partial<Omit<RuleCardProps, 'onChange' | 'onDelet
       <RuleCard {...props} />
     </ol>,
   );
-  return { ...utils, onChange, onDelete };
+  return { ...utils, onChange, onDelete, onConditionsChange };
 }
 
 describe('RuleCard', () => {
@@ -99,8 +118,10 @@ describe('RuleCard', () => {
         <RuleCard
           rule={{ ...RULE, payload: { ...RULE.payload, action: 'die' } }}
           index={0}
+          organisms={ORGANISMS}
           onChange={onChange}
           onDelete={vi.fn()}
+          onConditionsChange={vi.fn()}
         />
       </ol>,
     );
@@ -144,6 +165,45 @@ describe('RuleCard', () => {
 
   it('has no axe violations', async () => {
     const { container } = renderCard();
+
+    const results = await axe(container);
+    expect(results.violations).toEqual([]);
+  });
+
+  it("renders the Conditions group with Conway's Born rows (Story 4.11)", () => {
+    renderCard();
+
+    const group = screen.getByRole('group', { name: 'Rule 1' });
+    expect(
+      within(group).getByRole('group', { name: 'Conditions (all must match)' }),
+    ).toBeInTheDocument();
+    expect(within(group).getByRole('combobox', { name: 'Condition 1 property' })).toHaveValue(
+      'cellState',
+    );
+    expect(within(group).getByRole('combobox', { name: 'Condition 1 value' })).toHaveValue('empty');
+    expect(within(group).getByRole('combobox', { name: 'Condition 2 property' })).toHaveValue(
+      'neighborCount',
+    );
+    expect(within(group).getByRole('combobox', { name: 'Condition 2 operator' })).toHaveValue('eq');
+    expect(within(group).getByRole('textbox', { name: 'Condition 2 value' })).toHaveValue('3');
+  });
+
+  it('clicking + Add Condition calls onConditionsChange with the rule id and an appending updater', () => {
+    const { onConditionsChange } = renderCard();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add Condition' }));
+
+    expect(onConditionsChange).toHaveBeenCalledTimes(1);
+    const [id, updater] = onConditionsChange.mock.calls[0];
+    expect(id).toBe(RULE.id);
+    const next = updater(RULE.conditions);
+    expect(next).toHaveLength(3);
+    expect(next[2]).toMatchObject({ property: 'cellState', operator: 'eq', pattern: 'empty' });
+  });
+
+  it("has no axe violations with Conway's Survive rule (cellState + range)", async () => {
+    const survive = ruleDraftFrom(CONWAYS_CLASSIC.survivalRules[1], counter());
+    const { container } = renderCard({ rule: survive });
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);

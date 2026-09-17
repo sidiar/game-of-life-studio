@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SurvivalRuleSchema } from '@gol/domain';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
+import type { ConditionDraft } from './conditionDraft';
 import {
   appendRule,
   createNewRuleDraft,
@@ -10,19 +11,20 @@ import {
   removeRule,
   ruleActionLabel,
   RULE_ACTIONS,
+  ruleDraftFrom,
+  updateRuleConditions,
   updateRulePayload,
   type RuleDraft,
 } from './ruleDraft';
 
-// Conway's Classic's own two rules, stripped of `contentHash` — real `RuleDraft`s, not
-// hand-typed ones, so the three-rule cases below exercise the exact shape Story 4.16/4.17 will
-// parse/seed.
-function toDraft(rule: (typeof CONWAYS_CLASSIC.survivalRules)[number]): RuleDraft {
-  const { contentHash: _contentHash, ...draft } = rule;
-  return draft;
+// Deterministic id counter, never `crypto` — `ruleDraftFrom(rule, counter)` in place of the old
+// hand-destructure, so the two-rule fixtures below exercise the exact bridge Story 4.16/4.17 read.
+function counter() {
+  let n = 0;
+  return () => `c${++n}`;
 }
 
-const [BORN, SURVIVE] = CONWAYS_CLASSIC.survivalRules.map(toDraft);
+const [BORN, SURVIVE] = CONWAYS_CLASSIC.survivalRules.map((rule) => ruleDraftFrom(rule, counter()));
 
 describe('RULE_ACTIONS', () => {
   it('is exactly [born, survive, die], each parsing through the schema enum', () => {
@@ -109,5 +111,49 @@ describe('updateRulePayload', () => {
   it('returns the same reference for an unknown id', () => {
     const rules = [BORN, SURVIVE];
     expect(updateRulePayload(rules, 'nope', { summary: 'x' })).toBe(rules);
+  });
+});
+
+describe('updateRuleConditions', () => {
+  it('patches only the named rule, keeping the others by reference', () => {
+    const rules = [BORN, SURVIVE];
+    const next = updateRuleConditions(rules, BORN.id, (conditions) => [...conditions].reverse());
+    expect(next[0].conditions).toEqual([...BORN.conditions].reverse());
+    expect(next[1]).toBe(SURVIVE);
+  });
+
+  it('returns the same reference for an unknown id', () => {
+    const rules = [BORN, SURVIVE];
+    expect(updateRuleConditions(rules, 'nope', (c) => [...c].reverse())).toBe(rules);
+  });
+
+  it('returns the same reference for an identity update (a no-op stays a no-op)', () => {
+    const rules = [BORN, SURVIVE];
+    expect(updateRuleConditions(rules, BORN.id, (c) => c)).toBe(rules);
+  });
+});
+
+describe('ruleDraftFrom', () => {
+  it('keeps the rule id, drops contentHash, and maps each condition with a fresh id', () => {
+    const bornRule = CONWAYS_CLASSIC.survivalRules.find((r) => r.payload.action === 'born');
+    if (!bornRule) throw new Error('fixture has no born rule');
+
+    const draft = ruleDraftFrom(bornRule, counter());
+
+    expect(draft.id).toBe(bornRule.id);
+    expect(draft.payload).toEqual(bornRule.payload);
+    const conditions: readonly ConditionDraft[] = draft.conditions;
+    expect(conditions).toEqual([
+      { id: 'c1', property: 'cellState', operator: 'eq', pattern: 'empty' },
+      { id: 'c2', property: 'neighborCount', operator: 'eq', pattern: '3' },
+    ]);
+  });
+
+  it('a fresh createNewRuleDraft is unchanged (conditions: [])', () => {
+    expect(createNewRuleDraft('x')).toEqual({
+      id: 'x',
+      conditions: [],
+      payload: { summary: '', action: 'born' },
+    });
   });
 });

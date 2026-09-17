@@ -53,7 +53,8 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
   /**
    * The loaded library — an entity list, never a repository (AR-2/AR-27: this modal still calls
    * nothing that persists). Read ONCE, at mount, for the M6 default-colour seed (Story 4.8) and on
-   * EVERY render for the reuse warning (Story 4.9); 4.11 the organism-type dropdown, 4.17 excludes
+   * EVERY render for the reuse warning (Story 4.9); Story 4.11 uses it for the organism-type dropdown,
+   * Story 4.17 excludes
    * the organism under edit. The seed is taken from whatever the caller had loaded at open time
    * (FD9).
    */
@@ -315,6 +316,7 @@ export default function OrganismEditorModal({
             rules={
               <RulesEditor
                 rules={draft.survivalRules}
+                organisms={library}
                 onRulesChange={setSurvivalRules}
                 onAddRule={addRule}
               />

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { BattleSchema, CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID, OrganismSchema } from '@gol/domain';
+import {
+  BattleSchema,
+  CONDITION_PROPERTIES,
+  CONWAYS_CLASSIC,
+  CONWAYS_CLASSIC_ID,
+  NUMERIC_OPERATORS,
+  OrganismSchema,
+} from '@gol/domain';
 import {
   createMockBattles,
   createMockOrganisms,
@@ -8,17 +15,14 @@ import {
   MOCK_ORGANISM_IDS,
 } from './mockWorkspace';
 
-// The schema's own condition-property / operator universe (survivalRuleSchema.ts). Fixed by the
-// spec, not by what this file happens to contain — the COVERED sets below are what get derived
-// from the fixtures; this is what "full coverage" is measured against.
-const ALL_CONDITION_PROPERTIES = [
-  'cellState',
-  'organismType',
-  'age',
-  'neighborCount',
-  'occupantNeighborCount',
-] as const;
-const ALL_OPERATORS = ['eq', 'gt', 'lt', 'gte', 'lte', 'range'] as const;
+// The schema's own condition-property / operator universe (survivalRuleSchema.ts), derived from
+// @gol/domain's schema-read constants (Story 4.11 — closes deferred-work.md's 1.6 entry: this used
+// to hand-list both tuples, which could silently drift from the schema). The `eq` operator is not
+// itself in `NUMERIC_OPERATORS`'s complement here — the singleton properties (`cellState`,
+// `organismType`) only ever pair with `eq`, so the covered-operators set below is still exactly
+// `NUMERIC_OPERATORS` (every numeric fixture condition uses one of its six).
+const ALL_CONDITION_PROPERTIES = CONDITION_PROPERTIES;
+const ALL_OPERATORS = NUMERIC_OPERATORS;
 
 describe('schema validity', () => {
   it('every mock organism parses under OrganismSchema', () => {

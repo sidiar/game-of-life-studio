@@ -501,4 +501,100 @@ describe('OrganismEditorModal', () => {
     const results = await axe(document.body);
     expect(results.violations).toEqual([]);
   });
+
+  // Story 4.11: the condition builder wired through the modal — `organisms={library}` reaching
+  // `<RulesEditor>` -> `<RuleCard>` -> `<ConditionsEditor>`.
+  it('adds a rule, then a condition, focused on the property select with cellState the default', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    await user.click(headerAddButton(rules));
+    const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+    await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+
+    const property = within(rule1).getByRole('combobox', { name: 'Condition 1 property' });
+    expect(property).toHaveValue('cellState');
+    expect(document.activeElement).toBe(property);
+    expect(within(rules).getAllByRole('textbox', { name: 'Summary' })).toHaveLength(1);
+  });
+
+  it("the organism-type dropdown lists the library, selected on the first entry (Conway's Classic)", async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    await user.click(headerAddButton(rules));
+    const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+    await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+    await user.selectOptions(
+      within(rule1).getByRole('combobox', { name: 'Condition 1 property' }),
+      'organismType',
+    );
+
+    const value = within(rule1).getByRole('combobox', { name: 'Condition 1 value' });
+    expect(value).toHaveValue(LIBRARY[0].id);
+    const optionTexts = within(value)
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+    expect(optionTexts).toEqual(LIBRARY.map((organism) => organism.name));
+  });
+
+  it('the range pair error appears inside the card, and clears when Max exceeds Min; deleting the rule clears it', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    await user.click(headerAddButton(rules));
+    const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+    await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+    await user.selectOptions(
+      within(rule1).getByRole('combobox', { name: 'Condition 1 property' }),
+      'neighborCount',
+    );
+    await user.selectOptions(
+      within(rule1).getByRole('combobox', { name: 'Condition 1 operator' }),
+      'range',
+    );
+    await user.type(within(rule1).getByRole('textbox', { name: 'Condition 1 minimum' }), '3');
+    await user.type(within(rule1).getByRole('textbox', { name: 'Condition 1 maximum' }), '2');
+
+    expect(within(rule1).getByRole('alert')).toHaveTextContent('Min must be less than Max');
+
+    const max = within(rule1).getByRole('textbox', { name: 'Condition 1 maximum' });
+    await user.clear(max);
+    await user.type(max, '4');
+    expect(within(rule1).queryByRole('alert')).not.toBeInTheDocument();
+
+    await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+    expect(within(rules).queryByRole('alert')).not.toBeInTheDocument();
+    expect(rules.querySelector('[data-rules-empty-state]')).not.toBeNull();
+  });
+
+  it('has no axe violations with the pair error visible', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    await user.click(headerAddButton(rules));
+    const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+    await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+    await user.selectOptions(
+      within(rule1).getByRole('combobox', { name: 'Condition 1 property' }),
+      'neighborCount',
+    );
+    await user.selectOptions(
+      within(rule1).getByRole('combobox', { name: 'Condition 1 operator' }),
+      'range',
+    );
+    await user.type(within(rule1).getByRole('textbox', { name: 'Condition 1 minimum' }), '3');
+    await user.type(within(rule1).getByRole('textbox', { name: 'Condition 1 maximum' }), '2');
+
+    const results = await axe(document.body);
+    expect(results.violations).toEqual([]);
+  });
 });

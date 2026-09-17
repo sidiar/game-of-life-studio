@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
 import {
+  CONWAYS_CLASSIC_ID,
   MAX_DOMINANCE,
   MAX_ORGANISM_NAME_LENGTH,
   MIN_DOMINANCE,
@@ -1614,7 +1615,7 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await expect(rules.getByText('100 / 100')).toBeVisible();
   });
 
-  test('keyboard: delete -> Summary -> Action inside a card, and the handle is skipped', async ({
+  test('keyboard: delete -> Summary -> Action -> + Add Condition inside a card, and the handle is skipped', async ({
     page,
     browserName,
   }) => {
@@ -1624,12 +1625,18 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
 
     // Start on the card's first stop, its Delete — the handle before it is `disabled`, so Delete
-    // is where a Tab into the card lands — and walk Delete -> Summary -> Action -> next Delete.
+    // is where a Tab into the card lands — and walk Delete -> Summary -> Action -> + Add
+    // Condition -> next Delete (Story 4.11 AC11d: the condition builder's own add button is the
+    // card's new last stop).
     await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).focus();
     await page.keyboard.press(tabKey);
     await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
     await page.keyboard.press(tabKey);
     await expect(cardGroup(rules, 1).getByRole('combobox', { name: 'Action' })).toBeFocused();
+    await page.keyboard.press(tabKey);
+    await expect(
+      cardGroup(rules, 1).getByRole('button', { name: '+ Add Condition' }),
+    ).toBeFocused();
     await page.keyboard.press(tabKey);
     await expect(rules.getByRole('button', { name: 'Delete rule 2', exact: true })).toBeFocused();
 
@@ -1662,6 +1669,236 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await headerAdd.click();
     await cardGroup(rules, 2).getByRole('combobox', { name: 'Action' }).selectOption('survive');
     await cardGroup(rules, 3).getByRole('combobox', { name: 'Action' }).selectOption('die');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});
+
+test.describe('condition builder (Story 4.11)', () => {
+  async function openRules(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const rules = dialog.getByRole('region', { name: 'Survival Rules' });
+    const headerAdd = rules.locator('[data-add-rule="header"]');
+    return { dialog, rules, headerAdd };
+  }
+
+  function cardGroup(rules: Locator, n: number) {
+    return rules.getByRole('group', { name: `Rule ${n}`, exact: true });
+  }
+
+  // The controls by exact name — `exact: true` because `Condition 1` is a substring of
+  // `Condition 10`. `value` is one of a combobox (cellState/organismType) or a textbox (a numeric
+  // scalar) depending on the row's property — `.or()` resolves to whichever exists.
+  function row(card: Locator, n: number) {
+    return {
+      property: card.getByRole('combobox', { name: `Condition ${n} property`, exact: true }),
+      operator: card.getByRole('combobox', { name: `Condition ${n} operator`, exact: true }),
+      value: card
+        .getByRole('combobox', { name: `Condition ${n} value`, exact: true })
+        .or(card.getByRole('textbox', { name: `Condition ${n} value`, exact: true })),
+      min: card.getByRole('textbox', { name: `Condition ${n} minimum`, exact: true }),
+      max: card.getByRole('textbox', { name: `Condition ${n} maximum`, exact: true }),
+      delete: card.getByRole('button', { name: `Delete condition ${n}`, exact: true }),
+    };
+  }
+
+  test('a fresh rule has the group, no rows, and the add action; add focuses the property select; zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    const card = cardGroup(rules, 1);
+    const addCond = card.locator('[data-add-condition]');
+
+    await expect(card.getByRole('group', { name: 'Conditions (all must match)' })).toBeVisible();
+    await expect(addCond).toBeVisible();
+    await expect(card.getByRole('combobox', { name: /^Condition/ })).toHaveCount(0);
+
+    await addCond.click();
+
+    const r1 = row(card, 1);
+    await expect(r1.property).toBeFocused();
+    await expect(r1.property).toHaveValue('cellState');
+    expect(await r1.operator.locator('option').allTextContents()).toEqual(['=']);
+    await expect(r1.value).toHaveValue('empty');
+    // PRD FR-2.5's own words: "Empty, Alive (your organism), or Occupied (another organism)".
+    expect(await r1.value.locator('option').allTextContents()).toEqual([
+      'Empty',
+      'Alive (your organism)',
+      'Occupied (another organism)',
+    ]);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('property drives operator and value', async ({ page }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    const card = cardGroup(rules, 1);
+    await card.locator('[data-add-condition]').click();
+    const r1 = row(card, 1);
+
+    await r1.property.selectOption('neighborCount');
+    expect(await r1.operator.locator('option').allTextContents()).toHaveLength(6);
+    await expect(r1.value).toHaveAttribute('placeholder', '0–8');
+    await expect(r1.value).toHaveValue('');
+
+    await r1.property.selectOption('organismType');
+    expect(await r1.operator.locator('option').allTextContents()).toEqual(['=']);
+    // The production build carries no AR-45 fixtures (M9) — the library is Conway's Classic alone.
+    expect(await r1.value.locator('option').allTextContents()).toEqual(["Conway's Classic"]);
+    await expect(r1.value).toHaveValue(CONWAYS_CLASSIC_ID);
+
+    await r1.property.selectOption('age');
+    await expect(r1.value).toHaveAttribute('placeholder', '0–999');
+  });
+
+  test('range and the pair error', async ({ page }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    const card = cardGroup(rules, 1);
+    await card.locator('[data-add-condition]').click();
+    const r1 = row(card, 1);
+
+    await r1.property.selectOption('neighborCount');
+    await r1.operator.selectOption('range');
+    await expect(r1.min).toHaveAttribute('placeholder', 'Min');
+    await expect(r1.max).toHaveAttribute('placeholder', 'Max');
+
+    await r1.min.fill('3');
+    await r1.max.fill('2');
+    await expect(card.getByRole('alert')).toContainText('Min must be less than Max');
+    await expect(r1.min).toHaveAttribute('aria-invalid', 'true');
+    await expect(r1.max).toHaveAttribute('aria-invalid', 'true');
+
+    await r1.max.fill('4');
+    await expect(card.getByRole('alert')).toHaveCount(0);
+
+    await r1.min.fill('x');
+    await expect(card.getByRole('alert')).toContainText('Min must be a whole number from 0 to 8');
+  });
+
+  test('scalar bounds', async ({ page }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    const card = cardGroup(rules, 1);
+    await card.locator('[data-add-condition]').click();
+    const r1 = row(card, 1);
+    await r1.property.selectOption('neighborCount');
+
+    await r1.value.fill('9');
+    await expect(card.getByRole('alert')).toContainText('Enter a whole number from 0 to 8');
+    await r1.value.fill('8');
+    await expect(card.getByRole('alert')).toHaveCount(0);
+
+    await r1.property.selectOption('age');
+    await r1.value.fill('1000');
+    await expect(card.getByRole('alert')).toContainText('Enter a whole number from 0 to 999');
+    await r1.value.fill('999');
+    await expect(card.getByRole('alert')).toHaveCount(0);
+  });
+
+  test('rows renumber and focus follows a delete', async ({ page }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    const card = cardGroup(rules, 1);
+    const addCond = card.locator('[data-add-condition]');
+    await addCond.click();
+    await addCond.click();
+    await addCond.click();
+
+    await row(card, 1).delete.click();
+    await expect(row(card, 1).property).toBeVisible();
+    await expect(row(card, 2).property).toBeVisible();
+    await expect(row(card, 3).property).toHaveCount(0);
+    await expect(row(card, 1).property).toBeFocused();
+
+    await row(card, 1).delete.click();
+    await row(card, 1).delete.click();
+    await expect(addCond).toBeFocused();
+    await expect(card).toBeVisible();
+  });
+
+  test('keyboard: Tab walks property -> operator -> value -> delete -> next row; the add button follows the last delete', async ({
+    page,
+    browserName,
+  }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    const card = cardGroup(rules, 1);
+    const addCond = card.locator('[data-add-condition]');
+    await addCond.click();
+    await addCond.click();
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+
+    const r1 = row(card, 1);
+    await r1.property.focus();
+    await page.keyboard.press(tabKey);
+    await expect(r1.operator).toBeFocused();
+    await page.keyboard.press(tabKey);
+    await expect(r1.value).toBeFocused();
+    await page.keyboard.press(tabKey);
+    await expect(r1.delete).toBeFocused();
+    await page.keyboard.press(tabKey);
+    const r2 = row(card, 2);
+    await expect(r2.property).toBeFocused();
+
+    // From row 2's Delete, Tab reaches + Add Condition — the card's new last stop (AC11d).
+    await r2.delete.focus();
+    await page.keyboard.press(tabKey);
+    await expect(addCond).toBeFocused();
+
+    // Enter on the focused Delete removes the row; focus lands on the new last row's property
+    // (the "last was removed" branch, AC8).
+    await r2.delete.focus();
+    await page.keyboard.press('Enter');
+    await expect(row(card, 2).property).toHaveCount(0);
+    await expect(r1.property).toBeFocused();
+  });
+
+  test('axe with four row kinds (cellState / organismType / numeric scalar / range)', async ({
+    page,
+  }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    const card = cardGroup(rules, 1);
+    const addCond = card.locator('[data-add-condition]');
+
+    await addCond.click(); // row 1: cellState, the default
+    await addCond.click();
+    await row(card, 2).property.selectOption('organismType');
+    await addCond.click();
+    await row(card, 3).property.selectOption('age');
+    await row(card, 3).value.fill('3');
+    await addCond.click();
+    await row(card, 4).property.selectOption('neighborCount');
+    await row(card, 4).operator.selectOption('range');
+    await row(card, 4).min.fill('2');
+    await row(card, 4).max.fill('3');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('axe with the pair alert visible', async ({ page }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    const card = cardGroup(rules, 1);
+    await card.locator('[data-add-condition]').click();
+    await row(card, 1).property.selectOption('neighborCount');
+    await row(card, 1).operator.selectOption('range');
+    await row(card, 1).min.fill('3');
+    await row(card, 1).max.fill('2');
+    await expect(card.getByRole('alert')).toBeVisible();
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
