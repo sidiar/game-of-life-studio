@@ -537,8 +537,9 @@ describe('BattlePage', () => {
     // Story 2.15: SKIRMISH places a roster, so CLEAR renders enabled.
     expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeEnabled();
     // Story 2.16: converted from this test's own "2.16's Back" prediction — the eighth button IS
-    // Back to Battles. Story 3.11: LAB and RUN make ten; an ELEVENTH (fullscreen — Story 3.18 —
-    // or Epic 4's per-row pencil) still fails here.
+    // Back to Battles. Story 3.11: LAB and RUN make ten. Story 3.18's Fullscreen button is
+    // RUN-ONLY, so this LAB-mode count holds; an eleventh Lab control (Epic 4's per-row pencil)
+    // still fails here.
     expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeEnabled();
     expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 7);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
@@ -2864,10 +2865,10 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
   });
 
   // Story 3.12 Task 6, converted by 3.13 and again by 3.16: the Run chassis carries four buttons
-  // and now TWO sliders (Speed, Grid Size). Written so 3.18's fullscreen button fails this and
-  // gets converted, the route's own convention (the Lab-mode counts above do the same). Scoped
-  // to the Run VIEW (`within`), not the whole page — the header's LAB/RUN toggle is a separate,
-  // already-counted control (the Lab-mode test above), and this count is about the Run chassis.
+  // and now TWO sliders (Speed, Grid Size). Scoped to the Run VIEW (`within`), not the whole page
+  // — the header's LAB/RUN toggle is a separate, already-counted control (the Lab-mode test
+  // above), and this count is about the Run chassis. Story 3.18's Fullscreen button lives in the
+  // HEADER, outside `view`, so this count holds; the 3.18 block below counts the header's three.
   it('Run mode has exactly four buttons (Back, Play, Next cycle, Stop & reset) and two sliders (Story 3.16)', async () => {
     const user = userEvent.setup();
     const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
@@ -3095,5 +3096,145 @@ describe('BattlePage — Run from Gallery (Story 3.17)', () => {
     const view = await findRunView(container);
     expect(view).toHaveAttribute('data-status', 'paused');
     expect(view).toHaveAttribute('data-cycle', '0');
+  });
+});
+
+describe('BattlePage — Fullscreen run stage (Story 3.18)', () => {
+  const modeValue = (container: HTMLElement) =>
+    container.querySelector('[data-mode]')?.getAttribute('data-mode');
+  const runButton = () => screen.getByRole('button', { name: 'Run' });
+  const labButton = () => screen.getByRole('button', { name: 'Lab' });
+  const fullscreenButton = () => screen.getByRole('button', { name: 'Fullscreen' });
+  const exitButton = () => screen.getByRole('button', { name: 'Exit fullscreen' });
+
+  async function findRunView(container: HTMLElement): Promise<HTMLElement> {
+    return await waitFor(() => {
+      const view = container.querySelector<HTMLElement>('[data-status]');
+      if (view === null) throw new Error('the Run view has not mounted yet');
+      return view;
+    });
+  }
+
+  // AC2 (a)+(b): Lab shows no entry; RUN → the entry appears; click → the stage is up (the
+  // header GONE, one h1 = the title, Exit present, no sidebar, no Back); Exit → the chassis back
+  // exactly, `data-status` / `data-cycle` unchanged across the round trip.
+  it('enters fullscreen from the header in Run mode and exits back to the chassis, header remounted', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    await screen.findByRole('group', { name: 'Mode' });
+    expect(screen.queryByRole('button', { name: 'Fullscreen' })).toBeNull();
+
+    await user.click(runButton());
+    const view = await findRunView(container);
+    expect(view).toHaveAttribute('data-fullscreen', 'false');
+    expect(fullscreenButton()).toBeEnabled();
+
+    await user.click(fullscreenButton());
+
+    expect(view).toHaveAttribute('data-fullscreen', 'true');
+    expect(modeValue(container)).toBe('run');
+    expect(screen.queryByRole('group', { name: 'Mode' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fullscreen' })).toBeNull();
+    const headings = screen.getAllByRole('heading', { level: 1 });
+    expect(headings).toHaveLength(1);
+    expect(headings[0]).toHaveAccessibleName('Three-Way Skirmish');
+    expect(exitButton()).toBeInTheDocument();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back to Battles' })).toBeNull();
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0);
+    expect(view).toHaveAttribute('data-status', 'paused');
+    expect(view).toHaveAttribute('data-cycle', '0');
+
+    await user.click(exitButton());
+
+    expect(view).toHaveAttribute('data-fullscreen', 'false');
+    expect(screen.getByRole('group', { name: 'Mode' })).toBeInTheDocument();
+    expect(runButton()).toHaveAttribute('aria-pressed', 'true');
+    expect(fullscreenButton()).toBeInTheDocument();
+    expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
+    expect(screen.getAllByRole('button', { name: 'Back to Battles' })).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(view).toHaveAttribute('data-status', 'paused');
+    expect(view).toHaveAttribute('data-cycle', '0');
+    // The header carries THREE buttons in Run mode: Fullscreen, Lab, Run.
+    expect(within(screen.getByRole('banner')).getAllByRole('button')).toHaveLength(3);
+  });
+
+  // AC6/AC7: after Exit, focus is on the header's (NEW) Fullscreen button. `user.click` on Exit
+  // moves focus to Exit itself; Exit then unmounts, focus is loose, and the effect restores it to
+  // the entry — the DOM-lookup-at-restore-time shape. What this test CANNOT observe is the
+  // transient `<body>` focus between the two commits; it proves the settled state only.
+  it('restores focus to the Fullscreen button after Exit', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('group', { name: 'Mode' });
+    await user.click(runButton());
+    await findRunView(container);
+
+    await user.click(fullscreenButton());
+    expect(exitButton()).toHaveFocus();
+
+    await user.click(exitButton());
+
+    expect(fullscreenButton()).toHaveFocus();
+  });
+
+  // AC2 (b), trap 16: a mode flip clears the cell. Enter fullscreen, exit, go to Lab, come back to
+  // Run → the chassis, not the stage. (The header is unmounted in fullscreen, so Lab is reachable
+  // only after Exit; the rule is still exercised through `handleModeToggle`.)
+  it('re-enters Run in the chassis, never straight into fullscreen, after a Lab round trip', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('group', { name: 'Mode' });
+    await user.click(runButton());
+    await findRunView(container);
+    await user.click(fullscreenButton());
+    expect(container.querySelector('[data-status]')).toHaveAttribute('data-fullscreen', 'true');
+    await user.click(exitButton());
+
+    await user.click(labButton());
+    await screen.findByRole('button', { name: 'Undo' });
+    expect(screen.queryByRole('button', { name: 'Fullscreen' })).toBeNull();
+
+    await user.click(runButton());
+    const view = await findRunView(container);
+
+    expect(view).toHaveAttribute('data-fullscreen', 'false');
+    expect(screen.getByRole('group', { name: 'Mode' })).toBeInTheDocument();
+    expect(fullscreenButton()).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).toBeNull();
+  });
+
+  // AC2 (c): a Gallery Run entry (`initialMode="run"`, Story 3.17) shows the entry on the first
+  // header render.
+  it('shows the Fullscreen button on the first header render of a Run entry (initialMode="run")', async () => {
+    const { container } = render(
+      <BattlePage repositories={seeded()} battleId={SKIRMISH.id} initialMode="run" />,
+    );
+    await screen.findByRole('group', { name: 'Mode' });
+
+    expect(fullscreenButton()).toBeEnabled();
+    const view = await findRunView(container);
+    expect(view).toHaveAttribute('data-fullscreen', 'false');
+  });
+
+  // AC7: the stage is axe-clean at the page level — the stage's own `<h1>`, the HUD, the pills,
+  // the transport — with the header unmounted.
+  it('has no axe violations in fullscreen', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('group', { name: 'Mode' });
+    await user.click(runButton());
+    await findRunView(container);
+    await user.click(fullscreenButton());
+    expect(container.querySelector('[data-status]')).toHaveAttribute('data-fullscreen', 'true');
+
+    expect((await axe(container)).violations).toEqual([]);
   });
 });

@@ -163,6 +163,14 @@ const tileLink = (page: Page, name: string): Locator =>
 // symmetric with `tileLink` above.
 const runLink = (page: Page, name: string): Locator =>
   page.getByRole('link', { name: `Run ${name}`, exact: true });
+// Story 3.18 (3.17 Trap 4 again): `exact: true` on BOTH — `Fullscreen` is a case-insensitive
+// substring of `Exit fullscreen`, so a bare `{ name: 'Fullscreen' }` resolves to two buttons while
+// the stage is up and strict-fails. `runButton`'s `'Run'` matches neither (the stage's badge is a
+// `<span>`, not a button).
+const fullscreenButton = (page: Page): Locator =>
+  page.getByRole('button', { name: 'Fullscreen', exact: true });
+const exitFullscreenButton = (page: Page): Locator =>
+  page.getByRole('button', { name: 'Exit fullscreen', exact: true });
 
 /** Every test using this asserts a clean console: the Run toggle mounts a lazy chunk and a second
  * canvas, and both `buildRefToFillGroup`'s warn-once and the ResizeObserver loop report there, not
@@ -3035,6 +3043,215 @@ test.describe('Run from Gallery (Story 3.17)', () => {
 
     await page.keyboard.press(tab);
     await expect(tile.getByRole('button', { name: `Delete ${tileName}` })).toBeFocused();
+
+    expect(errors).toEqual([]);
+  });
+});
+
+// Story 3.18: the fullscreen run stage, end to end. What the unit suite cannot see is here — the
+// dish RE-LAID OUT (jsdom has no `ResizeObserver`, so "the box grows and stays painted" is only
+// provable in a browser), the loop running through the swap on real frames, and the focus moves.
+test.describe('Fullscreen run stage (Story 3.18)', () => {
+  const view = (page: Page): Locator => page.locator('[data-status]');
+  const cycle = async (page: Page): Promise<number> =>
+    Number(await view(page).getAttribute('data-cycle'));
+
+  async function enterRun(page: Page): Promise<void> {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(dish(page)).toBeVisible();
+  }
+
+  // (a) AC1/AC2/AC3/AC4/AC6/AC7: the round trip — the header gone, the dish LARGER and still
+  // painted, Exit focused, axe clean; then the chassis back and the entry focused again.
+  test('enters a fullscreen stage that re-lays out the same dish larger, and exits back to the chassis (AC10(a))', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+    await expect(fullscreenButton(page)).toBeVisible();
+    await expect(fullscreenButton(page)).toBeEnabled();
+    const boxBefore = await dish(page).boundingBox();
+    expect(boxBefore).not.toBeNull();
+    if (boxBefore === null) return;
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    if (viewport === null) return;
+
+    await fullscreenButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'true');
+    await expect(page.getByRole('group', { name: 'Mode' })).toHaveCount(0);
+    await expect(sidebarHeadings(page)).toHaveCount(0);
+    await expect(page.getByRole('complementary')).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(exitFullscreenButton(page)).toBeFocused();
+    await expect(page.getByRole('main')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Back to Battles' })).toHaveCount(0);
+    // The SAME canvas, re-laid out: `expect.poll` because the ResizeObserver's re-fit is a frame
+    // behind the layout change, and the comparison is strict — wider AND taller — inside the
+    // viewport. Still painted (the re-fit repainted `lastGrid` at the new pixel size).
+    await expect
+      .poll(async () => {
+        const box = await dish(page).boundingBox();
+        return box !== null && box.width > boxBefore.width && box.height > boxBefore.height;
+      })
+      .toBe(true);
+    const boxAfter = await dish(page).boundingBox();
+    expect(boxAfter).not.toBeNull();
+    if (boxAfter === null) return;
+    expect(boxAfter.x).toBeGreaterThanOrEqual(0);
+    expect(boxAfter.y).toBeGreaterThanOrEqual(0);
+    expect(boxAfter.x + boxAfter.width).toBeLessThanOrEqual(viewport.width);
+    expect(boxAfter.y + boxAfter.height).toBeLessThanOrEqual(viewport.height);
+    await expect(dish(page)).toBeVisible();
+    expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    await exitFullscreenButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'false');
+    await expect(fullscreenButton(page)).toBeFocused();
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
+    await expect(page.getByRole('button', { name: 'Back to Battles' })).toHaveCount(1);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    // Back to (approximately) the chassis box — within a few px of the earlier measurement.
+    await expect
+      .poll(async () => {
+        const box = await dish(page).boundingBox();
+        return (
+          box !== null &&
+          Math.abs(box.width - boxBefore.width) < 4 &&
+          Math.abs(box.height - boxBefore.height) < 4
+        );
+      })
+      .toBe(true);
+    expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
+
+    expect(errors).toEqual([]);
+  });
+
+  // (b) AC5: a RUNNING simulation runs straight through the swap — still `playing`, the cycle
+  // still climbing in fullscreen — and the HUD's Pause is the same transport as the bar's.
+  test('keeps a running simulation running through enter, pauses it from the HUD, and exits with the counter in step (AC10(b))', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect.poll(() => cycle(page)).toBeGreaterThan(0);
+
+    await fullscreenButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'true');
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    const cycleOnEntry = await cycle(page);
+    await expect.poll(() => cycle(page)).toBeGreaterThan(cycleOnEntry);
+
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+    const pausedAt = await cycle(page);
+
+    await exitFullscreenButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'false');
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    expect(await cycle(page)).toBe(pausedAt);
+    // The sidebar's counter reads the same number `data-cycle` does (zero-padded to 4 digits).
+    const counter = page
+      .getByRole('complementary')
+      .locator('section', { has: page.getByRole('heading', { name: 'Cycle Count' }) });
+    await expect(counter).toContainText(String(pausedAt).padStart(4, '0'));
+
+    expect(errors).toEqual([]);
+  });
+
+  // (c) AC5: speed and the ephemeral size are the HOOK's — set in the chassis, read in the HUD /
+  // on the dish, still on the sliders after exit.
+  test('carries the chosen speed and an ephemeral 150×90 through the stage and back (AC10(c))', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await speedSlider(page).focus();
+    await page.keyboard.press('End'); // 20 gen/s, the top detent
+    await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '20 generations per second');
+    await gridSizeSlider(page).focus();
+    await page.keyboard.press('End'); // 200x120
+    await page.keyboard.press('ArrowLeft'); // 150x90
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '150 by 90 cells');
+    await expect(page.getByRole('img', { name: 'Petri dish, 150 by 90 cells' })).toBeVisible();
+
+    await fullscreenButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'true');
+    await expect(page.getByText('20 gen/s')).toBeVisible();
+    await expect(page.getByRole('slider')).toHaveCount(0);
+    await expect(page.getByRole('img', { name: 'Petri dish, 150 by 90 cells' })).toBeVisible();
+
+    await exitFullscreenButton(page).click();
+
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'false');
+    await expect(speedSlider(page)).toHaveAttribute('aria-valuetext', '20 generations per second');
+    await expect(gridSizeSlider(page)).toHaveAttribute('aria-valuetext', '150 by 90 cells');
+    await expect(page.getByRole('img', { name: 'Petri dish, 150 by 90 cells' })).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+
+  // (d) AC7: Tab order in the stage is Exit → Play → Next cycle → Stop & reset — nothing else is
+  // reachable (the header and the sidebar are unmounted, not hidden).
+  test('tabs Exit → Play → Next cycle → Stop & reset in the stage (AC10(d))', async ({
+    page,
+    browserName,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await fullscreenButton(page).click();
+    await expect(exitFullscreenButton(page)).toBeFocused();
+
+    // WebKit needs `Alt+Tab` (the 3.13/3.16 idiom); `ci:dev` runs Chromium, where plain Tab is
+    // the key.
+    const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    await page.keyboard.press(tab);
+    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeFocused();
+    await page.keyboard.press(tab);
+    await expect(page.getByRole('button', { name: 'Next cycle', exact: true })).toBeFocused();
+    await page.keyboard.press(tab);
+    await expect(page.getByRole('button', { name: 'Stop & reset', exact: true })).toBeFocused();
+
+    expect(errors).toEqual([]);
+  });
+
+  // (e) AC2 (c): a Gallery Run entry (`?mode=run`, Story 3.17) shows the entry on the first
+  // header render.
+  test('a Gallery Run entry shows the Fullscreen button on first render (AC10(e))', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}&mode=run`);
+
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'run');
+    await expect(fullscreenButton(page)).toBeVisible();
+    await expect(fullscreenButton(page)).toBeEnabled();
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'false');
 
     expect(errors).toEqual([]);
   });

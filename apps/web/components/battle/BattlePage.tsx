@@ -168,8 +168,60 @@ export default function BattlePage({
   // `initialMode` exactly ONCE — a later prop change is deliberately ignored, so a toggle never
   // rewrites the URL and the address bar still reading `&mode=run` after Run → Lab is the
   // documented consequence, not a bug (a reload re-enters Run, exactly what the Gallery's Run link
-  // promised). The fullscreen affordance is still absent (Story 3.18).
+  // promised).
   const [mode, setMode] = useState<BattleMode>(initialMode);
+
+  // Story 3.18 (FD1 (a); RFC-005 "ephemeral UI → local `useState`"): the fullscreen stage's cell,
+  // owned HERE beside `mode` — not by `<BattleSimulationView>` as spec §3.11/§6 sketch — because
+  // the ENTRY control is `<BattleHeader>`'s (§3.2), the header is this component's child, and the
+  // header has to be UNMOUNTED while the stage is up (FD9) from the place that renders it. The
+  // same resolution 3.11 FD5 took for `onExitToLab`. Never a URL param, never persisted, never a
+  // third `mode` value (FD1 (d): `BattleMode` is the route param's and the toggle's type).
+  //
+  // `inFullscreen` is the ONLY value the render reads: a stale `true` behind a `'lab'` mode can
+  // never show. Every writer that takes `mode` off `'run'` ALSO clears the cell (`handleModeToggle`
+  // and the in-render adjust below) — otherwise a later Run entry would open straight into
+  // fullscreen (trap 16).
+  const [fullscreen, setFullscreen] = useState(false);
+  const inFullscreen = mode === 'run' && fullscreen;
+  const handleEnterFullscreen = useCallback(() => setFullscreen(true), []);
+
+  /**
+   * Whether focus is owed back to the header's Fullscreen button once the header has remounted
+   * (AC6/AC7) — the `useLeaveGuard` `restoreBackFocusRef` shape. Set by `handleExitFullscreen`
+   * BEFORE the state flip, read by the effect below AFTER the commit that remounted the header.
+   * A ref, not state: it is bookkeeping about a focus move, not something the render reads.
+   */
+  const restoreFullscreenEntryFocusRef = useRef(false);
+  const handleExitFullscreen = useCallback(() => {
+    restoreFullscreenEntryFocusRef.current = true;
+    setFullscreen(false);
+  }, []);
+
+  /**
+   * The focus restore on exit, run as an EFFECT keyed on `inFullscreen` clearing rather than from
+   * the exit callback directly: at the moment `handleExitFullscreen` runs the header is not in the
+   * DOM yet (it remounts on the commit this effect follows), so there is nothing to focus. The
+   * element that HAD focus — the stage's Exit button — has unmounted on that same commit, and
+   * focus would otherwise fall to `<body>`.
+   *
+   * ⚠️ A DOM lookup at restore time (`[data-enter-fullscreen]`), never a captured element — the
+   * header's button on exit is a NEW element (the header remounted), and WebKit does not focus a
+   * `<button>` on click anyway (`useLeaveGuard.ts`'s record). Only when focus is LOOSE (`null` or
+   * `<body>`): do not steal focus the user has already placed somewhere real. `.focus()` is not
+   * state, so this is not `react-hooks/set-state-in-effect` territory; under `<StrictMode>` the
+   * effect double-runs and the ref is cleared on the first pass, so the second is a no-op.
+   */
+  useEffect(() => {
+    if (inFullscreen) return;
+    if (!restoreFullscreenEntryFocusRef.current) return;
+    restoreFullscreenEntryFocusRef.current = false;
+
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+
+    document.querySelector<HTMLElement>('[data-enter-fullscreen]')?.focus();
+  }, [inFullscreen]);
 
   // Story 2.16 forced decision 1, option (a): the repo's FIRST programmatic navigation.
   //
@@ -335,9 +387,15 @@ export default function BattlePage({
   // `disabled={isSaving}` on the RUN button (the visible half) cannot catch it. A mode flip
   // mid-write would unmount the editor while `saveBattle` still holds its `grid`: harmless for the
   // write, wrong for the user's model of what "saved" means.
+  //
+  // Story 3.18 (AC2, trap 16): every mode change clears `fullscreen` — the header's toggle is
+  // unreachable while the stage is up (the header is unmounted), so in practice this is the
+  // Lab-bound flip, but the rule is written for BOTH directions so no later entry path can
+  // inherit a stale `true`.
   const handleModeToggle = useCallback((next: BattleMode) => {
     if (savingRef.current) return;
     setMode(next);
+    setFullscreen(false);
   }, []);
 
   /**
@@ -586,7 +644,14 @@ export default function BattlePage({
   // flight `rosterIds` is `NO_ROSTER` and `runOrganisms` is `[]` (`[].every(...)` is vacuously
   // `true`), never `null` — so this cannot fire before the roster has actually settled. It cannot
   // loop: React re-runs the body once with `'lab'`, and the condition is false on that pass.
-  if (mode === 'run' && runOrganisms === null) setMode('lab');
+  //
+  // Story 3.18 (trap 16): the second writer that takes `mode` off `'run'` — it clears `fullscreen`
+  // in the SAME in-render pass (two setters, one re-run, both false on the second pass; still no
+  // loop). Not an effect, for the same `set-state-in-effect` reason as the mode adjust itself.
+  if (mode === 'run' && runOrganisms === null) {
+    setMode('lab');
+    setFullscreen(false);
+  }
 
   // Story 2.8: THE grid state, and the only one (AC1). `useState` + a `lastSeedRef` re-seed used
   // to live here inline; both moved inside the hook, which now owns the async-seed adoption AND
@@ -857,17 +922,27 @@ export default function BattlePage({
     // one are indistinguishable to a test that got the selector wrong.
     <Root data-mode={mode} data-dirty={isDirty}>
       {/* AC2: the header tracks the LIVE edited value, not the stored `draft.name` — typing in the
-          sidebar updates the header on the same paint, with no save, no blur and no debounce. */}
-      <BattleHeader
-        battleTitle={battleDisplayName(battleName)}
-        /* Story 3.11 (FR-3.10, spec §3.2): the toggle renders now that both are supplied. `disabled`
-           is the visible half of the edit lock (AC2) OR the roster refusal (AC7) — it reaches RUN
-           only; LAB is always the way back. */
-        mode={mode}
-        onModeToggle={handleModeToggle}
-        disabled={isSaving || runOrganisms === null}
-        disabledReason={runDisabledReason}
-      />
+          sidebar updates the header on the same paint, with no save, no blur and no debounce.
+
+          Story 3.18 (FD9): UNMOUNTED while the stage is up, not hidden — the stage covers it, and
+          a covered-but-reachable toggle is the `aria-hidden-focus` shape `useInertBackground.ts`
+          exists to prevent for dialogs. The header holds no state, so nothing is lost; the stage's
+          own `<h1>` keeps the route's single-h1 invariant meanwhile. `data-mode` on `<Root>` is
+          unaffected (it is this component's, not the header's). */}
+      {!inFullscreen && (
+        <BattleHeader
+          battleTitle={battleDisplayName(battleName)}
+          /* Story 3.11 (FR-3.10, spec §3.2): the toggle renders now that both are supplied. `disabled`
+             is the visible half of the edit lock (AC2) OR the roster refusal (AC7) — it reaches RUN
+             only; LAB is always the way back. */
+          mode={mode}
+          onModeToggle={handleModeToggle}
+          disabled={isSaving || runOrganisms === null}
+          disabledReason={runDisabledReason}
+          /* Story 3.18: the entry; the header renders it in Run mode only. */
+          onEnterFullscreen={handleEnterFullscreen}
+        />
+      )}
       {/* `grid` is non-null whenever draft is (the seed memo above) — the check exists for
           TypeScript, not because the two can disagree at runtime. It is the OUTER guard for both
           branches below. */}
@@ -926,6 +1001,12 @@ export default function BattlePage({
              dialog's Save writes `initialGrid`, which is the correct grid (A-2). */
           onBack={handleBack}
           backDisabled={isSaving}
+          /* Story 3.18 (FD1 (a)): the stage is the view's LAYOUT, the cell is this component's.
+             `battleTitle` is the SAME string the header shows — `battleDisplayName` applied once
+             (trap 22), so an untitled battle reads "Untitled Battle" in both places. */
+          fullscreen={inFullscreen}
+          onExitFullscreen={handleExitFullscreen}
+          battleTitle={battleDisplayName(battleName)}
         />
       )}
       {/* Mounted only while a confirmation is in flight, which is also what keeps the lazy chunk

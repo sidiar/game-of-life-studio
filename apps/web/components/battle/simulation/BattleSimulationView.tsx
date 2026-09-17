@@ -11,6 +11,7 @@ import PetriDishCanvas from '../../PetriDishCanvas';
 import SidebarFooter from '../SidebarFooter';
 import SidebarSection from '../SidebarSection';
 import CycleCounter from './CycleCounter';
+import FullscreenStage from './FullscreenStage';
 import GridSizeControl from './GridSizeControl';
 import PopulationStats from './PopulationStats';
 import SimulationControlBar from './SimulationControlBar';
@@ -34,7 +35,8 @@ import SpeedControl from './SpeedControl';
  *    (stop the loop, detach the renderer, drop the session — Story 3.10 AC10), and nothing here
  *    writes to `initialGrid` (FR-4.8, AR-31).
  *
- * Deliberately ABSENT, by story: fullscreen (3.18), hotkeys (3.19). The
+ * Deliberately ABSENT, by story: hotkeys (3.19). The fullscreen stage shipped in 3.18 — see the
+ * `fullscreen` paragraph below. The
  * extinction auto-pause (FR-4.7, Decision B.5, Story 3.15) is the hook's alone — this component
  * gains no state, hook, effect or prop for it; it is observed through `status` exactly like a
  * manual pause. The transport bar shipped in 3.12:
@@ -51,13 +53,30 @@ import SpeedControl from './SpeedControl';
  * render-time boolean off `sim.status` exactly like the transport bar's Next-cycle button — no new
  * state, hook, ref or effect here either.
  *
+ * Story 3.18 added the fullscreen stage, as a LAYOUT SWAP and nothing more (spec §3.11
+ * "CSS-driven"; FD2 (a)). `fullscreen` arrives as a prop — `<BattlePage>` owns the cell (FD1 (a),
+ * the same shape 3.11 FD5 chose for `mode`: the header carries the entry control and is
+ * `<BattlePage>`'s child, so the page flips the boolean and unmounts the header while it is on) —
+ * and the view answers it three ways, none of which reach the hook: (1) `data-fullscreen` on the
+ * root selects a second set of styles on the SAME styled blocks (`SimulationLayout` goes
+ * `position: fixed; inset: 0`, the dish box becomes height-driven); (2) the sidebar and the bottom
+ * bar leave the tree through `false`-holding slots; (3) `<FullscreenStage>` — mounted in BOTH
+ * states — wraps the UNCHANGED dish wrappers and renders its title row and HUD only while active.
+ * Same component types at the same child positions above the canvas in both states, so React
+ * keeps the canvas, its `GridRenderer` and the attached loop; only the dish's BOX changes, which
+ * `PlaybackDish`'s `ResizeObserver` answers with `renderer.resize` (`PetriDishCanvas.tsx`). No
+ * effect here keys on `fullscreen`; nothing new runs per cycle (NFR-1.1, AR-29); the HUD reads the
+ * same <= 10 Hz published values the sidebar does (M2). `useSimulation`'s stable references
+ * (obligation 1) are untouched by the swap, so the run never notices it (Decision D).
+ *
  * Forced decision 5, option (a): props are `{ initialGrid, organisms, startingSpeed,
  * showGridLines, palette, colors, onBack, backDisabled }`. Not spec §3.11's `onExitToLab` (the
  * header owns the toggle, `<BattlePage>` flips `mode` — RFC-005 Decision 3's snippet had no
  * header) and not `cellAnimation` (no consumer until Story 6.7 — a prop nothing reads is the
  * dead-affordance rule applied to code). `palette` / `colors` / `onBack` are the same additive
  * deviations `<BattleEditorView>` carries, for the same reasons. All four recorded as §3.11
- * amendment candidates (deferred-work.md).
+ * amendment candidates (deferred-work.md), and Story 3.18 added three more — `fullscreen`,
+ * `onExitFullscreen`, `battleTitle` — for the FD1 reason above.
  */
 
 export interface BattleSimulationViewProps {
@@ -76,6 +95,21 @@ export interface BattleSimulationViewProps {
   onBack(): void;
   /** The visible half of `<BattlePage>`'s edit lock (Story 2.16 forced decision 3a, reaffirmed). */
   backDisabled?: boolean;
+  /**
+   * Story 3.18 (spec §3.11 amendment candidate, FD1 (a)): the stage is ON. Owned by `<BattlePage>`
+   * beside `mode` — never by this view — because the ENTRY control is the header's (§3.2) and the
+   * header is the page's child; the page also clears it on every mode change so a later Run entry
+   * never opens straight into fullscreen. Ephemeral UI state (RFC-005): never a URL param, never
+   * persisted.
+   */
+  fullscreen: boolean;
+  /** The stage's Exit control, straight through to `<BattlePage>`'s setter (FD1 (a)). */
+  onExitFullscreen(): void;
+  /**
+   * The stage's `<h1>` while the header is unmounted (FD9): the SAME string the header shows —
+   * `battleDisplayName(battleName)`, applied once by `<BattlePage>` (trap 22).
+   */
+  battleTitle: string;
 }
 
 // Private layout children (spec §3.3's rule for `<EditorSidebar>` / `<EditorMain>`, applied
@@ -88,10 +122,23 @@ export interface BattleSimulationViewProps {
 // Trap 12: the sidebar is 320px, the LAB mockup's value, NOT the play mockup's 350px. One column,
 // one width — a toggle that shifts the dish 30px reads as a page change, which is what RFC-005
 // Decision 3 exists to avoid.
+//
+// Story 3.18 (FD2 (a)): every fullscreen style is a `'[data-fullscreen="true"] &'` PARENT selector
+// on the EXISTING blocks (trap 17: the attribute selector must match React's stringified
+// `"true"`), never a second component — a different wrapper type above the canvas in one state
+// is the remount the epic's AC forbids. The stage covers the viewport by `position: fixed; inset:
+// 0` with NO `z-index` (trap 15): it is later in DOM order than everything it must cover, and the
+// header is unmounted while it is on (FD9). If a stacking bug ever appears, it is a DOM-order
+// bug — fix the order, not the number.
 const SimulationLayout = styled('div')({
   flex: 1,
   display: 'flex',
   minHeight: 0,
+  '&[data-fullscreen="true"]': {
+    position: 'fixed',
+    inset: 0,
+    background: 'var(--gol-bg-primary)',
+  },
 });
 
 const SimulationSidebar = styled('aside')({
@@ -127,6 +174,12 @@ const SimulationMain = styled('div')({
   background: 'var(--gol-bg-primary)',
 });
 
+// Fullscreen (3.18): a tighter gutter — the mockup's dish is `min(94vw, 138vh)`, i.e. nearly
+// edge to edge; the title row and HUD above and below are in flow (FD4), so this padding is the
+// only margin the dish gets, and the vertical half is what the height-bound layout trades against
+// dish size (measured at 1280×720: 12px here + the stage's own row paddings give a 544px-tall
+// dish against the chassis's 517px; the mockup-faithful 20px/18px/40px set gave 501px — smaller
+// than the chassis, which is the one thing the AC forbids).
 const GridContainer = styled('div')({
   flex: 1,
   minHeight: 0,
@@ -134,11 +187,23 @@ const GridContainer = styled('div')({
   alignItems: 'center',
   justifyContent: 'center',
   padding: '30px',
+  '[data-fullscreen="true"] &': {
+    padding: '12px 24px',
+  },
 });
 
 // Mockup: `.petri-dish-grid` (petri-dish-play-mode.html:440-447) — the accent border is "the cyan
 // active-simulation border", the one Run-vs-Lab visual this story ships besides the toggle (AC10).
 // The box values are the editor's (see above); only the border differs.
+//
+// Fullscreen (3.18): HEIGHT-driven — `height: 100%` of the `flex: 1` container between the title
+// row and the HUD, width from the aspect ratio, capped at the container's width. In a fixed-inset
+// column the binding constraint is nearly always height, so the accent border hugs the grid; when
+// width binds instead (a tall, narrow viewport) `maxWidth: 100%` takes over and the renderer
+// letterboxes vertically inside the box, as it already does horizontally today. The chassis's
+// `1000px` cap is lifted (`maxWidth: 100%`) — that cap is what "larger than the chassis" is
+// measured against (e2e AC10 (a)). No `box-shadow` glow (FD4: the mockup's `rgba(0,212,255,.12)`
+// is an AR-46 literal, and a shadow around a 60 FPS canvas is compositor work for nothing).
 const PetriDishBox = styled('div')({
   width: '100%',
   minWidth: 0,
@@ -147,6 +212,12 @@ const PetriDishBox = styled('div')({
   aspectRatio: '5 / 3',
   background: 'var(--gol-bg-primary)',
   border: '2px solid var(--gol-accent)',
+  '[data-fullscreen="true"] &': {
+    width: 'auto',
+    height: '100%',
+    maxWidth: '100%',
+    maxHeight: 'none',
+  },
 });
 
 // Trap 13: the third `styled(PetriDishCanvas)` wrapper, carrying only what THIS variant needs —
@@ -166,6 +237,9 @@ export default function BattleSimulationView({
   colors,
   onBack,
   backDisabled = false,
+  fullscreen,
+  onExitFullscreen,
+  battleTitle,
 }: BattleSimulationViewProps) {
   // The one hook call. The options object is a fresh literal per render ON PURPOSE: it is not part
   // of the session key (`seed` / `scheduler` are undefined, `genPerSec` is read once — Story 3.10
@@ -206,78 +280,113 @@ export default function BattleSimulationView({
     // below); the attributes were never promised to disappear, only to stop being the only
     // rendering — the `data-dirty` precedent (an absent attribute and a wrong one look the same to
     // a test with the wrong selector).
-    <SimulationLayout data-status={sim.status} data-cycle={sim.cycle}>
-      <SimulationSidebar>
-        <SidebarContent>
-          {/* Spec §2's sidebar order is Population Analysis, Cycle Count (both 3.14), Speed
+    //
+    // Story 3.18: `data-fullscreen` joins them, rendered in BOTH states as `"false"` / `"true"`
+    // (trap 10) — the e2e's and the unit tests' handle on the stage, and the selector every
+    // fullscreen style above keys on.
+    <SimulationLayout data-status={sim.status} data-cycle={sim.cycle} data-fullscreen={fullscreen}>
+      {/* Story 3.18 (trap 1): `{!fullscreen && …}` leaves `false` in child slot 0 while the stage
+          is up, so `<SimulationMain>` stays at slot 1 in both states and React never re-keys the
+          subtree that holds the canvas. Unmounted, not hidden (FD2 (e)): the sidebar holds no
+          state of its own — every value it shows is the hook's — and hidden-but-mounted sliders
+          would stay in the accessibility tree under the stage. */}
+      {!fullscreen && (
+        <SimulationSidebar>
+          <SidebarContent>
+            {/* Spec §2's sidebar order is Population Analysis, Cycle Count (both 3.14), Speed
               (3.13), Grid Size (3.16). The first two are pure reads (`sim.population` /
               `sim.cycle`); Speed and Grid Size each read one published value (`sim.genPerSec` /
               `sim.liveSize`) and hand ONE stable hook callback straight through (`setSpeed` /
               `resizeLive`). None of the four sees `sim` itself (spec §3.12's props exactly). */}
-          <SidebarSection title="Population Analysis">
-            <PopulationStats entries={sim.population} totalLiving={totalLiving} />
-          </SidebarSection>
-          <SidebarSection title="Cycle Count">
-            <CycleCounter cycle={sim.cycle} />
-          </SidebarSection>
-          {/* The title is "Speed", not the mockup's "Speed Multiplier" — a gen/sec value
+            <SidebarSection title="Population Analysis">
+              <PopulationStats entries={sim.population} totalLiving={totalLiving} />
+            </SidebarSection>
+            <SidebarSection title="Cycle Count">
+              <CycleCounter cycle={sim.cycle} />
+            </SidebarSection>
+            {/* The title is "Speed", not the mockup's "Speed Multiplier" — a gen/sec value
               multiplies nothing (3.13 FD3). `sim.setSpeed` is `useCallback`-stable with no deps
               (Story 3.10), so it is passed STRAIGHT THROUGH; a wrapper keyed on `sim` would be a
               fresh closure per published cycle (trap 4 — the churn 3.12's review caught in
               `handlePlayPause`). */}
-          <SidebarSection title="Speed">
-            <SpeedControl genPerSec={sim.genPerSec} onChange={sim.setSpeed} />
-          </SidebarSection>
-          {/* Story 3.16: `sim.resizeLive` is passed STRAIGHT THROUGH (stable, Story 3.10); `disabled`
+            <SidebarSection title="Speed">
+              <SpeedControl genPerSec={sim.genPerSec} onChange={sim.setSpeed} />
+            </SidebarSection>
+            {/* Story 3.16: `sim.resizeLive` is passed STRAIGHT THROUGH (stable, Story 3.10); `disabled`
               is a render-time boolean off `sim.status`, which follows the loop on every stop path
               (3.15 FD1), so the control can never be enabled over a running loop for more than one
               render — and the hook's FD5 throw (`resizeLive` while playing) is the tripwire if it
               ever is. No `useState`, no effect, no ref. */}
-          <SidebarSection title="Grid Size">
-            <GridSizeControl
-              value={sim.liveSize}
-              onChange={sim.resizeLive}
-              disabled={sim.status === 'playing'}
-            />
-          </SidebarSection>
-        </SidebarContent>
-        {/* The second caller `simulation/README.md` promised — the LAST child of the sidebar and a
+            <SidebarSection title="Grid Size">
+              <GridSizeControl
+                value={sim.liveSize}
+                onChange={sim.resizeLive}
+                disabled={sim.status === 'playing'}
+              />
+            </SidebarSection>
+          </SidebarContent>
+          {/* The second caller `simulation/README.md` promised — the LAST child of the sidebar and a
             SIBLING of the content region (the pin — SidebarFooter.tsx's own comment). No prop
             added for Run mode; the same `handleBack` reaches the same FR-7.9 guard (AC9). */}
-        <SidebarFooter onBack={onBack} disabled={backDisabled} />
-      </SimulationSidebar>
+          <SidebarFooter onBack={onBack} disabled={backDisabled} />
+        </SimulationSidebar>
+      )}
       <SimulationMain>
-        <GridContainer>
-          <PetriDishBox>
-            {/* `sim.liveSize`, not `initialGrid`'s dims: identical at mount, and Story 3.16's
+        {/* Story 3.18 (FD2 (a), AC4): the stage is MOUNTED IN BOTH STATES around the UNCHANGED
+            dish wrappers, rendering its title row and HUD only while `active` — `FullscreenStage.tsx`'s
+            fragment comment is the reconciliation argument. The `hud` / `transport` literals are
+            fresh per render ON PURPOSE: the view re-renders on every publish regardless (its
+            `useMemo` on `view` is what `sim` keys on), so memoising them would be the 3.12 memo
+            trap — ceremony against a value that changes as often as the render. `handlePlayPause`
+            keeps its `[status, play, pause]` deps (trap 8); `sim.step` / `sim.stop` are stable. */}
+        <FullscreenStage
+          active={fullscreen}
+          battleTitle={battleTitle}
+          onExit={onExitFullscreen}
+          hud={{ cycle: sim.cycle, population: sim.population, genPerSec: sim.genPerSec }}
+          transport={{
+            status: sim.status,
+            onPlayPause: handlePlayPause,
+            onStep: sim.step,
+            onStop: sim.stop,
+          }}
+        >
+          <GridContainer>
+            <PetriDishBox>
+              {/* `sim.liveSize`, not `initialGrid`'s dims: identical at mount, and Story 3.16's
                 `<GridSizeControl>` resize rebuilds the canvas at the live size for free through
                 this same prop (forced decision 6 — `<PlaybackDish>` keys its construction on the
                 DIMENSIONS, Story 3.11). `attachRenderer` is `useCallback`-stable (Story 3.10 Task 4)
                 and is passed STRAIGHT THROUGH — a wrapper would defeat the stability `PlaybackDish`
                 relies on. */}
-            {colors !== null && (
-              <DishCanvas
-                variant="playback"
-                size={sim.liveSize}
-                palette={palette}
-                showGridLines={showGridLines}
-                colors={colors}
-                onRendererReady={sim.attachRenderer}
-              />
-            )}
-          </PetriDishBox>
-        </GridContainer>
+              {colors !== null && (
+                <DishCanvas
+                  variant="playback"
+                  size={sim.liveSize}
+                  palette={palette}
+                  showGridLines={showGridLines}
+                  colors={colors}
+                  onRendererReady={sim.attachRenderer}
+                />
+              )}
+            </PetriDishBox>
+          </GridContainer>
+        </FullscreenStage>
         {/* `sim.step` / `sim.stop` are `useCallback`-stable (Story 3.10) — passed straight
             through; a wrapper here would add a closure per render for nothing. Last child of
             `<SimulationMain>`, in flow (the `<EditorStatusBar>` placement, never the mockup's
             `position: fixed`), so the dish's `flex: 1` reserve is computed from the bar's real
-            height. */}
-        <SimulationControlBar
-          status={sim.status}
-          onPlayPause={handlePlayPause}
-          onStep={sim.step}
-          onStop={sim.stop}
-        />
+            height. Story 3.18: unmounted while the stage is up — the HUD renders the SAME
+            `<TransportControls>` cluster, and the two never coexist, so the `Simulation controls`
+            group stays unique on the page. */}
+        {!fullscreen && (
+          <SimulationControlBar
+            status={sim.status}
+            onPlayPause={handlePlayPause}
+            onStep={sim.step}
+            onStop={sim.stop}
+          />
+        )}
       </SimulationMain>
     </SimulationLayout>
   );
