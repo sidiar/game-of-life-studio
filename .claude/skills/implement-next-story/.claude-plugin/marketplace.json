@@ -8,7 +8,7 @@
     {
       "name": "implement-next-story",
       "source": "./",
-      "description": "One story → one PR on Claude Code: create, implement, review on a different model, stop for the human merge. Built on BMad Method v6."
+      "description": "One story → one PR on Claude Code: create, implement, review on a different model, stop for the human merge. Ships with BMad Method v6 and plain adapters; write your own in an afternoon."
     }
   ]
 }
