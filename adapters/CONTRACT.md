@@ -2,7 +2,8 @@
 
 An **adapter** is the method-specific part of a story run: how a story gets written, how
 it gets implemented, how it gets reviewed. The skill ships with `bmad` (BMad Method v6)
-and expects you to be able to write another in an afternoon. This file is the whole
+and `plain` (no framework — the proof the seam is real), and expects you to be able to
+write another in an afternoon. This file is the whole
 agreement. If it is not written here, the orchestrator does not depend on it.
 
 Written 2026-09-17 against `SKILL.md` 1.1.1. Two kinds of section, and the difference
@@ -57,7 +58,9 @@ name = "bmad"               # ships with the skill: adapters/<name>/adapter.md
 Exactly one of `name` / `dir`. Missing table, both keys, neither key, or a file that is
 not there → the orchestrator STOPs before Step 0 and says which, like a missing `[paths]`
 key. No default: the adapter decides what "implement" means, and that is not a thing to
-guess.
+guess. An adapter's own settings go in a sub-table named after it — `[adapter.plain]
+check = [...]` — which the orchestrator never reads; the adapter's prompts tell the
+subagent to read it from the TOML.
 
 The orchestrator reads `adapter.md` **once**, at Step 0 beside the TOML, and holds it
 for the run. Keep it around 60 lines — it rides in the orchestrator's context on every
@@ -247,8 +250,8 @@ so you do not repeat them.
 - [ ] Treats a red CI run on the branch as a finding. ⟨O⟩ the prompt names the command.
 - [ ] Writes the story's status by the §3 table — `done` or `in-progress` — in the same
       commit as the findings.
-- [ ] Reports any cross-epic dependency the diff reveals as a **proposed** `{gates_file}`
-      row; writes nothing to that file.
+- [ ] ⟨O⟩ reports any cross-epic dependency the diff reveals as a **proposed**
+      `{gates_file}` row; writes nothing to that file.
 - [ ] ⟨O⟩ review fixes land as their **own** commit on the branch, pushed, never amended
       into the dev commit; the orchestrator opens the PR, draft iff not `done`.
 - [ ] **States the answer to every prompt or halt the tool presents** — §7.

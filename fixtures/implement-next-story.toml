@@ -3,10 +3,14 @@
 # implement-next-story.example.toml, scaled down to a generic web app.
 
 [adapter]
+# `bmad` for the test suite; switch to `name = "plain"` to run the fixture project without BMad.
 # The method that drives the three phases — create, implement, review. Exactly one of:
 name = "bmad"               # an adapter shipped with the skill: adapters/<name>/adapter.md
 # dir = "docs/my-adapter"   # a project-local one: <dir>/adapter.md, relative to the repo root
 # What an adapter must provide is in adapters/CONTRACT.md; `bmad` is written against v6.8.0.
+
+[adapter.plain]
+check = []                 # the fixture project has no build; a real one lists its lint/test commands
 
 [models]
 # Claude Code model aliases (`model:` on the Agent tool) — roles, not favourites. Tiers come

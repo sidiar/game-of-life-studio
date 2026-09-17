@@ -113,6 +113,20 @@ MODELS = textwrap.dedent("""\
 """)
 
 
+class PlainAdapterTests(unittest.TestCase):
+    """The `plain` adapter's Create fills a template; Review appends under a heading it
+    must therefore contain."""
+
+    def test_story_template_has_the_sections_the_prompts_rely_on(self):
+        path = os.path.join(ADAPTERS_DIR, "plain", "story-template.md")
+        with open(path) as fh:
+            text = fh.read()
+        self.assertIn("Status: ready-for-dev", text)
+        for heading in ("## Story", "## Acceptance Criteria", "## Tasks / Subtasks",
+                        "## Dev Notes", "### File List", "### Completion Notes"):
+            self.assertIn(heading + "\n", text, heading)
+
+
 class ReadConfigAdapterTests(unittest.TestCase):
     """`read_config` validates `[adapter]` whenever a config file is actually read."""
 
@@ -125,7 +139,9 @@ class ReadConfigAdapterTests(unittest.TestCase):
 
     def test_fixture_config_is_accepted(self):
         doc = lane_gates.read_config(FIXTURES, None)
-        self.assertEqual(doc["adapter"], {"name": "bmad"})
+        self.assertEqual(doc["adapter"]["name"], "bmad")
+        # an adapter's own sub-table (CONTRACT.md §2) is carried through, not rejected
+        self.assertEqual(doc["adapter"]["plain"], {"check": []})
 
     def test_no_adapter_table_is_rejected(self):
         path = self._write(textwrap.dedent("""\

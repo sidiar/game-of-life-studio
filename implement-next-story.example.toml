@@ -10,6 +10,10 @@
 name = "bmad"               # an adapter shipped with the skill: adapters/<name>/adapter.md
 # dir = "docs/my-adapter"   # a project-local one: <dir>/adapter.md, relative to the repo root
 # What an adapter must provide is in adapters/CONTRACT.md; `bmad` is written against v6.8.0.
+# An adapter's own settings go in [adapter.<name>]; the orchestrator ignores that table.
+#
+# [adapter.plain]
+# check = ["npm run lint", "npm test"]   # the `plain` adapter: commands that must pass before a story is done
 
 [models]
 # Claude Code model aliases (`model:` on the Agent tool) — roles, not favourites. Tiers come
