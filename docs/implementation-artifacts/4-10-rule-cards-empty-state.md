@@ -4,7 +4,7 @@ baseline_commit: 92a3d4dbf60b8bd7fee295aba1b1a6fcd703490f
 
 # Story 4.10: Rule Cards & Empty State
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -766,7 +766,7 @@ run `35225718572` on `132501a` — quality + e2e **green**. Decision 2 landed co
 consistently (effect, header comment, tests (e)/(f), e2e 3/5, AC5/FD6/Task 5/Task 8, Change Log);
 no first-pass patch regressed. What remains:
 
-- [ ] [Review][Decision] A pointer double-click on ✕ still cascades deletions — decision 2 closed
+- [x] [Review][Decision] A pointer double-click on ✕ still cascades deletions — decision 2 closed
       the keyboard cascade only. Every card has the same geometry (one-line Summary, fixed header),
       so when card N is removed the card below slides synchronously into the same slot (a discrete
       event commits before the next click is dispatched), and the second click of a double-click —
@@ -778,6 +778,10 @@ no first-pass patch regressed. What remains:
       button (stops the double-click, costs a deliberate rapid second delete at the same spot);
       (3) defer to the story that gives the editor undo/confirmation.
       [`apps/web/components/organisms/editor/RuleCard.tsx:216-221`]
+      **Owner decision (Sidiar, 2026-09-17): option 3 — defer.** A later story adds a rule-delete
+      confirmation dialog to the Organism Editor (mirroring UX-DR15's organism-level delete
+      confirmation); no code changes here.
+      **Resolved (dev-story, 2026-09-17): deferred to deferred-work.md.**
 - [x] [Review][Patch] The decision's rationale is untested — nothing proves a second Enter after a
       keyboard delete removes nothing. [`apps/web/components/organisms/editor/RulesEditor.test.tsx`]
 - [x] [Review][Patch] Review provenance in code comments — `Owner decision (review, 2026-09-17)`
@@ -1195,6 +1199,13 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
   tests 3 and 5 to assert focus on the neighbour's Summary textbox instead of its Delete button.
   No other behaviour changed — the neighbour-selection rule (index-match, else new-last, else the
   empty CTA) and the "loose focus" guard are untouched.
+- 2026-09-17 — Resumed to resolve the second pass's outstanding `[Review][Decision]` item: the
+  owner picked option 3 (defer) on the pointer double-click cascade on ✕. No code changed;
+  recorded the owner decision and resolution note against the review item, appended a bullet to
+  `deferred-work.md`'s `## Deferred from: code review of 4-10-rule-cards-empty-state (2026-09-17)`
+  section naming the pick-up point (a later Epic 4 story adding a rule-delete confirmation dialog
+  to the Organism Editor), and marked `4-10-rule-cards-empty-state` `review` in
+  `sprint-status.yaml`.
 
 ### File List
 
@@ -1243,6 +1254,11 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
   "header + Add Rule" corrected to the empty-state CTA; Task 8 test-5 text realigned with the
   e2e). 1 new `decision-needed` (pointer double-click on ✕ cascades deletions); status →
   in-progress pending that decision.
+- 2026-09-17 — Resolved the second pass's outstanding review decision (option 3, Sidiar): deferred
+  the pointer double-click cascade on ✕ to a later story that adds a rule-delete confirmation
+  dialog to the Organism Editor; no code changes. Bullet appended to `deferred-work.md`'s
+  `## Deferred from: code review of 4-10-rule-cards-empty-state (2026-09-17)` section; status →
+  review.
 
 Dev Model: sonnet   # follows the settled editor pattern (one draft field, controlled views, a layout slot, functional setters); every choice later stories build on — the RuleDraft shape, the three tokens, the diff-driven focus rule, the updater-style setter — is pinned as FD1–FD9 with the exact signatures, so the dev step executes rather than designs
 Proposed lane gate: none
