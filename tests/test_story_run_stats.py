@@ -155,23 +155,23 @@ class BuildReportPhaseTests(StoryRunStatsTestCase):
                          {"input": 200, "cache_write": 10, "cache_read": 4,
                           "output": 20, "total": 234})
 
-        self.assertEqual(rows["Step 1 — create-story"]["agents"], 1)
-        self.assertEqual(rows["Step 1 — create-story"]["tokens"],
+        self.assertEqual(rows["Step 1 — create"]["agents"], 1)
+        self.assertEqual(rows["Step 1 — create"]["tokens"],
                          {"input": 450, "cache_write": 18, "cache_read": 9,
                           "output": 45, "total": 522})
 
-        self.assertEqual(rows["Step 2 — dev-story"]["agents"], 0)
-        self.assertEqual(rows["Step 2 — dev-story"]["tokens"],
+        self.assertEqual(rows["Step 2 — implement"]["agents"], 0)
+        self.assertEqual(rows["Step 2 — implement"]["tokens"],
                          {"input": 300, "cache_write": 15, "cache_read": 6,
                           "output": 30, "total": 351})
 
-        self.assertEqual(rows["Step 3 — code review + PR"]["agents"], 1)
-        self.assertEqual(rows["Step 3 — code review + PR"]["tokens"],
+        self.assertEqual(rows["Step 3 — review + PR"]["agents"], 1)
+        self.assertEqual(rows["Step 3 — review + PR"]["tokens"],
                          {"input": 300, "cache_write": 12, "cache_read": 6,
                           "output": 30, "total": 348})
 
         # The synthetic-model entry (tok=9999s) must not have leaked into Step 3's sums.
-        self.assertNotIn(9999, rows["Step 3 — code review + PR"]["tokens"].values())
+        self.assertNotIn(9999, rows["Step 3 — review + PR"]["tokens"].values())
 
     def test_orchestrator_row_matches_main_transcript_totals(self):
         _, data = srs.build_report(self.state, idle_gap_minutes=40)
@@ -214,7 +214,7 @@ class IdleGapTests(StoryRunStatsTestCase):
         self.assertAlmostEqual(data["active"], 110 * 60, delta=1)
         self.assertAlmostEqual(data["wall"], 155 * 60, delta=1)
 
-        step2 = next(r for r in data["rows"] if r["title"] == "Step 2 — dev-story")
+        step2 = next(r for r in data["rows"] if r["title"] == "Step 2 — implement")
         self.assertAlmostEqual(step2["seconds"], 60 * 60, delta=1)   # wall clock: unaffected
         self.assertAlmostEqual(step2["active"], 15 * 60, delta=1)    # active: gap excluded
 
@@ -229,7 +229,7 @@ class IdleGapTests(StoryRunStatsTestCase):
         self.assertAlmostEqual(data["active"], data["wall"], delta=1)
         self.assertIn("No idle gaps were excluded", block)
 
-        step2 = next(r for r in data["rows"] if r["title"] == "Step 2 — dev-story")
+        step2 = next(r for r in data["rows"] if r["title"] == "Step 2 — implement")
         self.assertAlmostEqual(step2["active"], step2["seconds"], delta=1)
 
 

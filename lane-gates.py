@@ -11,6 +11,12 @@ orchestrator never has to read a table and reason about it:
                                              entry paired with N
                          exit 2 "UNANALYSED" — names the pair that has no analysis yet
   list                   prints every gate with its current verdict
+  adapter                exit 0 — prints the absolute path of the adapter.md that [adapter]
+                         names (`name = "x"` → adapters/x/adapter.md, shipped with the
+                         skill; `dir = "d"` → <root>/d/adapter.md)
+                         exit 2 — that file does not exist
+  reviewer DEV           exit 0 — prints the model [models.review] pairs with DEV, the
+                         model Step 2 ran on; exit 2 — no row for DEV
 
 Two more answer "is this the right working tree, and is it free?" — the questions that
 two lanes launched in the same checkout used to get wrong:
@@ -61,6 +67,15 @@ import tomllib
 from datetime import datetime, timezone
 
 CONFIG_FILE = "implement-next-story.toml"
+ADAPTER_TABLE = "adapter"
+MODELS_TABLE = "models"
+MODEL_ROLES = ("create", "dev", "dev_escalated", "sync")
+
+# The skill's board format (adapters/CONTRACT.md §3) — BMad writes it natively.
+DEVELOPMENT_STATUS_KEY = "development_status"
+STATUS_BACKLOG = "backlog"
+STATUS_IN_PROGRESS = "in-progress"
+STATUS_DONE = "done"
 
 STORY_KEY = re.compile(r"^(\d+)-(\d+)-[a-z0-9-]+$")
 EPIC_KEY = re.compile(r"^epic-(\d+)$")
@@ -76,8 +91,45 @@ class GateError(Exception):
 
 # ------------------------------------------------------------------ readers
 
-def read_config(root: str, explicit: str | None) -> dict[str, str]:
-    """`[paths]` from the project config, or {} when no config exists and none was named."""
+def _validate_adapter_table(path: str, doc: dict) -> None:
+    adapter = doc.get(ADAPTER_TABLE)
+    if not isinstance(adapter, dict):
+        raise GateError(f"{path}: [{ADAPTER_TABLE}] needs exactly one of name / dir")
+    has_name, has_dir = "name" in adapter, "dir" in adapter
+    if has_name == has_dir:  # both or neither
+        raise GateError(f"{path}: [{ADAPTER_TABLE}] needs exactly one of name / dir")
+    key = "name" if has_name else "dir"
+    if not isinstance(adapter[key], str):
+        raise GateError(f"{path}: [{ADAPTER_TABLE}] {key} must be a string")
+
+
+def _validate_models_table(path: str, doc: dict) -> None:
+    """`[models]`: one alias per role, and `[models.review]` pairing every dev model with a
+    reviewer that is never itself — the never-same-model rule, checked here rather than by eye."""
+    models = doc.get(MODELS_TABLE)
+    if not isinstance(models, dict):
+        raise GateError(f"{path}: no [{MODELS_TABLE}] table — see implement-next-story.example.toml")
+    for role in MODEL_ROLES:
+        if not isinstance(models.get(role), str) or not models[role]:
+            raise GateError(f"{path}: [{MODELS_TABLE}] {role} must be a model alias")
+    review = models.get("review")
+    if not isinstance(review, dict) or not review:
+        raise GateError(f"{path}: [{MODELS_TABLE}.review] must pair every dev model with its reviewer")
+    for dev, rev in review.items():
+        if not isinstance(rev, str) or not rev:
+            raise GateError(f"{path}: [{MODELS_TABLE}.review] {dev} must be a model alias")
+        if rev == dev:
+            raise GateError(f"{path}: [{MODELS_TABLE}.review] {dev} = {rev!r} — a model may not review its own work")
+    for role in ("dev", "dev_escalated"):
+        if models[role] not in review:
+            raise GateError(f"{path}: [{MODELS_TABLE}.review] has no row for {role} = {models[role]!r}")
+
+
+def read_config(root: str, explicit: str | None) -> dict:
+    """The whole parsed config doc, or {} when no config exists and none was named.
+
+    Validates `[paths]` (a table of strings) and `[adapter]` (exactly one of `name` /
+    `dir`, a string) whenever a config file is actually read."""
     path = explicit or os.path.join(root, CONFIG_FILE)
     if explicit is None and not os.path.exists(path):
         return {}
@@ -91,13 +143,15 @@ def read_config(root: str, explicit: str | None) -> dict[str, str]:
     paths = doc.get("paths", {})
     if not isinstance(paths, dict) or not all(isinstance(v, str) for v in paths.values()):
         raise GateError(f"{path}: `[paths]` must be a table of strings")
-    return paths
+    _validate_adapter_table(path, doc)
+    _validate_models_table(path, doc)
+    return doc
 
 
 def resolve_files(args, *keys: str) -> list[str]:
     """One path per key (`gates_file`, `status_file`) — flags win, then the config;
     nothing is guessed."""
-    paths = read_config(args.root, args.config)
+    paths = read_config(args.root, args.config).get("paths", {})
     found = {key: getattr(args, key) or paths.get(key) for key in keys}
     missing = [key for key, value in found.items() if not value]
     if missing:
@@ -190,7 +244,7 @@ def read_sprint_status(path: str) -> dict[str, str]:
     status: dict[str, str] = {}
     inside = False
     for line in lines:
-        if line.startswith("development_status:"):
+        if line.startswith(f"{DEVELOPMENT_STATUS_KEY}:"):
             inside = True
             continue
         if inside and line and not line.startswith(" ") and not line.startswith("#"):
@@ -201,7 +255,7 @@ def read_sprint_status(path: str) -> dict[str, str]:
         if m:
             status[m.group(1)] = m.group(2)
     if not status:
-        raise GateError(f"{path}: no development_status entries found")
+        raise GateError(f"{path}: no {DEVELOPMENT_STATUS_KEY} entries found")
     return status
 
 
@@ -222,7 +276,7 @@ def prerequisite_state(req: str, status: dict[str, str]) -> tuple[bool, str]:
         stories = {k: v for k, v in status.items() if STORY_KEY.match(k) and epic_of(k) == epic}
         if not stories:
             raise GateError(f"gate requires {req} but sprint-status has no {epic}-* stories")
-        pending = sorted((k for k, v in stories.items() if v != "done"),
+        pending = sorted((k for k, v in stories.items() if v != STATUS_DONE),
                          key=lambda k: int(STORY_KEY.match(k).group(2)))
         if pending:
             return False, f"{len(pending)} of {len(stories)} {epic}-* stories not done (first: {pending[0]})"
@@ -231,7 +285,7 @@ def prerequisite_state(req: str, status: dict[str, str]) -> tuple[bool, str]:
         raise GateError(f"`requires` must be a story key or epic-N, got {req!r}")
     if req not in status:
         raise GateError(f"gate requires {req}, which is not in sprint-status")
-    return status[req] == "done", f"{req} is {status[req]}"
+    return status[req] == STATUS_DONE, f"{req} is {status[req]}"
 
 
 def gates_for(story: str, gates: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -259,7 +313,7 @@ def cmd_check(args, doc, status) -> int:
 
 def in_progress_epics(status: dict[str, str]) -> list[int]:
     return sorted(int(EPIC_KEY.match(k).group(1)) for k, v in status.items()
-                  if EPIC_KEY.match(k) and v == "in-progress")
+                  if EPIC_KEY.match(k) and v == STATUS_IN_PROGRESS)
 
 
 def cmd_analysed(args, doc, status) -> int:
@@ -290,6 +344,45 @@ def cmd_list(args, doc, status) -> int:
     for g in rows:
         ok, state = prerequisite_state(g["requires"], status)
         print(f"{'open ' if ok else 'GATED'}  {g['story']:<40} requires {g['requires']:<32} {state}")
+    return 0
+
+
+def resolve_adapter_path(root: str, adapter: dict) -> tuple[str, str]:
+    """(the adapter.md path `[adapter]` names, a description of the key that produced it)."""
+    if "name" in adapter:
+        name = adapter["name"]
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adapters", name, "adapter.md")
+        return path, f"[{ADAPTER_TABLE}] name = {name!r}"
+    dir_ = adapter["dir"]
+    path = os.path.join(root, dir_, "adapter.md")
+    return path, f"[{ADAPTER_TABLE}] dir = {dir_!r}"
+
+
+def cmd_adapter(args) -> int:
+    doc = read_config(args.root, args.config)
+    if not doc:
+        path = args.config or os.path.join(args.root, CONFIG_FILE)
+        raise GateError(f"{path}: no such file — set [{ADAPTER_TABLE}] name / dir there, "
+                        f"or pass --config")
+    path, key_desc = resolve_adapter_path(args.root, doc[ADAPTER_TABLE])
+    if not os.path.isfile(path):
+        print(f"ERROR: {os.path.abspath(path)}: no adapter.md there (from {key_desc})", file=sys.stderr)
+        return 2
+    print(os.path.abspath(path))
+    return 0
+
+
+def cmd_reviewer(args) -> int:
+    doc = read_config(args.root, args.config)
+    if not doc:
+        path = args.config or os.path.join(args.root, CONFIG_FILE)
+        raise GateError(f"{path}: no such file — set [{MODELS_TABLE}] there, or pass --config")
+    review = doc[MODELS_TABLE]["review"]
+    if args.dev not in review:
+        print(f"ERROR: [{MODELS_TABLE}.review] has no row for {args.dev!r} — "
+              f"Step 2 ran on a model the config does not pair with a reviewer", file=sys.stderr)
+        return 2
+    print(review[args.dev])
     return 0
 
 
@@ -359,7 +452,7 @@ def cmd_resolve(args) -> int:
         print(f"LANE {unhoused[0]} — the only in-progress epic without a lane worktree, so it is {where}'s")
         return 0
     for key, state in status.items():
-        if STORY_KEY.match(key) and state == "backlog" and epic_of(key) not in lanes:
+        if STORY_KEY.match(key) and state == STATUS_BACKLOG and epic_of(key) not in lanes:
             print(f"LANE {epic_of(key)} — no in-progress epic outside the lane worktrees; "
                   f"the first backlog story elsewhere is {key}")
             return 0
@@ -501,6 +594,9 @@ def main() -> int:
     p = sub.add_parser("check"); p.add_argument("story")
     p = sub.add_parser("analysed"); p.add_argument("--epic", type=int, required=True)
     sub.add_parser("list")
+    sub.add_parser("adapter", help="resolve the adapter.md named in [adapter]")
+    p = sub.add_parser("reviewer", help="the model [models.review] pairs with the one Step 2 ran on")
+    p.add_argument("dev", help="the story's `Dev Model:` value")
     p = sub.add_parser("resolve", help="which lane this working tree serves")
     p.add_argument("--epic", type=int, help="the lane asked for; omitted = work it out from the tree and the board")
     p = sub.add_parser("lock", help="one-run-per-working-tree lock, kept in the git dir")
@@ -513,6 +609,10 @@ def main() -> int:
     lock.add_parser("status")
     args = parser.parse_args()
     try:
+        if args.command == "adapter":
+            return cmd_adapter(args)
+        if args.command == "reviewer":
+            return cmd_reviewer(args)
         if args.command == "resolve":
             return cmd_resolve(args)
         if args.command == "lock":
