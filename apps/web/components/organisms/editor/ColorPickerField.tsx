@@ -5,6 +5,7 @@ import { styled } from '@mui/material/styles';
 import { Fieldset, Legend, Description } from './fieldStyles';
 import { PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
+import { colorReuseWarning } from '@/lib/organisms/colorReuse';
 
 /**
  * The Basic Information column's second control (Story 4.8, FR-2.3, UX-DR7/UX-DR17): a selected-
@@ -16,9 +17,9 @@ import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
  * a fourth region, never a child of the layout. The DRAFT is fully controlled, like its siblings —
  * `<OrganismEditorModal>` owns it (RFC-005 Decision 1) and this is a thin view over
  * `draft.colorToken`: no draft state here, no effect that touches the draft, no repository, no
- * library (AC6) — the field does not know which tokens are in use (Story 4.9). The one piece of
- * local state is the disclosure's open/closed flag: view chrome, never draft data, and it resets
- * with the mount.
+ * library (AC6) — the field is told which tokens are in use through `usersByToken` and holds no
+ * state about it. The one piece of local state is the disclosure's open/closed flag: view chrome,
+ * never draft data, and it resets with the mount.
  *
  * Mockup: `organism-editor.html:212-297` (CSS), `:919-952` (markup), `:1263-1285` (the collapse +
  * click script). Design doc: `organism-editor-design.md:163-206, 528, 549, 755-757, 796-798` —
@@ -39,7 +40,19 @@ import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
  *   channels (WCAG 1.4.1): the native `checked` state, the accent border, and the `✓`. The chip,
  *   the selected swatch's fill and the aging strip's cap cell are all `displayColor(token,
  *   MAX_AGE_SHADE)` — the identity shade, the SAME string every one of them paints (AC4).
- * - FD6 — no in-use marking, no reuse warning, no `title` hints — Story 4.9's surface.
+ * - 4.9 FD1 — two REQUIRED props, `usersByToken` and `seedValue`: required, not
+ *   optional-with-default, because an optional prop is how a later picker forgets to wire them and
+ *   ships one that never warns.
+ * - 4.9 FD3 — the reuse warning lives in an always-mounted `role="status"` region: a live region
+ *   has to exist before its content changes to be announced reliably.
+ * - 4.9 FD4 — the in-use dot is a CSS pseudo-element on the swatch label with EMPTY alt text
+ *   (`content: "•" / ""`), never a `title`: generated content otherwise joins the radio's
+ *   accessible NAME (accname §2F.ii), exactly as an un-hidden `<span>` would.
+ * - 4.9 FD5 — the warning text is `--gol-danger` on the column's own background, with NO tint:
+ *   the mockup's translucent danger tint measures under the AA floor.
+ * - 4.9 FD6 — the reuse status region sits AFTER the swatch grid, inside the fieldset: after the
+ *   chip row it would shift the grid under a roving keyboard focus.
+ *   (The unprefixed FD1/FD4/FD7 above and below are Story 4.8's.)
  * - FD7 — the mockup's disclosure: the grid is `display: none` until "Change Color ▾" opens it, and
  *   a POINTER pick collapses it again with focus handed to the button (the mockup's script
  *   `:1280-1283`). A keyboard pick (arrow keys, Space) leaves it open — collapsing under a roving
@@ -53,13 +66,13 @@ import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
  * exists. The chip's name is plain text, NOT a live region: the radio change already announces
  * the new name, and a live region would read it a second time (the Story 3.13 trap).
  *
- * Followers: Story 4.9 adds the in-use marking and the reuse warning under the chip row; Story
- * 4.14 reads `draft.colorToken` for the preview grid; Story 4.17 seeds `value` from a record.
+ * Followers: Story 4.14 reads `draft.colorToken` for the preview grid; Story 4.17 seeds `value`
+ * and `seedValue` from the record and excludes the organism under edit from `usersByToken`.
  * `useId()` for every id — the field is not a singleton (Story 4.24's battle-origin editor is a
  * second instance, and two groups sharing a `name` would deselect each other).
  *
- * (Story 4.8) (Story 4.7) (Story 4.6) (Story 4.2) (Story 1.7) (FR-2.3) (M6) (RFC-007) (AR-46)
- * (NFR-2.1)
+ * (Story 4.9) (Story 4.8) (Story 4.7) (Story 4.6) (Story 4.2) (Story 1.7) (FR-2.3) (M6) (RFC-007)
+ * (AR-46) (NFR-2.1)
  */
 
 // `.color-selected-row` (`:220-225`).
@@ -172,6 +185,25 @@ const Swatch = styled('label')({
       pointerEvents: 'none',
     },
   },
+  // `.in-use::after` (`:275-286`), moved to `::before`: `::after` is already the selected glow
+  // above, and a selected in-use swatch has to show both (Story 4.9, FD4). The mockup's `#fff` /
+  // `rgba(0,0,0,0.9)` become `--gol-text-primary` / `--gol-bg-primary` (AR-46). Decorative — but
+  // NOT outside the accessibility tree by construction: accname §2F.ii folds generated `content`
+  // into a label's text alternative, and every engine does (a bare `"•"` names the radio
+  // "• Sky Blue" — Story 4.9 review, measured in Chromium's own AX tree). The `/ ""` alt-text form
+  // is what keeps it out of the name; where an engine lacks it the declaration drops and the dot
+  // simply does not paint. The in-use fact reaches assistive tech through the FD3 status region.
+  '&[data-in-use="true"]::before': {
+    content: '"•" / ""',
+    position: 'absolute',
+    top: '-1px',
+    right: '3px',
+    fontSize: '13px',
+    lineHeight: 1,
+    color: 'var(--gol-text-primary)',
+    textShadow: '0 0 3px var(--gol-bg-primary)',
+    pointerEvents: 'none',
+  },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
     '&:hover': { transform: 'none' },
@@ -213,13 +245,49 @@ const SelectedMark = styled('span')({
   pointerEvents: 'none',
 });
 
+// `.color-reuse-warning` (`:288-297`) minus the mockup's translucent tint (FD5 — measured under
+// the AA floor on this surface). `--gol-danger` for the text (the mockup's `--warning` IS
+// `--gol-danger`, Story 1.13), `border-left` carries the box's identity so no new `--gol-*` token
+// is needed for a surface only this one control uses. No `transition` (AR-46's neighbours already
+// paid for this lesson — a scan mid-fade measures a ratio no settled state has).
+const ReuseWarning = styled('p')({
+  margin: '10px 0 0 0',
+  padding: '8px 10px',
+  fontSize: '11px',
+  lineHeight: 1.4,
+  color: 'var(--gol-danger)',
+  borderLeft: '2px solid var(--gol-danger)',
+  display: 'flex',
+  gap: '6px',
+  alignItems: 'flex-start',
+  overflowWrap: 'anywhere',
+  minWidth: 0,
+});
+
 export interface ColorPickerFieldProps {
   /** The draft's palette token. */
   value: string;
   onChange(colorToken: string): void;
+  /**
+   * Token -> display names of the OTHER organisms using it (`usersByColorToken`). Drives the
+   * in-use dots and the reuse warning. Required, not optional-with-default: an optional prop lets
+   * a later picker forget it and ship one that never warns (Story 4.9, FD1).
+   */
+  usersByToken: ReadonlyMap<string, readonly string[]>;
+  /**
+   * The token the draft opened on. The warning is never raised on it (PRD FR-2.3: the
+   * system-assigned default does not itself raise it) — a token comparison, not provenance (Story
+   * 4.8 AC3, Story 4.9 FD2).
+   */
+  seedValue: string;
 }
 
-export default function ColorPickerField({ value, onChange }: ColorPickerFieldProps) {
+export default function ColorPickerField({
+  value,
+  onChange,
+  usersByToken,
+  seedValue,
+}: ColorPickerFieldProps) {
   const legendId = useId();
   const descriptionId = useId();
   const groupName = useId();
@@ -232,6 +300,12 @@ export default function ColorPickerField({ value, onChange }: ColorPickerFieldPr
   // PALETTE checks no radio and degrades through `resolvePaletteColor`, Decision I.4).
   const selected = resolvePaletteColor(value);
   const color = displayColor(value, MAX_AGE_SHADE);
+
+  // Story 4.9: derived per render, no memo, no effect. `warning` is null on the seed token even
+  // when it collides (FD2) — a token comparison, not a "was this the default?" flag.
+  const users = usersByToken.get(value) ?? [];
+  const warning = value === seedValue ? null : colorReuseWarning(users);
+  const inUse = (token: string) => (usersByToken.get(token)?.length ?? 0) > 0;
 
   // FD7: a pointer pick closes the palette (`detail` counts the clicks; a keyboard-synthesised
   // click on a radio — Space, an arrow key — carries 0).
@@ -254,7 +328,10 @@ export default function ColorPickerField({ value, onChange }: ColorPickerFieldPr
   return (
     <Fieldset aria-labelledby={legendId}>
       <Legend id={legendId}>Organism Color</Legend>
-      <Description id={descriptionId}>Pick any color — colors are reusable.</Description>
+      <Description id={descriptionId}>
+        {'Pick any color — colors are reusable. If another organism already uses your pick, a ' +
+          "non-blocking warning appears (they'll share a color on the grid)."}
+      </Description>
       <SelectedRow>
         <SelectedSwatch
           aria-hidden="true"
@@ -284,6 +361,7 @@ export default function ColorPickerField({ value, onChange }: ColorPickerFieldPr
             key={entry.id}
             data-color-token={entry.id}
             data-selected={entry.id === value}
+            data-in-use={inUse(entry.id)}
             style={{ background: displayColor(entry.id, MAX_AGE_SHADE) }}
             onClick={collapseAfterPointerPick}
           >
@@ -299,6 +377,17 @@ export default function ColorPickerField({ value, onChange }: ColorPickerFieldPr
           </Swatch>
         ))}
       </SwatchGrid>
+      {/* FD3/FD6: always mounted, after the grid, inside the fieldset — visible whether the
+          palette is collapsed (under the chip row) or open (under the swatches a keyboard user is
+          arrowing through), and it never shifts the grid under a roving focus. A plain div: the
+          region carries no styles of its own, so a `styled()` wrapper would be a class for nothing. */}
+      <div role="status" data-color-reuse-status>
+        {warning !== null && (
+          <ReuseWarning data-color-reuse-warning>
+            <span aria-hidden="true">{'⚠︎'}</span> {warning}
+          </ReuseWarning>
+        )}
+      </div>
     </Fieldset>
   );
 }

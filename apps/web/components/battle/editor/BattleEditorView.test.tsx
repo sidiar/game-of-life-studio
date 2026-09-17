@@ -875,6 +875,57 @@ describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', (
     );
     expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'false');
   });
+
+  // Story 4.9 (deferred-work.md:343): the FR-3.3 same-colour warning proven end to end THROUGH
+  // the add control — every prior "Shared colour" assertion (the AC4 test above) hand-feeds a
+  // twin roster. `findDuplicateColorIds` itself is unchanged; this closes the missing end-to-end
+  // path, per Story 2.10's own Dev Notes.
+  it('a colliding add marks BOTH rows once the parent hands back the updated roster (Story 4.9)', async () => {
+    const user = userEvent.setup();
+    const onAddToRoster = vi.fn();
+    const existingRoster: readonly DisplayOrganism[] = [
+      { id: 'already-here', name: 'Already Here', color: '#D55E00', colorToken: 'vermillion' },
+    ];
+    const { rerender } = renderEditor({
+      rosterIds: existingRoster.map((organism) => organism.id),
+      roster: existingRoster,
+      library: ADD_LIBRARY, // 'New Arrival', also `vermillion` — a deliberate collision.
+      onAddToRoster,
+    });
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /add organism/i }), 'lib-new');
+    expect(onAddToRoster).toHaveBeenCalledWith('lib-new');
+
+    const updatedRoster = [...existingRoster, ...ADD_LIBRARY];
+    rerender(
+      <BattleEditorView
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        rosterIds={updatedRoster.map((organism) => organism.id)}
+        roster={updatedRoster}
+        library={[]}
+        onAddToRoster={onAddToRoster}
+        atCap={false}
+        battleName=""
+        onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        onBack={() => {}}
+        isSaving={false}
+        saveError={null}
+        onCommitGrid={() => {}}
+        onUndo={() => {}}
+        canUndo={false}
+      />,
+    );
+
+    expect(screen.getAllByText('Shared colour')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /Already Here/ })).toHaveTextContent('Shared colour');
+    expect(screen.getByRole('button', { name: /New Arrival/ })).toHaveTextContent('Shared colour');
+  });
 });
 
 // Story 2.11 (AC1, AC7, Task 5). The heading-order claim (Organisms THEN Battle Name) is pinned

@@ -16,12 +16,24 @@ function jsdomNormalizedColor(color: string): string {
   return probe.style.background;
 }
 
+// Story 4.9: every render now needs `usersByToken` and `seedValue`. A module-level empty map for
+// the 4.8 cases that do not care about reuse, mechanically threaded through every render below.
+const NO_USERS: ReadonlyMap<string, readonly string[]> = new Map();
+
 /** A real controlled round trip — the `DominanceField.test.tsx` harness shape — seeded at
- * `PALETTE[0].id` unless overridden. */
+ * `PALETTE[0].id` unless overridden. `seedValue` defaults to the harness's own `seed` (FD2: the
+ * token it opened on), overridable independently for the (n) "silent on the seed" case. */
 function ControlledHarness({
   seed = PALETTE[0].id,
+  seedValue,
+  usersByToken = NO_USERS,
   onChange,
-}: { seed?: string; onChange?: (colorToken: string) => void } = {}) {
+}: {
+  seed?: string;
+  seedValue?: string;
+  usersByToken?: ReadonlyMap<string, readonly string[]>;
+  onChange?: (colorToken: string) => void;
+} = {}) {
   const [value, setValue] = useState(seed);
   return (
     <ColorPickerField
@@ -30,7 +42,28 @@ function ControlledHarness({
         onChange?.(next);
         setValue(next);
       }}
+      usersByToken={usersByToken}
+      seedValue={seedValue ?? seed}
     />
+  );
+}
+
+/** The renders that pass a bare `value`/`onChange` pair below all get the two new required props
+ * mechanically added through this helper, so the 4.8 cases stay otherwise unedited. */
+function renderField(overrides: {
+  value: string;
+  onChange: (colorToken: string) => void;
+  usersByToken?: ReadonlyMap<string, readonly string[]>;
+  seedValue?: string;
+}) {
+  const { value, onChange, usersByToken = NO_USERS, seedValue = PALETTE[0].id } = overrides;
+  return render(
+    <ColorPickerField
+      value={value}
+      onChange={onChange}
+      usersByToken={usersByToken}
+      seedValue={seedValue}
+    />,
   );
 }
 
@@ -53,7 +86,7 @@ describe('ColorPickerField', () => {
   // (a)
   it('is a fieldset group named "Organism Color" whose radiogroup, once opened, is described and holds PALETTE.length radios in registry order', async () => {
     const user = userEvent.setup();
-    render(<ColorPickerField value={PALETTE[0].id} onChange={() => {}} />);
+    renderField({ value: PALETTE[0].id, onChange: () => {} });
 
     expect(group().tagName).toBe('FIELDSET');
     await openPalette(user);
@@ -62,8 +95,9 @@ describe('ColorPickerField', () => {
     expect(grid.tagName).not.toBe('FIELDSET');
     const describedBy = grid.getAttribute('aria-describedby');
     if (describedBy === null) throw new Error('aria-describedby is absent');
+    // AC4: the description grows the mockup's second sentence.
     expect(document.getElementById(describedBy)).toHaveTextContent(
-      'Pick any color — colors are reusable.',
+      "Pick any color — colors are reusable. If another organism already uses your pick, a non-blocking warning appears (they'll share a color on the grid).",
     );
 
     const radios = within(grid).getAllByRole('radio');
@@ -79,7 +113,7 @@ describe('ColorPickerField', () => {
   // (b)
   it('initial state: PALETTE[0] checked, named, painted and marked', async () => {
     const user = userEvent.setup();
-    render(<ColorPickerField value={PALETTE[0].id} onChange={() => {}} />);
+    renderField({ value: PALETTE[0].id, onChange: () => {} });
     await openPalette(user);
 
     const checked = checkedRadio();
@@ -137,7 +171,7 @@ describe('ColorPickerField', () => {
   it('re-selecting the current colour is a no-op', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<ColorPickerField value={PALETTE[0].id} onChange={onChange} />);
+    renderField({ value: PALETTE[0].id, onChange });
     await openPalette(user);
 
     await user.click(radio(PALETTE[0].name));
@@ -207,7 +241,7 @@ describe('ColorPickerField', () => {
   // (k) — FD7, the disclosure itself.
   it('starts collapsed: no radio is reachable, the button says so, and it toggles both ways', async () => {
     const user = userEvent.setup();
-    render(<ColorPickerField value={PALETTE[0].id} onChange={() => {}} />);
+    renderField({ value: PALETTE[0].id, onChange: () => {} });
 
     expect(toggle()).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
@@ -244,21 +278,28 @@ describe('ColorPickerField', () => {
   it('is controlled: a click leaves the prop value checked until value changes; rerender moves it', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { rerender } = render(<ColorPickerField value={PALETTE[0].id} onChange={onChange} />);
+    const { rerender } = renderField({ value: PALETTE[0].id, onChange });
     await openPalette(user);
 
     await user.click(radio(PALETTE[2].name));
     await openPalette(user);
     expect(checkedRadio()).toHaveAccessibleName(PALETTE[0].name);
 
-    rerender(<ColorPickerField value={PALETTE[2].id} onChange={onChange} />);
+    rerender(
+      <ColorPickerField
+        value={PALETTE[2].id}
+        onChange={onChange}
+        usersByToken={NO_USERS}
+        seedValue={PALETTE[0].id}
+      />,
+    );
     expect(checkedRadio()).toHaveAccessibleName(PALETTE[2].name);
     expect(selectedName()).toHaveTextContent(PALETTE[2].name);
   });
 
   // (h)
   it('every swatch paints the identity shade of its own token', () => {
-    render(<ColorPickerField value={PALETTE[0].id} onChange={() => {}} />);
+    renderField({ value: PALETTE[0].id, onChange: () => {} });
 
     for (const entry of PALETTE) {
       const label = document.querySelector(`[data-color-token="${entry.id}"]`) as HTMLElement;
@@ -273,7 +314,7 @@ describe('ColorPickerField', () => {
   it('a label click selects exactly once (no double fire from the wrapped radio)', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<ColorPickerField value={PALETTE[0].id} onChange={onChange} />);
+    renderField({ value: PALETTE[0].id, onChange });
     await openPalette(user);
 
     const label = document.querySelector(`[data-color-token="${PALETTE[4].id}"]`) as HTMLElement;
@@ -286,18 +327,146 @@ describe('ColorPickerField', () => {
   // (j)
   it('has no axe violations collapsed at the default and open at a later swatch', async () => {
     const user = userEvent.setup();
-    const props: ColorPickerFieldProps = { value: PALETTE[0].id, onChange: () => {} };
+    const props: ColorPickerFieldProps = {
+      value: PALETTE[0].id,
+      onChange: () => {},
+      usersByToken: NO_USERS,
+      seedValue: PALETTE[0].id,
+    };
     const { container: firstContainer, unmount: unmountFirst } = render(
       <ColorPickerField {...props} />,
     );
     expect((await axe(firstContainer)).violations).toEqual([]);
     unmountFirst();
 
-    const { container: secondContainer, unmount: unmountSecond } = render(
-      <ColorPickerField value={PALETTE[7].id} onChange={() => {}} />,
-    );
+    const { container: secondContainer, unmount: unmountSecond } = renderField({
+      value: PALETTE[7].id,
+      onChange: () => {},
+    });
     await openPalette(user);
     expect((await axe(secondContainer)).violations).toEqual([]);
     unmountSecond();
+  });
+
+  // Story 4.9 — the fixture reused by cases (4.9 k)-(4.9 q); prefixed because 4.8's FD7 cases
+  // above already hold (k) and (l). Names are literals here — they are test data, not `PALETTE`
+  // values.
+  const USERS: ReadonlyMap<string, readonly string[]> = new Map([
+    [PALETTE[0].id, ["Conway's Classic"]],
+    [PALETTE[2].id, ['A', 'B']],
+    [PALETTE[3].id, ['A', 'B', 'C']],
+  ]);
+
+  // (4.9 k)
+  it('warns on a colliding pick', async () => {
+    const user = userEvent.setup();
+    render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
+    await openPalette(user);
+
+    await user.click(radio(PALETTE[0].name));
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      "Conway's Classic already uses this color.",
+    );
+    // The pick proceeded exactly as an unwarned one: the chip moved with it.
+    expect(selectedName()).toHaveTextContent(PALETTE[0].name);
+    // Reopen: a pointer pick collapsed the palette (FD7).
+    await openPalette(user);
+    expect(radio(PALETTE[0].name)).toBeChecked();
+    expect(document.querySelector('[aria-invalid]')).toBeNull();
+    const radios = within(radiogroup()).getAllByRole('radio');
+    expect(radios).toHaveLength(PALETTE.length);
+    expect(radios.every((r) => (r as HTMLInputElement).disabled === false)).toBe(true);
+  });
+
+  // (4.9 l)
+  it('the sentence scales with the number of users', async () => {
+    const user = userEvent.setup();
+    render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
+    await openPalette(user);
+
+    await user.click(radio(PALETTE[2].name));
+    expect(screen.getByRole('status')).toHaveTextContent('A and B already use this color.');
+
+    await openPalette(user);
+    await user.click(radio(PALETTE[3].name));
+    expect(screen.getByRole('status')).toHaveTextContent('A, B and 1 more already use this color.');
+  });
+
+  // (4.9 m)
+  it('clears on a non-conflicting pick', async () => {
+    const user = userEvent.setup();
+    render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
+    await openPalette(user);
+    await user.click(radio(PALETTE[0].name));
+    expect(screen.getByRole('status')).not.toBeEmptyDOMElement();
+
+    await openPalette(user);
+    await user.click(radio(PALETTE[5].name));
+
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(document.querySelector('[data-color-reuse-warning]')).toBeNull();
+  });
+
+  // (4.9 n)
+  it('is silent on the seed, even when it is in use', async () => {
+    const user = userEvent.setup();
+
+    // Direct: seeded and valued at the same in-use token.
+    const direct = renderField({
+      value: PALETTE[0].id,
+      onChange: () => {},
+      usersByToken: USERS,
+      seedValue: PALETTE[0].id,
+    });
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    direct.unmount();
+
+    // Through the harness: pick something else (warns), then re-pick the seed (FD2 — silent).
+    render(<ControlledHarness seed={PALETTE[0].id} usersByToken={USERS} />);
+    await openPalette(user);
+    await user.click(radio(PALETTE[2].name));
+    expect(screen.getByRole('status')).toHaveTextContent('A and B already use this color.');
+
+    await openPalette(user);
+    await user.click(radio(PALETTE[0].name));
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  // (4.9 o)
+  it('marks every in-use swatch with the dot, and the accessible name never gains it', async () => {
+    const user = userEvent.setup();
+    render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
+    await openPalette(user);
+
+    for (const entry of PALETTE) {
+      const label = document.querySelector(`[data-color-token="${entry.id}"]`);
+      const expected =
+        entry.id === PALETTE[0].id || entry.id === PALETTE[2].id || entry.id === PALETTE[3].id
+          ? 'true'
+          : 'false';
+      expect(label).toHaveAttribute('data-in-use', expected);
+    }
+
+    // jsdom does not compute generated content, so this cannot see a `::before` glyph join the
+    // name — the browser-side guard is the e2e `toHaveAccessibleName` (Story 4.9 review).
+    expect(checkedRadio()).toHaveAccessibleName(PALETTE[1].name);
+  });
+
+  // (4.9 p)
+  it('the status region is mounted before any warning exists', () => {
+    renderField({ value: PALETTE[0].id, onChange: () => {} });
+
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  // (4.9 q)
+  it('has no axe violations with the warning visible and the dot painted', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ControlledHarness seed={PALETTE[1].id} usersByToken={USERS} />);
+    await openPalette(user);
+    await user.click(radio(PALETTE[0].name));
+
+    expect((await axe(container)).violations).toEqual([]);
   });
 });

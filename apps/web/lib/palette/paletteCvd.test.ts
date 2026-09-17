@@ -4,6 +4,7 @@ import { displayColor, MAX_AGE_SHADE } from './displayColor';
 import { PALETTE } from './paletteRegistry';
 import {
   contrastRatio,
+  contrastRatioOfLinear,
   deltaE76,
   hexToLinearRgb,
   relativeLuminance,
@@ -132,4 +133,31 @@ describe('G4 — CVD-robust core (tokens 1-8)', () => {
       }
     }
   });
+});
+
+const CLINICAL_LAB_BG = '#0a0a0a';
+
+// G5 — visibility under CVD simulation (Story 4.9). Every token, at every shade 0-7, keeps
+// contrast >= 2.5 against #0a0a0a with BOTH colours passed through the same simulation (the
+// background is near-neutral and the Machado rows sum to ~1, so it barely moves — simulated
+// anyway so the ratio is one colour space, not two, per the module header's own warning). Closes
+// the ungated path palette-cvd-validation.md recorded: G1/G2 could not take a simulated colour
+// because `contrastRatio` took hexes. Measured worst: 2.96 (deutan, bluish-green, shade 0) —
+// matches the doc's earlier manual figure (2.96).
+describe('G5 — visibility under CVD simulation', () => {
+  const bgLinear = hexToLinearRgb(CLINICAL_LAB_BG);
+
+  it.each(PALETTE)(
+    '$id: contrast >= 2.5 vs #0a0a0a at every shade, under all 3 CVD simulations',
+    (color) => {
+      for (const mode of CVD_TYPES) {
+        const simulatedBg = simulateCvd(bgLinear, mode);
+        for (let shade = 0; shade <= MAX_AGE_SHADE; shade++) {
+          const pixelLinear = hexToLinearRgb(pixelHexAt(color.id, shade));
+          const simulatedPixel = simulateCvd(pixelLinear, mode);
+          expect(contrastRatioOfLinear(simulatedPixel, simulatedBg)).toBeGreaterThanOrEqual(2.5);
+        }
+      }
+    },
+  );
 });

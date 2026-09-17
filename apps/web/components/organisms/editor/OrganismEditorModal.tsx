@@ -17,6 +17,7 @@ import ColorPickerField from './ColorPickerField';
 import DominanceField from './DominanceField';
 import AgingToggleField from './AgingToggleField';
 import { createNewOrganismDraft, type OrganismDraft } from '@/lib/organisms/organismDraft';
+import { usersByColorToken } from '@/lib/organisms/colorReuse';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -48,8 +49,8 @@ export interface OrganismEditorLifecycleProps {
 export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
   /**
    * The loaded library — an entity list, never a repository (AR-2/AR-27: this modal still calls
-   * nothing that persists). Read ONCE, at mount, for the M6 default-colour seed (Story 4.8);
-   * Story 4.9 reads names for the reuse warning, 4.11 the organism-type dropdown, 4.17 excludes
+   * nothing that persists). Read ONCE, at mount, for the M6 default-colour seed (Story 4.8) and on
+   * EVERY render for the reuse warning (Story 4.9); 4.11 the organism-type dropdown, 4.17 excludes
    * the organism under edit. The seed is taken from whatever the caller had loaded at open time
    * (FD9).
    */
@@ -152,7 +153,7 @@ const EditorBody = styled('div')({
  * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds the editor's draft (`OrganismDraft`,
  * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name`, Story 4.6's
  * `dominance`, Story 4.7's `agingEnabled`/`colorToken` and Story 4.8's `colorToken` seed from
- * `library`) and nothing else — no repository call; the lifecycle (inert window, focus restore)
+ * `library`) and its seed — no repository call; the lifecycle (inert window, focus restore)
  * stays `useOrganismEditorModal`'s, and a fresh draft per open is the `mounted` gate's doing
  * (`<OrganismLibrary>` unmounts this modal after every exit, so there is no reset effect and no
  * `key` trick). The `useState` initialiser closes over the `library` prop — legitimate because it
@@ -181,9 +182,19 @@ export default function OrganismEditorModal({
   // The lazy-initialiser form, so the factory runs once per mount, not once per render — reading
   // `library` exactly once, at mount, for the M6 default-colour seed (FD9). One typed object that
   // grows a field per story (FD3), never one `useState` per field.
-  const [draft, setDraft] = useState<OrganismDraft>(() =>
+  //
+  // The seed is held, not recomputed: it is what Story 4.23 diffs the draft against (the factory's
+  // own contract — "the draft is diffed against its seed"), and it is what makes the FR-2.3 rule
+  // "the default never warns" a token comparison rather than a flag (Story 4.9, FD2). Story 4.17
+  // replaces this ONE initialiser with the record.
+  const [seed] = useState<OrganismDraft>(() =>
     createNewOrganismDraft(library.map((organism) => organism.colorToken)),
   );
+  const [draft, setDraft] = useState<OrganismDraft>(seed);
+  // Per render, unmemoised: `library` is the caller's unmemoised `sorted` (a `useMemo` keyed on it
+  // would never hit), and the scan is 0.02–0.04 ms at 1,000 organisms (Story 3.7's `library-filter`
+  // bench). Story 4.17 passes the library MINUS the organism under edit.
+  const usersByToken = usersByColorToken(library);
   // A functional update, so `setDominance` below cannot clobber a name change that landed in the
   // same batch.
   const setName = useCallback((name: string) => setDraft((d) => ({ ...d, name })), []);
@@ -259,7 +270,12 @@ export default function OrganismEditorModal({
             basicInfo={
               <>
                 <OrganismNameField value={draft.name} onChange={setName} />
-                <ColorPickerField value={draft.colorToken} onChange={setColorToken} />
+                <ColorPickerField
+                  value={draft.colorToken}
+                  onChange={setColorToken}
+                  usersByToken={usersByToken}
+                  seedValue={seed.colorToken}
+                />
                 <DominanceField value={draft.dominance} onChange={setDominance} />
                 <AgingToggleField
                   value={draft.agingEnabled}
