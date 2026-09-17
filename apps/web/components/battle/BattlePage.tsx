@@ -209,8 +209,9 @@ export default function BattlePage({
    * header's button on exit is a NEW element (the header remounted), and WebKit does not focus a
    * `<button>` on click anyway (`useLeaveGuard.ts`'s record). Only when focus is LOOSE (`null` or
    * `<body>`): do not steal focus the user has already placed somewhere real. `.focus()` is not
-   * state, so this is not `react-hooks/set-state-in-effect` territory; under `<StrictMode>` the
-   * effect double-runs and the ref is cleared on the first pass, so the second is a no-op.
+   * state, so this is not `react-hooks/set-state-in-effect` territory. `<StrictMode>`'s
+   * double-invoke applies to the MOUNT run only, where `inFullscreen` and the ref are both
+   * `false`, so it returns early twice; a later `inFullscreen` change runs the effect once.
    */
   useEffect(() => {
     if (inFullscreen) return;

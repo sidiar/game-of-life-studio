@@ -171,7 +171,9 @@ export interface BattleHeaderProps {
   disabledReason?: string;
   /**
    * Story 3.18 (spec §3.2): the Fullscreen entry, rendered in RUN mode only and only when supplied
-   * — the toggle's own both-or-nothing rule (NFR-4.1). `<BattlePage>` owns the `fullscreen` cell
+   * — the toggle's own both-or-nothing rule (NFR-4.1). It lives inside the `<Actions>` cluster the
+   * toggle owns, so `mode` + `onModeToggle` are preconditions too: Run mode with this handler but
+   * no toggle renders nothing (the page always supplies both). `<BattlePage>` owns the `fullscreen` cell
    * (3.18 FD1 (a)) and unmounts this whole header while the stage is up; this component only
    * reports the press, exactly as it does for `onModeToggle`.
    */

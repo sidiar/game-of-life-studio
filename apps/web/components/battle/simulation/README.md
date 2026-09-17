@@ -22,7 +22,8 @@ cycle, Stop & reset cluster, rendered by both `<SimulationControlBar>` and the f
 `<CycleDigits>` (the zero-padded glyph run, rendered by both `<CycleCounter>` and the HUD) and
 `<PopulationPills>` (the HUD's compact population reading — a SIBLING of `<PopulationStats>`, not
 a variant of it; the two share `populationGlyphs.tsx`'s swatch and skull, and data, not markup).
-Story 4.15's preview panel is the third consumer of all three.
+Story 4.15's preview panel is the next consumer of all three — the third of `<TransportControls>`
+and `<CycleDigits>`, the second of `<PopulationPills>`.
 `<SimulationSidebar>` and `<SimulationMain>` are private layout children inside
 `BattleSimulationView.tsx` (spec §3.3's rule for their Lab counterparts), not exported components;
 so are `<FullscreenTopOverlay>` and `<FullscreenHUD>` inside `FullscreenStage.tsx`.

@@ -4,7 +4,7 @@ baseline_commit: 0c4e82e5116c7e7f12f0fe3c78fcfd75139f8091
 
 # Story 3.18: Fullscreen Run Stage
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -426,6 +426,105 @@ pieces, and the tests. This story adds **no change to `PetriDishCanvas.tsx`, `us
   - [x] (d) `sprint-status.yaml`: this story's line only. Dev Agent Record: FD1–FD9 options taken
     and why; the bundle numbers (all four routes, deltas vs 3.17's 333.6 / 308.9 / 308.7 / 295.4);
     the `ci:dev` exit code; which e2e project ran on which port.
+
+### Review Findings
+
+Reviewed 2026-09-17 on **Fable** (`claude-fable-5-1`) against the Opus implementation (`81519e6`),
+via three parallel layers (Blind Hunter / Edge Case Hunter / Acceptance Auditor) plus the
+reviewer's own read of the diff. Triage: 2 `decision-needed`, 8 `patch`, 3 `defer`, 16 dismissed.
+Auditor: no AC violation or missing behaviour. Local `npm run ci:dev` on the review checkout: exit 0
+(185 Chromium e2e passed, bench 7.774 ms, `/battle` 309.1 KB — the Dev Agent Record's numbers
+reproduce). The fullscreen dish was re-measured against the built export: **924×553 at 1280×720,
+1114×667 at 1194×834** (canvas box; the bordered `PetriDishBox` is 928×557 / 1118×671).
+Decisions below are left for the owner; nothing in them was resolved by the reviewer.
+
+- [ ] [Review][Decision] **Fullscreen can be entered while the Run chunk is still loading — a
+  headerless "Loading simulation…" page with no Exit until the chunk resolves** — `<BattleHeader>`
+  renders the Fullscreen button from `mode === 'run'` alone, and AC2 (c) / AC10 (e) pin it on the
+  FIRST header render, i.e. while `dynamic()` is still fetching `BattleSimulationView` (first
+  Lab→Run toggle, every Gallery `?mode=run` entry on a cold cache). A click in that window sets
+  `fullscreen=true` → the header unmounts → the page is `<Root>` + `RunLoading`; focus drops to
+  `<body>`; the stage (with Exit) appears only when the chunk lands. Options: **(a)** accept and
+  record — the window is one chunk fetch, cached thereafter, and the stage self-heals on arrival;
+  add a `RunLoading`-visible note or nothing; **(b)** gate the entry on the view being mounted
+  (`onEnterFullscreen={runViewMounted ? … : undefined}` via a mount/unmount callback from the
+  view, or a `Suspense`-driven flag) — this REVERSES AC2 (c) / AC10 (e) ("button on the first
+  header render") and adds a state cell to `<BattlePage>`; **(c)** keep the header mounted until
+  `<FullscreenStage>` reports `active` — contradicts FD9's unmount-on-entry and the single-h1
+  invariant for one commit. A rejected chunk import is pre-existing behaviour (no `error.tsx`, by
+  story) and is not made worse here. [`BattlePage.tsx` `handleEnterFullscreen`;
+  `BattleHeader.tsx` `showFullscreen`]
+- [ ] [Review][Decision] **A pointer double-click on `Exit fullscreen` lands its second click on
+  the header's `Lab` button, which remounts under the pointer** — Exit sits at roughly
+  y∈[12,43], x∈[W−184, W−24] (TopOverlay `12px 24px`, button `8px 16px`); the header remounts on
+  the first click's commit with the Mode group at y∈[20,51], x∈[W−156, W−30], `Lab` its left
+  half. The second `click` of a double-click fires on `Lab` → `handleModeToggle('lab')` → the Run
+  view unmounts and the session (cycle, ephemeral size) is dropped. `handleModeToggle` checks only
+  `savingRef`. Same class as the rule-delete ✕ double-click cascade already on `deferred-work.md`
+  (Story 4.26's target). Options: **(a)** accept and record beside the 4.26 entry (a double-click
+  on a toggle-shaped button is unusual, and Lab is one click away from Run again); **(b)** ignore
+  `click` with `event.detail > 1` on `ModeButton` — touches 3.11's toggle, one line, and needs a
+  test in `BattleHeader.test.tsx`; **(c)** reposition Exit (left side of the overlay) so nothing
+  interactive remounts beneath it — a mockup deviation on top of FD4's. Not patched: (b) and (c)
+  both reach a surface the story did not own, and the fix shape is the owner's.
+  [`FullscreenStage.tsx` `ExitButton`; `BattleHeader.tsx` `ModeToggle`]
+- [x] [Review][Patch] `GridContainer`'s fullscreen comment states a 544px-tall dish; the measured
+  value (Dev Agent Record, `deferred-work.md`, and re-measured here) is 553px
+  [`apps/web/components/battle/simulation/BattleSimulationView.tsx` `GridContainer`] — applied.
+- [x] [Review][Patch] The Lab-round-trip test's comment claims "the rule is still exercised
+  through `handleModeToggle`"; by then `fullscreen` is already `false` (Exit cleared it), so that
+  clear is a no-op in the test and both AC2 clears are defensive-only today (the header is
+  unmounted while the stage is up; the in-render adjust needs a roster that goes dangling under a
+  mounted page, Stories 4.24/4.25). Comment rewritten to what the test proves; the guards stay
+  (AC2 mandates them) [`apps/web/components/battle/BattlePage.test.tsx` "re-enters Run in the
+  chassis"] — applied.
+- [x] [Review][Patch] The restore effect's comment says "under `<StrictMode>` the effect
+  double-runs and the ref is cleared on the first pass" — StrictMode double-invokes effects on
+  MOUNT only, where `inFullscreen` is `false` and the ref is `false`; a dependency change runs
+  once. Sentence rewritten [`apps/web/components/battle/BattlePage.tsx` restore effect] — applied.
+- [x] [Review][Patch] `onEnterFullscreen`'s JSDoc omits that the button lives inside the toggle's
+  `<Actions>` cluster, so `mode` + `onModeToggle` are preconditions too (Run mode + the handler
+  WITHOUT `onModeToggle` renders nothing). Documented [`apps/web/components/battle/BattleHeader.tsx`
+  props] — applied.
+- [x] [Review][Patch] `<PopulationPills>`'s head comment claims each `<li>`'s "accessible name" is
+  `${name} ${count}`; `listitem` is not a name-from-content role (its own test says so). Reworded
+  to what assistive technology reads [`apps/web/components/battle/simulation/PopulationPills.tsx`]
+  — applied.
+- [x] [Review][Patch] The shared `Skull` glyph carried `<PopulationStats>`'s `marginLeft: 5px`, so
+  the HUD skull sat 11px off its count (5px + the pill's 6px `gap`). Margin moved to the row host
+  (`RowSkull = styled(Skull)` in `PopulationStats.tsx`), the glyph is spacing-free
+  [`apps/web/components/battle/simulation/populationGlyphs.tsx`, `PopulationStats.tsx`] — applied.
+- [x] [Review][Patch] `Pills` never wraps: past ~20 organisms at 1280px the pill row exceeds the
+  panel's `94vw`, the centred `HudRow` overflows both edges, and the leftmost pills are clipped
+  off-viewport with no scroll (the stage root is `position: fixed`). `flexWrap: 'wrap'` +
+  `justifyContent: 'center'` on `Pills` — the panel's own overflow policy, extended to the pills
+  [`apps/web/components/battle/simulation/PopulationPills.tsx` `Pills`] — applied.
+- [x] [Review][Patch] `simulation/README.md` says 4.15 is "the third consumer of all three"; the
+  pills have ONE consumer today (`deferred-work.md` has it right: "second of the pills"); and the
+  3-18 deferred section says "diverges in five places" over four numbered items. Both reworded
+  [`apps/web/components/battle/simulation/README.md`, `docs/implementation-artifacts/deferred-work.md`]
+  — applied.
+- [x] [Review][Defer] The in-render roster adjust exits fullscreen without a focus restore: it
+  clears the cell without setting `restoreFullscreenEntryFocusRef`, and `[data-enter-fullscreen]`
+  does not exist in Lab anyway, so the stage's Exit button unmounts and focus lands on `<body>`
+  [`apps/web/components/battle/BattlePage.tsx` in-render adjust] — deferred: unreachable until a
+  library change can land under a mounted page (Stories 4.24/4.25, the case the adjust was written
+  for); recorded in `deferred-work.md` for that owner.
+- [x] [Review][Defer] A held `Enter` auto-repeats `click` on every `keydown`, and each commit moves
+  focus to the counterpart control (Exit on entry, Fullscreen on exit), so the stage toggles at
+  key-repeat rate, each cycle driving a `renderer.resize` repaint; no `event.repeat` guard
+  [`BattleHeader.tsx` `FullscreenButton`, `FullscreenStage.tsx` Exit] — deferred: a property of
+  every focus-handoff pair in the app, harmless to the run (the loop is untouched), and a guard is
+  a route-wide keyboard policy (Story 6.11's sweep), not this story's; recorded in
+  `deferred-work.md`.
+- [x] [Review][Defer] No floor on the fullscreen dish height: the title row and HUD take height
+  first and the height-driven box gets the remainder, so a short viewport (or a HUD that wraps to
+  several lines with a wide roster) shrinks the dish toward 0px; `applyDevicePixelSizing`'s
+  `clientHeight || authoredHeight` fallback keeps it from crashing
+  [`apps/web/components/battle/simulation/BattleSimulationView.tsx` `GridContainer` /
+  `PetriDishBox`] — deferred: both supported tiers (NFR-3.1, ≥1024 wide; measured 1280×720 and
+  1194×834) are fine; a `minHeight` or a scrolling stage column is a design value for the mockup
+  refresh; recorded in `deferred-work.md`.
 
 ## Dev Notes
 
@@ -1021,6 +1120,9 @@ Modified:
   `fullscreen` cell with focus restore, the CSS-driven no-remount layout swap in the Run view,
   `<FullscreenStage>` with `<TransportControls>` / `<CycleDigits>` / `<PopulationPills>` lifted
   out as shared Run pieces, `<VisuallyHidden>` promoted; 38 new unit tests, 5 e2e; bundle green.
+- 2026-09-17 — Code review (in-progress): 8 patches applied (comment accuracy ×5, the shared
+  skull's host margin, wrapping pills, doc wording), 3 deferred to `deferred-work.md`, 2 decisions
+  left open for the owner (fullscreen during the Run chunk fetch; the Exit/Lab double-click).
 
 Dev Model: opus   # architecture-shaping: it decides where `fullscreen` lives (BattlePage, against spec §6), establishes the CSS-driven no-remount layout-swap pattern that 3.19's F key toggles and that React reconciliation can silently break, and factors <TransportControls>/<CycleDigits>/<PopulationPills> out of 3.12/3.14's files as the pieces 4.15 builds on
 Proposed lane gate: { story: 4-15-preview-simulation, requires: 3-18-fullscreen-run-stage, why: "3.18 lifts the transport trio out of <SimulationControlBar> (<TransportControls>), the zero-padded digits out of <CycleCounter> (<CycleDigits>) and ships <PopulationPills> as the compact population sibling — the preview panel (spec §8 / §3.12: SpeedControl + compact PopulationStats + cycle counter + Play/Stop/Step) is the third consumer of all three and must reuse them rather than re-author or edit the same simulation/ files concurrently" }

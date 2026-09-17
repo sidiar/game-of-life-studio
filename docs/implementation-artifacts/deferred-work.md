@@ -1560,8 +1560,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 ## Deferred from: Story 3-18-fullscreen-run-stage implementation (2026-09-17)
 
 - **`component-tree-battle-page.md` amendment candidates** (planning artifact, not edited — the
-  3-11 section's precedent). What shipped diverges from the spec in five places, each a forced
-  decision recorded in the story's Dev Agent Record:
+  3-11 section's precedent). What shipped diverges from the spec in four places (five spec
+  sections), each a forced decision recorded in the story's Dev Agent Record:
   1. **§3.11 props** gain `fullscreen: boolean`, `onExitFullscreen(): void`, `battleTitle: string`
      (also item 9 of the 3-11 list above). **§6's owner row for `fullscreen` → `<BattlePage>`**,
      not `<BattleSimulationView>` (FD1 (a)): the entry control is `<BattleHeader>`'s (§3.2), the
@@ -1629,3 +1629,38 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   control survives the exit. Neither can observe the transient `<body>` focus between the two
   commits (the 3.17 review's "cannot observe a transient mount" lesson) — that window is one
   commit long and is what the effect exists to close.
+
+## Deferred from: code review of 3-18-fullscreen-run-stage (2026-09-17)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+Two `decision-needed` items are open in the story file's Review Findings (fullscreen entered
+while the Run chunk is still fetching; a double-click on Exit landing on the remounted `Lab`
+button) — they are the owner's, not recorded here. The items consciously deferred:
+
+- **The in-render roster adjust exits fullscreen without a focus restore.** `if (mode === 'run' &&
+  runOrganisms === null) { setMode('lab'); setFullscreen(false); }` clears the cell without setting
+  `restoreFullscreenEntryFocusRef`, and `[data-enter-fullscreen]` is not rendered in Lab anyway, so
+  the stage's Exit button (which holds focus via its mount effect) unmounts with the view and focus
+  lands on `<body>`. Unreachable today: the roster can only go dangling under a MOUNTED page once a
+  library change can happen beneath it — the 3-11 review's Stories 4.24/4.25 case this adjust was
+  written for. **Owner: whichever of 4.24/4.25 first makes the adjust reachable** — in that branch
+  also set a restore flag whose target is the Mode group's `Lab` button (a `data-*` handle on
+  `ModeButton`) rather than the fullscreen entry.
+- **A held `Enter` toggles the stage at key-repeat rate.** `Enter` dispatches `click` on every
+  auto-repeated `keydown`, and each commit programmatically moves focus to the counterpart control
+  (Exit on entry, the Fullscreen button on exit), so a held key ping-pongs the stage, each cycle
+  driving `PlaybackDish`'s observer → `renderer.resize` → a repaint of `lastGrid`. `Space` is safe
+  (it clicks on `keyup`). Harmless to the run — the loop is untouched (Decision D) — and a
+  property of every focus-handoff pair in the app, so an `event.repeat` guard is a route-wide
+  keyboard policy: **Story 6.11's sweep**, or 3.19 if it wants the `F` toggle to carry the same
+  guard from day one.
+- **No floor on the fullscreen dish height.** The title row and HUD are in flow and take height
+  first; `GridContainer` (`flex: 1; minHeight: 0`) hands the remainder to the height-driven
+  `PetriDishBox`, with no minimum. On a short viewport — or once the HUD wraps to several lines
+  with a wide roster (the pills wrap since this review) — the dish shrinks toward 0px;
+  `applyDevicePixelSizing`'s `clientHeight || authoredHeight` fallback keeps the canvas from
+  crashing but leaves it painted inside an invisible box. Both supported tiers are fine (NFR-3.1
+  is ≥1024 wide; measured 924×553 at 1280×720 and 1114×667 at 1194×834). A `minHeight` on the
+  container (e.g. `min(200px, 40vh)`) or a scrolling stage column is a design value: **the mockup
+  refresh** (this story's candidate 3 above), or the first story that adds a supported tier below
+  720px tall.

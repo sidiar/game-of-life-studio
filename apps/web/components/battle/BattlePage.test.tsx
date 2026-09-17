@@ -3185,9 +3185,12 @@ describe('BattlePage — Fullscreen run stage (Story 3.18)', () => {
     expect(fullscreenButton()).toHaveFocus();
   });
 
-  // AC2 (b), trap 16: a mode flip clears the cell. Enter fullscreen, exit, go to Lab, come back to
-  // Run → the chassis, not the stage. (The header is unmounted in fullscreen, so Lab is reachable
-  // only after Exit; the rule is still exercised through `handleModeToggle`.)
+  // AC2 (b), trap 16: enter fullscreen, exit, go to Lab, come back to Run → the chassis, not the
+  // stage. What this proves is the round trip's settled state; it does NOT exercise
+  // `handleModeToggle`'s own `setFullscreen(false)` — by the time Lab is clickable the header has
+  // remounted, which only happens after Exit has already cleared the cell, so that clear (and the
+  // in-render adjust's) is defensive today: no UI path reaches a mode change while the stage is
+  // up. The guards stay because AC2 mandates them for every writer that takes `mode` off `'run'`.
   it('re-enters Run in the chassis, never straight into fullscreen, after a Lab round trip', async () => {
     const user = userEvent.setup();
     const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);

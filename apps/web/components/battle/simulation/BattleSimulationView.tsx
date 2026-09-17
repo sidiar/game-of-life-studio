@@ -177,7 +177,7 @@ const SimulationMain = styled('div')({
 // Fullscreen (3.18): a tighter gutter — the mockup's dish is `min(94vw, 138vh)`, i.e. nearly
 // edge to edge; the title row and HUD above and below are in flow (FD4), so this padding is the
 // only margin the dish gets, and the vertical half is what the height-bound layout trades against
-// dish size (measured at 1280×720: 12px here + the stage's own row paddings give a 544px-tall
+// dish size (measured at 1280×720: 12px here + the stage's own row paddings give a 553px-tall
 // dish against the chassis's 517px; the mockup-faithful 20px/18px/40px set gave 501px — smaller
 // than the chassis, which is the one thing the AC forbids).
 const GridContainer = styled('div')({

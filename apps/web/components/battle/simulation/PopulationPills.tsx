@@ -29,18 +29,28 @@ import { Skull, Swatch } from './populationGlyphs';
  *
  * The organism NAME is present for assistive technology only, through `<VisuallyHidden>` — the
  * visible pill is swatch + count (the mockup), but a count with no subject is meaningless when
- * read aloud, so each `<li>`'s accessible name is `${name} ${count}` (+ `extinct`).
+ * read aloud, so what a screen reader reads for each `<li>` is `${name} ${count}` (+ `extinct`).
+ * That is the item's TEXT, not an accessible NAME: `listitem` is not a name-from-content role, so
+ * the `<li>` has none (its test asserts the text, the un-hidden name span and the named `img`).
  *
  * Empty roster → nothing: the HUD omits the group entirely, and the sidebar's "No organisms in
  * this battle" copy stays the sidebar's.
  */
 
-// Mockup: `.hud-pop` (petri-dish-play-mode-fullscreen.html:189-191) — the pills as a row.
+// Mockup: `.hud-pop` (petri-dish-play-mode-fullscreen.html:189-191) — the pills as a row, plus
+// `flexWrap` the mockup does not have: the HUD panel wraps its GROUPS at `94vw`, but this list is
+// one group whose min-content width is the whole unwrapped row, so past ~20 organisms at 1280px
+// the panel overflowed the fixed stage and the leftmost pills were clipped off-viewport with no
+// scroll (the roster cap is 255). Wrapping is the panel's own overflow policy, applied one level
+// down; the HUD grows and the height-driven dish gives up the difference (`deferred-work.md`,
+// 3-18 review: no floor on the dish height).
 const Pills = styled('ul')({
   listStyle: 'none',
   margin: 0,
   padding: 0,
   display: 'flex',
+  flexWrap: 'wrap',
+  justifyContent: 'center',
   alignItems: 'center',
   gap: '14px',
 });

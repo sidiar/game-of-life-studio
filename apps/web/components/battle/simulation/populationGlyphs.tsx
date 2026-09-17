@@ -25,10 +25,11 @@ export const Swatch = styled('span')({
   border: '1px solid',
 });
 
-// Mockup: `.pop-extinct-indicator` (petri-dish-play-mode.html:398-401). Rendered with
-// `role="img" aria-label="extinct"` at the call site — the third extinction channel, and the
-// one assistive technology hears.
+// Mockup: `.pop-extinct-indicator` (petri-dish-play-mode.html:398-401), minus its `margin-left`:
+// spacing is the HOST's (the sidebar row adds the mockup's 5px through `styled(Skull)`; the HUD
+// pill spaces by its own `gap`) — a shared glyph that ships one host's margin doubles up in the
+// other. Rendered with `role="img" aria-label="extinct"` at the call site — the third extinction
+// channel, and the one assistive technology hears.
 export const Skull = styled('span')({
   fontSize: '14px',
-  marginLeft: '5px',
 });

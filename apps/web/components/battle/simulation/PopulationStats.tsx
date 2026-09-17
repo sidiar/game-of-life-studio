@@ -80,6 +80,12 @@ const Name = styled('span')({
   },
 });
 
+// Mockup: `.pop-extinct-indicator`'s `margin-left: 5px` (:398-401) — the ROW's spacing, kept here
+// rather than on the shared glyph (`populationGlyphs.tsx`), whose other host spaces by `gap`.
+const RowSkull = styled(Skull)({
+  marginLeft: '5px',
+});
+
 // Always text-secondary (the mockup's `.pop-count`), living or extinct — the extinct step is
 // `Name`'s alone, so this carries no `data-extinct`.
 const Count = styled('span')({
@@ -158,9 +164,9 @@ export default function PopulationStats({ entries, totalLiving }: PopulationStat
                     />
                     <span>{entry.name}</span>
                     {entry.extinct && (
-                      <Skull role="img" aria-label="extinct">
+                      <RowSkull role="img" aria-label="extinct">
                         ☠
-                      </Skull>
+                      </RowSkull>
                     )}
                   </Name>
                   <Count>
