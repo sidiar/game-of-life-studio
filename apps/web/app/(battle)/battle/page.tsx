@@ -3,6 +3,7 @@
 import { Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import BattlePage, { BattleLoading } from '@/components/battle/BattlePage';
+import { BATTLE_MODE_PARAM, initialModeFromParam } from '@/lib/battle/battleRoute';
 import { createRepositories } from '@/lib/repositoryFactory';
 
 // Architecture Decision K: the battle route is a STATIC `/battle` page that reads the id from
@@ -11,6 +12,10 @@ import { createRepositories } from '@/lib/repositoryFactory';
 // minted in the user's browser, so there is nothing to enumerate at build time in this or any
 // future story. Decision K.5 makes that a standing rule: every route must be statically
 // prerenderable, and entity ids ride as query parameters, never as dynamic segments.
+//
+// Story 3.17 (FR-7.6) rides the SAME rule for a second, optional param: `?mode=run` is the
+// Gallery's Run entry hint, read beside `id` and handed down as `initialMode` — an ENTRY value
+// `<BattlePage>` seeds its mode state from once (RFC-005 Decision 3), never a synchronised route.
 //
 // ⚠️ useSearchParams() must sit under a <Suspense> boundary or the export build fails with
 // `missing-suspense-with-csr-bailout` — a failure `next dev` never shows. The reader is therefore
@@ -21,10 +26,14 @@ function BattleQueryRoute() {
   // never at module scope, never inside <BattlePage>, never through a Context. Constructing
   // repositories touches no storage, so this is safe on a statically exported route.
   const repositories = useMemo(() => createRepositories(), []);
+  // Both values come from the SAME `params` read, in the SAME render (deferred-work.md's two-phase
+  // useSearchParams entry now covers `mode` too — no special handling, see battleRoute.ts).
   // A missing or empty ?id= yields '' — <BattlePage> renders that as not-found, not as a crash.
-  const battleId = useSearchParams().get('id') ?? '';
+  const params = useSearchParams();
+  const battleId = params.get('id') ?? '';
+  const initialMode = initialModeFromParam(params.get(BATTLE_MODE_PARAM));
 
-  return <BattlePage repositories={repositories} battleId={battleId} />;
+  return <BattlePage repositories={repositories} battleId={battleId} initialMode={initialMode} />;
 }
 
 export default function BattleRoute() {

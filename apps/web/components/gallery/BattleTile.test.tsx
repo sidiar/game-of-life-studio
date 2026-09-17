@@ -131,19 +131,77 @@ describe('BattleTile', () => {
   // ⚠️ The delete <button> must NOT be inside the anchor. Nested interactive content is invalid
   // HTML that browsers reparse silently, and the visible symptom is that Delete navigates instead
   // of deleting — which the click test below would still pass, because the handler does fire.
-  // Asserted structurally.
+  // Asserted structurally. Story 3.17 (Trap 1): this test used to count 5 Tabs to Delete; it is 6
+  // now that Run sits between the dots and Delete — a Run placed AFTER Delete (FD5 (b)) would
+  // redden this by landing the 5th Tab on Delete instead.
   it('keeps the delete button outside the title link, and independently focusable', async () => {
     const user = userEvent.setup();
     render(<BattleTile {...BASE_PROPS} />);
 
     const link = screen.getByRole('link', { name: 'Three-Way Skirmish' });
+    const runLink = screen.getByRole('link', { name: 'Run Three-Way Skirmish' });
     const deleteButton = screen.getByRole('button', { name: 'Delete Three-Way Skirmish' });
     expect(link).not.toContainElement(deleteButton);
+    expect(link).not.toContainElement(runLink);
 
-    // Title link, then the three organism dots, then Delete — a destructive action reads
-    // naturally as the tile's LAST tab stop (Story 1.13's DOM-last placement, unchanged here).
+    // Title link, then the three organism dots, then Run, then Delete — a destructive action
+    // reads naturally as the tile's LAST tab stop (Story 1.13's DOM-last placement, unchanged
+    // here; Story 3.17, FD5, inserts Run before it). 5 Tabs to Run, 6 to Delete.
     for (let i = 0; i < 5; i += 1) await user.tab();
+    expect(runLink).toHaveFocus();
+    await user.tab();
     expect(deleteButton).toHaveFocus();
+  });
+
+  // AC3: the tile builds BOTH hrefs through the one shared contract module, so the tile and the
+  // route can never disagree on the param's spelling.
+  it('links Run to the battle route with the mode=run entry hint (AC3)', () => {
+    render(<BattleTile {...BASE_PROPS} />);
+
+    expect(screen.getByRole('link', { name: 'Run Three-Way Skirmish' })).toHaveAttribute(
+      'href',
+      `/battle?id=${BASE_PROPS.battleId}&mode=run`,
+    );
+  });
+
+  // Two links per tile (title, Run), one button (Delete) — AC1's own observable shape.
+  it('renders exactly two links and one button', () => {
+    render(<BattleTile {...BASE_PROPS} />);
+    expect(screen.getAllByRole('link')).toHaveLength(2);
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  // Trap 5: the Run link's accessible name must never collide with the title's, including for the
+  // untitled fallback (the same shape the Delete distinct-names test below proves).
+  it('gives two tiles with different names distinct Run-link accessible names', () => {
+    render(
+      <>
+        <BattleTile {...BASE_PROPS} name="Triple Threat" />
+        <BattleTile {...BASE_PROPS} name="Grand Colony War" />
+      </>,
+    );
+
+    const names = screen
+      .getAllByRole('link', { name: /^Run / })
+      .map((link) => link.getAttribute('aria-label'));
+
+    expect(names).toEqual(['Run Triple Threat', 'Run Grand Colony War']);
+    expect(new Set(names).size).toBe(2);
+  });
+
+  it('falls back to "Run Untitled Battle" for a blank name, the same fallback Delete uses', () => {
+    render(<BattleTile {...BASE_PROPS} name="   " />);
+    expect(screen.getByRole('link', { name: 'Run Untitled Battle' })).toBeInTheDocument();
+  });
+
+  // FD4: the glyph is aria-hidden so it never doubles the link's accessible name; the mirror of
+  // the Delete glyph assertion below. Run is an <a>, so the existing button-scoped selector still
+  // resolves to exactly one element (Delete's).
+  it('renders the ▶ glyph as aria-hidden on the Run link', () => {
+    const { container } = render(<BattleTile {...BASE_PROPS} />);
+    const glyph = container.querySelector('[data-tile-actions] a span[aria-hidden="true"]');
+    expect(glyph).not.toBeNull();
+    expect(glyph).toHaveTextContent('▶');
   });
 
   // MUI's Tooltip only mounts its content (role="tooltip", via a Popper portal) while open — no

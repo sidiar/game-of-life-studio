@@ -132,32 +132,37 @@ test.describe('battle gallery (Story 1.10)', () => {
   // an overlap assertion there passes no matter what the CSS says. Asserted as a geometric
   // non-intersection rather than by reading paddingRight back: the padding is the current fix, not
   // the requirement, and a test that restates the implementation cannot fail when the two diverge.
-  test('a long battle name never runs underneath the delete button', async ({ page }) => {
+  //
+  // Story 3.17 (Trap 3): the band now holds TWO controls (Run, Delete), 34px further left than the
+  // single-button band this test used to measure against. Measuring against Delete alone would
+  // pass on a name that clears Delete but runs under Run — so this measures the BAND
+  // (`[data-tile-actions]`) as a whole, not either control inside it.
+  test('a long battle name never runs underneath the action band', async ({ page }) => {
     await seedWorkspace(page, { longName: true });
     await page.goto('/');
 
     const tile = page.getByRole('article').first();
     await expect(tile.getByRole('heading', { level: 2 })).toHaveText(LONG_BATTLE_NAME);
 
-    // Hover to reveal the button. It is in the DOM and hit-testable at opacity 0 regardless, and
+    // Hover to reveal the band. It is in the DOM and hit-testable at opacity 0 regardless, and
     // permanently visible under `@media (hover: none)` — the overlap is not hover-gated, so this
     // only makes the measured state the one a mouse user actually sees.
     await tile.hover();
-    const button = tile.locator('[data-tile-actions] button');
-    await expect(button).toBeVisible();
+    const band = tile.locator('[data-tile-actions]');
+    await expect(band).toBeVisible();
 
     const titleBox = await tile.getByRole('heading', { level: 2 }).boundingBox();
-    const buttonBox = await button.boundingBox();
-    if (titleBox === null || buttonBox === null) {
-      throw new Error('Expected both the heading and the delete button to have a layout box.');
+    const bandBox = await band.boundingBox();
+    if (titleBox === null || bandBox === null) {
+      throw new Error('Expected both the heading and the action band to have a layout box.');
     }
 
     // The heading's box is the full wrapped block, so a vertical-only clearance would be a false
-    // pass on a one-line title: assert horizontally instead — the title must END before the button
+    // pass on a one-line title: assert horizontally instead — the title must END before the BAND
     // BEGINS. Guard that the name really did wrap to more than one line, otherwise a short-name
     // regression would satisfy this without ever testing the crowded case.
     expect(titleBox.height).toBeGreaterThan(30);
-    expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(buttonBox.x);
+    expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(bandBox.x);
   });
 
   // Story 1.11 AC1: the one smoke check AR-42 allows — a distinct-colour count, never a pixel or
@@ -260,6 +265,11 @@ test.describe('battle gallery (Story 1.10)', () => {
     // smallest text in the tile (10px --gol-text-tertiary on --gol-bg-secondary) and therefore
     // the contrast pair most at risk, and a real browser is the only place axe can check it.
     await expect(page.getByRole('img', { name: /3 more organisms:/ })).toBeVisible();
+
+    // Story 3.17: hover a tile first so its action band (Run + Delete) sits at opacity: 1 for the
+    // scan. axe would evaluate the band's contrast either way (opacity does not exempt an element
+    // from color-contrast), but the scan should measure the state a mouse user actually sees.
+    await page.getByRole('article').first().hover();
 
     // Story 1.11 AC1/AC2: canvases on screen must not introduce a NEW axe violation (the
     // aria-hidden dish carries no accessible-name obligation of its own).

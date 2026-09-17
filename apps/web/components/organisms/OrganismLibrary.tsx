@@ -39,9 +39,9 @@ const HEADING_ID = 'organism-library-heading';
 // Mockup: .section-header/.section-title/.section-subtitle
 // (organism-library.html:88-102) — same shape as BattleGallery's own section header. Duplicated
 // rather than shared (FD9): lifting these into components/layout/SectionHeader.tsx is only worth
-// doing together with switching BattleGallery to import them too, which is Story 3.17's surface
-// (run-from-Gallery) in the parallel Epic 3 lane — do the lift in the first story after 3.17 that
-// touches both.
+// doing together with switching BattleGallery to import them too. Story 3.17 (run-from-Gallery,
+// the parallel Epic 3 lane) has landed and did not touch BattleGallery.tsx's header, so this is
+// still open — do the lift in the first story that touches both files (deferred-work.md).
 const SectionHeader = styled('div')({
   marginBottom: '35px',
 });
