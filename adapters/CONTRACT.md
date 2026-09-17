@@ -194,7 +194,7 @@ Each is a checklist. Your `## Create` / `## Implement` / `## Review` text is wha
 the subagent satisfy it; the orchestrator's own instructions cover the items marked ⟨O⟩,
 so you do not repeat them.
 
-### Create — spawned on `opus`, from `main`, tree clean
+### Create — spawned on `[models] create`, from `main`, tree clean
 
 - [ ] Writes `{story_file}` for **`{story_key}` by key — never auto-discovered.** With
       two lanes in progress, a tool left to "pick the next story" picks the other lane's.
@@ -230,7 +230,7 @@ so you do not repeat them.
       the reason. The orchestrator leaves the branch for the owner; it never resumes
       into one.
 
-### Review — spawned on the model the lookup pairs with `Dev Model:` (`sonnet → opus`, `opus → fable`; never the same), on the pushed branch
+### Review — spawned on the model `[models.review]` pairs with `Dev Model:` (never the same one), on the pushed branch
 
 - [ ] Reviews the diff `origin/main...HEAD` **against the story** — `{story_file}` is
       always passed, and the prompt says why: it is what makes the review able to say

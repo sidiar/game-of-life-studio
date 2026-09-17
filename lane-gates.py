@@ -15,6 +15,8 @@ orchestrator never has to read a table and reason about it:
                          names (`name = "x"` → adapters/x/adapter.md, shipped with the
                          skill; `dir = "d"` → <root>/d/adapter.md)
                          exit 2 — that file does not exist
+  reviewer DEV           exit 0 — prints the model [models.review] pairs with DEV, the
+                         model Step 2 ran on; exit 2 — no row for DEV
 
 Two more answer "is this the right working tree, and is it free?" — the questions that
 two lanes launched in the same checkout used to get wrong:
@@ -66,6 +68,8 @@ from datetime import datetime, timezone
 
 CONFIG_FILE = "implement-next-story.toml"
 ADAPTER_TABLE = "adapter"
+MODELS_TABLE = "models"
+MODEL_ROLES = ("create", "dev", "dev_escalated", "sync")
 
 # The skill's board format (adapters/CONTRACT.md §3) — BMad writes it natively.
 DEVELOPMENT_STATUS_KEY = "development_status"
@@ -99,6 +103,28 @@ def _validate_adapter_table(path: str, doc: dict) -> None:
         raise GateError(f"{path}: [{ADAPTER_TABLE}] {key} must be a string")
 
 
+def _validate_models_table(path: str, doc: dict) -> None:
+    """`[models]`: one alias per role, and `[models.review]` pairing every dev model with a
+    reviewer that is never itself — the never-same-model rule, checked here rather than by eye."""
+    models = doc.get(MODELS_TABLE)
+    if not isinstance(models, dict):
+        raise GateError(f"{path}: no [{MODELS_TABLE}] table — see implement-next-story.example.toml")
+    for role in MODEL_ROLES:
+        if not isinstance(models.get(role), str) or not models[role]:
+            raise GateError(f"{path}: [{MODELS_TABLE}] {role} must be a model alias")
+    review = models.get("review")
+    if not isinstance(review, dict) or not review:
+        raise GateError(f"{path}: [{MODELS_TABLE}.review] must pair every dev model with its reviewer")
+    for dev, rev in review.items():
+        if not isinstance(rev, str) or not rev:
+            raise GateError(f"{path}: [{MODELS_TABLE}.review] {dev} must be a model alias")
+        if rev == dev:
+            raise GateError(f"{path}: [{MODELS_TABLE}.review] {dev} = {rev!r} — a model may not review its own work")
+    for role in ("dev", "dev_escalated"):
+        if models[role] not in review:
+            raise GateError(f"{path}: [{MODELS_TABLE}.review] has no row for {role} = {models[role]!r}")
+
+
 def read_config(root: str, explicit: str | None) -> dict:
     """The whole parsed config doc, or {} when no config exists and none was named.
 
@@ -118,6 +144,7 @@ def read_config(root: str, explicit: str | None) -> dict:
     if not isinstance(paths, dict) or not all(isinstance(v, str) for v in paths.values()):
         raise GateError(f"{path}: `[paths]` must be a table of strings")
     _validate_adapter_table(path, doc)
+    _validate_models_table(path, doc)
     return doc
 
 
@@ -345,6 +372,20 @@ def cmd_adapter(args) -> int:
     return 0
 
 
+def cmd_reviewer(args) -> int:
+    doc = read_config(args.root, args.config)
+    if not doc:
+        path = args.config or os.path.join(args.root, CONFIG_FILE)
+        raise GateError(f"{path}: no such file — set [{MODELS_TABLE}] there, or pass --config")
+    review = doc[MODELS_TABLE]["review"]
+    if args.dev not in review:
+        print(f"ERROR: [{MODELS_TABLE}.review] has no row for {args.dev!r} — "
+              f"Step 2 ran on a model the config does not pair with a reviewer", file=sys.stderr)
+        return 2
+    print(review[args.dev])
+    return 0
+
+
 # ------------------------------------------------------------------ trees and locks
 
 def _git(root: str, *argv: str) -> str:
@@ -554,6 +595,8 @@ def main() -> int:
     p = sub.add_parser("analysed"); p.add_argument("--epic", type=int, required=True)
     sub.add_parser("list")
     sub.add_parser("adapter", help="resolve the adapter.md named in [adapter]")
+    p = sub.add_parser("reviewer", help="the model [models.review] pairs with the one Step 2 ran on")
+    p.add_argument("dev", help="the story's `Dev Model:` value")
     p = sub.add_parser("resolve", help="which lane this working tree serves")
     p.add_argument("--epic", type=int, help="the lane asked for; omitted = work it out from the tree and the board")
     p = sub.add_parser("lock", help="one-run-per-working-tree lock, kept in the git dir")
@@ -568,6 +611,8 @@ def main() -> int:
     try:
         if args.command == "adapter":
             return cmd_adapter(args)
+        if args.command == "reviewer":
+            return cmd_reviewer(args)
         if args.command == "resolve":
             return cmd_resolve(args)
         if args.command == "lock":

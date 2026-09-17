@@ -33,6 +33,7 @@ reads the same file, so nothing is declared twice.
 | `{gates_file}` | `lane-gates.yaml`, the cross-epic dependency gates — see *Dependency gates* |
 | `{epics_file}` | the epics file, read only when *Opening a lane* |
 | `[adapter]` | `name = "bmad"` (shipped: `{skill_dir}/adapters/<name>/adapter.md`) or `dir = "…"` (project-local, relative to the repo root) — exactly one |
+| `[models]` | which model alias plays which role — `{models.create}`, `{models.dev}`, `{models.dev_escalated}`, `{models.sync}` — and `[models.review]`, the reviewer for each dev model. See *Models* below |
 | `[[sync.rules]]` | the project's own conflict rules for *Step S* — not a path |
 
 No file, or a key missing → STOP before Step 0 and say which; do not guess a layout.
@@ -280,7 +281,7 @@ story branch, nothing implemented.
 First, `gh pr list --state open --head lane/{E}-gates`: an open PR means the analysis is
 done and waiting on the owner's merge → STOP (`noop: true` in a loop). Do not analyse twice.
 
-Otherwise spawn a subagent, `model: "opus"`, `subagent_type: "general-purpose"`, and tell it to:
+Otherwise spawn a subagent, `model: "{models.create}"`, `subagent_type: "general-purpose"`, and tell it to:
 
 1. Read both epics' stories in `{epics_file}` and every existing `analysed`/`gates`
    entry in `{gates_file}`.
@@ -300,13 +301,13 @@ on a branch `lane/{E}-gates`, opens a PR, and STOPs — the owner merges it like
 the first `--epic {E}` story run after that finds the pair analysed. If in a loop,
 `ScheduleWakeup` with `noop: true` until then.
 
-## Step 1 — Create the story (Opus)
+## Step 1 — Create the story (`{models.create}`)
 
 ```bash
 python3 {skill_dir}/story-run-stats.py mark step1
 ```
 
-Spawn a subagent: `model: "opus"`, `subagent_type: "general-purpose"`.
+Spawn a subagent: `model: "{models.create}"`, `subagent_type: "general-purpose"`.
 Do **not** use `fork` — it inherits context and ignores the model override.
 
 Its prompt is the *Subagent instructions* plus the adapter's `## Create` for
@@ -314,11 +315,12 @@ Its prompt is the *Subagent instructions* plus the adapter's `## Create` for
 model the dev step should use:
 
 ```
-Dev Model: sonnet   # one-line justification
+Dev Model: {models.dev}   # one-line justification
 ```
 
-Default `sonnet`. Choose `opus` only when the story is architecture-shaping — it
-picks a pattern that later stories build on, rather than following one that exists.
+Default `{models.dev}`. Choose `{models.dev_escalated}` only when the story is
+architecture-shaping — it picks a pattern that later stories build on, rather than
+following one that exists. No third value: the review table below has rows for these two.
 
 Also tell it: **if this story depends on, or reshapes a surface used by, a story in
 another in-progress epic** (`{status_file}` says which epics those are), end the story
@@ -375,32 +377,24 @@ python3 {skill_dir}/story-run-stats.py mark step3
 ```
 
 Re-read the `Dev Model:` line from the story file and spawn a fresh subagent on the
-model this table pairs it with — a lookup, never a fixed choice:
+model `[models.review]` pairs it with — a lookup, never a fixed choice:
 
-| Step 2 ran on | Step 3 reviews on |
-| --- | --- |
-| `sonnet` | `opus` |
-| `opus`   | `fable` |
+```bash
+python3 {skill_dir}/lane-gates.py reviewer {dev model}   # prints the reviewer
+```
 
-Never the same model twice. A model reviewing its own output re-runs the reasoning that
-produced the bug and agrees with itself; the split exists to break that. Escalating dev
-to Opus does **not** license an Opus review — it escalates the review too, to Fable. A
-story is on Opus because it is architecture-shaping, and that is the diff least worth
-handing to a weaker reviewer. State in the spawn prompt which model implemented the
-story and that this review is deliberately a different one, so the reviewer knows it is
-the second pair of eyes.
+Exit 2 means the story names a dev model the table has no row for → STOP; the owner
+fixes the table or the story line, not you. Repeat the pair out loud before spawning —
+*"Step 2 ran on X, so Step 3 spawns Y"* — and state in the spawn prompt which model
+implemented the story and that this review is deliberately a different one, so the
+reviewer knows it is the second pair of eyes.
 
-`fable` is reachable only through the `opus` row, so it never touches the default path —
-`sonnet` is the default, and Fable costs roughly double Opus per token (as of 2026-09)
-before its longer turns are counted. When it is the reviewer, keep your own framing shorter than
-for the others — the goal, the branch, and the two hard rules below — and leave the method
-to it. Fable loses quality under step-by-step prescription in a way Opus and Sonnet
-do not. The adapter's `## Review` is still appended whole: its halt answers are the
-tool's menu, not method, and dropping them here would drop them where a wrong menu
-choice costs most.
-
-Before spawning, assert the choice out loud: *"Step 2 ran on X, so Step 3 spawns Y."*
-If X and Y are the same, you have mis-derived it — stop and recompute.
+Never the same model twice — the script refuses a table that pairs a model with itself.
+A model reviewing its own output re-runs the reasoning that produced the bug and agrees
+with itself; the split exists to break that. Escalating dev does **not** license the
+escalated model to review — the table escalates the review too: a story is on the
+escalated model because it is architecture-shaping, and that is the diff least worth
+handing to a weaker reviewer. See *Models* for the shipped pairing and its reasons.
 
 **Driving a review tool with no human at the keyboard.** The prompt is the *Subagent
 instructions* plus the adapter's `## Review` for `{story_file}` — which, by contract,
@@ -523,7 +517,7 @@ both branches minted sequentially (a numbered register of spec resolutions, a mi
 sequence). So the PR that merges second must be re-tested against the merged state, and
 this is where that happens. The owner never resolves these conflicts by hand.
 
-Spawn a subagent, `model: "sonnet"`, `subagent_type: "general-purpose"`, and tell it to:
+Spawn a subagent, `model: "{models.sync}"`, `subagent_type: "general-purpose"`, and tell it to:
 
 1. `git fetch origin && git switch story/{story_key}` (create the local tracking branch if
    the worktree lacks it), then `git merge --no-ff origin/main` — a **merge commit**, never a
@@ -574,6 +568,28 @@ story run.
   cap.
 
 ---
+
+## Models — roles, not favourites
+
+`[models]` in the TOML says which Claude Code alias (`model:` on the `Agent` tool)
+plays which role: `create` (Step 1, Opening a lane — reads the plan, writes the spec),
+`dev` and `dev_escalated` (Step 2), `sync` (Step S), and `[models.review]`, the reviewer
+for each dev model. Aliases, not versions: `opus` is whichever Opus is current. What
+does go stale is the set of tiers and how they stand to each other — that is why the
+table is the project's, required, and not a default this skill ships. `lane-gates.py`
+checks it at every read: every role set, every dev model paired, no model paired with
+itself.
+
+**The shipped pairing** (`implement-next-story.example.toml`, as of 2026-09) is
+`sonnet → opus`, `opus → fable`. Fable is reachable only through the escalated row, so
+it never touches the default path — and it costs roughly double Opus per token before
+its longer turns are counted. What the example table cannot carry is craft: **when
+Fable reviews, keep your own framing short** — the goal, the branch, the two hard rules
+of Step 3 — and leave the method to it; it loses quality under step-by-step
+prescription in a way Opus and Sonnet do not. The adapter's `## Review` is still
+appended whole: its halt answers are the tool's menu, not method, and dropping them
+here would drop them where a wrong menu choice costs most. When the tiers change,
+this paragraph is the part to re-check by hand; the table is the part the project edits.
 
 ## Run stats
 

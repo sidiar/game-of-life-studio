@@ -101,6 +101,18 @@ class AdapterShapeTests(unittest.TestCase):
 
 # ------------------------------------------------------------------ read_config([adapter])
 
+MODELS = textwrap.dedent("""\
+    [models]
+    create = "opus"
+    dev = "sonnet"
+    dev_escalated = "opus"
+    sync = "sonnet"
+    [models.review]
+    sonnet = "opus"
+    opus = "fable"
+""")
+
+
 class ReadConfigAdapterTests(unittest.TestCase):
     """`read_config` validates `[adapter]` whenever a config file is actually read."""
 
@@ -187,7 +199,7 @@ class AdapterSubcommandTests(unittest.TestCase):
                     dir = "somewhere"
                     [paths]
                     status_file = "a"
-                """))
+                """) + MODELS)
             result = run_cli("--root", root, "--config", config, "adapter")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout.strip(), os.path.abspath(adapter_file))
@@ -201,11 +213,85 @@ class AdapterSubcommandTests(unittest.TestCase):
                     dir = "nowhere"
                     [paths]
                     status_file = "a"
-                """))
+                """) + MODELS)
             result = run_cli("--root", root, "--config", config, "adapter")
             self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
             expected_path = os.path.abspath(os.path.join(root, "nowhere", "adapter.md"))
             self.assertIn(expected_path, result.stderr)
+
+
+class ReadConfigModelsTests(unittest.TestCase):
+    """`[models]`: one alias per role, and a reviewer for every dev model that is never itself."""
+
+    def _write(self, text: str) -> str:
+        fh = tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False, dir=tempfile.mkdtemp())
+        fh.write(text)
+        fh.close()
+        self.addCleanup(os.unlink, fh.name)
+        return fh.name
+
+    HEAD = '[adapter]\nname = "bmad"\n[paths]\nstatus_file = "a"\n'
+
+    def _reject(self, models: str, *fragments: str) -> None:
+        path = self._write(self.HEAD + textwrap.dedent(models))
+        with self.assertRaises(lane_gates.GateError) as ctx:
+            lane_gates.read_config(os.path.dirname(path), path)
+        for fragment in (path, "[models") + fragments:
+            self.assertIn(fragment, str(ctx.exception))
+
+    def test_fixture_models_are_accepted(self):
+        doc = lane_gates.read_config(FIXTURES, None)
+        self.assertEqual(doc["models"]["review"], {"sonnet": "opus", "opus": "fable"})
+
+    def test_no_models_table_is_rejected(self):
+        self._reject("", "no [models] table")
+
+    def test_missing_role_is_rejected(self):
+        self._reject("""\
+            [models]
+            create = "opus"
+            dev = "sonnet"
+            sync = "sonnet"
+            [models.review]
+            sonnet = "opus"
+        """, "dev_escalated")
+
+    def test_self_review_is_rejected(self):
+        self._reject("""\
+            [models]
+            create = "opus"
+            dev = "sonnet"
+            dev_escalated = "opus"
+            sync = "sonnet"
+            [models.review]
+            sonnet = "sonnet"
+            opus = "fable"
+        """, "sonnet", "own work")
+
+    def test_dev_model_without_review_row_is_rejected(self):
+        self._reject("""\
+            [models]
+            create = "opus"
+            dev = "sonnet"
+            dev_escalated = "opus"
+            sync = "sonnet"
+            [models.review]
+            sonnet = "opus"
+        """, "no row for dev_escalated")
+
+
+class ReviewerSubcommandTests(unittest.TestCase):
+    def test_lookup_prints_the_paired_model(self):
+        for dev, expected in (("sonnet", "opus"), ("opus", "fable")):
+            with self.subTest(dev=dev):
+                result = run_cli("--root", FIXTURES, "reviewer", dev)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), expected)
+
+    def test_unknown_dev_model_exits_2(self):
+        result = run_cli("--root", FIXTURES, "reviewer", "haiku")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("haiku", result.stderr)
 
 
 if __name__ == "__main__":
