@@ -5,13 +5,14 @@ import { PALETTE } from '@/lib/palette/paletteRegistry';
 import { createNewOrganismDraft } from './organismDraft';
 
 describe('createNewOrganismDraft', () => {
-  it('seeds an empty name, NEW_ORGANISM_DOMINANCE, aging off and the M6 colour default for the given library', () => {
+  it('seeds an empty name, NEW_ORGANISM_DOMINANCE, aging off, the M6 colour default and no rules for the given library', () => {
     const usedColorTokens = [PALETTE[1].id, PALETTE[2].id];
     expect(createNewOrganismDraft(usedColorTokens)).toEqual({
       name: '',
       dominance: NEW_ORGANISM_DOMINANCE,
       agingEnabled: false,
       colorToken: defaultColorToken(usedColorTokens),
+      survivalRules: [],
     });
   });
 
@@ -28,5 +29,13 @@ describe('createNewOrganismDraft', () => {
     const second = createNewOrganismDraft([]);
     expect(first).not.toBe(second);
     expect(first).toEqual(second);
+  });
+
+  // Story 4.10: a shared empty array would make every rule mutation through one call's reference
+  // visible to the other — the same seed-diff reasoning the scalar fields already have.
+  it('returns distinct survivalRules arrays on every call', () => {
+    const first = createNewOrganismDraft([]);
+    const second = createNewOrganismDraft([]);
+    expect(first.survivalRules).not.toBe(second.survivalRules);
   });
 });

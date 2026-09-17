@@ -66,19 +66,58 @@ describe('OrganismEditorLayout', () => {
     expect(within(preview).queryByTestId('probe-rules')).toBeNull();
   });
 
-  // No placeholder, no "coming soon" (NFR-4.1): an omitted slot leaves the column at its heading
-  // pair and nothing else, so 4.5–4.15 each add content rather than replace a stand-in.
-  it('renders only the heading pair in a column whose slot is omitted', () => {
+  // No placeholder, no "coming soon" (NFR-4.1): an omitted slot leaves the column at its header
+  // row (heading pair, no action) and nothing else, so 4.5–4.15 each add content rather than
+  // replace a stand-in. Story 4.10 wraps the heading pair in a header row — this guard moves one
+  // level down rather than being forked per column.
+  it('renders only the header row in a column whose slot is omitted', () => {
     render(<OrganismEditorLayout />);
 
     for (const region of screen.getAllByRole('region')) {
       // `childNodes`, not `children`: a bare-string slot renders a text node, which `children`
       // (elements only) would not count — and a text-only "coming soon" is exactly the stand-in
       // this test exists to refuse.
-      expect(region.childNodes).toHaveLength(2);
-      expect(region.childNodes[0]?.nodeName).toBe('H3');
-      expect(region.childNodes[1]?.nodeName).toBe('P');
+      expect(region.childNodes).toHaveLength(1);
+      const header = region.childNodes[0];
+      expect(header?.nodeName).toBe('DIV');
+      const info = (header as HTMLElement).childNodes;
+      expect(info).toHaveLength(1);
+      expect(info[0]?.nodeName).toBe('DIV');
+      const headingPair = (info[0] as HTMLElement).childNodes;
+      expect(headingPair).toHaveLength(2);
+      expect(headingPair[0]?.nodeName).toBe('H3');
+      expect(headingPair[1]?.nodeName).toBe('P');
     }
+  });
+
+  // Story 4.10: the Rules header's action slot, rendered beside the heading pair — outside the
+  // `rules` slot, so the list and the empty state below never own the header.
+  it('renders rulesAction inside the Survival Rules header and nowhere else', () => {
+    render(<OrganismEditorLayout rulesAction={<button data-testid="probe-action" />} />);
+
+    const [basic, rules, preview] = screen.getAllByRole('region');
+    if (!basic || !rules || !preview) throw new Error('expected three regions');
+
+    const probe = within(rules).getByTestId('probe-action');
+    expect(probe).toBeInTheDocument();
+    const header = rules.childNodes[0] as HTMLElement;
+    expect(header.nodeName).toBe('DIV');
+    expect(probe.parentElement).toBe(header);
+    // A sibling AFTER the info div, not before it.
+    expect(header.childNodes[0]?.nodeName).toBe('DIV');
+    expect(header.childNodes[1]).toBe(probe);
+
+    expect(within(basic).queryByTestId('probe-action')).toBeNull();
+    expect(within(preview).queryByTestId('probe-action')).toBeNull();
+  });
+
+  it('renders exactly one child in the Rules header when rulesAction is omitted', () => {
+    render(<OrganismEditorLayout />);
+
+    const rules = screen.getAllByRole('region')[1];
+    if (!rules) throw new Error('expected the Rules region');
+    const header = rules.childNodes[0] as HTMLElement;
+    expect(header.childNodes).toHaveLength(1);
   });
 
   // The e2e viewports (1440 full, 1280/1194 compressed, 1000 fold) are chosen around these two

@@ -409,4 +409,90 @@ describe('OrganismEditorModal', () => {
     const results = await axe(document.body);
     expect(results.violations).toEqual([]);
   });
+
+  // Story 4.10.
+  it('opens in the empty state with the header action', () => {
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    expect(within(rules).getByText('No Rules Defined')).toBeInTheDocument();
+    const addButtons = within(rules).getAllByRole('button', { name: '+ Add Rule' });
+    expect(addButtons).toHaveLength(2);
+    expect(addButtons[0]).toHaveAttribute('data-add-rule', 'header');
+    expect(addButtons[1]).toHaveAttribute('data-add-rule', 'empty');
+    expect(within(rules).queryByRole('list')).not.toBeInTheDocument();
+
+    const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
+    const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+    expect(within(basic).queryByRole('button', { name: '+ Add Rule' })).toBeNull();
+    expect(within(preview).queryByRole('button', { name: '+ Add Rule' })).toBeNull();
+  });
+
+  it('the header action adds through the modal', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
+    const header = within(rules)
+      .getAllByRole('button', { name: '+ Add Rule' })
+      .find((b) => b.getAttribute('data-add-rule') === 'header');
+    if (!header) throw new Error('header add button not found');
+    await user.click(header);
+
+    const group = within(rules).getByRole('group', { name: 'Rule 1' });
+    expect(within(group).getByRole('textbox', { name: 'Summary' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(within(rules).getAllByRole('textbox')).toHaveLength(1);
+    expect(within(basic).getAllByRole('textbox')).toHaveLength(2);
+  });
+
+  it('the draft round-trips: add, edit and delete stay in one draft object', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    const headerAdd = within(rules)
+      .getAllByRole('button', { name: '+ Add Rule' })
+      .find((b) => b.getAttribute('data-add-rule') === 'header')!;
+
+    await user.click(headerAdd);
+    await user.click(headerAdd);
+
+    const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+    const rule2 = within(rules).getByRole('group', { name: 'Rule 2' });
+    await user.type(within(rule2).getByRole('textbox', { name: 'Summary' }), 'hello');
+    await user.selectOptions(within(rule1).getByRole('combobox', { name: 'Action' }), 'die');
+
+    expect(within(rule1).getByRole('combobox', { name: 'Action' })).toHaveValue('die');
+    expect(within(rule2).getByRole('textbox', { name: 'Summary' })).toHaveValue('hello');
+    expect(within(rule2).getByRole('combobox', { name: 'Action' })).toHaveValue('born');
+
+    await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+
+    const survivor = within(rules).getByRole('group', { name: 'Rule 1' });
+    expect(within(survivor).getByRole('textbox', { name: 'Summary' })).toHaveValue('hello');
+    expect(within(survivor).getByRole('combobox', { name: 'Action' })).toHaveValue('born');
+  });
+
+  it('has no axe violations after two adds and one action change', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    const headerAdd = within(rules)
+      .getAllByRole('button', { name: '+ Add Rule' })
+      .find((b) => b.getAttribute('data-add-rule') === 'header')!;
+    await user.click(headerAdd);
+    await user.click(headerAdd);
+    const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+    await user.selectOptions(within(rule1).getByRole('combobox', { name: 'Action' }), 'survive');
+
+    const results = await axe(document.body);
+    expect(results.violations).toEqual([]);
+  });
 });

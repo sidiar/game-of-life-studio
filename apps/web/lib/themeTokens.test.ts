@@ -64,7 +64,12 @@ describe('Clinical Lab token layer — WCAG AA (AC5)', () => {
   });
 
   describe('text pairs — SC 1.4.3, >= 4.5:1', () => {
-    const textTokens = ['text-primary', 'text-secondary', 'text-tertiary', 'accent'];
+    // 'rule-born' joins the loop (Story 4.10) — measured 14.50 / 12.75 / 11.65 on the three
+    // backgrounds, well above the 4.5 floor. Its two siblings, --gol-rule-survive and
+    // --gol-rule-die, are `var()` ALIASES the hex regex above cannot parse (they resolve to
+    // --gol-accent / --gol-danger, respectively) and are already gated through those targets —
+    // the same precedent --gol-action-active sets for an alias token.
+    const textTokens = ['text-primary', 'text-secondary', 'text-tertiary', 'accent', 'rule-born'];
 
     for (const text of textTokens) {
       for (const bg of BACKGROUNDS) {

@@ -39,6 +39,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
   - **The canonicalization is now pinned in the file's header comment and verified reproducible** (review 2026-08-05): `sha256hex(JSON.stringify(sortKeysDeep({ conditions, payload })))`, keys sorted deeply in `Array#sort` order, array order preserved, `id` excluded. Both shipped literals reproduce exactly under that scheme.
   - **Story 1.6 extends this set**: the 8 AR-45 mock-organism rules in `packages/test-utils/src/mockWorkspace.ts` (3 for Aggressive Colonizer, 3 for Patient Defender, 2 for Chaotic Spreader) are generated with the identical scheme and pasted the same way. Unlike Conway's, these are **not** a cross-install identity baseline — they carry no identity-pinning test, and regenerating them is harmless — but they must match the scheme anyway, giving Epic 4's real hasher a set of 10 rules total (2 Conway + 8 mock) to validate against instead of just 2.
   - **Confirmed at Story 3.4 (2026-09-09): the evaluator cache CONSUMES `contentHash` and neither generates nor parses one.** `compileEvaluators.ts`'s cache key is `JSON.stringify(rules.map(r => r.contentHash))` — no hashing, no prefix-matching (`sha256:` or otherwise), no content comparison, no parsing of any kind (AR-21). So this entry is untouched by Epic 3: the literals stay hand-generated, the identity-pinning assertions stay valid, and nothing in `packages/simulation` forks rule identity. **Still Epic 4's to pick up** (rule authoring / hash generation): the real hasher must either match this scheme byte-for-byte, or the affected literals get regenerated through it — Conway's Classic's *and* `defaultWorkspace.test.ts`'s identity-pinning assertions in the same change (mandatory); the Story 1.6 mock rules only if convenient, since nothing pins their identity. A silent mismatch on Conway's forks rule identity across every already-installed workspace — the pinning test exists to force that conversation rather than let it ship.
+  - **Story 4.10 mints rule `id`s only** (`crypto.randomUUID()`, matching the persisted format's shape) **and computes no `contentHash`** — `RuleDraft` (`lib/organisms/ruleDraft.ts`) omits the field entirely, so there is nothing here for a partial hasher to fork. This entry stays open for Story 4.16, which parses the draft into a persisted `SurvivalRule` and must implement the hasher against this exact scheme.
 
 - **`useWorkspaceSeed`'s error path discards the error object** — **still open.** The *user-facing surface* landed in Story 1.10 (2026-08-07) and that half is done, but the defect this entry is named for is not: `useWorkspaceSeed.ts` still throws the underlying `QuotaExceededError`/`CorruptDataError` away, so a quota failure terminates with zero diagnostic anywhere. Struck through and marked closed on 2026-08-07, which removed a live defect from every scan of open debt — reopened in the 2026-08-08 review. What shipped: `BattleGallery` now renders `<p role="alert">Something went wrong loading your battles.</p>` for both `seedStatus === 'error'` and a rejecting `list()` — the "somewhere meaningful to surface it" this entry was waiting for. Scope stayed deliberately narrow: no retry, no reset-offer, no storage diagnostics, and `useWorkspaceSeed.ts` itself still discards the underlying `QuotaExceededError`/`CorruptDataError` object rather than logging it (the e2e asserts zero console errors on the happy path, so any such logging would have to sit on the failure branch only). Story 5.11 owns the richer corruption/storage-failure UX and the diagnostic itself.
 
@@ -724,9 +725,10 @@ Review Findings; these are the items consciously left open.
 
 - **The rules-preview natural-language summary is not on the card** (FD1) — the mockup shows
   `Born: 3 neighbors | Survive: 2-3 neighbors`; the card ships a count only (`N rules`) because the
-  sentence needs a summariser over action/condition vocabulary that `Story 4.10` defines. Writing a
-  one-off version in `<OrganismCard>` would mean writing it twice. **Pick this up in Story 4.10**,
-  once the rule-summary vocabulary exists.
+  sentence needs a summariser over action/condition vocabulary. **Re-pointed (2026-09-17):** Story
+  4.10 defines the ACTION half of that vocabulary (`ruleActionLabel`) but builds no condition
+  vocabulary — conditions are Story 4.11's, and the sentence needs both halves. **Pick this up in
+  Story 4.11**, once the condition vocabulary exists too.
 - **The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
   `tabIndex={0}` because it has no inner control to be the keyboard stop instead (organism cards
   open a modal in `Story 4.17`, which does not exist yet). Once Edit lands inside the card, a stop
@@ -746,8 +748,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   semantic association** — a screen reader gets "Dominance", "50", "Aging", "No" as four unrelated
   strings; a `<dl>`/`<dt>`/`<dd>` (or `aria-labelledby` from value to label) would pair them. Not
   patched here because the mockup and Task 3 specify the div shape and the card's content is still
-  moving — `Story 4.10` adds the rules sentence and `Story 4.20` the usage line. **Pick this up
-  with whichever of those settles the card's stat block**, and decide the cell semantics once for
+  moving. **Re-pointed (2026-09-17):** Story 4.10 adds the rule CARDS inside the editor, not the
+  rules sentence on `<OrganismCard>` itself (that needs Story 4.11's condition vocabulary too —
+  see the entry above); the card's stat block is still unsettled. **Pick this up with whichever of
+  Story 4.11 / Story 4.20 settles the card's stat block**, and decide the cell semantics once for
   all three rows.
 
 ## Deferred from: Story 4-3-editor-modal-shell (2026-09-14)
@@ -951,11 +955,14 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   settle the exact-1400px boundary: the design doc's tiers read "Desktop (>1400px)" / "Tablet
   (1024px-1400px)" (1400 itself compressed), `epics.md:1037` reads "≥ 1400px" (1400 itself full);
   the code follows the AC (`max-width: 1399.98px`) and the e2e boundary test pins it that way.
-- **The `.rules-header` row** (`organism-editor.html:993-999`) puts "+ Add Rule" beside the
+- ~~**The `.rules-header` row** (`organism-editor.html:993-999`) puts "+ Add Rule" beside the
   Survival Rules title. `<OrganismEditorLayout>` renders the heading pair itself and exposes no
   header-action slot; Story 4.10 restructures the Rules column heading into that row and should add
   the slot then (a `rulesAction` prop, or the heading pair moving into the `rules` slot's content),
-  not before.
+  not before.~~ — **✅ Resolved in Story 4.10.** `<OrganismEditorLayout>` gains a `ColumnHeader` row
+  (all three columns, so the DOM shape stays identical across them) and a `rulesAction?: ReactNode`
+  slot rendered beside the heading pair; `<OrganismEditorModal>` fills it with the header
+  `<AddRuleButton>`.
 - **"Stay put" was read as *no shared scroll* (FD2).** Every column is its own `overflow-y: auto`
   container and the proven property is that scrolling the Rules column moves neither of the other
   two. If the UX intent was that Basic Information and Preview *never* scroll, the 4.5–4.9 content
@@ -1394,3 +1401,38 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   count, a `key` on the region) is a product call. **Pick this up with Story 4.17** (edit flow —
   the first place a user sees their own duplicate names beside each other) or whichever story
   next touches the sentence.
+
+## Deferred from: Story 4-10-rule-cards-empty-state (2026-09-17)
+
+- **The 2026-06-01 accordion revision is not followed** (FD1) — cards are always expanded, no
+  caret, no collapse, delete in the header. `ORGANISM-EDITOR-UPDATES.md:52-84` and the shipped
+  mockup collapse cards by default with the delete control in a footer; the AC / design doc's card
+  anatomy (drag handle, badge, label, delete in the header) is the story's authority instead — the
+  same fork Story 4.3 took for the header. The UX reconciliation touch Story 4.3 asked for should
+  now settle which card the mockup shows, since two stories have taken the AC over the revision.
+- **The drag handle ships `disabled`** (FD4) until Story 4.12 wires reordering — a visible
+  affordance with no behaviour, deliberately honest rather than absent because the AC lists it.
+- **The mockup's per-action description copy is not built** (FD7) — "Successful birth will depend
+  on organism dominance rules" and "cells that are alive and belong to the same organism" are
+  engine claims (Decision C, M10) that need verifying against `packages/simulation` before shipping
+  as help text. Story 4.11 (the condition builder, where cell-state semantics get explained) is the
+  home.
+- **The summary cap is silent to AT** — clamped like the battle name but without Story 2.13's
+  at-cap polite notice; the field is optional and the counter is `aria-describedby`-only. Story
+  6.11 may add the notice if the battle-name one proves its worth.
+- **UX-DR10's 100 vs RFC-004 §2.4's 120** (FD2) — the editor caps `MAX_RULE_SUMMARY_LENGTH` at 100,
+  the schema still accepts up to 120 for records that arrive by import/migration. The next RFC
+  touch should either lower the schema (a persisted-shape change, Story 5.7's) or raise UX-DR10.
+- **Two "+ Add Rule" controls share one accessible name in the empty state** (FD9) —
+  `<BattleGallery>`'s FD2 precedent had two labels from the specs; this one has one. A
+  screen-reader user hears the same button twice; if that is unwanted the empty-state CTA can take
+  "Add your first rule" instead (a copy decision).
+- **The badge's `2px` radius and the 5% tints are dropped** (FD3) — the mockup values become
+  `--gol-radius` (0) and no background. `--gol-danger` on a 5% danger tint measures 4.72:1, one
+  axe rounding from the floor, and the `rgba` literal is AR-46 territory anyway.
+- **The empty-state title is a `<p>`, not a heading** (FD5) — unlike the Gallery's `<h2>`, a
+  conditional `<h4>` under the column's own `<h3>` would appear and vanish with the list.
+- **Story 4.11 may widen `RuleDraft.conditions`** to a `ConditionDraft[]` for half-typed rows — the
+  type is `readonly Condition[]` today because nothing here edits them.
+- **Story 4.17 seeds `survivalRules` by stripping `contentHash`** from the record's rules — and
+  must not re-mint ids (identity is stable across edits, RFC-004 §2.4).
