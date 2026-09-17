@@ -2718,14 +2718,15 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     expect(view).toHaveAttribute('data-status', 'paused');
     expect(view).toHaveAttribute('data-cycle', '0');
     // The editor is GONE — its four sections and its status bar — not merely hidden. The Run
-    // sidebar now carries three h2s: Population Analysis, Cycle Count (Story 3.14) and Speed
-    // (Story 3.13); 3.16 raises this to four.
+    // sidebar now carries four h2s: Population Analysis, Cycle Count (Story 3.14), Speed
+    // (Story 3.13) and Grid Size (Story 3.16).
     const runHeadings = screen.queryAllByRole('heading', { level: 2 });
-    expect(runHeadings).toHaveLength(3);
+    expect(runHeadings).toHaveLength(4);
     expect(runHeadings.map((h) => h.textContent)).toEqual([
       'Population Analysis',
       'Cycle Count',
       'Speed',
+      'Grid Size',
     ]);
     // Exact name, not a substring: the mockup's "Speed Multiplier" (3.13 FD3 rejected it) would
     // pass a `toHaveTextContent('Speed')`.
@@ -2862,12 +2863,12 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     expect(results.violations).toEqual([]);
   });
 
-  // Story 3.12 Task 6, converted by 3.13: the Run chassis carries four buttons and now ONE slider
-  // (the Speed control). Written so 3.16's Grid Size slider and 3.18's fullscreen button fail this
-  // and get converted, the route's own convention (the Lab-mode counts above do the same). Scoped
+  // Story 3.12 Task 6, converted by 3.13 and again by 3.16: the Run chassis carries four buttons
+  // and now TWO sliders (Speed, Grid Size). Written so 3.18's fullscreen button fails this and
+  // gets converted, the route's own convention (the Lab-mode counts above do the same). Scoped
   // to the Run VIEW (`within`), not the whole page — the header's LAB/RUN toggle is a separate,
   // already-counted control (the Lab-mode test above), and this count is about the Run chassis.
-  it('Run mode has exactly four buttons (Back, Play, Next cycle, Stop & reset) and one slider (Story 3.13)', async () => {
+  it('Run mode has exactly four buttons (Back, Play, Next cycle, Stop & reset) and two sliders (Story 3.16)', async () => {
     const user = userEvent.setup();
     const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
@@ -2878,9 +2879,53 @@ describe('BattlePage — Lab⇄Run mode toggle (Story 3.11)', () => {
     for (const name of ['Back to Battles', 'Play', 'Next cycle', 'Stop & reset']) {
       expect(within(view).getByRole('button', { name })).toBeInTheDocument();
     }
-    expect(within(view).getAllByRole('slider')).toHaveLength(1);
+    expect(within(view).getAllByRole('slider')).toHaveLength(2);
     expect(
       within(view).getByRole('slider', { name: 'Generations per second' }),
     ).toBeInTheDocument();
+    expect(within(view).getByRole('slider', { name: 'Grid dimensions' })).toBeInTheDocument();
+  });
+
+  // The 2.14 `gridSizeFact` shape (`:2056-2061`), local to this describe — the Grid Info section's
+  // own reading of the EDITOR grid's dimensions, unaffected by whatever the Run session did.
+  function gridSizeFact(): string {
+    const group = within(screen.getByRole('complementary')).getByRole('group', {
+      name: /^Grid Size: /,
+    });
+    return group.getAttribute('aria-label') ?? '';
+  }
+
+  // AC6: the resize is ephemeral — nothing here writes to `initialGrid`, sets the dirty flag or
+  // touches a repository. Run -> resize -> Lab shows the PERSISTED size and no dirty indicator;
+  // Run again starts a fresh session at the persisted size (a Play resize never survives the
+  // round trip, unlike the undo ring / dirty flag / name AC9 pins above).
+  it('a Play-mode resize is ephemeral: Lab shows the persisted size, nothing dirty, and Run again starts fresh (AC6, Story 3.16)', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.click(runButton());
+    const view = await findRunView(container);
+    const gridSizeSlider = within(view).getByRole('slider', { name: 'Grid dimensions' });
+    // SKIRMISH (`MOCK_BATTLE_IDS.battleA`) is 50x30 — the ladder's index 0. The valuetext too:
+    // an off-ladder size also sits at thumb 0 (FD4), so `'0'` alone does not prove 50x30.
+    expect(gridSizeSlider).toHaveValue('0');
+    expect(gridSizeSlider).toHaveAttribute('aria-valuetext', '50 by 30 cells');
+
+    fireEvent.change(gridSizeSlider, { target: { value: '3' } }); // 200x120
+    expect(gridSizeSlider).toHaveValue('3');
+
+    await user.click(labButton());
+    await screen.findByRole('button', { name: 'Undo' });
+
+    expect(gridSizeFact()).toBe('Grid Size: 50 by 30');
+    expect(dirtyValue(container)).toBe('false');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+
+    await user.click(runButton());
+    const secondView = await findRunView(container);
+    const freshSlider = within(secondView).getByRole('slider', { name: 'Grid dimensions' });
+    expect(freshSlider).toHaveValue('0');
+    expect(freshSlider).toHaveAttribute('aria-valuetext', '50 by 30 cells');
   });
 });

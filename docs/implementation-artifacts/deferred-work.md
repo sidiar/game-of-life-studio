@@ -72,7 +72,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **`groupByColourState`'s per-frame allocation profile** — a `number[]` per group, plus `Array.from` + `sort` + an object spread on every call, in the function the 60 FPS budget ultimately rests on. Correctness is not in question and Epic 1 calls it once per tile; the concern is Epic 3's 60 Hz loop. Deliberately pre-emptive — **revisit with Story 3.7**, which owns `vitest bench` and the 100×60 performance gate and is the first place a number would justify a change. — **✅ CLOSED in Story 3.7: measured, no change needed.** At the NFR-1.1 baseline (100×60, 20 organisms, 20 distinct colour tokens, a grid stepped 50 cycles so the age ramp is live) the whole function costs **~0.07 ms** — ~0.4% of a 16.667 ms frame, against the ~5.5–5.7 ms the engine step next door spends after FD7 (figure re-taken by the story's code review on the corrected, non-collapsing repaint fixture; the 0.044–0.048 first recorded was measured on a dish that had collapsed to 7 organisms). The allocation profile this entry describes is real and is a rounding error at the scale that matters. `apps/web/lib/canvas/repaintDecision.bench.ts` keeps the number honest from here on; `docs/implementation-artifacts/performance-baseline-validation.md` carries the full table.
 
-- **`resize()` accepts NaN or fractional `cols`/`rows` unvalidated** — `resize({cols: NaN, rows: 60})` makes `drawWidth`/`originX` NaN, every rect draws at NaN, and the canvas goes blank with no error. Upstream the dimensions are schema-validated ({50×30, 100×60} only, Decision A), so this is only reachable through a caller bug, and there is no caller yet. ~~**Revisit with Story 2.14** (edit-mode grid resize), the first story to call `resize()` with a genuinely new size.~~ ⏸ **Re-deferred by Story 2.14 (2026-08-29), premise CORRECTED: 2.14 is NOT that story, and no such story exists yet.** A grid-dimension change does not reach `resize()` at all — `size` is one of `EditDish`'s three construction dependencies, so the construction effect tears the renderer down and builds a NEW one at the new size (`PetriDishCanvas.tsx`), which `PetriDishCanvas.test.tsx`'s "reconstructs the renderer ONCE and full-repaints ONCE" now asserts directly (`expect(resize).not.toHaveBeenCalled()`). The only `resize()` caller is still the `ResizeObserver` callback, which passes the CURRENT `size` unchanged for a canvas-box change — and its effect's deps are `[size]`, so the observer it registers always belongs to a renderer constructed at that same size. `resize()` therefore still has no new-size caller anywhere, and every value it receives is the schema-validated one the renderer was built with. **Pick this up in Story 3.16** (Play-mode ephemeral resize), whose {150×90, 200×120} expansion is the first design that might legitimately want a re-layout without a reconstruction — or sooner if any story adds a `resize()` call that changes `cols`/`rows`.
+- **`resize()` accepts NaN or fractional `cols`/`rows` unvalidated** — `resize({cols: NaN, rows: 60})` makes `drawWidth`/`originX` NaN, every rect draws at NaN, and the canvas goes blank with no error. Upstream the dimensions are schema-validated ({50×30, 100×60} only, Decision A), so this is only reachable through a caller bug, and there is no caller yet. ~~**Revisit with Story 2.14** (edit-mode grid resize), the first story to call `resize()` with a genuinely new size.~~ ⏸ **Re-deferred by Story 2.14 (2026-08-29), premise CORRECTED: 2.14 is NOT that story, and no such story exists yet.** A grid-dimension change does not reach `resize()` at all — `size` is one of `EditDish`'s three construction dependencies, so the construction effect tears the renderer down and builds a NEW one at the new size (`PetriDishCanvas.tsx`), which `PetriDishCanvas.test.tsx`'s "reconstructs the renderer ONCE and full-repaints ONCE" now asserts directly (`expect(resize).not.toHaveBeenCalled()`). The only `resize()` caller is still the `ResizeObserver` callback, which passes the CURRENT `size` unchanged for a canvas-box change — and its effect's deps are `[size]`, so the observer it registers always belongs to a renderer constructed at that same size. `resize()` therefore still has no new-size caller anywhere, and every value it receives is the schema-validated one the renderer was built with. **Pick this up in Story 3.16** (Play-mode ephemeral resize), whose {150×90, 200×120} expansion is the first design that might legitimately want a re-layout without a reconstruction — or sooner if any story adds a `resize()` call that changes `cols`/`rows`. **✅ Checked by Story 3.16 (2026-09-16), no code change.** `resizeLive`'s own `paintFull` (`useSimulation.ts:544-549`) IS the first production `resize()` call with a genuinely NEW size — it resizes the OLD renderer before the canvas rebuild attaches a new one (Trap 4 of the story: two `drawFull`s per resize, expected). Its only input is `GRID_PRESETS[index]` (`gridPresets.ts`), a typed, literal, `as const` tuple — there is no path from a slider `<input type="range" min=0 max=3 step=1>` to a NaN or fractional `cols`/`rows`, so no validation was added (`resizeLive`'s own head comment, `useSimulation.ts:108`, still says the control owns the ladder). Re-point to whichever story next adds a `resizeLive`/`resize` caller fed by something other than a literal preset tuple.
 
 - ~~**Warn-once dedupe is keyed on battle-relative ref numbers, so a second battle's distinct corruption is silently suppressed**~~ — **✅ Resolved in Story 1.11** (2026-08-08). `warnedOutOfRangeRefs` in `apps/web/lib/colourStateGroups.ts` is now a `WeakMap<RefToFillGroup, Set<number>>`, keyed per LUT rather than on the bare ref number — one LUT is built per battle (`battleThumbnail.ts`), so LUT identity is battle identity for this purpose, and Battle A's corrupt `ref 3` no longer suppresses Battle B's unrelated corrupt `ref 3` (`colourStateGroups.test.ts`: "warns twice when two different LUTs each carry the same out-of-range ref"). The WeakMap also retires the unbounded-growth half of this concern for free: an unreferenced LUT's warned-refs Set becomes collectible garbage with it. `resetColourStateWarnings()` stays exported, now rebinding the WeakMap rather than clearing a Set in place. `warnedMissingOrganismIds` in `refToFillGroup.ts` is unaffected — it keys on organism id (stable across battles) and still only carries the unbounded-growth problem Story 1.7's entry tracks (Story 5.7).
 
@@ -438,7 +438,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 - **The Clear focus-ring e2e cannot distinguish `:focus-visible` from `:focus-within` or `:focus`** — `battleRoute.spec.ts`'s "keyboard-reachable and shows a visible focus ring" does `await clear.focus()` then asserts `outline-style: solid`. A programmatic focus matches all three pseudo-classes, so swapping `EditorToolsSection`'s `&:focus-visible` to the `&:focus-within` trap 8 exists to forbid leaves the test green; and `.focus()` says nothing about tab ORDER either (a `tabindex="-1"` control would pass identically). What the test does prove — the control takes focus, and Enter reaches `onClear` — is real and kept. The missing half needs a MODALITY distinction: a real `Tab` traversal for the ring-present case and a real mouse click for the ring-absent case, and the mouse-click half is awkward here specifically because clicking this control clears the dish and then disables it. Note also that this is the only `outline-style` assertion in the whole `e2e/` tree — the comment claiming it follows an established convention was wrong, and is corrected in place. **Pick this up in whichever story next adds a focus-ring assertion to this route**, and give it a helper the rest can share rather than solving it once inline. ⏸ **Confirmed and WIDENED by Story 2.16 (2026-08-31), not fixed.** That story added the second such assertion — "BACK TO BATTLES is keyboard-operable and shows a focus ring" — in the same shape and with the same blind spot, and said so in place rather than claiming more than it proves. There are now two `outline-style` assertions on this route and still no shared helper and still no modality distinction. The mouse-click half is marginally easier for the Back control than for CLEAR (clicking Back does not disable it — it navigates), but it navigates AWAY, so the ring-absent assertion has to be made before the navigation commits. Both should be solved together.
 
-- **No `<PetriDishCanvas>` test pins a CLEAR specifically** — the story's Testing standards asked for "a cleared grid identity triggers one `drawFull` and no renderer reconstruction; no `GridRendererDimensionMismatchError`; a Clear landing mid-stroke ends the stroke with `endStroke(false)` and releases pointer capture", and `PetriDishCanvas.test.tsx` is not in the commit at all. The dev's argument for that is sound and was re-checked here: `<PetriDishCanvas>` receives `grid` as an opaque prop and cannot tell a Clear from an undo or a resize, and the Story 2.8 "external grid change mid-stroke" describe (`:1675`) already exercises the same-dimension identity swap source-agnostically, including the no-renderer arm. Two named assertions genuinely have no home, though: pointer-capture RELEASE is asserted only on the palette-change path (`:1798`), not the grid-effect one, and "no renderer reconstruction on a same-dimension identity swap" is pinned nowhere (`:2320` covers the resize path, where reconstruction is expected). Neither is a defect in this story's code; both are gaps in a shared describe. **Re-pointed by Story 3.14 (2026-09-16):** 3.14 does not touch `<PetriDishCanvas>` (it ships two presentational sidebar sections only) — **pick this up in Story 3.16** instead, whose ephemeral Play-mode resize is the next external-grid-change source to reach the canvas.
+- **No `<PetriDishCanvas>` test pins a CLEAR specifically** — the story's Testing standards asked for "a cleared grid identity triggers one `drawFull` and no renderer reconstruction; no `GridRendererDimensionMismatchError`; a Clear landing mid-stroke ends the stroke with `endStroke(false)` and releases pointer capture", and `PetriDishCanvas.test.tsx` is not in the commit at all. The dev's argument for that is sound and was re-checked here: `<PetriDishCanvas>` receives `grid` as an opaque prop and cannot tell a Clear from an undo or a resize, and the Story 2.8 "external grid change mid-stroke" describe (`:1675`) already exercises the same-dimension identity swap source-agnostically, including the no-renderer arm. Two named assertions genuinely have no home, though: pointer-capture RELEASE is asserted only on the palette-change path (`:1798`), not the grid-effect one, and "no renderer reconstruction on a same-dimension identity swap" is pinned nowhere (`:2320` covers the resize path, where reconstruction is expected). Neither is a defect in this story's code; both are gaps in a shared describe. **Re-pointed by Story 3.14 (2026-09-16):** 3.14 does not touch `<PetriDishCanvas>` (it ships two presentational sidebar sections only) — **pick this up in Story 3.16** instead, whose ephemeral Play-mode resize is the next external-grid-change source to reach the canvas. **Checked and re-pointed again by Story 3.16 (2026-09-16), premise narrowed, not closed.** The PLAYBACK half of the two named gaps is already covered, and was before this story started: "no reconstruction on a same-dimension identity swap" is pinned on the `PlaybackDish` side at `PetriDishCanvas.test.tsx:2542` since Story 3.11 (every Stop WITHOUT a prior resize mints a fresh same-dimension `liveSize` object and rides that path — 3.12's Stop tests already exercise it; a Stop AFTER a resize, `BattleSimulationView.test.tsx`'s "steps and plays on the resized grid; Stop restores the persisted size", is the dimension-CHANGE rebuild at `:2523` instead). The two remaining gaps — pointer-capture release on the grid-effect path, and the no-reconstruction assertion — are both `EditDish`-side, and this story does not touch `editor/` or `EditDish` (out of scope, Dev Notes). **Re-pointed to whichever story next edits `EditDish`.**
 
 ## Deferred from: Story 2-16-back-navigation-unsaved-changes-guard implementation (2026-08-31)
 
@@ -1008,6 +1008,11 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `<SimulationControlBar>`, chosen there because the wall between `editor/` and `simulation/`
   was the reason; here there is no wall, which weakens the case for copying. If 4.15's preview
   panel and 6.9's settings control also want the idiom, (a) is the cheaper path by then.
+  **✅ Closed by Story 3.16 (2026-09-16): option (a) taken.** `<LadderSlider>`
+  (`apps/web/components/battle/simulation/LadderSlider.tsx`) now holds the shared shell;
+  `<SpeedControl>` is its first caller and `<GridSizeControl>` its second, and
+  `SpeedControl.test.tsx` passes UNCHANGED — the refactor's own proof (same DOM, same ARIA, same
+  styles). No thumb glow was added (the rider below is answered in the same breath).
 - **The 3.12 keyboard e2e ("Tab reaches Play, Next cycle, Stop & reset in order") fails on the
   LOCAL WebKit and tablet projects with plain Tab** — `document.activeElement` lands on `<body>`
   from any button on macOS WebKit — while CI's Linux WebKit passes it (main is green through
@@ -1086,6 +1091,12 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   (`--gol-shadow-slider-thumb`) between them. Whichever lands the `<LadderSlider>` /
   `<RangeSlider>` promotion decision (3.13's deferred item, above) also decides whether the glow
   becomes "the house thumb" for every native range or stays this control's own.
+  **✅ Closed by Story 3.16 (2026-09-16), as the 3-13 entry's own answer.** `<LadderSlider>`'s
+  rider is explicit: NO thumb glow — neither Run-mode mockup's slider has one, and adding it would
+  change `<SpeedControl>`'s rendered styles, which the FD1 refactor forbids.
+  `--gol-shadow-slider-thumb` stays `<DominanceField>`'s (Story 4.6) alone; it is not "the house
+  thumb" for the Run sidebar's sliders. Open again only if a future native-range control on this
+  route wants the glow and makes its own case.
 
 ## Deferred from: code review of 4-6-dominance-control (2026-09-15)
 
@@ -1291,6 +1302,53 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `implement-next-story` skill: derive the port from the worktree (e.g. `PLAYWRIGHT_PORT` set by
   the lane runner, or a hash of `process.cwd()`), or set `reuseExistingServer: false` and accept
   the rebuild — either makes "the e2e passed locally" mean this tree.
+
+## Deferred from: Story 3-16-play-mode-ephemeral-resize (2026-09-16)
+
+- **Spec §2's tree line `<GridSizeControl variant="play">` vs §3.12's `GridSizeControlProps` (no
+  `variant`).** The tree line predates the split into `<GridSettingsSection>` (edit) and
+  `<GridSizeControl>` (play) that §3.12's last sentence and `simulation/README.md` already record.
+  Shipped §3.12's three props exactly, with no `variant`. A §2 tree amendment candidate for
+  whichever story next touches `component-tree-battle-page.md`.
+- **Spec §3.12's `value: GridPreset` vs the shipped `value: { cols: number; rows: number }`.** The
+  same deviation Story 2.14 recorded for `<GridSettingsSection>.gridSize` (`:420` above), for the
+  same reason: the display reads the hook's plain-number `liveSize`; only the WRITE path
+  (`onChange`) is preset-typed. A §3.12 clarification candidate.
+- **`EDITABLE_GRID_PRESETS` (`editor/GridSettingsSection.tsx`) and `GRID_PRESETS`
+  (`lib/battle/gridPresets.ts`) are two arrays tied by a compile-time subset assertion, not a
+  shared import (FD2).** Story 6.8's settings preset picker is the third named consumer
+  (`component-tree-battle-page.md` §3.12/§8) — decide there whether to unify them into one module
+  the editor also imports, now that a second Run-mode consumer exists.
+- **Whether Story 6.9's default-speed setting lifts `<LadderSlider>` to `components/` root.**
+  It is `simulation/`-local today (FD1); 6.9's settings control is Run-adjacent but not itself
+  Run-mode, so it may cross the `simulation/` boundary the way `<SpeedControl>`/`<GridSizeControl>`
+  did not have to.
+- **The 3.13 keyboard e2e's Tab tail was rewritten for the new stop this story adds (trap 7) —**
+  Tab from the speed slider now reaches the Grid Size slider before Back to Battles, while paused.
+  In `battleRoute.spec.ts` the test's title, its trailing comment block and the Tab tail itself
+  changed (a `tab` constant shared by both presses, plus the new `toBeFocused()` on the Grid Size
+  slider); the 3-13 story file itself is not edited, so this is the pointer to that change.
+- **Mockup-refresh candidate: "Dimensions" → "Grid dimensions" (label), beside the 3-13 items
+  above.** A second `role="slider"` in one sidebar needs a name that stands alone in a screen
+  reader's controls list; the mockup's bare "Dimensions" does not.
+- **Disabled-state a11y (`disabled` vs `aria-disabled` + reachable reason) — `<GridSizeControl>`
+  joins the route-wide Story 6.11 sweep the 3-11 review opened.** The hint here IS reachable via
+  `aria-describedby` only while the control is enabled, since a genuinely disabled input drops out
+  of the tab order — the same shape `<SimulationControlBar>`'s Next-cycle button already has.
+
+## Deferred from: code review of 3-16-play-mode-ephemeral-resize (2026-09-16)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **Disabling the focused Grid Size slider drops focus to `<body>`.** A keyboard user who adjusts
+  the slider and then starts playback through a click that does not move focus (Safari and Firefox
+  on macOS do not focus a `<button>` on click) is left with `document.activeElement` on `<body>`
+  the moment `disabled` flips — `<BattleSimulationView>` has no focus restoration for that
+  transition, and the native `disabled` attribute is what removes the element from the tab order.
+  Pre-existing shape: `<SimulationControlBar>`'s Next-cycle button disables the same way. Belongs
+  to the route-wide `disabled` vs `aria-disabled` sweep the 3-11 review opened for **Story 6.11**,
+  where the fix (an `aria-disabled` control that stays focusable, or a `useEffect` over `disabled`
+  that hands focus to Pause) is decided once for every control on the route rather than here.
 
 ## Deferred from: Story 4-9-color-reuse-warning-cvd-validation (2026-09-16)
 
