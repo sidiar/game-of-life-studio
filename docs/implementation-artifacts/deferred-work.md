@@ -1522,14 +1522,20 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   revision) — decide whether the delete button's paint follows the story or the mockup, in one place.
 - **A pointer double-click on a rule card's ✕ still cascades deletions** — every card has the same
   geometry, so when card N is deleted the card below slides synchronously into the same slot before
-  the next click is dispatched, and the second click of a double-click (or any rapid re-click) hit-
-  tests against the *new* ✕ at the same coordinates and deletes the neighbour too, with no
-  confirmation and no undo (AC5). `<RuleCard>`'s decision 2 (`132501a`) already closed the
+  the next click is dispatched, and the second click of a double-click (or any rapid re-click)
+  hit-tests against the *new* ✕ at the same coordinates and deletes the neighbour too, with no
+  confirmation and no undo (AC5). Review decision 2 (`132501a`, `RulesEditor`'s delete-focus
+  effect) already closed the
   **keyboard** half of this — a held or double-tapped Enter now lands focus on the neighbour's
   Summary field, not another Delete button, so the keyboard cascade cannot reoccur; the pointer path
   bypasses focus entirely and was left open. [`apps/web/components/organisms/editor/RuleCard.tsx`]
   **Owner decision (Sidiar, 2026-09-17): defer** — a later story adds a confirmation dialog for
   rule deletion in the Organism Editor. **Pick this up in Story 4.26 (Rule-Delete Confirmation
-  Dialog)**, added to `epics.md` and the sprint board at the owner's request on the same day —
+  Dialog)**, added to `epics.md` and `sprint-status.yaml` at the owner's request on the same day —
   UX-DR15's editor dialogs cover organism-level delete, not rule cards, so a dedicated story was
-  needed rather than riding 4-13 or 4-23.
+  needed rather than riding 4-13 or 4-23. Two notes for 4.26's create-story (third review pass,
+  2026-09-17), on top of the owner-approved ACs: (1) the double-click's second click still lands
+  on whatever the opening dialog has put under the pointer — MUI's backdrop during the Fade means
+  an instant dismiss, so the dialog must not close on a click that arrives during its enter
+  transition (or the second click must be otherwise inert); (2) the story that closes the cascade
+  should prove it — a unit or e2e test that a pointer double-click on ✕ removes at most one rule.

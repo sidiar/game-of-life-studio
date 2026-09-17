@@ -590,7 +590,7 @@ The Organism Editor uses a **full-screen overlay** design with three main column
 
 **Deleting a Rule:**
 1. User clicks `[✕]` on rule card header
-2. Rule removed immediately — no confirmation dialog (aligned with epics Story 4.10; the removal is recoverable until save, since Cancel/Close discards unsaved changes via the editor's own unsaved-changes scope)
+2. Rule removed immediately — no confirmation dialog (aligned with epics Story 4.10; the removal is recoverable until save, since Cancel/Close discards unsaved changes via the editor's own unsaved-changes scope). → Superseded by epics Story 4.26 (2026-09-17): a confirmation dialog naming the rule precedes removal, closing the pointer double-click cascade found in 4.10's review.
 
 **Reordering Rules:**
 1. User clicks and holds drag handle `⋮⋮`

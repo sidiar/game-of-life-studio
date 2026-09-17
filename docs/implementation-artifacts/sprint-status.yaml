@@ -122,7 +122,7 @@ development_status:
   4-7-aging-degradation-toggle: done
   4-8-color-picker-selection-defaults: done
   4-9-color-reuse-warning-cvd-validation: done
-  4-10-rule-cards-empty-state: review
+  4-10-rule-cards-empty-state: done
   4-11-condition-builder: backlog
   4-12-rule-reordering: backlog
   4-13-editor-validation-feedback: backlog

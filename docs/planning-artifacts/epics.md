@@ -1110,7 +1110,7 @@ So that I can build up behavior rule by rule.
 
 **Given** the Rules column, **When** rules exist, **Then** each renders as a card with drag handle, colored action badge (Born green / Survive cyan-blue / Die red), optional summary ≤ 100 chars, and a delete button (UX-DR10)
 **Given** zero rules, **When** rendered, **Then** the centered empty state shows icon, "No Rules Defined", explanation, and a primary "+ Add Rule" action (UX-DR12)
-**And** "+ Add Rule" appends a new card with a default action; deleting a card removes it immediately
+**And** "+ Add Rule" appends a new card with a default action; deleting a card removes it immediately (→ Story 4.26 puts a confirmation dialog in front of that delete)
 
 ### Story 4.11: Condition Builder
 
@@ -1309,7 +1309,7 @@ So that a stray double-click never wipes out rules I meant to keep.
 
 **Given** a rule card's delete button, **When** activated by pointer or keyboard, **Then** a confirmation dialog names the rule (its Summary, or "Rule N" when the summary is empty) before anything changes — the Story 1.13 `DeleteBattleDialog` pattern, restyled for the editor (UX-DR15 vocabulary)
 **Given** the dialog, **When** confirmed, **Then** the rule is removed and focus lands per Story 4.10 AC5 (the neighbour's Summary, or the empty-state "+ Add Rule"); **When** cancelled or dismissed (Escape, backdrop), **Then** nothing changes and focus returns to the delete button that opened it
-**And** the dialog is keyboard-operable (focus trapped inside, Escape cancels) and passes axe; the confirm action is the only destructive control, so no second delete can be reached at the same coordinates (closes the double-click cascade deferred from Story 4.10)
+**And** the dialog is keyboard-operable (focus trapped inside, Escape cancels) and passes axe; the confirm action is the only destructive control, so no second delete can be reached at the same coordinates (closes the double-click cascade deferred from Story 4.10 and supersedes 4.10's immediate, no-confirmation delete — 4.10 AC3 here, its story-file AC5 and `organism-editor-design.md` "Deleting a Rule" step 2)
 **And** the Story 4.10 unit and e2e delete tests are updated to pass through the dialog rather than rewritten around it
 
 ## Epic 5: Sharing, Backup & Workspace Management

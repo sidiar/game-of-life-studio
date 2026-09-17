@@ -4,7 +4,7 @@ baseline_commit: 92a3d4dbf60b8bd7fee295aba1b1a6fcd703490f
 
 # Story 4.10: Rule Cards & Empty State
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -103,7 +103,8 @@ here touches a repository (AR-2 / AR-27) or the engine.
 
 5. **Delete removes the card immediately — no confirmation — renumbers the rest, and keeps
    focus in the column.** (`organism-editor-design.md:592-593`; readiness-report 2026-07-16 issue
-   #3, resolved in the story's favour.) After a delete, focus moves to the **Summary** field of the
+   #3, resolved in the story's favour. → The "no confirmation" half is superseded by Story 4.26,
+   which puts a confirmation dialog in front of the delete; the focus rule below is unchanged.) After a delete, focus moves to the **Summary** field of the
    card now occupying the removed index (the next card), or the last card's when the last was
    removed, or the empty state's "+ Add Rule" when no card remains (FD6) — the owner's review
    decision (2026-09-17): a neighbouring Delete button was rejected because a held or
@@ -779,9 +780,10 @@ no first-pass patch regressed. What remains:
       (3) defer to the story that gives the editor undo/confirmation.
       [`apps/web/components/organisms/editor/RuleCard.tsx:216-221`]
       **Owner decision (Sidiar, 2026-09-17): option 3 — defer.** A later story adds a rule-delete
-      confirmation dialog to the Organism Editor (mirroring UX-DR15's organism-level delete
-      confirmation); no code changes here.
-      **Resolved (dev-story, 2026-09-17): deferred to deferred-work.md.**
+      confirmation dialog to the Organism Editor (the Story 1.13 `DeleteBattleDialog` pattern in
+      UX-DR15's editor vocabulary); no code changes here.
+      **Resolved (dev-story, 2026-09-17): deferred to deferred-work.md — picked up by Story 4.26
+      (Rule-Delete Confirmation Dialog), added to `epics.md` and `sprint-status.yaml` in `0575e72`.**
 - [x] [Review][Patch] The decision's rationale is untested — nothing proves a second Enter after a
       keyboard delete removes nothing. [`apps/web/components/organisms/editor/RulesEditor.test.tsx`]
 - [x] [Review][Patch] Review provenance in code comments — `Owner decision (review, 2026-09-17)`
@@ -816,6 +818,54 @@ Summary target the owner chose — the add move already focuses an input by desi
 `crypto.randomUUID()` in an insecure context (pinned bare by AC3, `<BattlePage>` precedent);
 `data-rule-delete` now having no code consumer (AC4's locator vocabulary, the first pass's
 `data-rule-card` reasoning); the PR body being stale (the hand-off step, not the diff).
+
+**Third pass** — reviewed on **Opus** (2026-09-17) against the two docs-only commits `1041162`
+(decision 3 recorded: defer) and `0575e72` (Story 4.26 added), same three layers. Remote gate:
+PR #51's run on `0575e72` (see Change Log). The decision item is ticked with the owner's recorded
+choice, the `deferred-work.md` entry sits under the right section and names Story 4.26, Story 4.26
+is well-formed against 1.13/4.24/4.25 and consistent with AC5 as amended by decision 2, the
+sprint-status row is in place, and no first- or second-pass patch regressed. What remains is
+bookkeeping:
+
+- [x] [Review][Patch] Story 4.26 reverses a reconciled no-confirmation rule that three documents
+      still assert with no forward pointer — `epics.md` Story 4.10 AC3 ("removes it immediately"),
+      this file's AC5 ("no confirmation", citing readiness-report issue #3) and
+      `organism-editor-design.md:593` ("no confirmation dialog (aligned with epics Story 4.10)").
+      The decision is the owner's; the gap is that the next reader finds two authoritative docs
+      contradicting each other. Add a `→ Story 4.26` pointer at the three sites and say
+      "supersedes" in 4.26's own AC. [`docs/planning-artifacts/epics.md:1113,1312`,
+      `docs/implementation-artifacts/4-10-rule-cards-empty-state.md:104-106`,
+      `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md:593`]
+- [x] [Review][Patch] The story file is one commit stale against `deferred-work.md` — the owner
+      decision, its resolution note, the Completion Note and the Change Log all say "a later story"
+      although `0575e72` created Story 4.26 in the same push; the File List omits
+      `docs/planning-artifacts/epics.md`; and the owner-decision line says "mirroring UX-DR15's
+      organism-level delete confirmation" where 4.26 pins the Story 1.13 `DeleteBattleDialog`
+      pattern. [`docs/implementation-artifacts/4-10-rule-cards-empty-state.md:781-784,1202-1208,1233,1257-1261`]
+- [x] [Review][Patch] Deferred entry slips: "`<RuleCard>`'s decision 2" — `132501a` changed
+      `RulesEditor.tsx`'s delete-focus effect, not `RuleCard`; "hit-" / "tests" split across a
+      soft line break renders as "hit- tests"; "sprint board" for `sprint-status.yaml`.
+      [`docs/implementation-artifacts/deferred-work.md:1525-1533`]
+- [x] [Review][Patch] 4.26's closing argument is asserted, not required — "no second delete can be
+      reached at the same coordinates" holds, but the double-click's second click still lands on
+      whatever the opening dialog has put under the pointer (MUI's backdrop during the Fade → an
+      instant dismiss; the paper → nothing), and no AC asks for the regression test that proves a
+      pointer double-click removes at most one rule. Record both as pick-up notes for 4.26's
+      create-story in the deferred entry; the owner-approved AC text is left as is.
+      [`docs/implementation-artifacts/deferred-work.md:1531-1535`]
+
+Dismissed as noise (14): adding a story via a dev-story resume without a correct-course record
+(the owner approved the story and `epics.md` carries no per-epic story count to drift); option 3
+"undo/confirmation" narrowed to confirmation (the owner's recorded choice); options 1/2 not
+recorded as rejected (the owner's call, recorded as such); the deferred decision ticked `[x]`
+(decision 1 uses the same form); the "(AC5)" citation (AC5 is the delete AC); AC2's two When/Then
+pairs on one line and "Rule N"'s base (Story 1.13's form; the labels are positions per AC5);
+"rewritten around it" (AC4's intent is plain); the ledger placement (verified, `:1511`); adding
+"rule-delete confirmation" to the UX-DR15 line (DR15 summarises the UX spec, which the pointer at
+`:593` now covers); nested-Escape semantics with 4.23, capturing the rule by id at open time,
+whitespace-only summaries, focus fallback when the opener has unmounted (4.26's create-story
+forced decisions, not this delta); a lane gate for 4.26 on 4.23 (intra-epic order, not a
+cross-lane dependency).
 
 ## Dev Notes
 
@@ -1205,7 +1255,10 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
   `deferred-work.md`'s `## Deferred from: code review of 4-10-rule-cards-empty-state (2026-09-17)`
   section naming the pick-up point (a later Epic 4 story adding a rule-delete confirmation dialog
   to the Organism Editor), and marked `4-10-rule-cards-empty-state` `review` in
-  `sprint-status.yaml`.
+  `sprint-status.yaml`. The owner then had that story created in the same push (`0575e72`):
+  Story 4.26 Rule-Delete Confirmation Dialog in `epics.md`,
+  `4-26-rule-delete-confirmation-dialog: backlog` in `sprint-status.yaml`, and the deferred
+  entry pointed at it.
 
 ### File List
 
@@ -1230,6 +1283,8 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
+- `docs/planning-artifacts/epics.md` (Story 4.26 added; 4.10 AC3 pointer)
+- `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md` (Deleting a Rule step 2 pointer)
 - `docs/implementation-artifacts/4-10-rule-cards-empty-state.md` (this file)
 
 ### Change Log
@@ -1259,6 +1314,9 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
   dialog to the Organism Editor; no code changes. Bullet appended to `deferred-work.md`'s
   `## Deferred from: code review of 4-10-rule-cards-empty-state (2026-09-17)` section; status →
   review.
+- 2026-09-17 — Story 4.26 Rule-Delete Confirmation Dialog created at the owner's direction
+  (`0575e72`): added to `epics.md` after 4.25 and to `sprint-status.yaml` as `backlog`; the
+  deferred entry now names it as the pick-up point.
 
 Dev Model: sonnet   # follows the settled editor pattern (one draft field, controlled views, a layout slot, functional setters); every choice later stories build on — the RuleDraft shape, the three tokens, the diff-driven focus rule, the updater-style setter — is pinned as FD1–FD9 with the exact signatures, so the dev step executes rather than designs
 Proposed lane gate: none
