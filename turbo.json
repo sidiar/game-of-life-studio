@@ -36,6 +36,11 @@
     "e2e": {
       "cache": false
     },
+    // Chromium-only slice of the same suite, for the dev step's local gate
+    // (`npm run ci:dev`). The four-browser matrix is CI's job on the PR.
+    "e2e:chromium": {
+      "cache": false
+    },
     // ⚠️ NEVER CACHED, for a reason stronger than e2e's. A cached benchmark does
     // not merely re-run somewhere else — turbo replays the previous run's stdout
     // and its bench-results.json, so `bench:check` gates a number measured on a

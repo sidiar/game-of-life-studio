@@ -307,8 +307,16 @@ deliberately unspecified; don't invent one. GitHub Actions **runs on every push*
 (`.github/workflows/ci.yml`, Story 1.2): a `quality` job (typecheck → lint → format:check →
 spec:check → boundary:check → coverage → build → bundle → bench → bench:check) and an `e2e` job
 gated on it. **`npm run ci` is the local mirror of
-that gate — keep the two in lockstep.** Run the full gate before calling a change done; the
-pre-commit hook (lint-staged + typecheck) is the fast subset only.
+that gate — keep the two in lockstep.** The pre-commit hook (lint-staged + typecheck) is the
+fast subset only.
+
+- **The dev step's local gate is `npm run ci:dev`** — the same chain, but its e2e stage is
+  Chromium only (`npm run e2e:chromium`). Run it before calling a story done; do **not** run the
+  four-browser `npm run ci` in the dev step. The Firefox/WebKit/tablet matrix is CI's job on the
+  pushed branch, and a real run there beats a local one: all four Playwright projects
+  concurrently on a shared-CPU sandbox produce contention flakes in unrelated specs (Story 3.17
+  lost ~30 minutes proving they were flakes), and local browsers are not the runner's anyway
+  (next bullet). Reach for full `npm run ci` only to reproduce a browser-specific CI failure.
 
 - ⚠️ **A local green `npm run ci` is not proof CI is green.** The e2e job runs on Linux against
   a cached Playwright install; local runs use your own browsers. Check the actual run
@@ -353,9 +361,10 @@ projects under `NewJob/`), so it never shows up in this repo's `git status`.
 
 - "Tested" means the story's own verification checklist actually ran — not that typecheck passed.
   Report failures with their output; never state a step ran when it didn't.
-- `npm run ci` runs the full local gate (typecheck → lint → format:check → spec:check →
-  boundary:check → coverage → build → bundle → bench → bench:check → e2e);
-  it is the closest local proxy for CI until a remote exists. Report its actual result.
+- `npm run ci:dev` is the dev step's local gate (typecheck → lint → format:check → spec:check →
+  boundary:check → coverage → build → bundle → bench → bench:check → e2e on Chromium only).
+  Report its actual result. `npm run ci` is the same chain with the full four-browser e2e
+  matrix — that is CI's job on the pushed branch, not the dev step's.
 
 ### Critical Don't-Miss Rules
 
