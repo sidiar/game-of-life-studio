@@ -37,11 +37,18 @@ reads the same file, so nothing is declared twice.
 
 No file, or a key missing → STOP before Step 0 and say which; do not guess a layout.
 
-**The adapter file.** Read `adapter.md` once, with the TOML, and hold it for the run. Its
-`## Create`, `## Implement` and `## Review` sections are the spawn-prompt text Steps 1–3
-append — whole, verbatim, placeholders substituted — after the *Subagent instructions*
-below. Its `## Requires` and `## Notes` are for the owner. Missing `[adapter]`, both
-keys, neither, or no `adapter.md` at the path → STOP before Step 0, as for a path.
+**The adapter file.** Resolve it by script, not by eye, at the same time as the TOML:
+
+```bash
+python3 {skill_dir}/lane-gates.py adapter   # prints the adapter.md path
+```
+
+Exit 1 is a bad `[adapter]` (missing, both keys, neither) and exit 2 a path with no
+`adapter.md` → STOP before Step 0 with the script's output, as for a missing path. Read
+the file once and hold it for the run. Its `## Create`, `## Implement` and `## Review`
+sections are the spawn-prompt text Steps 1–3 append — whole, verbatim, placeholders
+substituted — after the *Subagent instructions* below. Its `## Requires` and `## Notes`
+are for the owner.
 
 **Scripts:** `lane-gates.py` (gates, lane resolution, the per-tree lock) and
 `story-run-stats.py` (timing and tokens) live in this skill's directory, written `{skill_dir}` in every command below. Installed as a
