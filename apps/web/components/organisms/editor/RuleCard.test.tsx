@@ -12,8 +12,10 @@ const RULE: RuleDraft = (({ contentHash: _contentHash, ...draft }) => draft)(
 );
 
 /** A lone `<li>` outside a `<ol role="list">` trips axe's `listitem` rule (the Story 4.8
- * `container` precedent) — render inside a real list wrapper here. */
-function renderCard(overrides: Partial<RuleCardProps> = {}) {
+ * `container` precedent) — render inside a real list wrapper here. The callbacks are not
+ * overridable: the helper returns its own mocks, and an override would be asserted against a mock
+ * that was never wired. */
+function renderCard(overrides: Partial<Omit<RuleCardProps, 'onChange' | 'onDelete'>> = {}) {
   const onChange = vi.fn();
   const onDelete = vi.fn();
   const props: RuleCardProps = {
@@ -80,7 +82,7 @@ describe('RuleCard', () => {
   });
 
   it('reflects the rendered value in the counter', () => {
-    renderCard({ rule: { ...(RULE as RuleDraft), payload: { ...RULE.payload, summary: 'abc' } } });
+    renderCard({ rule: { ...RULE, payload: { ...RULE.payload, summary: 'abc' } } });
 
     expect(screen.getByText('3 / 100')).toBeInTheDocument();
   });
@@ -95,7 +97,7 @@ describe('RuleCard', () => {
     rerender(
       <ol role="list" aria-label="Survival rules">
         <RuleCard
-          rule={{ ...(RULE as RuleDraft), payload: { ...RULE.payload, action: 'die' } }}
+          rule={{ ...RULE, payload: { ...RULE.payload, action: 'die' } }}
           index={0}
           onChange={onChange}
           onDelete={vi.fn()}
@@ -134,8 +136,8 @@ describe('RuleCard', () => {
 
     const summary = screen.getByRole('textbox', { name: 'Summary' });
     const describedBy = summary.getAttribute('aria-describedby');
-    expect(describedBy).not.toBeNull();
-    expect(document.getElementById(describedBy!)).toHaveTextContent(
+    if (describedBy === null) throw new Error('Summary has no aria-describedby');
+    expect(document.getElementById(describedBy)).toHaveTextContent(
       `${RULE.payload.summary.length} / 100`,
     );
   });

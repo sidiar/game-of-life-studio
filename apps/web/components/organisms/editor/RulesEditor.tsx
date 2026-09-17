@@ -12,9 +12,8 @@ import RuleCard from './RuleCard';
  * and passes an updater-style setter (FD8), the same reasoning `setDominance`'s functional form
  * carries — two rule mutations landing in one batch cannot clobber each other.
  *
- * **Focus follows the list diff (FD6)** — the design's three required moves (new card's Summary on
- * add, a neighbour's Summary on delete — the owner's 2026-09-17 review decision, non-destructive
- * over another Delete button — and the empty state's CTA when the last card goes) are driven by
+ * **Focus follows the list diff (FD6)** — the three required moves (the new card's Summary on add,
+ * a neighbour's Summary on delete, the empty state's CTA when the last card goes) are driven by
  * one effect keyed on `rules`, diffing against the previous render's ids. A `pendingFocus` ref set
  * by the handlers was rejected: the header's "+ Add Rule" lives in the layout's `rulesAction` slot,
  * OUTSIDE this component, and a diff needs no coordination with it. `autoFocus` on the newest card
@@ -132,11 +131,12 @@ export default function RulesEditor({ rules, onRulesChange, onAddRule }: RulesEd
         if (ids.length === 0) {
           root?.querySelector<HTMLElement>('[data-add-rule="empty"]')?.focus();
         } else {
-          // Owner decision (2026-09-17, review item): the Summary field, not the Delete button —
-          // a held or double-tapped Enter on a `<button>` auto-repeats on keydown, so landing on
-          // another destructive control let keyboard deletion cascade with no confirmation and no
-          // undo. Same neighbour-selection rule as before (the card that took the removed index,
-          // else the new last card); one Shift+Tab from here reaches that card's Delete.
+          // The neighbour's Summary, not its Delete (Story 4.10 AC5): Enter activates a
+          // `<button>` on keydown and auto-repeats, so landing on another destructive control
+          // would let a held or double-tapped Enter cascade deletions with no confirmation and
+          // no undo. The neighbour is the card that took the removed index, else the new last
+          // card; its Delete is one Shift+Tab back (Option+Shift+Tab where Safari's default
+          // keyboard settings skip buttons).
           const targetId = ids[Math.min(removedIndex, ids.length - 1)];
           if (targetId !== undefined) {
             cardControl(targetId, '[data-rule-summary]')?.focus();

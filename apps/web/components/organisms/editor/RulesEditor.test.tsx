@@ -151,8 +151,8 @@ describe('RulesEditor', () => {
     expect(screen.getByRole('group', { name: 'Rule 1' })).toBeInTheDocument();
     const second = screen.getByRole('group', { name: 'Rule 2' });
     expect(within(second).getByRole('combobox')).toHaveValue('die');
-    // Owner decision (review, 2026-09-17): the neighbour's Summary, not its Delete button — a
-    // held/double-tapped Enter on a destructive control would otherwise cascade deletions.
+    // The neighbour's Summary, not its Delete (AC5) — Enter auto-repeats on a `<button>`, so
+    // another destructive control would let a held Enter cascade deletions.
     expect(document.activeElement).toBe(within(second).getByRole('textbox', { name: 'Summary' }));
   });
 
@@ -162,6 +162,23 @@ describe('RulesEditor', () => {
 
     await user.click(screen.getByRole('button', { name: 'Delete rule 3' }));
 
+    const second = screen.getByRole('group', { name: 'Rule 2' });
+    expect(document.activeElement).toBe(within(second).getByRole('textbox', { name: 'Summary' }));
+  });
+
+  // The cascade the Summary target exists to prevent (AC5): after a keyboard delete, focus is on
+  // an `<input>` with no `<form>` around it, so a repeated Enter has nothing left to activate.
+  it('a second Enter after a keyboard delete removes nothing more', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={THREE} />);
+
+    screen.getByRole('button', { name: 'Delete rule 2' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+
+    await user.keyboard('{Enter}');
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
     const second = screen.getByRole('group', { name: 'Rule 2' });
     expect(document.activeElement).toBe(within(second).getByRole('textbox', { name: 'Summary' }));
   });

@@ -1599,7 +1599,7 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
 
     await expect(cardGroup(rules, 1).locator('[data-rule-badge]')).toHaveText('Survive');
     await expect(cardGroup(rules, 2).locator('[data-rule-badge]')).toHaveText('Die');
-    // Owner decision (review, 2026-09-17): the neighbour's Summary, not another Delete button.
+    // The neighbour's Summary, not another Delete button — a held Enter on one would cascade (AC5).
     await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
   });
 
@@ -1636,8 +1636,8 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await page.keyboard.press('Enter');
 
     await expect(cardGroup(rules, 2)).toHaveCount(0);
-    // Owner decision (review, 2026-09-17): the neighbour's Summary, not another Delete button —
-    // one Shift+Tab from here reaches that card's Delete.
+    // The neighbour's Summary, not another Delete button (AC5): a held Enter on a `<button>` would
+    // cascade deletions; that card's Delete is one Shift+Tab back.
     await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
   });
 

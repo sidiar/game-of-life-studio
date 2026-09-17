@@ -4,7 +4,7 @@ baseline_commit: 92a3d4dbf60b8bd7fee295aba1b1a6fcd703490f
 
 # Story 4.10: Rule Cards & Empty State
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -591,8 +591,9 @@ here touches a repository (AR-2 / AR-27) or the engine.
         4. **Summary clamps at 100 with the counter agreeing**: `fill` 120 characters into a
            Summary → value length **100**, counter reads `100 / 100`.
         5. **Keyboard**: the tab order inside a card is delete → Summary → Action (the handle is
-           `disabled`, so it is skipped). With two cards, from `Rule 1`'s Summary: `Tab` → `Rule
-           1`'s Action, `Tab` → `Delete rule 2`; WebKit via `Alt+Tab` (the 4.3 block's note).
+           `disabled`, so it is skipped). With two cards, from `Delete rule 1` (`.focus()`): `Tab`
+           → `Rule 1`'s Summary, `Tab` → `Rule 1`'s Action, `Tab` → `Delete rule 2`; WebKit via
+           `Alt+Tab` (the 4.3 block's note).
            `Enter` on the focused `Delete rule 2` removes it and `Rule 1`'s **Summary** is focused
            (the last card's — FD6's "last was removed" branch, landing on Summary per the owner's
            review decision).
@@ -680,7 +681,8 @@ gate is the PR's run, checked after this review.
       **Owner decision (Sidiar, 2026-09-17): option 2.** After a delete, focus lands on the
       neighbouring card's **Summary** field (same neighbour-selection rule as before: the card that
       took the removed card's index, else the new last card; header "+ Add Rule" when the list is
-      empty). Update AC5 and FD6 in this file to say Summary, adjust RulesEditor tests (e)/(f) and
+      empty [sic — the empty state's "+ Add Rule", as AC5, FD6 and test (g) pin; the two controls
+      share one name and one callback, so the behaviour is the same]). Update AC5 and FD6 in this file to say Summary, adjust RulesEditor tests (e)/(f) and
       e2e tests 3/5 accordingly, and note that one Shift+Tab from the Summary reaches that card's
       Delete.
       **Resolved (dev-story, 2026-09-17):** `RulesEditor.tsx`'s delete-focus branch now targets
@@ -757,6 +759,59 @@ hover border (mockup); `Partial` with an explicit `undefined`, surrogate-pair an
 (UTF-16 units match the schema's `.max` and native `maxLength`, the name field's idiom); an
 out-of-enum action, duplicate ids and reorder-plus-delete or two adds in one batch (unreachable
 until 4.12/4.17 seed or reorder, and same-length diffs are inert by design).
+
+**Second pass** — reviewed on **Opus** (2026-09-17) against the Sonnet resume commit `132501a`
+(decision 2: post-delete focus → the neighbour's Summary), same three layers. Remote gate: PR #51's
+run `35225718572` on `132501a` — quality + e2e **green**. Decision 2 landed completely and
+consistently (effect, header comment, tests (e)/(f), e2e 3/5, AC5/FD6/Task 5/Task 8, Change Log);
+no first-pass patch regressed. What remains:
+
+- [ ] [Review][Decision] A pointer double-click on ✕ still cascades deletions — decision 2 closed
+      the keyboard cascade only. Every card has the same geometry (one-line Summary, fixed header),
+      so when card N is removed the card below slides synchronously into the same slot (a discrete
+      event commits before the next click is dispatched), and the second click of a double-click —
+      or any rapid re-click — is hit-tested against the *new* ✕ at the same coordinates and deletes
+      the neighbour too, with no confirmation and no undo (AC5). The last card is the only one
+      where nothing lands under the cursor. Options: (1) accept — two clicks are two deliberate
+      actions, and the removal is recoverable until Save via Cancel/Close
+      (`organism-editor-design.md:593`); (2) ignore a click whose `event.detail > 1` on the Delete
+      button (stops the double-click, costs a deliberate rapid second delete at the same spot);
+      (3) defer to the story that gives the editor undo/confirmation.
+      [`apps/web/components/organisms/editor/RuleCard.tsx:216-221`]
+- [x] [Review][Patch] The decision's rationale is untested — nothing proves a second Enter after a
+      keyboard delete removes nothing. [`apps/web/components/organisms/editor/RulesEditor.test.tsx`]
+- [x] [Review][Patch] Review provenance in code comments — `Owner decision (review, 2026-09-17)`
+      is the "as requested" form project-context bans; `RulesEditor.tsx:138` says "as before" (a
+      lineage only git shows); "one Shift+Tab reaches that card's Delete" is unconditional, but
+      Safari's default keyboard settings skip `<button>`s (Option+Shift+Tab — the reason the same
+      spec presses `Alt+Tab`); `organisms.spec.ts:1602` carries no why at all. Keep the why, cite
+      AC5, drop the provenance. [`apps/web/components/organisms/editor/RulesEditor.tsx:15-17,135-139`,
+      `RulesEditor.test.tsx:154-156`, `apps/web/e2e/organisms.spec.ts:1602,1639-1640`]
+- [x] [Review][Patch] First-pass "escape hatches" patch not fully applied — two now-redundant
+      `RULE as RuleDraft` casts and a non-null `describedBy!` survive.
+      [`apps/web/components/organisms/editor/RuleCard.test.tsx:83,98,138`]
+- [x] [Review][Patch] `renderCard` returns its own mocks even when `overrides` supplies `onChange`
+      / `onDelete` — a future override would assert against a mock that was never wired. Narrow the
+      overrides type. [`apps/web/components/organisms/editor/RuleCard.test.tsx:16-31`]
+- [x] [Review][Patch] First-pass "orphaned line" patch only moved it — a five-word line remains.
+      [`apps/web/components/organisms/editor/OrganismEditorModal.tsx:160-162`]
+- [x] [Review][Patch] The recorded owner decision says "header `+ Add Rule` when the list is
+      empty"; code, AC5 and test (g) target the empty state's CTA (same name and callback, so the
+      behaviour is identical — the record is wrong, not the code).
+      [`docs/implementation-artifacts/4-10-rule-cards-empty-state.md:682`]
+- [x] [Review][Patch] Task 8 test-5 text still starts "from `Rule 1`'s Summary"; the e2e has
+      started on `Delete rule 1` since the first-pass patch, and `132501a` edited the end of that
+      paragraph without the start. [`docs/implementation-artifacts/4-10-rule-cards-empty-state.md:593-595`]
+
+Dismissed as noise (7): implicit form submission on the Summary's Enter (no `<form>` in the editor,
+`OrganismNameField.tsx:112`); the empty-list branch landing on the empty CTA, an Enter-activated
+button (AC5's own target, and adding is non-destructive); the `organism-editor-design.md:592-593`
+citation (the doc names no focus target, so nothing there disagrees); the focus ring/caret a
+pointer delete now shows and the soft keyboard a tap-delete raises on touch (inherent to the
+Summary target the owner chose — the add move already focuses an input by design, `:588`);
+`crypto.randomUUID()` in an insecure context (pinned bare by AC3, `<BattlePage>` precedent);
+`data-rule-delete` now having no code consumer (AC4's locator vocabulary, the first pass's
+`data-rule-card` reasoning); the PR body being stale (the hand-off step, not the diff).
 
 ## Dev Notes
 
@@ -1180,6 +1235,14 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
   targets the neighbouring card's Summary field, not its Delete button; AC5, FD6, the Task 5/8
   spec text, `RulesEditor.tsx`, `RulesEditor.test.tsx` (e)/(f) and `organisms.spec.ts` e2e tests
   3/5 updated to match; status → review.
+- 2026-09-17 — Second review pass (Opus) on `132501a`: decision 2 verified complete; CI run
+  `35225718572` green. 7 patches applied (a "second Enter removes nothing" unit test; review
+  provenance dropped from four comments with the why and the Safari Shift+Tab caveat kept; the
+  first pass's leftover `as RuleDraft` casts and `describedBy!` removed and `renderCard`'s
+  overrides narrowed; the modal's orphan comment line folded; the recorded owner decision's
+  "header + Add Rule" corrected to the empty-state CTA; Task 8 test-5 text realigned with the
+  e2e). 1 new `decision-needed` (pointer double-click on ✕ cascades deletions); status →
+  in-progress pending that decision.
 
 Dev Model: sonnet   # follows the settled editor pattern (one draft field, controlled views, a layout slot, functional setters); every choice later stories build on — the RuleDraft shape, the three tokens, the diff-driven focus rule, the updater-style setter — is pinned as FD1–FD9 with the exact signatures, so the dev step executes rather than designs
 Proposed lane gate: none
