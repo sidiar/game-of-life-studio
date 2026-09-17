@@ -1254,3 +1254,18 @@ Sonnet (claude-sonnet-5), per the story's own "Dev Model: sonnet" note.
 
 Dev Model: sonnet   # follows the settled editor pattern (draft in the modal, controlled views, pure lib helpers, the 4.10 focus diff, the 4.5 validated-input idiom); every shape later stories build on — ConditionDraft, the parse trio, the domain constants, the bridges — is pinned with exact signatures and semantics, so the dev step executes rather than designs
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 1m 03s | 1m 03s | 38 | 6,724 | 16,086 | 1,091,473 | 1,114,321 |
+| Step 1 — create | opus-5 | 1 | 21m 25s | 21m 25s | 188 | 97,552 | 1,027,829 | 15,035,845 | 16,161,414 |
+| Step 2 — implement | sonnet-5 | 1 | 28m 20s | 28m 20s | 612 | 121,360 | 894,208 | 76,742,371 | 77,758,551 |
+| Step 3 — review + PR | opus-5 | 4 | 16m 30s | 16m 30s | 386 | 115,420 | 949,179 | 25,353,906 | 26,418,891 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 86 | 24,966 | 53,787 | 2,795,156 | 2,873,995 |
+| **Total (create → PR ready)** | | 6 | **1h 07m** | 1h 07m | 1,224 | 341,056 | 2,887,302 | 118,223,595 | **121,453,177** |
+
+Run started 2026-09-17 19:58 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
