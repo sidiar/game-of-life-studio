@@ -160,9 +160,9 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **The dot-row z-index fix is load-bearing and has no test** — `BattleTile.tsx`'s `DotRow` gained `position: relative; z-index: 1` so the organism dots stay above `TitleLink`'s full-tile `::after` overlay. Its own comment names the failure precisely: without the raise, hovering a dot hits the overlay, the tooltip never opens, "only the keyboard path would still work, which is exactly the kind of half-broken state that reads as fine in a unit test." The existing tooltip tests use `userEvent.hover`, which dispatches at the target and cannot observe occlusion; jsdom does no hit-testing at all. An e2e hover assertion is the obvious cover but risks flaking across the four Playwright projects (the `tablet` project is touch, where hover does not apply), so it needs a deliberate choice rather than a reviewer's guess. The sibling hazard (Delete under the overlay) *is* covered by an e2e. **Pick this up with the next story that touches tile interaction.**
 
-- **`TileActions` is an unconditional invisible hit target, and now sits over the navigation overlay** — it keeps `opacity: 0` and gained `z-index: 1`, which puts it above `TitleLink`'s stretched overlay *at all times*, not only when hover reveals it. `opacity: 0` does not remove an element from hit-testing (the file's own comment says so). On a device that reports `hover: hover` but is driven by touch — a touchscreen laptop, an iPad with a trackpad, a Surface — `@media (hover: none)` does not match and `Tile:hover` never fires for a tap, so a tap in the tile's top-right 28×28 px region opens the delete confirmation for a control the user cannot see, instead of opening the battle. The phantom hit target is pre-existing (Story 1.13); what Story 2.1 adds is that it now *shadows navigation* rather than shadowing nothing. `pointer-events: none` while hidden is the obvious fix but interacts with the `:focus-within` reveal. **Pick this up with the tile-interaction story above.**
+- **`TileActions` is an unconditional invisible hit target, and now sits over the navigation overlay** — it keeps `opacity: 0` and gained `z-index: 1`, which puts it above `TitleLink`'s stretched overlay *at all times*, not only when hover reveals it. `opacity: 0` does not remove an element from hit-testing (the file's own comment says so). On a device that reports `hover: hover` but is driven by touch — a touchscreen laptop, an iPad with a trackpad, a Surface — `@media (hover: none)` does not match and `Tile:hover` never fires for a tap, so a tap in the tile's top-right region opens either action for a control the user cannot see, instead of opening the battle. The phantom hit target is pre-existing (Story 1.13); what Story 2.1 added is that it now *shadows navigation* rather than shadowing nothing. **Widened by Story 3.17** (2026-09-17): the band grew from one 28×28 px control to two side by side (Run + Delete, 6px gap), so the phantom region is now roughly 62×28 px — wider, not narrower. Its consequence is also uneven now: a phantom tap on the LEFT half (Run) navigates to a paused Run session — recoverable, arguably even harmless — where a phantom tap on the RIGHT half (Delete) still opens a destructive confirmation dialog. `pointer-events: none` while hidden is the obvious fix but interacts with the `:focus-within` reveal. **Pick this up with the tile-interaction story above.**
 
-- **`/battle` can flash "Battle Not Found" on the happy path** — `app/(battle)/battle/page.tsx:25` reads `useSearchParams().get('id') ?? ''`. If the CSR-bailout hydration pass yields empty params on the first client render and populates on a later one, render 1 has `battleId === ''`, starts `battles.load('')`, and that resolves to `null` from a genuinely fast localStorage read. Should it settle before the params-populated render, the not-found notice paints for a frame before flipping to loading and then to the battle. The prerendered `battle.html` itself is clean (it contains only the Suspense fallback, so there is no hydration text mismatch) — the hazard is entirely the two-phase param read, and it depends on Next 16's exact bailout timing. Not observed: the e2e waits for the heading and would not catch a one-frame flash. **Revisit if a flash is ever reported, or with Story 2.4's work on this route.** **Confirmed unaffected by Story 2.4** (2026-08-26): `app/(battle)/battle/page.tsx`'s two-phase `useSearchParams()` read is untouched, and `<BattlePage>`'s not-found branch is still reached the same way (`draft === null` with `battleResource.status !== 'error'`) — collapsing the two render arms and holding the draft in a memo changed nothing about how fast that branch resolves. Entry left standing; still unowned.
+- **`/battle` can flash "Battle Not Found" on the happy path** — `app/(battle)/battle/page.tsx:25` reads `useSearchParams().get('id') ?? ''`. If the CSR-bailout hydration pass yields empty params on the first client render and populates on a later one, render 1 has `battleId === ''`, starts `battles.load('')`, and that resolves to `null` from a genuinely fast localStorage read. Should it settle before the params-populated render, the not-found notice paints for a frame before flipping to loading and then to the battle. The prerendered `battle.html` itself is clean (it contains only the Suspense fallback, so there is no hydration text mismatch) — the hazard is entirely the two-phase param read, and it depends on Next 16's exact bailout timing. Not observed: the e2e waits for the heading and would not catch a one-frame flash. **Revisit if a flash is ever reported, or with Story 2.4's work on this route.** **Confirmed unaffected by Story 2.4** (2026-08-26): `app/(battle)/battle/page.tsx`'s two-phase `useSearchParams()` read is untouched, and `<BattlePage>`'s not-found branch is still reached the same way (`draft === null` with `battleResource.status !== 'error'`) — collapsing the two render arms and holding the draft in a memo changed nothing about how fast that branch resolves. Entry left standing; still unowned. **Widened in kind by Story 3.17** (2026-09-17): the route now reads a second param (`mode`) off the SAME `params` object in the SAME render, so if `id` were ever empty on render 1, `mode` would be too, and `<BattlePage>`'s `useState(initialMode)` would capture `'lab'` in that world — but that world also shows the not-found flash this entry already describes, which nobody has observed. No special handling was added (a re-seed of `mode` on a later prop change would turn the entry hint into a synchronised route, which RFC-005 Decision 3 forbids); the hazard is unchanged in kind and still unobserved.
 
 - ~~**Every battle shares one browser-tab title**~~ — **✅ Resolved in Story 2.11 (AC6)**, via the `document.title` effect this entry predicted, not a server wrapper. `<BattlePage>` sets `"<live display name> · Game of Life Studio"` in a `useEffect` declared above all four early returns, tracking `battleDisplayName(battleName)` live as the field is typed. Two effects, in declaration order: the FIRST (`[]` deps) captures the pre-mount title once, owns a `MutationObserver`, and restores the captured title on UNMOUNT; the SECOND (`[draft, battleName]`) writes the live value. ⚠️ **The observer is the load-bearing half and must not be "simplified" away** — Next 16's App Router commits the root layout's static `<title>` ELEMENT into the head during hydration, strictly after this component's first write (confirmed in the Story 2.11 code review by instrumenting the `document.title` setter against the built export: the only two assignments are the effect's, then one from inside the observer callback, which by its own guard only fires when the title had been changed out from under it). Without the observer the tab reads "Game of Life Studio" at rest, and AC6 fails. Its re-assertions are deliberately CAPPED: a callback that writes back what it observes re-queues itself as a microtask, so two agents each insisting on their own title starve the event loop and freeze the tab outright (reproduced in review). The restore on unmount is the fix for the trap the Dev Notes flagged: both battle pages inherit the SAME static `metadata.title`, so Next may not rewrite a `<title>` it believes is unchanged on a client navigation back to the Gallery, and an imperatively-set title can otherwise survive that navigation. `draft === null` (the not-found / error branch) is excluded explicitly — it does not claim a name it does not have, and keeps reading whatever the restore-effect captured. **Residual, honestly incomplete:** this is a STATIC EXPORT. The effect only fixes the *live* tab; the prerendered `battle.html` still ships the root layout's `"Game of Life Studio"` in its own `<title>`, so a crawler or a cold bookmark still sees that, unchanged by this story. `BattlePage.test.tsx`'s "the browser tab title (AC6)" describe block covers the loaded/typing/not-found/unmount cases; `battleRoute.spec.ts` covers the tab title changing with typing end to end. **Relocated 2026-09-03:** the whole mechanism now lives in `apps/web/lib/useDocumentTitle.ts` (with `appTitle()` for the suffix); `<BattlePage>` keeps one declarative line, `useDocumentTitle(draft === null ? null : appTitle(battleDisplayName(battleName)))`, and the `draft === null` exclusion above is now simply that `null`. The observer, the correction cap and the whitespace read-back moved verbatim and gained their first direct tests (`useDocumentTitle.test.tsx`, mutation-checked). ⚠️ One claim in this entry did NOT survive the move: the two effects' UNMOUNT ORDER is not load-bearing — `MutationObserver.disconnect()` empties the record queue, so the restore write is never delivered to the observer with either ordering (measured; reversing the two lines reddens no test). The hook records the correction. The residual below is unchanged — this is still a static export, and `battle.html` still ships the layout's title.
 
@@ -190,7 +190,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **The toolbar band ships without the mockup's layout rules** — Task 4 asked for "the mockup's `.toolbar` band"; `BattleGallery.tsx:118-120` implements it as `styled('div')({ marginBottom: '35px' })`, omitting `display: flex`, `justify-content: space-between`, `align-items: center`, `gap: 20px` and `flex-wrap: wrap` (`clinical-lab-theme/battle-gallery.html:111-118`). Correct and invisible with a single child — deliberately not added, because layout rules for hypothetical future children are speculation. The cost is that the next control added to the band lands in an unstyled block and looks broken for one commit. ~~**Pick this up in Story 2.16** or whichever story first adds a second toolbar control.~~ ⏸ **Checked in Story 2.16 (2026-08-31): NOT this story's, and the entry stands untouched.** This is the GALLERY's toolbar band (`BattleGallery.tsx`); Story 2.16 adds one control, to the BATTLE route's sidebar footer, and touches no Gallery file. The naming of this story was speculative rather than derived. **Pick this up in whichever story first adds a second control to the Gallery toolbar band** — Epic 5's export/import entry points are the likely first.
 
-- **`e2e/createBattle.spec.ts` forks the seed helpers a third time** — `buildSeedPayload`/`seedWorkspace` are now copy-pasted across `gallery.spec.ts`, `battleRoute.spec.ts`/`deleteBattle.spec.ts` and `createBattle.spec.ts`, with an in-file comment asking future readers to keep them in sync by hand. Task 7 named the `gallery.spec.ts` helpers "the established helpers", which reads as *reuse*, not *fork*; the dev scoped the story to one new spec file instead. Three copies is the point at which the next divergence becomes silent. **Pick this up in the next story that touches `apps/web/e2e`**, by extracting them to a shared `e2e/` fixture module.
+- **`e2e/createBattle.spec.ts` forks the seed helpers a third time** — `buildSeedPayload`/`seedWorkspace` are now copy-pasted across `gallery.spec.ts`, `battleRoute.spec.ts`/`deleteBattle.spec.ts` and `createBattle.spec.ts`, with an in-file comment asking future readers to keep them in sync by hand. Task 7 named the `gallery.spec.ts` helpers "the established helpers", which reads as *reuse*, not *fork*; the dev scoped the story to one new spec file instead. Three copies is the point at which the next divergence becomes silent. **Pick this up in the next story that touches `apps/web/e2e` broadly enough to justify the extraction** (Story 3.17 touched two spec files, added five-line locator helpers, and declined — the fork stays at three copies), by extracting them to a shared `e2e/` fixture module.
 
 - **A synchronous throw from an injected `settings.load()` bypasses the `.catch()`** — `BattlePage.tsx:83` is `repositories.settings.load().catch(…)`; if a repository's `load` is not `async` and throws before returning a promise, the `.catch` is never attached and the throw takes down the whole `Promise.all`. For a real battle id that surfaces as "its stored data may be damaged" about a battle that loaded fine. The comment at `:76-78` states flatly that settings "never rejects INTO this `Promise.all`", which is true only for `async` implementations; `SettingsRepository.load(): Promise<Settings>` does not preclude the other kind. `useAsyncResource` guards this exact shape for its own `load` argument (`Promise.resolve().then(load)`); the same defence is absent here. Unreachable through `LocalStorageSettingsRepository` (which is `async`) — reachable only through the DI seam. **Revisit if a non-async repository implementation is ever added**, e.g. an in-memory or API-backed repo in Connected mode.
 
@@ -700,7 +700,13 @@ Review Findings; these are the items consciously left open.
   surfaces; `/organisms` is the fourth as of Story 4.1 (Epic 4 intro, `epics.md:989`).** Already
   flagged by the readiness report
   (`implementation-readiness-report-2026-07-16.md:55,286,410` — "RFC touch: add `/organisms` … to
-  RFC-001/RFC-005 route sketches"); this entry is the tracker for that touch.
+  RFC-001/RFC-005 route sketches"); this entry is the tracker for that touch. **Story 3.17 adds a
+  second one to the same touch**: RFC-005 Decision 3's route list should read
+  `/battle?id=<uuid>[&mode=run]`, not bare `/battle?id=<uuid>` — the Gallery's Run link carries an
+  optional entry hint beside the id (FR-7.6, `apps/web/lib/battle/battleRoute.ts`).
+  `component-tree-battle-page.md` §3.1 and §7 need the matching `initialMode?`/FR-7.6 rows (no §7
+  row exists for FR-7.6 today). Neither planning doc was edited by this story (scope: `apps/web`
+  code, tests and this file).
 
 ## Deferred from: code review of 4-1-organisms-route-top-navigation (2026-09-13)
 
@@ -733,9 +739,11 @@ Review Findings; these are the items consciously left open.
   wrapping a stop is legal but noisy. **Story 4.17 decides** whether the article stays a tab stop
   once it has focusable children.
 - **`SectionHeader` stays duplicated between `<OrganismLibrary>` and `<BattleGallery>`** (FD9) —
-  unchanged from Story 4.1's deferral; still blocked behind `Story 3.17`'s Gallery change (the
-  parallel Epic 3 lane's surface) landing first, so the lift does not collide with it. **Pick this
-  up in the first story after 3.17 that touches both files.**
+  unchanged from Story 4.1's deferral. As of Story 3.17 the Gallery change this entry waited on is
+  in (`BattleTile.tsx`'s action band; `<BattleGallery>` itself untouched), so the precondition is
+  met. **Pick this up in the first story that touches both files** — no longer tied to 3.17 by
+  name. (`OrganismLibrary.tsx`'s own FD9 comment still names 3.17 as the thing to wait for; it is
+  history now and was deliberately left alone — `components/organisms/**` is lane 4's surface.)
 
 ## Deferred from: code review of 4-2-organism-card-grid (2026-09-14)
 
@@ -910,16 +918,19 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
 
 Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
 
-- **`mode === 'run' && runOrganisms === null` renders a header over nothing, and nothing flips
-  `mode` back.** The Run branch's `runOrganisms !== null` guard is there for TypeScript (the story
-  prescribed "renders nothing rather than `!`"), which is correct only while the state is
-  unreachable — and today it is: `organismsResource` has fixed deps and never re-lists, and
-  `rosterIds` changes only through the editor, which is unmounted in Run mode. It stops being
-  unreachable the moment a story changes the library while `<BattlePage>` is mounted — Stories
-  4.24 / 4.25 (edit / create organism from the battle, gated on `epic-3`) are the first. **Pick
-  this up there:** either flip to `'lab'` when the roster becomes unresolvable (an effect, so mind
-  `react-hooks/set-state-in-effect`) or render the same disabled-with-reason notice the header
-  shows, and add the test the guard cannot have today.
+- ~~**`mode === 'run' && runOrganisms === null` renders a header over nothing, and nothing flips
+  `mode` back.**~~ **✅ Closed in Story 3.17** (2026-09-17). A Gallery Run link reaches this state
+  ON MOUNT — before this story it needed a library change while `<BattlePage>` was already
+  mounted (Stories 4.24/4.25), which nothing could trigger yet; a `?mode=run` entry over a
+  dangling roster reaches it immediately. The fix taken is the first of the two options this entry
+  named: an in-render adjust (`if (mode === 'run' && runOrganisms === null) setMode('lab')`,
+  `BattlePage.tsx`, after `runDisabledReason`) — the `nameState` shape, not an effect, so no
+  `react-hooks/set-state-in-effect` and no painted frame of the empty branch. It is written to
+  cover BOTH readers: this story's mount-time entry, and 4.24/4.25's still-open case of the
+  library changing under an already-mounted page — those stories inherit the guard rather than
+  writing their own. Tests: `BattlePage.test.tsx`'s "Run from Gallery (Story 3.17)" describe
+  (dangling roster and failed-library cases, both asserting `[data-status]` never mounts) and
+  `battleRoute.spec.ts`'s AC8(b) e2e.
 - **The disabled RUN button states its reason only through `title`.** A `disabled` `<button>` is
   not focusable, so a keyboard user never meets the tooltip; screen readers do expose `title` as
   the accessible description, so the gap is sighted keyboard use. This is the route's policy
@@ -1394,3 +1405,63 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   count, a `key` on the region) is a product call. **Pick this up with Story 4.17** (edit flow —
   the first place a user sees their own duplicate names beside each other) or whichever story
   next touches the sentence.
+
+## Deferred from: Story 3-17-run-battle-from-gallery (2026-09-17)
+
+- **Planning-doc amendments the spec-conflict flag surfaced, not made here** (this story's scope
+  is `apps/web` code, tests and this file — no planning artifact) — see the RFC-touch tracker
+  entry above (Story 4.1's section), amended by this story with the `initialMode`/`&mode=run`
+  detail.
+- **The Gallery mockup-refresh list gains a fourth item**: a Run control in the tile's action band,
+  alongside Story 3.13's and 3.16's still-open mockup-refresh candidates — no mockup renders it
+  today (the clinical mockup has an unauthored `⋮` menu; the biotech one a `COPY`/`DEL` band).
+  **Pick this up whenever the Gallery mockups are next revisited.**
+- **The stale `&mode=run` after a Run → Lab flip** — the address bar keeps reading the Gallery's
+  entry hint even after the user has toggled to Lab, so a reload at that point re-enters Run
+  (FD1(a)'s documented, tested consequence — `battleRoute.spec.ts`'s AC8(c)). **Revisit only if a
+  user actually reports a reload landing back in Run as surprising**; the alternative (FD1(b),
+  stripping the param with `router.replace` after mount) was rejected as a second navigation for
+  cosmetics.
+- **Whether the Gallery should ever pre-judge a tile's runnability** — today every tile renders
+  Run unconditionally (FD3(a)); a battle whose roster cannot run lands in Lab, disabled, one click
+  later. Pre-judging would mean giving `<BattleGallery>`/`<BattleTile>` the page's `runOrganisms`
+  rule a second time, with a second fixture, and it would still be wrong the moment the library
+  changes between the Gallery's render and the click. **Revisit only if the "cannot run" landing
+  becomes common enough that a disabled Run affordance reads kinder than a Lab landing.**
+- **The e2e seed-helper fork stays at three copies** — this story's new `test.describe` block
+  lives in `battleRoute.spec.ts` and reuses that file's own `seedWorkspace`/helpers rather than
+  adding a fourth copy, so the standing count (`gallery.spec.ts` / `battleRoute.spec.ts` +
+  `deleteBattle.spec.ts` / `createBattle.spec.ts`) is unchanged. **Unchanged pick-up: the next
+  story that touches `apps/web/e2e` broadly enough to justify the extraction.**
+
+## Deferred from: code review of 3-17-run-battle-from-gallery (2026-09-17)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **`/battle?id=new&mode=run` seeds Run over an unsaved empty draft.** The route file reads
+  `mode` unconditionally, and `battleId === 'new'` is a sentinel `<BattlePage>` honours from ANY
+  caller, not only `/battle/new/page.tsx` — so a hand-typed `?id=new` already opened an empty new
+  battle before this story (Story 2.2), and `&mode=run` on it now mounts a paused Run over zero
+  organisms. Not a new state: an empty roster is `[]`, never `null`, so the RUN toggle on
+  `/battle/new` already permits exactly this. `BattlePage.tsx`'s prop comment ("`/battle/new`
+  never passes this") is true of the route file, not of the sentinel. **Pick this up with whichever
+  story next decides what `?id=new` on the query route should mean** — the one-line fix, if wanted,
+  is `battleId === 'new' ? 'lab' : initialModeFromParam(…)` at the read site.
+- **The two-phase `useSearchParams` hazard's consequence is worse for `mode` than for `id`.** The
+  Story 2.1 entry above (widened by 3.17) says that in the world where render 1 yields empty params
+  the page "also shows the not-found flash". For `id` that flash self-heals on the next render; for
+  `mode`, `useState(initialMode)` captures `'lab'` on render 1 and never re-reads, so a Gallery Run
+  link would silently land in Lab under a URL that says `&mode=run`. Still unobserved (every e2e in
+  the 3.17 block, including the `page.reload()` one, lands in Run), and deliberately NOT handled by
+  a prop-change re-seed (FD1's line: that turns the entry hint into a synchronised route). **If it
+  is ever observed**, the shape is a `key` on the route side (`<BattlePage key={battleId} …>` or a
+  key that flips when params first populate), which remounts with the populated value without any
+  URL write.
+- **A live run dropped to Lab without notice when the library changes under a mounted page.** The
+  AC6 adjust (`if (mode === 'run' && runOrganisms === null) setMode('lab')`) serves the 3-11 review's
+  future case (Stories 4.24/4.25) as well as the mount-time entry — but for a RUNNING session it
+  unmounts the view mid-run and the only explanation is the disabled RUN button's `title`. On mount
+  there is nothing to lose; under 4.24/4.25 there may be a cycle count and a population the user
+  was watching. Unreachable today (nothing re-lists the library while `<BattlePage>` is mounted).
+  **Stories 4.24/4.25 decide** whether the flip should stop-and-explain (a notice in the Lab
+  sidebar, the AC7 shape) rather than inherit the silent guard as written.

@@ -151,6 +151,19 @@ const gridSizeSlider = (page: Page): Locator =>
 const populationRows = (page: Page): Locator =>
   page.getByRole('complementary').getByRole('listitem');
 
+// Story 3.17 (Trap 4): Playwright's `getByRole(…, { name })` is a case-insensitive SUBSTRING match
+// by default, so the moment a tile also renders `Run ${name}` (below), every bare
+// `getByRole('link', { name: <battle name> })` resolves to TWO elements and fails strict mode.
+// `exact: true` is the fix; hoisted here so the five converted call sites below (and any future
+// one) share it rather than repeating the option inline.
+const tileLink = (page: Page, name: string): Locator =>
+  page.getByRole('link', { name, exact: true });
+// The Gallery's Run affordance (AC1). `exact: true` here too — `Run Three-Way Skirmish` would
+// otherwise substring-match a hypothetical `Run Three-Way Skirmish II`, and it keeps this helper
+// symmetric with `tileLink` above.
+const runLink = (page: Page, name: string): Locator =>
+  page.getByRole('link', { name: `Run ${name}`, exact: true });
+
 /** Every test using this asserts a clean console: the Run toggle mounts a lazy chunk and a second
  * canvas, and both `buildRefToFillGroup`'s warn-once and the ResizeObserver loop report there, not
  * as test failures. */
@@ -185,7 +198,7 @@ test.describe('battle route (Story 2.1)', () => {
     // console-error assertion).
     await expect(page.getByRole('article')).toHaveCount(2);
 
-    await page.getByRole('link', { name: 'Three-Way Skirmish' }).click();
+    await tileLink(page, 'Three-Way Skirmish').click();
 
     await expect(page).toHaveURL(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
@@ -273,7 +286,9 @@ test.describe('battle route (Story 2.1)', () => {
     const tile = page.getByRole('article').filter({ hasText: 'Three-Way Skirmish' });
     const box = await tile.boundingBox();
     if (box === null) throw new Error('tile has no layout box');
-    // Low-centre: below the title, clear of the top-right delete button's 34px band.
+    // Low-centre: below the title, clear of the top-right action band — 62px wide as of Story
+    // 3.17 (Run + 6px gap + Delete; the header reserves 68px for it), still well clear of this
+    // low-centre point.
     await page.mouse.click(box.x + box.width / 2, box.y + box.height - 24);
 
     await expect(page).toHaveURL(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
@@ -1172,7 +1187,7 @@ test.describe('saving a battle (Story 2.13)', () => {
     // Back to the Gallery and in again by its own tile — the same route a user takes, and the only
     // one that proves the minted id is reachable from outside the editor session that made it.
     await page.goto('/');
-    await page.getByRole('link', { name: 'Reopened Battle' }).click();
+    await tileLink(page, 'Reopened Battle').click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Reopened Battle');
     await expect(page.getByRole('textbox', { name: /battle name/i })).toHaveValue(
       'Reopened Battle',
@@ -1315,7 +1330,7 @@ test.describe('edit-mode grid resize (Story 2.14)', () => {
     // AC5: out and back in through the Gallery — the route a user takes, and the only one that
     // proves the record parsed back through `BattleSchema` at the new size.
     await page.goto('/');
-    await page.getByRole('link', { name: 'Grand Colony War' }).click();
+    await tileLink(page, 'Grand Colony War').click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
     await expect(gridSizeFact(page)).toHaveAttribute('aria-label', 'Grid Size: 50 by 30');
     await expect(page.getByRole('radio', { name: '50 by 30' })).toBeChecked();
@@ -1540,7 +1555,7 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     // Out and back in through the Gallery — the route a user takes, and the only one that proves
     // the pruned `organismIds: []` record actually parses back through `BattleSchema`.
     await page.goto('/');
-    await page.getByRole('link', { name: 'Three-Way Skirmish' }).click();
+    await tileLink(page, 'Three-Way Skirmish').click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
 
     // The dish reopens exactly as empty as it was right after the Clear — nothing survived save.
@@ -1844,7 +1859,7 @@ test.describe('back navigation & the unsaved-changes guard (Story 2.16)', () => 
     await leaveDialog(page).getByRole('button', { name: 'Discard Changes' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Battle Gallery');
 
-    await page.getByRole('link', { name: 'Three-Way Skirmish' }).click();
+    await tileLink(page, 'Three-Way Skirmish').click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
 
     // A fresh mount, a fresh ring — and a clean battle, because the paint was discarded.
@@ -2878,6 +2893,148 @@ test.describe('Play-mode ephemeral resize (Story 3.16)', () => {
     expect(await cycle(page)).toBe(0);
 
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+    expect(errors).toEqual([]);
+  });
+});
+
+// Story 3.17 (FR-7.6): the Gallery and the route prove Run-from-Gallery end to end. Reuses the
+// module-scope helpers above (`runButton`/`labButton` are the header toggle's OWN buttons, unaffected
+// by this story) rather than any of `battleRoute.spec.ts`'s own hand-rolled seed logic.
+test.describe('Run from Gallery (Story 3.17)', () => {
+  test('runLink navigates straight into a paused Run session, and Back returns to the Gallery (AC8(a))', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto('/');
+    await expect(page.getByRole('article')).toHaveCount(2);
+
+    await runLink(page, 'Three-Way Skirmish').click();
+
+    await expect(page).toHaveURL(`/battle?id=${MOCK_BATTLE_IDS.battleA}&mode=run`);
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'run');
+    await expect(runButton(page)).toHaveAttribute('aria-pressed', 'true');
+    const view = page.locator('[data-status]');
+    await expect(view).toHaveAttribute('data-status', 'paused');
+    await expect(view).toHaveAttribute('data-cycle', '0');
+    // FR-3.10 "the playback canvas painted" — the same smoke check the 3.11 toggle test uses.
+    await expect(dish(page)).toBeVisible();
+    expect(await distinctColorCount(dish(page))).toBeGreaterThan(2);
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
+    await expect(page.getByRole('textbox')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Back to Battles' })).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Back to Battles' }).click();
+
+    await expect(page).toHaveURL('/');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Battle Gallery');
+    await expect(page.getByRole('article')).toHaveCount(2);
+
+    expect(errors).toEqual([]);
+  });
+
+  // AC8(b), FD3(a): battleB carries the dangling Conway id in an e2e-seeded workspace (no
+  // seedConwaysClassic here) — a Run entry over it lands in Lab, disabled, exactly as a toggle
+  // attempt would.
+  test('runLink over a dangling roster lands in Lab with RUN disabled, and never mounts the Run view (AC8(b))', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto('/');
+    await expect(page.getByRole('article')).toHaveCount(2);
+
+    await runLink(page, 'Grand Colony War').click();
+
+    await expect(page).toHaveURL(`/battle?id=${MOCK_BATTLE_IDS.battleB}&mode=run`);
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+    await expect(runButton(page)).toBeDisabled();
+    await expect(runButton(page)).toHaveAttribute(
+      'title',
+      'Some organisms in this battle could not be loaded',
+    );
+    await expect(sidebarHeadings(page)).toHaveText([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
+    await expect(page.locator('[data-status]')).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  // AC8(c): the query param is bookmarkable and survives a reload (AC5's "a reload re-enters
+  // Run" made observable); an unrecognised value degrades to Lab silently.
+  test('the ?mode=run entry is bookmarkable and survives a reload; an unrecognised value degrades to Lab (AC8(c))', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}&mode=run`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.locator('[data-status]')).toHaveAttribute('data-status', 'paused');
+
+    // The hydration lesson (the Story 2.1 reload test above): re-await the h1 before reading
+    // [data-mode] after a reload, since the prerendered fallback briefly replaces the tree.
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'run');
+
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}&mode=play`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+
+    expect(errors).toEqual([]);
+  });
+
+  // AC8(d), Trap 15: title link → organism dots → Run → Delete, the same order BattleTile.test.tsx
+  // pins under RTL. Dot count is read off the tile rather than hardcoded — the fixture's own
+  // roster size is not this test's concern, only that Run lands immediately after the last dot.
+  test('keyboard reaches Run right after the last organism dot, then Delete (AC8(d))', async ({
+    page,
+    browserName,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto('/');
+    // Hydration signal (appShell.spec.ts's own lesson): a bare `.count()` does not auto-wait the
+    // way an `expect` assertion does, so without this the tile is still the prerendered "Loading
+    // battles…" placeholder and every count below reads 0.
+    await expect(page.getByRole('article')).toHaveCount(2);
+
+    const tile = page.getByRole('article').first();
+    const titleLink = tile.getByRole('link').first();
+    const dotCount = await tile.getByRole('img').count();
+    const tileName = (await titleLink.textContent()) ?? '';
+    // A zero-dot tile would let the loop run 0 times and still land Run right after the title —
+    // true, but not the ordering this test exists to pin.
+    expect(dotCount).toBeGreaterThan(0);
+
+    await titleLink.focus();
+    await expect(titleLink).toBeFocused();
+
+    // WebKit needs `Alt+Tab` (the 3.13/3.16 idiom): a plain Tab from a just-focused element can
+    // leave `document.activeElement` on `<body>` on macOS WebKit.
+    const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    for (let i = 0; i < dotCount; i += 1) {
+      await page.keyboard.press(tab);
+    }
+
+    // Tile-scoped like the Delete locator below — a page-scoped `runLink` would strict-fail the
+    // day two seeded tiles share a name.
+    await page.keyboard.press(tab);
+    await expect(tile.getByRole('link', { name: `Run ${tileName}`, exact: true })).toBeFocused();
+
+    await page.keyboard.press(tab);
+    await expect(tile.getByRole('button', { name: `Delete ${tileName}` })).toBeFocused();
 
     expect(errors).toEqual([]);
   });

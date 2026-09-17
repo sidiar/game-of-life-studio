@@ -56,8 +56,9 @@ const CreateBattleLink = styled(Link)({
     outlineOffset: '2px',
   },
   // The hover lift is motion, and this control now appears twice on an empty Gallery. Every other
-  // piece of gallery chrome carries this guard (BattleTile's Tile, TileActions and ActionButton);
-  // without it a user who asked for no motion still gets the translate.
+  // piece of gallery chrome carries this guard (BattleTile's Tile, TileActions, DeleteButton and
+  // RunLink, the latter two sharing one `actionChrome` object as of Story 3.17); without it a user
+  // who asked for no motion still gets the translate.
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
     '&:hover': { transform: 'none' },
