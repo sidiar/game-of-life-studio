@@ -7,9 +7,9 @@ agreement. If it is not written here, the orchestrator does not depend on it.
 
 Written 2026-09-17 against `SKILL.md` 1.1.1. Two kinds of section, and the difference
 matters: **§3–§7 are derived** — every obligation traces to a line the orchestrator
-already reads or a check it already runs, and nothing there is anticipated. **§2, §10
-and §11 specify** the mechanism that carries them — the `[adapter]` table, `adapter.md`,
-the placeholders, the conformance test — which does not exist at 1.1.1 and is what
+already reads or a check it already runs, and nothing there is anticipated. **§2, §8,
+§10 and §11 specify** the mechanism that carries them — the `[adapter]` table,
+`adapter.md`, the placeholders, the conformance test — which does not exist at 1.1.1 and is what
 Phases 1 and 2 of the decoupling plan build. Until then `SKILL.md` names the BMad skills
 directly; this file is what that text is being replaced with.
 
@@ -86,7 +86,9 @@ branch, the two hard rules), not the adapter's section: the halt answers in `## 
 (§7) are the tool's menu, not method prescription, and dropping them on the one path
 where the reviewer is Fable would drop them exactly where a wrong menu choice costs most.
 The line budget above is what keeps this honest — an adapter section that needs a page
-is prescribing method, and Fable will do worse with it.
+is prescribing method, and Fable will do worse with it. (This is a reading of Step 3 at
+1.1.1; Phase 1's rewrite of Step 3 states it, so the two files do not disagree on the
+Fable path.)
 
 Placeholders the orchestrator substitutes — use them rather than paths of your own:
 
@@ -273,11 +275,11 @@ unresolved `decision-needed` finding is a checklist line in `{story_file}` of th
 - [ ] [Review][Decision] <title> — <the options, one line>
 ```
 
-and it is *open* while unchecked. That line is what Step 3 counts. Patches and deferrals
-are `- [ ] [Review][Patch] …` (checked once applied) and `- [x] [Review][Defer] …`; the
-orchestrator does not count those, but the hand-back copies them. Your `## Review`
-prompt writes findings in this shape or maps your tool's onto it — BMad's is this shape
-already.
+and it is *open* while unchecked. That line is what Step 3 counts, and it is the **only**
+line shape the contract claims: how patches and deferrals are recorded in the story file
+is yours (BMad uses `[Review][Patch]` / `[Review][Defer]` lines in the same style; nothing
+reads them). Your `## Review` prompt writes open decisions in this shape or maps your
+tool's onto it — BMad's is this shape already.
 
 What the orchestrator does with the words:
 
@@ -331,8 +333,8 @@ were written against. One line per item, checkable by the owner before the first
 ```
 
 The orchestrator does not check these — it cannot know how — but Step 5 names the
-adapter in the hand-back, and a run that fails in Create for want of a tool should be
-diagnosable from this list.
+adapter in the hand-back (Phase 1), and a run that fails in Create for want of a tool
+should be diagnosable from this list.
 
 ---
 
