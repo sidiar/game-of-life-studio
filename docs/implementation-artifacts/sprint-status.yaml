@@ -138,6 +138,7 @@ development_status:
   4-23-editor-unsaved-changes-scope: backlog
   4-24-edit-organism-from-battle: backlog
   4-25-create-organism-from-battle: backlog
+  4-26-rule-delete-confirmation-dialog: backlog
   epic-4-retrospective: optional
 
   # Epic 5: Sharing, Backup & Workspace Management

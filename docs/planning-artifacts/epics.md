@@ -1299,6 +1299,19 @@ So that inspiration doesn't require leaving my work.
 **Given** Save & Close, **When** completed, **Then** the new organism joins the session roster, immediately selectable for painting (Decision H.2; spec §3.4)
 **And** Cancel leaves the roster and battle untouched
 
+### Story 4.26: Rule-Delete Confirmation Dialog
+
+As a user,
+I want to confirm before a survival rule is removed,
+So that a stray double-click never wipes out rules I meant to keep.
+
+**Acceptance Criteria:**
+
+**Given** a rule card's delete button, **When** activated by pointer or keyboard, **Then** a confirmation dialog names the rule (its Summary, or "Rule N" when the summary is empty) before anything changes — the Story 1.13 `DeleteBattleDialog` pattern, restyled for the editor (UX-DR15 vocabulary)
+**Given** the dialog, **When** confirmed, **Then** the rule is removed and focus lands per Story 4.10 AC5 (the neighbour's Summary, or the empty-state "+ Add Rule"); **When** cancelled or dismissed (Escape, backdrop), **Then** nothing changes and focus returns to the delete button that opened it
+**And** the dialog is keyboard-operable (focus trapped inside, Escape cancels) and passes axe; the confirm action is the only destructive control, so no second delete can be reached at the same coordinates (closes the double-click cascade deferred from Story 4.10)
+**And** the Story 4.10 unit and e2e delete tests are updated to pass through the dialog rather than rewritten around it
+
 ## Epic 5: Sharing, Backup & Workspace Management
 
 Users can export Battles to share, import shared files safely, and manage their workspace. Versioned serializer with rule-aware closure, migration pipeline, atomic destructive import, Clear All, workspace statistics, and the Settings page shell. NFR-7.3 load-time corruption handling lands here.

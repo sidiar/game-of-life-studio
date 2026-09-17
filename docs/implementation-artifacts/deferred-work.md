@@ -1529,8 +1529,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   Summary field, not another Delete button, so the keyboard cascade cannot reoccur; the pointer path
   bypasses focus entirely and was left open. [`apps/web/components/organisms/editor/RuleCard.tsx`]
   **Owner decision (Sidiar, 2026-09-17): defer** — a later story adds a confirmation dialog for
-  rule deletion in the Organism Editor. Pick this up in **a later Epic 4 story that adds a
-  rule-delete confirmation dialog to the Organism Editor** — no such story exists in `epics.md` yet
-  (UX-DR15's editor dialogs cover organism-level delete, not rule cards); the owner decides whether
-  it becomes a new story or rides an existing one (candidates: 4-13 editor validation feedback, or
-  4-23 editor unsaved-changes scope).
+  rule deletion in the Organism Editor. **Pick this up in Story 4.26 (Rule-Delete Confirmation
+  Dialog)**, added to `epics.md` and the sprint board at the owner's request on the same day —
+  UX-DR15's editor dialogs cover organism-level delete, not rule cards, so a dedicated story was
+  needed rather than riding 4-13 or 4-23.
