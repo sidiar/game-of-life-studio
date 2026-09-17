@@ -5,9 +5,13 @@ it gets implemented, how it gets reviewed. The skill ships with `bmad` (BMad Met
 and expects you to be able to write another in an afternoon. This file is the whole
 agreement. If it is not written here, the orchestrator does not depend on it.
 
-Written 2026-09-17 against `SKILL.md` 1.1.1. Every obligation below is derived from a
-line the orchestrator actually reads or a check it actually runs — nothing is
-anticipated.
+Written 2026-09-17 against `SKILL.md` 1.1.1. Two kinds of section, and the difference
+matters: **§3–§7 are derived** — every obligation traces to a line the orchestrator
+already reads or a check it already runs, and nothing there is anticipated. **§2, §10
+and §11 specify** the mechanism that carries them — the `[adapter]` table, `adapter.md`,
+the placeholders, the conformance test — which does not exist at 1.1.1 and is what
+Phases 1 and 2 of the decoupling plan build. Until then `SKILL.md` names the BMad skills
+directly; this file is what that text is being replaced with.
 
 ---
 
@@ -76,6 +80,14 @@ placeholders, and spawns. Write them as instructions to an agent that has never 
 your method's documentation. Terse beats thorough; the subagent can read your tool's
 own files if you name them.
 
+The section is appended **whole, on every model**. `SKILL.md` Step 3 keeps Fable's spawn
+prompt shorter than the others — that rule governs the orchestrator's own framing (goal,
+branch, the two hard rules), not the adapter's section: the halt answers in `## Review`
+(§7) are the tool's menu, not method prescription, and dropping them on the one path
+where the reviewer is Fable would drop them exactly where a wrong menu choice costs most.
+The line budget above is what keeps this honest — an adapter section that needs a page
+is prescribing method, and Fable will do worse with it.
+
 Placeholders the orchestrator substitutes — use them rather than paths of your own:
 
 | Placeholder | Value |
@@ -100,7 +112,7 @@ adapter must produce the same shape, because `lane-gates.py` parses it with a st
 parser and `SKILL.md` Step 0 reads it on `main` for every decision it makes.
 
 ```yaml
-last_updated: 2026-09-17          # a top-level date; free-form, never read by the skill
+last_updated: 2026-09-17          # a top-level date; Step S sets it to today on a sync
 
 development_status:
   epic-4: in-progress             # one row per epic
@@ -118,6 +130,11 @@ development_status:
 - The board is **versioned**. On a story branch, `done` is a proposal ("implemented and
   reviewed"); on `main`, it is a fact ("merged"), because merging is the only thing that
   writes it there. Step 0 reads `main`, never the branch.
+- The orchestrator **does commit to this file once**: Step S, syncing an open PR with
+  `main`, resolves a conflict in `{status_file}` by keeping both sides' status lines and
+  setting `last_updated` to today. That is a line-merge of what the two branches already
+  wrote, never a transition — but it is a commit to the board by something other than
+  your tool, and a tool that checksums or regenerates the file will notice.
 
 ### Who may write which transition
 
@@ -126,7 +143,7 @@ development_status:
 | **Create** | story `backlog → ready-for-dev`; and `epic-N: backlog → in-progress` on the epic's first story |
 | **Implement** | story `ready-for-dev → in-progress → review` |
 | **Review** | story `review → done` (nothing left open), or `review → in-progress` (`decision-needed` findings left in the story file as action items) |
-| **Orchestrator** | **no story status, ever.** After Review it *checks* that `done` ⇔ no `decision-needed` findings and STOPs on a mismatch rather than editing. It writes gate rows to `{gates_file}` only when the owner has approved them (Step 5). |
+| **Orchestrator** | **no story status, ever.** After Review it *checks* that `done` ⇔ no open `[Review][Decision]` item (§6) and STOPs on a mismatch rather than editing. It writes gate rows to `{gates_file}` only when the owner has approved them (Step 5), and the Step S line-merge above. |
 
 The adapter's tool owns its transitions, the orchestrator verifies them. This is the
 pattern, not a BMad accident: the review tool is the one that knows whether it left
@@ -155,15 +172,17 @@ and appends one:
 
 | Line / block | Written by | Read by |
 | --- | --- | --- |
-| `Dev Model: sonnet   # one-line justification` — last lines of the file | Create (the orchestrator's instruction, added to your prompt) | Step 2 (which model implements), Step 3 (which model reviews) |
-| `Proposed lane gate: …` or `Proposed lane gate: none` — same place | Create, likewise | Step 5, carried to the owner |
-| Its `## Review` / findings section, with `decision-needed` items identifiable | Review | Step 3's `done` check, Step 5's hand-back |
+| A line beginning `Dev Model:` — `Dev Model: sonnet   # one-line justification` — anywhere in the file | Create (the orchestrator's instruction, added to your prompt) | Step 2 (which model implements), Step 3 (which model reviews) |
+| A line beginning `Proposed lane gate:` — a `{gates_file}` row, or `none` | Create, likewise | Step 5, carried to the owner |
+| `- [ ] [Review][Decision] …` checklist items — the open-decision marker, §6 | Review | Step 3's `done` check, Step 5's hand-back |
 | The run-stats block after the marker line *"This story was implemented with the 'Implement next story' skill with the following stats:"* | Step 4 (`story-run-stats.py`) | nobody; re-runs replace it |
 
-So the format is otherwise yours, with two tolerances: the file must survive two
-trailer lines being appended after Create, and a stats block being appended after
-Review. A tool that validates the story file against a strict schema, or rewrites it
-whole, will need to tolerate or preserve these.
+So the format is otherwise yours, with one tolerance: the two trailer lines Create
+appends must be **preserved through Implement and Review** — both rewrite the story file
+(tasks ticked, file list, status, findings), and Step 3 re-reads `Dev Model:` after
+Implement has been through it. The stats block is appended last, after Review, and only
+`story-run-stats.py` reads it. A tool that validates the story file against a strict
+schema, or regenerates it whole, will need to carry the two lines across.
 
 ---
 
@@ -178,11 +197,17 @@ so you do not repeat them.
 - [ ] Writes `{story_file}` for **`{story_key}` by key — never auto-discovered.** With
       two lanes in progress, a tool left to "pick the next story" picks the other lane's.
       If your tool has a discovery mode, the prompt must bypass it by naming the story.
-- [ ] Sets the story to `ready-for-dev`; flips `epic-{E}` to `in-progress` if this is the
-      epic's first story. Both writes are expected and the orchestrator's Step 2 tree
-      check allows exactly `{story_file}` and `{status_file}` to be dirty.
-- [ ] Touches no other file. Nothing is committed yet — Step 2 branches first, so that a
-      Create that dies mid-write leaves `main` clean.
+- [ ] Sets the story to `ready-for-dev`, and **must** flip `epic-{E}: backlog →
+      in-progress` when this is the epic's first story. That row is not bookkeeping:
+      `lane-gates.py resolve` and `analysed` derive the set of in-progress epics from the
+      `epic-N: in-progress` rows on `main`, so a method that keeps epic state anywhere
+      else breaks lane resolution and pair analysis. The flip reaches `main` when the
+      first story's PR merges, like every other board write.
+- [ ] Dirties **exactly** `{story_file}` and `{status_file}` — Step 2's tree check STOPs
+      on anything else, and a note in `## Notes` does not waive it. A method that writes
+      other files at creation cannot be adapted without a `SKILL.md` change. Nothing is
+      committed yet — Step 2 branches first, so that a Create that dies mid-write leaves
+      `main` clean.
 - [ ] ⟨O⟩ ends the file with `Dev Model:` and `Proposed lane gate:`.
 - [ ] HALTs — a story that cannot be written (missing epic, missing planning docs, a
       prerequisite the tool insists on) — are reported and end the run. Nothing is
@@ -197,14 +222,13 @@ so you do not repeat them.
       end, in `{status_file}` and wherever the story file records status.
 - [ ] Records what changed in the story file (a file list, or your tool's equivalent), so
       the reviewer and the PR body have something to check against.
-- [ ] Adds no dependency and changes no configuration the story did not ask for; that is
-      a HALT, not a judgement call.
 - [ ] ⟨O⟩ branch first, one commit `feat: {title} (story {id})`, push, never `main`.
 - [ ] HALTs (an ambiguous task, a check that will not pass after honest attempts, a
-      missing prerequisite) end the run with the reason. The orchestrator leaves the
-      branch for the owner; it never resumes into one.
+      missing prerequisite — whatever your tool's own conditions are) end the run with
+      the reason. The orchestrator leaves the branch for the owner; it never resumes
+      into one.
 
-### Review — spawned on the model Implement did *not* use, on the pushed branch
+### Review — spawned on the model the lookup pairs with `Dev Model:` (`sonnet → opus`, `opus → fable`; never the same), on the pushed branch
 
 - [ ] Reviews the diff `origin/main...HEAD` **against the story** — `{story_file}` is
       always passed, and the prompt says why: it is what makes the review able to say
@@ -242,17 +266,31 @@ Three buckets. Every review finding lands in exactly one.
 Noise and false positives are dropped, not recorded — a fourth bucket the vocabulary
 does not need.
 
+**The open-decision marker** is the skill's too, claimed the way the board format is: an
+unresolved `decision-needed` finding is a checklist line in `{story_file}` of the shape
+
+```markdown
+- [ ] [Review][Decision] <title> — <the options, one line>
+```
+
+and it is *open* while unchecked. That line is what Step 3 counts. Patches and deferrals
+are `- [ ] [Review][Patch] …` (checked once applied) and `- [x] [Review][Defer] …`; the
+orchestrator does not count those, but the hand-back copies them. Your `## Review`
+prompt writes findings in this shape or maps your tool's onto it — BMad's is this shape
+already.
+
 What the orchestrator does with the words:
 
-- **`done` ⇔ no `decision-needed`.** Step 3 reads `{status_file}` on the branch and
-  the findings in `{story_file}` and STOPs if they disagree. A review that leaves a
+- **`done` ⇔ no open `[Review][Decision]`.** Step 3 reads `{status_file}` on the branch
+  and counts the unchecked marker lines in `{story_file}`, and STOPs if they disagree. A review that leaves a
   decision open and writes `done`, or resolves everything and writes `in-progress`, is a
   broken adapter, and the run says so rather than papering over it.
 - **Draft PR iff not `done`.** The draft flag is the "owner has calls to make" signal;
   it is derived from the status, so the status has to be right.
-- **The hand-back lists them by bucket** — patches applied, items deferred, decisions as
-  explicit questions to the owner. Your `## Review` prompt should make the reviewer's
-  report use these words so Step 5 can copy them.
+- **The hand-back names them** — Step 5 lists patches auto-applied and every
+  `decision-needed` finding awaiting the owner's call; the PR body's *Review* section
+  adds the deferrals. Your `## Review` prompt should make the reviewer's report use these
+  words so both can be copied from it.
 
 ---
 
@@ -307,17 +345,17 @@ For the owner. What living with this adapter means, beyond the prompts. Required
   skills glob story files non-recursively, so archiving a finished epic's stories into a
   subfolder makes them invisible to every later phase. Archive per epic, after the epic
   is done; never per "phase".
-- Any board write the method makes that is not in the §3 table, so that the orchestrator's
-  Step 2 tree check (only `{story_file}` and `{status_file}` may be dirty after Create)
-  is not a surprise.
+- Any file the method reads or writes outside `{stories_dir}` and `{status_file}` during
+  Implement or Review — a deferred-work log, a project-context file — so the owner knows
+  what a story PR can touch. (Create has no such latitude: §5.)
 
 ---
 
 ## 10. Worked example — the `bmad` adapter, and the four findings behind this contract
 
-`adapters/bmad/adapter.md` is the reference. Read it beside this file. Four findings from
-the v1 review shaped the sections above; they are recorded here so that the next adapter
-does not rediscover them.
+`adapters/bmad/adapter.md` (Phase 1) is the reference implementation of this contract.
+Four findings from the v1 review shaped the sections above; they are recorded here so
+that the next adapter does not rediscover them.
 
 | Finding | What it was | Where the contract answers it |
 | --- | --- | --- |
@@ -328,15 +366,18 @@ does not rediscover them.
 
 BMad's vocabulary maps 1:1 onto §6 — `patch`, `defer`, `decision_needed` — with its
 fourth bucket, `dismiss`, dropped at triage exactly as §6 prescribes. Its statuses are
-the §3 statuses. Its `[Review][Decision]` / `[Review][Patch]` / `[Review][Defer]`
-checklist items in the story file are what Step 3 counts for the `done` check.
+the §3 statuses, and its `[Review][Decision]` / `[Review][Patch]` / `[Review][Defer]`
+checklist lines are the §6 marker as written. Its `bmad-dev-story` HALTs of its own
+accord on a dependency the story did not ask for, on missing configuration, and on
+three consecutive failed attempts — those are the adapter's halts (§7), listed in its
+`## Implement`, not obligations of the contract.
 
 ---
 
-## 11. Conformance — `tests/test_adapters.py`
+## 11. Conformance — `tests/test_adapters.py` (Phase 2)
 
 Every `adapters/*/adapter.md` shipped with the skill, and any `dir =` adapter you point
-the tests at, is checked for:
+the tests at, will be checked for:
 
 - the five H2s, by name, in order, and nothing else at H2 level;
 - `## Review` naming all three buckets — `patch`, `defer`, `decision-needed` — and the
@@ -345,8 +386,9 @@ the tests at, is checked for:
 - `## Requires` non-empty;
 - the whole file under 100 lines (the context budget, §2).
 
-And `lane-gates.py`'s `read_config` refuses a missing `[adapter]`, both keys, neither,
-and a `dir` whose `adapter.md` does not exist — with the message naming the key.
+And `lane-gates.py`'s `read_config` will refuse a missing `[adapter]`, both keys,
+neither, and a `dir` whose `adapter.md` does not exist — with the message naming the
+key. (At 1.1.1 it reads `[paths]` only.)
 
 The tests cannot check that your prompts *work*. The check for that is a story run on a
 throwaway repository; `fixtures/` is such a project.
