@@ -120,9 +120,39 @@ Opus row so it never touches the default path, and Step 3 makes the orchestrator
 derivation out loud before spawning — *"Step 2 ran on X, so Step 3 spawns Y"* — because a
 collapsed split is silent and a stated one is not. Ten stories have run Opus + Fable so far.
 
+Since 2.0.0 the table is the project's, `[models.review]` in its TOML, and the derivation is
+a script call (`lane-gates.py reviewer`) that refuses a table pairing any model with itself.
+The move was prompted by a question, not an incident: the three names were going to be
+outdated, and a skill-shipped default would go stale silently — exactly the failure the
+table exists to make loud. So the project owns the choice, dated, in its own repo.
+
 One impression rode along, from those ten runs rather than from a comparison: Fable seemed
 to do worse under step-by-step prescription than Opus or Sonnet, so its review prompt is
 deliberately shorter — the goal, the branch, the two hard rules, and the method left to it.
+
+## The board and the vocabulary are the skill's
+
+*Anticipated.* Nothing has run on an adapter other than `bmad`; this section records a
+decision, not a result.
+
+v2 made the three phase prompts pluggable and deliberately left two things fixed. The
+**board format** — `sprint-status.yaml`, one `key: status` line per story under one
+mapping — because *the PR is the state machine* needs `done` on `main` to mean *merged*,
+which needs the board to be a versioned file in the repo; an issue tracker cannot be that,
+and a second file format has not appeared. The **triage vocabulary** — `patch` / `defer` /
+`decision-needed` and the `- [ ] [Review][Decision]` marker line — because the draft-PR
+rule, the done-check and the hand-back are all written in those words; an adapter maps its
+tool's vocabulary onto them rather than bringing its own. Both were BMad's; both are now
+claimed as the skill's, with BMad noted as writing them natively.
+
+The contract's other rule came from a review of the BMad path before anything moved: the
+review tool halts five times for a human, and the skill had scripted one of them; the
+reviewer inferred the rest correctly in every run — and one of the options it could have
+inferred was "start the next story", which is the other lane's story on this branch. So
+*an adapter states the answer to every halt its tool presents* is a contract obligation,
+and "the subagent will work it out" is named as the defect it is. The `plain` adapter is
+the second implementation, written so the seam is not imagined; whether it holds is a
+question for its first run.
 
 ## Gates are rows, not memory
 

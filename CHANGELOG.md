@@ -3,6 +3,38 @@
 Dates are the dates the change landed in the source project; the skill was extracted
 with its history on 2026-09-15.
 
+## 2.0.0 — 2026-09-17
+
+**Breaking:** `implement-next-story.toml` needs two new tables, `[adapter]` and
+`[models]`; a run stops before Step 0 without them. Copy both from
+`implement-next-story.example.toml` — for a BMad project that is `[adapter] name = "bmad"`
+and the shipped model table unchanged.
+
+The method is pluggable. Everything BMad-specific in `SKILL.md` — the three skill
+invocations, the review's halt answers, the auto-discovery warning, the non-recursive
+glob, the resume path for a draft PR — moved verbatim into `adapters/bmad/adapter.md`,
+one file with five sections that the orchestrator reads once and appends to its own
+instructions when it spawns each phase. `adapters/CONTRACT.md` is what an adapter must
+provide, derived from what the orchestrator reads and checks: the board format and its
+transition table (adapters own their status transitions, the orchestrator verifies), the
+story-file trailers, the three triage buckets and the `- [ ] [Review][Decision]` marker
+line the done-check counts, and the rule that every halt a tool presents has a scripted
+answer. `adapters/plain/` is the second adapter — no framework, a git repo and a
+Markdown plan — and the proof the seam is real; it has not yet had its first run.
+
+Found on the way: `bmad-code-review` halts five times, not four — a checkpoint in its
+first step and a chunking offer for large diffs — and the `bmad` adapter now answers both.
+
+Models are roles. `[models]` names which alias plays `create`, `dev`, `dev_escalated` and
+`sync`, and `[models.review]` pairs each dev model with its reviewer; `lane-gates.py`
+refuses a table that pairs a model with itself, and `reviewer DEV` does Step 3's lookup.
+`SKILL.md` refers to roles throughout; its one *Models* section holds the shipped pairing
+and the Fable craft note, dated.
+
+Scripts: `lane-gates.py adapter` resolves the adapter file; the board-format literals are
+named constants; `story-run-stats.py`'s phase titles are the skill's steps (`create`,
+`implement`, `review + PR`), the marker unchanged so re-runs still replace. Tests 44 → 61.
+
 ## 1.1.1 — 2026-09-16
 
 Step 3 drives `bmad-code-review` by script rather than by the reviewer's judgement. Its
