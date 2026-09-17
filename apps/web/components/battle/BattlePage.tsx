@@ -574,9 +574,10 @@ export default function BattlePage({
 
   // Story 3.17 (AC6, FD3(a)): a Run entry whose roster cannot run lands in Lab with RUN disabled
   // and its reason — never a header over nothing. Serves TWO readers: this story's Gallery Run
-  // link, reachable on MOUNT for the first time, and the 3-11 review's open future case (a library
-  // that changes under an already-mounted page, Stories 4.24/4.25 — deferred-work.md:912-920). The
-  // in-render `nameState` shape (`:~260` above), not an effect: `react-hooks/set-state-in-effect`
+  // link, reachable on MOUNT for the first time, and the 3-11 review's future case (a library that
+  // changes under an already-mounted page, Stories 4.24/4.25 — deferred-work.md, "renders a header
+  // over nothing", closed by this story). The in-render `nameState` shape (the seed-compare adjust
+  // above), not an effect: `react-hooks/set-state-in-effect`
   // is live, and an effect would still paint one frame of the empty Run branch first — the exact
   // flash this AC forbids. Not a derived `effectiveMode` either: state and `data-mode` would then
   // disagree, and `handleModeToggle` / the header's `aria-pressed` both read `mode` directly.

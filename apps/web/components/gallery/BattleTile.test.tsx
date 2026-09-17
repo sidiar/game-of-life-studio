@@ -134,7 +134,7 @@ describe('BattleTile', () => {
   // Asserted structurally. Story 3.17 (Trap 1): this test used to count 5 Tabs to Delete; it is 6
   // now that Run sits between the dots and Delete — a Run placed AFTER Delete (FD5 (b)) would
   // redden this by landing the 5th Tab on Delete instead.
-  it('keeps the delete button outside the title link, and independently focusable', async () => {
+  it('keeps Run and Delete outside the title link, in tab order after the dots with Delete last', async () => {
     const user = userEvent.setup();
     render(<BattleTile {...BASE_PROPS} />);
 

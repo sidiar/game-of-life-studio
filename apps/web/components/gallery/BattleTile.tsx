@@ -155,9 +155,10 @@ const DeleteButton = styled('button')(actionChrome);
 
 // The Run affordance (AC1, FD1(a)): pure navigation, so a `styled(Link)`, never a `<button>` +
 // `onClick` — the same Story 2.2 FD1 / 2.16 FD1 line `CreateBattleLink.tsx` draws. Shares Delete's
-// 28x28 chrome via `actionChrome`, spread rather than passed as a second argument (emotion's
-// `styled()` call form takes exactly one styles argument); `textDecoration: 'none'` is the one
-// addition an anchor needs that a button never did.
+// 28x28 chrome via `actionChrome`. Spread into ONE object rather than passed as a second styles
+// argument (which MUI's `styled()` does accept) so the override is visible in the same literal as
+// the chrome it overrides, not in a trailing argument the eye skips; `textDecoration: 'none'` is the
+// one addition an anchor needs that a button never did.
 const RunLink = styled(Link)({ ...actionChrome, textDecoration: 'none' });
 
 // `display: flex` stays even though TileTitle is now its only child (the grid-size stat that used
@@ -499,8 +500,12 @@ export default function BattleTile({
             distinct, the same reasoning Delete's own label uses below; the untitled fallback still
             reads "Run Untitled Battle" (Trap 5). The glyph is the transport bar's own Play glyph
             (`SimulationControlBar.tsx`) — the same verb reads as the same verb in both places
-            (FD4) — `aria-hidden` because axe's emoji regex would otherwise flag a symbol-only
-            name as `incomplete`; the pair's contrast is already gated by `themeTokens.test.ts`.
+            (FD4) — and `aria-hidden` for the same reason Delete's is: the `aria-label` IS the
+            name, and the glyph must never double into it. Unlike Delete's `×`, `▶` sits inside
+            axe-core's emoji range, so axe files its color-contrast check under `incomplete` rather
+            than evaluating it; FD4 accepts that here because the pair this control wears
+            (`--gol-text-secondary` / `--gol-border-control` on `--gol-bg-hover`) is a gated row in
+            `themeTokens.test.ts`, which is the stronger check.
             ❌ No `data-run-battle-id`: nothing restores focus here, since a link navigates away
             rather than opening a dialog to cancel (contrast Delete's own attribute below). */}
         <RunLink
@@ -514,7 +519,8 @@ export default function BattleTile({
             accessible name (AC1); `title` gives the pointer tooltip the mockup's `title="Actions"`
             provided. The glyph is deliberately a BMP character (Story 1.12 Dev Notes) — outside
             axe-core's ignoreUnicode/textIsEmojis range, so it gets a REAL color-contrast check
-            rather than landing in `incomplete`, which is what we want for a real control. */}
+            rather than landing in `incomplete`. Run's `▶` above cannot have that (the glyph is the
+            point), so its contrast leans on the `themeTokens.test.ts` gate instead. */}
         <DeleteButton
           type="button"
           // How <BattleGallery> finds this button again to restore focus to it after a cancelled

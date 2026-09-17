@@ -2991,7 +2991,8 @@ describe('BattlePage — Run from Gallery (Story 3.17)', () => {
   });
 
   // AC6(a): a dangling roster reached ON MOUNT — the state the 3-11 review filed as unreachable
-  // "today" (deferred-work.md:912-920), which a Gallery Run entry reaches first.
+  // "today" (deferred-work.md, "renders a header over nothing"), which a Gallery Run entry reaches
+  // first.
   it('a Run entry with a dangling roster lands in Lab, RUN disabled with its reason, and never mounts the Run view', async () => {
     const { container } = render(
       <BattlePage
@@ -3003,15 +3004,23 @@ describe('BattlePage — Run from Gallery (Story 3.17)', () => {
     const heading = await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
     expect(modeValue(container)).toBe('lab');
-    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(4);
+    // The Lab sidebar BY NAME — the Run sidebar also has exactly four h2s, so a bare count would
+    // pass in either mode.
+    expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
     expect(runButton()).toBeDisabled();
     expect(runButton()).toHaveAttribute(
       'title',
       'Some organisms in this battle could not be loaded',
     );
     expect(labButton()).toHaveAttribute('aria-pressed', 'true');
-    // [data-status] never mounts at all — not even transiently — because the adjust fires
-    // in-render, before the Run branch is ever reached (AC6's "never a header over nothing").
+    // The settled state has no Run view. A final-state query cannot see a transient mount — the
+    // proof that the Run branch never rendered at all (not even for one commit) is the
+    // recorder-based test in `BattlePage.modeToggle.test.tsx` (`runRenders` stays empty).
     expect(container.querySelector('[data-status]')).toBeNull();
     expect(screen.getByRole('heading', { level: 1 })).toBe(heading);
   });
@@ -3068,7 +3077,12 @@ describe('BattlePage — Run from Gallery (Story 3.17)', () => {
     await user.click(labButton());
     await screen.findByRole('button', { name: 'Undo' });
 
-    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(4);
+    expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Organisms',
+      'Battle Name',
+      'Grid Info',
+      'Tools',
+    ]);
     const gridSizeFact = within(screen.getByRole('complementary')).getByRole('group', {
       name: /^Grid Size: /,
     });

@@ -220,4 +220,24 @@ describe('BattlePage — what the Run view receives (Story 3.11)', () => {
     expect(run.showGridLines).toBe(false);
     expect(run.backDisabled).toBe(false);
   });
+
+  // AC6 / Story 3.17: the in-render adjust means the Run branch is never REACHED for a dangling
+  // roster — not merely gone by the time the DOM settles. Only this file can prove that: the
+  // recorder sees every render of the mocked view, including one that a later commit would remove,
+  // where `BattlePage.test.tsx`'s final-state `[data-status]` query cannot.
+  it('a run-first render over a dangling roster never renders the Run view, not even once (AC6)', async () => {
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles, organisms: [], settings: SETTINGS })}
+        battleId={SKIRMISH.id}
+        initialMode="run"
+      />,
+    );
+    await screen.findByRole('group', { name: 'Mode' });
+    await waitFor(() => expect(editorRenders.length).toBeGreaterThan(0));
+
+    expect(runRenders).toHaveLength(0);
+    expect(screen.queryByTestId('run')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+  });
 });

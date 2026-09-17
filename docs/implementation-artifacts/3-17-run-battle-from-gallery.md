@@ -4,7 +4,7 @@ baseline_commit: 92a3d4dbf60b8bd7fee295aba1b1a6fcd703490f
 
 # Story 3.17: Run Battle from Gallery
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -338,6 +338,34 @@ touch, and no new route**.
   - [x] (d) `sprint-status.yaml`: this story's line only. Dev Agent Record: FD1–FD5 options taken
     and why; the bundle numbers (both routes, deltas); the `ci` exit code with named failures;
     which e2e projects ran on which port; the five converted locators by line.
+
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (2026-09-17), via three parallel adversarial
+layers (Blind Hunter — diff only; Edge Case Hunter — diff + read access; Acceptance Auditor — diff +
+story + spec). 0 `decision-needed`, 12 `patch`, 3 `defer`, 9 dismissed as noise. The reviewer re-ran
+the gate independently rather than trusting the Dev Agent Record: typecheck / lint / format:check /
+spec:check / boundary:check exit 0; `apps/web` 1466 unit tests green; `build:standalone` +
+`bundle:check` reproduce the Debug Log's four numbers exactly (333.6 / 308.9 / 308.7 / 295.4 KB);
+e2e on a PRIVATE port (4917, an untracked throwaway config, deleted before commit): chromium
+`battleRoute.spec.ts` 90/90 and `gallery`/`deleteBattle`/`createBattle` 19 passed + 1 skipped;
+webkit 3.17 block + `gallery.spec.ts` 10/10.
+
+- [x] [Review][Patch] AC6 tests claim "`[data-status]` never mounts — not even transiently" on a final-state `querySelector` that cannot observe a transient mount; add the recorder-based proof (`runRenders.length === 0`) in `BattlePage.modeToggle.test.tsx` and cut the comment to what the assertion proves [apps/web/components/battle/BattlePage.test.tsx:3014-3016; apps/web/components/battle/BattlePage.modeToggle.test.tsx]
+- [x] [Review][Patch] `toHaveLength(4)` on level-2 headings does not distinguish Lab from Run (the Run sidebar has exactly four h2s too) — assert the Lab heading names in AC6(a) and AC7(b) [apps/web/components/battle/BattlePage.test.tsx:3007,3072]
+- [x] [Review][Patch] Line-number citations are stale within this same diff (`deferred-work.md:912-920` moved by the patch's own insertions; `:~260` for `nameState`; `:204-205` for the hydration lesson) — cite by entry title / symbol, not line [apps/web/components/battle/BattlePage.tsx:577-579; apps/web/components/battle/BattlePage.test.tsx:2995; apps/web/e2e/battleRoute.spec.ts:2777]
+- [x] [Review][Patch] Band width stated as "68px wide" (that is `TileHeader.paddingRight`; the band is 28 + 6 + 28 = 62px, as `BattleTile.tsx` and `deferred-work.md` both derive) [apps/web/e2e/battleRoute.spec.ts:289-290]
+- [x] [Review][Patch] Tab-order test title "keeps the delete button outside the title link" now also pins Run's containment and position — rename it [apps/web/components/gallery/BattleTile.test.tsx:368]
+- [x] [Review][Patch] AC8(d) keyboard e2e: the Run locator is page-scoped while the Delete locator is tile-scoped (two tiles sharing a name would strict-fail), and a zero-dot first tile would silently weaken the proof — scope Run to the tile and assert `dotCount > 0` [apps/web/e2e/battleRoute.spec.ts:3011-3032]
+- [x] [Review][Patch] `OrganismLibrary.tsx` was edited although Task 5(a) said its comment "is history" once the deferred-work entry is re-pointed, and `components/organisms/**` is lane 4's surface (4.10) — revert the comment-only change; also "Story 3.17 has now landed" past tense in `deferred-work.md` from inside the PR that lands it [apps/web/components/organisms/OrganismLibrary.tsx:39-44; docs/implementation-artifacts/deferred-work.md:742-745]
+- [x] [Review][Patch] `RunLink` comment gives a false reason for the spread — MUI's `styled()` resolver is variadic (`@mui/system/createStyled/createStyled.js:186`), so `styled(Link)(actionChrome, { textDecoration: 'none' })` would have worked; keep the spread, fix the why [apps/web/components/gallery/BattleTile.tsx:157-163]
+- [x] [Review][Patch] The Run glyph comment says `aria-hidden` is "because axe's emoji regex would otherwise flag a symbol-only name as `incomplete`" — `aria-hidden` keeps the glyph out of the accessible name; the `incomplete` verdict is a color-contrast matter that FD4 accepts because the pair is gated by `themeTokens.test.ts`. The adjacent Delete comment ("a REAL color-contrast check … what we want for a real control") now reads as an argument against the line above it — make the two consistent [apps/web/components/gallery/BattleTile.tsx:501-503,516-517]
+- [x] [Review][Patch] FD4(a)'s "record the `incomplete` entry as expected in the e2e axe test's comment, as 1.12 did for `∅`" was not done — the axe test comment only explains the hover [apps/web/e2e/gallery.spec.ts:269-272]
+- [x] [Review][Patch] The e2e seed-helper fork entry still ends "Pick this up in the next story that touches `apps/web/e2e`" — 3.17 is that story and declined; "What NOT to build" said to re-point it honestly [docs/implementation-artifacts/deferred-work.md:193]
+- [x] [Review][Patch] AC4 asked the read-site comment to say an unrecognised value is Lab, silently; the sentence lives only in `battleRoute.ts`. Also the Completion Notes' dangling "verified by `git diff --stat` before committing (below)" — nothing follows [apps/web/app/(battle)/battle/page.tsx:29-30; this file, Completion Notes]
+- [x] [Review][Defer] `/battle?id=new&mode=run` seeds Run over an unsaved empty draft — the `'new'` sentinel leaking through the query route is pre-existing (Story 2.2), and the state it reaches is the one the RUN toggle already permits on `/battle/new` (an empty roster is `[]`, not `null`) [apps/web/app/(battle)/battle/page.tsx:32-34] — deferred, pre-existing
+- [x] [Review][Defer] Two-phase `useSearchParams` read: if render 1 ever yields empty params, `useState(initialMode)` captures `'lab'` and — unlike the not-found flash the entry describes — does not self-heal; a `key` on the route side is the shape if it is ever observed [apps/web/app/(battle)/battle/page.tsx:32-37] — deferred, pre-existing (`deferred-work.md` two-phase entry, unobserved since Story 2.1)
+- [x] [Review][Defer] When a library change under a mounted page (Stories 4.24/4.25) turns `runOrganisms` null mid-run, the adjust drops a LIVE session to Lab with no notice beyond the disabled RUN's `title` — unreachable today; whether a running session deserves a stop-and-explain is 4.24/4.25's call [apps/web/components/battle/BattlePage.tsx:588] — deferred, not reachable before 4.24/4.25
 
 ## Dev Notes
 
@@ -824,7 +852,7 @@ The five e2e substring locators converted to `tileLink(page, name)` (Trap 4):
   e2e proof end to end (AC8) and the five locator conversions (AC9), the bundle/bench check (AC10),
   and the comment/bookkeeping pass (AC11).
 - No hook, effect, ref, engine or `packages/**` change, per the story's own scope fence — verified
-  by `git diff --stat` before committing (below) and by `boundary:check` staying green.
+  by `git diff --stat` before committing (the File List) and by `boundary:check` staying green.
 - `OrganismLibrary.tsx`'s stale `SectionHeader`/FD9 comment (naming Story 3.17 as future work,
   "the parallel Epic 3 lane") was corrected in passing, alongside `CreateBattleLink.tsx:58-60`'s
   stale `ActionButton` name — both are comment-only, no behaviour change, and both were surfaced by
@@ -847,8 +875,8 @@ The five e2e substring locators converted to `tileLink(page, name)` (Trap 4):
 **New (tests):** `apps/web/lib/battle/battleRoute.test.ts`
 **Modified (code):** `apps/web/components/gallery/BattleTile.tsx`,
 `apps/web/components/battle/BattlePage.tsx`, `apps/web/app/(battle)/battle/page.tsx`,
-`apps/web/components/gallery/CreateBattleLink.tsx`, `apps/web/components/organisms/OrganismLibrary.tsx`
-(one stale comment, unscheduled but AC11-driven — see Completion Notes)
+`apps/web/components/gallery/CreateBattleLink.tsx` (`OrganismLibrary.tsx`'s stale comment was
+touched by the dev and reverted in review — lane 4's surface, and Task 5(a) had called it history)
 **Modified (tests):** `apps/web/components/gallery/BattleTile.test.tsx`,
 `apps/web/components/battle/BattlePage.test.tsx`, `apps/web/components/battle/BattlePage.modeToggle.test.tsx`,
 `apps/web/e2e/battleRoute.spec.ts`, `apps/web/e2e/gallery.spec.ts`
@@ -859,6 +887,10 @@ The five e2e substring locators converted to `tileLink(page, name)` (Trap 4):
 
 - 2026-09-17 — Story 3.17 created (ready-for-dev): ultimate context engine analysis completed —
   comprehensive developer guide created.
+- 2026-09-17 — Story 3.17 code review (Opus, full mode): 0 decision-needed, 12 patches applied,
+  3 deferred to `deferred-work.md`, 9 dismissed; gate re-run independently (static gates 0,
+  1466 unit tests, bundle numbers reproduced, e2e chromium + webkit on a private port). Status →
+  done.
 - 2026-09-17 — Story 3.17 implemented (status: review). All 11 ACs, all 5 tasks. `npm run ci`
   exit code 1 — the sole failures are the two pre-existing local-WebKit/tablet "Tab reaches Play…"
   (Story 3.12) tests, named in the Debug Log; every other stage (typecheck, lint, format:check,

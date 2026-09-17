@@ -29,6 +29,8 @@ function BattleQueryRoute() {
   // Both values come from the SAME `params` read, in the SAME render (deferred-work.md's two-phase
   // useSearchParams entry now covers `mode` too — no special handling, see battleRoute.ts).
   // A missing or empty ?id= yields '' — <BattlePage> renders that as not-found, not as a crash.
+  // `?mode=run` is the Gallery's Run entry hint; anything else (absent, `lab`, a hand-typed `play`)
+  // is Lab, silently — an unrecognised hint is not an error state this page announces (AC4).
   const params = useSearchParams();
   const battleId = params.get('id') ?? '';
   const initialMode = initialModeFromParam(params.get(BATTLE_MODE_PARAM));

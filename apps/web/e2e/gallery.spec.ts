@@ -269,6 +269,9 @@ test.describe('battle gallery (Story 1.10)', () => {
     // Story 3.17: hover a tile first so its action band (Run + Delete) sits at opacity: 1 for the
     // scan. axe would evaluate the band's contrast either way (opacity does not exempt an element
     // from color-contrast), but the scan should measure the state a mouse user actually sees.
+    // Expected in `incomplete`, not `violations`: the Run glyph `▶` is inside axe-core's emoji
+    // range, so its color-contrast check is filed as needs-review rather than evaluated (FD4 —
+    // the same bucket 1.12's `∅` lands in); the pair is gated by `themeTokens.test.ts` instead.
     await page.getByRole('article').first().hover();
 
     // Story 1.11 AC1/AC2: canvases on screen must not introduce a NEW axe violation (the

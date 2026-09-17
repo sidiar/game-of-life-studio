@@ -190,7 +190,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **The toolbar band ships without the mockup's layout rules** — Task 4 asked for "the mockup's `.toolbar` band"; `BattleGallery.tsx:118-120` implements it as `styled('div')({ marginBottom: '35px' })`, omitting `display: flex`, `justify-content: space-between`, `align-items: center`, `gap: 20px` and `flex-wrap: wrap` (`clinical-lab-theme/battle-gallery.html:111-118`). Correct and invisible with a single child — deliberately not added, because layout rules for hypothetical future children are speculation. The cost is that the next control added to the band lands in an unstyled block and looks broken for one commit. ~~**Pick this up in Story 2.16** or whichever story first adds a second toolbar control.~~ ⏸ **Checked in Story 2.16 (2026-08-31): NOT this story's, and the entry stands untouched.** This is the GALLERY's toolbar band (`BattleGallery.tsx`); Story 2.16 adds one control, to the BATTLE route's sidebar footer, and touches no Gallery file. The naming of this story was speculative rather than derived. **Pick this up in whichever story first adds a second control to the Gallery toolbar band** — Epic 5's export/import entry points are the likely first.
 
-- **`e2e/createBattle.spec.ts` forks the seed helpers a third time** — `buildSeedPayload`/`seedWorkspace` are now copy-pasted across `gallery.spec.ts`, `battleRoute.spec.ts`/`deleteBattle.spec.ts` and `createBattle.spec.ts`, with an in-file comment asking future readers to keep them in sync by hand. Task 7 named the `gallery.spec.ts` helpers "the established helpers", which reads as *reuse*, not *fork*; the dev scoped the story to one new spec file instead. Three copies is the point at which the next divergence becomes silent. **Pick this up in the next story that touches `apps/web/e2e`**, by extracting them to a shared `e2e/` fixture module.
+- **`e2e/createBattle.spec.ts` forks the seed helpers a third time** — `buildSeedPayload`/`seedWorkspace` are now copy-pasted across `gallery.spec.ts`, `battleRoute.spec.ts`/`deleteBattle.spec.ts` and `createBattle.spec.ts`, with an in-file comment asking future readers to keep them in sync by hand. Task 7 named the `gallery.spec.ts` helpers "the established helpers", which reads as *reuse*, not *fork*; the dev scoped the story to one new spec file instead. Three copies is the point at which the next divergence becomes silent. **Pick this up in the next story that touches `apps/web/e2e` broadly enough to justify the extraction** (Story 3.17 touched two spec files, added five-line locator helpers, and declined — the fork stays at three copies), by extracting them to a shared `e2e/` fixture module.
 
 - **A synchronous throw from an injected `settings.load()` bypasses the `.catch()`** — `BattlePage.tsx:83` is `repositories.settings.load().catch(…)`; if a repository's `load` is not `async` and throws before returning a promise, the `.catch` is never attached and the throw takes down the whole `Promise.all`. For a real battle id that surfaces as "its stored data may be damaged" about a battle that loaded fine. The comment at `:76-78` states flatly that settings "never rejects INTO this `Promise.all`", which is true only for `async` implementations; `SettingsRepository.load(): Promise<Settings>` does not preclude the other kind. `useAsyncResource` guards this exact shape for its own `load` argument (`Promise.resolve().then(load)`); the same defence is absent here. Unreachable through `LocalStorageSettingsRepository` (which is `async`) — reachable only through the DI seam. **Revisit if a non-async repository implementation is ever added**, e.g. an in-memory or API-backed repo in Connected mode.
 
@@ -739,10 +739,11 @@ Review Findings; these are the items consciously left open.
   wrapping a stop is legal but noisy. **Story 4.17 decides** whether the article stays a tab stop
   once it has focusable children.
 - **`SectionHeader` stays duplicated between `<OrganismLibrary>` and `<BattleGallery>`** (FD9) —
-  unchanged from Story 4.1's deferral. Story 3.17 has now landed its Gallery change
-  (`BattleTile.tsx`'s action band; `<BattleGallery>` itself untouched), so the precondition this
-  entry was blocked on is met. **Pick this up in the first story that touches both files** — no
-  longer tied to 3.17 by name.
+  unchanged from Story 4.1's deferral. As of Story 3.17 the Gallery change this entry waited on is
+  in (`BattleTile.tsx`'s action band; `<BattleGallery>` itself untouched), so the precondition is
+  met. **Pick this up in the first story that touches both files** — no longer tied to 3.17 by
+  name. (`OrganismLibrary.tsx`'s own FD9 comment still names 3.17 as the thing to wait for; it is
+  history now and was deliberately left alone — `components/organisms/**` is lane 4's surface.)
 
 ## Deferred from: code review of 4-2-organism-card-grid (2026-09-14)
 
@@ -1432,3 +1433,35 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   adding a fourth copy, so the standing count (`gallery.spec.ts` / `battleRoute.spec.ts` +
   `deleteBattle.spec.ts` / `createBattle.spec.ts`) is unchanged. **Unchanged pick-up: the next
   story that touches `apps/web/e2e` broadly enough to justify the extraction.**
+
+## Deferred from: code review of 3-17-run-battle-from-gallery (2026-09-17)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **`/battle?id=new&mode=run` seeds Run over an unsaved empty draft.** The route file reads
+  `mode` unconditionally, and `battleId === 'new'` is a sentinel `<BattlePage>` honours from ANY
+  caller, not only `/battle/new/page.tsx` — so a hand-typed `?id=new` already opened an empty new
+  battle before this story (Story 2.2), and `&mode=run` on it now mounts a paused Run over zero
+  organisms. Not a new state: an empty roster is `[]`, never `null`, so the RUN toggle on
+  `/battle/new` already permits exactly this. `BattlePage.tsx`'s prop comment ("`/battle/new`
+  never passes this") is true of the route file, not of the sentinel. **Pick this up with whichever
+  story next decides what `?id=new` on the query route should mean** — the one-line fix, if wanted,
+  is `battleId === 'new' ? 'lab' : initialModeFromParam(…)` at the read site.
+- **The two-phase `useSearchParams` hazard's consequence is worse for `mode` than for `id`.** The
+  Story 2.1 entry above (widened by 3.17) says that in the world where render 1 yields empty params
+  the page "also shows the not-found flash". For `id` that flash self-heals on the next render; for
+  `mode`, `useState(initialMode)` captures `'lab'` on render 1 and never re-reads, so a Gallery Run
+  link would silently land in Lab under a URL that says `&mode=run`. Still unobserved (every e2e in
+  the 3.17 block, including the `page.reload()` one, lands in Run), and deliberately NOT handled by
+  a prop-change re-seed (FD1's line: that turns the entry hint into a synchronised route). **If it
+  is ever observed**, the shape is a `key` on the route side (`<BattlePage key={battleId} …>` or a
+  key that flips when params first populate), which remounts with the populated value without any
+  URL write.
+- **A live run dropped to Lab without notice when the library changes under a mounted page.** The
+  AC6 adjust (`if (mode === 'run' && runOrganisms === null) setMode('lab')`) serves the 3-11 review's
+  future case (Stories 4.24/4.25) as well as the mount-time entry — but for a RUNNING session it
+  unmounts the view mid-run and the only explanation is the disabled RUN button's `title`. On mount
+  there is nothing to lose; under 4.24/4.25 there may be a cycle count and a population the user
+  was watching. Unreachable today (nothing re-lists the library while `<BattlePage>` is mounted).
+  **Stories 4.24/4.25 decide** whether the flip should stop-and-explain (a notice in the Lab
+  sidebar, the AC7 shape) rather than inherit the silent guard as written.

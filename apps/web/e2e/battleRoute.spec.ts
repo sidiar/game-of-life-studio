@@ -286,8 +286,9 @@ test.describe('battle route (Story 2.1)', () => {
     const tile = page.getByRole('article').filter({ hasText: 'Three-Way Skirmish' });
     const box = await tile.boundingBox();
     if (box === null) throw new Error('tile has no layout box');
-    // Low-centre: below the title, clear of the top-right action band — 68px wide as of Story
-    // 3.17 (Run + Delete), still well clear of this low-centre point.
+    // Low-centre: below the title, clear of the top-right action band — 62px wide as of Story
+    // 3.17 (Run + 6px gap + Delete; the header reserves 68px for it), still well clear of this
+    // low-centre point.
     await page.mouse.click(box.x + box.width / 2, box.y + box.height - 24);
 
     await expect(page).toHaveURL(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
@@ -2981,8 +2982,8 @@ test.describe('Run from Gallery (Story 3.17)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
     await expect(page.locator('[data-status]')).toHaveAttribute('data-status', 'paused');
 
-    // The hydration lesson (`:204-205`): re-await the h1 before reading [data-mode] after a
-    // reload, since the prerendered fallback briefly replaces the tree.
+    // The hydration lesson (the Story 2.1 reload test above): re-await the h1 before reading
+    // [data-mode] after a reload, since the prerendered fallback briefly replaces the tree.
     await page.reload();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
     await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'run');
@@ -3013,6 +3014,9 @@ test.describe('Run from Gallery (Story 3.17)', () => {
     const titleLink = tile.getByRole('link').first();
     const dotCount = await tile.getByRole('img').count();
     const tileName = (await titleLink.textContent()) ?? '';
+    // A zero-dot tile would let the loop run 0 times and still land Run right after the title —
+    // true, but not the ordering this test exists to pin.
+    expect(dotCount).toBeGreaterThan(0);
 
     await titleLink.focus();
     await expect(titleLink).toBeFocused();
@@ -3024,8 +3028,10 @@ test.describe('Run from Gallery (Story 3.17)', () => {
       await page.keyboard.press(tab);
     }
 
+    // Tile-scoped like the Delete locator below — a page-scoped `runLink` would strict-fail the
+    // day two seeded tiles share a name.
     await page.keyboard.press(tab);
-    await expect(runLink(page, tileName)).toBeFocused();
+    await expect(tile.getByRole('link', { name: `Run ${tileName}`, exact: true })).toBeFocused();
 
     await page.keyboard.press(tab);
     await expect(tile.getByRole('button', { name: `Delete ${tileName}` })).toBeFocused();
