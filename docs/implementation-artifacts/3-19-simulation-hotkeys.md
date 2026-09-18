@@ -992,3 +992,18 @@ Claude Sonnet 5 (claude-sonnet-5).
 
 Dev Model: sonnet   # follows patterns that exist — the useDirtyGuard listener-hook shape, the latest-ref idiom, 3.18's fullscreen cell and focus effects, presentational <kbd> runs; the one new seam (FD2's bindings) is prescribed above and nothing later builds on it (4.15's preview must NOT mount it)
 Proposed lane gate: none   # 3.19 edits no file lane 4 touches (themes.css untouched, TransportControls markup untouched); 4.24/4.25 already gate on epic-3, which this story completes, and FD10's DOM-based suspension holds for their modal by construction
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 43s | 43s | 18 | 2,714 | 10,496 | 510,958 | 524,186 |
+| Step 1 — create | opus-5 | 1 | 19m 30s | 19m 30s | 188 | 69,707 | 421,319 | 12,161,054 | 12,652,268 |
+| Step 2 — implement | sonnet-5 | 1 | 28m 47s | 28m 47s | 678 | 129,445 | 728,693 | 77,278,563 | 78,137,379 |
+| Step 3 — review + PR | opus-5 | 4 | 27m 23s | 27m 23s | 492 | 137,642 | 1,333,221 | 32,950,178 | 34,421,533 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 60 | 17,723 | 38,653 | 1,918,982 | 1,975,418 |
+| **Total (create → PR ready)** | | 6 | **1h 16m** | 1h 16m | 1,376 | 339,508 | 2,493,729 | 122,900,753 | **125,735,366** |
+
+Run started 2026-09-18 14:09 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
