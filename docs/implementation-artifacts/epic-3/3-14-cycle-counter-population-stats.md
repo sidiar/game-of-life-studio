@@ -876,7 +876,7 @@ route's e2e). `eslint-plugin-react-hooks` 7.1.1 via `eslint-config-next` 16.2.12
   cells each; `battleB` carries the glider and, e2e-seeded, the dangling Conway id),
   `packages/domain/src/defaultWorkspace.ts` (`CONWAYS_CLASSIC`), `eslint.config.mjs` (AR-46
   selectors).
-- `docs/implementation-artifacts/3-13-speed-control.md` (the section-wiring shape, traps 1/4/6,
+- `docs/implementation-artifacts/epic-3/3-13-speed-control.md` (the section-wiring shape, traps 1/4/6,
   review findings, Dev Agent Record bundle numbers), `3-12-transport-controls.md` (FD4 frame
   driver, trap 7), `3-10-usesimulation-hook.md` (obligations 5–6, FD4 cadence, Task 3),
   `epic-2/2-12-editor-status-bar-stats.md` (FD3 named region, the colour-chip reasoning),
@@ -1003,7 +1003,7 @@ Claude Sonnet 5 (claude-sonnet-5), via `bmad-dev-story`.
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/3-14-cycle-counter-population-stats.md` (this file: frontmatter,
+- `docs/implementation-artifacts/epic-3/3-14-cycle-counter-population-stats.md` (this file: frontmatter,
   task checkboxes, Dev Agent Record, Change Log, Status)
 
 Nothing in `packages/*`; no planning artifact edited (per the story's own scope list).

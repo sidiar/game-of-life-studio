@@ -353,12 +353,12 @@ at `review`.
   [apps/web/components/battle/simulation/SpeedControl.tsx:150]
 - [x] [Review][Patch] Dev Agent Record test arithmetic: `simulationSpeed` went 6 → 10 and the view
   15 → 22, so +23 on a 1211 baseline, not +21 on 1213 — corrected below
-  [docs/implementation-artifacts/3-13-speed-control.md]
+  [docs/implementation-artifacts/epic-3/3-13-speed-control.md]
 - [x] [Review][Patch] AC7 lists ArrowUp / ArrowDown; e2e (b) pressed only Right / Left — both added,
   plus the singular valuetext at the bottom detent [apps/web/e2e/battleRoute.spec.ts:2341]
 - [x] [Review][Patch] AC2 says the accessible name is `Speed` while naming a `<label htmlFor>`
   "Generations per second" as its source — a spec-authoring inconsistency the story's conflict list
-  did not flag; recorded under Spec-conflict flags [docs/implementation-artifacts/3-13-speed-control.md]
+  did not flag; recorded under Spec-conflict flags [docs/implementation-artifacts/epic-3/3-13-speed-control.md]
 - [x] [Review][Defer] AC10's literal "`npm run ci` exits 0" — the local gate exits 1 on Story 3.12's
   "Tab reaches Play…" e2e on the macOS WebKit/tablet projects, reproduced on the untouched
   baseline and already recorded in `deferred-work.md` (3-13 section); the remote gate runs on this
@@ -673,7 +673,7 @@ TypeScript 5.9.3 — `satisfies` on an `as const` tuple is the shape Task 1 reli
   `:124-135` — the rows AC6 relies on, all present), `apps/web/e2e/battleRoute.spec.ts`
   (`sidebarHeadings` `:139`, `collectErrors` `:145`, the 3.11 block `:1966-2117`, the 3.12 block
   `:2118-`), `eslint.config.mjs` (AR-46 selectors incl. `rgb()`).
-- `docs/implementation-artifacts/3-12-transport-controls.md` (FD4 frame driver, traps 6/7/15,
+- `docs/implementation-artifacts/epic-3/3-12-transport-controls.md` (FD4 frame driver, traps 6/7/15,
   review finding on `[sim]` deps, Dev Agent Record bundle numbers), `3-10-usesimulation-hook.md`
   (AC7, FD6, obligation 6, trap 10), `3-8-simulationloop.md` (AC4, FD3 — the speed-change bank),
   `deferred-work.md` (1-9 review: the MUI Slider rail token gap with the stale "Epic 4 (speed
@@ -812,7 +812,7 @@ Modified:
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/3-13-speed-control.md` (this file)
+- `docs/implementation-artifacts/epic-3/3-13-speed-control.md` (this file)
 
 Not touched (as required): `apps/web/lib/battle/useSimulation.ts`, `packages/**`,
 `apps/web/app/themes.css`, `apps/web/lib/themeTokens.test.ts`, `SidebarSection.tsx`,

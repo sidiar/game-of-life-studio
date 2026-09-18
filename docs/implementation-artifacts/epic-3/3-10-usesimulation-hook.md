@@ -304,7 +304,7 @@ verifies; the "nothing forbidden was built" note).
 - [x] [Review][Patch] Manual `step()` runs the population sweep and `setView` twice on every click at 1–10 gen/sec (the thunk already published — `cyclesPerPublish` is 1 for four of five speeds, so the "cadence-aligned" case is the common one). [apps/web/lib/battle/useSimulation.ts:352]
 - [x] [Review][Patch] `requireSession` says "called before mount" for the realistic case — a captured handler firing after unmount. [apps/web/lib/battle/useSimulation.ts:322]
 - [x] [Review][Patch] Task 4's citation checklist names `Story 3.9`; the hook's head comment cites the substance (`toStepRenderer`, `playbackRenderer.ts`) without the ID. [apps/web/lib/battle/useSimulation.ts:30]
-- [x] [Review][Patch] AC5 / Trap 11 say "one `setCycle` + one `setPopulation`, never merged", the implementation holds one `RunView` cell — Task 4(b) prescribes exactly that cell and the API surface still exposes `cycle` as an int, so the deviation is harmless; record that it was consciously superseded so a later reader does not re-litigate it. [docs/implementation-artifacts/3-10-usesimulation-hook.md Dev Agent Record]
+- [x] [Review][Patch] AC5 / Trap 11 say "one `setCycle` + one `setPopulation`, never merged", the implementation holds one `RunView` cell — Task 4(b) prescribes exactly that cell and the API surface still exposes `cycle` as an int, so the deviation is harmless; record that it was consciously superseded so a later reader does not re-litigate it. [docs/implementation-artifacts/epic-3/3-10-usesimulation-hook.md Dev Agent Record]
 - [x] [Review][Defer] A throw inside the RAF step (`stepGridBuffers` or the forwarded `drawDiff`) makes the loop clear its handle and rethrow, so `loop.isRunning()` is false while `status` stays `'playing'` — `play()` restarts silently and `step()` stops throwing. [apps/web/lib/battle/useSimulation.ts:236] — deferred: the thunk→`status: 'paused'` path is exactly what Story 3.15's extinction auto-pause must build; build it once there.
 
 ## Dev Notes
@@ -599,7 +599,7 @@ callbacks receive a `DOMHighResTimeStamp`; the loop takes `now: number` from the
   patterns), `apps/web/components/PetriDishCanvas.tsx` (construction effect, cleanup),
   `apps/web/components/battle/simulation/README.md` (where the hook lives).
 - `packages/domain/src/settingsSchema.ts` (`defaultSpeed` ladder — the `GenPerSec` source).
-- `docs/implementation-artifacts/3-8-simulationloop.md` (FD2, FD4, FD5, Traps, What NOT to
+- `docs/implementation-artifacts/epic-3/3-8-simulationloop.md` (FD2, FD4, FD5, Traps, What NOT to
   build), `3-9-colour-state-batch-rendering.md` (Trap 1/2, deferred entries), `deferred-work.md`
   (seed-domain entry ~L490; 3-9 section; 3-8 section `stepGridBuffers` note; 4-1 review's
   error-boundary note).
@@ -731,7 +731,7 @@ Recorded in `deferred-work.md` in case a consumer ever needs a seed-stable Stop.
 - `apps/web/components/PetriDishCanvas.tsx` (modified — one trailer comment)
 - `docs/implementation-artifacts/deferred-work.md` (modified)
 - `docs/implementation-artifacts/sprint-status.yaml` (modified — `3-10` status)
-- `docs/implementation-artifacts/3-10-usesimulation-hook.md` (this file)
+- `docs/implementation-artifacts/epic-3/3-10-usesimulation-hook.md` (this file)
 
 ### Change Log
 

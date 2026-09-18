@@ -377,7 +377,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
       component\n * gains no state…") [`apps/web/components/battle/simulation/BattleSimulationView.tsx:46-47`]
 - [x] [Review][Patch] Dev Agent Record says `BattleSimulationView.test.tsx (+8)` — the diff adds 7;
       trap 16's 1024-wide check was neither run nor recorded (now measured — see the record)
-      [`docs/implementation-artifacts/3-19-simulation-hotkeys.md` Dev Agent Record]
+      [`docs/implementation-artifacts/epic-3/3-19-simulation-hotkeys.md` Dev Agent Record]
 - [x] [Review][Defer] Presence-based dialog detection (FD10 (a)) makes all four keys silently
       dead while ANY `[role="dialog"]` / `[aria-modal="true"]` element persists (a `keepMounted`
       MUI Dialog, a hidden panel, an extension-injected node) and leaves the recorded chunk-fetch
@@ -408,7 +408,7 @@ green (quality + e2e).
 
 - [x] [Review][Patch] AC8 and Task 4.3 still describe the three-entry stage hint (`F` / `Space` /
       `→`) — the shipped `STAGE_HINT_ENTRIES` carries four (`Esc Stop & exit`, AC6 / FD4 (c))
-      [`docs/implementation-artifacts/3-19-simulation-hotkeys.md` AC8, Task 4.3]
+      [`docs/implementation-artifacts/epic-3/3-19-simulation-hotkeys.md` AC8, Task 4.3]
 - [x] [Review][Patch] Two head comments quote the pre-FD4 (c) three-entry stage line one paragraph
       before (or without) saying it gained a fourth entry
       [`apps/web/components/battle/simulation/HotkeyHints.tsx:9-10`,
@@ -925,9 +925,9 @@ render-time ref access, `eslint-plugin-react-hooks` 7.1.1 enforces it); `@testin
   (extinction-only auto-pause — Space after an auto-pause resumes), AR-29, AR-46.
 - `docs/planning-artifacts/rfcs/RFC-005-application-state-modes-undo.md` — the three state
   categories; the hook is a bridge holding no state.
-- `docs/implementation-artifacts/3-18-fullscreen-run-stage.md` — Dev Agent Record (FD1–FD9, the
+- `docs/implementation-artifacts/epic-3/3-18-fullscreen-run-stage.md` — Dev Agent Record (FD1–FD9, the
   tripwire mutation, the gates), Change Log, the lane-gate line.
-- `docs/implementation-artifacts/3-12-transport-controls.md:36-38,136-142,553-554` — the hints
+- `docs/implementation-artifacts/epic-3/3-12-transport-controls.md:36-38,136-142,553-554` — the hints
   half deferred here; "no `aria-keyshortcuts`".
 - `docs/implementation-artifacts/deferred-work.md:888,1018-1023,1620-1677,1726-1732,1761-1777`
   — the items addressed to this story.
@@ -1097,7 +1097,7 @@ Claude Sonnet 5 (claude-sonnet-5).
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/3-19-simulation-hotkeys.md` (this file)
+- `docs/implementation-artifacts/epic-3/3-19-simulation-hotkeys.md` (this file)
 
 ## Change Log
 
@@ -1140,6 +1140,9 @@ Claude Sonnet 5 (claude-sonnet-5).
   (`epics.md:982`, component-tree §4 / §3.14). 4 items deferred to `deferred-work.md` (all-keys
   suspension on a focused range input; links listed as Space activators; attribute-only dialog
   detection; the chassis hint's missing `F`). No new owner decision. Status → done.
+- 2026-09-18 — Second-review patches committed as `9518c19` (CI green: quality 3m09s, e2e 10m44s, run
+  35354801150). PR #58 taken out of draft and merged into `main` by the owner as `f0ae4b2`. Last
+  story of Epic 3 — the epic closes with it.
 
 Dev Model: sonnet   # follows patterns that exist — the useDirtyGuard listener-hook shape, the latest-ref idiom, 3.18's fullscreen cell and focus effects, presentational <kbd> runs; the one new seam (FD2's bindings) is prescribed above and nothing later builds on it (4.15's preview must NOT mount it)
 Proposed lane gate: none   # 3.19 edits no file lane 4 touches (themes.css untouched, TransportControls markup untouched); 4.24/4.25 already gate on epic-3, which this story completes, and FD10's DOM-based suspension holds for their modal by construction

@@ -346,7 +346,7 @@ story + spec). 0 `decision-needed`, 14 `patch`, 1 `defer`, 17 dismissed as noise
 - [x] [Review][Patch] e2e AC6 proves "back in the Lab" with a bare `toHaveCount(4)` where every other heading assertion in this diff is an exact ordered list [apps/web/e2e/battleRoute.spec.ts:2784]
 - [x] [Review][Patch] deferred-work 3-16 section says "one line changed in `battleRoute.spec.ts`" for the 3.13 Tab tail — it was the title plus ~12 lines, a new `tab` constant and an extra focus assertion [docs/implementation-artifacts/deferred-work.md]
 - [x] [Review][Patch] deferred-work 2-15 entry claims the AC4 view test "rides on" the same-dimension no-rebuild path; that test resizes 7×5 → 200×120 and Stops, i.e. the dimension-change rebuild path — the same-dimension path is every Stop WITHOUT a prior resize (3.12's tests) [docs/implementation-artifacts/deferred-work.md]
-- [x] [Review][Patch] Dev Agent Record claims the full four-project `npm run ci` e2e run was **exit 0** while the same paragraph admits the pre-existing 3.12 Tab test fails on local WebKit; `apps/web/test-results/.last-run.json` (19:00, status `failed`, 5 tests) confirms the local run was red — AC12 forbids claiming exit 0 for that reason; report the actual result and let CI be the authority [docs/implementation-artifacts/3-16-play-mode-ephemeral-resize.md Dev Agent Record]
+- [x] [Review][Patch] Dev Agent Record claims the full four-project `npm run ci` e2e run was **exit 0** while the same paragraph admits the pre-existing 3.12 Tab test fails on local WebKit; `apps/web/test-results/.last-run.json` (19:00, status `failed`, 5 tests) confirms the local run was red — AC12 forbids claiming exit 0 for that reason; report the actual result and let CI be the authority [docs/implementation-artifacts/epic-3/3-16-play-mode-ephemeral-resize.md Dev Agent Record]
 - [x] [Review][Patch] Task 6 (a) is checked but `simulation/README.md`'s "⚠️ `<GridSizeControl>` … belongs HERE" paragraph was not rewritten to shipped history [apps/web/components/battle/simulation/README.md:50-55]
 - [x] [Review][Defer] Disabling the focused Grid Size slider (keyboard-adjust, then Play via a non-focusing click on Safari/Firefox) drops focus to `<body>` — no focus restoration when `disabled` flips [apps/web/components/battle/simulation/BattleSimulationView.tsx:235-239] — deferred, pre-existing route-wide disabled-state policy; joins the Story 6.11 sweep
 
@@ -688,7 +688,7 @@ MUI 9.3.1 (`styled` only — no `Slider`). No React Compiler.
   does not), `:667` (3.9), `:801-830` (3.10 amendment items 1 and 4), `:860-905` (3.11: bundle
   mechanism, observer assumption), **`:1002-1010`** (3-13 LadderSlider), `:1084-1088` (4-6 glow),
   3-15 review section (`reuseExistingServer` hazard).
-- `docs/implementation-artifacts/3-15-extinction-auto-pause.md` (Review Findings, Debug Log),
+- `docs/implementation-artifacts/epic-3/3-15-extinction-auto-pause.md` (Review Findings, Debug Log),
   `3-13-speed-control.md` (FD1/FD2, the range idiom), `3-11-mode-toggle-run-view-skeleton.md`
   (FD6, canvas keyed on dimensions), `3-10-usesimulation-hook.md` (FD6 `liveSize`),
   `lane-gates.yaml`.
@@ -807,7 +807,7 @@ Claude Sonnet 5 (claude-sonnet-5).
 - `apps/web/components/battle/simulation/README.md`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/3-16-play-mode-ephemeral-resize.md` (this file)
+- `docs/implementation-artifacts/epic-3/3-16-play-mode-ephemeral-resize.md` (this file)
 
 ## Change Log
 

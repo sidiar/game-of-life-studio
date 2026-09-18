@@ -586,12 +586,12 @@ Not touched: `eslint.config.mjs`, `scripts/*.mjs`, `packages/simulation/vitest.c
 - [Source: docs/project-context.md#Critical Don't-Miss Rules] — death precedes survival and implicit
   death resolves at cycle-end; grid dimensions are never constants; no classes or module-level
   mutable state in the engine; the `Uint8Array`/`Uint16Array` split; auto-stop is extinction-only
-- [Source: docs/implementation-artifacts/3-4-precompiled-evaluators-organism-interning.md#Dev Agent
+- [Source: docs/implementation-artifacts/epic-3/3-4-precompiled-evaluators-organism-interning.md#Dev Agent
   Record] — FD1 (`CompilableOrganism`, minimal local input types), **FD2 → M15 (the evaluator pair,
   ref-indexed table)**, FD3 (the cache key), FD8 (**what `src/session/` is for, and that this
   story's code is not it**), and **Decisions Needed #2** (`resolveBirthSurvival` keeps
   `Action | null`; `'die'` is unreachable — Trap 11)
-- [Source: docs/implementation-artifacts/3-3-typed-array-grid-neighborhood.md#Dev Agent Record] —
+- [Source: docs/implementation-artifacts/epic-3/3-3-typed-array-grid-neighborhood.md#Dev Agent Record] —
   FD3 (the double-buffer seam as a caller-owned value), FD4 (write the unmeasured optimisation down
   rather than building it blind — the model for **FD5**), FD5 (`OrganismRef` = index + 1)
 - [Source: packages/simulation/src/grid/doubleBuffer.ts] — **the writer obligation this story
@@ -780,7 +780,7 @@ its own mutation is untested):
 - `packages/simulation/src/grid/neighborhood.ts` — comments only
 - `packages/simulation/src/gol/cellSubject.ts` — comments only
 - `packages/simulation/src/gol/resolveCellAction.ts` — comments only
-- `docs/implementation-artifacts/3-5-phases-1-2-death-claims.md` — this record
+- `docs/implementation-artifacts/epic-3/3-5-phases-1-2-death-claims.md` — this record
 - `docs/implementation-artifacts/sprint-status.yaml` — `backlog` → `review` (one hunk; the
   in-progress step was never committed), then `review` → `done` in the review commit
 

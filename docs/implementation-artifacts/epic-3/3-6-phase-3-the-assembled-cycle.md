@@ -297,7 +297,7 @@ pin is what makes the duplication non-silent — the review kept the pair identi
       be one of that cell's claimants before the aging check.
 - [x] [Review][Patch] Record slips: the Change Log's "15 shipped comments" (27 sites across 14
       files); mutation rows 1, 2 and 4 cited counts rather than the named test Task 9 asked for
-      [docs/implementation-artifacts/3-6-phase-3-the-assembled-cycle.md] — corrected; row 1 now
+      [docs/implementation-artifacts/epic-3/3-6-phase-3-the-assembled-cycle.md] — corrected; row 1 now
       names the (repaired) pin.
 - [x] [Review][Patch] Three rewritten comment lines ran to 121–164 columns (Prettier does not
       reflow comments), and `deathPhase.ts` quoted a `doubleBuffer.ts` sentence that file does not
@@ -626,7 +626,7 @@ shipped.
   alive, reset to 0 on rebirth.
 - [Source: docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md#FR-2.4] — **the
   `agingEnabled` toggle is rendering-only; cell-age tracking is unaffected.**
-- [Source: docs/implementation-artifacts/3-5-phases-1-2-death-claims.md#Dev Agent Record] — FD1
+- [Source: docs/implementation-artifacts/epic-3/3-5-phases-1-2-death-claims.md#Dev Agent Record] — FD1
   (`SimulationDeps` is 3.6's), FD2 (destination-passing; the RFC edit rides with this story), FD3
   (the `Claims` shape), FD4 (non-incumbent `survive` dropped), FD5 (the neighbour tally), FD6 (the
   `strategy/` directory), Trap 14 (fail-closed on an out-of-roster ref).
@@ -918,7 +918,7 @@ is a RENDER input (FR-2.4)`. That is a clarification of an already-correct line,
 - `packages/simulation/src/index.ts` — barrel additions + the strategy-layer block rewritten
 - `packages/simulation/src/domainRuleSetCompatibility.test.ts` — M13 pin for `OrganismRuntime`
 - `docs/implementation-artifacts/sprint-status.yaml` — 3-6 → review
-- `docs/implementation-artifacts/3-6-phase-3-the-assembled-cycle.md` — this record
+- `docs/implementation-artifacts/epic-3/3-6-phase-3-the-assembled-cycle.md` — this record
 
 ### Change Log
 

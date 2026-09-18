@@ -89,7 +89,7 @@ development_status:
   # the story files back up beside this file first (CLAUDE.md).
 
   # Epic 3: Living Simulations (Play Mode & Engine)
-  epic-3: in-progress
+  epic-3: done
   3-1-generic-rules-engine: done
   3-2-gol-rules-layer: done
   3-3-typed-array-grid-neighborhood: done
@@ -109,7 +109,10 @@ development_status:
   3-17-run-battle-from-gallery: done
   3-18-fullscreen-run-stage: done
   3-19-simulation-hotkeys: done
-  epic-3-retrospective: optional
+  # No epic-3-retrospective key: the retrospective was deliberately skipped (Sidiar, 2026-09-18),
+  # the same call as Epics 1 and 2. Epic 3's stories are archived into epic-3/, and the retrospective
+  # skill globs story files NON-recursively — it would find zero there. To run one, move the story
+  # files back up beside this file first (CLAUDE.md).
 
   # Epic 4: Custom Organisms & the Shared Library
   epic-4: in-progress

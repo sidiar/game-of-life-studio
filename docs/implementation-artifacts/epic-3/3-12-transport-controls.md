@@ -690,7 +690,7 @@ installed. `eslint-plugin-react-hooks` 7.1.1 via `eslint-config-next` 16.2.12 (`
   (fixtures, `installContexts`, `root`), `apps/web/e2e/battleRoute.spec.ts` (3.11 block helpers;
   `snapshotBaseline` / `countChangedPixels` `:98-133`), `eslint.config.mjs` (AR-46 selectors incl.
   `rgb()`; test-support boundary).
-- `docs/implementation-artifacts/3-11-mode-toggle-run-view-skeleton.md` (AC3/AC5/AC10, review
+- `docs/implementation-artifacts/epic-3/3-11-mode-toggle-run-view-skeleton.md` (AC3/AC5/AC10, review
   patch 1, FD5/FD7, traps 2/4/12/13, Dev Agent Record bundle numbers),
   `3-10-usesimulation-hook.md` (AC4, AC8, AC11, FD5, traps 1/2/12), `deferred-work.md` (3-10
   review: throw leaves `'playing'`; 3-11: `PlaybackDish` on the route, §3.11 candidates,
@@ -777,7 +777,7 @@ accurate during implementation; none needed a new flag.
 - Modified: `apps/web/e2e/battleRoute.spec.ts`
 - Modified: `docs/implementation-artifacts/deferred-work.md`
 - Modified: `docs/implementation-artifacts/sprint-status.yaml`
-- Modified (this file): `docs/implementation-artifacts/3-12-transport-controls.md`
+- Modified (this file): `docs/implementation-artifacts/epic-3/3-12-transport-controls.md`
 - Not touched (checked, no false-future-tense sentence found): `apps/web/lib/battle/useSimulation.ts`,
   `packages/simulation/src/loop/simulationLoop.ts`, `apps/web/components/battle/simulation/README.md`
   — all cited "Story 3.12" sentences already describe the contract this story honours.
