@@ -319,6 +319,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
       the view's `onStop` binding, the stage hint gains `ESC Exit`, AC6 / e2e (b) / the view test
       flip; **(c) `Escape` stops AND exits** — same one-branch change, hint reads `ESC Stop & exit`.
       Owner's call; `deferred-work.md`'s 3.19 section carries the FD4 (b) entry.
+      **Owner's decision (2026-09-18): (c)** — `Escape` in the fullscreen stage **stops the run AND
+      exits the stage**; in the chassis it keeps stopping only. Stage hint reads `ESC Stop & exit`;
+      flip AC6 / e2e (b) / the view test accordingly and drop the now-settled FD4 (b) entry from
+      `deferred-work.md`.
 - [x] [Review][Patch] `onExit` prop has no doc comment, so AC13's "mentions `F`" never landed
       [`apps/web/components/battle/simulation/FullscreenStage.tsx:69`]
 - [x] [Review][Patch] Hook head comment omits the NFR-4.1 citation Task 1.1 requires and FD3 (a)'s
