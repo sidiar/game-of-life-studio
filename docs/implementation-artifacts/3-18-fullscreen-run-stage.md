@@ -4,7 +4,7 @@ baseline_commit: 0c4e82e5116c7e7f12f0fe3c78fcfd75139f8091
 
 # Story 3.18: Fullscreen Run Stage
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -1368,6 +1368,8 @@ Modified:
   statements, `deferred-work.md`'s stale open-decision preamble, the swapped HUD/dish overlap
   figures in code comment + story + `deferred-work.md`, one noun in `themes.css`'s comment), 0
   deferred, 0 decisions open, 4 dismissed. CI for `209f3e6`: green — quality 3m04s, e2e 11m36s, deploy skipped (PR) — run 35317561904.
+- 2026-09-18 — Third-review patches committed as `e6f6005` (CI green: quality 2m28s, e2e 12m04s).
+  PR #55 taken out of draft and merged into `main` by the owner as `7578d4d`. Status → done.
 
 Dev Model: opus   # architecture-shaping: it decides where `fullscreen` lives (BattlePage, against spec §6), establishes the CSS-driven no-remount layout-swap pattern that 3.19's F key toggles and that React reconciliation can silently break, and factors <TransportControls>/<CycleDigits>/<PopulationPills> out of 3.12/3.14's files as the pieces 4.15 builds on
 Proposed lane gate: { story: 4-15-preview-simulation, requires: 3-18-fullscreen-run-stage, why: "3.18 lifts the transport trio out of <SimulationControlBar> (<TransportControls>), the zero-padded digits out of <CycleCounter> (<CycleDigits>) and ships <PopulationPills> as the compact population sibling — the preview panel (spec §8 / §3.12: SpeedControl + compact PopulationStats + cycle counter + Play/Stop/Step) is the third consumer of <TransportControls> and <CycleDigits> and the second of <PopulationPills>, and must reuse them rather than re-author or edit the same simulation/ files concurrently" }
