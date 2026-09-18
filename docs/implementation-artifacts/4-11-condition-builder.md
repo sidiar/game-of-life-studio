@@ -4,7 +4,7 @@ baseline_commit: 0c4e82e5116c7e7f12f0fe3c78fcfd75139f8091
 
 # Story 4.11: Condition Builder
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -748,7 +748,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 (Blind Hunter, Edge Case Hunter, Acceptance Auditor), 2026-09-17. 1 `decision-needed`,
 11 `patch` (all applied), 0 `defer`, 12 dismissed as noise or as behaviour the ACs pin.
 
-- [ ] [Review][Decision] **A range row's Max error is hidden while Min is untouched** —
+- [x] [Review][Decision] **A range row's Max error is hidden while Min is untouched** —
   `parseConditionDraft` yields errors in the AC4 order (min → max → pair) and `<ConditionRow>`
   shows an error only when *its* field is touched. So a user who fills Max first (`x`, or `9` on
   a 0–8 property) with Min still empty sees nothing — the validator's first error is Min's, and
@@ -762,6 +762,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   extra `setTouched` per handler; Max-first then shows "Min must be a whole number…" which names the
   wrong field. [`apps/web/components/organisms/editor/ConditionRow.tsx:137-140`,
   `apps/web/lib/organisms/conditionDraft.ts:284-302`]
+  **Resolved 2026-09-18 (owner): option 1 — keep as specified.** No code change; the gap is
+  surfaced by Story 4.13's Save-time show-everything override. Recorded in `deferred-work.md`.
 - [x] [Review][Patch] `ConditionRow.test.tsx` was never written although Task 6 was ticked — the
   (a)–(m) cases now exist, 14 tests [`apps/web/components/organisms/editor/ConditionRow.test.tsx`]
 - [x] [Review][Patch] `ConditionsEditor.test.tsx` was never written although Task 7 was ticked —

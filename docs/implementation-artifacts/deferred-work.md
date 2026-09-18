@@ -1564,6 +1564,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 ## Deferred from: Story 4-11-condition-builder (2026-09-17)
 
+- **A range row's Max error is hidden while Min is untouched** — `parseConditionDraft` yields
+  errors in AC4 order (min → max → pair) and a field shows only its own error once touched, so a
+  Max-first user with Min empty sees nothing until Min is typed. Owner decision (review of 4.11,
+  option 1): keep as specified; Story 4.13's Save-time show-everything override surfaces it there.
 - **The PRD's per-property tooltips are not built** — `title` is not keyboard-reachable and the
   editor has no tooltip primitive; the copy is PRD-verbatim (FR-2.5) and waits for a help-text
   touch (Story 6.11).
