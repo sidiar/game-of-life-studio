@@ -51,6 +51,9 @@ function view(overrides: Partial<BattleSimulationViewProps> = {}) {
       palette={PALETTE}
       colors={COLORS}
       onBack={vi.fn()}
+      fullscreen={false}
+      onExitFullscreen={vi.fn()}
+      battleTitle="Three-Way Skirmish"
       {...overrides}
     />
   );
@@ -1058,6 +1061,229 @@ describe('Play-mode ephemeral resize (Story 3.16)', () => {
     act(() => screen.getByRole('button', { name: 'Play' }).click());
     driver.frame(0);
     expect(gridSizeSlider()).toBeDisabled(); // the second scan IS the disabled leg
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});
+
+describe('Fullscreen run stage (Story 3.18)', () => {
+  const speedSlider = () => screen.getByRole('slider', { name: 'Generations per second' });
+  const gridSizeSlider = () => screen.getByRole('slider', { name: 'Grid dimensions' });
+  const exitButton = () => screen.getByRole('button', { name: 'Exit fullscreen' });
+
+  // AC4 (a)+(b): entering and exiting is a LAYOUT SWAP — the same `<canvas>` element, the same
+  // renderer (one context construction), no re-prime — with the sidebar and the bar unmounted
+  // in fullscreen and back on exit. The three identity assertions are the tripwire for anyone who
+  // later puts a new element type above the canvas in one state only (FD2 (c), trap 1).
+  it('enters and exits fullscreen without remounting the canvas: same node, one context, drawFull unchanged (AC4)', () => {
+    installContexts();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const onExitFullscreen = vi.fn();
+    const { container, rerender } = render(view({ onExitFullscreen }));
+    const canvasBefore = container.querySelector('canvas');
+    expect(canvasBefore).not.toBeNull();
+    expect(drawFullSpy).toHaveBeenCalledTimes(1); // the mount prime
+    // Renderer constructions on THIS canvas (the 3.16 idiom): each `new GridRenderer(canvas, …)`
+    // calls `canvas.getContext` exactly once. The contexts MAP is not the count — the renderer's
+    // grid-line overlay is a second, offscreen canvas with a context of its own.
+    const constructions = () =>
+      vi
+        .mocked(HTMLCanvasElement.prototype.getContext)
+        .mock.contexts.filter((self) => self === canvasBefore).length;
+    expect(constructions()).toBe(1);
+    expect(root(container)).toHaveAttribute('data-fullscreen', 'false');
+
+    rerender(view({ onExitFullscreen, fullscreen: true }));
+
+    expect(root(container)).toHaveAttribute('data-fullscreen', 'true');
+    expect(container.querySelector('canvas')).toBe(canvasBefore);
+    expect(container.querySelectorAll('canvas')).toHaveLength(1);
+    expect(constructions()).toBe(1); // no second construction
+    expect(drawFullSpy).toHaveBeenCalledTimes(1); // a remount would re-attach and re-prime
+    // The sidebar and the bottom bar are GONE (unmounted, not hidden): no complementary
+    // landmark, no sliders, no Back; the stage's chrome is up.
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('slider')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Back to Battles' })).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveAccessibleName('Three-Way Skirmish');
+    expect(exitButton()).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Simulation controls' })).toBeInTheDocument();
+    // Exactly four buttons in the stage: Exit + the transport trio.
+    expect(screen.getAllByRole('button')).toHaveLength(4);
+
+    act(() => exitButton().click());
+    expect(onExitFullscreen).toHaveBeenCalledTimes(1);
+
+    rerender(view({ onExitFullscreen, fullscreen: false }));
+
+    expect(root(container)).toHaveAttribute('data-fullscreen', 'false');
+    expect(container.querySelector('canvas')).toBe(canvasBefore);
+    expect(container.querySelectorAll('canvas')).toHaveLength(1);
+    expect(constructions()).toBe(1);
+    expect(drawFullSpy).toHaveBeenCalledTimes(1);
+    // The chassis is back exactly: four h2s in order, two sliders, the bar's group, four buttons.
+    expect(screen.queryAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Population Analysis',
+      'Cycle Count',
+      'Speed',
+      'Grid Size',
+    ]);
+    expect(screen.getAllByRole('slider')).toHaveLength(2);
+    expect(screen.getByRole('group', { name: 'Simulation controls' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary')).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(4);
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).not.toBeInTheDocument();
+  });
+
+  // AC4 (c): under StrictMode the round trip settles to one canvas and one primed renderer — the
+  // `:206-220` shape, through the swap.
+  it('settles under StrictMode across a fullscreen round trip: one canvas, primed, no extra construction', () => {
+    installContexts();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const { container, rerender } = render(<StrictMode>{view()}</StrictMode>);
+    expect(container.querySelectorAll('canvas')).toHaveLength(1);
+    const canvasBefore = container.querySelector('canvas');
+    const primesAfterMount = drawFullSpy.mock.calls.length; // 2 under StrictMode (mount test)
+    const getContextCalls = () =>
+      vi.mocked(HTMLCanvasElement.prototype.getContext).mock.calls.length;
+    const contextsAfterMount = getContextCalls();
+
+    rerender(<StrictMode>{view({ fullscreen: true })}</StrictMode>);
+    rerender(<StrictMode>{view({ fullscreen: false })}</StrictMode>);
+
+    expect(container.querySelectorAll('canvas')).toHaveLength(1);
+    expect(container.querySelector('canvas')).toBe(canvasBefore);
+    expect(getContextCalls()).toBe(contextsAfterMount);
+    expect(drawFullSpy).toHaveBeenCalledTimes(primesAfterMount);
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+  });
+
+  // AC5 (a): a RUNNING simulation never notices the swap — no frame cancelled, the next frame
+  // still queued, the cycle still advancing, in both directions.
+  it('keeps a playing simulation running across enter and exit: no cancel, frame still pending, cycle advancing (AC5)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container, rerender } = render(view({ startingSpeed: 10 }));
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+
+    rerender(view({ startingSpeed: 10, fullscreen: true }));
+
+    expect(driver.caf).not.toHaveBeenCalled();
+    expect(driver.pending()).toBe(1);
+    driver.frame(200);
+    driver.frame(300);
+    expect(root(container)).toHaveAttribute('data-cycle', '3');
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+    // The HUD's transport reads the live status: "Pause" while playing, Step disabled.
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next cycle' })).toBeDisabled();
+
+    rerender(view({ startingSpeed: 10, fullscreen: false }));
+
+    expect(driver.caf).not.toHaveBeenCalled();
+    expect(driver.pending()).toBe(1);
+    driver.frame(400);
+    driver.frame(500);
+    expect(root(container)).toHaveAttribute('data-cycle', '5');
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+  });
+
+  // AC5 (b): paused state survives the round trip untouched — cycle and status the same on both
+  // sides, and the HUD's Cycle group shows the same number the sidebar's counter did.
+  it('keeps a paused simulation at its cycle across enter and exit (AC5)', () => {
+    installContexts();
+    installFrameDriver();
+    const { container, rerender } = render(view());
+
+    act(() => screen.getByRole('button', { name: 'Next cycle' }).click());
+    act(() => screen.getByRole('button', { name: 'Next cycle' }).click());
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+
+    rerender(view({ fullscreen: true }));
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(screen.getByText('Cycle').nextElementSibling).toHaveTextContent(/^0002$/);
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+
+    rerender(view({ fullscreen: false }));
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+  });
+
+  // AC5 (c): the speed is the HOOK's (3.10 FD6) — set from the chassis, read in the HUD, still
+  // on the slider after exit. Nothing in the view stores it.
+  it('shows the chosen speed in the HUD and keeps it on the slider after exit (AC5)', () => {
+    installContexts();
+    installFrameDriver();
+    const { rerender } = render(view({ startingSpeed: 10 }));
+
+    fireEvent.change(speedSlider(), { target: { value: '4' } }); // 20 gen/sec
+    expect(speedSlider()).toHaveAttribute('aria-valuetext', '20 generations per second');
+
+    rerender(view({ startingSpeed: 10, fullscreen: true }));
+    expect(screen.getByText('Speed').nextElementSibling).toHaveTextContent(/^20 gen\/s$/);
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+
+    rerender(view({ startingSpeed: 10, fullscreen: false }));
+    expect(speedSlider()).toHaveValue('4');
+    expect(speedSlider()).toHaveAttribute('aria-valuetext', '20 generations per second');
+  });
+
+  // AC5 (d), trap 2: an ephemeral 150×90 stays 150×90 across the swap — `PlaybackDish` keys its
+  // construction on DIMENSIONS (the hook's `liveSize`, unchanged by the layout), so the same
+  // canvas node carries the same name; Grid Size still reads 150×90 after exit because the state
+  // lives in the hook, not the sidebar.
+  it('keeps an ephemeral 150×90 resize across enter and exit on the same canvas node (AC5)', () => {
+    installContexts();
+    const { container, rerender } = render(view());
+    const canvas = screen.getByRole('img', { name: 'Petri dish, 7 by 5 cells' });
+
+    act(() => fireEvent.change(gridSizeSlider(), { target: { value: '2' } })); // 150x90
+    expect(screen.getByRole('img', { name: 'Petri dish, 150 by 90 cells' })).toBe(canvas);
+
+    rerender(view({ fullscreen: true }));
+    expect(screen.getByRole('img', { name: 'Petri dish, 150 by 90 cells' })).toBe(canvas);
+    expect(container.querySelectorAll('canvas')).toHaveLength(1);
+
+    rerender(view({ fullscreen: false }));
+    expect(screen.getByRole('img', { name: 'Petri dish, 150 by 90 cells' })).toBe(canvas);
+    expect(gridSizeSlider()).toHaveValue('2');
+    expect(gridSizeSlider()).toHaveAttribute('aria-valuetext', '150 by 90 cells');
+  });
+
+  // The HUD's population pills read the same published entries the sidebar's rows do — in the
+  // hook's order, the unplaced third organism skulled from the first publish (H.2).
+  it('renders the population pills from the hook’s published entries in fullscreen', () => {
+    installContexts();
+    render(view({ fullscreen: true }));
+
+    const pills = within(screen.getByRole('list', { name: 'Population' })).getAllByRole('listitem');
+    expect(pills.map((pill) => pill.textContent)).toEqual([
+      'Aggressive Colonizer 3',
+      'Patient Defender 3',
+      'Chaotic Spreader 0☠',
+    ]);
+  });
+
+  // AC7: Exit takes focus when the stage mounts INTO an already-mounted view (the real path —
+  // the header's button has just unmounted), and axe is clean paused and playing in fullscreen.
+  it('focuses Exit fullscreen on entry and has no axe violations in fullscreen, paused and playing', async () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container, rerender } = render(view());
+
+    rerender(view({ fullscreen: true }));
+    expect(exitButton()).toHaveFocus();
+    expect((await axe(container)).violations).toEqual([]);
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
     expect((await axe(container)).violations).toEqual([]);
   });
 });

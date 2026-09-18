@@ -23,9 +23,10 @@ describe('BattleHeader', () => {
 
   // NFR-4.1, as a COUNT. Story 2.1 asserted ZERO controls even with the Epic 3 props supplied —
   // a rendered-but-inert toggle being the one thing NFR-4.1 forbids. Story 3.11 gives the toggle
-  // its consumer, so the count flips to exactly TWO buttons: a third (fullscreen, Story 3.18)
-  // still fails here. `onEnterFullscreen` stays supplied and stays unrendered.
-  it('renders exactly two buttons and no links when `mode` + `onModeToggle` are supplied', () => {
+  // its consumer, so the count flips to exactly TWO buttons. Story 3.18's Fullscreen button is
+  // RUN-ONLY, so this LAB-mode count is unaffected by it even with `onEnterFullscreen` supplied —
+  // the Run-mode case below is where the third button appears.
+  it('renders exactly two buttons and no links in Lab mode, even with `onEnterFullscreen` supplied', () => {
     render(
       <BattleHeader
         battleTitle="Three-Way Skirmish"
@@ -47,6 +48,81 @@ describe('BattleHeader', () => {
 
     expect(screen.queryAllByRole('button')).toHaveLength(0);
     expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  describe('the Fullscreen entry (Story 3.18, NFR-4.1)', () => {
+    // AC1: Run mode + the handler → exactly THREE buttons, the Fullscreen button BEFORE the Mode
+    // group in DOM order (the mockup's `.header-actions` order — tab order Fullscreen → Lab →
+    // Run), and one press → one call.
+    it('renders a third button, "Fullscreen", before the Mode group in Run mode, calling the handler once', async () => {
+      const user = userEvent.setup();
+      const onEnterFullscreen = vi.fn();
+      render(
+        <BattleHeader
+          battleTitle="Three-Way Skirmish"
+          mode="run"
+          onModeToggle={vi.fn()}
+          onEnterFullscreen={onEnterFullscreen}
+        />,
+      );
+
+      expect(screen.getAllByRole('button')).toHaveLength(3);
+      const fullscreen = screen.getByRole('button', { name: 'Fullscreen' });
+      expect(fullscreen).toHaveAttribute('type', 'button');
+      expect(fullscreen).toBeEnabled();
+      expect(fullscreen).toHaveAttribute('data-enter-fullscreen');
+      const group = screen.getByRole('group', { name: 'Mode' });
+      expect(
+        fullscreen.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+        '⛶ Fullscreen',
+        'Lab',
+        'Run',
+      ]);
+
+      await user.click(fullscreen);
+
+      expect(onEnterFullscreen).toHaveBeenCalledTimes(1);
+    });
+
+    // The both-or-nothing rule the toggle already uses: Run mode WITHOUT the handler renders no
+    // Fullscreen button (a control with nothing wired behind it is what NFR-4.1 forbids).
+    it('renders two buttons in Run mode when `onEnterFullscreen` is not supplied', () => {
+      render(<BattleHeader battleTitle="T" mode="run" onModeToggle={vi.fn()} />);
+
+      expect(screen.getAllByRole('button')).toHaveLength(2);
+      expect(screen.queryByRole('button', { name: /fullscreen/i })).toBeNull();
+    });
+
+    // Never `disabled`: entering fullscreen touches no editor state, so neither the edit lock nor
+    // the roster refusal applies — both reach RUN only.
+    it('stays enabled while RUN is disabled', () => {
+      render(
+        <BattleHeader
+          battleTitle="T"
+          mode="run"
+          onModeToggle={vi.fn()}
+          onEnterFullscreen={vi.fn()}
+          disabled
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Fullscreen' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    });
+
+    it('has no axe violations in the three-button state', async () => {
+      const { container } = render(
+        <BattleHeader
+          battleTitle="Three-Way Skirmish"
+          mode="run"
+          onModeToggle={vi.fn()}
+          onEnterFullscreen={vi.fn()}
+        />,
+      );
+      expect((await axe(container)).violations).toEqual([]);
+    });
   });
 
   it('renders the toggle only when BOTH `mode` and `onModeToggle` are present', () => {
@@ -110,6 +186,28 @@ describe('BattleHeader', () => {
       await user.click(screen.getByRole('button', { name: 'Lab' }));
 
       expect(onModeToggle).not.toHaveBeenCalled();
+    });
+
+    // Story 3.18 review decision: the second click of a pointer double-click on the stage's Exit
+    // button lands on `Lab`, which remounts under the pointer when the header returns — so a
+    // repeat click (`detail > 1`) must NOT toggle. A plain click carries `detail: 1`, and a
+    // keyboard activation synthesises a click with `detail: 0`; both still fire.
+    it('ignores the repeat clicks of a pointer multi-click (`detail > 1`) but not single or keyboard clicks', async () => {
+      const user = userEvent.setup();
+      const onModeToggle = vi.fn();
+      render(<BattleHeader battleTitle="T" mode="run" onModeToggle={onModeToggle} />);
+      const lab = screen.getByRole('button', { name: 'Lab' });
+
+      lab.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
+      expect(onModeToggle).not.toHaveBeenCalled();
+
+      lab.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      expect(onModeToggle).toHaveBeenCalledTimes(1);
+
+      lab.focus();
+      await user.keyboard('{Enter}');
+      expect(onModeToggle).toHaveBeenCalledTimes(2);
+      expect(onModeToggle).toHaveBeenLastCalledWith('lab');
     });
 
     // `disabled` reaches RUN only: LAB is always reachable from Run, because a roster that cannot

@@ -1,5 +1,6 @@
 'use client';
 
+import type { MouseEvent } from 'react';
 import { styled } from '@mui/material/styles';
 
 // Mockup: .header (clinical-lab-theme/petri-dish-lab-mode.html:33-45). `position: fixed` is
@@ -38,8 +39,8 @@ const Title = styled('h1')({
 });
 
 // Mockup: .header-actions (petri-dish-play-mode.html:55-59 / lab-mode:55-59) — the right-hand
-// cluster the mode toggle sits in. Its `gap` is what will space Story 3.18's fullscreen button off
-// the toggle; today it holds the toggle alone.
+// cluster the mode toggle sits in. Its `gap` is what spaces the Fullscreen button (Story 3.18,
+// Run mode only) off the toggle; in Lab mode it holds the toggle alone.
 const Actions = styled('div')({
   display: 'flex',
   gap: '15px',
@@ -118,6 +119,37 @@ const ModeButton = styled('button')({
   },
 });
 
+// Mockup: `.btn-fullscreen` (petri-dish-play-mode.html:97-114) — transparent, accent border and
+// text — minus `transition: all 0.2s` (the axe mid-fade trap every bar on this route records).
+// Hover is the mockup's `rgba(0, 212, 255, 0.1)` (`:112-114`) as `--gol-accent-tint`, the token
+// Story 4.2 authored for exactly this rgba (AR-46 forbids the literal). The `:focus-visible` ring is
+// `ModeButton`'s, COPIED rather than shared: a shared object would change `ModeButton`'s identity
+// (trap 14), and this file sits in `/battle`'s first-load payload with ~1 KB of headroom.
+//
+// No `&:disabled` rule and never `disabled`: entering fullscreen touches no editor state, so
+// neither the edit lock nor the roster refusal applies — both reach RUN only.
+const FullscreenButton = styled('button')({
+  background: 'transparent',
+  border: '1px solid var(--gol-accent)',
+  color: 'var(--gol-accent)',
+  padding: '8px 16px',
+  fontSize: '11px',
+  fontWeight: 600,
+  // Trap 15 (`<SidebarFooter>`): DOM text stays sentence case ("Fullscreen") so the accessible
+  // name does; CSS renders the mockup's FULLSCREEN.
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  '&:hover': {
+    background: 'var(--gol-accent-tint)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+});
+
 export type BattleMode = 'lab' | 'run';
 
 export interface BattleHeaderProps {
@@ -138,35 +170,68 @@ export interface BattleHeaderProps {
   disabled?: boolean;
   /** Lands as `title` on the RUN button, so a disabled control states WHY (NFR-4.1). */
   disabledReason?: string;
-  /** Still ABSENT from the render — the fullscreen button is Story 3.18. */
+  /**
+   * Story 3.18 (spec §3.2): the Fullscreen entry, rendered in RUN mode only and only when supplied
+   * — the toggle's own both-or-nothing rule (NFR-4.1). It lives inside the `<Actions>` cluster the
+   * toggle owns, so `mode` + `onModeToggle` are preconditions too: Run mode with this handler but
+   * no toggle renders nothing (the page always supplies both). `<BattlePage>` owns the `fullscreen` cell
+   * (3.18 FD1 (a)) and unmounts this whole header while the stage is up; this component only
+   * reports the press, exactly as it does for `onModeToggle`.
+   */
   onEnterFullscreen?(): void;
 }
 
 // Display only (component-tree-battle-page.md §3.2): the title is TEXT, never an input.
 // In-place renaming is <BattleNameField> in the sidebar (Story 2.11), and no Save, Back or dirty
-// indicator belongs here either. The one control it owns is the Lab⇄Run toggle (FR-3.10):
-// `<BattlePage>` owns `mode` and this component only reports the press (AR-28).
+// indicator belongs here either. The controls it owns are the Lab⇄Run toggle (FR-3.10) and, in
+// Run mode, the Fullscreen entry (Story 3.18): `<BattlePage>` owns `mode` and `fullscreen`, and
+// this component only reports the presses (AR-28).
 export default function BattleHeader({
   battleTitle,
   mode,
   onModeToggle,
   disabled = false,
   disabledReason,
+  onEnterFullscreen,
 }: BattleHeaderProps) {
   const showToggle = mode !== undefined && onModeToggle !== undefined;
+  const showFullscreen = mode === 'run' && onEnterFullscreen !== undefined;
+  // Story 3.18 review decision (b): the ACTIVE button is a no-op, never a re-set — `onModeToggle`
+  // fires only for a genuine change, so `<BattlePage>` never renders for a mode it is already
+  // in — and a REPEAT click never fires at all. The stage's Exit button sits where `Lab` remounts
+  // when the header returns (Exit ≈ y 18–49 / x W−184..W−24 under the bar's `18px 24px`; the Mode
+  // group ≈ y 20–51 / x W−156..W−30, `Lab` its left half), so the second click of a pointer double-click on Exit
+  // would land on `Lab` and drop the run session. `event.detail` is the click count within the
+  // multi-click window; a keyboard-synthesised click carries `detail === 0` and must still fire.
+  const toggleTo = (next: BattleMode) => (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail > 1 || mode === next || onModeToggle === undefined) return;
+    onModeToggle(next);
+  };
   return (
     <Header>
       <Title>{battleTitle}</Title>
       {showToggle && (
         <Actions>
+          {/* BEFORE the toggle — the mockup's DOM order (`:551-560`), so the tab order is
+              Fullscreen → Lab → Run. `data-enter-fullscreen` is the focus-restore handle: when the
+              stage exits, `<BattlePage>` looks this element up in the DOM at restore time (the
+              `[data-back-to-battles]` precedent — WebKit does not focus a `<button>` on click, so
+              a captured element is the wrong tool). */}
+          {showFullscreen && (
+            <FullscreenButton type="button" onClick={onEnterFullscreen} data-enter-fullscreen="">
+              {/* The glyph (U+26F6) sits in axe's symbol range (the 3.17 FD4 shape): `aria-hidden`
+                  keeps it out of the accessible name, which is exactly "Fullscreen". The pair
+                  this control wears — accent on `--gol-bg-primary` — is gated in
+                  `themeTokens.test.ts`. */}
+              <span aria-hidden="true">⛶</span> Fullscreen
+            </FullscreenButton>
+          )}
           <ModeToggle role="group" aria-label="Mode">
-            {/* The ACTIVE button is a no-op, never a re-set: `onModeToggle` fires only for a
-                genuine change, so `<BattlePage>` never renders for a mode it is already in. */}
             <ModeButton
               type="button"
               data-mode-value="lab"
               aria-pressed={mode === 'lab'}
-              onClick={() => mode !== 'lab' && onModeToggle('lab')}
+              onClick={toggleTo('lab')}
             >
               Lab
             </ModeButton>
@@ -176,7 +241,7 @@ export default function BattleHeader({
               aria-pressed={mode === 'run'}
               disabled={disabled}
               title={disabled ? disabledReason : undefined}
-              onClick={() => mode !== 'run' && onModeToggle('run')}
+              onClick={toggleTo('run')}
             >
               Run
             </ModeButton>

@@ -59,7 +59,14 @@ vi.mock('./editor/BattleEditorView', () => ({
 vi.mock('./simulation/BattleSimulationView', () => ({
   default: (props: BattleSimulationViewProps) => {
     runRenders.push(props);
-    return <div data-testid="run" />;
+    return (
+      <div data-testid="run" data-fullscreen={props.fullscreen}>
+        {/* Story 3.18: a control that STAYS mounted across the mocked view's exit — the real
+            stage's Exit button unmounts on exit, so only a mock can hold focus through it and
+            exercise the restore effect's "focus is not loose" branch. */}
+        <button type="button">focus holder</button>
+      </div>
+    );
   },
 }));
 
@@ -123,6 +130,10 @@ describe('BattlePage — what the Run view receives (Story 3.11)', () => {
     expect(run.initialGrid).toBe(lastEditorGrid);
     expect(run.startingSpeed).toBe(5);
     expect(run.showGridLines).toBe(false);
+    // Story 3.18 (trap 6): the three stage props, on the toggle path.
+    expect(run.fullscreen).toBe(false);
+    expect(typeof run.onExitFullscreen).toBe('function');
+    expect(run.battleTitle).toBe('Three-Way Skirmish');
     expect(screen.queryByTestId('editor')).toBeNull();
   });
 
@@ -219,6 +230,11 @@ describe('BattlePage — what the Run view receives (Story 3.11)', () => {
     expect(run.startingSpeed).toBe(5);
     expect(run.showGridLines).toBe(false);
     expect(run.backDisabled).toBe(false);
+    // Story 3.18 (trap 6): the three stage props, on the run-first path — never fullscreen on
+    // mount.
+    expect(run.fullscreen).toBe(false);
+    expect(typeof run.onExitFullscreen).toBe('function');
+    expect(run.battleTitle).toBe('Three-Way Skirmish');
   });
 
   // AC6 / Story 3.17: the in-render adjust means the Run branch is never REACHED for a dangling
@@ -239,5 +255,74 @@ describe('BattlePage — what the Run view receives (Story 3.11)', () => {
     expect(runRenders).toHaveLength(0);
     expect(screen.queryByTestId('run')).toBeNull();
     expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+  });
+});
+
+describe('BattlePage — the fullscreen cell through the mocked view (Story 3.18)', () => {
+  // AC2 / AC6: the header's press flips `fullscreen` to the view and UNMOUNTS the header; the
+  // view's `onExitFullscreen` flips it back and the header REMOUNTS (a new Mode group).
+  it('hands `fullscreen: true` to the view and unmounts the header on entry; the view’s onExitFullscreen remounts it', async () => {
+    const user = await renderSkirmish();
+    await enterRun(user);
+    const groupBefore = screen.getByRole('group', { name: 'Mode' });
+
+    await user.click(screen.getByRole('button', { name: 'Fullscreen' }));
+
+    await waitFor(() =>
+      expect((runRenders.at(-1) as BattleSimulationViewProps).fullscreen).toBe(true),
+    );
+    expect(screen.queryByRole('group', { name: 'Mode' })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull(); // the mock renders no h1
+    expect(screen.getByTestId('run')).toHaveAttribute('data-fullscreen', 'true');
+
+    (runRenders.at(-1) as BattleSimulationViewProps).onExitFullscreen();
+
+    const groupAfter = await screen.findByRole('group', { name: 'Mode' });
+    expect(groupAfter).not.toBe(groupBefore);
+    await waitFor(() =>
+      expect((runRenders.at(-1) as BattleSimulationViewProps).fullscreen).toBe(false),
+    );
+    expect(screen.getByRole('button', { name: 'Fullscreen' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // AC6, the "loose focus" guard: when a control the user focused SURVIVES the exit (only a mock
+  // can arrange that — the real stage's Exit button unmounts), the restore effect must NOT steal
+  // focus from it. The complementary case — focus dropping to `<body>` and being restored to the
+  // Fullscreen button — is `BattlePage.test.tsx`'s, against the real view.
+  it('does not steal focus on exit from a control the user has already focused', async () => {
+    const user = await renderSkirmish();
+    await enterRun(user);
+    await user.click(screen.getByRole('button', { name: 'Fullscreen' }));
+    await waitFor(() =>
+      expect((runRenders.at(-1) as BattleSimulationViewProps).fullscreen).toBe(true),
+    );
+    const holder = screen.getByRole('button', { name: 'focus holder' });
+    holder.focus();
+    expect(holder).toHaveFocus();
+
+    (runRenders.at(-1) as BattleSimulationViewProps).onExitFullscreen();
+    await screen.findByRole('group', { name: 'Mode' });
+
+    expect(holder).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Fullscreen' })).not.toHaveFocus();
+  });
+
+  // The restore is a real move when focus IS loose: exit with focus on `<body>` → the Fullscreen
+  // button has focus after the header remounts.
+  it('restores focus to the Fullscreen button on exit when focus is loose', async () => {
+    const user = await renderSkirmish();
+    await enterRun(user);
+    await user.click(screen.getByRole('button', { name: 'Fullscreen' }));
+    await waitFor(() =>
+      expect((runRenders.at(-1) as BattleSimulationViewProps).fullscreen).toBe(true),
+    );
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.body).toHaveFocus();
+
+    (runRenders.at(-1) as BattleSimulationViewProps).onExitFullscreen();
+    await screen.findByRole('group', { name: 'Mode' });
+
+    expect(screen.getByRole('button', { name: 'Fullscreen' })).toHaveFocus();
   });
 });

@@ -3,6 +3,7 @@
 import { styled } from '@mui/material/styles';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import type { PopulationEntry } from '@/lib/battle/useSimulation';
+import { Skull, Swatch } from './populationGlyphs';
 
 /**
  * Spec §3.12 / component-tree-battle-page.md §3.12: "All pure presentational; logic (sorting,
@@ -28,9 +29,12 @@ import type { PopulationEntry } from '@/lib/battle/useSimulation';
  * steps" — this route has lost three transitions to a mid-fade axe scan already,
  * `EditorStatusBar.tsx`'s comment block is the record).
  *
- * Story 3.18's HUD pills and 4.15's compact preview are the "compact variants" spec §8 names; this
- * story ships the sidebar shape only, no `variant`/`compact` prop until a consumer exists (the
- * dead-affordance rule applied to props, 3.11 FD5's reasoning).
+ * The "compact variant" spec §8 names shipped in Story 3.18 as a SIBLING, `<PopulationPills>` (the
+ * fullscreen HUD's pills), not as a `variant`/`compact` prop here: the pills share DATA (the same
+ * `PopulationEntry[]`) with these rows, not markup — no name, no bar, no total — and this
+ * component stays the sidebar shape alone. What the two DO share is the swatch and the skull,
+ * lifted into `populationGlyphs.tsx` so the hollow-when-extinct pattern is one definition. Story
+ * 4.15's preview is the third consumer of that pair.
  */
 
 // Mockup: `.population-stats` (petri-dish-play-mode.html:341-346).
@@ -76,18 +80,9 @@ const Name = styled('span')({
   },
 });
 
-// `aria-hidden` at the call site (decorative — the name/percentage already state what the colour
-// would). The hex arrives via inline `style` (background/borderColor); extinct rows go hollow.
-const Swatch = styled('span')({
-  width: '10px',
-  height: '10px',
-  flexShrink: 0,
-  border: '1px solid',
-});
-
-// Mockup: `.pop-extinct-indicator` (:398-401).
-const Skull = styled('span')({
-  fontSize: '14px',
+// Mockup: `.pop-extinct-indicator`'s `margin-left: 5px` (:398-401) — the ROW's spacing, kept here
+// rather than on the shared glyph (`populationGlyphs.tsx`), whose other host spaces by `gap`.
+const RowSkull = styled(Skull)({
   marginLeft: '5px',
 });
 
@@ -169,9 +164,9 @@ export default function PopulationStats({ entries, totalLiving }: PopulationStat
                     />
                     <span>{entry.name}</span>
                     {entry.extinct && (
-                      <Skull role="img" aria-label="extinct">
+                      <RowSkull role="img" aria-label="extinct">
                         ☠
-                      </Skull>
+                      </RowSkull>
                     )}
                   </Name>
                   <Count>

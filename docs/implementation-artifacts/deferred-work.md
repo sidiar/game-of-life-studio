@@ -201,7 +201,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 ## Deferred from: Story 2-3-renderer-dirty-region-editing-paths implementation (2026-08-26)
 
-- **`applyDevicePixelSizing`'s `dpr²` exposure survives for `static` tiles repainted at a 0-width box** — the residual of the 1.11 review item Story 2.3 closed by documentation rather than by re-engineering. The anti-double-scaling guard compares `canvas.width` against the *instance's* `backingWidth`, so it only ever matches on a renderer that outlives one paint. `<PetriDishCanvas variant="static">` constructs a renderer per paint (Story 1.11 forced decision 2), so on any repaint where `canvas.clientWidth` reads 0 — an ancestor `display:none`, a collapsed layout, a `ResizeObserver` notification for a 0×0 box — the backing store becomes `cssPx * dpr²`, then `dpr³`. Not reachable in the current Gallery layout, which never produces a 0-width repaint, and the caller-side guard (`PetriDishCanvas` ignores a notification whose `contentRect` matches the box last rasterised) narrows the window further. The fix, if it is ever needed, is to make the guard instance-independent by stamping the CSS box the backing store was computed from onto the canvas element (a `data-*` attribute or an expando), which is renderer state living outside the renderer — worth doing only when a real 0-width repaint exists to justify it. **Revisit if a static tile is ever observed rendering at the wrong scale**, or with Story 3.18 (fullscreen re-layout) if that path introduces a 0-width transition.
+- **`applyDevicePixelSizing`'s `dpr²` exposure survives for `static` tiles repainted at a 0-width box** — the residual of the 1.11 review item Story 2.3 closed by documentation rather than by re-engineering. The anti-double-scaling guard compares `canvas.width` against the *instance's* `backingWidth`, so it only ever matches on a renderer that outlives one paint. `<PetriDishCanvas variant="static">` constructs a renderer per paint (Story 1.11 forced decision 2), so on any repaint where `canvas.clientWidth` reads 0 — an ancestor `display:none`, a collapsed layout, a `ResizeObserver` notification for a 0×0 box — the backing store becomes `cssPx * dpr²`, then `dpr³`. Not reachable in the current Gallery layout, which never produces a 0-width repaint, and the caller-side guard (`PetriDishCanvas` ignores a notification whose `contentRect` matches the box last rasterised) narrows the window further. The fix, if it is ever needed, is to make the guard instance-independent by stamping the CSS box the backing store was computed from onto the canvas element (a `data-*` attribute or an expando), which is renderer state living outside the renderer — worth doing only when a real 0-width repaint exists to justify it. **Revisit if a static tile is ever observed rendering at the wrong scale**, or with Story 3.18 (fullscreen re-layout) if that path introduces a 0-width transition. — ✅ **Checked by Story 3.18 (2026-09-17): it does not.** The fullscreen swap is a `data-fullscreen` attribute selecting a second set of styles on the SAME wrappers (`position: fixed; inset: 0` on the view root, a `min(94vw, 138vh)` dish box) — no `display: none` anywhere on the canvas's ancestor chain, no unmount, no 0-width frame; the dish goes from one positive box straight to another, and `PlaybackDish`'s observer sees exactly one resize. The trigger stays "a static tile at the wrong scale".
 
 - **`drawFull` re-primes the whole colour-state baseline on every call — O(cells) plus one allocation per grid shape** — `resetDirtyState()` sweeps all `width * height` cells through `colourStateAt` after every full repaint, and `resize()`/`setGridLines()` both route through it. At 100×60 that is a 6000-iteration pass and a 12 KB `Uint16Array`, which is affordable precisely because it runs on mount/resize/toggle and never on the per-edit `draw` path. Epic 3 changes the shape of that claim: **Decision D.3 repaints after every step**, and if Story 3.8's loop reaches for `drawFull` rather than `markDirty` + `draw`, this sweep lands at the cycle rate. Correctness is not in question. **Revisit with Story 3.7** (the `vitest bench` harness and the 100×60 performance gate), which is the first place a measurement would justify a change — and check Story 3.8's loop calls `draw`, not `drawFull`, while you are there. — **✅ CLOSED in Story 3.7: measured, affordable, and the `draw`-vs-`drawFull` question is answered with both numbers.** The O(cells) re-prime costs **~0.08 ms** at 100×60 — 0.5% of a 16.667 ms frame — so it would be affordable even at the cycle rate Decision D.3 implies. On *decision* cost alone `drawFull` is in fact CHEAPER (groupByColourState ~0.07 + this ~0.08 ≈ 0.15 ms) than the dirty path's UPPER BOUND with every cell marked and every occupied cell reading as changed (**~0.7 ms**), because `markDirty` allocates a coordinate per cell and routes it through a `Set`. ⚠️ **The recommendation is still `draw`**, for the half no off-browser harness can measure: `draw` touches the canvas only for cells whose colour state actually changed, while `drawFull` repaints the whole background, every cell and every grid line every frame — and jsdom has no canvas to rasterize into. **Story 3.8 now has both numbers instead of an assumption**; if it takes `drawFull` it should say so against these figures and measure the paint in a browser. Full table: `docs/implementation-artifacts/performance-baseline-validation.md`.
 
@@ -241,7 +241,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 ## Deferred from: code review of 2-6-drag-painting (2026-08-27)
 
-- **The stroke's cached geometry goes stale on a mid-stroke SCROLL or reposition, not only on a resize** — `StrokeGeometry` freezes `getBoundingClientRect()` at pointer-down (Task 4, so a `pointermove` at the display's refresh rate does not force a reflow), and the only invalidation path is the `ResizeObserver` callback, which ends the stroke. But `ResizeObserver` reports **box size**, not **position**: a wheel/trackpad/keyboard scroll during a drag, an ancestor collapsing above the dish, a toolbar or snackbar appearing, or a browser-zoom change all move `rect.left`/`rect.top` without changing the canvas's own box, so the observer never fires and every remaining move maps through an origin that has moved. The result is not a crash — it is a correctly-shaped stroke painted in the wrong place, then committed. `touch-action: none` stops the dish from *initiating* a scroll but not a scroll started anywhere else. The cheap fix is to also listen for `scroll` (capture phase) / `visualViewport` `resize` for the life of the stroke and end it there too, alongside the existing resize path; the thorough one is to re-measure the rect per move and accept the reflow, which Task 4 rejected on cost. **Pick this up in Story 2.14** (grid resize), the next story that touches the geometry path — or sooner if the editor ever gains a scrolling ancestor. ⚠️ Story 2.9 shipped one: `<SidebarContent>` is `overflow-y: auto`, so the editor now HAS a scrolling ancestor. It scrolls the sidebar rather than the dish, so a scroll inside it does not move the canvas's rect today — but the precondition this entry was waiting on has been met, and Story 2.11/2.14/2.15 adding more sections makes that scroll region taller and more likely to be used mid-gesture. ⚠️ **Confirmed, not fixed (Story 2.11, 2026-08-27):** the Battle Name section is the predicted SECOND section — `<SidebarContent>` is now two `<SidebarSection>`s deep before Grid Info (2.14) and Tools (2.15) add a third and fourth, exactly as this entry anticipated. Still Story 2.14's fix; this story touches neither the geometry path nor `<SidebarContent>`'s own layout beyond mounting a section into the shell forced decision 2 built. ⏸ **Re-deferred by Story 2.14 (2026-08-29), premise re-checked and UNCHANGED in kind.** The predicted third section (Grid Info) has now landed, so `<SidebarContent>` is three sections deep — but the reachability argument is the same one Story 2.11 recorded and it still holds: that region scrolls the SIDEBAR, whose box is `flexShrink: 0` at a fixed 320px, so scrolling it moves nothing about the canvas's own `rect`. What DID change is that the sidebar now carries an interactive control (the preset radios) rather than only a name field and a roster list, so a keyboard user can now reach the bottom of that scroll region with `Tab` — which makes a mid-gesture scroll marginally more likely, still without making the stale-rect defect reachable, because both hands cannot be on the dish and in the sidebar at once outside the multi-touch case the palette entry already covers. Not fixed here for the reason the entry itself gives: the cheap fix (a capture-phase `scroll` / `visualViewport` listener for the life of the stroke) is a new stroke-lifecycle listener with its own teardown, and this story's stroke-lifecycle budget went entirely on making the `size`-change path correct. **Pick this up in Story 2.15** (Clear), the next story at this seam, or in 3.18 (fullscreen), which genuinely moves the dish's `rect` without changing its box and is the first story where the defect is reachable with ONE pointer. ⏸ **Re-deferred by Story 2.15 (2026-08-31), premise re-checked against a FOUR-section sidebar and UNCHANGED in kind.** Tools is the predicted fourth section and has now landed — `<SidebarContent>` is four sections deep, one taller than the three-section check Story 2.14 recorded — but the reachability argument is identical: that region still scrolls the SIDEBAR (`flexShrink: 0`, fixed 320px), so scrolling it still moves nothing about the canvas's own `rect`. The new control (CLEAR PETRI DISH) is a plain `<button>` at the BOTTOM of that column, one more keyboard `Tab` stop past the preset radios Story 2.14 added — a keyboard user can now reach it without leaving the sidebar's scroll region, which is the same "marginally more likely, still not reachable" shift 2.14 recorded for the radios. This story's own stroke-lifecycle budget went entirely on the Clear commit path (Task 2/4), not the geometry path, for the identical reason 2.14 gave. ~~**Pick this up in Story 2.16** (the sidebar footer / Back button — the next story that touches `<SidebarContent>`'s composition), or in 3.18 (fullscreen), which is still the first story where the defect is reachable with ONE pointer.~~ ⏸ **Re-deferred by Story 2.16 (2026-08-31), premise re-checked against the code as it now stands and WEAKER than before.** Story 2.15 predicted this story would touch `<SidebarContent>`'s composition; it did not. `<SidebarFooter>` mounts as a SIBLING of `<SidebarContent>`, outside the scroll region entirely — the scroll region gained no section and did not get taller, so the "marginally more likely to be scrolled mid-gesture" drift 2.14 and 2.15 each recorded does not continue here. The new control is one more keyboard `Tab` stop, but it is BELOW the scroll region rather than inside it, so reaching it does not require scrolling that region at all. The reachability argument is otherwise identical and still holds: that region scrolls the SIDEBAR, which is `flexShrink: 0` at a fixed 320px, so scrolling it still moves nothing about the canvas's own `rect`. This story touched no stroke-lifecycle or geometry code. **Pick this up in 3.18** (fullscreen), which genuinely moves the dish's `rect` without changing its box and is the first story where the defect is reachable with ONE pointer — or in whichever earlier story gives the editor a scrolling ancestor that actually contains the dish. Epic 2 is now closed, so there is no remaining Epic 2 story at this seam.
+- **The stroke's cached geometry goes stale on a mid-stroke SCROLL or reposition, not only on a resize** — `StrokeGeometry` freezes `getBoundingClientRect()` at pointer-down (Task 4, so a `pointermove` at the display's refresh rate does not force a reflow), and the only invalidation path is the `ResizeObserver` callback, which ends the stroke. But `ResizeObserver` reports **box size**, not **position**: a wheel/trackpad/keyboard scroll during a drag, an ancestor collapsing above the dish, a toolbar or snackbar appearing, or a browser-zoom change all move `rect.left`/`rect.top` without changing the canvas's own box, so the observer never fires and every remaining move maps through an origin that has moved. The result is not a crash — it is a correctly-shaped stroke painted in the wrong place, then committed. `touch-action: none` stops the dish from *initiating* a scroll but not a scroll started anywhere else. The cheap fix is to also listen for `scroll` (capture phase) / `visualViewport` `resize` for the life of the stroke and end it there too, alongside the existing resize path; the thorough one is to re-measure the rect per move and accept the reflow, which Task 4 rejected on cost. **Pick this up in Story 2.14** (grid resize), the next story that touches the geometry path — or sooner if the editor ever gains a scrolling ancestor. ⚠️ Story 2.9 shipped one: `<SidebarContent>` is `overflow-y: auto`, so the editor now HAS a scrolling ancestor. It scrolls the sidebar rather than the dish, so a scroll inside it does not move the canvas's rect today — but the precondition this entry was waiting on has been met, and Story 2.11/2.14/2.15 adding more sections makes that scroll region taller and more likely to be used mid-gesture. ⚠️ **Confirmed, not fixed (Story 2.11, 2026-08-27):** the Battle Name section is the predicted SECOND section — `<SidebarContent>` is now two `<SidebarSection>`s deep before Grid Info (2.14) and Tools (2.15) add a third and fourth, exactly as this entry anticipated. Still Story 2.14's fix; this story touches neither the geometry path nor `<SidebarContent>`'s own layout beyond mounting a section into the shell forced decision 2 built. ⏸ **Re-deferred by Story 2.14 (2026-08-29), premise re-checked and UNCHANGED in kind.** The predicted third section (Grid Info) has now landed, so `<SidebarContent>` is three sections deep — but the reachability argument is the same one Story 2.11 recorded and it still holds: that region scrolls the SIDEBAR, whose box is `flexShrink: 0` at a fixed 320px, so scrolling it moves nothing about the canvas's own `rect`. What DID change is that the sidebar now carries an interactive control (the preset radios) rather than only a name field and a roster list, so a keyboard user can now reach the bottom of that scroll region with `Tab` — which makes a mid-gesture scroll marginally more likely, still without making the stale-rect defect reachable, because both hands cannot be on the dish and in the sidebar at once outside the multi-touch case the palette entry already covers. Not fixed here for the reason the entry itself gives: the cheap fix (a capture-phase `scroll` / `visualViewport` listener for the life of the stroke) is a new stroke-lifecycle listener with its own teardown, and this story's stroke-lifecycle budget went entirely on making the `size`-change path correct. **Pick this up in Story 2.15** (Clear), the next story at this seam, or in 3.18 (fullscreen), which genuinely moves the dish's `rect` without changing its box and is the first story where the defect is reachable with ONE pointer. ⏸ **Re-deferred by Story 2.15 (2026-08-31), premise re-checked against a FOUR-section sidebar and UNCHANGED in kind.** Tools is the predicted fourth section and has now landed — `<SidebarContent>` is four sections deep, one taller than the three-section check Story 2.14 recorded — but the reachability argument is identical: that region still scrolls the SIDEBAR (`flexShrink: 0`, fixed 320px), so scrolling it still moves nothing about the canvas's own `rect`. The new control (CLEAR PETRI DISH) is a plain `<button>` at the BOTTOM of that column, one more keyboard `Tab` stop past the preset radios Story 2.14 added — a keyboard user can now reach it without leaving the sidebar's scroll region, which is the same "marginally more likely, still not reachable" shift 2.14 recorded for the radios. This story's own stroke-lifecycle budget went entirely on the Clear commit path (Task 2/4), not the geometry path, for the identical reason 2.14 gave. ~~**Pick this up in Story 2.16** (the sidebar footer / Back button — the next story that touches `<SidebarContent>`'s composition), or in 3.18 (fullscreen), which is still the first story where the defect is reachable with ONE pointer.~~ ⏸ **Re-deferred by Story 2.16 (2026-08-31), premise re-checked against the code as it now stands and WEAKER than before.** Story 2.15 predicted this story would touch `<SidebarContent>`'s composition; it did not. `<SidebarFooter>` mounts as a SIBLING of `<SidebarContent>`, outside the scroll region entirely — the scroll region gained no section and did not get taller, so the "marginally more likely to be scrolled mid-gesture" drift 2.14 and 2.15 each recorded does not continue here. The new control is one more keyboard `Tab` stop, but it is BELOW the scroll region rather than inside it, so reaching it does not require scrolling that region at all. The reachability argument is otherwise identical and still holds: that region scrolls the SIDEBAR, which is `flexShrink: 0` at a fixed 320px, so scrolling it still moves nothing about the canvas's own `rect`. This story touched no stroke-lifecycle or geometry code. ~~**Pick this up in 3.18** (fullscreen), which genuinely moves the dish's `rect` without changing its box and is the first story where the defect is reachable with ONE pointer~~ — or in whichever earlier story gives the editor a scrolling ancestor that actually contains the dish. Epic 2 is now closed, so there is no remaining Epic 2 story at this seam. ⏸ **Re-pointed by Story 3.18 (2026-09-17): the "3.18 makes it reachable" premise was WRONG.** Fullscreen is Run-only, and `EditDish` — the only dish that has strokes — is UNMOUNTED in Run mode (`<BattlePage>` mounts the Run chassis in place of the editor, Story 3.11). The stage moves the PLAYBACK dish's `rect`, which has no stroke geometry to go stale; no stroke can exist while the stage is up. The defect is still real and still unreached: the honest next owner is **whichever story gives the EDITOR a scrolling ancestor that actually contains the dish** (none planned in Epic 4–6 today), or a Playwright measurement if a user ever reports a misplaced stroke.
 
 - **The resize effect captures a stale `endStroke`, and therefore a stale `onStrokeCommit`** — the effect's deps are `[size]` with an `eslint-disable-next-line react-hooks/exhaustive-deps`, so the `ResizeObserver` callback holds the `endStroke` closure from whichever render last changed `size` (usually the mount) and commits through *that* render's `onStrokeCommit` prop. Inert today: `<BattlePage>` passes `onCommitGrid={setEditedGrid}`, and a `useState` setter has a stable identity, so the stale closure and the live one are the same function. It becomes live the moment the commit handler stops being a bare setter — Story 2.8's undo ring wraps it, which is the obvious first case. The existing comment justifies the dep omission on re-registration cost only and never names this staleness, which is the same class of thing Task 4 required to be named. A `useRef` holding the latest `endStroke` costs nothing and removes it. ~~**Pick this up in Story 2.8**, which is the story that wraps `onCommitGrid`.~~ **✅ Resolved in Story 2.8** (2026-08-27), by the prescription above rather than by leaning on `useUndoableGrid.commit` being stable: `PetriDishCanvas.tsx` now holds an `endStrokeRef` refreshed by an effect declared BEFORE every effect that reads it (React runs a commit's passive effects in hook-declaration order, so the refresh lands first), and both the `ResizeObserver` callback and the new grid effect go through it. The dep-omission comment now names the staleness instead of justifying the omission on re-registration cost alone. Pinned by `PetriDishCanvas.test.tsx`'s "commits a mid-stroke re-layout through the CURRENT onStrokeCommit, not the mount-time one", which passes a NEW `onStrokeCommit` identity on a render that does not change `size` — mutation-checked against reverting the callback to the direct `endStroke(…)` call.
 
@@ -711,7 +711,11 @@ Review Findings; these are the items consciously left open.
   optional entry hint beside the id (FR-7.6, `apps/web/lib/battle/battleRoute.ts`).
   `component-tree-battle-page.md` §3.1 and §7 need the matching `initialMode?`/FR-7.6 rows (no §7
   row exists for FR-7.6 today). Neither planning doc was edited by this story (scope: `apps/web`
-  code, tests and this file).
+  code, tests and this file). **Story 3.18 adds a third note to the same touch**: the fullscreen
+  run stage shipped as UX-sourced scope (spec §9.5 — no backing FR; the epic itself says "PRD touch
+  recommended"). The PRD touch should either mint the FR or record that the stage is deliberately
+  FR-less; until then the governing IDs in code are NFR-4.1, NFR-1.1 / AR-29, RFC-005 (state
+  categories), Decision D and AR-46.
 
 ## Deferred from: code review of 4-1-organisms-route-top-navigation (2026-09-13)
 
@@ -912,6 +916,12 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
      re-export rather than re-declared. One fact the spec leaves open, recorded as a §3.12
      clarification candidate: `totalLiving` is not published by the hook — §4's `RunView` has no
      such member — so the consumer (`<BattleSimulationView>`) sums `entries[].count` itself (FD3).
+  9. **Story 3.18 (2026-09-17): §3.11 gains `fullscreen: boolean`, `onExitFullscreen(): void` and
+     `battleTitle: string`** — because the `fullscreen` cell is `<BattlePage>`'s, not the view's
+     (3.18 FD1 (a); see the 3-18 section below for the §6 owner-row and §3.14 amendments that go
+     with it). The view is the stage's LAYOUT; the page owns the boolean, for the same reason item
+     1 gives for `onExitToLab`: the entry control is the header's, and the header is the page's
+     child.
 - **`<BattleHeader>`'s `disabled` collapses two facts into one attribute.** `disabled={isSaving ||
   runOrganisms === null}` — the edit lock and the unresolvable roster — reach the RUN button as one
   boolean, and only the roster case carries a `title`. While a save is in flight the button is
@@ -1266,7 +1276,11 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   is the sibling — the fullscreen HUD's pills have no name, no bar and no total, so they share
   DATA (the same `PopulationEntry[]`) with the sidebar shape, not markup. No `variant`/`compact`
   prop was added here (the dead-affordance rule, 3.11 FD5's reasoning) — whichever story ships
-  the pills decides.
+  the pills decides. — ✅ **CLOSED by Story 3.18 (2026-09-17): the sibling.** `<PopulationPills>`
+  shipped as its own component (`simulation/PopulationPills.tsx`), no prop on `<PopulationStats>`;
+  the two share `populationGlyphs.tsx` (the swatch and the skull, lifted out of
+  `PopulationStats.tsx` so the hollow-when-extinct pattern is one definition) and nothing else.
+  Story 4.15's preview is the third consumer of the glyphs and the second of the pills.
 - **The FD5 rounding rule.** `Math.round(pct)` means a living organism under 0.5% reads `0%`
   beside a non-zero count, with no skull (the flag, not the percentage, is the truth — trap 4). A
   `< 1%` floor display is a UX call this story does not make; recorded as a candidate only.
@@ -1304,7 +1318,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `'paused' | 'playing'` here (FD4 (a)). Story 3.18's fullscreen HUD and Story 4.15's editor
   preview — both gated on this story — inherit `status` through the hook unchanged; if either
   wants to render WHY a run is paused (rather than just that it is), that is the story to widen
-  the union, not a retrofit here.
+  the union, not a retrofit here. — **Checked by Story 3.18 (2026-09-17): unchanged.** The HUD
+  renders `status` through `<TransportControls>` exactly as the bottom bar does (the same cluster,
+  lifted) and shows no reason for a pause; nothing in the stage needed the union widened. 4.15 is
+  now the only remaining candidate consumer.
 - **Story 3.14 test (d)'s literal "scan while playing with an extinct row" is unreachable under
   FR-4.7.** An extinct grid auto-pauses on the very next driven cycle, so a dish can never be
   "playing" with every organism extinct for more than one cycle. The e2e (`battleRoute.spec.ts`,
@@ -1603,6 +1620,173 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **4.15's preview needs `contentHash` before 4.16's hasher exists** — `validateSurvivalRules`
   rejects a hash-less rule; Story 4.15 decides (a session-only placeholder hash, or landing after
   4.16).
+## Deferred from: Story 3-18-fullscreen-run-stage implementation (2026-09-17)
+
+- **`component-tree-battle-page.md` amendment candidates** (planning artifact, not edited — the
+  3-11 section's precedent). What shipped diverges from the spec in four places (five spec
+  sections), each a forced decision recorded in the story's Dev Agent Record:
+  1. **§3.11 props** gain `fullscreen: boolean`, `onExitFullscreen(): void`, `battleTitle: string`
+     (also item 9 of the 3-11 list above). **§6's owner row for `fullscreen` → `<BattlePage>`**,
+     not `<BattleSimulationView>` (FD1 (a)): the entry control is `<BattleHeader>`'s (§3.2), the
+     header is the page's child, and the header must be UNMOUNTED while the stage is up (FD9) from
+     the place that renders it — one ephemeral cell, one owner, cleared by every writer that takes
+     `mode` off `'run'`. Story 3.19's `F` toggle reaches this same cell through a page-level
+     handler.
+  2. **§3.14 `<FullscreenStage>` props** gain `active: boolean` (FD2 (a)): the component is
+     mounted in BOTH states and renders its chrome only while active, because `children` is the
+     live canvas and a wrapper type that exists in one state only is a remount. `hud.population` is
+     `readonly PopulationEntry[]` (the hook's entries — the pills need `organismId`/`name`/
+     `colorToken`/`extinct`), and `transport` is the whole `SimulationControlBarProps`. **§2's tree**
+     should note that the stage wraps the dish in both states.
+  3. **§8 "SpeedControl … fullscreen HUD" → a read-out** (FD6 (a)): §3.14's `genPerSec` is a value
+     and the mockup draws `10 gen/s` as text; the HUD renders `${genPerSec} gen/s`, no slider.
+     `SpeedControl.tsx`'s head comment is rewritten; 4.15's preview may still render the slider.
+  4. **§3.13 / the transport cluster is now `<TransportControls>`** (FD7 (a)), rendered by both
+     `<SimulationControlBar>` and the HUD; `SimulationControlBarProps` is declared there and
+     re-exported from the bar. The spec's §2 tree could name it beside `<LadderSlider>`.
+- **Mockup-refresh candidates** (`petri-dish-play-mode-fullscreen.html`), recorded as what the
+  mockup shows and why this route does not reproduce it (the 3.14 FD2 shape):
+  1. **The HUD's transport labels** `Play`/`Next`/`Stop` → the bar's `Play`/`Next cycle`/`Stop &
+     reset` (FD7 (a)): accessible names are part of the route's test vocabulary (three files'
+     `getByRole`) and 3.19's hints name one set of verbs.
+  2. **`backdrop-filter: blur(8px)` on the HUD** — the one piece of the mockup's floating chrome
+     that does not ship. ~~Floating, translucent overlays, the gradient, the glow — none shipped
+     (FD4 (a))~~ — **reversed by the owner 2026-09-18 (FD4 (b))**: the top bar and HUD float over
+     the dish, the dish is `min(94vw, 138vh)` with the glow, and the mockup's rgba scrim and glow
+     are channel-composed tokens (`--gol-scrim-top`, `--gol-shadow-dish-glow`), the 1.10/4.2/4.6
+     construction. The HUD panel and the Exit button are opaque `--gol-bg-secondary`, not the
+     mockup's 0.82 alpha (second-review decision (d): a translucent panel let a bright colony push
+     `--gol-text-secondary` under AA, and axe reports such pairs `incomplete`, so no gate sees it).
+     The blur stays out: compositor work over a 60 FPS canvas on every frame (RFC-003's
+     no-animation-during-steps rule, NFR-1.1). If a refresh wants the blur, it is a bench question,
+     not a token one.
+  3. ~~**The in-flow rows are TIGHTER than the mockup's**~~ — **moot since 2026-09-18** (FD4 (b)):
+     the chrome floats, so nothing competes with the dish for height and the mockup's `18px 24px` /
+     `bottom: 40px` are used as drawn. Measured: 990×592 at 1280×720 (mockup 994×596), 1486×890
+     at 1920×1080.
+  4. **The `.fs-hint` line** (`Press F to exit fullscreen • SPACE Play/Pause • → Next`) and the
+     mockup's `keydown` script belong to Story 3.19, with the handlers that make them true
+     (NFR-4.1).
+  5. **The mockup's coloured `.hud-pop-pill` text** — colour is on the swatch only (3.14 FD4), the
+     same open contrast question the 3-14 section records.
+- **"True fullscreen" via the Fullscreen API** (FD3 (a)): the stage fills the viewport in-app;
+  `requestFullscreen()` is not called. Reasons: spec §3.11 says "CSS-driven"; the API's own
+  `Escape` exit would desynchronise the cell unless a `fullscreenchange` listener mirrored it, and
+  **Story 3.19 assigns `ESC` to Stop — a direct collision with the browser's exit key**; the API is
+  gesture-gated and fails silently from a programmatic call; jsdom cannot exercise it and headless
+  Playwright cannot observe it; WebKit needs the prefixed form. The user still has F11 / the
+  browser's own fullscreen on top of this stage. **A post-3.19 enhancement candidate, if wanted**:
+  a `fullscreenchange` listener that mirrors the browser's state into the cell, and a decision
+  about `ESC`.
+- **Story 4.15 pointers.** The preview panel (spec §8 / §3.12: SpeedControl + compact
+  PopulationStats + cycle counter + Play/Stop/Step) should REUSE `<TransportControls>`,
+  `<CycleDigits>`, `<PopulationPills>` and `<SpeedControl>` rather than re-author them or edit the
+  same `simulation/` files concurrently — the lane gate proposed at the end of the 3-18 story
+  file says why. `<VisuallyHidden>` is at `components/` root for the same reason.
+- **`<BattleHeader>`'s `disabled` collapse** (the 3-11 entry above) is unchanged by this story:
+  the Fullscreen button is NEVER disabled — entering fullscreen touches no editor state, so
+  neither the edit lock nor the roster refusal applies (both reach RUN only). The entry stays
+  accurate as written.
+- **Focus-restore on exit: what the tests prove and what they cannot.** `BattlePage.test.tsx`
+  proves the settled state after a real Exit click (the Fullscreen button has focus);
+  `BattlePage.modeToggle.test.tsx` proves the "do not steal" branch with a mocked view whose
+  control survives the exit. Neither can observe the transient `<body>` focus between the two
+  commits (the 3.17 review's "cannot observe a transient mount" lesson) — that window is one
+  commit long and is what the effect exists to close.
+
+## Deferred from: code review of 3-18-fullscreen-run-stage (2026-09-17)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+The two `decision-needed` items were decided by the owner on 2026-09-18: the double-click on Exit
+landing on the remounted `Lab` button is FIXED (option (b): `BattleHeader.tsx`'s mode toggle
+ignores `click` events with `event.detail > 1`, tested in `BattleHeader.test.tsx`); the
+fullscreen-during-chunk-fetch window is ACCEPTED and recorded first below. The items consciously
+deferred:
+
+- **Fullscreen can be entered while the Run chunk is still fetching — accepted, self-healing,
+  cold-cache-only** (owner decision 2026-09-18, option (a)). `<BattleHeader>` renders the
+  Fullscreen button from `mode === 'run'` alone, and AC2 (c) / AC10 (e) pin it on the FIRST header
+  render — i.e. while `dynamic()` is still fetching `BattleSimulationView` (the first Lab→Run
+  toggle, or a Gallery `?mode=run` entry on a cold cache). A click in that window sets
+  `fullscreen=true` → the header unmounts → the page is `<Root>` + `RunLoading` ("Loading
+  simulation…") with no Exit and focus on `<body>`, until the chunk lands and `<FullscreenStage>`
+  mounts with its Exit button focused. The window is one chunk fetch, cached thereafter, and the
+  stage heals it on arrival; a REJECTED chunk import is pre-existing behaviour (no `error.tsx`, by
+  story) and is not made worse. **If it ever matters, the fix is option (b):** gate the entry on the
+  view being mounted (`onEnterFullscreen={runViewMounted ? … : undefined}` via a mount/unmount
+  callback from the view, or a `Suspense`-driven flag) — which reverses AC2 (c) / AC10 (e)
+  ("button on the first header render") and adds a state cell to `<BattlePage>`. No owner story;
+  revisit if the Run chunk grows or a user report names the window.
+- **The in-render roster adjust exits fullscreen without a focus restore.** `if (mode === 'run' &&
+  runOrganisms === null) { setMode('lab'); setFullscreen(false); }` clears the cell without setting
+  `restoreFullscreenEntryFocusRef`, and `[data-enter-fullscreen]` is not rendered in Lab anyway, so
+  the stage's Exit button (which holds focus via its mount effect) unmounts with the view and focus
+  lands on `<body>`. Unreachable today: the roster can only go dangling under a MOUNTED page once a
+  library change can happen beneath it — the 3-11 review's Stories 4.24/4.25 case this adjust was
+  written for. **Owner: whichever of 4.24/4.25 first makes the adjust reachable** — in that branch
+  also set a restore flag whose target is the Mode group's `Lab` button (a `data-*` handle on
+  `ModeButton`) rather than the fullscreen entry.
+- **A held `Enter` toggles the stage at key-repeat rate.** `Enter` dispatches `click` on every
+  auto-repeated `keydown`, and each commit programmatically moves focus to the counterpart control
+  (Exit on entry, the Fullscreen button on exit), so a held key ping-pongs the stage, each cycle
+  driving `PlaybackDish`'s observer → `renderer.resize` → a repaint of `lastGrid`. `Space` is safe
+  (it clicks on `keyup`). Harmless to the run — the loop is untouched (Decision D) — and a
+  property of every focus-handoff pair in the app, so an `event.repeat` guard is a route-wide
+  keyboard policy: **Story 6.11's sweep**, or 3.19 if it wants the `F` toggle to carry the same
+  guard from day one.
+- ~~**No floor on the fullscreen dish height.**~~ — **CLOSED 2026-09-18 by the FD4 owner override**:
+  the chrome is `position: fixed` and the dish is `min(94vw, 138vh)`, so its height is a function
+  of the viewport alone — no flex competition, no shrink toward 0px. What remains is the mockup's
+  own property: on a short viewport the floating HUD covers more of the dish's bottom edge (at
+  1280×720 it overlaps by ≈41px, ≈23px at 1194×834 — as in the mockup; opaque since decision (d),
+  so those rows are hidden, not dimmed) — and a WIDE roster does the same from below:
+  the panel wraps (`HudPanel` and `Pills` both `flexWrap`) and, being `position: fixed; bottom:
+  40px`, grows UPWARD over the cells (255 organisms ≈ 14 pill lines ≈ 370px, more than half of a
+  596px dish at 1280×720). The dish never shrinks for either; the HUD covers it instead. Original entry kept for the record: The title
+  row and HUD are in flow and take height first; `GridContainer` (`flex: 1; minHeight: 0`) hands the remainder to the height-driven
+  `PetriDishBox`, with no minimum. On a short viewport — or once the HUD wraps to several lines
+  with a wide roster (the pills wrap since this review) — the dish shrinks toward 0px;
+  `applyDevicePixelSizing`'s `clientHeight || authoredHeight` fallback keeps the canvas from
+  crashing but leaves it painted inside an invisible box. Both supported tiers are fine (NFR-3.1
+  is ≥1024 wide; measured 924×553 at 1280×720 and 1114×667 at 1194×834). A `minHeight` on the
+  container (e.g. `min(200px, 40vh)`) or a scrolling stage column is a design value: **the mockup
+  refresh** (this story's candidate 3 above), or the first story that adds a supported tier below
+  720px tall.
+
+## Deferred from: code review of 3-18-fullscreen-run-stage (2026-09-18, second review)
+
+Reviewed on **Fable** against the Opus commits that reversed FD4 to (b) and applied the owner's two
+first-review decisions. Its one `decision-needed` item (HUD text under AA where the translucent HUD
+overlapped a bright colony) was decided by the owner the same day as option (d) — the HUD panel and
+the Exit button are opaque `--gol-bg-secondary`, `--gol-surface-hud` removed — and is closed in the
+story file's Review Findings. The items consciously deferred:
+
+- **Decision 2 (b)'s residuals — the `detail > 1` guard covers the mode toggle only.** (1) The
+  header's Fullscreen button (right edge ≈ W−171 with `Actions`' 15px gap) and the stage's Exit
+  (x W−184..W−24, y 18–49 against the header row's y 20–51) overlap by ≈13px across the swap, and
+  neither carries the guard: a pointer double-click in that strip enters and immediately exits (or
+  exits and re-enters) — two layout swaps and two `renderer.resize` calls, no session drop, focus
+  ends where it started. (2) iOS/iPadOS WebKit synthesises each tap's `click` with `detail: 1`, so a
+  touch double-tap on Exit still lands its second tap on the remounted `Lab` on an iPad — the case
+  the decision meant to close, on the tablet tier NFR-3.1 names; the `tablet` Playwright project is
+  desktop WebKit and cannot observe it. (3) No browser test delivers a real cross-target
+  `detail: 2` — `BattleHeader.test.tsx` dispatches the event by hand, which proves the `if`, not
+  the UA's click-count policy (Chromium: time + radius, target-agnostic; Gecko: widget count plus
+  `EventStateManager` checks). **If any of the three ever matters, the structural fix is the one
+  the first review named as option (c)**: do not remount the header under the pointer — keep the
+  Exit button's box clear of the header's Mode group, or gate `onModeToggle` for one frame after
+  an exit. Guarding Exit / Fullscreen with the same `detail` check is the cheap half-measure and
+  does nothing for (2). Owner: Story 3.19 (the `F` toggle shares the geometry) or 6.11's keyboard /
+  pointer sweep.
+- **A third `VisuallyHidden` copy lives in lane 4's surface.**
+  `apps/web/components/organisms/editor/ColorPickerField.tsx:226-234` carries the same recipe as the
+  one 3.18 promoted to `apps/web/components/VisuallyHidden.tsx` (its own comment calls it "The
+  `GridSettingsSection.tsx` copy" — a copy of a copy that no longer exists). FD5 (a)'s rationale ("a
+  second copy is exactly the drift the README warns about") is now the literal state of the tree,
+  and 3.18 correctly did not touch `organisms/**`. **Pointer for the next story that edits
+  `organisms/editor/ColorPickerField.tsx`** (lane 4): replace the local styled block with
+  `import VisuallyHidden from '@/components/VisuallyHidden'` and update `VisuallyHidden.tsx`'s head
+  comment, which lists two renderers. Not a lane gate — an import swap, no shared file.
 
 ## Deferred from: Story 4-12-rule-reordering (2026-09-18)
 
