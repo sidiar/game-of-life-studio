@@ -1672,8 +1672,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
      mockup's `keydown` script belong to Story 3.19, with the handlers that make them true
      (NFR-4.1).~~ — **Shipped in Story 3.19.** The hint line renders as `<FullscreenStage>`'s
      fourth fragment slot (`<HotkeyHints>`, FD6); the mockup's OWN `keydown` script (which exits on
-     `Escape` too) is NOT what shipped — `useSimulationHotkeys` follows the spec instead (`ESC`
-     stops, `F` is the only exit key, FD4 (a)), a flagged conflict the owner can revisit.
+     `Escape` too) was NOT what first shipped — `useSimulationHotkeys` followed the spec instead
+     (`ESC` stops, `F` the only exit key, FD4 (a)), a flagged conflict. **Resolved 2026-09-18**: the
+     owner picked FD4 (c) — `Escape` now stops AND exits the stage, `F` remains an independent
+     toggle-only exit key.
   5. **The mockup's coloured `.hud-pop-pill` text** — colour is on the swatch only (3.14 FD4), the
      same open contrast question the 3-14 section records.
 - **"True fullscreen" via the Fullscreen API** (FD3 (a)): the stage fills the viewport in-app;
@@ -1816,10 +1818,6 @@ story file's Review Findings. The items consciously deferred:
   story because the cluster is shared with Story 4.15's preview panel, which mounts no hotkey hook
   — `aria-keyshortcuts` baked into the shared component would advertise keys the preview does not
   have. **Candidate for Story 6.11's keyboard sweep**, scoped to the Run route's own instance only.
-- **FD4 (b) — `Escape` exits the stage instead of stopping, per the mockup's own `keydown`
-  script.** Story 3.19 shipped FD4 (a) (the spec's `ESC` stops / `F` exits split) — see the
-  Spec-conflict flags entry in the story file. **Left open for the owner**; the implementation
-  difference is one branch on `fullscreen` in the view's `onStop` binding if reversed later.
 - **`component-tree-battle-page.md` amendment candidates** (the running list this story adds to):
   §3.11's props list gains `onEnterFullscreen` (the 3.18 amendment list's item 1 grows by one); §4's
   `useSimulationHotkeys(bindings)` line should read the FD2 shape (`onPlayPause` / `onStep` /

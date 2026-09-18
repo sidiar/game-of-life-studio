@@ -1350,6 +1350,35 @@ describe('Simulation hotkeys (Story 3.19)', () => {
     expect(drawFullSpy.mock.calls.length).toBe(primesAfterMount + 1);
   });
 
+  // FD4 (c) — owner's decision, 2026-09-18: in the STAGE, Escape stops AND exits; in the
+  // chassis it keeps stopping only (the test above). One `onStop` binding, one `fullscreen`
+  // branch (`handleEscapeStop` in the view) — `onExitFullscreen` is called only when the stage
+  // is up.
+  it('Escape stops AND exits the stage while fullscreen, but only stops in the chassis (FD4 (c))', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const onExitFullscreen = vi.fn();
+    const { container, rerender } = render(view({ startingSpeed: 10, onExitFullscreen }));
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(onExitFullscreen).not.toHaveBeenCalled();
+
+    rerender(view({ startingSpeed: 10, onExitFullscreen, fullscreen: true }));
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(300);
+    driver.frame(400);
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+    expect(onExitFullscreen).toHaveBeenCalledTimes(1);
+  });
+
   // FD5 (a): `f` in the chassis calls `onEnterFullscreen`; `F` in the stage calls
   // `onExitFullscreen` — the composed toggle, never a third callback.
   it('f calls onEnterFullscreen once from the chassis; F calls onExitFullscreen once from the stage', () => {

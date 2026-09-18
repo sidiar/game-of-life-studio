@@ -38,11 +38,13 @@ import SpeedControl from './SpeedControl';
  *
  * Story 3.19 added the hotkeys: `useSimulationHotkeys` is called HERE, once, because this is the
  * only component that holds `sim` (spec §3.11) — the hook itself never sees it, only the three
- * transport callbacks the two `<TransportControls>` homes already get, plus `canStep` (`status ===
- * 'paused'`, the same boolean `<GridSizeControl>`'s `disabled` reads) and a fullscreen toggle
- * composed from `onExitFullscreen` (this view's own prop) and the new `onEnterFullscreen` prop
- * (FD5 (a); `<BattlePage>` passes the same callback the header's Fullscreen button gets). Mounting
- * here, not in `<BattlePage>`, is also what makes Lab mode hotkey-free "by construction" (AC4):
+ * transport callbacks the two `<TransportControls>` homes already get (`onStop` composed per FD4
+ * (c), below — it stops AND exits while the stage is up, the owner's 2026-09-18 decision), plus
+ * `canStep` (`status === 'paused'`, the same boolean `<GridSizeControl>`'s `disabled` reads) and a
+ * fullscreen toggle composed from `onExitFullscreen` (this view's own prop) and the new
+ * `onEnterFullscreen` prop (FD5 (a); `<BattlePage>` passes the same callback the header's
+ * Fullscreen button gets). Mounting here, not in `<BattlePage>`, is also what makes Lab mode
+ * hotkey-free "by construction" (AC4):
  * `<BattlePage>` unmounts this view on Run -> Lab, which is the hook's own cleanup — no `enabled`
  * flag, no second listener. The extinction auto-pause (FR-4.7, Decision B.5, Story 3.15) is the
  * hook's alone — this component gains no state, hook, effect or prop for it; it is observed
@@ -290,15 +292,28 @@ export default function BattleSimulationView({
   // choice between them buys nothing and only adds a dependency array to review.
   const toggleFullscreen = fullscreen ? onExitFullscreen : onEnterFullscreen;
 
+  // FD4 (c) — owner's decision, 2026-09-18 (superseding the shipped FD4 (a)): `Escape` stops the
+  // run in BOTH layouts and, while the stage is up, ALSO exits it — the one `fullscreen` branch
+  // the review's FD4 called for. In the chassis (`fullscreen === false`) this reduces to
+  // `sim.stop()` alone, unchanged from what shipped. A plain function, not `useCallback`: the
+  // hook reads bindings through a latest-ref and never re-subscribes on identity (trap 3), so a
+  // fresh closure per render costs nothing.
+  const handleEscapeStop = () => {
+    sim.stop();
+    if (fullscreen) onExitFullscreen();
+  };
+
   // Story 3.19: the ONLY key handler on the route (Dev Notes constraint). The hook receives
   // exactly the callbacks the two `<TransportControls>` homes already get, `canStep` — the same
   // boolean `<GridSizeControl>`'s `disabled` reads — and the composed fullscreen toggle. No
   // React state in the hook, no per-render re-subscription (AR-29, AC10): see
-  // `useSimulationHotkeys.ts`'s own head comment for the latest-ref mechanics.
+  // `useSimulationHotkeys.ts`'s own head comment for the latest-ref mechanics. `onStop` is
+  // `handleEscapeStop` (FD4 (c)), not `sim.stop` straight through — the stage's Stop & Reset
+  // button (the HUD's `transport.onStop` below) is unaffected and still calls `sim.stop` alone.
   useSimulationHotkeys({
     onPlayPause: handlePlayPause,
     onStep: sim.step,
-    onStop: sim.stop,
+    onStop: handleEscapeStop,
     onToggleFullscreen: toggleFullscreen,
     canStep: sim.status === 'paused',
   });

@@ -52,6 +52,10 @@ import TransportControls, { type SimulationControlBarProps } from './TransportCo
  * `keydown` handling the hint describes is `useSimulationHotkeys`'s, mounted by
  * `<BattleSimulationView>`, never this file. No Back, no speed slider (FD6), no grid-size control,
  * no sidebar.
+ *
+ * FD4 (c) — owner's decision, 2026-09-18, superseding the shipped FD4 (a): `Escape` now stops the
+ * run AND exits the stage (the chassis keeps `Escape` stop-only), so the hint gained a fourth
+ * entry — `Esc Stop & exit` — alongside `F`'s standalone toggle-only exit.
  */
 
 export interface FullscreenHudValues {
@@ -304,12 +308,13 @@ const HintText = styled(HotkeyHints)({
   },
 });
 
-// The stage's three entries (FD11): `F` names the exit key first (the mockup's own order), then
-// the same Play/Pause and Next the chassis hint carries — `ESC` is deliberately absent here (FD4
-// (a): `Escape` stops in the stage too; `F` is the only exit key, so naming ESC in this hint would
-// make it false).
+// The stage's four entries (FD11, FD4 (c)): `F` names the exit key first (the mockup's own
+// order), then `Esc` — the owner's 2026-09-18 decision made `Escape` a second, combined exit key
+// (`Stop & exit`, distinct from `F`'s toggle-only exit) — then the same Play/Pause and Next the
+// chassis hint carries.
 const STAGE_HINT_ENTRIES = [
   { key: 'F', label: 'to exit fullscreen' },
+  { key: 'Esc', label: 'Stop & exit' },
   { key: 'Space', label: 'Play/Pause' },
   { key: '→', label: 'Next', arrow: true },
 ] as const;

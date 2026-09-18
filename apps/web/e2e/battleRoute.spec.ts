@@ -3324,9 +3324,9 @@ test.describe('Simulation hotkeys (Story 3.19)', () => {
     expect(errors).toEqual([]);
   });
 
-  // (b) AC5/AC6: f enters the stage without touching a running sim; Escape stops but stays
-  // fullscreen (FD4 (a)); f exits back to the chassis.
-  test('f enters the fullscreen stage without stopping a running sim, Escape stops but stays fullscreen, f exits (AC5/AC6)', async ({
+  // (b) AC5/AC6: f enters the stage without touching a running sim; Escape stops AND exits the
+  // stage (FD4 (c), owner's decision 2026-09-18 — superseding the shipped FD4 (a)).
+  test('f enters the fullscreen stage without stopping a running sim, Escape stops AND exits it (AC5/AC6)', async ({
     page,
   }) => {
     const errors = collectErrors(page);
@@ -3352,18 +3352,15 @@ test.describe('Simulation hotkeys (Story 3.19)', () => {
         return box !== null && box.width > boxBefore.width && box.height > boxBefore.height;
       })
       .toBe(true);
-    // The stage's own hint names F as the exit key; ESC is deliberately absent (FD4 (a)).
+    // The stage's hint now names both exit keys: F (toggle only) and Esc (stop & exit, FD4 (c)).
     await expect(page.getByText('to exit fullscreen')).toBeVisible();
+    await expect(page.getByText('Stop & exit')).toBeVisible();
 
     await page.keyboard.press('Escape');
 
     await expect(view(page)).toHaveAttribute('data-status', 'paused');
     await expect(view(page)).toHaveAttribute('data-cycle', '0');
-    await expect(view(page)).toHaveAttribute('data-fullscreen', 'true'); // STILL fullscreen
-
-    await page.keyboard.press('f');
-
-    await expect(view(page)).toHaveAttribute('data-fullscreen', 'false');
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'false'); // FD4 (c): exits too
     await expect(fullscreenButton(page)).toBeFocused();
     await expect(page.getByText('to exit fullscreen')).toHaveCount(0);
 

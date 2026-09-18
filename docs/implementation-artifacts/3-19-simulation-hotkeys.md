@@ -4,7 +4,7 @@ baseline_commit: ce3f7ab418ab4ffcb63439c647722347ed2226b7
 
 # Story 3.19: Simulation Hotkeys
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -123,12 +123,16 @@ callable (3.12 FD5). What does **not** exist: any `keydown` handling on the batt
    - `F` is handled whether or not the header's Fullscreen button would be enabled — it never is
      disabled (3.18 Completion Notes: "never disabled"), so there is no lock to mirror.
 
-6. **`Escape` STOPS in the stage too; `F` is the only key that exits (FD4 (a)).** In fullscreen,
-   `Escape` → `onStop` (status paused, cycle 0) and `data-fullscreen` stays `"true"`. The stage's
-   hint line therefore names `F` and omits `ESC`, exactly as the fullscreen mockup draws it. The
-   mockup's own `keydown` script exits on `Escape` (`petri-dish-play-mode-fullscreen.html:388-392`)
-   — a conflict with the spec, flagged below; the spec wins (`epics.md:982`, spec §4) unless the
-   owner says otherwise in review.
+6. **`Escape` STOPS in the stage too, and ALSO exits it (FD4 (c), owner's decision 2026-09-18,
+   superseding the shipped FD4 (a)).** In fullscreen, `Escape` → `onStop` (status paused, cycle 0)
+   AND `onExitFullscreen` — `data-fullscreen` flips to `"false"`, the same one `fullscreen` branch
+   in the view's `onStop` binding that FD4 (b) would have used. `F` remains an independent
+   toggle-only exit key (AC5) — it never stops the run. The stage's hint line therefore names both
+   `F` (`to exit fullscreen`) and `ESC` (`Stop & exit`). In the chassis, `Escape` is unchanged:
+   `onStop` alone, no `onExitFullscreen` call (there is no stage to exit). The mockup's own
+   `keydown` script exits on `Escape` too (`petri-dish-play-mode-fullscreen.html:388-392`) — the
+   conflict flagged below is now resolved in the mockup's favor, by the owner's explicit call
+   rather than by the spec's default.
 
 7. **The chassis bar shows the hints, left; display only.** `<SimulationControlBar>` renders the
    hint line as its FIRST child and `<TransportControls>` as its second; `Bar` flips to
@@ -192,9 +196,9 @@ callable (3.12 FD5). What does **not** exist: any `keydown` handling on the batt
       own pace (assert no throw via `collectErrors`); `Escape` → paused at 0. The chassis hint
       visible with its three `<kbd>`s.
     - (b) AC5/AC6: `f` → the stage (`data-fullscreen="true"`, Exit focused, the dish larger — the
-      3.18 (a) box assertion), simulation still playing; `Escape` in the stage → paused at 0 and
-      STILL fullscreen; `f` → chassis, `fullscreenButton` focused, `data-fullscreen="false"`; the
-      stage's hint visible while up, gone after.
+      3.18 (a) box assertion), simulation still playing; the stage hint visible with `F`, `Esc`,
+      `Space`, `→` while up; `Escape` in the stage (FD4 (c)) → paused at 0 AND back to the
+      chassis (`data-fullscreen="false"`), `fullscreenButton` focused, the stage hint gone.
     - (c) AC3 (iv): focus `speedSlider`, `ArrowRight` → the slider moves one detent (the 3.13 e2e
       assertion) and `data-cycle` stays 0.
     - (d) AC4: in Lab (`data-mode="lab"`), `Space` / `ArrowRight` / `Escape` / `f` → `data-mode`
@@ -309,7 +313,7 @@ callable (3.12 FD5). What does **not** exist: any `keydown` handling on the batt
 Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers
 (Blind Hunter, Edge Case Hunter, Acceptance Auditor); 12 findings dismissed as noise at triage.
 
-- [ ] [Review][Decision] **FD4 — `Escape` while the fullscreen stage is up: Stop (shipped) or Exit?**
+- [x] [Review][Decision] **FD4 — `Escape` while the fullscreen stage is up: Stop (shipped) or Exit?**
       — The implementation follows `epics.md:982` / spec §4 (`ESC` → Stop, `F` → toggle fullscreen):
       in the stage, `Escape` stops the run at cycle 0 and `data-fullscreen` stays `"true"` (AC6,
       e2e (b)); the stage hint names `F` only. The fullscreen mockup's own `keydown` script
@@ -489,17 +493,23 @@ each left their half for this story.
   comment; it is the reviewer's first question.
 
 **FD4 — `Escape` while the stage is up.**
-- **(a) [default] `Escape` stops; `F` is the only exit key** — `epics.md:982` ("ESC stops, F
+- (a) `Escape` stops; `F` is the only exit key — `epics.md:982` ("ESC stops, F
   toggles fullscreen"), spec §4, spec §3.14 (`onExit … / F key`), and the fullscreen mockup's
   hint line (`Press F to exit fullscreen` — no ESC named). The chassis hint names `ESC Stop`; a
   key that meant Stop in one layout and Exit in the other would make one of the two hints false.
   `deferred-work.md:1672` already records the collision with the browser's own fullscreen exit key
   as a known property (no Fullscreen API is used — 3.18 FD3 (a) — so the browser never sees this
-  `Escape` as fullscreen-related).
+  `Escape` as fullscreen-related). **Shipped at first implementation; superseded below.**
 - (b) `Escape` exits the stage, per the mockup's `keydown` script (`:388-392`), and stops only in
-  the chassis. **Owner's call if wanted** — flagged in "Spec-conflict flags"; the implementation
-  difference is one branch on `fullscreen` in the view's `onStop` binding, so switching later is
-  cheap.
+  the chassis. Flagged in "Spec-conflict flags"; the implementation difference is one branch on
+  `fullscreen` in the view's `onStop` binding. **Not taken** — the owner chose (c) instead, which
+  keeps the Stop semantics (b) would have dropped.
+- **(c) [taken — owner's decision, 2026-09-18, code review] `Escape` stops AND exits** — same one
+  branch on `fullscreen` in the view's `onStop` binding as (b), but the branch ADDS the exit
+  rather than replacing the stop: `sim.stop()` always runs, and `onExitFullscreen()` runs too when
+  `fullscreen` is true. The chassis is unaffected (no stage to exit). The stage hint reads `Esc
+  Stop & exit`, alongside `F`'s standalone `to exit fullscreen`. Implemented in
+  `BattleSimulationView.tsx`'s `handleEscapeStop`.
 
 **FD5 — how the view gets the toggle.**
 - **(a) [default] A new `onEnterFullscreen(): void` prop on `<BattleSimulationView>`**, the twin
@@ -685,10 +695,13 @@ hotkey disables the focused control, `deferred-work.md:1018-1023`).**
 
 ### Spec-conflict flags (project-context: surface new conflicts, don't silently pick one)
 
-1. **Fullscreen mockup script vs. spec on `Escape`.** `petri-dish-play-mode-fullscreen.html:388-392`
-   exits fullscreen on `f` / `F` / `Escape`; `epics.md:982` and spec §4 assign `ESC` → stop and `F`
-   → toggle fullscreen; the same mockup's hint line names only `F` as the exit key. FD4 (a) follows
-   the spec. Owner's call in review if the mockup's behaviour is wanted.
+1. ~~**Fullscreen mockup script vs. spec on `Escape`.**~~ — **RESOLVED 2026-09-18 (FD4 (c),
+   owner's decision)**: `petri-dish-play-mode-fullscreen.html:388-392` exits fullscreen on `f` /
+   `F` / `Escape`; `epics.md:982` and spec §4 assign `ESC` → stop and `F` → toggle fullscreen; the
+   shipped FD4 (a) followed the spec (stop only). The owner chose the mockup's `Escape`-exits
+   behaviour, blended with the spec's stop: `Escape` in the stage now stops AND exits (FD4 (c)),
+   not a straight switch to the mockup's exit-only script. The stage hint now names both `F` and
+   `ESC`.
 2. **`simulation/README.md` places the hook in two folders.** Its "What goes here" list names
    `useSimulationHotkeys` (from spec §2's tree), while its `useSimulation` paragraph says hooks
    go to `lib/battle/`. FD1 (a) resolves it for `lib/battle/`; the README line is corrected.
@@ -902,6 +915,20 @@ Claude Sonnet 5 (claude-sonnet-5).
   dropped; every failure 1.1 s, none an assertion) — re-run alone: `npm run e2e:chromium` →
   **198 passed, 1 skipped, exit 0**.
 
+- **FD4 (c) gate (2026-09-18, after the owner's decision):** `npm run ci:dev >
+  /tmp/ci-3-19-fd4.log 2>&1; echo $?` → **exit 0**. `typecheck` / `lint` (the same pre-existing
+  `BattleGallery.tsx` `react-hooks/exhaustive-deps` warning, 0 errors) / `format:check` /
+  `spec:check` / `boundary:check` all green; `test:coverage` **web 106 files / 1693 tests** (+1 —
+  the new `BattleSimulationView.test.tsx` stage-Escape test), packages unchanged (`@gol/domain`
+  108, `@gol/persistence` 82, `@gol/test-utils` 89, `@gol/simulation` 407); `bundle:check` `/battle`
+  **309.2 KB / 310 KB, 0.8 KB headroom — unchanged** (`/` 333.7 KB / 6.3 KB headroom, `/battle/new`
+  309.1 KB / 0.9 KB headroom, `/organisms` 295.5 KB / 9.5 KB headroom — the hint-entry addition
+  ships in the lazy Run chunk, not the first-load page, trap 12); `bench:check` **9.436 ms headroom
+  (56.6% of the 16.667 ms frame budget)** — no engine change, as expected; `e2e:chromium` **198
+  passed, 1 skipped** (the pre-existing unrelated skip), including the flipped `Simulation hotkeys
+  (Story 3.19)` block's (b) test and the new "Escape stops AND exits the stage" unit test, both
+  green on the first run.
+
 ### Completion Notes List
 
 - **FD1 (a)** — the hook lives at `apps/web/lib/battle/useSimulationHotkeys.ts`, beside
@@ -914,10 +941,14 @@ Claude Sonnet 5 (claude-sonnet-5).
 - **FD3 (a)** — Space defers to the browser when the target natively activates on Space
   (`isSpaceActivator`, exported and unit-tested standalone); the hook does nothing on that key in
   that case.
-- **FD4 (a)** — `Escape` stops the sim in BOTH the chassis and the stage; `F` is the only
-  fullscreen-exit key. The mockup's own `keydown` script (which also exits on `Escape`) is a
-  flagged spec conflict, not what shipped — see the story's Spec-conflict flags §1 and the
-  `deferred-work.md` FD4 (b) entry left open for the owner.
+- **FD4 (c)** — shipped first as FD4 (a) (`Escape` stops only, `F` the sole exit key); the code
+  review left the choice to the owner, who decided (c) on 2026-09-18: `Escape` now stops the sim
+  AND exits the stage (`data-fullscreen` → `"false"`), while `F` remains an independent
+  toggle-only exit key. One branch on `fullscreen` added to the view's `onStop` binding
+  (`handleEscapeStop`, `BattleSimulationView.tsx`); the chassis is unaffected. The stage hint
+  gained a fourth entry, `Esc Stop & exit`, alongside `F`'s `to exit fullscreen`
+  (`FullscreenStage.tsx`'s `STAGE_HINT_ENTRIES`). AC6, e2e (b) and the view's Escape/fullscreen
+  test flipped to match; the now-settled FD4 (b) entry dropped from `deferred-work.md`.
 - **FD5 (a)** — `<BattleSimulationView>` gained `onEnterFullscreen(): void`; the view composes
   `fullscreen ? onExitFullscreen : onEnterFullscreen` as a plain expression. `<BattlePage>` passes
   the SAME `handleEnterFullscreen` the header's Fullscreen button already receives.
@@ -943,13 +974,15 @@ Claude Sonnet 5 (claude-sonnet-5).
 - All 13 acceptance criteria verified: AC1 (single window listener, no re-subscription — pinned by
   the StrictMode/addEventListener-spy tests in both the hook's own suite and
   `BattleSimulationView.test.tsx`), AC2/AC3 (the four keys and all six suspension rules, unit +
-  e2e), AC4 (Lab mounts no listener — unit spy assertion + e2e), AC5/AC6 (`F` round trip, e2e box
-  assertion reused from 3.18), AC7/AC8 (both hint lines, with axe), AC9 (dialog suspension, unit +
-  e2e with a genuinely playing sim), AC10 (no per-cycle work, bundle unchanged at `/battle`), AC11
-  (axe clean throughout), AC12 (the five e2e tests), AC13 (docs below).
-- Spec-conflict flags 1–5 all carried into the story file unchanged (no NEW conflict found); flag 1
-  (`Escape`/mockup-script vs. spec) is the one live decision left to the owner, recorded in both
-  places.
+  e2e), AC4 (Lab mounts no listener — unit spy assertion + e2e), AC5/AC6 (`F` round trip plus the
+  FD4 (c) Escape stop-and-exit branch, unit + e2e box assertion reused from 3.18), AC7/AC8 (both
+  hint lines, with axe), AC9 (dialog suspension, unit + e2e with a genuinely playing sim), AC10 (no
+  per-cycle work, bundle unchanged at `/battle`), AC11 (axe clean throughout), AC12 (the five e2e
+  tests), AC13 (docs below).
+- Spec-conflict flags 1–5 all carried into the story file unchanged at first implementation (no NEW
+  conflict found); flag 1 (`Escape`/mockup-script vs. spec) was the one live decision left to the
+  owner — **resolved 2026-09-18 as FD4 (c)**, recorded in the flag itself, AC6, the Dev Notes FD4
+  block above, and this record.
 
 ### File List
 
@@ -993,6 +1026,16 @@ Claude Sonnet 5 (claude-sonnet-5).
   double-Escape and AC9 (ii)/(iii) coverage, the open-dialog axe pass in e2e (e)); 5 items deferred
   to `deferred-work.md`; 1 owner decision left open (FD4 — `Escape` in the stage). Status →
   in-progress until the FD4 decision is recorded.
+- 2026-09-18 — FD4 owner decision applied (option (c)): `Escape` in the fullscreen stage now stops
+  the run AND exits the stage; in the chassis it keeps stopping only. One `fullscreen` branch added
+  to the view's `onStop` binding (`BattleSimulationView.tsx`'s `handleEscapeStop`); the stage hint
+  gained a fourth entry, `Esc Stop & exit` (`FullscreenStage.tsx`'s `STAGE_HINT_ENTRIES`). AC6, the
+  Spec-conflict flags §1 entry, e2e (b) and a new `BattleSimulationView.test.tsx` unit test flipped
+  to match; `FullscreenStage.test.tsx`'s hint test updated for the fourth `<kbd>`. The now-settled
+  FD4 (b) entry dropped from `deferred-work.md`, and its 3.18-review sibling note (`:1671-1676`)
+  marked resolved. `npm run ci:dev` green (exit 0): web 106/1693 unit tests (+1), e2e Chromium
+  198/1 skipped, `/battle` 309.2 KB (0.8 KB headroom, unchanged), bench 9.436 ms headroom. The
+  `[Review][Decision]` item is checked. Status → review.
 
 Dev Model: sonnet   # follows patterns that exist — the useDirtyGuard listener-hook shape, the latest-ref idiom, 3.18's fullscreen cell and focus effects, presentational <kbd> runs; the one new seam (FD2's bindings) is prescribed above and nothing later builds on it (4.15's preview must NOT mount it)
 Proposed lane gate: none   # 3.19 edits no file lane 4 touches (themes.css untouched, TransportControls markup untouched); 4.24/4.25 already gate on epic-3, which this story completes, and FD10's DOM-based suspension holds for their modal by construction
