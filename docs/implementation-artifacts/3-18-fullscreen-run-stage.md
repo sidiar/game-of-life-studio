@@ -649,6 +649,18 @@ dish `min(94vw, 138vh)`.
   an axe `incomplete` (or violation) on every HUD scan, and a compositor cost nobody has measured.
   Record the glow and translucency as what the mockup shows and why this route does not reproduce
   it (the 3.14 FD2 shape).
+- **OWNER OVERRIDE (2026-09-18): (b), not (a).** Reviewed against the mockup on the built branch,
+  (a) made fullscreen read as "the chassis minus its sidebar" — the dish grew 3% at 1280×720
+  (924×553 vs 896×517) and the chrome stayed stacked. The three reasons for (a) do not hold:
+  (1) AR-46 bans the literal in the component, not the surface — `--gol-shadow-tile-hover` (1.10),
+  `--gol-accent-tint` (4.2) and `--gol-shadow-slider-thumb` (4.6) are exactly this, mockup rgba
+  composed from the `--gol-*-channel` triplets that exist for the purpose (`themes.css:99-105`);
+  (2) axe reports text over a translucent surface as `incomplete`, never a violation, and the HUD's
+  0.82 `bg-secondary` surface visually dominates whatever cells lie under it; (3) is real and is
+  answered by dropping `backdrop-filter` alone — the floating layout costs nothing per frame. What
+  shipped: `.fs-top` and `.fs-hud` `position: fixed` over the dish, the dish `min(94vw, 138vh)`,
+  three tokens (`--gol-scrim-top`, `--gol-surface-hud`, `--gol-shadow-dish-glow`), no blur, no
+  `transition`. Measured: **990×592 at 1280×720** (mockup 994×596), **1486×890 at 1920×1080**.
 
 **FD5 — `<VisuallyHidden>`.**
 - **(a) Promote `editor/GridSettingsSection.tsx:146-153` to `apps/web/components/VisuallyHidden.tsx`;
@@ -792,7 +804,8 @@ dish `min(94vw, 138vh)`.
 - **Mockup `.fs-hint` + `F`/`Escape` script.** Story 3.19's (spec §4 `useSimulationHotkeys`, §9.6);
   NFR-4.1 forbids the hint without the handler. Nothing here listens to keys.
 - **Mockup translucency, gradient, glow, floating overlays.** FD4 (a); AR-46 and the contrast gate
-  are the authorities. Mockup-refresh candidate.
+  are the authorities. Mockup-refresh candidate. *(Overridden 2026-09-18: FD4 (b) — the mockup
+  is followed; AR-46 is satisfied by composed tokens, as in 1.10/4.2/4.6.)*
 - **No backing FR (spec §9.5; epic note "PRD touch recommended").** Unchanged by this story; the
   RFC-touch tracker entry in `deferred-work.md` (Story 4.1's section) takes the note that the
   fullscreen stage shipped as UX-sourced scope.
@@ -809,6 +822,8 @@ dish `min(94vw, 138vh)`.
   transport buttons, the padding rule, the swatch/skull, or `VisuallyHidden`.
 - ❌ No speed slider, grid-size control, Back button, sidebar or name field in the stage.
 - ❌ No new `--gol-*` token, no `rgba` literal, no `backdrop-filter`, no `transition`, no glow.
+  *(Superseded 2026-09-18 by the FD4 owner override: three composed tokens and the glow ship; the
+  `rgba` literal, `backdrop-filter` and `transition` bans stand.)*
 - ❌ No `z-index` constant, no portal, no `key` on the canvas, no `display: none` on its chain, no
   `renderer.resize` call from the view.
 - ❌ No change to `PetriDishCanvas.tsx`, `useSimulation.ts`, `gridRenderer.ts`, `packages/**`,
@@ -996,7 +1011,8 @@ Claude Opus 5 (1M context) — `claude-opus-5[1m]`, under `implement-next-story`
   existing styled blocks; sidebar and bar leave via `false`-holding slots; `<FullscreenStage
   active>` always mounted around the unchanged dish wrappers, chrome as fixed fragment slots. FD3
   (a) — no `requestFullscreen()`. FD4 (a) — in-flow rows, opaque surfaces, no rgba / gradient /
-  blur / glow / transition. FD5 (a) — `<VisuallyHidden>` promoted to `components/` root. FD6 (a) —
+  blur / glow / transition — **overridden to (b) by the owner on 2026-09-18** (floating chrome,
+  `min(94vw, 138vh)` dish, three composed tokens; see the FD4 block and the Change Log). FD5 (a) — `<VisuallyHidden>` promoted to `components/` root. FD6 (a) —
   Speed as a read-out. FD7 (a) — `<TransportControls>` lifted, same three names. FD8 (a) —
   `<CycleDigits>` lifted. FD9 (a) — header unmounted while the stage is up, explicit focus moves.
   The swatch/skull pair went to a small `populationGlyphs.tsx` (the AC8 "dev's call").
@@ -1008,7 +1024,10 @@ Claude Opus 5 (1M context) — `claude-opus-5[1m]`, under `implement-next-story`
   height-bound at 16:9. Tightened to `12px` / `16px` / `12px`: **924×553 at 1280×720** and
   **1114×667 at 1194×834** (chassis 810×484 there), both rows on screen at both tiers — AC4's
   invariants (i) and (ii) hold; the numbers are in the styled blocks' comments and in
-  `deferred-work.md`'s mockup-refresh candidate 3.
+  `deferred-work.md`'s mockup-refresh candidate 3. **Moot since 2026-09-18** (FD4 owner override):
+  the chrome floats, nothing competes with the dish for height, and the dish is `min(94vw,
+  138vh)` — 990×592 at 1280×720, 1486×890 at 1920×1080. The mockup-faithful paddings (`18px 24px`,
+  `bottom: 40px`) are back as drawn.
 - **Mutation check on the AC4 tripwire**: with `<FullscreenStage>` rewritten as `active ? <div>…
   {children}…</div> : <>{children}</>` (FD2 (c)), `BattleSimulationView.test.tsx`'s three
   "same canvas node / one construction / drawFull unchanged" tests reddened (3 failed), and went
@@ -1123,6 +1142,11 @@ Modified:
 - 2026-09-17 — Code review (in-progress): 8 patches applied (comment accuracy ×5, the shared
   skull's host margin, wrapping pills, doc wording), 3 deferred to `deferred-work.md`, 2 decisions
   left open for the owner (fullscreen during the Run chunk fetch; the Exit/Lab double-click).
+- 2026-09-18 — Owner review against the mockup: FD4 (a) → (b). The top bar and HUD float over the
+  dish (`position: fixed`), the dish is `min(94vw, 138vh)` with the accent glow; the mockup's
+  translucent surfaces become three channel-composed tokens (`--gol-scrim-top`,
+  `--gol-surface-hud`, `--gol-shadow-dish-glow`); `backdrop-filter` and `transition` stay out.
+  Unit, e2e (3.14/3.16/3.18 blocks + axe) and bundle gates green; `/battle` unchanged at 309.1 KB.
 
 Dev Model: opus   # architecture-shaping: it decides where `fullscreen` lives (BattlePage, against spec §6), establishes the CSS-driven no-remount layout-swap pattern that 3.19's F key toggles and that React reconciliation can silently break, and factors <TransportControls>/<CycleDigits>/<PopulationPills> out of 3.12/3.14's files as the pieces 4.15 builds on
 Proposed lane gate: { story: 4-15-preview-simulation, requires: 3-18-fullscreen-run-stage, why: "3.18 lifts the transport trio out of <SimulationControlBar> (<TransportControls>), the zero-padded digits out of <CycleCounter> (<CycleDigits>) and ships <PopulationPills> as the compact population sibling — the preview panel (spec §8 / §3.12: SpeedControl + compact PopulationStats + cycle counter + Play/Stop/Step) is the third consumer of all three and must reuse them rather than re-author or edit the same simulation/ files concurrently" }

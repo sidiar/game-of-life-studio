@@ -31,19 +31,19 @@ import TransportControls, { type SimulationControlBarProps } from './TransportCo
  * rule for `<EditorSidebar>` / `<EditorMain>`; `simulation/README.md`'s "`<FullscreenStage>` and
  * its two parts").
  *
- * FD4 (a), where this deviates from the mockup and why: the mockup FLOATS the top bar and the HUD
- * over the dish (`position: fixed`, a `rgba` gradient, `rgba(26,26,26,.82)` + `backdrop-filter:
- * blur(8px)`), adds a `box-shadow` glow, and sizes the dish `min(94vw, 138vh)`. None of that ships:
- * (1) AR-46 bans the four `rgba` literals and the token layer should not grow two translucent
- * surfaces for one screen; (2) text over a translucent panel over arbitrary organism cells has no
- * gate-able contrast, while every pair used here — accent / text-primary / text-secondary on
- * bg-primary / bg-secondary — is already a row in `themeTokens.test.ts`; (3) `backdrop-filter`
- * over a canvas repainting at up to 60 FPS forces per-frame recomposition of the region beneath
- * it, which RFC-003's "no UI animation during simulation steps" rule exists to keep off the budget
- * (NFR-1.1). So: three IN-FLOW rows in a flex column, an opaque `--gol-bg-primary` stage (the
- * view's `SimulationLayout`, not this file), a `--gol-bg-secondary` HUD panel with `--gol-border`;
- * no gradient, no blur, no glow, no `transition` anywhere (the mid-fade axe trap every bar on this
- * route records). Mockup-refresh candidate (`deferred-work.md`).
+ * FD4 (b) — the mockup's geometry, kept: the top bar and the HUD FLOAT over the dish
+ * (`position: fixed`), which is what makes the stage read as a different place from the chassis
+ * rather than the chassis minus its sidebar. The dish itself is sized by the view
+ * (`min(94vw, 138vh)`, `BattleSimulationView.tsx`'s `PetriDishBox`), so nothing here competes
+ * with it for height. The mockup's translucent surfaces are TOKENS — `--gol-scrim-top`,
+ * `--gol-surface-hud`, `--gol-shadow-dish-glow` — composed from the `--gol-*-channel` triplets
+ * exactly as `--gol-shadow-tile-hover` (1.10) and `--gol-accent-tint` (4.2) were: AR-46 bans the
+ * rgba literal in this file, not the surface. Two things from the mockup do NOT ship:
+ * `backdrop-filter: blur(8px)` (compositor work over a 60 FPS canvas on every frame, RFC-003 /
+ * NFR-1.1 — the 0.82 surface reads as a panel without it) and `transition` (the mid-fade axe trap
+ * every bar on this route records). Text on the HUD sits on that 0.82 `bg-secondary` surface, not
+ * on the cells: axe reports the pair as `incomplete`, never a violation, and the gated pairs
+ * (`themeTokens.test.ts`) are the same accent / text-primary / text-secondary on bg-secondary.
  *
  * NOT rendered, by story: the mockup's `.fs-hint` line (`Press F to exit …`) and its `keydown`
  * script are Story 3.19's, together with the handlers that make them true (NFR-4.1 forbids a hint
@@ -70,18 +70,26 @@ export interface FullscreenStageProps {
   children: ReactNode;
 }
 
-// Mockup: `.fs-top` (petri-dish-play-mode-fullscreen.html:38-52) — IN FLOW (FD4), not
-// `position: fixed`; no gradient, no `pointer-events` dance (nothing sits under it). Vertical
-// padding is 12px, not the mockup's 18px: in flow, every pixel of this row is a pixel the dish
-// does not get (the layout is height-bound at 16:9), and the mockup's values were drawn for rows
-// that FLOATED over the dish. Measured at 1280×720 (Story 3.18 Dev Agent Record): with the
-// mockup's values the fullscreen dish came out SMALLER than the chassis's (501px vs 517px tall).
+// Mockup: `.fs-top` (petri-dish-play-mode-fullscreen.html:38-52) verbatim — `position: fixed`
+// across the top edge, the `--gol-scrim-top` gradient, and the `pointer-events` pair: the bar
+// itself lets clicks through to the dish beneath it, its children take them back. No `z-index`
+// (the view's trap 15): the dish is not positioned, so a fixed box paints above it by the
+// stacking rules alone.
 const TopOverlay = styled('div')({
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: '16px',
-  padding: '12px 24px',
+  padding: '18px 24px',
+  background: 'var(--gol-scrim-top)',
+  pointerEvents: 'none',
+  '& > *': {
+    pointerEvents: 'auto',
+  },
 });
 
 // Mockup: `.fs-title` (:54-63) — the row that holds the heading and its badge. The badge is a
@@ -122,13 +130,14 @@ const ModeBadge = styled('span')({
   flexShrink: 0,
 });
 
-// Mockup: `.fs-exit` (:74-92) minus its `rgba(0, 0, 0, 0.4)` surface (FD4: transparent on the
-// stage's own opaque `--gol-bg-primary`) and minus `transition: all 0.2s` (the axe mid-fade trap).
+// Mockup: `.fs-exit` (:74-92) minus `transition: all 0.2s` (the axe mid-fade trap). Its
+// `rgba(0, 0, 0, 0.4)` surface is `--gol-surface-hud` — the same translucent panel token the HUD
+// wears, one token for the stage's floating chrome rather than a second near-black one.
 // `--gol-border-control`, not `--gol-border`: SC 1.4.11 needs the control token's 3:1 against
 // `--gol-bg-primary` (`themeTokens.test.ts`'s control pairs). Hover is the mockup's own accent
 // border + text (`:89-92`).
 const ExitButton = styled('button')({
-  background: 'transparent',
+  background: 'var(--gol-surface-hud)',
   border: '1px solid var(--gol-border-control)',
   color: 'var(--gol-text-primary)',
   padding: '8px 16px',
@@ -182,18 +191,23 @@ function FullscreenTopOverlay({ battleTitle, onExit }: FullscreenTopOverlayProps
   );
 }
 
-// Mockup: `.fs-hud`'s placement (:131-148) — `bottom: 40px`, centred — as an IN-FLOW row (FD4):
-// the centring is `justifyContent`, the offset is bottom padding — 16px rather than the mockup's
-// 40px, for the reason `TopOverlay` records: a floating panel's 40px clearance from the viewport
-// edge is dead height once the row is in flow, and the dish pays for it.
+// Mockup: `.fs-hud`'s placement (:131-148) — `position: fixed; bottom: 40px`, centred. The mockup
+// centres the panel with `left: 50%; transform: translateX(-50%)`; a full-width fixed row with
+// `justifyContent: center` puts it in the same place without a transform on a box that holds live
+// text. The row lets pointer events through to the dish; the panel takes them back.
 const HudRow = styled('div')({
+  position: 'fixed',
+  bottom: '40px',
+  left: 0,
+  right: 0,
   display: 'flex',
   justifyContent: 'center',
-  padding: '0 24px 16px',
+  padding: '0 24px',
+  pointerEvents: 'none',
 });
 
-// Mockup: `.fs-hud`'s panel (:131-148) minus `position: fixed`, the `rgba` surface and
-// `backdrop-filter` (FD4) — `--gol-bg-secondary` opaque, `--gol-border`. `flexWrap` + `maxWidth:
+// Mockup: `.fs-hud`'s panel (:131-148) — the `--gol-surface-hud` translucent surface over the
+// dish, `--gol-border`; minus `backdrop-filter` (see the file comment). `flexWrap` + `maxWidth:
 // 94vw` are the mockup's own overflow policy for a wide roster.
 const HudPanel = styled('div')({
   display: 'inline-flex',
@@ -203,8 +217,9 @@ const HudPanel = styled('div')({
   gap: '20px',
   padding: '12px 20px',
   maxWidth: '94vw',
-  background: 'var(--gol-bg-secondary)',
+  background: 'var(--gol-surface-hud)',
   border: '1px solid var(--gol-border)',
+  pointerEvents: 'auto',
 });
 
 // Mockup: `.hud-group` (:150-154).

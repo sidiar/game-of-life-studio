@@ -174,12 +174,10 @@ const SimulationMain = styled('div')({
   background: 'var(--gol-bg-primary)',
 });
 
-// Fullscreen (3.18): a tighter gutter — the mockup's dish is `min(94vw, 138vh)`, i.e. nearly
-// edge to edge; the title row and HUD above and below are in flow (FD4), so this padding is the
-// only margin the dish gets, and the vertical half is what the height-bound layout trades against
-// dish size (measured at 1280×720: 12px here + the stage's own row paddings give a 553px-tall
-// dish against the chassis's 517px; the mockup-faithful 20px/18px/40px set gave 501px — smaller
-// than the chassis, which is the one thing the AC forbids).
+// Fullscreen (3.18, FD4 (b)): no padding — the stage's title bar and HUD are `position: fixed`
+// and out of flow, so this container is the whole viewport and only centres the dish; the dish's
+// own `min(94vw, 138vh)` (`PetriDishBox` below) is the margin, exactly as the mockup draws it
+// (`.fs-stage` centres `.petri-dish-grid` with no gutter of its own).
 const GridContainer = styled('div')({
   flex: 1,
   minHeight: 0,
@@ -188,7 +186,7 @@ const GridContainer = styled('div')({
   justifyContent: 'center',
   padding: '30px',
   '[data-fullscreen="true"] &': {
-    padding: '12px 24px',
+    padding: 0,
   },
 });
 
@@ -196,14 +194,15 @@ const GridContainer = styled('div')({
 // active-simulation border", the one Run-vs-Lab visual this story ships besides the toggle (AC10).
 // The box values are the editor's (see above); only the border differs.
 //
-// Fullscreen (3.18): HEIGHT-driven — `height: 100%` of the `flex: 1` container between the title
-// row and the HUD, width from the aspect ratio, capped at the container's width. In a fixed-inset
-// column the binding constraint is nearly always height, so the accent border hugs the grid; when
-// width binds instead (a tall, narrow viewport) `maxWidth: 100%` takes over and the renderer
-// letterboxes vertically inside the box, as it already does horizontally today. The chassis's
-// `1000px` cap is lifted (`maxWidth: 100%`) — that cap is what "larger than the chassis" is
-// measured against (e2e AC10 (a)). No `box-shadow` glow (FD4: the mockup's `rgba(0,212,255,.12)`
-// is an AR-46 literal, and a shadow around a 60 FPS canvas is compositor work for nothing).
+// Fullscreen (3.18, FD4 (b)): the mockup's `.petri-dish-grid` verbatim — `width: min(94vw,
+// 138vh)` at 5:3, i.e. 94% of the viewport's width unless height binds first (138vh × 3/5 =
+// 82.8vh tall), centred by `GridContainer`. The floating HUD overlaps the dish's bottom edge on
+// most viewports, as it does in the mockup; the top bar's scrim overlaps its top edge on none of
+// the supported ones. The chassis's `1000px` cap is lifted (`maxWidth: none`) — that cap is what
+// "larger than the chassis" is measured against (e2e AC10 (a)), and `vw`/`vh` keep the box inside
+// the viewport, which the same test asserts. The glow is `--gol-shadow-dish-glow` (the mockup's
+// `box-shadow: 0 0 40px rgba(0,212,255,.12)`, composed from `--gol-accent-channel` — a static
+// shadow on a box whose canvas repaints is one layer, not per-frame work).
 const PetriDishBox = styled('div')({
   width: '100%',
   minWidth: 0,
@@ -213,10 +212,10 @@ const PetriDishBox = styled('div')({
   background: 'var(--gol-bg-primary)',
   border: '2px solid var(--gol-accent)',
   '[data-fullscreen="true"] &': {
-    width: 'auto',
-    height: '100%',
-    maxWidth: '100%',
+    width: 'min(94vw, 138vh)',
+    maxWidth: 'none',
     maxHeight: 'none',
+    boxShadow: 'var(--gol-shadow-dish-glow)',
   },
 });
 

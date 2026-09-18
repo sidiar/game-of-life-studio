@@ -1586,20 +1586,18 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   1. **The HUD's transport labels** `Play`/`Next`/`Stop` → the bar's `Play`/`Next cycle`/`Stop &
      reset` (FD7 (a)): accessible names are part of the route's test vocabulary (three files'
      `getByRole`) and 3.19's hints name one set of verbs.
-  2. **Floating, translucent overlays, the gradient, the glow** — `.fs-top`'s `position: fixed` +
-     `rgba(10,10,10,.9)` gradient, `.fs-hud`'s `rgba(26,26,26,.82)` + `backdrop-filter: blur(8px)`,
-     `.fs-exit`'s `rgba(0,0,0,.4)`, `.petri-dish-grid`'s `box-shadow: 0 0 40px rgba(0,212,255,.12)`
-     — none shipped (FD4 (a)): AR-46 bans the four rgba literals; text over a translucent panel over
-     arbitrary organism cells has no gate-able contrast; `backdrop-filter` over a 60 FPS canvas
-     forces per-frame recomposition (RFC-003's no-animation-during-steps rule, NFR-1.1). The stage
-     is three IN-FLOW rows on an opaque `--gol-bg-primary`, the HUD an opaque `--gol-bg-secondary`
-     panel.
-  3. **The in-flow rows are TIGHTER than the mockup's**: `.fs-top` padding 18px → 12px vertical,
-     `.fs-hud`'s `bottom: 40px` → 16px bottom padding, the dish gutter 20px → 12px vertical.
-     Measured at 1280×720 with the mockup-faithful values the fullscreen dish was 838×501 — SMALLER
-     than the chassis's 896×517 — because rows in flow compete with the dish for height where the
-     mockup's floating overlays did not; with the tightened values it is 924×553 (1114×667 at
-     1194×834). If the mockup is refreshed for in-flow rows these are the values to draw.
+  2. **`backdrop-filter: blur(8px)` on the HUD** — the one piece of the mockup's floating chrome
+     that does not ship. ~~Floating, translucent overlays, the gradient, the glow — none shipped
+     (FD4 (a))~~ — **reversed by the owner 2026-09-18 (FD4 (b))**: the top bar and HUD float over
+     the dish, the dish is `min(94vw, 138vh)` with the glow, and the mockup's rgba surfaces are
+     channel-composed tokens (`--gol-scrim-top`, `--gol-surface-hud`, `--gol-shadow-dish-glow`),
+     the 1.10/4.2/4.6 construction. The blur stays out: compositor work over a 60 FPS canvas on
+     every frame (RFC-003's no-animation-during-steps rule, NFR-1.1), and the 0.82 surface reads
+     as a panel without it. If a refresh wants the blur, it is a bench question, not a token one.
+  3. ~~**The in-flow rows are TIGHTER than the mockup's**~~ — **moot since 2026-09-18** (FD4 (b)):
+     the chrome floats, so nothing competes with the dish for height and the mockup's `18px 24px` /
+     `bottom: 40px` are used as drawn. Measured: 990×592 at 1280×720 (mockup 994×596), 1486×890
+     at 1920×1080.
   4. **The `.fs-hint` line** (`Press F to exit fullscreen • SPACE Play/Pause • → Next`) and the
      mockup's `keydown` script belong to Story 3.19, with the handlers that make them true
      (NFR-4.1).
@@ -1654,8 +1652,12 @@ button) — they are the owner's, not recorded here. The items consciously defer
   property of every focus-handoff pair in the app, so an `event.repeat` guard is a route-wide
   keyboard policy: **Story 6.11's sweep**, or 3.19 if it wants the `F` toggle to carry the same
   guard from day one.
-- **No floor on the fullscreen dish height.** The title row and HUD are in flow and take height
-  first; `GridContainer` (`flex: 1; minHeight: 0`) hands the remainder to the height-driven
+- ~~**No floor on the fullscreen dish height.**~~ — **CLOSED 2026-09-18 by the FD4 owner override**:
+  the chrome is `position: fixed` and the dish is `min(94vw, 138vh)`, so its height is a function
+  of the viewport alone — no flex competition, no shrink toward 0px. What remains is the mockup's
+  own property: on a short viewport the floating HUD covers more of the dish's bottom edge (at
+  1280×720 it overlaps by ~33px, as in the mockup). Original entry kept for the record: The title
+  row and HUD are in flow and take height first; `GridContainer` (`flex: 1; minHeight: 0`) hands the remainder to the height-driven
   `PetriDishBox`, with no minimum. On a short viewport — or once the HUD wraps to several lines
   with a wide roster (the pills wrap since this review) — the dish shrinks toward 0px;
   `applyDevicePixelSizing`'s `clientHeight || authoredHeight` fallback keeps the canvas from
