@@ -12,9 +12,12 @@ import LadderSlider from './LadderSlider';
  *
  * Presentational and total, the `<SimulationControlBar>` shape: no hook beyond `<LadderSlider>`'s
  * own `useId`, no state, no repository, no `sim`. `SpeedControlProps` is spec §3.12's two members
- * exactly, because Story 3.18's `<FullscreenHUD>` and Story 4.15's preview panel render this same
- * control (spec §7). The value is CONTROLLED by `genPerSec` — the hook is the only holder of the
- * speed (3.10 FD6), and a local mirror is precisely the drift that design exists to prevent.
+ * exactly, so a second consumer can render this same control (spec §7). Story 3.18's fullscreen
+ * HUD did NOT turn out to be one (3.18 FD6 (a)): §3.14 gives the HUD `genPerSec` as a VALUE and
+ * the mockup draws `10 gen/s` as text, so the HUD shows a read-out and a presenter changes speed
+ * from the chassis; Story 4.15's preview panel may still render the slider. The value is
+ * CONTROLLED by `genPerSec` — the hook is the only holder of the speed (3.10 FD6), and a local
+ * mirror is precisely the drift that design exists to prevent.
  *
  * Story 3.13 FD1, option (a): a native `<input type="range">` rather than MUI `<Slider>` — see
  * `<LadderSlider>`'s head comment for the full reasoning (index-valued, `aria-valuetext`-labelled,

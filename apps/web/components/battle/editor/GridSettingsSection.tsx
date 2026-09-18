@@ -3,6 +3,7 @@
 import { useId } from 'react';
 import { styled } from '@mui/material/styles';
 import type { EditableGridPreset } from '@gol/domain';
+import VisuallyHidden from '@/components/VisuallyHidden';
 
 /**
  * Spec §3.6's Grid Info section, plus FR-3.11's resize control ("the mockup shows read-only Grid
@@ -136,20 +137,6 @@ const HiddenRadio = styled('input')({
   margin: 0,
   padding: 0,
   opacity: 0,
-});
-
-/**
- * The radio's accessible name. Spelled out ("50 by 30") because the visible text is `aria-hidden`:
- * `×` (U+00D7) is announced as "times", "multiplication sign" or nothing at all depending on the
- * screen reader, and a size is read as "by" in every one of them.
- */
-const VisuallyHidden = styled('span')({
-  position: 'absolute',
-  width: '1px',
-  height: '1px',
-  overflow: 'hidden',
-  clipPath: 'inset(50%)',
-  whiteSpace: 'nowrap',
 });
 
 // Decorative: the option's own text and `aria-checked` already state which one is selected, so
@@ -294,6 +281,12 @@ export default function GridSettingsSection({
               <span aria-hidden="true">
                 {preset.cols} × {preset.rows}
               </span>
+              {/* The radio's accessible name. Spelled out ("50 by 30") because the visible text
+                  is `aria-hidden`: `×` (U+00D7) is announced as "times", "multiplication sign" or
+                  nothing at all depending on the screen reader, and a size is read as "by" in
+                  every one of them. `<VisuallyHidden>` was born here (Story 2.14) and was promoted
+                  to `components/` root by Story 3.18, when the Run folder became its second
+                  caller. */}
               <VisuallyHidden>
                 {preset.cols} by {preset.rows}
               </VisuallyHidden>
