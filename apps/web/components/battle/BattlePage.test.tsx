@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import {
@@ -3239,5 +3239,121 @@ describe('BattlePage — Fullscreen run stage (Story 3.18)', () => {
     expect(container.querySelector('[data-status]')).toHaveAttribute('data-fullscreen', 'true');
 
     expect((await axe(container)).violations).toEqual([]);
+  });
+});
+
+describe('BattlePage — Simulation hotkeys (Story 3.19)', () => {
+  const modeValue = (container: HTMLElement) =>
+    container.querySelector('[data-mode]')?.getAttribute('data-mode');
+  const dirtyValue = (container: HTMLElement) =>
+    container.querySelector('[data-dirty]')?.getAttribute('data-dirty');
+  const runButton = () => screen.getByRole('button', { name: 'Run' });
+  const backButton = () => screen.getByRole('button', { name: 'Back to Battles' });
+  const nameField = () => screen.getByRole('textbox', { name: /battle name/i });
+  const fullscreenButton = () => screen.getByRole('button', { name: 'Fullscreen' });
+  const exitButton = () => screen.getByRole('button', { name: 'Exit fullscreen' });
+
+  async function findRunView(container: HTMLElement): Promise<HTMLElement> {
+    return await waitFor(() => {
+      const view = container.querySelector<HTMLElement>('[data-status]');
+      if (view === null) throw new Error('the Run view has not mounted yet');
+      return view;
+    });
+  }
+
+  /** The `BattleSimulationView.test.tsx` driver, reused here: a manual RAF queue so a driven
+   * Space settles deterministically instead of racing jsdom's own timer-based rAF. */
+  function installFrameDriver() {
+    const queue: { handle: number; callback: FrameRequestCallback }[] = [];
+    let nextHandle = 1;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(
+      (callback: FrameRequestCallback) => {
+        const handle = nextHandle++;
+        queue.push({ handle, callback });
+        return handle;
+      },
+    );
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((handle: number) => {
+      const index = queue.findIndex((entry) => entry.handle === handle);
+      if (index !== -1) queue.splice(index, 1);
+    });
+    return {
+      frame(now: number): void {
+        const batch = queue.splice(0);
+        act(() => {
+          for (const entry of batch) entry.callback(now);
+        });
+      },
+    };
+  }
+
+  // FD5 (a): the keyboard twin of the pointer round trip already pinned in the 3.18 describe
+  // block above, driven through `user.keyboard('f')` instead of a click on the two buttons.
+  it('F round trip: f enters the stage with Exit focused; F again returns to the chassis with Fullscreen focused', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('group', { name: 'Mode' });
+    await user.click(runButton());
+    await findRunView(container);
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    await user.keyboard('f');
+
+    expect(screen.queryByRole('group', { name: 'Mode' })).toBeNull();
+    expect(exitButton()).toHaveFocus();
+
+    await user.keyboard('f');
+
+    expect(await screen.findByRole('group', { name: 'Mode' })).toBeInTheDocument();
+    await waitFor(() => expect(fullscreenButton()).toHaveFocus());
+  });
+
+  // AC4: the hook is mounted by the Run view, which Lab unmounts entirely — not one that declines
+  // to act. `data-mode` / `data-dirty` are unaffected by all four keys, and no `[data-fullscreen]`
+  // ever appears.
+  it('Lab mode registers no keydown listener, and the four keys leave data-mode / data-dirty unchanged', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('group', { name: 'Mode' });
+    expect(modeValue(container)).toBe('lab');
+
+    expect(addSpy.mock.calls.some(([type]) => type === 'keydown')).toBe(false);
+
+    fireEvent.keyDown(document.body, { key: ' ' });
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    fireEvent.keyDown(document.body, { key: 'f' });
+
+    expect(modeValue(container)).toBe('lab');
+    expect(dirtyValue(container)).toBe('false');
+    expect(container.querySelector('[data-fullscreen="true"]')).toBeNull();
+  });
+
+  // AC9: from Run mode with a dirty battle, Back opens the guard; Escape is Cancel for the dialog
+  // AND is suspended for the hook (AC3 (v)) — a playing simulation is untouched underneath it.
+  it('Escape suspends while the unsaved-changes dialog is open: dialog closes, a playing simulation is untouched (AC9)', async () => {
+    const user = userEvent.setup();
+    const driver = installFrameDriver();
+    const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    await user.type(nameField(), '!');
+    await user.click(runButton());
+    const view = await findRunView(container);
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    await user.keyboard(' ');
+    driver.frame(0);
+    driver.frame(100);
+    expect(view).toHaveAttribute('data-status', 'playing');
+    const cycleBeforeDialog = view.getAttribute('data-cycle');
+
+    await user.click(backButton());
+    const dialog = await screen.findByRole('dialog', { name: 'Unsaved Changes' });
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(view).toHaveAttribute('data-status', 'playing');
+    expect(view).toHaveAttribute('data-cycle', cycleBeforeDialog as string);
   });
 });

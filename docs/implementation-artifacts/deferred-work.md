@@ -1015,12 +1015,19 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   same gap `deferred-work.md`'s 3-11 review entry already records for the header's RUN button (a
   `disabled` control is not focusable, so a keyboard user never reaches the tooltip). **Joins
   Story 6.11's route-wide disabled-state a11y sweep**, not a separate fix.
-- **SPACE while Next cycle is focused disables the focused element — focus falls to `<body>`.**
+- ~~**SPACE while Next cycle is focused disables the focused element — focus falls to `<body>`.**
   Pressing Stop while Play/Pause is focused, or pressing Play while Next cycle is focused and then
   playing starts, both remove the focused control from the accessible tree mid-interaction (Next
   cycle goes from enabled to `disabled` the instant `status` flips to `'playing'`), and nothing
   today moves focus anywhere on that transition. **Story 3.19 decides** whether to move focus (to
-  Play/Pause, the bar's next enabled control) when this happens, alongside the hotkeys it adds.
+  Play/Pause, the bar's next enabled control) when this happens, alongside the hotkeys it adds.~~ —
+  **Closed in Story 3.19 (FD9 (a)), resolved-by-construction, no focus code added.** Under FD3 (a)
+  the reachable cases collapse: Space on a focused Next cycle is a native step (Next stays
+  enabled — Space never reaches the disabling transition through the button that would trigger
+  it); Space on a focused Play is the native toggle (Play/Pause is never disabled); a pointer press
+  moves focus to the pressed control regardless. The one keyboard path that unmounts a focused
+  control is `F` (the bar or the HUD leaves), and 3.18's two focus effects already land focus on
+  Exit / the Fullscreen button — no third mechanism needed.
 
 ## Deferred from: Story 3-13-speed-control implementation (2026-09-15)
 
@@ -1661,9 +1668,12 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
      the chrome floats, so nothing competes with the dish for height and the mockup's `18px 24px` /
      `bottom: 40px` are used as drawn. Measured: 990×592 at 1280×720 (mockup 994×596), 1486×890
      at 1920×1080.
-  4. **The `.fs-hint` line** (`Press F to exit fullscreen • SPACE Play/Pause • → Next`) and the
+  4. ~~**The `.fs-hint` line** (`Press F to exit fullscreen • SPACE Play/Pause • → Next`) and the
      mockup's `keydown` script belong to Story 3.19, with the handlers that make them true
-     (NFR-4.1).
+     (NFR-4.1).~~ — **Shipped in Story 3.19.** The hint line renders as `<FullscreenStage>`'s
+     fourth fragment slot (`<HotkeyHints>`, FD6); the mockup's OWN `keydown` script (which exits on
+     `Escape` too) is NOT what shipped — `useSimulationHotkeys` follows the spec instead (`ESC`
+     stops, `F` is the only exit key, FD4 (a)), a flagged conflict the owner can revisit.
   5. **The mockup's coloured `.hud-pop-pill` text** — colour is on the swatch only (3.14 FD4), the
      same open contrast question the 3-14 section records.
 - **"True fullscreen" via the Fullscreen API** (FD3 (a)): the stage fills the viewport in-app;
@@ -1727,10 +1737,12 @@ deferred:
   auto-repeated `keydown`, and each commit programmatically moves focus to the counterpart control
   (Exit on entry, the Fullscreen button on exit), so a held key ping-pongs the stage, each cycle
   driving `PlaybackDish`'s observer → `renderer.resize` → a repaint of `lastGrid`. `Space` is safe
-  (it clicks on `keyup`). Harmless to the run — the loop is untouched (Decision D) — and a
-  property of every focus-handoff pair in the app, so an `event.repeat` guard is a route-wide
-  keyboard policy: **Story 6.11's sweep**, or 3.19 if it wants the `F` toggle to carry the same
-  guard from day one.
+  (it clicks on `keyup`). Harmless to the run — the loop is untouched (Decision D). **Closed for
+  `F` by Story 3.19 (FD7 (a)):** `useSimulationHotkeys` ignores every `event.repeat` keydown for
+  all four of its keys, so a held `F` fires once, exactly like a held `Space`/`ArrowRight`/`Escape`
+  now does. `Enter` itself — the header's Fullscreen button and the stage's Exit button, both
+  reached by pointer/native-activation Enter, not this hook — remains **Story 6.11's route-wide
+  sweep**.
 - ~~**No floor on the fullscreen dish height.**~~ — **CLOSED 2026-09-18 by the FD4 owner override**:
   the chrome is `position: fixed` and the dish is `min(94vw, 138vh)`, so its height is a function
   of the viewport alone — no flex competition, no shrink toward 0px. What remains is the mockup's
@@ -1773,8 +1785,9 @@ story file's Review Findings. The items consciously deferred:
   the first review named as option (c)**: do not remount the header under the pointer — keep the
   Exit button's box clear of the header's Mode group, or gate `onModeToggle` for one frame after
   an exit. Guarding Exit / Fullscreen with the same `detail` check is the cheap half-measure and
-  does nothing for (2). Owner: Story 3.19 (the `F` toggle shares the geometry) or 6.11's keyboard /
-  pointer sweep.
+  does nothing for (2). **Declined by Story 3.19** — it is a pointer double-activation geometry
+  issue, not a keyboard one, and the `F` hotkey's own `event.repeat` guard (FD7) is orthogonal to
+  it. Unchanged: **Story 6.11's keyboard / pointer sweep**.
 - **A third `VisuallyHidden` copy lives in lane 4's surface.**
   `apps/web/components/organisms/editor/ColorPickerField.tsx:226-234` carries the same recipe as the
   one 3.18 promoted to `apps/web/components/VisuallyHidden.tsx` (its own comment calls it "The
@@ -1784,3 +1797,36 @@ story file's Review Findings. The items consciously deferred:
   `organisms/editor/ColorPickerField.tsx`** (lane 4): replace the local styled block with
   `import VisuallyHidden from '@/components/VisuallyHidden'` and update `VisuallyHidden.tsx`'s head
   comment, which lists two renderers. Not a lane gate — an import swap, no shared file.
+
+## Deferred from: Story 3-19-simulation-hotkeys implementation (2026-09-18)
+
+- **FD10's chunk-fetch window.** `<UnsavedChangesDialog>` is a `next/dynamic` chunk (Story 2.16
+  trap 8); between the first click on Back in a page session and the chunk resolving, the DOM has
+  no `[role="dialog"]` yet, so a key pressed in that window is NOT suspended by
+  `useSimulationHotkeys`'s AC3 (v) check. Accepted, the same shape 3.18 accepted for its own
+  first-mount effects — the window is a single dynamic import's resolution time, and every
+  subsequent Back in the session hits the cached chunk. **No owner story**; revisit only if a real
+  report names it.
+- **`ArrowRight` repeat as a scrub (FD7 (b)).** The hook ignores `event.repeat` for all four keys,
+  including `ArrowRight` — a held arrow does not auto-step. A held-arrow scrub is plausible UX, but
+  each step is a full cycle + publish + repaint at OS repeat rate (~30 Hz) on up to a 200×120 grid
+  with no budget behind it (Decision A.4: larger presets are measured, never gated). **Candidate
+  for Story 6.11's keyboard sweep**, which is where a deliberate repeat policy belongs.
+- **An opt-in `keyshortcuts?: boolean` prop on `<TransportControls>` (FD8 (b)).** Rejected for this
+  story because the cluster is shared with Story 4.15's preview panel, which mounts no hotkey hook
+  — `aria-keyshortcuts` baked into the shared component would advertise keys the preview does not
+  have. **Candidate for Story 6.11's keyboard sweep**, scoped to the Run route's own instance only.
+- **FD4 (b) — `Escape` exits the stage instead of stopping, per the mockup's own `keydown`
+  script.** Story 3.19 shipped FD4 (a) (the spec's `ESC` stops / `F` exits split) — see the
+  Spec-conflict flags entry in the story file. **Left open for the owner**; the implementation
+  difference is one branch on `fullscreen` in the view's `onStop` binding if reversed later.
+- **`component-tree-battle-page.md` amendment candidates** (the running list this story adds to):
+  §3.11's props list gains `onEnterFullscreen` (the 3.18 amendment list's item 1 grows by one); §4's
+  `useSimulationHotkeys(bindings)` line should read the FD2 shape (`onPlayPause` / `onStep` /
+  `onStop` / `onToggleFullscreen` / `canStep`) and name `lib/battle/` as its home, not the tree's
+  current placement under the Run view; §2's tree may name `<HotkeyHints>` beside `<LadderSlider>`
+  as a component the tree omits.
+- **Mockup-refresh note.** The chassis mockup's hint sits inside a `.stats-left` region that, in
+  the Lab mockup, also carries the Lab bar's stats (`petri-dish-play-mode.html:743-746`); the Run
+  bar has no stats section, so the hint is its whole left half rather than sharing the region with
+  anything else. Recorded for whoever next refreshes the mockup set — no code implication.

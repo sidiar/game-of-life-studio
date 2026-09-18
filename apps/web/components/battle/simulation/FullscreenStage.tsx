@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { styled } from '@mui/material/styles';
 import type { GenPerSec, PopulationEntry } from '@/lib/battle/useSimulation';
 import CycleDigits from './CycleDigits';
+import HotkeyHints from './HotkeyHints';
 import PopulationPills from './PopulationPills';
 import TransportControls, { type SimulationControlBarProps } from './TransportControls';
 
@@ -46,9 +47,11 @@ import TransportControls, { type SimulationControlBarProps } from './TransportCo
  * `backdrop-filter: blur(8px)` (compositor work over a 60 FPS canvas on every frame, RFC-003 /
  * NFR-1.1) and `transition` (the mid-fade axe trap every bar on this route records).
  *
- * NOT rendered, by story: the mockup's `.fs-hint` line (`Press F to exit …`) and its `keydown`
- * script are Story 3.19's, together with the handlers that make them true (NFR-4.1 forbids a hint
- * with nothing behind it); no Back, no speed slider (FD6), no grid-size control, no sidebar.
+ * Story 3.19 ships the mockup's `.fs-hint` line (`Press F to exit fullscreen • Space Play/Pause •
+ * → Next`) as a FOURTH fragment slot, after the HUD — `children` stays at slot 1 (trap 8), and the
+ * `keydown` handling the hint describes is `useSimulationHotkeys`'s, mounted by
+ * `<BattleSimulationView>`, never this file. No Back, no speed slider (FD6), no grid-size control,
+ * no sidebar.
  */
 
 export interface FullscreenHudValues {
@@ -268,6 +271,44 @@ const HudDivider = styled('span')({
   flexShrink: 0,
 });
 
+// Mockup: `.fs-hint` (`petri-dish-play-mode-fullscreen.html:260-278`) — a full-width fixed row
+// (the `HudRow` idiom, no `transform`) so the panel centres without competing with the HUD for the
+// same fixed box; `pointer-events: none` lets clicks through to the dish beneath it.
+const HintRow = styled('div')({
+  position: 'fixed',
+  bottom: '14px',
+  left: 0,
+  right: 0,
+  display: 'flex',
+  justifyContent: 'center',
+  pointerEvents: 'none',
+});
+
+// `.fs-hint`'s own text values: `9px`, `--gol-text-tertiary`, uppercase, `0.5px`; `<kbd>`s
+// `--gol-text-secondary`, `600`, `margin: 0 2px`. Opaque `--gol-bg-primary` is what this pair is
+// gated against (`themeTokens.test.ts`) — the hint floats over the stage's own background, below
+// the dish's bottom edge at every supported viewport (the file comment's own measurements).
+const HintText = styled(HotkeyHints)({
+  fontSize: '9px',
+  color: 'var(--gol-text-tertiary)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  '& kbd': {
+    color: 'var(--gol-text-secondary)',
+    margin: '0 2px',
+  },
+});
+
+// The stage's three entries (FD11): `F` names the exit key first (the mockup's own order), then
+// the same Play/Pause and Next the chassis hint carries — `ESC` is deliberately absent here (FD4
+// (a): `Escape` stops in the stage too; `F` is the only exit key, so naming ESC in this hint would
+// make it false).
+const STAGE_HINT_ENTRIES = [
+  { key: 'F', label: 'to exit fullscreen' },
+  { key: 'Space', label: 'Play/Pause' },
+  { key: '→', label: 'Next', arrow: true },
+] as const;
+
 interface FullscreenHUDProps {
   hud: FullscreenHudValues;
   transport: SimulationControlBarProps;
@@ -314,17 +355,24 @@ export default function FullscreenStage({
   children,
 }: FullscreenStageProps) {
   return (
-    // THE load-bearing line (FD2 (a), AC4): a fragment with THREE FIXED SLOTS. React reconciles
-    // unkeyed children by position, and `{active && …}` leaves `false` in its slot rather than
-    // removing it — so `children` (the dish's wrappers and the canvas) is at slot 1 whether the
-    // stage is active or not, under the same ancestor types, and keeps its DOM node, its
-    // `GridRenderer` and its attached loop across enter and exit. A `{active ? <>…{children}…</> :
-    // children}` here would move `children` between depths and REMOUNT the canvas
-    // (`BattleSimulationView.test.tsx`'s "same canvas node" assertions are the tripwire).
+    // THE load-bearing line (FD2 (a), AC4): a fragment with FOUR FIXED SLOTS (Story 3.19 added the
+    // fourth). React reconciles unkeyed children by position, and `{active && …}` leaves `false`
+    // in its slot rather than removing it — so `children` (the dish's wrappers and the canvas) is
+    // at slot 1 whether the stage is active or not, under the same ancestor types, and keeps its
+    // DOM node, its `GridRenderer` and its attached loop across enter and exit. A `{active ?
+    // <>…{children}…</> : children}` here would move `children` between depths and REMOUNT the
+    // canvas (`BattleSimulationView.test.tsx`'s "same canvas node" assertions are the tripwire).
+    // Trap 8: the hint is the FOURTH slot, AFTER the HUD — never before `children`, never wrapping
+    // it.
     <>
       {active && <FullscreenTopOverlay battleTitle={battleTitle} onExit={onExit} />}
       {children}
       {active && <FullscreenHUD hud={hud} transport={transport} />}
+      {active && (
+        <HintRow>
+          <HintText lead="Press " entries={STAGE_HINT_ENTRIES} />
+        </HintRow>
+      )}
     </>
   );
 }

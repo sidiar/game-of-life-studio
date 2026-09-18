@@ -3256,3 +3256,190 @@ test.describe('Fullscreen run stage (Story 3.18)', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// Story 3.19: window-level hotkeys, end to end — the real DOM behaviour jsdom cannot see (native
+// Space activation on a focused button, the Escape/dialog race with a genuinely mounted MUI
+// modal, the fullscreen round trip through the keyboard rather than a click). Reuses 3.18's
+// `view` / `cycle` / `enterRun` shape and the file's `runButton` / `dish` / `speedSlider` /
+// `fullscreenButton` / `exitFullscreenButton` locators.
+test.describe('Simulation hotkeys (Story 3.19)', () => {
+  const view = (page: Page): Locator => page.locator('[data-status]');
+  const cycle = async (page: Page): Promise<number> =>
+    Number(await view(page).getAttribute('data-cycle'));
+
+  async function enterRun(page: Page): Promise<void> {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(dish(page)).toBeVisible();
+  }
+
+  // Trap 19: `runButton(page).click()` leaves focus ON the Mode toggle, and Space would flip it
+  // back to Lab natively (AC3 (vi)) before ever reaching the hook. A click on the dish — not
+  // focusable — blurs to `<body>`, the real "focus is loose" starting point every hotkey test
+  // below needs before its first Space.
+  async function parkFocus(page: Page): Promise<void> {
+    await dish(page).click();
+  }
+
+  // (a) AC2/AC3: the four keys from a loose-focus chassis, plus the chassis hint.
+  test('Space plays and pauses, ArrowRight steps three times, ArrowRight is a no-op while playing, Escape stops at 0 (AC2/AC3)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+    await parkFocus(page);
+
+    await page.keyboard.press('Space');
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect.poll(() => cycle(page)).toBeGreaterThan(0);
+
+    await page.keyboard.press('Space');
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    const pausedAt = await cycle(page);
+
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(view(page)).toHaveAttribute('data-cycle', String(pausedAt + 3));
+
+    await page.keyboard.press('Space');
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    // A no-op while playing — `sim.step()` is never called, so it never throws (trap 1); the
+    // cycle keeps the LOOP's own pace instead of jumping by the keypress.
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => cycle(page)).toBeGreaterThan(pausedAt + 3);
+
+    await page.keyboard.press('Escape');
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+
+    // The chassis hint: three <kbd>s, visible.
+    await expect(page.getByText('Shortcuts:')).toBeVisible();
+    expect(await page.locator('kbd').count()).toBe(3);
+
+    expect(errors).toEqual([]);
+  });
+
+  // (b) AC5/AC6: f enters the stage without touching a running sim; Escape stops but stays
+  // fullscreen (FD4 (a)); f exits back to the chassis.
+  test('f enters the fullscreen stage without stopping a running sim, Escape stops but stays fullscreen, f exits (AC5/AC6)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+    await parkFocus(page);
+    const boxBefore = await dish(page).boundingBox();
+    expect(boxBefore).not.toBeNull();
+    if (boxBefore === null) return;
+
+    await page.keyboard.press('Space');
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect.poll(() => cycle(page)).toBeGreaterThan(0);
+
+    await page.keyboard.press('f');
+
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'true');
+    await expect(exitFullscreenButton(page)).toBeFocused();
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    // The 3.18 (a) box assertion: the SAME dish, re-laid out larger.
+    await expect
+      .poll(async () => {
+        const box = await dish(page).boundingBox();
+        return box !== null && box.width > boxBefore.width && box.height > boxBefore.height;
+      })
+      .toBe(true);
+    // The stage's own hint names F as the exit key; ESC is deliberately absent (FD4 (a)).
+    await expect(page.getByText('to exit fullscreen')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'true'); // STILL fullscreen
+
+    await page.keyboard.press('f');
+
+    await expect(view(page)).toHaveAttribute('data-fullscreen', 'false');
+    await expect(fullscreenButton(page)).toBeFocused();
+    await expect(page.getByText('to exit fullscreen')).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  // (c) AC3 (iv): the Speed slider is a native range input — ArrowRight moves it one detent and
+  // never reaches the sim (the 3.13 e2e assertion, repeated with the hook mounted).
+  test('ArrowRight on the Speed slider moves it one detent and does not step the sim (AC3 (iv))', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await enterRun(page);
+
+    await speedSlider(page).focus();
+    await page.keyboard.press('ArrowRight');
+
+    await expect(speedSlider(page)).toHaveValue('4');
+    await expect(view(page)).toHaveAttribute('data-cycle', '0');
+
+    expect(errors).toEqual([]);
+  });
+
+  // (d) AC4: Lab mode mounts no hook at all — the four keys change nothing observable.
+  test('the four keys change nothing in Lab mode (AC4)', async ({ page }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    await page.keyboard.press('Space');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('f');
+
+    await expect(page.locator('[data-mode]')).toHaveAttribute('data-mode', 'lab');
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+    await expect(page.locator('[data-fullscreen="true"]')).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  // (e) AC9: a dirty battle's Back guard suspends the hook — Escape closes the dialog, a playing
+  // simulation is untouched underneath it.
+  test('Escape closes the Unsaved Changes dialog and leaves a playing simulation untouched (AC9)', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    const box = await dish(page).boundingBox();
+    if (box === null) throw new Error('the dish has no layout box');
+    await dish(page).click({ position: { x: box.width * 0.05, y: box.height * 0.05 } });
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+
+    await runButton(page).click();
+    await expect(view(page)).toHaveAttribute('data-status', 'paused');
+    await parkFocus(page);
+
+    await page.keyboard.press('Space');
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+    await expect.poll(() => cycle(page)).toBeGreaterThan(0);
+
+    await page.getByRole('button', { name: 'Back to Battles' }).click();
+    await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).toBeVisible();
+
+    await page.keyboard.press('Escape');
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(view(page)).toHaveAttribute('data-status', 'playing');
+
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+});

@@ -236,3 +236,27 @@ describe('FullscreenStage (Story 3.18)', () => {
     expect((await axe(container)).violations).toEqual([]);
   });
 });
+
+describe('FullscreenStage — keyboard hint (Story 3.19, AC8)', () => {
+  it('renders the hint with F, Space and → while active', () => {
+    const { container } = render(stage());
+
+    expect(container.textContent).toContain('Press');
+    expect(container.textContent).toContain('to exit fullscreen');
+    expect(container.textContent).toContain('Play/Pause');
+    expect(container.textContent).toContain('Next');
+    expect(container.querySelectorAll('kbd')).toHaveLength(3);
+  });
+
+  it('renders no hint while inactive', () => {
+    render(stage({ active: false }));
+
+    expect(screen.queryByText('to exit fullscreen')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('kbd')).toHaveLength(0);
+  });
+
+  it('has no axe violations with the hint present', async () => {
+    const { container } = render(stage());
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});
