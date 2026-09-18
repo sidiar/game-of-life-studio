@@ -199,8 +199,8 @@ export default function BattleHeader({
   // Story 3.18 review decision (b): the ACTIVE button is a no-op, never a re-set — `onModeToggle`
   // fires only for a genuine change, so `<BattlePage>` never renders for a mode it is already
   // in — and a REPEAT click never fires at all. The stage's Exit button sits where `Lab` remounts
-  // when the header returns (Exit ≈ y 12–43 / x W−184..W−24; the Mode group ≈ y 20–51 /
-  // x W−156..W−30, `Lab` its left half), so the second click of a pointer double-click on Exit
+  // when the header returns (Exit ≈ y 18–49 / x W−184..W−24 under the bar's `18px 24px`; the Mode
+  // group ≈ y 20–51 / x W−156..W−30, `Lab` its left half), so the second click of a pointer double-click on Exit
   // would land on `Lab` and drop the run session. `event.detail` is the click count within the
   // multi-click window; a keyboard-synthesised click carries `detail === 0` and must still fire.
   const toggleTo = (next: BattleMode) => (event: MouseEvent<HTMLButtonElement>) => {

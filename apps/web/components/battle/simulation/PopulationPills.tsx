@@ -42,8 +42,10 @@ import { Skull, Swatch } from './populationGlyphs';
 // one group whose min-content width is the whole unwrapped row, so past ~20 organisms at 1280px
 // the panel overflowed the fixed stage and the leftmost pills were clipped off-viewport with no
 // scroll (the roster cap is 255). Wrapping is the panel's own overflow policy, applied one level
-// down; the HUD grows and the height-driven dish gives up the difference (`deferred-work.md`,
-// 3-18 review: no floor on the dish height).
+// down; the HUD is `position: fixed` (FD4 (b)), so a wrapped panel grows UPWARD over the dish's
+// cells rather than shrinking the dish — at 255 organisms ≈ 14 lines, more than half of a 596px
+// dish at 1280×720 (`deferred-work.md`, 3-18 review: the closed "no floor" entry names this as
+// what remains).
 const Pills = styled('ul')({
   listStyle: 'none',
   margin: 0,

@@ -4,7 +4,7 @@ baseline_commit: 0c4e82e5116c7e7f12f0fe3c78fcfd75139f8091
 
 # Story 3.18: Fullscreen Run Stage
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -37,7 +37,8 @@ entry button, the `fullscreen` state cell, `<FullscreenStage>` and its two parts
 pieces, and the tests. This story adds **no change to `PetriDishCanvas.tsx`, `useSimulation.ts`,
 `gridRenderer.ts`, `SimulationLoop`, anything in `packages/**`, `check-bundle-size.mjs`,
 `themes.css`, any route file, any repository, and nothing under `components/organisms/**` or
-`lib/organisms/**` (lane 4's surface)**.
+`lib/organisms/**` (lane 4's surface)**. *(FD4 owner override, 2026-09-18: `themes.css` DID change —
+three channel-composed tokens for the floating chrome; see FD4 (b) and the File List.)*
 
 1. **The header carries the entry, in Run mode only (spec §3.2; `petri-dish-play-mode.html:97-114`,
    `:551-560`; NFR-4.1).** `<BattleHeader>` renders a `<FullscreenButton>` (a plain
@@ -106,12 +107,16 @@ pieces, and the tests. This story adds **no change to `PetriDishCanvas.tsx`, `us
      `aria-hidden` `⛶` before it, chrome per `.fs-exit` minus the rgba surface (FD4: `transparent`
      on the stage's own `--gol-bg-primary`, `1px solid var(--gol-border-control)` — SC 1.4.11
      needs the control token, not `--gol-border`), hover → accent border + text, focus-visible ring,
-     no `transition`. It calls `onExit`.
+     no `transition`. It calls `onExit`. *(FD4 (b), 2026-09-18: the bar is `position: fixed` under
+     `--gol-scrim-top`, and the Exit surface is `--gol-surface-hud` — the mockup's `rgba(0,0,0,.4)`
+     as the one floating-chrome token — not `transparent`.)*
    - **The dish**: `children` — the live `<PetriDishCanvas>` inside its unchanged wrappers (AC4).
    - **HUD** (`.fs-hud` / `.hud-*`, mockup `:131-210`; `.control-btn*` `:212-259`): a centred row (`padding: 0 24px 40px` —
      the mockup's 40px bottom offset, in flow) holding one panel: `display: inline-flex; alignItems:
      center; gap: 20px; padding: 12px 20px; background: var(--gol-bg-secondary); border: 1px solid
-     var(--gol-border); maxWidth: 94vw; flexWrap: wrap; justifyContent: center`. Groups in this
+     var(--gol-border); maxWidth: 94vw; flexWrap: wrap; justifyContent: center`. *(FD4 (b): the row
+     is `position: fixed; bottom: 40px`, not in flow, and the panel's surface is `--gol-surface-hud`.)*
+     Groups in this
      order, separated by `1px × 28px` `--gol-border` dividers (`aria-hidden`): **Cycle** — a
      10px/uppercase `--gol-text-secondary` label `Cycle` + the zero-padded digits at
      20px/600/accent/`tabular-nums`/2px letter-spacing (`.hud-cycle-value`), through
@@ -149,7 +154,11 @@ pieces, and the tests. This story adds **no change to `PetriDishCanvas.tsx`, `us
      renderer letterboxes vertically, as it already does horizontally today). These values are a
      starting point; the invariants are (i) both rows visible with the dish between them at
      1280×720 and 1194×834, (ii) the dish's box strictly LARGER than in the chassis at 1280×720
-     (e2e AC10 (a)).
+     (e2e AC10 (a)). *(FD4 (b), 2026-09-18 — what shipped: `GridContainer` `padding: 0`; `PetriDishBox`
+     `width: min(94vw, 138vh); maxWidth: none; maxHeight: none; boxShadow: var(--gol-shadow-dish-glow)`
+     — width-declared, not height-driven. Invariant (i) reads "both floating rows on screen, the HUD
+     overlapping the dish's bottom edge (≈22px at 1280×720, ≈40px at 1194×834) as in the mockup";
+     (ii) holds: 990×592 vs 896×517.)*
    - The sidebar leaves the tree: `{!fullscreen && <SimulationSidebar>…</SimulationSidebar>}` — a
      `false` keeps child slot 0 occupied so `<SimulationMain>` stays at slot 1 (trap 1).
    - Inside `<SimulationMain>`: `<FullscreenStage active={fullscreen} …>` wraps the UNCHANGED
@@ -272,7 +281,9 @@ pieces, and the tests. This story adds **no change to `PetriDishCanvas.tsx`, `us
    same ≤ 10 Hz published values the sidebar reads (M2); `handlePlayPause`'s deps stay
    `[status, play, pause]` (3.12's per-publish-churn lesson — ❌ never `[sim]`); no `useMemo` on
    `totalLiving`-style render expressions; no `transition`, `animation`, `backdrop-filter` or
-   `box-shadow` on anything over the dish (FD4). `bench:check` is unaffected (no engine change —
+   `box-shadow` on anything over the dish (FD4) *(FD4 (b): the dish box ITSELF wears the static
+   `--gol-shadow-dish-glow`; nothing floating over the dish has a shadow, blur or transition)*.
+   `bench:check` is unaffected (no engine change —
    report the number anyway). **Bundle:** every new module (`FullscreenStage`, `PopulationPills`,
    `TransportControls`, `CycleDigits`) is imported ONLY from files inside the Run chunk
    (`BattleSimulationView.tsx`, `SimulationControlBar.tsx`, `CycleCounter.tsx`) — a static import
@@ -376,7 +387,8 @@ pieces, and the tests. This story adds **no change to `PetriDishCanvas.tsx`, `us
     (comment: reconciliation), `<FullscreenTopOverlay>` and `<FullscreenHUD>` as private children,
     the focus-on-mount effect on the Exit button, every mockup line cited on its styled block
     (the route's convention), FD4's deviations named where they apply (no rgba, no
-    backdrop-filter, no gradient, no glow, in-flow rows).
+    backdrop-filter, no gradient, no glow, in-flow rows) *— superseded 2026-09-18 by FD4 (b): no
+    rgba literal, no `backdrop-filter`, no `transition`; floating rows, gradient and glow as tokens*.
   - [x] (b) `FullscreenStage.test.tsx` per AC3's test list.
 
 - [x] **Task 4 — the view (AC4, AC5, AC9)**
@@ -538,7 +550,99 @@ Decisions below are left for the owner; nothing in them was resolved by the revi
   [`apps/web/components/battle/simulation/BattleSimulationView.tsx` `GridContainer` /
   `PetriDishBox`] — deferred: both supported tiers (NFR-3.1, ≥1024 wide; measured 1280×720 and
   1194×834) are fine; a `minHeight` or a scrolling stage column is a design value for the mockup
-  refresh; recorded in `deferred-work.md`.
+  refresh; recorded in `deferred-work.md`. **Closed 2026-09-18 by the FD4 (b) override**: the dish
+  is `min(94vw, 138vh)`, a function of the viewport alone; what remains (the fixed HUD covering
+  more of the dish on a short viewport or under a wide, wrapped roster) is in the closed entry.
+
+#### Second review (2026-09-18)
+
+Reviewed 2026-09-18 on **Fable** (`claude-fable-5-1`) against the Opus commits since the first
+review (`92ea1e7` FD4 (a) → (b); `61e4b3b` / `f43176c` — the owner's two decisions applied), plus a
+re-read of the full diff; the same three parallel layers. Triage: 1 `decision-needed`, 9 `patch`,
+2 `defer`, 12 dismissed. **The two first-review decisions are applied to intent**: (1) recorded in
+`deferred-work.md` with option (b) named, no code; (2) `toggleTo` returns on `event.detail > 1`, and
+the test's `Enter` really dispatches `detail: 0` under user-event 14.6.1 (`keypress.js` →
+`dispatchUIEvent(target, 'click')` with no `detail`). The no-`z-index` stacking claim was verified
+on the tree: nothing under `SimulationLayout` carries `position` / `transform` / `filter` /
+`contain`, so the fixed overlays paint above the dish by DOM order alone. CI: `61e4b3b` green
+(quality + e2e, all four projects); `f43176c` — HEAD and the PR head — triggered **no run**
+(`actions/runs?head_sha=` → 0), so the review commit's push is the first run on this content.
+
+- [ ] [Review][Decision] **HUD text falls under AA where the HUD overlaps a bright colony** — FD4
+  (b)'s reason (2) says the 0.82 `bg-secondary` surface "visually dominates whatever cells lie under
+  it"; the arithmetic says otherwise for the weakest gated token. `--gol-surface-hud` is
+  `rgb(26 26 26 / 0.82)`, so 18% of the cell colour composes through. `HudLabel` (10px) and the
+  extinct pill (12px) are `--gol-text-secondary` (`#999999`): on plain `bg-secondary` the pair is
+  6.1:1 (the gated row in `themeTokens.test.ts`); over the palette's yellow `#F0E442` the composite
+  is ≈ `rgb(64 62 33)` and the pair is **3.8:1**, ≈3.5:1 over a near-white shade, ≈4.2:1 over the
+  accent cyan — under WCAG AA's 4.5:1 for text this size (NFR-8.3 names the default theme as the
+  AA-guaranteed one). The label band IS over cells on the tablet tier (1194×834: the dish's bottom
+  edge is 80px from the viewport bottom, the HUD spans ≈40–102px, its text centre ≈71px) and within
+  a few px of them at 1280×720; axe reports the pair `incomplete`, so no gate sees it. Options:
+  **(a)** accept as the mockup's own property — record it under the FD4 override and in
+  `deferred-work.md`; **(b)** raise `--gol-surface-hud` to `/ 0.92` (composite over yellow ≈
+  `rgb(43 42 29)` → 5.1:1 for text-secondary; the panel still reads translucent; the Exit button
+  shares the token); **(c)** keep 0.82 and lift the HUD's two `--gol-text-secondary` uses
+  (`HudLabel`, the extinct pill) to `--gol-text-primary` (≈11:1 over yellow) — the mockup's
+  `.hud-label` is `#999`, so this is a visible deviation. Not patched: (b) changes an owner-chosen
+  value, (c) changes the mockup's typography, (a) records a known AA miss — the owner's call.
+  [`apps/web/app/themes.css` `--gol-surface-hud`; `FullscreenStage.tsx` `HudLabel`;
+  `PopulationPills.tsx` `Pill[data-extinct]`]
+- [x] [Review][Patch] Story text still says `themes.css` is untouched in five places (Story
+  section, Dev Notes constraints, What NOT to build, Project Structure "Not touched", Dev Agent
+  Record "For the reviewer") and the File List omits it — it is a shared-lane file (4.2 / 4.6 / 4.10
+  appended tokens; the new block sits directly above 4.10's), so a lane-4 token append is an
+  adjacent-hunk merge conflict the reviewer note should name
+  [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md:37-40, 547-554, 843-845, 938-939,
+  1119-1121, 1138-1156`]
+- [x] [Review][Patch] AC3 (Exit `transparent`, HUD "in flow" on `--gol-bg-secondary`), AC4
+  (`padding: 20px 24px`, `width: auto; height: 100%`, invariant (i) "dish between them"), AC9 (no
+  `box-shadow`) and Task 3 (a) ("no glow, in-flow rows") still describe FD4 (a); the FD4 override's
+  "What shipped" omits the Exit button's `--gol-surface-hud` surface (the mockup's `rgba(0,0,0,.4)`)
+  [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md:106-114, 145-152, 274-275, 378-379,
+  675-677`]
+- [x] [Review][Patch] The first review's `[Defer]` "No floor on the fullscreen dish height" reads
+  as open while `deferred-work.md` closes it under FD4 (b)
+  [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md:534-541`]
+- [x] [Review][Patch] The proposed lane-gate row says 4.15 is "the third consumer of all three";
+  the first review corrected README / `deferred-work.md` to third of `<TransportControls>` /
+  `<CycleDigits>`, second of the pills [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md`
+  `Proposed lane gate`]
+- [x] [Review][Patch] Head comments describe the in-flow layout: "the dish box becomes
+  height-driven" / "a title row above the dish, a HUD below it"
+  [`apps/web/components/battle/simulation/BattleSimulationView.tsx:62`;
+  `apps/web/components/battle/simulation/FullscreenStage.tsx:11-12`]
+- [x] [Review][Patch] `Pills` comment: "the HUD grows and the height-driven dish gives up the
+  difference" cites a closed entry; with a fixed HUD a wrapped roster grows UPWARD over the dish
+  (255 organisms ≈ 14 pill lines ≈ 370px over a 596px dish at 1280×720) — recorded nowhere
+  [`apps/web/components/battle/simulation/PopulationPills.tsx:45-46`; `deferred-work.md` closed
+  "no floor" entry]
+- [x] [Review][Patch] Decision-2 comment's geometry is pre-FD4 (b): "Exit ≈ y 12–43" came from
+  `12px` padding; shipped `18px` → Exit ≈ y 18–49 (the overlap with `Lab` at y 20–51 still holds)
+  [`apps/web/components/battle/BattleHeader.tsx:199-204`]
+- [x] [Review][Patch] "the top bar's scrim overlaps its top edge on none of the supported ones" is
+  false at 1280×720: the dish top is at 8.6vh ≈ 62px and the bar ≈ 67px (18 + ~31 + 18), so the
+  gradient's last ~5px (≈0.07 alpha) cross the edge; and the `ExitButton` contrast sentence names
+  `--gol-bg-primary` as the button's ground while its surface is now `--gol-surface-hud`
+  [`apps/web/components/battle/simulation/BattleSimulationView.tsx:199-201`;
+  `apps/web/components/battle/simulation/FullscreenStage.tsx:133-138`]
+- [x] [Review][Patch] `deferred-work.md`'s dpr² entry says the swap yields "a height-driven dish
+  box" [`docs/implementation-artifacts/deferred-work.md:200`]
+- [x] [Review][Defer] Decision 2 (b)'s residuals: the header's Fullscreen button (right edge ≈
+  W−171) and the stage's Exit (x W−184..W−24, y 18–49 vs 20–51) overlap by ≈13px across the swap
+  and neither carries the `detail` guard (a double-click there enters and exits, or exits and
+  re-enters — two layout swaps, no session drop); iOS WebKit synthesises each tap's `click` with
+  `detail: 1`, so a touch double-tap on Exit still reaches `Lab` on an iPad (the `tablet` Playwright
+  project is desktop WebKit and cannot see it); and no browser test delivers a real cross-target
+  `detail: 2` (the unit test proves the `if`, not the UA's click-count policy)
+  [`apps/web/components/battle/BattleHeader.tsx` `FullscreenButton` / `toggleTo`;
+  `apps/web/components/battle/simulation/FullscreenStage.tsx` `ExitButton`] — deferred: the owner
+  scoped the fix to the mode toggle; recorded in `deferred-work.md`.
+- [x] [Review][Defer] A third `VisuallyHidden` copy lives in lane 4's
+  `organisms/editor/ColorPickerField.tsx` ("The `GridSettingsSection.tsx` copy") — FD5 (a)'s
+  drift, in a file this story may not touch
+  [`apps/web/components/organisms/editor/ColorPickerField.tsx:226-234`] — deferred, pre-existing
+  (lane 4 surface); pointer recorded in `deferred-work.md` for the next `organisms/editor` story.
 
 ## Dev Notes
 
@@ -551,7 +655,7 @@ Decisions below are left for the owner; nothing in them was resolved by the revi
   `SpeedControl.tsx` (comment only), `GridSizeControl.tsx`, `SidebarFooter.tsx`, `useLeaveGuard.ts`,
   `themes.css`, `check-bundle-size.mjs`, any route file, anything in `packages/**`, anything in
   `components/organisms/**` / `lib/organisms/**` (lane 4 — the 3.17 review reverted exactly such a
-  touch).
+  touch). *(`themes.css`: superseded 2026-09-18 by the FD4 override — three tokens appended.)*
 - **Hot state stays in refs (RFC-005 Decision 5, AR-29).** The swap is CSS + reconciliation. No
   effect watches `fullscreen` in the view; the ONLY effects this story adds are the two focus moves
   (an `.focus()` call is not state). Nothing new runs per cycle; the HUD is a reader of the ≤ 10 Hz
@@ -673,8 +777,9 @@ dish `min(94vw, 138vh)`.
   0.82 `bg-secondary` surface visually dominates whatever cells lie under it; (3) is real and is
   answered by dropping `backdrop-filter` alone — the floating layout costs nothing per frame. What
   shipped: `.fs-top` and `.fs-hud` `position: fixed` over the dish, the dish `min(94vw, 138vh)`,
-  three tokens (`--gol-scrim-top`, `--gol-surface-hud`, `--gol-shadow-dish-glow`), no blur, no
-  `transition`. Measured: **990×592 at 1280×720** (mockup 994×596), **1486×890 at 1920×1080**.
+  three tokens (`--gol-scrim-top`, `--gol-surface-hud`, `--gol-shadow-dish-glow`) — the Exit button
+  wears `--gol-surface-hud` too (the mockup's `rgba(0,0,0,.4)`; one token for the floating chrome
+  rather than a second near-black one) — no blur, no `transition`. Measured: **990×592 at 1280×720** (mockup 994×596), **1486×890 at 1920×1080**.
 
 **FD5 — `<VisuallyHidden>`.**
 - **(a) Promote `editor/GridSettingsSection.tsx:146-153` to `apps/web/components/VisuallyHidden.tsx`;
@@ -842,7 +947,8 @@ dish `min(94vw, 138vh)`.
   `renderer.resize` call from the view.
 - ❌ No change to `PetriDishCanvas.tsx`, `useSimulation.ts`, `gridRenderer.ts`, `packages/**`,
   route files, `themes.css`, `check-bundle-size.mjs` — unless AC9's red-bundle clause fires, and
-  then ONLY the documented variant split, flagged loudly.
+  then ONLY the documented variant split, flagged loudly. *(`themes.css`: superseded 2026-09-18 by
+  the FD4 override, not by the bundle clause — three composed tokens; the bundle stayed at 309.1 KB.)*
 - ❌ No `error.tsx`; no `aria-live`; no `title` tooltips on the new buttons (their text is the
   name).
 - ❌ No edits to `component-tree-battle-page.md`, `architecture.md`, RFCs, mockups, or any 2.x/3.x
@@ -936,8 +1042,8 @@ None new. React 19.2.7 (fragments, `inert` passthrough, `autoFocus`); Next 16.2.
 - Modified (docs): `docs/implementation-artifacts/deferred-work.md`, `sprint-status.yaml`, this
   file.
 - Not touched: `apps/web/components/PetriDishCanvas.tsx`, `apps/web/lib/battle/useSimulation.ts`,
-  `apps/web/lib/canvas/**`, `apps/web/app/**`, `apps/web/app/themes.css`,
-  `scripts/check-bundle-size.mjs`, `packages/**`, `apps/web/components/organisms/**`,
+  `apps/web/lib/canvas/**`, `apps/web/app/**` except `themes.css` (three tokens, FD4 (b) — see the
+  File List), `scripts/check-bundle-size.mjs`, `packages/**`, `apps/web/components/organisms/**`,
   `apps/web/lib/organisms/**`, any planning artifact, any epic-4 story or status line.
 - Naming: PascalCase component files; `data-fullscreen` (view root), `data-enter-fullscreen`
   (header button); DOM text sentence case (`Fullscreen`, `Exit fullscreen`, `Run`, `Cycle`,
@@ -1117,8 +1223,12 @@ Claude Opus 5 (1M context) — `claude-opus-5[1m]`, under `implement-next-story`
   (b), `event.detail > 1` guard on the mode toggle in `BattleHeader.tsx` + one test (`detail: 2`
   ignored; `detail: 1` and keyboard `Enter` still fire). `BattleHeader.test.tsx`: 18/18.
 - **For the reviewer**: nothing here touches `PetriDishCanvas.tsx`, `useSimulation.ts`,
-  `gridRenderer.ts`, `packages/**`, `themes.css`, `check-bundle-size.mjs`, any route file, or
-  anything under `components/organisms/**` / `lib/organisms/**`. The bundle stayed green, so the
+  `gridRenderer.ts`, `packages/**`, `check-bundle-size.mjs`, any route file, or anything under
+  `components/organisms/**` / `lib/organisms/**`. `themes.css` IS touched since the FD4 override
+  (2026-09-18): three tokens appended at the end of `:root`, directly above Story 4.10's rule-action
+  block — `themes.css` is a shared-lane file (4.2 / 4.6 / 4.10 each appended there), so a lane-4
+  token append lands as an adjacent-hunk conflict; merge one lane's PR, let the other sync. The
+  bundle stayed green, so the
   documented `PetriDishCanvas` split (which would touch a file 4.14/4.15 import) was NOT needed
   and no lane gate is proposed on that account; the lane gate the story file already proposes
   (4.15 requires 3.18, for the three shared `simulation/` pieces) stands.
@@ -1154,6 +1264,8 @@ Modified:
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
 - `docs/implementation-artifacts/3-18-fullscreen-run-stage.md` (this file)
+- `apps/web/app/themes.css` (FD4 (b), 2026-09-18: `--gol-scrim-top`, `--gol-surface-hud`,
+  `--gol-shadow-dish-glow`)
 
 ## Change Log
 
@@ -1174,9 +1286,14 @@ Modified:
 - 2026-09-18 — Addressed code review findings - 2 items resolved (the two owner decisions): the
   chunk-fetch fullscreen window accepted and recorded in `deferred-work.md`; the mode toggle
   ignores repeat clicks (`event.detail > 1`), with a test. Status → review.
+- 2026-09-18 — Second code review (in-progress): 9 patches applied (the story's `themes.css` /
+  in-flow statements brought in line with FD4 (b), the File List, the lane-gate wording, four code
+  comments, one `deferred-work.md` line), 2 deferred to `deferred-work.md` (decision 2's residuals;
+  a third `VisuallyHidden` copy in lane 4), 1 decision left open for the owner (HUD text under AA
+  where the translucent HUD overlaps a bright colony).
 
 Dev Model: opus   # architecture-shaping: it decides where `fullscreen` lives (BattlePage, against spec §6), establishes the CSS-driven no-remount layout-swap pattern that 3.19's F key toggles and that React reconciliation can silently break, and factors <TransportControls>/<CycleDigits>/<PopulationPills> out of 3.12/3.14's files as the pieces 4.15 builds on
-Proposed lane gate: { story: 4-15-preview-simulation, requires: 3-18-fullscreen-run-stage, why: "3.18 lifts the transport trio out of <SimulationControlBar> (<TransportControls>), the zero-padded digits out of <CycleCounter> (<CycleDigits>) and ships <PopulationPills> as the compact population sibling — the preview panel (spec §8 / §3.12: SpeedControl + compact PopulationStats + cycle counter + Play/Stop/Step) is the third consumer of all three and must reuse them rather than re-author or edit the same simulation/ files concurrently" }
+Proposed lane gate: { story: 4-15-preview-simulation, requires: 3-18-fullscreen-run-stage, why: "3.18 lifts the transport trio out of <SimulationControlBar> (<TransportControls>), the zero-padded digits out of <CycleCounter> (<CycleDigits>) and ships <PopulationPills> as the compact population sibling — the preview panel (spec §8 / §3.12: SpeedControl + compact PopulationStats + cycle counter + Play/Stop/Step) is the third consumer of <TransportControls> and <CycleDigits> and the second of <PopulationPills>, and must reuse them rather than re-author or edit the same simulation/ files concurrently" }
 
 ---
 

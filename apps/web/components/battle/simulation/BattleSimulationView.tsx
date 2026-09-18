@@ -59,7 +59,7 @@ import SpeedControl from './SpeedControl';
  * `<BattlePage>`'s child, so the page flips the boolean and unmounts the header while it is on) —
  * and the view answers it three ways, none of which reach the hook: (1) `data-fullscreen` on the
  * root selects a second set of styles on the SAME styled blocks (`SimulationLayout` goes
- * `position: fixed; inset: 0`, the dish box becomes height-driven); (2) the sidebar and the bottom
+ * `position: fixed; inset: 0`, the dish box becomes `min(94vw, 138vh)`); (2) the sidebar and the bottom
  * bar leave the tree through `false`-holding slots; (3) `<FullscreenStage>` — mounted in BOTH
  * states — wraps the UNCHANGED dish wrappers and renders its title row and HUD only while active.
  * Same component types at the same child positions above the canvas in both states, so React
@@ -197,8 +197,10 @@ const GridContainer = styled('div')({
 // Fullscreen (3.18, FD4 (b)): the mockup's `.petri-dish-grid` verbatim — `width: min(94vw,
 // 138vh)` at 5:3, i.e. 94% of the viewport's width unless height binds first (138vh × 3/5 =
 // 82.8vh tall), centred by `GridContainer`. The floating HUD overlaps the dish's bottom edge on
-// most viewports, as it does in the mockup; the top bar's scrim overlaps its top edge on none of
-// the supported ones. The chassis's `1000px` cap is lifted (`maxWidth: none`) — that cap is what
+// every supported viewport (≈22px at 1280×720, ≈40px at 1194×834), as it does in the mockup; the
+// top bar (≈67px: 18 + the ~31px Exit button + 18) reaches the dish's top edge (8.6vh ≈ 62px when
+// height binds) by a few px at 720-tall viewports, where the gradient is already near-transparent.
+// The chassis's `1000px` cap is lifted (`maxWidth: none`) — that cap is what
 // "larger than the chassis" is measured against (e2e AC10 (a)), and `vw`/`vh` keep the box inside
 // the viewport, which the same test asserts. The glow is `--gol-shadow-dish-glow` (the mockup's
 // `box-shadow: 0 0 40px rgba(0,212,255,.12)`, composed from `--gol-accent-channel` — a static

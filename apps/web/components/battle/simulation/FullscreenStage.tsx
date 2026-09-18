@@ -8,8 +8,8 @@ import PopulationPills from './PopulationPills';
 import TransportControls, { type SimulationControlBarProps } from './TransportControls';
 
 /**
- * The immersive Run stage (spec §3.14; `petri-dish-play-mode-fullscreen.html`): a title row above
- * the dish, a HUD below it, the dish itself as `children`. Presentational and total — no hook
+ * The immersive Run stage (spec §3.14; `petri-dish-play-mode-fullscreen.html`): a title bar floating
+ * over the dish's top edge, a HUD floating over its bottom edge, the dish itself as `children`. Presentational and total — no hook
  * beyond one focus effect, no state, no `sim`: the HUD reads the hook's <= 10 Hz published values
  * (`cycle`, `population`, `genPerSec` — M2) that `<BattleSimulationView>` hands it, the same ones
  * the sidebar reads, and the transport is the bar's own cluster (`<TransportControls>`, FD7) in a
@@ -133,9 +133,11 @@ const ModeBadge = styled('span')({
 // Mockup: `.fs-exit` (:74-92) minus `transition: all 0.2s` (the axe mid-fade trap). Its
 // `rgba(0, 0, 0, 0.4)` surface is `--gol-surface-hud` — the same translucent panel token the HUD
 // wears, one token for the stage's floating chrome rather than a second near-black one.
-// `--gol-border-control`, not `--gol-border`: SC 1.4.11 needs the control token's 3:1 against
-// `--gol-bg-primary` (`themeTokens.test.ts`'s control pairs). Hover is the mockup's own accent
-// border + text (`:89-92`).
+// `--gol-border-control`, not `--gol-border`: SC 1.4.11 measures a control's border against the
+// colour ADJACENT to it — outside the button that is the scrim over the stage's `--gol-bg-primary`
+// (the scrim is the same channel, so `themeTokens.test.ts`'s control pair is the rendered one); the
+// `--gol-surface-hud` fill sits inside the border and is not what the border is measured against.
+// Hover is the mockup's own accent border + text (`:89-92`).
 const ExitButton = styled('button')({
   background: 'var(--gol-surface-hud)',
   border: '1px solid var(--gol-border-control)',

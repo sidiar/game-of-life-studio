@@ -197,7 +197,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 ## Deferred from: Story 2-3-renderer-dirty-region-editing-paths implementation (2026-08-26)
 
-- **`applyDevicePixelSizing`'s `dpr²` exposure survives for `static` tiles repainted at a 0-width box** — the residual of the 1.11 review item Story 2.3 closed by documentation rather than by re-engineering. The anti-double-scaling guard compares `canvas.width` against the *instance's* `backingWidth`, so it only ever matches on a renderer that outlives one paint. `<PetriDishCanvas variant="static">` constructs a renderer per paint (Story 1.11 forced decision 2), so on any repaint where `canvas.clientWidth` reads 0 — an ancestor `display:none`, a collapsed layout, a `ResizeObserver` notification for a 0×0 box — the backing store becomes `cssPx * dpr²`, then `dpr³`. Not reachable in the current Gallery layout, which never produces a 0-width repaint, and the caller-side guard (`PetriDishCanvas` ignores a notification whose `contentRect` matches the box last rasterised) narrows the window further. The fix, if it is ever needed, is to make the guard instance-independent by stamping the CSS box the backing store was computed from onto the canvas element (a `data-*` attribute or an expando), which is renderer state living outside the renderer — worth doing only when a real 0-width repaint exists to justify it. **Revisit if a static tile is ever observed rendering at the wrong scale**, or with Story 3.18 (fullscreen re-layout) if that path introduces a 0-width transition. — ✅ **Checked by Story 3.18 (2026-09-17): it does not.** The fullscreen swap is a `data-fullscreen` attribute selecting a second set of styles on the SAME wrappers (`position: fixed; inset: 0` on the view root, a height-driven dish box) — no `display: none` anywhere on the canvas's ancestor chain, no unmount, no 0-width frame; the dish goes from one positive box straight to another, and `PlaybackDish`'s observer sees exactly one resize. The trigger stays "a static tile at the wrong scale".
+- **`applyDevicePixelSizing`'s `dpr²` exposure survives for `static` tiles repainted at a 0-width box** — the residual of the 1.11 review item Story 2.3 closed by documentation rather than by re-engineering. The anti-double-scaling guard compares `canvas.width` against the *instance's* `backingWidth`, so it only ever matches on a renderer that outlives one paint. `<PetriDishCanvas variant="static">` constructs a renderer per paint (Story 1.11 forced decision 2), so on any repaint where `canvas.clientWidth` reads 0 — an ancestor `display:none`, a collapsed layout, a `ResizeObserver` notification for a 0×0 box — the backing store becomes `cssPx * dpr²`, then `dpr³`. Not reachable in the current Gallery layout, which never produces a 0-width repaint, and the caller-side guard (`PetriDishCanvas` ignores a notification whose `contentRect` matches the box last rasterised) narrows the window further. The fix, if it is ever needed, is to make the guard instance-independent by stamping the CSS box the backing store was computed from onto the canvas element (a `data-*` attribute or an expando), which is renderer state living outside the renderer — worth doing only when a real 0-width repaint exists to justify it. **Revisit if a static tile is ever observed rendering at the wrong scale**, or with Story 3.18 (fullscreen re-layout) if that path introduces a 0-width transition. — ✅ **Checked by Story 3.18 (2026-09-17): it does not.** The fullscreen swap is a `data-fullscreen` attribute selecting a second set of styles on the SAME wrappers (`position: fixed; inset: 0` on the view root, a `min(94vw, 138vh)` dish box) — no `display: none` anywhere on the canvas's ancestor chain, no unmount, no 0-width frame; the dish goes from one positive box straight to another, and `PlaybackDish`'s observer sees exactly one resize. The trigger stays "a static tile at the wrong scale".
 
 - **`drawFull` re-primes the whole colour-state baseline on every call — O(cells) plus one allocation per grid shape** — `resetDirtyState()` sweeps all `width * height` cells through `colourStateAt` after every full repaint, and `resize()`/`setGridLines()` both route through it. At 100×60 that is a 6000-iteration pass and a 12 KB `Uint16Array`, which is affordable precisely because it runs on mount/resize/toggle and never on the per-edit `draw` path. Epic 3 changes the shape of that claim: **Decision D.3 repaints after every step**, and if Story 3.8's loop reaches for `drawFull` rather than `markDirty` + `draw`, this sweep lands at the cycle rate. Correctness is not in question. **Revisit with Story 3.7** (the `vitest bench` harness and the 100×60 performance gate), which is the first place a measurement would justify a change — and check Story 3.8's loop calls `draw`, not `drawFull`, while you are there. — **✅ CLOSED in Story 3.7: measured, affordable, and the `draw`-vs-`drawFull` question is answered with both numbers.** The O(cells) re-prime costs **~0.08 ms** at 100×60 — 0.5% of a 16.667 ms frame — so it would be affordable even at the cycle rate Decision D.3 implies. On *decision* cost alone `drawFull` is in fact CHEAPER (groupByColourState ~0.07 + this ~0.08 ≈ 0.15 ms) than the dirty path's UPPER BOUND with every cell marked and every occupied cell reading as changed (**~0.7 ms**), because `markDirty` allocates a coordinate per cell and routes it through a `Set`. ⚠️ **The recommendation is still `draw`**, for the half no off-browser harness can measure: `draw` touches the canvas only for cells whose colour state actually changed, while `drawFull` repaints the whole background, every cell and every grid line every frame — and jsdom has no canvas to rasterize into. **Story 3.8 now has both numbers instead of an assumption**; if it takes `drawFull` it should say so against these figures and measure the paint in a browser. Full table: `docs/implementation-artifacts/performance-baseline-validation.md`.
 
@@ -1672,7 +1672,10 @@ deferred:
   the chrome is `position: fixed` and the dish is `min(94vw, 138vh)`, so its height is a function
   of the viewport alone — no flex competition, no shrink toward 0px. What remains is the mockup's
   own property: on a short viewport the floating HUD covers more of the dish's bottom edge (at
-  1280×720 it overlaps by ~33px, as in the mockup). Original entry kept for the record: The title
+  1280×720 it overlaps by ~33px, as in the mockup) — and a WIDE roster does the same from below:
+  the panel wraps (`HudPanel` and `Pills` both `flexWrap`) and, being `position: fixed; bottom:
+  40px`, grows UPWARD over the cells (255 organisms ≈ 14 pill lines ≈ 370px, more than half of a
+  596px dish at 1280×720). The dish never shrinks for either; the HUD covers it instead. Original entry kept for the record: The title
   row and HUD are in flow and take height first; `GridContainer` (`flex: 1; minHeight: 0`) hands the remainder to the height-driven
   `PetriDishBox`, with no minimum. On a short viewport — or once the HUD wraps to several lines
   with a wide roster (the pills wrap since this review) — the dish shrinks toward 0px;
@@ -1682,3 +1685,37 @@ deferred:
   container (e.g. `min(200px, 40vh)`) or a scrolling stage column is a design value: **the mockup
   refresh** (this story's candidate 3 above), or the first story that adds a supported tier below
   720px tall.
+
+## Deferred from: code review of 3-18-fullscreen-run-stage (2026-09-18, second review)
+
+Reviewed on **Fable** against the Opus commits that reversed FD4 to (b) and applied the owner's two
+first-review decisions. One `decision-needed` item (HUD text under AA where the translucent HUD
+overlaps a bright colony) is open in the story file's Review Findings — the owner's, not recorded
+here. The items consciously deferred:
+
+- **Decision 2 (b)'s residuals — the `detail > 1` guard covers the mode toggle only.** (1) The
+  header's Fullscreen button (right edge ≈ W−171 with `Actions`' 15px gap) and the stage's Exit
+  (x W−184..W−24, y 18–49 against the header row's y 20–51) overlap by ≈13px across the swap, and
+  neither carries the guard: a pointer double-click in that strip enters and immediately exits (or
+  exits and re-enters) — two layout swaps and two `renderer.resize` calls, no session drop, focus
+  ends where it started. (2) iOS/iPadOS WebKit synthesises each tap's `click` with `detail: 1`, so a
+  touch double-tap on Exit still lands its second tap on the remounted `Lab` on an iPad — the case
+  the decision meant to close, on the tablet tier NFR-3.1 names; the `tablet` Playwright project is
+  desktop WebKit and cannot observe it. (3) No browser test delivers a real cross-target
+  `detail: 2` — `BattleHeader.test.tsx` dispatches the event by hand, which proves the `if`, not
+  the UA's click-count policy (Chromium: time + radius, target-agnostic; Gecko: widget count plus
+  `EventStateManager` checks). **If any of the three ever matters, the structural fix is the one
+  the first review named as option (c)**: do not remount the header under the pointer — keep the
+  Exit button's box clear of the header's Mode group, or gate `onModeToggle` for one frame after
+  an exit. Guarding Exit / Fullscreen with the same `detail` check is the cheap half-measure and
+  does nothing for (2). Owner: Story 3.19 (the `F` toggle shares the geometry) or 6.11's keyboard /
+  pointer sweep.
+- **A third `VisuallyHidden` copy lives in lane 4's surface.**
+  `apps/web/components/organisms/editor/ColorPickerField.tsx:226-234` carries the same recipe as the
+  one 3.18 promoted to `apps/web/components/VisuallyHidden.tsx` (its own comment calls it "The
+  `GridSettingsSection.tsx` copy" — a copy of a copy that no longer exists). FD5 (a)'s rationale ("a
+  second copy is exactly the drift the README warns about") is now the literal state of the tree,
+  and 3.18 correctly did not touch `organisms/**`. **Pointer for the next story that edits
+  `organisms/editor/ColorPickerField.tsx`** (lane 4): replace the local styled block with
+  `import VisuallyHidden from '@/components/VisuallyHidden'` and update `VisuallyHidden.tsx`'s head
+  comment, which lists two renderers. Not a lane gate — an import swap, no shared file.
