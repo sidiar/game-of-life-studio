@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { useCallback, useId } from 'react';
 import { styled } from '@mui/material/styles';
 import {
   isRuleAction,
@@ -9,7 +9,9 @@ import {
   RULE_ACTIONS,
   type RuleDraft,
 } from '@/lib/organisms/ruleDraft';
-import { Field, Label } from './fieldStyles';
+import type { ConditionDraft, OrganismOption } from '@/lib/organisms/conditionDraft';
+import { Field, Label, SelectInput, TextInput } from './fieldStyles';
+import ConditionsEditor from './ConditionsEditor';
 
 /**
  * One survival rule under edit (Story 4.10, AC4, FR-2.5): `⋮⋮ · [Born] · Rule N · ✕` in the
@@ -38,7 +40,7 @@ import { Field, Label } from './fieldStyles';
  *   `cellState`'s `empty`/`alive`/`occupied` meaning gets explained — is where that copy earns its
  *   place.
  *
- * Followers: Story 4.11 adds "Conditions (all must match)" after Action, Story 4.12 removes the
+ * Story 4.11 mounts `<ConditionsEditor>` after Action. Followers: Story 4.12 removes the
  * handle's `disabled` and adds the drag handlers, Story 4.13 flags a zero-condition card at Save.
  *
  * `useId()` gives four ids per card (label, summary, counter, action) — the multi-instance case
@@ -152,32 +154,6 @@ const CardBody = styled('div')({
   borderTop: '1px solid var(--gol-border)',
 });
 
-// Shared by `SummaryInput` and `ActionSelect` — below the three-callers lift threshold (Story 4.7
-// FD7): the name field's `Input` is the other caller today, Story 4.11's condition inputs are the
-// third and lift this into `fieldStyles.ts` then.
-const controlRules = {
-  width: '100%',
-  background: 'var(--gol-bg-hover)',
-  border: '1px solid var(--gol-border-control)',
-  color: 'var(--gol-text-primary)',
-  padding: '10px 12px',
-  fontSize: '13px',
-  fontFamily: 'inherit',
-  '&::placeholder': {
-    color: 'var(--gol-text-secondary)',
-    opacity: 0.8,
-  },
-  '&:focus-visible': {
-    outline: '2px solid var(--gol-accent)',
-    outlineOffset: '-2px',
-  },
-} as const;
-
-const SummaryInput = styled('input')(controlRules);
-
-// The `<AddSelect>` FD3 reasoning: `cursor: pointer` and the UA's own arrow, never hidden.
-const ActionSelect = styled('select')({ ...controlRules, cursor: 'pointer' });
-
 // `<OrganismNameField>`'s `CharCount`, minus the `data-over-limit` rule — unreachable here: the
 // summary is clamped, never over-limit.
 const CharCount = styled('div')({
@@ -191,16 +167,33 @@ export interface RuleCardProps {
   rule: RuleDraft;
   /** 0-based position — the label, the names and the ids all derive from it; nothing stores it. */
   index: number;
+  organisms: readonly OrganismOption[];
   onChange(id: string, patch: Partial<RuleDraft['payload']>): void;
   onDelete(id: string): void;
+  onConditionsChange(
+    id: string,
+    update: (conditions: readonly ConditionDraft[]) => readonly ConditionDraft[],
+  ): void;
 }
 
-export default function RuleCard({ rule, index, onChange, onDelete }: RuleCardProps) {
+export default function RuleCard({
+  rule,
+  index,
+  organisms,
+  onChange,
+  onDelete,
+  onConditionsChange,
+}: RuleCardProps) {
   const labelId = useId();
   const summaryId = useId();
   const counterId = useId();
   const actionId = useId();
   const n = index + 1;
+  const handleConditionsChange = useCallback(
+    (update: (conditions: readonly ConditionDraft[]) => readonly ConditionDraft[]) =>
+      onConditionsChange(rule.id, update),
+    [onConditionsChange, rule.id],
+  );
 
   return (
     <Card>
@@ -225,7 +218,7 @@ export default function RuleCard({ rule, index, onChange, onDelete }: RuleCardPr
         <CardBody>
           <Field>
             <Label htmlFor={summaryId}>Summary</Label>
-            <SummaryInput
+            <TextInput
               id={summaryId}
               type="text"
               value={rule.payload.summary}
@@ -245,7 +238,7 @@ export default function RuleCard({ rule, index, onChange, onDelete }: RuleCardPr
           </Field>
           <Field>
             <Label htmlFor={actionId}>Action</Label>
-            <ActionSelect
+            <SelectInput
               id={actionId}
               value={rule.payload.action}
               onChange={(event) => {
@@ -260,8 +253,13 @@ export default function RuleCard({ rule, index, onChange, onDelete }: RuleCardPr
                   {ruleActionLabel(action)}
                 </option>
               ))}
-            </ActionSelect>
+            </SelectInput>
           </Field>
+          <ConditionsEditor
+            conditions={rule.conditions}
+            organisms={organisms}
+            onConditionsChange={handleConditionsChange}
+          />
         </CardBody>
       </div>
     </Card>

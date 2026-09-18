@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { styled } from '@mui/material/styles';
-import { removeRule, updateRulePayload, type RuleDraft } from '@/lib/organisms/ruleDraft';
+import type { ConditionDraft, OrganismOption } from '@/lib/organisms/conditionDraft';
+import {
+  removeRule,
+  updateRuleConditions,
+  updateRulePayload,
+  type RuleDraft,
+} from '@/lib/organisms/ruleDraft';
 import AddRuleButton from './AddRuleButton';
 import RuleCard from './RuleCard';
 
@@ -62,6 +68,7 @@ const EmptyDescription = styled('p')({
 
 export interface RulesEditorProps {
   rules: readonly RuleDraft[];
+  organisms: readonly OrganismOption[];
   /**
    * Updater-style, like `setState`: the modal applies it inside ONE functional `setDraft`, so two
    * rule mutations in one batch cannot clobber each other (FD8). The list helpers in
@@ -76,7 +83,12 @@ export interface RulesEditorProps {
   onAddRule(): void;
 }
 
-export default function RulesEditor({ rules, onRulesChange, onAddRule }: RulesEditorProps) {
+export default function RulesEditor({
+  rules,
+  organisms,
+  onRulesChange,
+  onAddRule,
+}: RulesEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const prevIdsRef = useRef<readonly string[] | null>(null);
 
@@ -88,6 +100,12 @@ export default function RulesEditor({ rules, onRulesChange, onAddRule }: RulesEd
 
   const handleDelete = useCallback(
     (id: string) => onRulesChange((current) => removeRule(current, id)),
+    [onRulesChange],
+  );
+
+  const handleConditionsChange = useCallback(
+    (id: string, update: (conditions: readonly ConditionDraft[]) => readonly ConditionDraft[]) =>
+      onRulesChange((current) => updateRuleConditions(current, id, update)),
     [onRulesChange],
   );
 
@@ -144,8 +162,8 @@ export default function RulesEditor({ rules, onRulesChange, onAddRule }: RulesEd
         }
       }
     }
-    // Same-length changes (a summary keystroke, an action change, Story 4.11's condition edits,
-    // Story 4.12's reorder) move no focus.
+    // Same-length changes (a summary keystroke, an action change, a condition edit inside
+    // `<ConditionsEditor>`, Story 4.12's reorder) move no focus.
 
     prevIdsRef.current = ids;
   }, [rules]);
@@ -170,8 +188,10 @@ export default function RulesEditor({ rules, onRulesChange, onAddRule }: RulesEd
               key={rule.id}
               rule={rule}
               index={index}
+              organisms={organisms}
               onChange={handleChange}
               onDelete={handleDelete}
+              onConditionsChange={handleConditionsChange}
             />
           ))}
         </RulesList>

@@ -9,20 +9,26 @@ import {
   appendRule,
   createNewRuleDraft,
   ruleActionLabel,
+  ruleDraftFrom,
   type RuleDraft,
 } from '@/lib/organisms/ruleDraft';
 import RulesEditor from './RulesEditor';
 
 const NO_RULES: readonly RuleDraft[] = [];
+const ORGANISMS = [
+  { id: 'org-a', name: 'Alpha' },
+  { id: 'org-b', name: 'Beta' },
+];
+
+// Deterministic id counter, never `crypto` — matches the `ruleDraft.test.ts` idiom.
+function counter() {
+  let n = 0;
+  return () => `c${++n}`;
+}
 
 // One rule of each action, drawn from the mock organisms' real rules — Conway's Classic has no Die
 // rule (`defaultWorkspace.ts`'s own comment: order-is-priority means no explicit Die rule is
 // needed), so the Die rule comes from a mock organism.
-function stripHash(rule: SurvivalRule): RuleDraft {
-  const { contentHash: _contentHash, ...draft } = rule;
-  return draft;
-}
-
 function ruleWithAction(rules: readonly SurvivalRule[], action: RuleDraft['payload']['action']) {
   const rule = rules.find((r) => r.payload.action === action);
   if (!rule) throw new Error(`fixture has no ${action} rule`);
@@ -31,9 +37,9 @@ function ruleWithAction(rules: readonly SurvivalRule[], action: RuleDraft['paylo
 
 const [aggressive] = createMockOrganisms();
 const THREE: readonly RuleDraft[] = [
-  stripHash(ruleWithAction(CONWAYS_CLASSIC.survivalRules, 'born')),
-  stripHash(ruleWithAction(CONWAYS_CLASSIC.survivalRules, 'survive')),
-  stripHash(ruleWithAction(aggressive.survivalRules, 'die')),
+  ruleDraftFrom(ruleWithAction(CONWAYS_CLASSIC.survivalRules, 'born'), counter()),
+  ruleDraftFrom(ruleWithAction(CONWAYS_CLASSIC.survivalRules, 'survive'), counter()),
+  ruleDraftFrom(ruleWithAction(aggressive.survivalRules, 'die'), counter()),
 ];
 
 /** Holds `rules` in real state and wires `onRulesChange`/`onAddRule` to the modal's own shape
@@ -64,6 +70,7 @@ function Harness({
       </button>
       <RulesEditor
         rules={rules}
+        organisms={ORGANISMS}
         onRulesChange={(update) => setRules((current) => update(current))}
         onAddRule={addRule}
       />
@@ -132,8 +139,11 @@ describe('RulesEditor', () => {
   it('cards render in order, labelled by position', () => {
     render(<Harness initial={THREE} />);
 
+    // The condition fieldsets are `group`s too now (AC1/AC11c) — filter to the rule cards.
     expect(
-      screen.getAllByRole('group').map((g) => within(g).getByText(/^Rule \d$/).textContent),
+      screen
+        .getAllByRole('group', { name: /^Rule \d$/ })
+        .map((g) => within(g).getByText(/^Rule \d$/).textContent),
     ).toEqual(['Rule 1', 'Rule 2', 'Rule 3']);
     const badges = document.querySelectorAll('[data-rule-badge]');
     expect(Array.from(badges).map((b) => b.textContent)).toEqual(
@@ -150,7 +160,7 @@ describe('RulesEditor', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
     expect(screen.getByRole('group', { name: 'Rule 1' })).toBeInTheDocument();
     const second = screen.getByRole('group', { name: 'Rule 2' });
-    expect(within(second).getByRole('combobox')).toHaveValue('die');
+    expect(within(second).getByRole('combobox', { name: 'Action' })).toHaveValue('die');
     // The neighbour's Summary, not its Delete (AC5) — Enter auto-repeats on a `<button>`, so
     // another destructive control would let a held Enter cascade deletions.
     expect(document.activeElement).toBe(within(second).getByRole('textbox', { name: 'Summary' }));
@@ -231,15 +241,15 @@ describe('RulesEditor', () => {
     render(<Harness initial={THREE} />);
 
     const first = screen.getByRole('group', { name: 'Rule 1' });
-    await user.selectOptions(within(first).getByRole('combobox'), 'survive');
+    await user.selectOptions(within(first).getByRole('combobox', { name: 'Action' }), 'survive');
 
-    expect(within(first).getByRole('combobox')).toHaveValue('survive');
+    expect(within(first).getByRole('combobox', { name: 'Action' })).toHaveValue('survive');
     expect(first.querySelector('[data-rule-badge]')).toHaveTextContent(ruleActionLabel('survive'));
     const second = screen.getByRole('group', { name: 'Rule 2' });
     const third = screen.getByRole('group', { name: 'Rule 3' });
-    expect(within(second).getByRole('combobox')).toHaveValue('survive');
+    expect(within(second).getByRole('combobox', { name: 'Action' })).toHaveValue('survive');
     expect(second.querySelector('[data-rule-badge]')).toHaveTextContent(ruleActionLabel('survive'));
-    expect(within(third).getByRole('combobox')).toHaveValue('die');
+    expect(within(third).getByRole('combobox', { name: 'Action' })).toHaveValue('die');
     expect(third.querySelector('[data-rule-badge]')).toHaveTextContent(ruleActionLabel('die'));
   });
 
@@ -257,5 +267,40 @@ describe('RulesEditor', () => {
   it('has no axe violations in the empty state', async () => {
     const { container } = render(<Harness initial={NO_RULES} />);
     expect((await axe(container)).violations).toEqual([]);
+  });
+
+  // Story 4.11, Task 8 (m): a condition edit round-trips through the rules list, and the outer
+  // (rule-count) focus effect stays inert — same rule count, so it must not fight the inner
+  // (condition-count) effect that DID just move focus.
+  it('a condition edit round-trips through the rules list and moves no focus', async () => {
+    const user = userEvent.setup();
+    let latest: readonly RuleDraft[] = [];
+    render(
+      <Harness
+        initial={THREE}
+        onState={(rules) => {
+          latest = rules;
+        }}
+      />,
+    );
+
+    const first = screen.getByRole('group', { name: 'Rule 1' });
+    await user.click(within(first).getByRole('button', { name: '+ Add Condition' }));
+
+    const newProperty = within(first).getByRole('combobox', { name: 'Condition 3 property' });
+    expect(document.activeElement).toBe(newProperty);
+
+    await user.selectOptions(newProperty, 'neighborCount');
+    const value = within(first).getByRole('textbox', { name: 'Condition 3 value' });
+    await user.type(value, '4');
+
+    expect(latest[0].conditions[2]).toMatchObject({ property: 'neighborCount', pattern: '4' });
+    expect(latest[1]).toBe(THREE[1]);
+    expect(latest[2]).toBe(THREE[2]);
+    expect(document.activeElement).toBe(
+      within(screen.getByRole('group', { name: 'Rule 1' })).getByRole('textbox', {
+        name: 'Condition 3 value',
+      }),
+    );
   });
 });

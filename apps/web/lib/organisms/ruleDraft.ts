@@ -1,4 +1,5 @@
-import { SurvivalRuleSchema, type Condition, type SurvivalRule } from '@gol/domain';
+import { SurvivalRuleSchema, type SurvivalRule } from '@gol/domain';
+import { type ConditionDraft, conditionDraftFrom } from './conditionDraft';
 
 /**
  * The rule-under-edit vocabulary (Story 4.10, FR-2.5/FR-2.6). Lives in `lib/organisms/` — the
@@ -48,11 +49,13 @@ export function isRuleAction(value: string): value is RuleAction {
  * `conditions` allowed empty. `SurvivalRuleSchema` requires `conditions.min(1)` and a non-empty
  * `contentHash` — neither exists the moment "+ Add Rule" is pressed (conditions are Story 4.11's,
  * the hash is Story 4.16's), so the draft cannot be the persisted type. Same nesting on purpose:
- * Story 4.16 parses `{ ...rule, contentHash }`, Story 4.17 seeds `rules.map(strip hash)`.
+ * Story 4.16 parses `{ ...rule, contentHash }`, Story 4.17 seeds `rules.map(strip hash)` — and
+ * with conditions as `ConditionDraft`s — text patterns and an editor-only id; Story 4.16 maps them
+ * through `conditionFromDraft`.
  */
 export interface RuleDraft {
   readonly id: string;
-  readonly conditions: readonly Condition[];
+  readonly conditions: readonly ConditionDraft[];
   readonly payload: { readonly summary: string; readonly action: RuleAction };
 }
 
@@ -87,4 +90,30 @@ export function updateRulePayload(
   return rules.map((rule) =>
     rule.id === id ? { ...rule, payload: { ...rule.payload, ...patch } } : rule,
   );
+}
+
+/** Applies `update` to the conditions of the rule with `id`. Same array reference when `id`
+ * matches nothing OR `update` returns the same conditions array (a no-op stays a no-op all the
+ * way up to the modal's functional setDraft). Every other rule by reference. */
+export function updateRuleConditions(
+  rules: readonly RuleDraft[],
+  id: string,
+  update: (conditions: readonly ConditionDraft[]) => readonly ConditionDraft[],
+): readonly RuleDraft[] {
+  const target = rules.find((rule) => rule.id === id);
+  if (!target) return rules;
+  const conditions = update(target.conditions);
+  if (conditions === target.conditions) return rules;
+  return rules.map((rule) => (rule.id === id ? { ...rule, conditions } : rule));
+}
+
+/** A persisted rule as a draft: `contentHash` dropped, the rule's own `id` KEPT (RFC-004 §2.4 —
+ * never re-minted), each condition through `conditionDraftFrom` with an id from `nextId`.
+ * Story 4.17's seed and the test fixtures' one source of `RuleDraft`s. */
+export function ruleDraftFrom(rule: SurvivalRule, nextId: () => string): RuleDraft {
+  return {
+    id: rule.id,
+    conditions: rule.conditions.map((condition) => conditionDraftFrom(condition, nextId())),
+    payload: rule.payload,
+  };
 }

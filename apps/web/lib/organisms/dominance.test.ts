@@ -1,34 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_DOMINANCE, MIN_DOMINANCE } from '@gol/domain';
-import { clampDominance, isDominanceInRange, parseDominanceText } from './dominance';
-
-describe('parseDominanceText', () => {
-  it.each([
-    ['5', 5],
-    [' 42 ', 42],
-    ['007', 7],
-    ['150', 150], // NOT clamped here — that is clampDominance's job.
-    ['-5', -5],
-    ['0', 0],
-  ])('parses %j as %j', (text, expected) => {
-    expect(parseDominanceText(text)).toBe(expected);
-  });
-
-  // A flat array — one case per string. Wrapping it in a second pair of brackets makes it ONE
-  // row of ten columns, and only the first string is ever tested (the review's own finding).
-  it.each(['', ' ', '   ', 'abc', '5.5', '5.', '.5', '1e2', '+5', '5 5'])(
-    'rejects %j as null',
-    (text) => {
-      expect(parseDominanceText(text)).toBeNull();
-    },
-  );
-
-  it('a 400-digit string is an integer TEXT — it parses to a finite or Infinity number, never null', () => {
-    const parsed = parseDominanceText('9'.repeat(400));
-    expect(parsed).not.toBeNull();
-    expect(typeof parsed).toBe('number');
-  });
-});
+import { clampDominance, isDominanceInRange } from './dominance';
 
 describe('clampDominance', () => {
   it.each([

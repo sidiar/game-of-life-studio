@@ -14,6 +14,14 @@ import { styled } from '@mui/material/styles';
  * Story 4.8 adds `Fieldset` / `Legend`: the UA fieldset-chrome reset and the label rule set for a
  * GROUPED control's name, so `<ColorPickerField>` (the first caller) does not hand-roll either.
  * `labelRules` is the one place the label typography lives — `Label` and `Legend` both read it.
+ *
+ * Story 4.11 lifts `controlRules` (and its `TextInput`/`SelectInput` wrappers) here too: the
+ * three-callers threshold `RuleCard.tsx`'s own comment named — its Summary/Action, the name
+ * field's `Input` (which keeps its own metrics and is NOT lifted), and the condition builder's
+ * inputs — is met. The rule set is `RuleCard.tsx`'s unchanged, with one rule appended
+ * (`'&[aria-invalid="true"]'`) that is inert on Summary/Action (neither ever sets `aria-invalid`)
+ * — the proof being that `RuleCard.test.tsx`'s pre-existing cases pass unedited by the move
+ * (Story 4.7's idiom; that file's edits in Story 4.11 are for the card's new props, not this).
  */
 
 // Mockup: `.form-field` (`clinical-lab-theme/organism-editor.html:153-156`; markup `:912-916`,
@@ -60,3 +68,32 @@ export const Description = styled('p')({
   margin: '4px 0 0 0',
   lineHeight: 1.4,
 });
+
+// `RuleCard.tsx`'s `controlRules` as they were, plus the aria-invalid border rule the condition
+// builder's numeric/range inputs need (Story 4.11). Callers: `RuleCard`'s Summary/Action and
+// `<ConditionRow>`'s property/operator/value/min/max controls.
+export const controlRules = {
+  width: '100%',
+  background: 'var(--gol-bg-hover)',
+  border: '1px solid var(--gol-border-control)',
+  color: 'var(--gol-text-primary)',
+  padding: '10px 12px',
+  fontSize: '13px',
+  fontFamily: 'inherit',
+  '&::placeholder': {
+    color: 'var(--gol-text-secondary)',
+    opacity: 0.8,
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '-2px',
+  },
+  '&[aria-invalid="true"]': {
+    borderColor: 'var(--gol-danger)',
+  },
+} as const;
+
+export const TextInput = styled('input')(controlRules);
+
+// The `<AddSelect>` FD3 reasoning: `cursor: pointer` and the UA's own arrow, never hidden.
+export const SelectInput = styled('select')({ ...controlRules, cursor: 'pointer' });
