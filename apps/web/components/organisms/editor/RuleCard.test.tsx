@@ -240,6 +240,22 @@ describe('RuleCard', () => {
     },
   );
 
+  it.each([
+    ['altKey', 'ArrowDown'],
+    ['ctrlKey', 'ArrowUp'],
+    ['metaKey', 'ArrowDown'],
+    ['shiftKey', 'ArrowUp'],
+  ])(
+    "a modified arrow (%s + %s) is somebody else's chord: not a move, not consumed",
+    (mod, key) => {
+      const { onMove } = renderCard({ index: 1 });
+      const handle = screen.getByRole('button', { name: 'Reorder rule 2' });
+
+      expect(fireEvent.keyDown(handle, { key, [mod]: true })).toBe(true);
+      expect(onMove).not.toHaveBeenCalled();
+    },
+  );
+
   it('pointer plumbing: down starts, move reports, up ends; a move after up is ignored', () => {
     const { onDragStart, onDragOver, onDragEnd } = renderCard();
     const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
@@ -249,9 +265,10 @@ describe('RuleCard', () => {
     expect(onDragStart).toHaveBeenCalledTimes(1);
 
     fireEvent.pointerMove(handle, { pointerId: 1, buttons: 1, clientY: 240 });
-    expect(onDragOver).toHaveBeenCalledWith(240);
+    expect(onDragOver).toHaveBeenCalledWith(RULE.id, 240);
 
     fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(onDragEnd).toHaveBeenCalledWith(RULE.id);
     expect(onDragEnd).toHaveBeenCalledTimes(1);
 
     fireEvent.pointerMove(handle, { pointerId: 1, buttons: 1, clientY: 300 });
@@ -275,6 +292,7 @@ describe('RuleCard', () => {
     expect(onDragOver).not.toHaveBeenCalled();
 
     fireEvent.pointerMove(handle, { pointerId: 1, buttons: 0, clientY: 50 });
+    expect(onDragCancel).toHaveBeenCalledWith(RULE.id);
     expect(onDragCancel).toHaveBeenCalledTimes(1);
     expect(onDragOver).not.toHaveBeenCalled();
 

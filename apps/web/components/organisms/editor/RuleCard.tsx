@@ -31,6 +31,9 @@ import ConditionsEditor from './ConditionsEditor';
  *   measures 4.72:1 for `--gol-danger` text on `--gol-bg-secondary` — one axe rounding from the
  *   4.5 floor. Without the tint the pair is the gated 4.90:1. The header is not clickable (this is
  *   not the accordion), so no `.rule-header:hover` either.
+ * - FD4 — the action `<select>` ships HERE, native (the `<OrganismRoster>` `AddSelect` decision —
+ *   zero bundle, free keyboard/AT): a badge that cannot change would be dead UI with no later
+ *   story to fix it, since 4.11/4.12/4.13/4.16 none own an action selector.
  * - FD7 — the mockup's per-action description paragraph is not built: it makes engine claims
  *   (Decision C, M10) nothing here can verify. Story 4.11 — the condition builder, where
  *   `cellState`'s `empty`/`alive`/`occupied` meaning gets explained — is where that copy earns its
@@ -70,7 +73,10 @@ const dropLine = {
 // 2.13-2.15). `position: relative` anchors the two drop-indicator pseudo-elements (Story 4.12,
 // AC1/FD5): they sit on the adjacent `<li>`, not a separate element between cards, because an
 // `<ol>` may hold only `<li>` children and an extra one — even `aria-hidden` — would change the
-// `listitem` count Story 4.10's tests pin.
+// `listitem` count Story 4.10's tests pin. An empty-content pseudo-element on a non-control joins
+// no accessible name (contrast the 4.9 FD4 swatch, where generated content sat INSIDE a button),
+// so the lines are invisible to AT by construction. The three `data-*` selectors below are
+// literals, never built from a prop value, so `themeTokens.test.ts`'s `var(` scan stays honest.
 const Card = styled('li')({
   position: 'relative',
   background: 'var(--gol-bg-secondary)',
@@ -221,11 +227,14 @@ export interface RuleCardProps {
   /** Keyboard reorder (ArrowUp → index − 1, ArrowDown → index + 1); clamping is the parent's. */
   onMove(id: string, toIndex: number): void;
   /** Pointer drag, semantic — geometry and state are `<RulesEditor>`'s; this card owns only the
-   * pointer plumbing (capture, button and pointerId guards, the buttons-bitmask self-heal). */
+   * pointer plumbing (capture, button and pointerId guards, the buttons-bitmask self-heal). Every
+   * callback carries this card's id: the editor accepts one drag at a time, but a SECOND primary
+   * pointer (pen + mouse are each primary for their type) lands here, captures, and would
+   * otherwise steer and drop the first card's drag through its own move/up. */
   onDragStart(id: string): void;
-  onDragOver(clientY: number): void;
-  onDragEnd(): void;
-  onDragCancel(): void;
+  onDragOver(id: string, clientY: number): void;
+  onDragEnd(id: string): void;
+  onDragCancel(id: string): void;
   /** This card is the one being dragged (`data-dragging` on the `<li>`). */
   dragging: boolean;
   /** The accent line to paint on this card, or none (`data-drop` on the `<li>`). */
@@ -264,6 +273,9 @@ export default function RuleCard({
 
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      // A modified arrow is somebody else's chord (the OS, the browser, a screen reader's
+      // navigation) — never a move, never consumed.
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (event.key === 'ArrowUp') {
         event.preventDefault();
         onMove(rule.id, index - 1);
@@ -303,21 +315,21 @@ export default function RuleCard({
       // primary button reading as released as a terminate-and-cancel.
       if ((event.buttons & 1) === 0) {
         endDrag(event.currentTarget, event.pointerId);
-        onDragCancel();
+        onDragCancel(rule.id);
         return;
       }
-      onDragOver(event.clientY);
+      onDragOver(rule.id, event.clientY);
     },
-    [onDragCancel, onDragOver, endDrag],
+    [onDragCancel, onDragOver, endDrag, rule.id],
   );
 
   const handlePointerUp = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (event.pointerId !== pointerIdRef.current) return;
       endDrag(event.currentTarget, event.pointerId);
-      onDragEnd();
+      onDragEnd(rule.id);
     },
-    [onDragEnd, endDrag],
+    [onDragEnd, endDrag, rule.id],
   );
 
   const handlePointerCancel = useCallback(
@@ -327,9 +339,9 @@ export default function RuleCard({
       // order is release -> ref cleared -> `lostpointercapture` ignored).
       if (event.pointerId !== pointerIdRef.current) return;
       endDrag(event.currentTarget, event.pointerId);
-      onDragCancel();
+      onDragCancel(rule.id);
     },
-    [onDragCancel, endDrag],
+    [onDragCancel, endDrag, rule.id],
   );
 
   return (

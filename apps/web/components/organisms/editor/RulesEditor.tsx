@@ -28,9 +28,12 @@ import RuleCard from './RuleCard';
  * races MUI's focus trap on the dialog's first paint.
  *
  * **Story 4.12 — reordering.** One commit path (`commitMove`) for both inputs: a keyboard move
- * (immediate, FD2) and a pointer drop. `drag` is ephemeral UI state, not a ref — the drop
- * indicator renders from it, and `setDrag` is only called when `toIndex` actually changes, so a
- * 60Hz `pointermove` costs no render while the pointer stays in one slot. The GEOMETRY (which
+ * (immediate, FD2) and a pointer drop. `drag` is ephemeral UI state — the drop indicator renders
+ * from it — mirrored in `dragRef` for the HANDLERS: pointer events arrive faster than a render
+ * commits, and the drop must land in the slot the last `pointermove` chose, not the one the last
+ * render saw; reading the ref keeps every `setDrag` updater pure (no layout inside it) and every
+ * handler's deps honest. `setDrag` is only called when `toIndex` actually changes, so a 60Hz
+ * `pointermove` costs no render while the pointer stays in one slot. The GEOMETRY (which
  * slot the pointer is over) lives here, not in `<RuleCard>`, because a lone card has no siblings
  * to measure against — the card owns only the pointer plumbing (capture, guards). `pendingFocusId`
  * is a ref because the FD6 effect below reads it on the render the reorder produces, exactly the
@@ -133,8 +136,15 @@ export default function RulesEditor({
   const instructionsId = useId();
 
   const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
   const [announcement, setAnnouncement] = useState<{ text: string; seq: number } | null>(null);
   const dragging = drag !== null;
+
+  // The one writer of both halves — the ref is what the handlers read, the state is what renders.
+  const updateDrag = useCallback((next: DragState | null) => {
+    dragRef.current = next;
+    setDrag(next);
+  }, []);
 
   const handleChange = useCallback(
     (id: string, patch: Partial<RuleDraft['payload']>) =>
@@ -143,8 +153,13 @@ export default function RulesEditor({
   );
 
   const handleDelete = useCallback(
-    (id: string) => onRulesChange((current) => removeRule(current, id)),
-    [onRulesChange],
+    (id: string) => {
+      // The status region unmounts with the list (Story 4.12); a sentence left in state would
+      // remount with the next list, verbatim, describing rules that no longer exist.
+      if (rules.length === 1) setAnnouncement(null);
+      onRulesChange((current) => removeRule(current, id));
+    },
+    [onRulesChange, rules.length],
   );
 
   const handleConditionsChange = useCallback(
@@ -156,43 +171,51 @@ export default function RulesEditor({
   // The one commit path both a keyboard move and a pointer drop share (Story 4.12). A no-op
   // (unknown id, or the clamped target equals the rule's current index) announces nothing and
   // moves no focus — `moveRule` itself returns the same array reference for either case.
-  const commitMove = (id: string, toIndex: number) => {
-    const from = rules.findIndex((rule) => rule.id === id);
-    const to = Math.max(0, Math.min(rules.length - 1, toIndex));
-    if (from === -1 || from === to) return;
-    pendingFocusIdRef.current = id;
-    setAnnouncement((a) => ({
-      text: `Rule moved to position ${to + 1} of ${rules.length}`,
-      seq: (a?.seq ?? 0) + 1,
-    }));
-    onRulesChange((current) => moveRule(current, id, to));
-  };
-
-  // Per-render callback is fine here (no hot path; the card's own `useCallback`s take it as a
-  // dep, as `handleChange` does today).
-  const handleMove = useCallback(
-    (id: string, toIndex: number) => commitMove(id, toIndex),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const commitMove = useCallback(
+    (id: string, toIndex: number) => {
+      const from = rules.findIndex((rule) => rule.id === id);
+      const to = Math.max(0, Math.min(rules.length - 1, toIndex));
+      if (from === -1 || from === to) return;
+      pendingFocusIdRef.current = id;
+      setAnnouncement((a) => ({
+        text: `Rule moved to position ${to + 1} of ${rules.length}`,
+        seq: (a?.seq ?? 0) + 1,
+      }));
+      onRulesChange((current) => moveRule(current, id, to));
+    },
     [rules, onRulesChange],
+  );
+
+  const handleMove = useCallback(
+    (id: string, toIndex: number) => {
+      // Arrow keys are live mid-drag in Chromium (the handle takes focus on `pointerdown`); a
+      // keyboard move would re-render the list under a `fromIndex` captured at pointerdown, so
+      // the drop would compare against a stale origin.
+      if (dragRef.current !== null) return;
+      commitMove(id, toIndex);
+    },
+    [commitMove],
   );
 
   const handleDragStart = useCallback(
     (id: string) => {
-      if (drag !== null) return;
+      if (dragRef.current !== null) return;
       const fromIndex = rules.findIndex((rule) => rule.id === id);
       if (fromIndex === -1) return;
-      setDrag({ id, fromIndex, toIndex: fromIndex });
+      updateDrag({ id, fromIndex, toIndex: fromIndex });
     },
-    [drag, rules],
+    [rules, updateDrag],
   );
 
-  // Reads the LATEST drag state from the updater rather than the closed-over `drag` — pointer
-  // events can arrive faster than a render commits, and the geometry must never act on a stale
-  // slot. The `d.toIndex === toIndex` guard keeps a same-slot move a same-reference no-op.
-  const handleDragOver = useCallback((clientY: number) => {
-    const root = rootRef.current;
-    setDrag((d) => {
-      if (d === null || root === null) return d;
+  // Geometry: the slot is the count of OTHER cards whose midpoint sits above the pointer. Every
+  // callback checks the card's id against the drag's — a second primary pointer (pen + mouse)
+  // starts nothing above, but its card has captured and keeps reporting; those reports are not
+  // this drag's. The `toIndex` guard keeps a same-slot move a no-op render.
+  const handleDragOver = useCallback(
+    (id: string, clientY: number) => {
+      const d = dragRef.current;
+      const root = rootRef.current;
+      if (d === null || d.id !== id || root === null) return;
       const others = Array.from(root.querySelectorAll<HTMLElement>('[data-rule-id]')).filter(
         (el) => el.getAttribute('data-rule-id') !== d.id,
       );
@@ -200,21 +223,29 @@ export default function RulesEditor({
         const rect = el.getBoundingClientRect();
         return rect.top + rect.height / 2 < clientY;
       }).length;
-      return d.toIndex === toIndex ? d : { ...d, toIndex };
-    });
-  }, []);
+      if (toIndex !== d.toIndex) updateDrag({ ...d, toIndex });
+    },
+    [updateDrag],
+  );
 
-  const handleDragEnd = useCallback(() => {
-    if (drag === null) return;
-    const { id, fromIndex, toIndex } = drag;
-    setDrag(null);
-    if (toIndex !== fromIndex) commitMove(id, toIndex);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drag]);
+  const handleDragEnd = useCallback(
+    (id: string) => {
+      const d = dragRef.current;
+      if (d === null || d.id !== id) return;
+      updateDrag(null);
+      if (d.toIndex !== d.fromIndex) commitMove(d.id, d.toIndex);
+    },
+    [commitMove, updateDrag],
+  );
 
-  const handleDragCancel = useCallback(() => {
-    setDrag(null);
-  }, []);
+  const handleDragCancel = useCallback(
+    (id: string) => {
+      const d = dragRef.current;
+      if (d === null || d.id !== id) return;
+      updateDrag(null);
+    },
+    [updateDrag],
+  );
 
   // Escape mid-drag (Story 4.12, FD6): a `document` CAPTURE listener, alive only for the life of
   // a drag, keyed on the drag's NULLNESS (not the object) so a `toIndex` change mid-drag does not
@@ -227,16 +258,22 @@ export default function RulesEditor({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.stopPropagation();
-      setDrag(null);
+      updateDrag(null);
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [dragging]);
+  }, [dragging, updateDrag]);
 
   useEffect(() => {
     const ids = rules.map((rule) => rule.id);
     const prev = prevIdsRef.current;
     const root = rootRef.current;
+
+    // The dragged card left the list mid-drag (deleted from the keyboard, or by the parent): its
+    // `<li>` is gone, so `lostpointercapture` fires on a detached node React never hears, and
+    // without this the drag would stay open — every new drag refused, the Escape listener live.
+    const d = dragRef.current;
+    if (d !== null && !ids.includes(d.id)) updateDrag(null);
 
     if (prev === null) {
       // First run — a seeded list (Story 4.17) must not steal focus on mount.
@@ -301,7 +338,7 @@ export default function RulesEditor({
     // to be a no-op (a stale `rules` prop) must never fire on the next keystroke (AC8).
     pendingFocusIdRef.current = null;
     prevIdsRef.current = ids;
-  }, [rules]);
+  }, [rules, updateDrag]);
 
   // The drop target, computed once per render (not per card): `others` excludes the dragged rule,
   // so `drag.toIndex` indexes directly into it. A target index at or past the end paints the

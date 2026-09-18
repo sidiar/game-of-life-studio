@@ -4,7 +4,7 @@ baseline_commit: 71bc1a054e748beb71ded2764dc5b42b133bcb0c
 
 # Story 4.12: Rule Reordering
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -548,6 +548,27 @@ Story 4.15's; the **engine** that applies it is Epic 3's and is untouched. No de
         domain / simulation / test-utils coverage lines and the e2e summary into the Dev Agent
         Record. Push to `story/4-12-rule-reordering`; `gh run list --limit 1` after the PR opens.
 
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (resumed by hand — see Dev Agent Record),
+via three parallel adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor);
+30 raw findings, 7 dismissed as noise, the rest merged to the list below.
+
+- [x] [Review][Patch] `handleDragEnd` / `handleMove` close over a per-render `commitMove` behind two `eslint-disable`s, and `handleDragOver` reads layout inside the `setDrag` updater [apps/web/components/organisms/editor/RulesEditor.tsx:160-212] — `handleDragEnd` is memoised on `[drag]` only, so a `rules` change mid-drag (a keystroke into a still-focused textbox — WebKit does not move focus on `pointerdown`) commits through a stale `rules`: the announcement's "of M" and the clamp are wrong, `pendingFocusIdRef` is set for a move `moveRule` then treats as a no-op and is never cleared, and the next same-length change steals focus to the handle (the exact AC8 failure the effect's own comment describes). `handleDragOver`'s `root.querySelectorAll` + `getBoundingClientRect()` run inside the updater — impure (double-invoked under StrictMode, runs during render), and Task 4 asked for measurement in the handler with the functional form only as a proven-stale fallback. Fix: mirror `drag` in a ref for the handlers, measure in the handler and keep the updater pure, memoise `commitMove` on `[rules, onRulesChange]` and give both callers real deps — the disables go away. (blind+edge+auditor)
+- [x] [Review][Patch] Arrow keys during a pointer drag corrupt the drag's `fromIndex` [apps/web/components/organisms/editor/RulesEditor.tsx:173-177] — Chromium focuses the handle on `pointerdown`, so ArrowUp/ArrowDown are live mid-drag; `handleMove` commits and re-renders but `drag.fromIndex` stays at its pointerdown value, so the drop compares against a stale origin (a real drop suppressed, or an indicator painted for a no-op). Fix: `handleMove` is a no-op while `drag !== null`. (blind+edge)
+- [x] [Review][Patch] Modifier + arrow chords are hijacked and `preventDefault`ed [apps/web/components/organisms/editor/RuleCard.tsx:265-276] — Ctrl/Alt/Shift/Meta + ArrowUp/Down are OS, browser and screen-reader chords; the handler moves the rule and swallows them. Fix: bail when any modifier is held (FD2's "any other key is left alone" reading). (blind+edge)
+- [x] [Review][Patch] A second primary pointer of another type (pen + mouse) steers and commits the active drag [apps/web/components/organisms/editor/RuleCard.tsx:288-296, RulesEditor.tsx:179-187] — `handleDragStart` refuses the second start but the second card has already captured its pointer and set its `pointerIdRef`; its `pointermove` calls `onDragOver` (steering card 1's slot) and its `pointerup` calls `onDragEnd` (committing card 1's drag). The existing test passes `isPrimary: false`, which exercises the card's guard, not the editor's. Fix: the card passes `rule.id` on over/end/cancel and the editor ignores any id that is not `drag.id`. (blind+edge)
+- [x] [Review][Patch] The dragged rule's removal mid-drag leaves `drag` stuck non-null [apps/web/components/organisms/editor/RulesEditor.tsx:180-215] — the `<li>` unmounts, `lostpointercapture` fires on a detached node React never hears, `drag` stays set: every new drag is refused, the Escape listener stays subscribed, the drop indicator can keep painting. Fix: an effect that clears `drag` when `rules` no longer contains `drag.id`. (edge)
+- [x] [Review][Patch] A stale announcement survives the empty state and remounts verbatim [apps/web/components/organisms/editor/RulesEditor.tsx:367] — move, delete every rule, add one: the `role="status"` region mounts already containing "Rule moved to position 2 of 3", which some AT announce on insertion, for a list that no longer exists. Fix: clear `announcement` when the list empties. (blind)
+- [x] [Review][Patch] Stale e2e comment says the handle is `disabled` and Delete is the card's first stop [apps/web/e2e/organisms.spec.ts:1627-1630] — contradicts AC2/AC11c and the assertions right below it, which were retargeted. (auditor)
+- [x] [Review][Patch] FD4 header bullet deleted wholesale, taking the native action-`<select>` rationale with it [apps/web/components/organisms/editor/RuleCard.tsx header] — Task 3 said retire the *"disabled" clause*; project-context says drop the tag, keep the prose. The reason the Action control is a native `<select>` (the `<OrganismRoster>` `AddSelect` decision — zero bundle, free keyboard/AT) is no longer recorded anywhere in the file. Fix: restore that sentence. (auditor)
+- [x] [Review][Patch] `Card` comment omits two Task 3 points [apps/web/components/organisms/editor/RuleCard.tsx:~443] — the accessible-name point (an empty-content pseudo-element on a non-control joins no accessible name, contrast the 4.9 FD4 swatch case) is absent, and the `themeTokens.test.ts` `var(` scan point sits on `dropLine` rather than the Card. (auditor)
+- [x] [Review][Patch] Doc comment left mid-sentence [apps/web/components/organisms/editor/OrganismEditorModal.tsx:161] — "…and a fresh / draft per open is / the `mounted` gate's doing" — a dangling two-word line from an unre-read edit. Reflow. (blind)
+- [x] [Review][Patch] Dev Agent Record misstates which pointer tests scroll [docs/implementation-artifacts/4-12-rule-reordering.md Completion Notes / Change Log] — three pointer tests exist; only drag-below and Escape scroll handle 1 into view. "drag card 3 above card 1" measures `cardGroup(1)` without scrolling, so its `before` indicator is proven against a negative `clientY` — mechanically FD8 (an off-screen rect still resolves the slot), but the record must say so. (auditor)
+- [x] [Review][Defer] `cursor: grabbing` does not persist once the pointer leaves the 16px handle [apps/web/components/organisms/editor/RuleCard.tsx `DragHandle`] — deferred, cosmetic: the cursor follows hit-testing, not pointer capture, so `&:active` shows `grabbing` only while over the handle; a body-level cursor during the drag belongs with the dragging-CSS item already deferred to the UX reconciliation touch. (blind)
+
+**Dismissed as noise (7):** the plain-click flash (deferred item 7, recorded); no auto-scroll (FD8, deferred item 1); Escape leaves the card holding capture until release (by design — FD6 cancels editor-side, the card self-heals on `pointerup` and every path through `endDrag`); the `ruleDraft.ts` import + re-export of `RULE_ACTIONS` (the import is used by `isRuleAction`/`ruleActionLabel`; the move is Task 1/FD9, not an unrelated refactor); `moveRule` tests not pinning element identity (the helper never touches rule objects); the first card's `-7px` `before` line being clipped (the scroller has ~100px of header above the list — measured); the "before" bundle figures not re-measured on `main` (the only commit between 4.11's measurement and this story's baseline is #57, `implement-next-story.toml` only — `git diff --stat 401970a..71bc1a0`).
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -880,16 +901,18 @@ the tasks, wrote this record, re-ran `ci:dev`.
   - `packages/simulation`: **100/100/100/100** (407 tests), untouched by this story.
   - `packages/test-utils`: **94.44% stmts / 90.09% branch / 100% funcs / 97.07% lines** aggregate
     (89 tests; ≥80% floor, Story 3.7), unchanged.
-  - `apps/web` (no gate; 1627 tests, 102 files): `ruleDraft.ts` 100/100/100/100; `RuleCard.tsx`
-    96.61 / 88 / 100 / 98.18 (uncovered `:284` is the `hasPointerCapture` false arm of `endDrag`,
-    jsdom-only); `RulesEditor.tsx` 96.63 / 83.6 / 100 / 100 (the uncovered branches are the
-    `root === null` / `?.` jsdom guards in the geometry and focus effect).
+  - `apps/web` (no gate; 1627 tests, 102 files — 1636 after review): `ruleDraft.ts`
+    100/100/100/100; `RuleCard.tsx` 96.61 / 88 / 100 / 98.18 (uncovered is the
+    `hasPointerCapture` false arm of `endDrag`, jsdom-only); `RulesEditor.tsx` 96.63 / 83.6 / 100
+    / 100 at the dev step, **98.5 / 89.47 / 100 / 100 after review** (the remaining uncovered
+    branches are the `root === null` / `?.` jsdom guards in the geometry and focus effect).
   - Bundle (`scripts/check-bundle-size.mjs`): `/` 333.8 KB / 340 KB budget (6.2 KB headroom),
     `/battle` 309.0 KB / 310 KB (1.0 KB), `/battle/new` 308.9 KB / 310 KB (1.1 KB), `/organisms`
     295.6 KB / 305 KB (9.4 KB) — every route within +0.1 KB of `main` (Story 4.11's post-merge
     figures: 333.7 / 309.0 / 308.8 / 295.5; only the toml chore #57 merged since). The lazy
     editor chunk (`grep -rl "Organism Color" .next/static/chunks/*.js`) moved **9501 B → 10700 B
-    gzip (+1199 B / +1.17 KB)** — inside AC12's ≈ +1.0–1.5 KB estimate. **No budget raised.**
+    gzip (+1199 B / +1.17 KB)** — inside AC12's ≈ +1.0–1.5 KB estimate; **10826 B after review**
+    (+126 B: the id guards, the mid-drag key guard, the stuck-drag effect). **No budget raised.**
   - Bench (`npm run bench` + `bench:check`): frame 7.560 ms of the 16.667 ms budget (9.107 ms
     headroom) — unaffected by this story (no engine/render code touched).
   - e2e (Chromium only, `npm run e2e:chromium`): **194 passed, 1 skipped** (pre-existing, unrelated) across `apps/web/e2e/**`, including
@@ -930,8 +953,10 @@ the tasks, wrote this record, re-ran `ci:dev`.
 - Task 6: e2e `rule reordering (Story 4.12)` — keyboard move/renumber/focus/announce with the
   consumed top no-op and zero console errors, drag-below (`after`) and drag-above (`before`) with
   drop renumbering, Escape mid-drag, Tab order (handle first, `Alt+Tab` on WebKit), axe after a
-  keyboard reorder. The two pointer tests scroll handle 1 into view first (see Debug Log). 4.10's
-  two tests retargeted per AC11c only.
+  keyboard reorder. Of the three pointer tests, the two that START on handle 1 (drag-below,
+  Escape) scroll it into view first (see Debug Log); "drag card 3 above card 1" starts on the
+  visible handle 3 and drags to card 1's rect at a negative `clientY` — the FD8 case upward, an
+  off-screen rect still resolving the slot. 4.10's two tests retargeted per AC11c only.
 - Task 7: bundle measured before/after (Debug Log); `deferred-work.md` — two 4.10/4.11 items struck
   as resolved (the `disabled` handle, `RULE_ACTIONS`'s home), one marked partial (arrow-key
   *navigation* between rows → Story 6.11 / the UX touch), and a new `Deferred from: Story
@@ -965,9 +990,15 @@ the tasks, wrote this record, re-ran `ci:dev`.
   spec map compiled; status → ready-for-dev.
 - 2026-09-18 — Tasks 1–7 implemented (dev-story, Sonnet); first `ci:dev` red on one e2e; session
   ended on a usage limit before the record was written.
-- 2026-09-18 — Resumed by hand (Opus 5): the two pointer e2e tests scroll handle 1 into view
-  before measuring (the 4.10 focus effect had scrolled it off-screen); Escape test now asserts the
-  drag started; tasks ticked, record written, `ci:dev` green; status → review.
+- 2026-09-18 — Resumed by hand (Opus 5): the two pointer e2e tests that start on handle 1 scroll
+  it into view before measuring (the 4.10 focus effect had scrolled it off-screen); Escape test
+  now asserts the drag started; tasks ticked, record written, `ci:dev` green; status → review.
+- 2026-09-18 — Code review (Opus, three adversarial layers): 11 patches applied — `<RulesEditor>`
+  handlers read a `dragRef` mirror (pure `setDrag`, honest deps, both `eslint-disable`s gone),
+  arrow keys ignored mid-drag, modifier + arrow left alone, every drag callback carries the card's
+  id so a second primary pointer cannot steer or drop the first drag, a dragged card leaving the
+  list closes the drag, the announcement clears with the empty state; four comment/record fixes.
+  One deferral (`cursor: grabbing` off the handle). Five tests added. Status → done.
 
 Dev Model: sonnet   # follows settled patterns — the PetriDishCanvas pointer idiom, the 4.10 focus-diff effect, the 4.9 status-region idiom, the ruleDraft same-reference helpers; the one new shape (a hand-rolled sortable: pointer plumbing in the card, geometry and state in the editor, a pure moveRule) is pinned with exact handlers, guards, selectors and tests, and no later story builds on it
 Proposed lane gate: none

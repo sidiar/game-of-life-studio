@@ -1624,10 +1624,10 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await headerAdd.click();
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
 
-    // Start on the card's first stop, its Delete — the handle before it is `disabled`, so Delete
-    // is where a Tab into the card lands — and walk Delete -> Summary -> Action -> + Add
-    // Condition (Story 4.11 AC11d: the condition builder's own add button is the card's new last
-    // stop) -> the NEXT card's Reorder handle, now its first stop (Story 4.12, AC11c) -> Delete.
+    // Start on the card's Delete (its SECOND stop since Story 4.12 — the live Reorder handle is
+    // the first, covered by the 4.12 Tab-order test) and walk Delete -> Summary -> Action -> + Add
+    // Condition (Story 4.11 AC11d: the condition builder's own add button is the card's last
+    // stop) -> the NEXT card's Reorder handle, its first stop (Story 4.12, AC11c) -> Delete.
     await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).focus();
     await page.keyboard.press(tabKey);
     await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();

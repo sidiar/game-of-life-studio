@@ -1632,3 +1632,11 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   the next UX reconciliation touch (the one Stories 4.3 and 4.10 also asked for).
 - **Condition rows are not reorderable** — they are AND-combined, so order is irrelevant (FR-2.5);
   nothing to build.
+
+## Deferred from: code review of 4-12-rule-reordering (2026-09-18)
+
+- **`cursor: grabbing` does not persist once the pointer leaves the handle** — the cursor follows
+  hit-testing, not pointer capture, so `<DragHandle>`'s `&:active { cursor: grabbing }` shows only
+  while the pointer is over the 16px handle; for the bulk of a real drag the page shows the card
+  body's cursor. A body-level `cursor` set for the life of the drag is the fix; it belongs with the
+  dragging-CSS item above (the mockup has none) in the UX reconciliation touch.

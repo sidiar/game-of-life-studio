@@ -158,12 +158,11 @@ const EditorBody = styled('div')({
  * `dominance`, Story 4.7's `agingEnabled`/`colorToken`, Story 4.8's `colorToken` seed from
  * `library` and Story 4.10's `survivalRules`, Story 4.12's order) and its seed — no repository
  * call; the lifecycle (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh
- * draft per open is
- * the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after every exit, so there
- * is no reset effect and no `key` trick). The `useState` initialiser closes over the `library`
- * prop — legitimate because it runs once per mount and the `mounted` gate guarantees a mount per
- * open. The editor's own dirty scope (AR-33 — independent of the battle's) arrives with Story
- * 4.23, will live in this shell, and will diff this draft against its seed.
+ * draft per open is the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after
+ * every exit, so there is no reset effect and no `key` trick). The `useState` initialiser closes
+ * over the `library` prop — legitimate because it runs once per mount and the `mounted` gate
+ * guarantees a mount per open. The editor's own dirty scope (AR-33 — independent of the battle's)
+ * arrives with Story 4.23, will live in this shell, and will diff this draft against its seed.
  *
  * Header layout follows the epics AC / UX-DR5 (`organism-editor-design.md:101-126`): Back on the
  * left, centred title, Save + Close on the right. ⚠️ The 2026-06-01 mockup revision
