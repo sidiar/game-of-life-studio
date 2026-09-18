@@ -454,6 +454,9 @@ Decisions below are left for the owner; nothing in them was resolved by the revi
   invariant for one commit. A rejected chunk import is pre-existing behaviour (no `error.tsx`, by
   story) and is not made worse here. [`BattlePage.tsx` `handleEnterFullscreen`;
   `BattleHeader.tsx` `showFullscreen`]
+  **Owner decision (2026-09-18): (a) — accept and record.** No code change. Record the window in
+  `deferred-work.md` (this story's section) as a known, self-healing, cold-cache-only state, with
+  option (b) named as the fix if it ever matters; then check this item.
 - [ ] [Review][Decision] **A pointer double-click on `Exit fullscreen` lands its second click on
   the header's `Lab` button, which remounts under the pointer** — Exit sits at roughly
   y∈[12,43], x∈[W−184, W−24] (TopOverlay `12px 24px`, button `8px 16px`); the header remounts on
@@ -468,6 +471,12 @@ Decisions below are left for the owner; nothing in them was resolved by the revi
   interactive remounts beneath it — a mockup deviation on top of FD4's. Not patched: (b) and (c)
   both reach a surface the story did not own, and the fix shape is the owner's.
   [`FullscreenStage.tsx` `ExitButton`; `BattleHeader.tsx` `ModeToggle`]
+  **Owner decision (2026-09-18): (b) — ignore repeat clicks on the mode toggle.** In
+  `BattleHeader.tsx`'s `ModeButton` click handling, return early when `event.detail > 1` (the
+  second and later clicks of a pointer multi-click; keyboard-synthesised clicks carry `detail ===
+  0` and must still fire). Comment WHY (the Exit → Lab remount geometry, this decision). Add a test
+  in `BattleHeader.test.tsx`: a click with `detail: 2` does not call `onModeToggle`, a plain click
+  and a keyboard activation still do. Then check this item.
 - [x] [Review][Patch] `GridContainer`'s fullscreen comment states a 544px-tall dish; the measured
   value (Dev Agent Record, `deferred-work.md`, and re-measured here) is 553px
   [`apps/web/components/battle/simulation/BattleSimulationView.tsx` `GridContainer`] — applied.
