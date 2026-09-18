@@ -588,6 +588,16 @@ on the tree: nothing under `SimulationLayout` carries `position` / `transform` /
   value, (c) changes the mockup's typography, (a) records a known AA miss — the owner's call.
   [`apps/web/app/themes.css` `--gol-surface-hud`; `FullscreenStage.tsx` `HudLabel`;
   `PopulationPills.tsx` `Pill[data-extinct]`]
+  **Owner decision (2026-09-18): (d) — no alpha on the HUD surface.** The mockup's HUD reads as a
+  slightly-grey opaque panel; make it exactly that: `HudPanel` and `ExitButton` in
+  `FullscreenStage.tsx` take `background: var(--gol-bg-secondary)` (opaque, the mockup's
+  `--bg-secondary`), and the `--gol-surface-hud` token is REMOVED from `themes.css` (no other
+  consumer; its comment block shrinks to the two tokens that remain, `--gol-scrim-top` and
+  `--gol-shadow-dish-glow`). Text on the panel is then the gated `themeTokens.test.ts` pair
+  (6.1:1) wherever the panel sits — the contrast question is gone, not tuned. The scrim and the
+  glow are unchanged. Update the FD4 override paragraph, the file-header comment in
+  `FullscreenStage.tsx` and the `deferred-work.md` mockup-refresh line that name three tokens
+  (now two); re-run the gates; then check this item.
 - [x] [Review][Patch] Story text still says `themes.css` is untouched in five places (Story
   section, Dev Notes constraints, What NOT to build, Project Structure "Not touched", Dev Agent
   Record "For the reviewer") and the File List omits it — it is a shared-lane file (4.2 / 4.6 / 4.10
