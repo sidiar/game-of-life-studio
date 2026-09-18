@@ -1,6 +1,20 @@
 # implement-next-story.toml — project configuration for the implement-next-story skill
 # (.claude/skills/implement-next-story, a subtree of sidiar/implement-next-story).
-# SKILL.md reads it at the start of every run; lane-gates.py reads [paths].
+# SKILL.md reads it at the start of every run; lane-gates.py reads every table.
+
+[adapter]
+name = "bmad"              # BMad Method v6 — .claude/skills/implement-next-story/adapters/bmad/adapter.md
+
+[models]
+# Claude Code model aliases, by role. The skill's Models section has the reasons.
+create        = "opus"     # Step 1 and Opening a lane
+dev           = "sonnet"   # Step 2 default
+dev_escalated = "opus"     # Step 2 when the story is architecture-shaping
+sync          = "sonnet"   # Step S
+
+[models.review]            # Step 3: the reviewer for each dev model — never the same
+sonnet = "opus"
+opus   = "fable"
 
 [adapter]
 name = "bmad"               # adapters/bmad/adapter.md, shipped with the skill (written against BMad v6.8.0)

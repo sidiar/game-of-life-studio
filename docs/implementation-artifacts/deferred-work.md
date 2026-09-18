@@ -45,7 +45,11 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 ## Deferred from: code review of 1-6-test-utilities-dev-fixture-workspace (2026-08-05)
 
-- **The AR-45 coverage-matrix *universe* is hand-listed rather than derived from the schema** — `packages/test-utils/src/mockWorkspace.test.ts` correctly derives the *covered* property/operator sets from `createMockOrganisms()`'s actual conditions at run time (which is what Story 1.6 Task 6 asked for, and it means editing a fixture rule fails the test rather than passing silently). What is hand-listed is the expected universe: local `ALL_CONDITION_PROPERTIES` / `ALL_OPERATORS` literals, not the schema's own enums. If Epic 4 adds a seventh operator or a sixth condition property, `expect(coveredOperators).toEqual(new Set(ALL_OPERATORS))` stays green and the "AR-45 full coverage" claim quietly becomes false. Deriving them is not a one-liner: `survivalRuleSchema.ts` inlines both as `z.enum([...])` rather than exporting named constants, and the five properties span a discriminated union (`cellState`/`organismType` are separate members from the three numeric ones), so the fix belongs in `@gol/domain` — export the enum arrays (or read them off `ConditionSchema.options`) and consume them here. **Revisit with Story 4.11 (condition builder)**, which is the first place that needs the same universe for its UI and will otherwise hand-list it a third time.
+- ~~**The AR-45 coverage-matrix *universe* is hand-listed rather than derived from the schema** — `packages/test-utils/src/mockWorkspace.test.ts` correctly derives the *covered* property/operator sets from `createMockOrganisms()`'s actual conditions at run time (which is what Story 1.6 Task 6 asked for, and it means editing a fixture rule fails the test rather than passing silently). What is hand-listed is the expected universe: local `ALL_CONDITION_PROPERTIES` / `ALL_OPERATORS` literals, not the schema's own enums. If Epic 4 adds a seventh operator or a sixth condition property, `expect(coveredOperators).toEqual(new Set(ALL_OPERATORS))` stays green and the "AR-45 full coverage" claim quietly becomes false. Deriving them is not a one-liner: `survivalRuleSchema.ts` inlines both as `z.enum([...])` rather than exporting named constants, and the five properties span a discriminated union (`cellState`/`organismType` are separate members from the three numeric ones), so the fix belongs in `@gol/domain` — export the enum arrays (or read them off `ConditionSchema.options`) and consume them here. **Revisit with Story 4.11 (condition builder)**, which is the first place that needs the same universe for its UI and will otherwise hand-list it a third time.~~ —
+  **✅ Resolved in Story 4.11.** `packages/domain/src/survivalRuleSchema.ts` now exports
+  `CELL_STATES`, `NUMERIC_OPERATORS`, `NUMERIC_CONDITION_PROPERTIES` and `CONDITION_PROPERTIES`,
+  each read off the schema objects (`.options`/`.value`), and `mockWorkspace.test.ts` compares its
+  covered sets against them directly — the local literals are gone.
 
 - **`seedDevFixtures()` partial failure leaves a half-seeded, already-stamped workspace that never retries** — `packages/test-utils/src/seedDevFixtures.ts` writes 3 organisms then 2 battles in a bare `for … await` loop with no rollback. A rejection mid-loop (realistically `QuotaExceededError` on Battle B's 100×60 `gridState`) leaves an arbitrary prefix written; `gol:schema` is already stamped by then, so `isFreshWorkspace()` is `false` on the next load and the dev-fixture branch never runs again — the workspace is stuck half-seeded with no diagnostic beyond `workspace: error`. Story 1.6 put this out of scope explicitly ("❌ No quota-failure injection, no latency simulation, no call spies in this story … add them in the story that first needs one"), and it is dev-only data, so nothing user-facing depends on it. **Revisit with Story 5.8 (atomic import pipeline)**, which has to solve all-or-nothing multi-record writes properly for the real import path — whatever transactional shape lands there should be what this reuses.
 
@@ -737,8 +741,12 @@ Review Findings; these are the items consciously left open.
   `Born: 3 neighbors | Survive: 2-3 neighbors`; the card ships a count only (`N rules`) because the
   sentence needs a summariser over action/condition vocabulary. **Re-pointed (2026-09-17):** Story
   4.10 defines the ACTION half of that vocabulary (`ruleActionLabel`) but builds no condition
-  vocabulary — conditions are Story 4.11's, and the sentence needs both halves. **Pick this up in
-  Story 4.11**, once the condition vocabulary exists too.
+  vocabulary — conditions are Story 4.11's, and the sentence needs both halves. **Re-pointed again
+  (Story 4.11, 2026-09-17):** the condition vocabulary now exists
+  (`conditionPropertyLabel`/`operatorLabel`/`cellStateLabel` in
+  `apps/web/lib/organisms/conditionDraft.ts`) — Story 4.11 builds only the vocabulary, not the
+  summariser or the sentence on `<OrganismCard>` itself. **Pick this up in Story 4.20**, with the
+  card's stat block.
 - **The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
   `tabIndex={0}` because it has no inner control to be the keyboard stop instead (organism cards
   open a modal in `Story 4.17`, which does not exist yet). Once Edit lands inside the card, a stop
@@ -762,8 +770,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   patched here because the mockup and Task 3 specify the div shape and the card's content is still
   moving. **Re-pointed (2026-09-17):** Story 4.10 adds the rule CARDS inside the editor, not the
   rules sentence on `<OrganismCard>` itself (that needs Story 4.11's condition vocabulary too —
-  see the entry above); the card's stat block is still unsettled. **Pick this up with whichever of
-  Story 4.11 / Story 4.20 settles the card's stat block**, and decide the cell semantics once for
+  see the entry above); the card's stat block is still unsettled. **Re-pointed again (Story 4.11,
+  2026-09-17):** the condition vocabulary Story 4.11 built lives in the editor
+  (`lib/organisms/conditionDraft.ts`), not on `<OrganismCard>` — this stat-cell semantics question
+  is unaffected. **Pick this up with Story 4.20 alone**, and decide the cell semantics once for
   all three rows.
 
 ## Deferred from: Story 4-3-editor-modal-shell (2026-09-14)
@@ -1105,15 +1115,21 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `basicInfo` fragment because Story 4.8 has not landed yet. Story 4.8 inserts `<ColorPicker>`
   between `<OrganismNameField>` and `<DominanceField>` in that fragment — a pointer for that
   story, not a divergence to fix here.~~ — **✅ Resolved in Story 4.8.**
-- **`parseDominanceText` / `clampDominance` / `isDominanceInRange` are dominance-named**, living in
+- ~~**`parseDominanceText` / `clampDominance` / `isDominanceInRange` are dominance-named**, living in
   `apps/web/lib/organisms/dominance.ts`. Story 4.11's Age / Neighbor-count condition inputs want
   the identical parse/clamp shape; generalise to `lib/organisms/integerInput.ts` when they become
-  the second caller (the Story 4.5 FD6 "no abstraction over one caller" reasoning).
+  the second caller (the Story 4.5 FD6 "no abstraction over one caller" reasoning).~~ — **✅
+  Resolved in Story 4.11.** The shared parse moved to `apps/web/lib/organisms/integerText.ts` as
+  `parseIntegerText` (`<DominanceField>` and `<ConditionRow>` are its two callers);
+  `clampDominance`/`isDominanceInRange` stayed in `dominance.ts` — dominance clamps its
+  out-of-range values, conditions display an error for theirs, so only the parse was shared.
 - **Story 4.13's "numeric invalidity" AC item does not apply to dominance.** `OrganismDraft.dominance`
   is always a valid integer in `[MIN_DOMINANCE, MAX_DOMINANCE]` by construction (FD4) — the field
   clamps before every commit and never writes an invalid value to the draft. When Story 4.13 builds
   the Save gate, that AC item refers to Story 4.11's numeric condition inputs; 4.13 should confirm
-  this and not add a dominance-specific check.
+  this and not add a dominance-specific check. **Confirmed (Story 4.11, 2026-09-17):** the function
+  4.13's gate calls per condition row is `validateConditionDraft` (`lib/organisms/conditionDraft.ts`)
+  — nothing else in `RuleDraft`/`OrganismDraft` holds an unvalidated number.
 - **Story 6.9's default-speed setting and 3.16's Grid Size slider now have two native-range
   precedents** (`SpeedControl.tsx`, `DominanceField.tsx`) and one shared thumb-glow token
   (`--gol-shadow-slider-thumb`) between them. Whichever lands the `<LadderSlider>` /
@@ -1504,7 +1520,11 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   on organism dominance rules" and "cells that are alive and belong to the same organism" are
   engine claims (Decision C, M10) that need verifying against `packages/simulation` before shipping
   as help text. Story 4.11 (the condition builder, where cell-state semantics get explained) is the
-  home.
+  home. **Partial (Story 4.11, 2026-09-17):** the cell-state parentheticals ship, verbatim from the
+  PRD, in the condition builder's value dropdown (`cellStateLabel` — "Empty", "Alive (your
+  organism)", "Occupied (another organism)"); the mockup's per-ACTION paragraph itself is still
+  unbuilt — no tooltips, no help text under the legend. **Re-pointed to a help-text touch** (Story
+  6.11 or the UX reconciliation touch above), not this story.
 - **The summary cap is silent to AT** — clamped like the battle name but without Story 2.13's
   at-cap polite notice; the field is optional and the counter is `aria-describedby`-only. Story
   6.11 may add the notice if the battle-name one proves its worth.
@@ -1520,8 +1540,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   axe rounding from the floor, and the `rgba` literal is AR-46 territory anyway.
 - **The empty-state title is a `<p>`, not a heading** (FD5) — unlike the Gallery's `<h2>`, a
   conditional `<h4>` under the column's own `<h3>` would appear and vanish with the list.
-- **Story 4.11 may widen `RuleDraft.conditions`** to a `ConditionDraft[]` for half-typed rows — the
-  type is `readonly Condition[]` today because nothing here edits them.
+- ~~**Story 4.11 may widen `RuleDraft.conditions`** to a `ConditionDraft[]` for half-typed rows — the
+  type is `readonly Condition[]` today because nothing here edits them.~~ — **✅ Resolved in Story
+  4.11.** `RuleDraft.conditions` is `readonly ConditionDraft[]`; `ruleDraft.ts` gained
+  `updateRuleConditions` and `ruleDraftFrom` as the two bridges.
 - **Story 4.17 seeds `survivalRules` by stripping `contentHash`** from the record's rules — and
   must not re-mint ids (identity is stable across edits, RFC-004 §2.4).
 
@@ -1557,6 +1579,44 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   transition (or the second click must be otherwise inert); (2) the story that closes the cascade
   should prove it — a unit or e2e test that a pointer double-click on ✕ removes at most one rule.
 
+## Deferred from: Story 4-11-condition-builder (2026-09-17)
+
+- **A range row's Max error is hidden while Min is untouched** — `parseConditionDraft` yields
+  errors in AC4 order (min → max → pair) and a field shows only its own error once touched, so a
+  Max-first user with Min empty sees nothing until Min is typed. Owner decision (review of 4.11,
+  option 1): keep as specified; Story 4.13's Save-time show-everything override surfaces it there.
+- **The PRD's per-property tooltips are not built** — `title` is not keyboard-reachable and the
+  editor has no tooltip primitive; the copy is PRD-verbatim (FR-2.5) and waits for a help-text
+  touch (Story 6.11).
+- **Operator option text is the mockup's symbols** (`>=`), which some screen readers read as
+  "greater than equals". A spelled-out label is a one-string change per operator in
+  `operatorLabel` (`lib/organisms/conditionDraft.ts`).
+- **Age's editor cap is 999** (design doc) inside the schema's 65534 — the summary's 100/120 class.
+  A record over 999 arriving by import is invalid in edit mode until changed: the bounds error
+  shows once its input is touched, or at Story 4.13's Save-time show-everything override — never
+  on mount (4.5 FD2).
+- **Range validates `<` where the schema accepts `<=`** — same class as the age cap, deliberate
+  (AC4/FD8): an `[n, n]` range still parses on import, it just cannot be typed in the editor.
+- **Condition delete has no confirmation and shares 4.10's pointer double-click cascade** (FD7) —
+  a row is cheap to re-add; if the Story 4.26 dialog pattern is wanted here too, the owner decides
+  (not proposed here: three dialogs per rule edit).
+- **No arrow-key navigation between rows** (UX-DR17 lists it; no AC asks) — Story 4.12's keyboard
+  reordering is where arrow keys enter this column.
+- **`RULE_ACTIONS` still derives in `apps/web`** (`lib/organisms/ruleDraft.ts`) while the condition
+  universe now derives in `@gol/domain` — moving it is a two-line symmetry change for the next
+  `ruleDraft.ts` touch.
+- **Story 4.17 must decide whether the organism-type dropdown lists the organism under edit** —
+  the modal doc says 4.17 passes `library` minus self (right for the colour warning); `organismType
+  eq <self>` is a legal, `alive`-equivalent condition, and an existing self-reference would render
+  as `Unknown organism`.
+- **`<OrganismNameField>`'s `Input` is not lifted** into `fieldStyles.ts` (different metrics —
+  12px/14px padding, 14px type — from `controlRules`).
+- **`validateRules.ts` keeps its own condition-universe literals** (the engine's `@gol/domain` edge
+  is test-only by design, Story 3.2) — a sixth property now fails the build in `@gol/domain`
+  consumers and the engine's `Record<CellProperty, …>` separately, which is the intended pair.
+- **4.15's preview needs `contentHash` before 4.16's hasher exists** — `validateSurvivalRules`
+  rejects a hash-less rule; Story 4.15 decides (a session-only placeholder hash, or landing after
+  4.16).
 ## Deferred from: Story 3-18-fullscreen-run-stage implementation (2026-09-17)
 
 - **`component-tree-battle-page.md` amendment candidates** (planning artifact, not edited — the

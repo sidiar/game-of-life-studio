@@ -3,7 +3,8 @@
 import { useId, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { MAX_DOMINANCE, MIN_DOMINANCE } from '@gol/domain';
-import { clampDominance, isDominanceInRange, parseDominanceText } from '@/lib/organisms/dominance';
+import { clampDominance, isDominanceInRange } from '@/lib/organisms/dominance';
+import { parseIntegerText } from '@/lib/organisms/integerText';
 import { Field, Label, Description } from './fieldStyles';
 
 // Mockup: `.dominance-container` (`:954-964`).
@@ -164,7 +165,7 @@ export default function DominanceField({
 
   const commit = () => {
     if (text === null) return;
-    const parsed = parseDominanceText(text);
+    const parsed = parseIntegerText(text);
     if (parsed !== null) {
       const clamped = clampDominance(parsed, min, max);
       if (clamped !== value) onChange(clamped); // snap on commit
@@ -205,7 +206,7 @@ export default function DominanceField({
           onChange={(event) => {
             const next = event.currentTarget.value;
             setText(next);
-            const parsed = parseDominanceText(next);
+            const parsed = parseIntegerText(next);
             // Commit live ONLY while the typed value is already in range (FD3) — an out-of-range
             // integer waits for blur/Enter so a typed `0` does not become `1` mid-keystroke.
             if (parsed !== null && isDominanceInRange(parsed, min, max) && parsed !== value) {

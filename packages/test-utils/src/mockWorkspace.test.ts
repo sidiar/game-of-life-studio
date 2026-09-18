@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { BattleSchema, CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID, OrganismSchema } from '@gol/domain';
+import {
+  BattleSchema,
+  CONDITION_PROPERTIES,
+  CONWAYS_CLASSIC,
+  CONWAYS_CLASSIC_ID,
+  NUMERIC_OPERATORS,
+  OrganismSchema,
+} from '@gol/domain';
 import {
   createMockBattles,
   createMockOrganisms,
@@ -8,17 +15,10 @@ import {
   MOCK_ORGANISM_IDS,
 } from './mockWorkspace';
 
-// The schema's own condition-property / operator universe (survivalRuleSchema.ts). Fixed by the
-// spec, not by what this file happens to contain — the COVERED sets below are what get derived
-// from the fixtures; this is what "full coverage" is measured against.
-const ALL_CONDITION_PROPERTIES = [
-  'cellState',
-  'organismType',
-  'age',
-  'neighborCount',
-  'occupantNeighborCount',
-] as const;
-const ALL_OPERATORS = ['eq', 'gt', 'lt', 'gte', 'lte', 'range'] as const;
+// The expected universe is @gol/domain's schema-read `CONDITION_PROPERTIES` / `NUMERIC_OPERATORS`
+// (Story 4.11 — closes deferred-work.md's 1.6 entry: this file used to hand-list both tuples,
+// which could drift from the schema without failing). `NUMERIC_OPERATORS` is the whole operator
+// universe: the two singleton properties only ever pair with `eq`, which is one of its six.
 
 describe('schema validity', () => {
   it('every mock organism parses under OrganismSchema', () => {
@@ -46,7 +46,7 @@ describe('AR-45 coverage matrix — derived from the fixtures, not hand-listed',
       organisms.flatMap((o) => o.survivalRules.flatMap((r) => r.conditions.map((c) => c.property))),
     );
 
-    expect(coveredProperties).toEqual(new Set(ALL_CONDITION_PROPERTIES));
+    expect(coveredProperties).toEqual(new Set(CONDITION_PROPERTIES));
   });
 
   it('the 3 mock organisms jointly cover all six operators, including range', () => {
@@ -55,7 +55,7 @@ describe('AR-45 coverage matrix — derived from the fixtures, not hand-listed',
       organisms.flatMap((o) => o.survivalRules.flatMap((r) => r.conditions.map((c) => c.operator))),
     );
 
-    expect(coveredOperators).toEqual(new Set(ALL_OPERATORS));
+    expect(coveredOperators).toEqual(new Set(NUMERIC_OPERATORS));
   });
 
   it('at least one organism has agingEnabled: true', () => {

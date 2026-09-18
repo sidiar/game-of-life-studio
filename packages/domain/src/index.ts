@@ -1,5 +1,20 @@
-export { ConditionSchema, SurvivalRuleSchema, SurvivalRulesSchema } from './survivalRuleSchema';
-export type { Condition, SurvivalRule, SurvivalRules } from './survivalRuleSchema';
+export {
+  CELL_STATES,
+  CONDITION_PROPERTIES,
+  ConditionSchema,
+  NUMERIC_CONDITION_PROPERTIES,
+  NUMERIC_OPERATORS,
+  SurvivalRuleSchema,
+  SurvivalRulesSchema,
+} from './survivalRuleSchema';
+export type {
+  CellState,
+  Condition,
+  NumericConditionProperty,
+  NumericOperator,
+  SurvivalRule,
+  SurvivalRules,
+} from './survivalRuleSchema';
 
 export {
   OrganismSchema,

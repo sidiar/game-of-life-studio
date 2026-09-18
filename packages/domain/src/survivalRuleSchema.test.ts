@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ConditionSchema, SurvivalRuleSchema, SurvivalRulesSchema } from './survivalRuleSchema';
+import {
+  CELL_STATES,
+  CONDITION_PROPERTIES,
+  ConditionSchema,
+  NUMERIC_CONDITION_PROPERTIES,
+  NUMERIC_OPERATORS,
+  SurvivalRuleSchema,
+  SurvivalRulesSchema,
+} from './survivalRuleSchema';
 
 const validPayload = {
   summary: 'Born on an empty cell with exactly 3 neighbors',
@@ -127,6 +135,46 @@ describe('ConditionSchema', () => {
       pattern: 'ghost',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('condition universe', () => {
+  it('CELL_STATES is exactly [empty, alive, occupied], in order, each parsing as a cellState condition', () => {
+    expect(CELL_STATES).toEqual(['empty', 'alive', 'occupied']);
+    for (const pattern of CELL_STATES) {
+      expect(
+        ConditionSchema.safeParse({ property: 'cellState', operator: 'eq', pattern }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('NUMERIC_OPERATORS is exactly [eq, gt, lt, gte, lte, range], in order, each parsing on a numeric condition', () => {
+    expect(NUMERIC_OPERATORS).toEqual(['eq', 'gt', 'lt', 'gte', 'lte', 'range']);
+    for (const operator of NUMERIC_OPERATORS) {
+      const pattern = operator === 'range' ? [0, 1] : 0;
+      expect(
+        ConditionSchema.safeParse({ property: 'neighborCount', operator, pattern }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('NUMERIC_CONDITION_PROPERTIES is exactly [age, neighborCount, occupantNeighborCount], in order, each parsing as a numeric condition', () => {
+    expect(NUMERIC_CONDITION_PROPERTIES).toEqual(['age', 'neighborCount', 'occupantNeighborCount']);
+    for (const property of NUMERIC_CONDITION_PROPERTIES) {
+      expect(ConditionSchema.safeParse({ property, operator: 'eq', pattern: 0 }).success).toBe(
+        true,
+      );
+    }
+  });
+
+  it('CONDITION_PROPERTIES is the design-doc order: the two singletons, then the numerics', () => {
+    expect(CONDITION_PROPERTIES).toEqual([
+      'cellState',
+      'organismType',
+      'age',
+      'neighborCount',
+      'occupantNeighborCount',
+    ]);
   });
 });
 

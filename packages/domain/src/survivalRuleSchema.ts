@@ -44,6 +44,27 @@ export const ConditionSchema = z.discriminatedUnion('property', [
   NumericCondition,
 ]);
 
+// The condition universe, read off the schema objects above — never a second literal tuple
+// that could drift from them (the Story 4.10 RULE_ACTIONS rule, at the source). Consumers:
+// the editor's condition builder (Story 4.11) and the AR-45 coverage matrix in
+// @gol/test-utils, which used to hand-list both. NOT consumed by @gol/simulation, whose
+// @gol/domain edge is test-only by design (Story 3.2): validateRules.ts keeps its own copies.
+export const CELL_STATES: readonly CellState[] = CellStateCondition.shape.pattern.options;
+export const NUMERIC_OPERATORS: readonly NumericOperator[] =
+  NumericCondition.shape.operator.options;
+export const NUMERIC_CONDITION_PROPERTIES: readonly NumericConditionProperty[] =
+  NumericCondition.shape.property.options;
+// Design-doc order (organism-editor-design.md:387-411): the two singletons, then numerics.
+export const CONDITION_PROPERTIES: readonly Condition['property'][] = [
+  CellStateCondition.shape.property.value,
+  OrganismTypeCondition.shape.property.value,
+  ...NUMERIC_CONDITION_PROPERTIES,
+];
+
+export type CellState = z.infer<typeof CellStateCondition>['pattern'];
+export type NumericOperator = z.infer<typeof NumericCondition>['operator'];
+export type NumericConditionProperty = z.infer<typeof NumericCondition>['property'];
+
 const SurvivalPayloadSchema = z.object({
   summary: z.string().max(120),
   action: z.enum(['born', 'survive', 'die']),
