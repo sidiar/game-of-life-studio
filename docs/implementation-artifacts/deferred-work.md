@@ -1015,12 +1015,23 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   same gap `deferred-work.md`'s 3-11 review entry already records for the header's RUN button (a
   `disabled` control is not focusable, so a keyboard user never reaches the tooltip). **Joins
   Story 6.11's route-wide disabled-state a11y sweep**, not a separate fix.
-- **SPACE while Next cycle is focused disables the focused element — focus falls to `<body>`.**
+- ~~**SPACE while Next cycle is focused disables the focused element — focus falls to `<body>`.**
   Pressing Stop while Play/Pause is focused, or pressing Play while Next cycle is focused and then
   playing starts, both remove the focused control from the accessible tree mid-interaction (Next
   cycle goes from enabled to `disabled` the instant `status` flips to `'playing'`), and nothing
   today moves focus anywhere on that transition. **Story 3.19 decides** whether to move focus (to
-  Play/Pause, the bar's next enabled control) when this happens, alongside the hotkeys it adds.
+  Play/Pause, the bar's next enabled control) when this happens, alongside the hotkeys it adds.~~ —
+  **Closed in Story 3.19 (FD9 (a)), resolved-by-construction, no focus code added.** Under FD3 (a)
+  the reachable cases collapse: Space on a focused Next cycle is a native step (Next stays
+  enabled — Space never reaches the disabling transition through the button that would trigger
+  it); Space on a focused Play is the native toggle (Play/Pause is never disabled). The one keyboard
+  path that unmounts a focused control is `F` (the bar or the HUD leaves), and 3.18's two focus
+  effects already land focus on Exit / the Fullscreen button — no third mechanism needed. ⚠️ The
+  POINTER path this entry originally described (Tab to Next cycle, then click Play) is unchanged
+  and still 3.12's: on Chromium/Firefox-Windows the click moves focus to Play, but Safari and
+  Firefox on macOS do not focus a `<button>` on click (`useLeaveGuard.ts`'s record), so there
+  focus does fall to `<body>` when Next cycle disables. No hotkey is involved; closed HERE for the
+  keyboard paths 3.19 owns, open as a **6.11 candidate** for the pointer one.
 
 ## Deferred from: Story 3-13-speed-control implementation (2026-09-15)
 
@@ -1661,9 +1672,14 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
      the chrome floats, so nothing competes with the dish for height and the mockup's `18px 24px` /
      `bottom: 40px` are used as drawn. Measured: 990×592 at 1280×720 (mockup 994×596), 1486×890
      at 1920×1080.
-  4. **The `.fs-hint` line** (`Press F to exit fullscreen • SPACE Play/Pause • → Next`) and the
+  4. ~~**The `.fs-hint` line** (`Press F to exit fullscreen • SPACE Play/Pause • → Next`) and the
      mockup's `keydown` script belong to Story 3.19, with the handlers that make them true
-     (NFR-4.1).
+     (NFR-4.1).~~ — **Shipped in Story 3.19.** The hint line renders as `<FullscreenStage>`'s
+     fourth fragment slot (`<HotkeyHints>`, FD6); the mockup's OWN `keydown` script (which exits on
+     `Escape` too) was NOT what first shipped — `useSimulationHotkeys` followed the spec instead
+     (`ESC` stops, `F` the only exit key, FD4 (a)), a flagged conflict. **Resolved 2026-09-18**: the
+     owner picked FD4 (c) — `Escape` now stops AND exits the stage, `F` remains an independent
+     toggle-only exit key.
   5. **The mockup's coloured `.hud-pop-pill` text** — colour is on the swatch only (3.14 FD4), the
      same open contrast question the 3-14 section records.
 - **"True fullscreen" via the Fullscreen API** (FD3 (a)): the stage fills the viewport in-app;
@@ -1674,7 +1690,11 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   Playwright cannot observe it; WebKit needs the prefixed form. The user still has F11 / the
   browser's own fullscreen on top of this stage. **A post-3.19 enhancement candidate, if wanted**:
   a `fullscreenchange` listener that mirrors the browser's state into the cell, and a decision
-  about `ESC`.
+  about `ESC`. — **The `ESC` decision is made (Story 3.19 FD4 (c), owner, 2026-09-18):** in the
+  stage `Escape` stops the run AND exits, so it now leaves the stage exactly as the browser's own
+  exit key would leave true fullscreen — the collision this note flagged has become an alignment
+  (with the Stop added on top). The Fullscreen API itself stays unadopted; only the `ESC` half of
+  the candidate is settled.
 - **Story 4.15 pointers.** The preview panel (spec §8 / §3.12: SpeedControl + compact
   PopulationStats + cycle counter + Play/Stop/Step) should REUSE `<TransportControls>`,
   `<CycleDigits>`, `<PopulationPills>` and `<SpeedControl>` rather than re-author them or edit the
@@ -1727,10 +1747,12 @@ deferred:
   auto-repeated `keydown`, and each commit programmatically moves focus to the counterpart control
   (Exit on entry, the Fullscreen button on exit), so a held key ping-pongs the stage, each cycle
   driving `PlaybackDish`'s observer → `renderer.resize` → a repaint of `lastGrid`. `Space` is safe
-  (it clicks on `keyup`). Harmless to the run — the loop is untouched (Decision D) — and a
-  property of every focus-handoff pair in the app, so an `event.repeat` guard is a route-wide
-  keyboard policy: **Story 6.11's sweep**, or 3.19 if it wants the `F` toggle to carry the same
-  guard from day one.
+  (it clicks on `keyup`). Harmless to the run — the loop is untouched (Decision D). **Closed for
+  `F` by Story 3.19 (FD7 (a)):** `useSimulationHotkeys` ignores every `event.repeat` keydown for
+  all four of its keys, so a held `F` fires once, exactly like a held `Space`/`ArrowRight`/`Escape`
+  now does. `Enter` itself — the header's Fullscreen button and the stage's Exit button, both
+  reached by pointer/native-activation Enter, not this hook — remains **Story 6.11's route-wide
+  sweep**.
 - ~~**No floor on the fullscreen dish height.**~~ — **CLOSED 2026-09-18 by the FD4 owner override**:
   the chrome is `position: fixed` and the dish is `min(94vw, 138vh)`, so its height is a function
   of the viewport alone — no flex competition, no shrink toward 0px. What remains is the mockup's
@@ -1773,8 +1795,9 @@ story file's Review Findings. The items consciously deferred:
   the first review named as option (c)**: do not remount the header under the pointer — keep the
   Exit button's box clear of the header's Mode group, or gate `onModeToggle` for one frame after
   an exit. Guarding Exit / Fullscreen with the same `detail` check is the cheap half-measure and
-  does nothing for (2). Owner: Story 3.19 (the `F` toggle shares the geometry) or 6.11's keyboard /
-  pointer sweep.
+  does nothing for (2). **Declined by Story 3.19** — it is a pointer double-activation geometry
+  issue, not a keyboard one, and the `F` hotkey's own `event.repeat` guard (FD7) is orthogonal to
+  it. Unchanged: **Story 6.11's keyboard / pointer sweep**.
 - **A third `VisuallyHidden` copy lives in lane 4's surface.**
   `apps/web/components/organisms/editor/ColorPickerField.tsx:226-234` carries the same recipe as the
   one 3.18 promoted to `apps/web/components/VisuallyHidden.tsx` (its own comment calls it "The
@@ -1784,3 +1807,104 @@ story file's Review Findings. The items consciously deferred:
   `organisms/editor/ColorPickerField.tsx`** (lane 4): replace the local styled block with
   `import VisuallyHidden from '@/components/VisuallyHidden'` and update `VisuallyHidden.tsx`'s head
   comment, which lists two renderers. Not a lane gate — an import swap, no shared file.
+
+## Deferred from: Story 3-19-simulation-hotkeys implementation (2026-09-18)
+
+- **FD10's chunk-fetch window.** `<UnsavedChangesDialog>` is a `next/dynamic` chunk (Story 2.16
+  trap 8); between the first click on Back in a page session and the chunk resolving, the DOM has
+  no `[role="dialog"]` yet, so a key pressed in that window is NOT suspended by
+  `useSimulationHotkeys`'s AC3 (v) check. Accepted, the same shape 3.18 accepted for its own
+  first-mount effects — the window is a single dynamic import's resolution time, and every
+  subsequent Back in the session hits the cached chunk. **No owner story**; revisit only if a real
+  report names it.
+- **`ArrowRight` repeat as a scrub (FD7 (b)).** The hook ignores `event.repeat` for all four keys,
+  including `ArrowRight` — a held arrow does not auto-step. A held-arrow scrub is plausible UX, but
+  each step is a full cycle + publish + repaint at OS repeat rate (~30 Hz) on up to a 200×120 grid
+  with no budget behind it (Decision A.4: larger presets are measured, never gated). **Candidate
+  for Story 6.11's keyboard sweep**, which is where a deliberate repeat policy belongs.
+- **An opt-in `keyshortcuts?: boolean` prop on `<TransportControls>` (FD8 (b)).** Rejected for this
+  story because the cluster is shared with Story 4.15's preview panel, which mounts no hotkey hook
+  — `aria-keyshortcuts` baked into the shared component would advertise keys the preview does not
+  have. **Candidate for Story 6.11's keyboard sweep**, scoped to the Run route's own instance only.
+- **`component-tree-battle-page.md` amendment candidates** (the running list this story adds to):
+  §3.11's props list gains `onEnterFullscreen` (the 3.18 amendment list's item 1 grows by one); §4's
+  `useSimulationHotkeys(bindings)` line should read the FD2 shape (`onPlayPause` / `onStep` /
+  `onStop` / `onToggleFullscreen` / `canStep`) and name `lib/battle/` as its home, not the tree's
+  current placement under the Run view; §2's tree may name `<HotkeyHints>` beside `<LadderSlider>`
+  as a component the tree omits. **Added after FD4 (c) (owner, 2026-09-18):** §4's `ESC → stop`
+  and §3.14's `onExit … / F key` should read "`ESC` → stop, and in the fullscreen stage also exit"
+  / "`F` or `Esc` key"; `epics.md:982`'s "ESC stops, F toggles fullscreen" line is the same
+  amendment upstream (the owner's PRD/epic touch, not the dev's — `epics.md:984`).
+- **Mockup-refresh note.** The chassis mockup's hint sits inside a `.stats-left` region that, in
+  the Lab mockup, also carries the Lab bar's stats (`petri-dish-play-mode.html:743-746`); the Run
+  bar has no stats section, so the hint is its whole left half rather than sharing the region with
+  anything else. Recorded for whoever next refreshes the mockup set — no code implication.
+
+## Deferred from: code review of 3-19-simulation-hotkeys (2026-09-18)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+Thirteen findings were patched in place (test-depth, comments, one hook guard); one owner decision
+(FD4, `Escape` in the stage) was left as a `[Review][Decision]` item in the story file — **answered
+the same day: FD4 (c), `Escape` stops AND exits the stage** (commit `a245fe4`). Deferred:
+
+- **Presence-based dialog detection is an all-or-nothing switch.** `useSimulationHotkeys` (FD10 (a))
+  suspends every key while ANY `[role="dialog"]` / `[aria-modal="true"]` element exists in the
+  document — a `keepMounted` MUI Dialog, a hidden panel, or an extension-injected node would leave
+  all four hotkeys silently dead while both hint lines still advertise them, and the recorded
+  chunk-fetch window (first Back before the dynamic dialog chunk resolves) stays open. FD10 (b)'s
+  `enabled: !leaveConfirming` binding through a new view prop would close the window; the reviewer
+  judged it not worth a view prop today (no such dialog exists, 4.24/4.25's modal is a plain MUI
+  `Dialog`). Revisit if a persistent dialog ever lands on the route.
+- **Selector lists stop at the AC3 enumeration.** `SPACE_ACTIVATOR_SELECTOR` omits `[role="radio"]`
+  (Space selects a focused radio — the hook would also toggle playback); `EDITABLE_OR_KEY_CONSUMING_SELECTOR`
+  omits the arrow-consuming widgets (`tab`, `tablist`, `radiogroup`, `spinbutton`, `tree`, `grid`,
+  `scrollbar`, media controls). None exist on the battle route today. **Story 6.11's keyboard sweep**
+  is where the lists should be extended, once, with the route's actual widget inventory in hand.
+- **Latest-bindings ref refreshed in a passive `useEffect`.** The story prescribed the
+  `PetriDishCanvas.tsx:826-843` idiom; a keydown landing between a rAF-driven commit (the extinction
+  auto-pause flipping `status`) and its passive-effect flush reads a stale `canStep` /
+  `handlePlayPause`. Today the stale direction is harmless (`pause()` on an already-paused run —
+  one Space appears dead; the dangerous `paused → playing` flip comes only from discrete events,
+  which React flushes synchronously). `useLayoutEffect` (or React 19's `useEffectEvent`) is the
+  tighter form. Not changed in review because the idiom was prescribed; **fold into the next hook
+  touch or 6.11**.
+- **`installFrameDriver` duplicated across two test files.** `BattlePage.test.tsx` (Story 3.19) now
+  carries a verbatim copy of `BattleSimulationView.test.tsx`'s helper. `@gol/test-utils` candidate,
+  alongside the `installContexts()` canvas stubs it pairs with.
+- **Gallery `runLink` entry absent from the hotkeys e2e block.** Trap 17 named both Run entries;
+  only `runButton.click()` + `parkFocus` is exercised. The `?mode=run` path (Story 3.17) starts with
+  focus on `<body>` and is the one path where the hints are true from the first frame — a one-test
+  addition to the 3.19 block when the file is next touched.
+
+## Deferred from: code review of 3-19-simulation-hotkeys (2026-09-18, second review)
+
+Reviewed on **Opus** after the FD4 (c) commit (`a245fe4`, Sonnet), via three parallel adversarial
+layers. Twelve findings were patched in place (all comment/docs/test-depth: the stale three-entry
+stage-hint text in AC8, two head comments and `onExit`'s JSDoc; the "SAME handlers" claim that
+FD4 (c)'s composed `onStop` made false; the four-`<kbd>` e2e assertion; e2e (e)'s mid-fade axe scan
+missing the 2.16 idiom's waits; the dead `default` branch; this file's own stale FD4 lines). No
+owner decision was left open. Deferred:
+
+- **Rule (iv) suspends every key while an `<input>` holds focus — including a range input after a
+  pointer drag.** Adjusting Speed or Grid size with the mouse leaves the `<input type="range">`
+  focused (`LadderSlider.tsx`), and `useSimulationHotkeys`'s AC3 (iv) check then ignores Space,
+  Escape and `F` as well as ArrowRight, while both hint lines still advertise them, until the user
+  clicks the dish or tabs away. Spec §4's "suspended while … an input has focus" is what shipped;
+  a per-key rule (`input[type="range"]` consumes only the arrows) would be the tighter form.
+  **Candidate for Story 6.11's keyboard sweep.**
+- **`a[href]` / `[role="link"]` / `[role="tab"]` are listed as Space activators, but links activate
+  on Enter.** Space on a focused link natively scrolls, so the hook's FD3 (a) deferral makes Space a
+  dead key there rather than Play/Pause. The list is AC3 (vi)'s own enumeration and no link is
+  focusable in Run mode today (the sidebar's Back is a `<button>`). Fold into the selector-list sweep
+  the first review already recorded for **Story 6.11**.
+- **`DIALOG_SELECTOR` matches attributes, not semantics.** A native `<dialog open>` or a `popover`
+  element carries the dialog role implicitly, so FD10 (a)'s `[role="dialog"], [aria-modal="true"]`
+  query would not suspend the hook over one — and the window-level `preventDefault()` on `Escape`
+  would eat their native dismissal. Every dialog on the route is a MUI `<Dialog>` (explicit
+  `role="dialog"`), so this is a note for whoever first adds a native one; folds into the FD10 entry
+  above.
+- **The chassis hint names three keys while four are live in the chassis.** `f` enters the stage
+  from the chassis (`toggleFullscreen`), but `CHASSIS_HINT_ENTRIES` carries `Space` / `→` / `Esc`
+  only — the mockup's `.keyboard-hint` (`petri-dish-play-mode.html:744-746`) and `epics.md:983`
+  both specify exactly those three, and the header's Fullscreen button is the visible affordance
+  for `F`. **Mockup-refresh / Story 6.11 candidate**, not a code change under the current spec.

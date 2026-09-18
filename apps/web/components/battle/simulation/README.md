@@ -13,17 +13,19 @@ drift.
 
 The Run subtree of the spec's §2 tree: `<BattleSimulationView>`, `<SimulationSidebar>` and its
 sections (`<PopulationStats>`, `<CycleCounter>`, `<SpeedControl>`, `<GridSizeControl>`),
-`<SimulationMain>`, `<SimulationControlBar>`, `<FullscreenStage>` and its two parts, plus
-`useSimulationHotkeys`. `<LadderSlider>` (Story 3.16 FD1 (a)) is the shared detented-slider
-primitive `<SpeedControl>` and `<GridSizeControl>` are both built on — promoted here rather than
-copied because both callers are Run-mode, so no `editor/` boundary crosses. Story 3.18 added three
-more shared Run-mode pieces on the same reasoning: `<TransportControls>` (the Play/Pause, Next
-cycle, Stop & reset cluster, rendered by both `<SimulationControlBar>` and the fullscreen HUD),
-`<CycleDigits>` (the zero-padded glyph run, rendered by both `<CycleCounter>` and the HUD) and
-`<PopulationPills>` (the HUD's compact population reading — a SIBLING of `<PopulationStats>`, not
-a variant of it; the two share `populationGlyphs.tsx`'s swatch and skull, and data, not markup).
-Story 4.15's preview panel is the next consumer of all three — the third of `<TransportControls>`
-and `<CycleDigits>`, the second of `<PopulationPills>`.
+`<SimulationMain>`, `<SimulationControlBar>`, `<FullscreenStage>` and its two parts. `<LadderSlider>`
+(Story 3.16 FD1 (a)) is the shared detented-slider primitive `<SpeedControl>` and `<GridSizeControl>`
+are both built on — promoted here rather than copied because both callers are Run-mode, so no
+`editor/` boundary crosses. Story 3.18 added three more shared Run-mode pieces on the same
+reasoning: `<TransportControls>` (the Play/Pause, Next cycle, Stop & reset cluster, rendered by
+both `<SimulationControlBar>` and the fullscreen HUD), `<CycleDigits>` (the zero-padded glyph run,
+rendered by both `<CycleCounter>` and the HUD) and `<PopulationPills>` (the HUD's compact
+population reading — a SIBLING of `<PopulationStats>`, not a variant of it; the two share
+`populationGlyphs.tsx`'s swatch and skull, and data, not markup). Story 3.19 added `<HotkeyHints>`
+(FD6) — the shared `<kbd>` + arrow recipe both hint lines render, `<SimulationControlBar>`'s and
+`<FullscreenStage>`'s, each styling its own copy for size and colour. Story 4.15's preview panel is
+the next consumer of `<TransportControls>`, `<CycleDigits>` and `<PopulationPills>` (a third, third
+and second caller respectively) — never `<HotkeyHints>`: the preview mounts no hotkey hook (FD8 (a)).
 `<SimulationSidebar>` and `<SimulationMain>` are private layout children inside
 `BattleSimulationView.tsx` (spec §3.3's rule for their Lab counterparts), not exported components;
 so are `<FullscreenTopOverlay>` and `<FullscreenHUD>` inside `FullscreenStage.tsx`.
@@ -34,6 +36,9 @@ a primitive both need belongs above both, the way `<PetriDishCanvas>` does (Stor
 
 `useSimulation` is a hook, so it goes to `lib/battle/` with the rest of the editor-and-runtime
 hooks — not here. `<BattleSimulationView>` is "the only component that touches the hook" (§3.11).
+`useSimulationHotkeys` (Story 3.19, FD1 (a)) lives there too, beside it — a hook among components
+would be the asymmetry this file argues against one paragraph up. `<BattleSimulationView>` is also
+its only caller.
 
 ## What does NOT go here
 

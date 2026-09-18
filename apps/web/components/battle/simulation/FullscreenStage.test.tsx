@@ -236,3 +236,34 @@ describe('FullscreenStage (Story 3.18)', () => {
     expect((await axe(container)).violations).toEqual([]);
   });
 });
+
+describe('FullscreenStage — keyboard hint (Story 3.19, AC8)', () => {
+  // `textContent`, not `getByText`: the hint is ONE flowing `<span>` whose own text nodes join to
+  // `Press to exit fullscreen Stop & exit Play/Pause Next`, so RTL's default exact matcher never
+  // sees `to exit fullscreen` on its own — a `queryByText` for it is `null` in BOTH states.
+  it('renders the hint with F, Esc, Space and → while active (FD4 (c): Esc stops AND exits)', () => {
+    const { container } = render(stage());
+    const text = container.textContent ?? '';
+
+    expect(text).toContain('Press');
+    expect(text).toContain('to exit fullscreen');
+    expect(text).toContain('Stop & exit');
+    expect(text).toContain('Play/Pause');
+    expect(text).toContain('Next');
+
+    const keys = Array.from(container.querySelectorAll('kbd')).map((kbd) => kbd.textContent);
+    expect(keys).toEqual(['F', 'Esc', 'Space', '→Right arrow']);
+  });
+
+  it('renders no hint while inactive', () => {
+    const { container } = render(stage({ active: false }));
+
+    expect(container.textContent).not.toContain('to exit fullscreen');
+    expect(document.querySelectorAll('kbd')).toHaveLength(0);
+  });
+
+  it('has no axe violations with the hint present', async () => {
+    const { container } = render(stage());
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});
