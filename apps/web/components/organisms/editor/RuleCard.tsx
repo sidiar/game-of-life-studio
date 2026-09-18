@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useId } from 'react';
+import { useCallback, useId, useRef } from 'react';
+import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { styled } from '@mui/material/styles';
 import {
   isRuleAction,
@@ -30,35 +31,65 @@ import ConditionsEditor from './ConditionsEditor';
  *   measures 4.72:1 for `--gol-danger` text on `--gol-bg-secondary` — one axe rounding from the
  *   4.5 floor. Without the tint the pair is the gated 4.90:1. The header is not clickable (this is
  *   not the accordion), so no `.rule-header:hover` either.
- * - FD4 — the drag handle ships as a genuinely `disabled` button, not a no-op span that looks
- *   live (the Save button's NFR-4.1 reasoning): Story 4.12 removes one attribute and adds
- *   handlers. The action `<select>` ships HERE, native (the `<OrganismRoster>` `AddSelect`
- *   decision — zero bundle, free keyboard/AT): a badge that cannot change would be dead UI with no
- *   later story to fix it, since 4.11/4.12/4.13/4.16 none own an action selector.
  * - FD7 — the mockup's per-action description paragraph is not built: it makes engine claims
  *   (Decision C, M10) nothing here can verify. Story 4.11 — the condition builder, where
  *   `cellState`'s `empty`/`alive`/`occupied` meaning gets explained — is where that copy earns its
  *   place.
  *
- * Story 4.11 mounts `<ConditionsEditor>` after Action. Followers: Story 4.12 removes the
- * handle's `disabled` and adds the drag handlers, Story 4.13 flags a zero-condition card at Save.
+ * Story 4.11 mounts `<ConditionsEditor>` after Action. Story 4.12 removes the handle's
+ * `disabled` and wires it live: this card owns only the pointer PLUMBING (capture, the `button` /
+ * `isPrimary` / `pointerId` guards, the `buttons`-bitmask self-heal, `ArrowUp`/`ArrowDown`) —
+ * the drag GEOMETRY (which slot the pointer is over) and the reorder STATE (`drag`, the
+ * announcement) live one level up in `<RulesEditor>`, because a lone card has no siblings to
+ * measure against. `key={rule.id}` is what keeps this card's `useId()`s and its condition rows'
+ * `touched` state attached to the SAME rule across a reorder (RFC-004 §2.4 — identity survives a
+ * move; AC3). Story 4.13 flags a zero-condition card at Save.
  *
  * `useId()` gives four ids per card (label, summary, counter, action) — the multi-instance case
  * `<OrganismNameField>`'s comment anticipated. Every decorative glyph (`⋮⋮`, `✕`) is a real
  * `aria-hidden` node inside a button whose accessible name comes from `aria-label` (the Story 4.9
  * review finding: generated content joins a control's accessible name).
  *
- * (Story 4.10) (FR-2.5) (UX-DR10) (UX-DR17) (AR-46)
+ * (Story 4.10) (Story 4.12) (FR-2.5) (FR-2.6) (UX-DR10) (UX-DR11) (UX-DR17) (AR-46)
  */
 
-// `.rule-card` (`:527-536`). No `transition` on the hover border (NFR-2.1).
+// The drop indicator's shared rule set (Story 4.12, AC1/FD5) — module-level, referenced from the
+// two literal `data-drop` selectors below, never a selector built from the prop value (the
+// `themeTokens.test.ts` `var(` scan, the `<RuleCard>` `ActionBadge` precedent).
+const dropLine = {
+  content: '""',
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  height: '2px',
+  background: 'var(--gol-accent)',
+  pointerEvents: 'none',
+} as const;
+
+// `.rule-card` (`:527-536`). No `transition` on the hover border (the axe-mid-fade rule, Stories
+// 2.13-2.15). `position: relative` anchors the two drop-indicator pseudo-elements (Story 4.12,
+// AC1/FD5): they sit on the adjacent `<li>`, not a separate element between cards, because an
+// `<ol>` may hold only `<li>` children and an extra one — even `aria-hidden` — would change the
+// `listitem` count Story 4.10's tests pin.
 const Card = styled('li')({
+  position: 'relative',
   background: 'var(--gol-bg-secondary)',
   border: '1px solid var(--gol-border)',
   marginBottom: '12px',
   '&:hover': {
     borderColor: 'var(--gol-accent)',
   },
+  // The dragged card itself (AC1): semi-transparent and elevated with the existing accent-glow
+  // token (Story 1.10) — no new token, no `rgba` literal (AR-46).
+  '&[data-dragging]': {
+    opacity: 0.5,
+    borderColor: 'var(--gol-accent)',
+    boxShadow: 'var(--gol-shadow-tile-hover)',
+  },
+  // The drop indicator (AC1/FD5): a 2px accent line in the 12px `marginBottom` gap, on whichever
+  // neighbour the drop would land beside — `-7px` centres the 2px line in that gap.
+  '&[data-drop="before"]::before': { ...dropLine, top: '-7px' },
+  '&[data-drop="after"]::after': { ...dropLine, bottom: '-7px' },
 });
 
 // `.rule-header` (`:542-548`). Not clickable — no `cursor: pointer`, no hover background.
@@ -69,9 +100,13 @@ const CardHeader = styled('div')({
   padding: '15px 18px',
 });
 
-// `.drag-handle` (`:555-563`) — text-tertiary, transparent, no border; `cursor: default` because
-// this control does nothing yet (FD4). `&:disabled` keeps the same colour: axe exempts disabled
-// controls from `color-contrast`, and the point here is the ATTRIBUTE, not the paint.
+// `.drag-handle` (`:555-563`, hover `:561-563`) — text-tertiary, transparent, no border. Story
+// 4.12 wires it live: `cursor: 'grab'` / `'grabbing'` while active, a visible focus ring (the
+// `DeleteButton` ring, copied), and the two declarative gestures that keep the browser from
+// fighting a drag — `touchAction: 'none'` stops touch-scroll, `userSelect: 'none'` stops a fast
+// mouse drag starting text selection (the `<BattleEditorView>` `:360-372` reasoning: CSS set
+// BEFORE the gesture starts, never `preventDefault()` on `pointerdown`, which in Chromium would
+// also suppress the button receiving focus).
 const DragHandle = styled('button')({
   background: 'transparent',
   border: 0,
@@ -79,9 +114,18 @@ const DragHandle = styled('button')({
   color: 'var(--gol-text-tertiary)',
   fontSize: '16px',
   lineHeight: 1,
-  cursor: 'default',
-  '&:disabled': {
-    color: 'var(--gol-text-tertiary)',
+  cursor: 'grab',
+  touchAction: 'none',
+  userSelect: 'none',
+  '&:active': {
+    cursor: 'grabbing',
+  },
+  '&:hover': {
+    color: 'var(--gol-accent)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
   },
 });
 
@@ -174,6 +218,20 @@ export interface RuleCardProps {
     id: string,
     update: (conditions: readonly ConditionDraft[]) => readonly ConditionDraft[],
   ): void;
+  /** Keyboard reorder (ArrowUp → index − 1, ArrowDown → index + 1); clamping is the parent's. */
+  onMove(id: string, toIndex: number): void;
+  /** Pointer drag, semantic — geometry and state are `<RulesEditor>`'s; this card owns only the
+   * pointer plumbing (capture, button and pointerId guards, the buttons-bitmask self-heal). */
+  onDragStart(id: string): void;
+  onDragOver(clientY: number): void;
+  onDragEnd(): void;
+  onDragCancel(): void;
+  /** This card is the one being dragged (`data-dragging` on the `<li>`). */
+  dragging: boolean;
+  /** The accent line to paint on this card, or none (`data-drop` on the `<li>`). */
+  dropIndicator: 'before' | 'after' | null;
+  /** The list-level instructions node — every handle's `aria-describedby`. */
+  describedBy: string;
 }
 
 export default function RuleCard({
@@ -183,23 +241,113 @@ export default function RuleCard({
   onChange,
   onDelete,
   onConditionsChange,
+  onMove,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDragCancel,
+  dragging,
+  dropIndicator,
+  describedBy,
 }: RuleCardProps) {
   const labelId = useId();
   const summaryId = useId();
   const counterId = useId();
   const actionId = useId();
   const n = index + 1;
+  const pointerIdRef = useRef<number | null>(null);
   const handleConditionsChange = useCallback(
     (update: (conditions: readonly ConditionDraft[]) => readonly ConditionDraft[]) =>
       onConditionsChange(rule.id, update),
     [onConditionsChange, rule.id],
   );
 
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        onMove(rule.id, index - 1);
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        onMove(rule.id, index + 1);
+      }
+      // Any other key is left alone (FD2 — one key, one move; no grab/drop mode).
+    },
+    [onMove, rule.id, index],
+  );
+
+  // Clears the active pointer and releases capture — shared by every termination path
+  // (pointerup, pointercancel, lostpointercapture, and the buttons-bitmask self-heal below).
+  const endDrag = useCallback((target: HTMLButtonElement, pointerId: number) => {
+    pointerIdRef.current = null;
+    if (target.hasPointerCapture?.(pointerId)) {
+      target.releasePointerCapture?.(pointerId);
+    }
+  }, []);
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0 || !event.isPrimary || pointerIdRef.current !== null) return;
+      pointerIdRef.current = event.pointerId;
+      // Guarded — jsdom 30 has no `setPointerCapture` (the `<PetriDishCanvas>` Task 5 idiom).
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      onDragStart(rule.id);
+    },
+    [onDragStart, rule.id],
+  );
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.pointerId !== pointerIdRef.current) return;
+      // Trap 5's self-heal: capture lost somewhere the handle never heard about — treat the
+      // primary button reading as released as a terminate-and-cancel.
+      if ((event.buttons & 1) === 0) {
+        endDrag(event.currentTarget, event.pointerId);
+        onDragCancel();
+        return;
+      }
+      onDragOver(event.clientY);
+    },
+    [onDragCancel, onDragOver, endDrag],
+  );
+
+  const handlePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.pointerId !== pointerIdRef.current) return;
+      endDrag(event.currentTarget, event.pointerId);
+      onDragEnd();
+    },
+    [onDragEnd, endDrag],
+  );
+
+  const handlePointerCancel = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      // `lostpointercapture` fires after our own `releasePointerCapture` in `endDrag` too — by
+      // then `pointerIdRef` is already `null`, so this guard drops the redundant callback (the
+      // order is release -> ref cleared -> `lostpointercapture` ignored).
+      if (event.pointerId !== pointerIdRef.current) return;
+      endDrag(event.currentTarget, event.pointerId);
+      onDragCancel();
+    },
+    [onDragCancel, endDrag],
+  );
+
   return (
-    <Card>
+    <Card data-dragging={dragging || undefined} data-drop={dropIndicator ?? undefined}>
       <div role="group" aria-labelledby={labelId} data-rule-card data-rule-id={rule.id}>
         <CardHeader>
-          <DragHandle type="button" disabled aria-label={`Reorder rule ${n}`} data-drag-handle>
+          <DragHandle
+            type="button"
+            aria-label={`Reorder rule ${n}`}
+            aria-describedby={describedBy}
+            data-drag-handle
+            onKeyDown={handleKeyDown}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            onLostPointerCapture={handlePointerCancel}
+          >
             <span aria-hidden="true">⋮⋮</span>
           </DragHandle>
           <ActionBadge data-action={rule.payload.action} data-rule-badge>

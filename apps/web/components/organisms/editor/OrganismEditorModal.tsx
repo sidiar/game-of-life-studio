@@ -156,8 +156,9 @@ const EditorBody = styled('div')({
  * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds the editor's draft (`OrganismDraft`,
  * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name`, Story 4.6's
  * `dominance`, Story 4.7's `agingEnabled`/`colorToken`, Story 4.8's `colorToken` seed from
- * `library` and Story 4.10's `survivalRules`) and its seed — no repository call; the lifecycle
- * (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh draft per open is
+ * `library` and Story 4.10's `survivalRules`, Story 4.12's order) and its seed — no repository
+ * call; the lifecycle (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh
+ * draft per open is
  * the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after every exit, so there
  * is no reset effect and no `key` trick). The `useState` initialiser closes over the `library`
  * prop — legitimate because it runs once per mount and the `mounted` gate guarantees a mount per

@@ -30,11 +30,28 @@ const ORGANISMS = [
  * overridable: the helper returns its own mocks, and an override would be asserted against a mock
  * that was never wired. */
 function renderCard(
-  overrides: Partial<Omit<RuleCardProps, 'onChange' | 'onDelete' | 'onConditionsChange'>> = {},
+  overrides: Partial<
+    Omit<
+      RuleCardProps,
+      | 'onChange'
+      | 'onDelete'
+      | 'onConditionsChange'
+      | 'onMove'
+      | 'onDragStart'
+      | 'onDragOver'
+      | 'onDragEnd'
+      | 'onDragCancel'
+    >
+  > = {},
 ) {
   const onChange = vi.fn();
   const onDelete = vi.fn();
   const onConditionsChange = vi.fn();
+  const onMove = vi.fn();
+  const onDragStart = vi.fn();
+  const onDragOver = vi.fn();
+  const onDragEnd = vi.fn();
+  const onDragCancel = vi.fn();
   const props: RuleCardProps = {
     rule: RULE,
     index: 0,
@@ -42,14 +59,35 @@ function renderCard(
     onChange,
     onDelete,
     onConditionsChange,
+    onMove,
+    onDragStart,
+    onDragOver,
+    onDragEnd,
+    onDragCancel,
+    dragging: false,
+    dropIndicator: null,
+    describedBy: 'instr',
     ...overrides,
   };
   const utils = render(
-    <ol role="list" aria-label="Survival rules">
-      <RuleCard {...props} />
-    </ol>,
+    <>
+      <span id="instr">Press Up Arrow or Down Arrow to move this rule.</span>
+      <ol role="list" aria-label="Survival rules">
+        <RuleCard {...props} />
+      </ol>
+    </>,
   );
-  return { ...utils, onChange, onDelete, onConditionsChange };
+  return {
+    ...utils,
+    onChange,
+    onDelete,
+    onConditionsChange,
+    onMove,
+    onDragStart,
+    onDragOver,
+    onDragEnd,
+    onDragCancel,
+  };
 }
 
 describe('RuleCard', () => {
@@ -58,7 +96,7 @@ describe('RuleCard', () => {
 
     const group = screen.getByRole('group', { name: 'Rule 1' });
     const reorder = within(group).getByRole('button', { name: 'Reorder rule 1' });
-    expect(reorder).toBeDisabled();
+    expect(reorder).toBeEnabled();
     expect(within(group).getByRole('button', { name: 'Delete rule 1' })).toBeInTheDocument();
     const summary = within(group).getByRole('textbox', { name: 'Summary' });
     expect(summary).toHaveValue(RULE.payload.summary);
@@ -114,16 +152,27 @@ describe('RuleCard', () => {
     expect(onChange).toHaveBeenCalledWith(RULE.id, { action: 'die' });
 
     rerender(
-      <ol role="list" aria-label="Survival rules">
-        <RuleCard
-          rule={{ ...RULE, payload: { ...RULE.payload, action: 'die' } }}
-          index={0}
-          organisms={ORGANISMS}
-          onChange={onChange}
-          onDelete={vi.fn()}
-          onConditionsChange={vi.fn()}
-        />
-      </ol>,
+      <>
+        <span id="instr">instructions</span>
+        <ol role="list" aria-label="Survival rules">
+          <RuleCard
+            rule={{ ...RULE, payload: { ...RULE.payload, action: 'die' } }}
+            index={0}
+            organisms={ORGANISMS}
+            onChange={onChange}
+            onDelete={vi.fn()}
+            onConditionsChange={vi.fn()}
+            onMove={vi.fn()}
+            onDragStart={vi.fn()}
+            onDragOver={vi.fn()}
+            onDragEnd={vi.fn()}
+            onDragCancel={vi.fn()}
+            dragging={false}
+            dropIndicator={null}
+            describedBy="instr"
+          />
+        </ol>
+      </>,
     );
     const badge = document.querySelector('[data-rule-badge]');
     expect(badge).toHaveTextContent('Die');
@@ -140,16 +189,178 @@ describe('RuleCard', () => {
     expect(onDelete).toHaveBeenCalledWith(RULE.id);
   });
 
-  it('the handle is genuinely disabled and a click on it calls nothing', async () => {
+  it('the handle is enabled, and a plain click calls neither onChange, onDelete nor onMove', async () => {
     const user = userEvent.setup();
-    const { onChange, onDelete } = renderCard();
+    const { onChange, onDelete, onMove } = renderCard();
 
     const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
-    expect(handle).toBeDisabled();
+    expect(handle).toBeEnabled();
     await user.click(handle);
 
     expect(onChange).not.toHaveBeenCalled();
     expect(onDelete).not.toHaveBeenCalled();
+    expect(onMove).not.toHaveBeenCalled();
+  });
+
+  it('the handle is described by the list-level instructions node', () => {
+    renderCard();
+
+    const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+    expect(handle.getAttribute('aria-describedby')).toBe('instr');
+  });
+
+  it('ArrowDown / ArrowUp call onMove with index +/- 1 and are consumed', () => {
+    const { onMove } = renderCard({ index: 2 });
+    const handle = screen.getByRole('button', { name: 'Reorder rule 3' });
+
+    expect(fireEvent.keyDown(handle, { key: 'ArrowDown' })).toBe(false);
+    expect(onMove).toHaveBeenCalledWith(RULE.id, 3);
+
+    expect(fireEvent.keyDown(handle, { key: 'ArrowUp' })).toBe(false);
+    expect(onMove).toHaveBeenCalledWith(RULE.id, 1);
+  });
+
+  it('ArrowUp at index 0 calls onMove with -1 — the card does not clamp', () => {
+    const { onMove } = renderCard({ index: 0 });
+    const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+
+    fireEvent.keyDown(handle, { key: 'ArrowUp' });
+
+    expect(onMove).toHaveBeenCalledWith(RULE.id, -1);
+  });
+
+  it.each(['Enter', ' ', 'ArrowLeft', 'Home'])(
+    'other keys (%s) are left alone: onMove not called, not prevented',
+    (key) => {
+      const { onMove } = renderCard();
+      const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+
+      expect(fireEvent.keyDown(handle, { key })).toBe(true);
+      expect(onMove).not.toHaveBeenCalled();
+    },
+  );
+
+  it('pointer plumbing: down starts, move reports, up ends; a move after up is ignored', () => {
+    const { onDragStart, onDragOver, onDragEnd } = renderCard();
+    const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+
+    fireEvent.pointerDown(handle, { button: 0, isPrimary: true, pointerId: 1 });
+    expect(onDragStart).toHaveBeenCalledWith(RULE.id);
+    expect(onDragStart).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerMove(handle, { pointerId: 1, buttons: 1, clientY: 240 });
+    expect(onDragOver).toHaveBeenCalledWith(240);
+
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(onDragEnd).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerMove(handle, { pointerId: 1, buttons: 1, clientY: 300 });
+    expect(onDragOver).toHaveBeenCalledTimes(1);
+  });
+
+  it('pointer guards: wrong button, non-primary, another pointerId, and a released-buttons self-heal', () => {
+    const { onDragStart, onDragOver, onDragCancel, onDragEnd } = renderCard();
+    const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+
+    fireEvent.pointerDown(handle, { button: 2, isPrimary: true, pointerId: 1 });
+    expect(onDragStart).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(handle, { button: 0, isPrimary: false, pointerId: 1 });
+    expect(onDragStart).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(handle, { button: 0, isPrimary: true, pointerId: 1 });
+    expect(onDragStart).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerMove(handle, { pointerId: 2, buttons: 1, clientY: 50 });
+    expect(onDragOver).not.toHaveBeenCalled();
+
+    fireEvent.pointerMove(handle, { pointerId: 1, buttons: 0, clientY: 50 });
+    expect(onDragCancel).toHaveBeenCalledTimes(1);
+    expect(onDragOver).not.toHaveBeenCalled();
+
+    // The ref was cleared by the self-heal above — a pointerup carrying the SAME id is no longer
+    // recognised as the active drag.
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(onDragEnd).not.toHaveBeenCalled();
+  });
+
+  it('pointercancel mid-drag calls onDragCancel', () => {
+    const { onDragStart, onDragCancel } = renderCard();
+    const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+
+    fireEvent.pointerDown(handle, { button: 0, isPrimary: true, pointerId: 1 });
+    expect(onDragStart).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerCancel(handle, { pointerId: 1 });
+    expect(onDragCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second pointerDown mid-drag starts nothing', () => {
+    const { onDragStart } = renderCard();
+    const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+
+    fireEvent.pointerDown(handle, { button: 0, isPrimary: true, pointerId: 1 });
+    fireEvent.pointerDown(handle, { button: 0, isPrimary: true, pointerId: 2 });
+
+    expect(onDragStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('state props reach the <li>: dragging and dropIndicator toggle data attributes', () => {
+    const { rerender } = renderCard({ dragging: true, dropIndicator: null });
+    expect(screen.getByRole('listitem')).toHaveAttribute('data-dragging');
+    expect(screen.getByRole('listitem')).not.toHaveAttribute('data-drop');
+
+    rerender(
+      <>
+        <span id="instr">instructions</span>
+        <ol role="list" aria-label="Survival rules">
+          <RuleCard
+            rule={RULE}
+            index={0}
+            organisms={ORGANISMS}
+            onChange={vi.fn()}
+            onDelete={vi.fn()}
+            onConditionsChange={vi.fn()}
+            onMove={vi.fn()}
+            onDragStart={vi.fn()}
+            onDragOver={vi.fn()}
+            onDragEnd={vi.fn()}
+            onDragCancel={vi.fn()}
+            dragging={false}
+            dropIndicator="after"
+            describedBy="instr"
+          />
+        </ol>
+      </>,
+    );
+    expect(screen.getByRole('listitem')).not.toHaveAttribute('data-dragging');
+    expect(screen.getByRole('listitem')).toHaveAttribute('data-drop', 'after');
+
+    rerender(
+      <>
+        <span id="instr">instructions</span>
+        <ol role="list" aria-label="Survival rules">
+          <RuleCard
+            rule={RULE}
+            index={0}
+            organisms={ORGANISMS}
+            onChange={vi.fn()}
+            onDelete={vi.fn()}
+            onConditionsChange={vi.fn()}
+            onMove={vi.fn()}
+            onDragStart={vi.fn()}
+            onDragOver={vi.fn()}
+            onDragEnd={vi.fn()}
+            onDragCancel={vi.fn()}
+            dragging={false}
+            dropIndicator={null}
+            describedBy="instr"
+          />
+        </ol>
+      </>,
+    );
+    expect(screen.getByRole('listitem')).not.toHaveAttribute('data-dragging');
+    expect(screen.getByRole('listitem')).not.toHaveAttribute('data-drop');
   });
 
   it('the summary textbox is described by the counter', () => {

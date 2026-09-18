@@ -1497,8 +1497,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   anatomy (drag handle, badge, label, delete in the header) is the story's authority instead — the
   same fork Story 4.3 took for the header. The UX reconciliation touch Story 4.3 asked for should
   now settle which card the mockup shows, since two stories have taken the AC over the revision.
-- **The drag handle ships `disabled`** (FD4) until Story 4.12 wires reordering — a visible
-  affordance with no behaviour, deliberately honest rather than absent because the AC lists it.
+- ~~**The drag handle ships `disabled`** (FD4) until Story 4.12 wires reordering — a visible
+  affordance with no behaviour, deliberately honest rather than absent because the AC lists it.~~
+  — **✅ Resolved in Story 4.12.** The handle is a live pointer/keyboard reorder control.
 - **The mockup's per-action description copy is not built** (FD7) — "Successful birth will depend
   on organism dominance rules" and "cells that are alive and belong to the same organism" are
   engine claims (Decision C, M10) that need verifying against `packages/simulation` before shipping
@@ -1583,11 +1584,13 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **Condition delete has no confirmation and shares 4.10's pointer double-click cascade** (FD7) —
   a row is cheap to re-add; if the Story 4.26 dialog pattern is wanted here too, the owner decides
   (not proposed here: three dialogs per rule edit).
-- **No arrow-key navigation between rows** (UX-DR17 lists it; no AC asks) — Story 4.12's keyboard
-  reordering is where arrow keys enter this column.
-- **`RULE_ACTIONS` still derives in `apps/web`** (`lib/organisms/ruleDraft.ts`) while the condition
+- **Partial (Story 4.12, 2026-09-18): No arrow-key navigation between rows** (UX-DR17 lists it; no
+  AC asks) — arrow keys from the focused drag handle now reorder rules; arrow-key *navigation*
+  between condition rows is still unbuilt. Re-pointed to Story 6.11 / the UX reconciliation touch.
+- ~~**`RULE_ACTIONS` still derives in `apps/web`** (`lib/organisms/ruleDraft.ts`) while the condition
   universe now derives in `@gol/domain` — moving it is a two-line symmetry change for the next
-  `ruleDraft.ts` touch.
+  `ruleDraft.ts` touch.~~ — **✅ Resolved in Story 4.12.** `RULE_ACTIONS`/`RuleAction` now live in
+  `@gol/domain`'s `survivalRuleSchema.ts`; `ruleDraft.ts` re-exports them.
 - **Story 4.17 must decide whether the organism-type dropdown lists the organism under edit** —
   the modal doc says 4.17 passes `library` minus self (right for the colour warning); `organismType
   eq <self>` is a legal, `alive`-equivalent condition, and an existing self-reference would render
@@ -1600,3 +1603,32 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **4.15's preview needs `contentHash` before 4.16's hasher exists** — `validateSurvivalRules`
   rejects a hash-less rule; Story 4.15 decides (a session-only placeholder hash, or landing after
   4.16).
+
+## Deferred from: Story 4-12-rule-reordering (2026-09-18)
+
+- **No auto-scroll of the Rules column during a pointer drag** (FD8) — the wheel still scrolls it
+  natively, and the keyboard path covers any list length. Edge-triggered auto-scroll is a
+  `requestAnimationFrame` loop with its own tests and cancellation surface — a story's worth for
+  lists this editor will rarely grow past the viewport.
+- **No grab/drop keyboard mode, no Home/End** (FD2) — one key, one move; immediate and reversible
+  with the opposite key. A grab-and-drop state machine (Space to pick up, arrows to move, Space to
+  drop, Escape to revert) can land as a follow-up on top of the same `moveRule` if parity with
+  `@dnd-kit`-style sortables is wanted.
+- **A boundary key is silent** — no "already first" / "already last" announcement (FD2); the key
+  is still consumed (`preventDefault`ed) so the column never scrolls under it.
+- **axe is not run mid-drag** (FD7) — `opacity: 0.5` on the dragged card halves every contrast
+  ratio on it for the life of the gesture, a transient pointer state rather than one of the
+  settled states this project's axe idiom scans.
+- **`VisuallyHidden` now has two copies** (`<ColorPickerField>`, `<RulesEditor>`) — the third
+  caller lifts it into `fieldStyles.ts` (the Story 4.7 threshold).
+- **No unreachable-rule hint** (RFC-004 Risk 8: a later rule shadowed by an earlier one with a
+  broader condition) — out of MVP scope by the RFC's own line.
+- **No drag threshold** — a plain click on the handle flashes the dragging style for the click's
+  duration (harmless NFR-4.2 feedback); a 4px movement threshold before `data-dragging` paints is
+  a one-line change if the flash is unwanted.
+- **The mockup has no dragging CSS** — `.rule-card.dragging` / drop-zone styles do not exist in
+  either theme's HTML; AC1's values (0.5 opacity / accent border / `--gol-shadow-tile-hover`
+  elevation / 2px accent line) are this story's reading of the design doc's prose and belong in
+  the next UX reconciliation touch (the one Stories 4.3 and 4.10 also asked for).
+- **Condition rows are not reorderable** — they are AND-combined, so order is irrelevant (FR-2.5);
+  nothing to build.
