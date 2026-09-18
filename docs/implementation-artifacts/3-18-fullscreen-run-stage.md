@@ -4,7 +4,7 @@ baseline_commit: 0c4e82e5116c7e7f12f0fe3c78fcfd75139f8091
 
 # Story 3.18: Fullscreen Run Stage
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -108,14 +108,16 @@ three channel-composed tokens for the floating chrome; see FD4 (b) and the File 
      on the stage's own `--gol-bg-primary`, `1px solid var(--gol-border-control)` — SC 1.4.11
      needs the control token, not `--gol-border`), hover → accent border + text, focus-visible ring,
      no `transition`. It calls `onExit`. *(FD4 (b), 2026-09-18: the bar is `position: fixed` under
-     `--gol-scrim-top`, and the Exit surface is `--gol-surface-hud` — the mockup's `rgba(0,0,0,.4)`
-     as the one floating-chrome token — not `transparent`.)*
+     `--gol-scrim-top`, and the Exit surface is opaque `--gol-bg-secondary` — the mockup's
+     `rgba(0,0,0,.4)` made opaque, the surface the HUD panel shares — not `transparent`; second-review
+     decision (d) removed the interim translucent `--gol-surface-hud` token.)*
    - **The dish**: `children` — the live `<PetriDishCanvas>` inside its unchanged wrappers (AC4).
    - **HUD** (`.fs-hud` / `.hud-*`, mockup `:131-210`; `.control-btn*` `:212-259`): a centred row (`padding: 0 24px 40px` —
      the mockup's 40px bottom offset, in flow) holding one panel: `display: inline-flex; alignItems:
      center; gap: 20px; padding: 12px 20px; background: var(--gol-bg-secondary); border: 1px solid
      var(--gol-border); maxWidth: 94vw; flexWrap: wrap; justifyContent: center`. *(FD4 (b): the row
-     is `position: fixed; bottom: 40px`, not in flow, and the panel's surface is `--gol-surface-hud`.)*
+     is `position: fixed; bottom: 40px`, not in flow; the panel's surface stays the opaque
+     `--gol-bg-secondary` — second-review decision (d).)*
      Groups in this
      order, separated by `1px × 28px` `--gol-border` dividers (`aria-hidden`): **Cycle** — a
      10px/uppercase `--gol-text-secondary` label `Cycle` + the zero-padded digits at
@@ -568,7 +570,7 @@ on the tree: nothing under `SimulationLayout` carries `position` / `transform` /
 (quality + e2e, all four projects); `f43176c` — HEAD and the PR head — triggered **no run**
 (`actions/runs?head_sha=` → 0), so the review commit's push is the first run on this content.
 
-- [ ] [Review][Decision] **HUD text falls under AA where the HUD overlaps a bright colony** — FD4
+- [x] [Review][Decision] **HUD text falls under AA where the HUD overlaps a bright colony** — FD4
   (b)'s reason (2) says the 0.82 `bg-secondary` surface "visually dominates whatever cells lie under
   it"; the arithmetic says otherwise for the weakest gated token. `--gol-surface-hud` is
   `rgb(26 26 26 / 0.82)`, so 18% of the cell colour composes through. `HudLabel` (10px) and the
@@ -787,9 +789,13 @@ dish `min(94vw, 138vh)`.
   0.82 `bg-secondary` surface visually dominates whatever cells lie under it; (3) is real and is
   answered by dropping `backdrop-filter` alone — the floating layout costs nothing per frame. What
   shipped: `.fs-top` and `.fs-hud` `position: fixed` over the dish, the dish `min(94vw, 138vh)`,
-  three tokens (`--gol-scrim-top`, `--gol-surface-hud`, `--gol-shadow-dish-glow`) — the Exit button
-  wears `--gol-surface-hud` too (the mockup's `rgba(0,0,0,.4)`; one token for the floating chrome
-  rather than a second near-black one) — no blur, no `transition`. Measured: **990×592 at 1280×720** (mockup 994×596), **1486×890 at 1920×1080**.
+  two tokens (`--gol-scrim-top`, `--gol-shadow-dish-glow`) — no blur, no `transition`. Measured:
+  **990×592 at 1280×720** (mockup 994×596), **1486×890 at 1920×1080**.
+  *(Second-review decision (d), 2026-09-18: the HUD panel and the Exit button are OPAQUE
+  `--gol-bg-secondary`, not a translucent token — reason (2) above was wrong for the weakest gated
+  pair: 18% of a bright colony composed through the 0.82 surface and put `--gol-text-secondary`
+  at ≈3.8:1 over the palette's yellow, under AA. The `--gol-surface-hud` token that shipped with
+  (b) was removed; the scrim and the glow are unchanged, so the floating chrome is two tokens.)*
 
 **FD5 — `<VisuallyHidden>`.**
 - **(a) Promote `editor/GridSettingsSection.tsx:146-153` to `apps/web/components/VisuallyHidden.tsx`;
@@ -1189,6 +1195,14 @@ Claude Opus 5 (1M context) — `claude-opus-5[1m]`, under `implement-next-story`
   **185 passed, 1 skipped** on the default port.
 - **`npm run ci:dev > /tmp/ci-3-18.log 2>&1; echo $?`**: **exit 0** (typecheck → lint → format:check → spec:check → boundary:check → coverage → build → bundle → bench → bench:check → e2e:chromium; **185 Chromium e2e passed**, 1.0 min). The four-browser matrix is CI's job on the pushed branch.
 - **`bench:check`** (no engine change, reported anyway): frame **7.205 ms** (step 7.062 + repaint-diff 0.143) against 16.667 ms — 9.462 ms headroom, 56.8% of the frame; green, no engine change.
+- **Second-review decision (d) pass (2026-09-18)**: `--gol-surface-hud` removed; `HudPanel` /
+  `ExitButton` → `var(--gol-bg-secondary)`; no test referenced the token (grep over `apps/`,
+  `packages/`, `docs/` — only `themes.css`, `FullscreenStage.tsx` and the docs named it). `npm run
+  ci:dev` exit **0**: typecheck → lint → format:check → spec:check → boundary:check → coverage
+  (persistence 82, simulation 407, test-utils 89, domain 108, web green incl. `themeTokens` 86) →
+  build → bundle (`/battle` 309.2 KB, 0.8 KB headroom; `/battle/new` 0.9 KB; `/` 6.3 KB;
+  `/organisms` 9.5 KB) → bench:check (8.525 ms headroom, 51.2% of the frame) → e2e Chromium
+  **193 passed, 1 skipped** (1.2 min).
 
 ### Completion Notes List
 
@@ -1232,11 +1246,19 @@ Claude Opus 5 (1M context) — `claude-opus-5[1m]`, under `implement-next-story`
   ✅ Resolved review finding [Decision]: Exit double-click landing on the remounted `Lab` — option
   (b), `event.detail > 1` guard on the mode toggle in `BattleHeader.tsx` + one test (`detail: 2`
   ignored; `detail: 1` and keyboard `Enter` still fire). `BattleHeader.test.tsx`: 18/18.
+- **Second-review decision applied (2026-09-18)** —
+  ✅ Resolved review finding [Decision]: HUD text under AA over a bright colony — the owner's
+  option (d): `HudPanel` and `ExitButton` are opaque `var(--gol-bg-secondary)`; `--gol-surface-hud`
+  removed from `themes.css` (its comment block now covers the two tokens that remain); the FD4
+  override paragraph, the `FullscreenStage.tsx` file-header and `.fs-exit` / `.fs-hud` comments,
+  the two AC italics that named the token, the File List line and the `deferred-work.md`
+  mockup-refresh line now say two tokens and an opaque panel. No new test: the panel's text is the
+  already-gated `themeTokens.test.ts` bg-secondary pair, and no test named the removed token.
 - **For the reviewer**: nothing here touches `PetriDishCanvas.tsx`, `useSimulation.ts`,
   `gridRenderer.ts`, `packages/**`, `check-bundle-size.mjs`, any route file, or anything under
   `components/organisms/**` / `lib/organisms/**`. `themes.css` IS touched since the FD4 override
-  (2026-09-18): three tokens appended at the end of `:root`, directly above Story 4.10's rule-action
-  block — `themes.css` is a shared-lane file (4.2 / 4.6 / 4.10 each appended there), so a lane-4
+  (2026-09-18): two tokens appended at the end of `:root` (three until decision (d) removed
+  `--gol-surface-hud`), directly above Story 4.10's rule-action block — `themes.css` is a shared-lane file (4.2 / 4.6 / 4.10 each appended there), so a lane-4
   token append lands as an adjacent-hunk conflict; merge one lane's PR, let the other sync. The
   bundle stayed green, so the
   documented `PetriDishCanvas` split (which would touch a file 4.14/4.15 import) was NOT needed
@@ -1274,8 +1296,8 @@ Modified:
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
 - `docs/implementation-artifacts/3-18-fullscreen-run-stage.md` (this file)
-- `apps/web/app/themes.css` (FD4 (b), 2026-09-18: `--gol-scrim-top`, `--gol-surface-hud`,
-  `--gol-shadow-dish-glow`)
+- `apps/web/app/themes.css` (FD4 (b), 2026-09-18: `--gol-scrim-top`, `--gol-shadow-dish-glow`;
+  the interim `--gol-surface-hud` was removed by second-review decision (d))
 
 ## Change Log
 
@@ -1301,6 +1323,10 @@ Modified:
   comments, one `deferred-work.md` line), 2 deferred to `deferred-work.md` (decision 2's residuals;
   a third `VisuallyHidden` copy in lane 4), 1 decision left open for the owner (HUD text under AA
   where the translucent HUD overlaps a bright colony).
+- 2026-09-18 — Addressed code review findings - 1 item resolved (the owner's decision (d)): the HUD
+  panel and the Exit button are opaque `--gol-bg-secondary`; `--gol-surface-hud` removed from
+  `themes.css`; the FD4 override, the `FullscreenStage.tsx` file comment and the `deferred-work.md`
+  mockup-refresh line now name two tokens. Gates re-run. Status → review.
 
 Dev Model: opus   # architecture-shaping: it decides where `fullscreen` lives (BattlePage, against spec §6), establishes the CSS-driven no-remount layout-swap pattern that 3.19's F key toggles and that React reconciliation can silently break, and factors <TransportControls>/<CycleDigits>/<PopulationPills> out of 3.12/3.14's files as the pieces 4.15 builds on
 Proposed lane gate: { story: 4-15-preview-simulation, requires: 3-18-fullscreen-run-stage, why: "3.18 lifts the transport trio out of <SimulationControlBar> (<TransportControls>), the zero-padded digits out of <CycleCounter> (<CycleDigits>) and ships <PopulationPills> as the compact population sibling — the preview panel (spec §8 / §3.12: SpeedControl + compact PopulationStats + cycle counter + Play/Stop/Step) is the third consumer of <TransportControls> and <CycleDigits> and the second of <PopulationPills>, and must reuse them rather than re-author or edit the same simulation/ files concurrently" }

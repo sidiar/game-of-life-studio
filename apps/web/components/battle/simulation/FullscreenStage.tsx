@@ -35,15 +35,16 @@ import TransportControls, { type SimulationControlBarProps } from './TransportCo
  * (`position: fixed`), which is what makes the stage read as a different place from the chassis
  * rather than the chassis minus its sidebar. The dish itself is sized by the view
  * (`min(94vw, 138vh)`, `BattleSimulationView.tsx`'s `PetriDishBox`), so nothing here competes
- * with it for height. The mockup's translucent surfaces are TOKENS — `--gol-scrim-top`,
- * `--gol-surface-hud`, `--gol-shadow-dish-glow` — composed from the `--gol-*-channel` triplets
- * exactly as `--gol-shadow-tile-hover` (1.10) and `--gol-accent-tint` (4.2) were: AR-46 bans the
- * rgba literal in this file, not the surface. Two things from the mockup do NOT ship:
+ * with it for height. The mockup's translucent scrim and glow are TOKENS — `--gol-scrim-top`,
+ * `--gol-shadow-dish-glow` — composed from the `--gol-*-channel` triplets exactly as
+ * `--gol-shadow-tile-hover` (1.10) and `--gol-accent-tint` (4.2) were: AR-46 bans the rgba
+ * literal in this file, not the surface. The HUD panel and the Exit button are OPAQUE
+ * `--gol-bg-secondary`, not the mockup's 0.82 alpha: a translucent panel lets a bright colony
+ * compose through (text-secondary over the palette's yellow fell to ≈3.8:1, under AA, and axe
+ * reports such pairs `incomplete` so no gate sees it); on the opaque panel the text is the gated
+ * `themeTokens.test.ts` pair wherever the panel sits. Two things from the mockup do NOT ship:
  * `backdrop-filter: blur(8px)` (compositor work over a 60 FPS canvas on every frame, RFC-003 /
- * NFR-1.1 — the 0.82 surface reads as a panel without it) and `transition` (the mid-fade axe trap
- * every bar on this route records). Text on the HUD sits on that 0.82 `bg-secondary` surface, not
- * on the cells: axe reports the pair as `incomplete`, never a violation, and the gated pairs
- * (`themeTokens.test.ts`) are the same accent / text-primary / text-secondary on bg-secondary.
+ * NFR-1.1) and `transition` (the mid-fade axe trap every bar on this route records).
  *
  * NOT rendered, by story: the mockup's `.fs-hint` line (`Press F to exit …`) and its `keydown`
  * script are Story 3.19's, together with the handlers that make them true (NFR-4.1 forbids a hint
@@ -131,15 +132,16 @@ const ModeBadge = styled('span')({
 });
 
 // Mockup: `.fs-exit` (:74-92) minus `transition: all 0.2s` (the axe mid-fade trap). Its
-// `rgba(0, 0, 0, 0.4)` surface is `--gol-surface-hud` — the same translucent panel token the HUD
-// wears, one token for the stage's floating chrome rather than a second near-black one.
+// `rgba(0, 0, 0, 0.4)` surface is opaque `--gol-bg-secondary` — the same surface the HUD panel
+// wears (see the file comment for why neither is translucent), one surface for the stage's
+// floating chrome rather than a second near-black one.
 // `--gol-border-control`, not `--gol-border`: SC 1.4.11 measures a control's border against the
 // colour ADJACENT to it — outside the button that is the scrim over the stage's `--gol-bg-primary`
 // (the scrim is the same channel, so `themeTokens.test.ts`'s control pair is the rendered one); the
-// `--gol-surface-hud` fill sits inside the border and is not what the border is measured against.
+// `--gol-bg-secondary` fill sits inside the border and is not what the border is measured against.
 // Hover is the mockup's own accent border + text (`:89-92`).
 const ExitButton = styled('button')({
-  background: 'var(--gol-surface-hud)',
+  background: 'var(--gol-bg-secondary)',
   border: '1px solid var(--gol-border-control)',
   color: 'var(--gol-text-primary)',
   padding: '8px 16px',
@@ -208,9 +210,9 @@ const HudRow = styled('div')({
   pointerEvents: 'none',
 });
 
-// Mockup: `.fs-hud`'s panel (:131-148) — the `--gol-surface-hud` translucent surface over the
-// dish, `--gol-border`; minus `backdrop-filter` (see the file comment). `flexWrap` + `maxWidth:
-// 94vw` are the mockup's own overflow policy for a wide roster.
+// Mockup: `.fs-hud`'s panel (:131-148) — opaque `--gol-bg-secondary` over the dish (not the
+// mockup's 0.82 alpha; see the file comment), `--gol-border`; minus `backdrop-filter`. `flexWrap`
+// + `maxWidth: 94vw` are the mockup's own overflow policy for a wide roster.
 const HudPanel = styled('div')({
   display: 'inline-flex',
   alignItems: 'center',
@@ -219,7 +221,7 @@ const HudPanel = styled('div')({
   gap: '20px',
   padding: '12px 20px',
   maxWidth: '94vw',
-  background: 'var(--gol-surface-hud)',
+  background: 'var(--gol-bg-secondary)',
   border: '1px solid var(--gol-border)',
   pointerEvents: 'auto',
 });

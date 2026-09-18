@@ -1649,11 +1649,14 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   2. **`backdrop-filter: blur(8px)` on the HUD** — the one piece of the mockup's floating chrome
      that does not ship. ~~Floating, translucent overlays, the gradient, the glow — none shipped
      (FD4 (a))~~ — **reversed by the owner 2026-09-18 (FD4 (b))**: the top bar and HUD float over
-     the dish, the dish is `min(94vw, 138vh)` with the glow, and the mockup's rgba surfaces are
-     channel-composed tokens (`--gol-scrim-top`, `--gol-surface-hud`, `--gol-shadow-dish-glow`),
-     the 1.10/4.2/4.6 construction. The blur stays out: compositor work over a 60 FPS canvas on
-     every frame (RFC-003's no-animation-during-steps rule, NFR-1.1), and the 0.82 surface reads
-     as a panel without it. If a refresh wants the blur, it is a bench question, not a token one.
+     the dish, the dish is `min(94vw, 138vh)` with the glow, and the mockup's rgba scrim and glow
+     are channel-composed tokens (`--gol-scrim-top`, `--gol-shadow-dish-glow`), the 1.10/4.2/4.6
+     construction. The HUD panel and the Exit button are opaque `--gol-bg-secondary`, not the
+     mockup's 0.82 alpha (second-review decision (d): a translucent panel let a bright colony push
+     `--gol-text-secondary` under AA, and axe reports such pairs `incomplete`, so no gate sees it).
+     The blur stays out: compositor work over a 60 FPS canvas on every frame (RFC-003's
+     no-animation-during-steps rule, NFR-1.1). If a refresh wants the blur, it is a bench question,
+     not a token one.
   3. ~~**The in-flow rows are TIGHTER than the mockup's**~~ — **moot since 2026-09-18** (FD4 (b)):
      the chrome floats, so nothing competes with the dish for height and the mockup's `18px 24px` /
      `bottom: 40px` are used as drawn. Measured: 990×592 at 1280×720 (mockup 994×596), 1486×890

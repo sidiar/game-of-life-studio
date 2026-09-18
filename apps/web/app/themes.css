@@ -142,19 +142,21 @@
   --gol-grid-line: rgb(var(--gol-border-channel) / 0.3);
 
   /* Fullscreen run stage (Story 3.18). Mockup: petri-dish-play-mode-fullscreen.html — .fs-top's
-     linear-gradient(rgba(10,10,10,.9) → rgba(10,10,10,0)) (:47), .fs-hud's rgba(26,26,26,.82)
-     (:139) and .petri-dish-grid's box-shadow: 0 0 40px rgba(0,212,255,.12) (:100). The chrome
-     FLOATS over the dish there, so its surfaces are translucent by design — the same construction
-     as --gol-shadow-tile-hover / --gol-accent-tint: composed from the channel tokens so Epic 6's
+     linear-gradient(rgba(10,10,10,.9) → rgba(10,10,10,0)) (:47) and .petri-dish-grid's
+     box-shadow: 0 0 40px rgba(0,212,255,.12) (:100). The chrome FLOATS over the dish there, so
+     these two surfaces are translucent by design — the same construction as
+     --gol-shadow-tile-hover / --gol-accent-tint: composed from the channel tokens so Epic 6's
      block retunes them for free, authored here because AR-46 bans the literals in the components.
-     The mockup's backdrop-filter: blur(8px) is NOT reproduced (a blur over a 60 FPS canvas is
-     compositor work per frame, and the 0.82 surface reads as a panel without it). */
+     The HUD panel and the Exit button are NOT a third token: they wear plain --gol-bg-secondary,
+     opaque, so the text on them is always the gated bg-secondary pair (themeTokens.test.ts)
+     whatever cells lie beneath — a translucent panel let a bright colony compose through and
+     pushed text-secondary under AA. The mockup's backdrop-filter: blur(8px) is NOT reproduced
+     (a blur over a 60 FPS canvas is compositor work per frame). */
   --gol-scrim-top: linear-gradient(
     to bottom,
     rgb(var(--gol-bg-primary-channel) / 0.9),
     rgb(var(--gol-bg-primary-channel) / 0)
   );
-  --gol-surface-hud: rgb(var(--gol-bg-secondary-channel) / 0.82);
   --gol-shadow-dish-glow: 0 0 40px rgb(var(--gol-accent-channel) / 0.12);
 
   /* Rule-action colours (Story 4.10). Mockup: --action-born / --action-survive / --action-die
