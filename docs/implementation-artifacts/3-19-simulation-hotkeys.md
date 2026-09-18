@@ -4,7 +4,7 @@ baseline_commit: ce3f7ab418ab4ffcb63439c647722347ed2226b7
 
 # Story 3.19: Simulation Hotkeys
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -149,8 +149,10 @@ callable (3.12 FD5). What does **not** exist: any `keydown` handling on the batt
    Next cycle → Stop & reset → body`) passes unchanged because nothing in the hint is focusable.
 
 8. **The stage shows its own hint line.** `<FullscreenStage>` renders, while `active`, the
-   mockup's `.fs-hint` (`:260-278`): `Press <kbd>F</kbd> to exit fullscreen • <kbd>Space</kbd>
-   Play/Pause • <kbd>→</kbd> Next` — `position: fixed; bottom: 14px`, centred (a full-width row
+   mockup's `.fs-hint` (`:260-278`), plus the FD4 (c) entry: `Press <kbd>F</kbd> to exit fullscreen
+   • <kbd>Esc</kbd> Stop & exit • <kbd>Space</kbd> Play/Pause • <kbd>→</kbd> Next` (four `<kbd>`s;
+   the mockup's line has three — `Esc` is the owner's 2026-09-18 addition, AC6) — `position: fixed;
+   bottom: 14px`, centred (a full-width row
    with `justifyContent: center`, the `HudRow` idiom — no `transform`), `9px`,
    `--gol-text-tertiary`, uppercase, `letter-spacing: 0.5px`; `<kbd>`s `--gol-text-secondary`,
    `600`, `margin: 0 2px`; `pointer-events: none` (it floats over the stage's `--gol-bg-primary`
@@ -292,8 +294,8 @@ callable (3.12 FD5). What does **not** exist: any `keydown` handling on the batt
         `HintText` with the `.fs-hint` values (`9px`, `--gol-text-tertiary`, uppercase, `0.5px`; `&
         kbd { color: var(--gol-text-secondary); margin: 0 2px }`), rendered as the FOURTH fragment
         slot while `active`. File comment: the "NOT rendered, by story" paragraph → what ships.
-        `FullscreenStage.test.tsx`: hint present when active with `F` / `Space` / `→`, absent
-        otherwise, axe.
+        `FullscreenStage.test.tsx`: hint present when active with `F` / `Esc` (FD4 (c)) / `Space` /
+        `→`, absent otherwise, axe.
 
 - [x] **Task 5 — e2e** (AC12): the five tests above in `battleRoute.spec.ts`; run the new block
       and the whole 3.11–3.19 range on `--project=chromium --workers=1` first (the 3.18 record's
@@ -398,6 +400,80 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
       are true from the first frame — is not in the hotkeys e2e block (trap 17 "should")
       [`apps/web/e2e/battleRoute.spec.ts`] — deferred, test-depth
 
+**Second review (2026-09-18, Opus, after the FD4 (c) commit `a245fe4`)** — three parallel
+adversarial layers again (Blind Hunter, Edge Case Hunter, Acceptance Auditor); 14 findings dismissed
+as noise at triage; no new owner decision; 12 patches applied in place (the 12th — the mid-fade axe
+flake in e2e (e) — found by running the block, not by a layer). CI on `a245fe4`: run 35352197048
+green (quality + e2e).
+
+- [x] [Review][Patch] AC8 and Task 4.3 still describe the three-entry stage hint (`F` / `Space` /
+      `→`) — the shipped `STAGE_HINT_ENTRIES` carries four (`Esc Stop & exit`, AC6 / FD4 (c))
+      [`docs/implementation-artifacts/3-19-simulation-hotkeys.md` AC8, Task 4.3]
+- [x] [Review][Patch] Two head comments quote the pre-FD4 (c) three-entry stage line one paragraph
+      before (or without) saying it gained a fourth entry
+      [`apps/web/components/battle/simulation/HotkeyHints.tsx:9-10`,
+      `apps/web/components/battle/simulation/FullscreenStage.tsx:50-51`]
+- [x] [Review][Patch] "The SAME handlers the two transport homes get" is false for `onStop` since
+      FD4 (c) (`handleEscapeStop` vs. `sim.stop`) — the hook's head comment, the view's call-site
+      comment (self-contradicting in one breath), the story's FD2 (a) rationale and its
+      one-paragraph summary all still say it
+      [`apps/web/lib/battle/useSimulationHotkeys.ts:6-7`,
+      `apps/web/components/battle/simulation/BattleSimulationView.tsx:307-312`, story FD2 / "What
+      this story is"]
+- [x] [Review][Patch] e2e (b) asserts only the two label strings while the stage is up; AC12 (b)
+      lists `F`, `Esc`, `Space`, `→` — add the four-`<kbd>` count (the chassis test (a) already
+      counts three) [`apps/web/e2e/battleRoute.spec.ts` (Story 3.19 block, test (b))]
+- [x] [Review][Patch] `onExit`'s JSDoc names `F` as the only hotkey that reaches the setter past
+      this prop; `Escape` now does too (`handleEscapeStop`)
+      [`apps/web/components/battle/simulation/FullscreenStage.tsx:73-77`]
+- [x] [Review][Patch] `deferred-work.md`'s 3.18 "True fullscreen via the Fullscreen API" note still
+      says "Story 3.19 assigns `ESC` to Stop — a direct collision with the browser's exit key" and
+      asks for "a decision about `ESC`" — decided; in the stage `Escape` now exits as the browser's
+      key would [`docs/implementation-artifacts/deferred-work.md:1681-1689`]
+- [x] [Review][Patch] `deferred-work.md`'s 3.19 review-section intro says the FD4 decision "is left
+      as a `[Review][Decision]` item" — it is answered and checked
+      [`docs/implementation-artifacts/deferred-work.md:1835-1836`]
+- [x] [Review][Patch] No spec-amendment candidate recorded for the `Escape` semantics change —
+      `epics.md:982` ("ESC stops, F toggles fullscreen"), `component-tree-battle-page.md` §4 (`ESC`
+      → stop) and §3.14 (`onExit … / F key`) all still describe FD4 (a); add to the 3.19 amendment
+      list [`docs/implementation-artifacts/deferred-work.md` (3-19 implementation section)]
+- [x] [Review][Patch] FD9's closure says "a pointer press moves focus to the pressed control
+      regardless" — Safari and Firefox on macOS do not focus a `<button>` on click; the pointer path
+      is 3.12's pre-existing behaviour, not a hotkey path — scope the sentence
+      [`docs/implementation-artifacts/deferred-work.md:1027-1028`]
+- [x] [Review][Patch] The listener's `switch (true)` `default` branch is unreachable after the
+      `isHotkey` filter and its comment describes behaviour that cannot happen there — an
+      `if`/`else if` chain says what the code does
+      [`apps/web/lib/battle/useSimulationHotkeys.ts:151-181`]
+- [x] [Review][Patch] e2e (a)'s "ArrowRight is a no-op while playing" poll
+      (`toBeGreaterThan(pausedAt + 3)`) passes whether or not the key stepped; the comment should
+      name `collectErrors` as the load-bearing tripwire (the story's own AC12 (a) wording)
+      [`apps/web/e2e/battleRoute.spec.ts:3310-3314`]
+- [x] [Review][Patch] e2e (e)'s open-dialog axe pass cites "the 2.16 idiom" but takes only its
+      first wait (`toBeVisible()`) — axe scans MUI's Fade mid-transition; reproduced locally on
+      Chromium (198 `color-contrast` nodes at 3.31:1, the dialog's text over a half-faded Paper),
+      a timing flake CI happened to miss; add the idiom's `opacity: 1` + 300 ms waits
+      [`apps/web/e2e/battleRoute.spec.ts:3439-3443`]
+- [x] [Review][Defer] Rule (iv) suspends ALL four keys while an `<input>` holds focus, and a range
+      input keeps focus after a pointer drag — after adjusting Speed with the mouse, Space / Escape
+      / `F` are dead until the user clicks elsewhere, while both hint lines still advertise them;
+      spec §4's "suspended while an input has focus" is what shipped
+      [`apps/web/lib/battle/useSimulationHotkeys.ts:95-97`] — deferred, 6.11 candidate (per-key
+      suspension for `input[type="range"]`)
+- [x] [Review][Defer] `a[href]` / `[role="link"]` / `[role="tab"]` sit in `SPACE_ACTIVATOR_SELECTOR`
+      though links (and script-driven tabs) activate on Enter, not Space — Space on a focused link
+      is a dead key rather than Play/Pause; AC3 (vi)'s own list, no link exists in Run mode today
+      [`apps/web/lib/battle/useSimulationHotkeys.ts:48-60`] — deferred, 6.11 selector sweep
+- [x] [Review][Defer] `DIALOG_SELECTOR` matches attributes only — a native `<dialog open>` or a
+      `popover` (implicit role, no attribute) would not suspend the hook, and the window-level
+      `preventDefault()` on `Escape` would eat their native dismissal; no such element exists on the
+      route [`apps/web/lib/battle/useSimulationHotkeys.ts:68`] — deferred, folds into the FD10 entry
+- [x] [Review][Defer] The chassis hint names three keys while four are live there (`f` enters the
+      stage from the chassis) — the mockup (`:744-746`) and `epics.md:983` both specify the three;
+      the header's Fullscreen button is the visible affordance
+      [`apps/web/components/battle/simulation/SimulationControlBar.tsx:62-66`] — deferred,
+      mockup-refresh / 6.11 candidate
+
 ## Dev Notes
 
 ### Constraints the developer MUST follow
@@ -430,8 +506,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 ### What this story is, in one paragraph
 
 Four keys, one listener, two hint lines. `useSimulationHotkeys` is a `useDirtyGuard`-shaped
-window listener hook that `<BattleSimulationView>` mounts with the same three transport handlers
-it already hands to `<TransportControls>`, plus a fullscreen toggle composed from `<BattlePage>`'s
+window listener hook that `<BattleSimulationView>` mounts with the three transport verbs it already
+hands to `<TransportControls>` — `onPlayPause` and `onStep` the very same functions, `onStop` composed
+per FD4 (c) so that `Escape` also exits the stage — plus a fullscreen toggle composed from `<BattlePage>`'s
 two existing callbacks and a `canStep` boolean. Its whole difficulty is in what it must NOT do:
 fire twice when a button already has focus (Space activates buttons natively), steal arrow keys
 from the two sliders, act inside or just after a dialog, act on `⌘F`, act on key repeat, or call
@@ -466,7 +543,9 @@ each left their half for this story.
   ```
   The three transport names are `SimulationControlBarProps`' names, so the view passes the SAME
   values to the hook and to both transport homes — one derivation of "what Play/Pause means"
-  (3.12 FD3). `canStep` is a boolean rather than a `status` string so the hook interprets nothing
+  (3.12 FD3). (Since FD4 (c), `onStop` is the one exception: the hook gets `handleEscapeStop` —
+  `sim.stop()` plus `onExitFullscreen()` while the stage is up — while both transport homes keep
+  `sim.stop`; `onPlayPause` and `onStep` are still the identical functions.) `canStep` is a boolean rather than a `status` string so the hook interprets nothing
   and its test needs no `SimulationStatus` import.
 - (b) `{ status, play, pause, step, stop, toggleFullscreen }` — the hook decides play-vs-pause.
   Rejected: a second copy of `handlePlayPause`'s derivation (3.12 FD3 rejected exactly this for
@@ -929,6 +1008,17 @@ Claude Sonnet 5 (claude-sonnet-5).
   (Story 3.19)` block's (b) test and the new "Escape stops AND exits the stage" unit test, both
   green on the first run.
 
+- **Second-review gate (2026-09-18, after the 12 patches):** `npx tsc --noEmit` (apps/web) exit 0;
+  `eslint` on the five touched source/test files 0 errors; `prettier --check` green on code and docs;
+  `npm run spec:check` green (256 ids); `vitest run` on the seven Story 3.19 unit files **7 files /
+  254 tests passed**; `npx playwright test --project=chromium --workers=1 -g "Simulation hotkeys"` →
+  first run **4 passed / 1 failed** (test (e)'s open-dialog axe pass mid-fade — the flake the 12th
+  patch closes), then **5 passed** and `--repeat-each 3` **15 passed**. No engine, bundle-relevant or
+  `BattlePage` change in this pass (comments, docs, one `if`-chain rewrite of the hook's dispatch,
+  two e2e assertions), so `bundle:check` / `bench:check` were not re-run — the pushed branch's CI
+  is the authority for both. CI on the reviewed commit `a245fe4`: run 35352197048, `quality` +
+  `e2e` success.
+
 ### Completion Notes List
 
 - **FD1 (a)** — the hook lives at `apps/web/lib/battle/useSimulationHotkeys.ts`, beside
@@ -1036,6 +1126,20 @@ Claude Sonnet 5 (claude-sonnet-5).
   marked resolved. `npm run ci:dev` green (exit 0): web 106/1693 unit tests (+1), e2e Chromium
   198/1 skipped, `/battle` 309.2 KB (0.8 KB headroom, unchanged), bench 9.436 ms headroom. The
   `[Review][Decision]` item is checked. Status → review.
+
+- 2026-09-18 — Second code review (Opus, three adversarial layers, after `a245fe4`): 12 patches
+  applied in place — AC8 / Task 4.3 / FD2 (a) / the summary paragraph brought in line with FD4 (c)
+  (four-entry stage hint; `onStop` composed, no longer "the SAME handler"); the stale three-entry
+  stage-hint text in `HotkeyHints.tsx` and `FullscreenStage.tsx`'s head comments and `onExit`'s
+  JSDoc; the view's self-contradicting call-site comment and the hook's head comment; the hook's
+  `switch (true)` with its unreachable `default` → an `if` chain; e2e (b) asserts the four `<kbd>`s
+  AC12 (b) lists; e2e (a)'s comment names `collectErrors` as the load-bearing tripwire; e2e (e)'s
+  open-dialog axe pass takes the 2.16 idiom's three waits (a mid-fade flake reproduced locally);
+  `deferred-work.md`'s two stale FD4-open lines, its 3.18 Fullscreen-API `ESC` note, the FD9 closure
+  scoped to the keyboard paths, and a spec-amendment candidate for the `Escape` semantics change
+  (`epics.md:982`, component-tree §4 / §3.14). 4 items deferred to `deferred-work.md` (all-keys
+  suspension on a focused range input; links listed as Space activators; attribute-only dialog
+  detection; the chassis hint's missing `F`). No new owner decision. Status → done.
 
 Dev Model: sonnet   # follows patterns that exist — the useDirtyGuard listener-hook shape, the latest-ref idiom, 3.18's fullscreen cell and focus effects, presentational <kbd> runs; the one new seam (FD2's bindings) is prescribed above and nothing later builds on it (4.15's preview must NOT mount it)
 Proposed lane gate: none   # 3.19 edits no file lane 4 touches (themes.css untouched, TransportControls markup untouched); 4.24/4.25 already gate on epic-3, which this story completes, and FD10's DOM-based suspension holds for their modal by construction

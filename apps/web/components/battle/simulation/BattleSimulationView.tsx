@@ -303,13 +303,14 @@ export default function BattleSimulationView({
     if (fullscreen) onExitFullscreen();
   };
 
-  // Story 3.19: the ONLY key handler on the route (Dev Notes constraint). The hook receives
-  // exactly the callbacks the two `<TransportControls>` homes already get, `canStep` — the same
-  // boolean `<GridSizeControl>`'s `disabled` reads — and the composed fullscreen toggle. No
-  // React state in the hook, no per-render re-subscription (AR-29, AC10): see
-  // `useSimulationHotkeys.ts`'s own head comment for the latest-ref mechanics. `onStop` is
-  // `handleEscapeStop` (FD4 (c)), not `sim.stop` straight through — the stage's Stop & Reset
-  // button (the HUD's `transport.onStop` below) is unaffected and still calls `sim.stop` alone.
+  // Story 3.19: the ONLY key handler on the route (Dev Notes constraint). The hook receives the
+  // same `onPlayPause` / `onStep` the two `<TransportControls>` homes get, `canStep` — the same
+  // boolean `<GridSizeControl>`'s `disabled` reads — the composed fullscreen toggle, and ONE
+  // composed verb: `onStop` is `handleEscapeStop` (FD4 (c)), not `sim.stop` straight through, so
+  // that the key also exits the stage; both transport homes (the bar's `onStop` and the HUD's
+  // `transport.onStop` below) are unaffected and still call `sim.stop` alone. No React state in
+  // the hook, no per-render re-subscription (AR-29, AC10): see `useSimulationHotkeys.ts`'s own
+  // head comment for the latest-ref mechanics.
   useSimulationHotkeys({
     onPlayPause: handlePlayPause,
     onStep: sim.step,

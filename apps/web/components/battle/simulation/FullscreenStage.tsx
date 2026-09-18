@@ -48,7 +48,8 @@ import TransportControls, { type SimulationControlBarProps } from './TransportCo
  * NFR-1.1) and `transition` (the mid-fade axe trap every bar on this route records).
  *
  * Story 3.19 ships the mockup's `.fs-hint` line (`Press F to exit fullscreen • Space Play/Pause •
- * → Next`) as a FOURTH fragment slot, after the HUD — `children` stays at slot 1 (trap 8), and the
+ * → Next`, plus the `Esc Stop & exit` entry the next paragraph explains) as a FOURTH fragment slot,
+ * after the HUD — `children` stays at slot 1 (trap 8), and the
  * `keydown` handling the hint describes is `useSimulationHotkeys`'s, mounted by
  * `<BattleSimulationView>`, never this file. No Back, no speed slider (FD6), no grid-size control,
  * no sidebar.
@@ -72,8 +73,9 @@ export interface FullscreenStageProps {
   battleTitle: string;
   /**
    * Spec §3.14 `onExit(): void // ⛶ Exit Fullscreen / F key` — the top overlay's Exit button
-   * calls it directly; the `F` hotkey reaches the SAME `<BattlePage>` setter through
-   * `<BattleSimulationView>`'s composed toggle (Story 3.19, FD5 (a)), never through this prop.
+   * calls it directly; the `F` hotkey (Story 3.19, FD5 (a)) and the stop-and-exit `Escape` (FD4 (c))
+   * both reach the SAME `<BattlePage>` setter through `<BattleSimulationView>`'s own bindings, never
+   * through this prop.
    */
   onExit(): void;
   hud: FullscreenHudValues;

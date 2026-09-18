@@ -7,7 +7,8 @@ import VisuallyHidden from '@/components/VisuallyHidden';
 /**
  * Story 3.19 (FD6): the shared `<kbd>` + separator recipe, one implementation for both hint
  * lines — the chassis bar's `Shortcuts: Space Play/Pause • → Next • Esc Stop` and the fullscreen
- * stage's `Press F to exit fullscreen • Space Play/Pause • → Next`. Named beside
+ * stage's `Press F to exit fullscreen • Esc Stop & exit • Space Play/Pause • → Next` (the `Esc`
+ * entry is FD4 (c)'s, the owner's 2026-09-18 addition to the mockup's three). Named beside
  * `<TransportControls>` / `<CycleDigits>` / `<PopulationPills>` in `simulation/README.md` — the
  * `<CycleDigits>` shape: unstyled beyond `kbd { font-family: inherit; font-weight: 600 }`, each
  * host wraps it in its own styled block for size and colour.

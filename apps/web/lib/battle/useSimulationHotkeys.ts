@@ -4,11 +4,12 @@ import { useEffect, useRef } from 'react';
 
 /**
  * Story 3.19 (spec §4, FR-4.1/4.3/4.4, AC5): Run-mode-only key handling, mounted ONCE from
- * `<BattleSimulationView>` — the same three transport verbs the bar/HUD buttons already call,
- * plus the fullscreen toggle composed from `<BattlePage>`'s two callbacks (FD5). `canStep` is a
- * boolean, not the `status` string, so the hook interprets nothing and needs no `SimulationStatus`
- * import (FD2 (a)) — the same reason `sim.step()`'s throw while playing (trap 1) can never reach
- * the hook: `canStep` gates the call, the hook never `try`s.
+ * `<BattleSimulationView>` — the three transport verbs the bar/HUD buttons already call (the view
+ * composes `onStop` so that `Escape` also exits the fullscreen stage, FD4 (c); the buttons' own
+ * Stop does not), plus the fullscreen toggle composed from `<BattlePage>`'s two callbacks (FD5).
+ * `canStep` is a boolean, not the `status` string, so the hook interprets nothing and needs no
+ * `SimulationStatus` import (FD2 (a)) — the same reason `sim.step()`'s throw while playing (trap 1)
+ * can never reach the hook: `canStep` gates the call, the hook never `try`s.
  *
  * The hint lines (`<HotkeyHints>`) land in the same story as this hook because NFR-4.1 forbids a
  * hint with nothing behind it — which is also why 3.12 and 3.18 each left their half for 3.19.
@@ -106,7 +107,7 @@ export function shouldIgnoreHotkey(event: KeyboardEvent): boolean {
   return false;
 }
 
-/** The four keys, matched the way the `switch` in the listener matches them (trap 7 / trap 11). */
+/** The four keys, matched the way the listener's dispatch chain matches them (trap 7 / trap 11). */
 function isHotkey(key: string): boolean {
   return key === ' ' || key === 'ArrowRight' || key === 'Escape' || key.toLowerCase() === 'f';
 }
@@ -135,7 +136,7 @@ export function useSimulationHotkeys(bindings: SimulationHotkeyBindings): void {
     const handleKeyDown = (event: KeyboardEvent) => {
       // The key set first, the suspension rules second: rule (v) is a `document.querySelector`,
       // and without this filter it would run for every key typed anywhere in Run mode (Tab, a
-      // modifier, a letter) only to be discarded by the `switch` below. `typeof` rather than a
+      // modifier, a letter) only to be discarded by the dispatch below. `typeof` rather than a
       // truthiness check — a `keydown` dispatched as a plain `Event` carries no `key` at all, and
       // `.toLowerCase()` on `undefined` would throw inside a window listener.
       if (typeof event.key !== 'string' || !isHotkey(event.key)) return;
@@ -146,30 +147,24 @@ export function useSimulationHotkeys(bindings: SimulationHotkeyBindings): void {
       // Trap 10: every HANDLED key prevents its native effect uniformly (Space would scroll,
       // ArrowRight would scroll horizontally) — including a gated ArrowRight (`canStep: false`),
       // so "handled" and "prevents default" never disagree for a reviewer reading the tests.
-      switch (true) {
-        case event.key === ' ':
-          event.preventDefault();
-          onPlayPause();
-          break;
-        case event.key === 'ArrowRight':
-          event.preventDefault();
-          // FR-4.3 "paused only" / trap 1: `sim.step()` throws while playing, and this hook never
-          // `try`s — `canStep` is the same boolean the Next-cycle button's `disabled` reads.
-          if (canStep) onStep();
-          break;
-        case event.key === 'Escape':
-          event.preventDefault();
-          onStop();
-          break;
-        // Trap 11: match what the user TYPED (`key.toLowerCase()`), not where the key physically
-        // is (`code === 'KeyF'` would also fire on a non-Latin layout).
-        case event.key.toLowerCase() === 'f':
-          event.preventDefault();
-          onToggleFullscreen();
-          break;
-        default:
-          // An unrecognised key: no preventDefault, native behaviour proceeds.
-          break;
+      // Exhaustive over `isHotkey`'s four members — an unrecognised key returned above, before
+      // `preventDefault` could touch it, so there is no fall-through case to write here.
+      if (event.key === ' ') {
+        event.preventDefault();
+        onPlayPause();
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        // FR-4.3 "paused only" / trap 1: `sim.step()` throws while playing, and this hook never
+        // `try`s — `canStep` is the same boolean the Next-cycle button's `disabled` reads.
+        if (canStep) onStep();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        onStop();
+      } else {
+        // Trap 11: `isHotkey` matched what the user TYPED (`key.toLowerCase() === 'f'`), not where
+        // the key physically is (`code === 'KeyF'` would also fire on a non-Latin layout).
+        event.preventDefault();
+        onToggleFullscreen();
       }
     };
 

@@ -3309,7 +3309,10 @@ test.describe('Simulation hotkeys (Story 3.19)', () => {
     await page.keyboard.press('Space');
     await expect(view(page)).toHaveAttribute('data-status', 'playing');
     // A no-op while playing — `sim.step()` is never called, so it never throws (trap 1); the
-    // cycle keeps the LOOP's own pace instead of jumping by the keypress.
+    // cycle keeps the LOOP's own pace. The poll below only proves the loop is still running — it
+    // would pass whether or not the key stepped — so the load-bearing assertion is the
+    // `collectErrors` check at the end: a `step()` reached while playing throws, and that throw
+    // surfaces there and nowhere else (AC12 (a)).
     await page.keyboard.press('ArrowRight');
     await expect.poll(() => cycle(page)).toBeGreaterThan(pausedAt + 3);
 
@@ -3353,8 +3356,13 @@ test.describe('Simulation hotkeys (Story 3.19)', () => {
       })
       .toBe(true);
     // The stage's hint now names both exit keys: F (toggle only) and Esc (stop & exit, FD4 (c)).
+    // Four <kbd>s — F, Esc, Space, → (AC12 (b)); the chassis bar (three) is unmounted while the
+    // stage is up, so the page-wide count is the stage's alone.
     await expect(page.getByText('to exit fullscreen')).toBeVisible();
     await expect(page.getByText('Stop & exit')).toBeVisible();
+    await expect(page.locator('kbd')).toHaveCount(4);
+    await expect(page.locator('kbd').nth(2)).toHaveText('Space');
+    await expect(page.locator('kbd').nth(3)).toContainText('→');
 
     await page.keyboard.press('Escape');
 
@@ -3429,9 +3437,15 @@ test.describe('Simulation hotkeys (Story 3.19)', () => {
     await expect.poll(() => cycle(page)).toBeGreaterThan(0);
 
     await page.getByRole('button', { name: 'Back to Battles' }).click();
-    await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).toBeVisible();
     // Axe with the dialog OPEN over a playing Run (the 2.16 idiom) — the inert background plus
-    // the hint lines underneath are the state a reviewer cannot see in jsdom.
+    // the hint lines underneath are the state a reviewer cannot see in jsdom. The idiom's THREE
+    // waits, not one (`:1428-1437` says why): `toBeVisible()` passes the instant the Paper has a
+    // box, before MUI's Fade settles, and a scan taken mid-fade computes colour-contrast against
+    // blended colours — measured here on Chromium as 198 nodes at 3.31:1 with only the first wait.
+    const dialog = page.getByRole('dialog', { name: 'Unsaved Changes' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveCSS('opacity', '1');
+    await page.waitForTimeout(300);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
     await page.keyboard.press('Escape');
