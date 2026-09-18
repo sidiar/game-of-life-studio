@@ -1,5 +1,6 @@
 'use client';
 
+import type { MouseEvent } from 'react';
 import { styled } from '@mui/material/styles';
 
 // Mockup: .header (clinical-lab-theme/petri-dish-lab-mode.html:33-45). `position: fixed` is
@@ -195,6 +196,17 @@ export default function BattleHeader({
 }: BattleHeaderProps) {
   const showToggle = mode !== undefined && onModeToggle !== undefined;
   const showFullscreen = mode === 'run' && onEnterFullscreen !== undefined;
+  // Story 3.18 review decision (b): the ACTIVE button is a no-op, never a re-set — `onModeToggle`
+  // fires only for a genuine change, so `<BattlePage>` never renders for a mode it is already
+  // in — and a REPEAT click never fires at all. The stage's Exit button sits where `Lab` remounts
+  // when the header returns (Exit ≈ y 12–43 / x W−184..W−24; the Mode group ≈ y 20–51 /
+  // x W−156..W−30, `Lab` its left half), so the second click of a pointer double-click on Exit
+  // would land on `Lab` and drop the run session. `event.detail` is the click count within the
+  // multi-click window; a keyboard-synthesised click carries `detail === 0` and must still fire.
+  const toggleTo = (next: BattleMode) => (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail > 1 || mode === next || onModeToggle === undefined) return;
+    onModeToggle(next);
+  };
   return (
     <Header>
       <Title>{battleTitle}</Title>
@@ -215,13 +227,11 @@ export default function BattleHeader({
             </FullscreenButton>
           )}
           <ModeToggle role="group" aria-label="Mode">
-            {/* The ACTIVE button is a no-op, never a re-set: `onModeToggle` fires only for a
-                genuine change, so `<BattlePage>` never renders for a mode it is already in. */}
             <ModeButton
               type="button"
               data-mode-value="lab"
               aria-pressed={mode === 'lab'}
-              onClick={() => mode !== 'lab' && onModeToggle('lab')}
+              onClick={toggleTo('lab')}
             >
               Lab
             </ModeButton>
@@ -231,7 +241,7 @@ export default function BattleHeader({
               aria-pressed={mode === 'run'}
               disabled={disabled}
               title={disabled ? disabledReason : undefined}
-              onClick={() => mode !== 'run' && onModeToggle('run')}
+              onClick={toggleTo('run')}
             >
               Run
             </ModeButton>

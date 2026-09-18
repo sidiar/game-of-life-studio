@@ -4,7 +4,7 @@ baseline_commit: 0c4e82e5116c7e7f12f0fe3c78fcfd75139f8091
 
 # Story 3.18: Fullscreen Run Stage
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -438,7 +438,7 @@ reproduce). The fullscreen dish was re-measured against the built export: **924�
 1114×667 at 1194×834** (canvas box; the bordered `PetriDishBox` is 928×557 / 1118×671).
 Decisions below are left for the owner; nothing in them was resolved by the reviewer.
 
-- [ ] [Review][Decision] **Fullscreen can be entered while the Run chunk is still loading — a
+- [x] [Review][Decision] **Fullscreen can be entered while the Run chunk is still loading — a
   headerless "Loading simulation…" page with no Exit until the chunk resolves** — `<BattleHeader>`
   renders the Fullscreen button from `mode === 'run'` alone, and AC2 (c) / AC10 (e) pin it on the
   FIRST header render, i.e. while `dynamic()` is still fetching `BattleSimulationView` (first
@@ -456,8 +456,9 @@ Decisions below are left for the owner; nothing in them was resolved by the revi
   `BattleHeader.tsx` `showFullscreen`]
   **Owner decision (2026-09-18): (a) — accept and record.** No code change. Record the window in
   `deferred-work.md` (this story's section) as a known, self-healing, cold-cache-only state, with
-  option (b) named as the fix if it ever matters; then check this item.
-- [ ] [Review][Decision] **A pointer double-click on `Exit fullscreen` lands its second click on
+  option (b) named as the fix if it ever matters; then check this item. — **Applied 2026-09-18:**
+  recorded as the first entry of the 3-18 code-review section in `deferred-work.md`; no code.
+- [x] [Review][Decision] **A pointer double-click on `Exit fullscreen` lands its second click on
   the header's `Lab` button, which remounts under the pointer** — Exit sits at roughly
   y∈[12,43], x∈[W−184, W−24] (TopOverlay `12px 24px`, button `8px 16px`); the header remounts on
   the first click's commit with the Mode group at y∈[20,51], x∈[W−156, W−30], `Lab` its left
@@ -476,7 +477,11 @@ Decisions below are left for the owner; nothing in them was resolved by the revi
   second and later clicks of a pointer multi-click; keyboard-synthesised clicks carry `detail ===
   0` and must still fire). Comment WHY (the Exit → Lab remount geometry, this decision). Add a test
   in `BattleHeader.test.tsx`: a click with `detail: 2` does not call `onModeToggle`, a plain click
-  and a keyboard activation still do. Then check this item.
+  and a keyboard activation still do. Then check this item. — **Applied 2026-09-18:** both
+  `ModeButton`s share a `toggleTo(next)` handler that returns on `event.detail > 1` (and on the
+  already-active mode, as before), commented with the Exit → Lab remount geometry; the test
+  dispatches `detail: 2` (no call), `detail: 1` (one call) and `Enter` via user-event (a second
+  call, `'lab'`).
 - [x] [Review][Patch] `GridContainer`'s fullscreen comment states a 544px-tall dish; the measured
   value (Dev Agent Record, `deferred-work.md`, and re-measured here) is 553px
   [`apps/web/components/battle/simulation/BattleSimulationView.tsx` `GridContainer`] — applied.
@@ -1061,6 +1066,11 @@ Claude Opus 5 (1M context) — `claude-opus-5[1m]`, under `implement-next-story`
 - **e2e**: the 3.18 block (5 tests) and the whole 3.11–3.18 range (37 tests) on
   `--project=chromium --workers=1` against a private port (`PORT = 4199` in
   `playwright.config.ts`, reverted to 4173 before commit).
+- **Owner decisions pass (2026-09-18)**: `BattleHeader.test.tsx` RED (the `detail: 2` click called
+  `onModeToggle`) → guard → 18/18 green. `npm run ci:dev` exit **0**: unit 142 files green
+  (test-utils 6, domain 6, persistence 7, simulation 23, web 100), bundle within budget on all
+  four routes (`/battle` 0.9 KB headroom, unchanged), bench 8.118 ms headroom, e2e Chromium
+  **185 passed, 1 skipped** on the default port.
 - **`npm run ci:dev > /tmp/ci-3-18.log 2>&1; echo $?`**: **exit 0** (typecheck → lint → format:check → spec:check → boundary:check → coverage → build → bundle → bench → bench:check → e2e:chromium; **185 Chromium e2e passed**, 1.0 min). The four-browser matrix is CI's job on the pushed branch.
 - **`bench:check`** (no engine change, reported anyway): frame **7.205 ms** (step 7.062 + repaint-diff 0.143) against 16.667 ms — 9.462 ms headroom, 56.8% of the frame; green, no engine change.
 
@@ -1101,6 +1111,11 @@ Claude Opus 5 (1M context) — `claude-opus-5[1m]`, under `implement-next-story`
   `BattleHeader.test.tsx`, `BattlePage.test.tsx` ×2; `simulation/README.md` names the three
   shared pieces and `<VisuallyHidden>`'s home; `deferred-work.md` (1)–(6) done, plus the RFC-touch
   tracker note; `sprint-status.yaml` this story's line only.
+- Owner review decisions (2026-09-18): ✅ Resolved review finding [Decision]: fullscreen entered
+  during the Run chunk fetch — option (a), accepted and recorded in `deferred-work.md` (no code).
+  ✅ Resolved review finding [Decision]: Exit double-click landing on the remounted `Lab` — option
+  (b), `event.detail > 1` guard on the mode toggle in `BattleHeader.tsx` + one test (`detail: 2`
+  ignored; `detail: 1` and keyboard `Enter` still fire). `BattleHeader.test.tsx`: 18/18.
 - **For the reviewer**: nothing here touches `PetriDishCanvas.tsx`, `useSimulation.ts`,
   `gridRenderer.ts`, `packages/**`, `themes.css`, `check-bundle-size.mjs`, any route file, or
   anything under `components/organisms/**` / `lib/organisms/**`. The bundle stayed green, so the
@@ -1156,6 +1171,9 @@ Modified:
   translucent surfaces become three channel-composed tokens (`--gol-scrim-top`,
   `--gol-surface-hud`, `--gol-shadow-dish-glow`); `backdrop-filter` and `transition` stay out.
   Unit, e2e (3.14/3.16/3.18 blocks + axe) and bundle gates green; `/battle` unchanged at 309.1 KB.
+- 2026-09-18 — Addressed code review findings - 2 items resolved (the two owner decisions): the
+  chunk-fetch fullscreen window accepted and recorded in `deferred-work.md`; the mode toggle
+  ignores repeat clicks (`event.detail > 1`), with a test. Status → review.
 
 Dev Model: opus   # architecture-shaping: it decides where `fullscreen` lives (BattlePage, against spec §6), establishes the CSS-driven no-remount layout-swap pattern that 3.19's F key toggles and that React reconciliation can silently break, and factors <TransportControls>/<CycleDigits>/<PopulationPills> out of 3.12/3.14's files as the pieces 4.15 builds on
 Proposed lane gate: { story: 4-15-preview-simulation, requires: 3-18-fullscreen-run-stage, why: "3.18 lifts the transport trio out of <SimulationControlBar> (<TransportControls>), the zero-padded digits out of <CycleCounter> (<CycleDigits>) and ships <PopulationPills> as the compact population sibling — the preview panel (spec §8 / §3.12: SpeedControl + compact PopulationStats + cycle counter + Play/Stop/Step) is the third consumer of all three and must reuse them rather than re-author or edit the same simulation/ files concurrently" }

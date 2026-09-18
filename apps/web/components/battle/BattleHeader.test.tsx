@@ -188,6 +188,28 @@ describe('BattleHeader', () => {
       expect(onModeToggle).not.toHaveBeenCalled();
     });
 
+    // Story 3.18 review decision: the second click of a pointer double-click on the stage's Exit
+    // button lands on `Lab`, which remounts under the pointer when the header returns — so a
+    // repeat click (`detail > 1`) must NOT toggle. A plain click carries `detail: 1`, and a
+    // keyboard activation synthesises a click with `detail: 0`; both still fire.
+    it('ignores the repeat clicks of a pointer multi-click (`detail > 1`) but not single or keyboard clicks', async () => {
+      const user = userEvent.setup();
+      const onModeToggle = vi.fn();
+      render(<BattleHeader battleTitle="T" mode="run" onModeToggle={onModeToggle} />);
+      const lab = screen.getByRole('button', { name: 'Lab' });
+
+      lab.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
+      expect(onModeToggle).not.toHaveBeenCalled();
+
+      lab.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      expect(onModeToggle).toHaveBeenCalledTimes(1);
+
+      lab.focus();
+      await user.keyboard('{Enter}');
+      expect(onModeToggle).toHaveBeenCalledTimes(2);
+      expect(onModeToggle).toHaveBeenLastCalledWith('lab');
+    });
+
     // `disabled` reaches RUN only: LAB is always reachable from Run, because a roster that cannot
     // run is a reason not to ENTER Run, never a reason to trap the user there.
     it('disables RUN (with the reason as its title) but never LAB when `disabled`', () => {

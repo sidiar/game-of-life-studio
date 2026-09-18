@@ -1631,10 +1631,26 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 ## Deferred from: code review of 3-18-fullscreen-run-stage (2026-09-17)
 
 Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
-Two `decision-needed` items are open in the story file's Review Findings (fullscreen entered
-while the Run chunk is still fetching; a double-click on Exit landing on the remounted `Lab`
-button) — they are the owner's, not recorded here. The items consciously deferred:
+The two `decision-needed` items were decided by the owner on 2026-09-18: the double-click on Exit
+landing on the remounted `Lab` button is FIXED (option (b): `BattleHeader.tsx`'s mode toggle
+ignores `click` events with `event.detail > 1`, tested in `BattleHeader.test.tsx`); the
+fullscreen-during-chunk-fetch window is ACCEPTED and recorded first below. The items consciously
+deferred:
 
+- **Fullscreen can be entered while the Run chunk is still fetching — accepted, self-healing,
+  cold-cache-only** (owner decision 2026-09-18, option (a)). `<BattleHeader>` renders the
+  Fullscreen button from `mode === 'run'` alone, and AC2 (c) / AC10 (e) pin it on the FIRST header
+  render — i.e. while `dynamic()` is still fetching `BattleSimulationView` (the first Lab→Run
+  toggle, or a Gallery `?mode=run` entry on a cold cache). A click in that window sets
+  `fullscreen=true` → the header unmounts → the page is `<Root>` + `RunLoading` ("Loading
+  simulation…") with no Exit and focus on `<body>`, until the chunk lands and `<FullscreenStage>`
+  mounts with its Exit button focused. The window is one chunk fetch, cached thereafter, and the
+  stage heals it on arrival; a REJECTED chunk import is pre-existing behaviour (no `error.tsx`, by
+  story) and is not made worse. **If it ever matters, the fix is option (b):** gate the entry on the
+  view being mounted (`onEnterFullscreen={runViewMounted ? … : undefined}` via a mount/unmount
+  callback from the view, or a `Suspense`-driven flag) — which reverses AC2 (c) / AC10 (e)
+  ("button on the first header render") and adds a state cell to `<BattlePage>`. No owner story;
+  revisit if the Run chunk grows or a user report names the window.
 - **The in-render roster adjust exits fullscreen without a focus restore.** `if (mode === 'run' &&
   runOrganisms === null) { setMode('lab'); setFullscreen(false); }` clears the cell without setting
   `restoreFullscreenEntryFocusRef`, and `[data-enter-fullscreen]` is not rendered in Lab anyway, so
