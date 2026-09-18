@@ -197,7 +197,8 @@ const GridContainer = styled('div')({
 // Fullscreen (3.18, FD4 (b)): the mockup's `.petri-dish-grid` verbatim — `width: min(94vw,
 // 138vh)` at 5:3, i.e. 94% of the viewport's width unless height binds first (138vh × 3/5 =
 // 82.8vh tall), centred by `GridContainer`. The floating HUD overlaps the dish's bottom edge on
-// every supported viewport (≈22px at 1280×720, ≈40px at 1194×834), as it does in the mockup; the
+// every supported viewport (≈41px at 1280×720, where height binds; ≈23px at 1194×834, where width
+// binds — the panel is opaque, so those rows are covered), as it does in the mockup; the
 // top bar (≈67px: 18 + the ~31px Exit button + 18) reaches the dish's top edge (8.6vh ≈ 62px when
 // height binds) by a few px at 720-tall viewports, where the gradient is already near-transparent.
 // The chassis's `1000px` cap is lifted (`maxWidth: none`) — that cap is what

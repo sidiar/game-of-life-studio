@@ -1735,7 +1735,8 @@ deferred:
   the chrome is `position: fixed` and the dish is `min(94vw, 138vh)`, so its height is a function
   of the viewport alone — no flex competition, no shrink toward 0px. What remains is the mockup's
   own property: on a short viewport the floating HUD covers more of the dish's bottom edge (at
-  1280×720 it overlaps by ~33px, as in the mockup) — and a WIDE roster does the same from below:
+  1280×720 it overlaps by ≈41px, ≈23px at 1194×834 — as in the mockup; opaque since decision (d),
+  so those rows are hidden, not dimmed) — and a WIDE roster does the same from below:
   the panel wraps (`HudPanel` and `Pills` both `flexWrap`) and, being `position: fixed; bottom:
   40px`, grows UPWARD over the cells (255 organisms ≈ 14 pill lines ≈ 370px, more than half of a
   596px dish at 1280×720). The dish never shrinks for either; the HUD covers it instead. Original entry kept for the record: The title
@@ -1752,9 +1753,10 @@ deferred:
 ## Deferred from: code review of 3-18-fullscreen-run-stage (2026-09-18, second review)
 
 Reviewed on **Fable** against the Opus commits that reversed FD4 to (b) and applied the owner's two
-first-review decisions. One `decision-needed` item (HUD text under AA where the translucent HUD
-overlaps a bright colony) is open in the story file's Review Findings — the owner's, not recorded
-here. The items consciously deferred:
+first-review decisions. Its one `decision-needed` item (HUD text under AA where the translucent HUD
+overlapped a bright colony) was decided by the owner the same day as option (d) — the HUD panel and
+the Exit button are opaque `--gol-bg-secondary`, `--gol-surface-hud` removed — and is closed in the
+story file's Review Findings. The items consciously deferred:
 
 - **Decision 2 (b)'s residuals — the `detail > 1` guard covers the mode toggle only.** (1) The
   header's Fullscreen button (right edge ≈ W−171 with `Actions`' 15px gap) and the stage's Exit
