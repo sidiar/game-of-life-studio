@@ -1830,3 +1830,38 @@ story file's Review Findings. The items consciously deferred:
   the Lab mockup, also carries the Lab bar's stats (`petri-dish-play-mode.html:743-746`); the Run
   bar has no stats section, so the hint is its whole left half rather than sharing the region with
   anything else. Recorded for whoever next refreshes the mockup set — no code implication.
+
+## Deferred from: code review of 3-19-simulation-hotkeys (2026-09-18)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+Thirteen findings were patched in place (test-depth, comments, one hook guard); one owner decision
+(FD4, `Escape` in the stage) is left as a `[Review][Decision]` item in the story file. Deferred:
+
+- **Presence-based dialog detection is an all-or-nothing switch.** `useSimulationHotkeys` (FD10 (a))
+  suspends every key while ANY `[role="dialog"]` / `[aria-modal="true"]` element exists in the
+  document — a `keepMounted` MUI Dialog, a hidden panel, or an extension-injected node would leave
+  all four hotkeys silently dead while both hint lines still advertise them, and the recorded
+  chunk-fetch window (first Back before the dynamic dialog chunk resolves) stays open. FD10 (b)'s
+  `enabled: !leaveConfirming` binding through a new view prop would close the window; the reviewer
+  judged it not worth a view prop today (no such dialog exists, 4.24/4.25's modal is a plain MUI
+  `Dialog`). Revisit if a persistent dialog ever lands on the route.
+- **Selector lists stop at the AC3 enumeration.** `SPACE_ACTIVATOR_SELECTOR` omits `[role="radio"]`
+  (Space selects a focused radio — the hook would also toggle playback); `EDITABLE_OR_KEY_CONSUMING_SELECTOR`
+  omits the arrow-consuming widgets (`tab`, `tablist`, `radiogroup`, `spinbutton`, `tree`, `grid`,
+  `scrollbar`, media controls). None exist on the battle route today. **Story 6.11's keyboard sweep**
+  is where the lists should be extended, once, with the route's actual widget inventory in hand.
+- **Latest-bindings ref refreshed in a passive `useEffect`.** The story prescribed the
+  `PetriDishCanvas.tsx:826-843` idiom; a keydown landing between a rAF-driven commit (the extinction
+  auto-pause flipping `status`) and its passive-effect flush reads a stale `canStep` /
+  `handlePlayPause`. Today the stale direction is harmless (`pause()` on an already-paused run —
+  one Space appears dead; the dangerous `paused → playing` flip comes only from discrete events,
+  which React flushes synchronously). `useLayoutEffect` (or React 19's `useEffectEvent`) is the
+  tighter form. Not changed in review because the idiom was prescribed; **fold into the next hook
+  touch or 6.11**.
+- **`installFrameDriver` duplicated across two test files.** `BattlePage.test.tsx` (Story 3.19) now
+  carries a verbatim copy of `BattleSimulationView.test.tsx`'s helper. `@gol/test-utils` candidate,
+  alongside the `installContexts()` canvas stubs it pairs with.
+- **Gallery `runLink` entry absent from the hotkeys e2e block.** Trap 17 named both Run entries;
+  only `runButton.click()` + `parkFocus` is exercised. The `?mode=run` path (Story 3.17) starts with
+  focus on `<body>` and is the one path where the hints are true from the first frame — a one-test
+  addition to the 3.19 block when the file is next touched.

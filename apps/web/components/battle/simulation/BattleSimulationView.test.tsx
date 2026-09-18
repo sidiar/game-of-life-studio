@@ -1321,7 +1321,11 @@ describe('Simulation hotkeys (Story 3.19)', () => {
     driver.frame(100);
     expect(root(container)).toHaveAttribute('data-cycle', '3');
 
-    expect(() => fireEvent.keyDown(document.body, { key: 'ArrowRight' })).not.toThrow();
+    // Not wrapped in `expect(...).not.toThrow()`: jsdom routes a throw inside a window listener to
+    // its virtual console, never back to `fireEvent`'s caller, so that assertion could not fail.
+    // The tripwire is Vitest's unhandled-error channel — a `step()` throw here fails the RUN
+    // ("Errors 1 error", exit non-zero; verified by removing the `canStep` gate).
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
     expect(root(container)).toHaveAttribute('data-cycle', '3'); // unchanged by the keypress
     driver.frame(200);
     expect(root(container)).toHaveAttribute('data-cycle', '4'); // the loop's own next frame

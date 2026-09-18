@@ -52,8 +52,16 @@ export default function HotkeyHints({ className, lead, entries }: HotkeyHintsPro
       {lead}
       {entries.map((entry, index) => (
         <Fragment key={`${entry.label}-${index}`}>
-          {/* A bullet read aloud between every pair is noise — the separator carries no name. */}
-          {index > 0 && <span aria-hidden="true"> • </span>}
+          {/* A bullet read aloud between every pair is noise — the separator carries no name. The
+              spaces stay OUTSIDE the hidden span: inline runs concatenate without a word break in
+              the accessibility tree, so with them inside, `Play/Pause` would run straight into the
+              arrow's `Right arrow`. */}
+          {index > 0 && (
+            <>
+              {' '}
+              <span aria-hidden="true">•</span>{' '}
+            </>
+          )}
           <kbd>
             {entry.arrow === true ? (
               <>

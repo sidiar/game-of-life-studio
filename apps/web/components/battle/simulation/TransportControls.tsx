@@ -15,7 +15,7 @@ import type { SimulationStatus } from '@/lib/battle/useSimulation';
  *
  * The three accessible names are the same in both homes (`Play`/`Pause`, `Next cycle`, `Stop &
  * reset`), NOT the fullscreen mockup's shorter `Play`/`Next`/`Stop`: the names are part of the
- * route's test vocabulary, and Story 3.19's hotkey hints (`<HotkeyHints>`, in each bar's own file)
+ * route's test vocabulary, and Story 3.19's hotkey hints (`<HotkeyHints>`, styled by each bar)
  * name the SHORTER verbs — `Play/Pause`, `Next`, `Stop` — as prefixes of these accessible names,
  * never a second set (FD11). No `aria-keyshortcuts` here (FD8 (a)): this cluster is shared with
  * Story 4.15's preview panel, where no hotkey hook is ever mounted, and the hint line is the

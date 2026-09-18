@@ -45,9 +45,8 @@ import SpeedControl from './SpeedControl';
  * here, not in `<BattlePage>`, is also what makes Lab mode hotkey-free "by construction" (AC4):
  * `<BattlePage>` unmounts this view on Run -> Lab, which is the hook's own cleanup — no `enabled`
  * flag, no second listener. The extinction auto-pause (FR-4.7, Decision B.5, Story 3.15) is the
- * hook's alone — this component
- * gains no state, hook, effect or prop for it; it is observed through `status` exactly like a
- * manual pause. The transport bar shipped in 3.12:
+ * hook's alone — this component gains no state, hook, effect or prop for it; it is observed
+ * through `status` exactly like a manual pause. The transport bar shipped in 3.12:
  * `<SimulationControlBar>` is the only thing that moves the view off paused-at-cycle-0, and
  * `handlePlayPause` below is the one derivation genuinely new there — which verb Play/Pause means,
  * decided from `status` (3.12 FD3). The Speed section shipped in 3.13: `<SpeedControl>` reads

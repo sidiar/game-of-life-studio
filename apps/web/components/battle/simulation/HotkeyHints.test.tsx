@@ -20,14 +20,17 @@ describe('HotkeyHints (Story 3.19, FD6)', () => {
     expect(text).toContain('Stop');
   });
 
-  it('DOM text is sentence case — Space / Esc, not SPACE / ESC (trap 15)', () => {
-    const { container } = render(<HotkeyHints lead="Shortcuts: " entries={CHASSIS_ENTRIES} />);
+  it('keeps a real space on both sides of the aria-hidden bullet (the spaces are not inside it)', () => {
+    const { container } = render(<HotkeyHints entries={CHASSIS_ENTRIES} />);
 
-    const text = container.textContent ?? '';
-    expect(text).toContain('Space');
-    expect(text).toContain('Esc');
-    expect(text).not.toContain('SPACE');
-    expect(text).not.toContain('ESC');
+    const bullets = Array.from(container.querySelectorAll('[aria-hidden="true"]')).filter(
+      (node) => node.textContent === '•',
+    );
+    expect(bullets).toHaveLength(2);
+    for (const bullet of bullets) {
+      expect(bullet.previousSibling?.textContent).toBe(' ');
+      expect(bullet.nextSibling?.textContent).toBe(' ');
+    }
   });
 
   it('renders one <kbd> per entry', () => {

@@ -3296,6 +3296,9 @@ describe('BattlePage — Simulation hotkeys (Story 3.19)', () => {
     await user.click(runButton());
     await findRunView(container);
     (document.activeElement as HTMLElement | null)?.blur();
+    // Trap 21: `user.keyboard` types into the focused element — assert focus is loose first, or a
+    // failed blur would send `f` into a field and fail with a misleading "no hotkeys" symptom.
+    expect(document.body).toHaveFocus();
 
     await user.keyboard('f');
 
@@ -3331,7 +3334,12 @@ describe('BattlePage — Simulation hotkeys (Story 3.19)', () => {
 
   // AC9: from Run mode with a dirty battle, Back opens the guard; Escape is Cancel for the dialog
   // AND is suspended for the hook (AC3 (v)) — a playing simulation is untouched underneath it.
-  it('Escape suspends while the unsaved-changes dialog is open: dialog closes, a playing simulation is untouched (AC9)', async () => {
+  // (i) Escape closes the dialog and the run is untouched; (ii) Space / ArrowRight while it is
+  // open change nothing; trap 6: a SECOND Escape a beat after Cancel — MUI keeps the
+  // `role="dialog"` Paper mounted through its exit transition — is still suspended; (iii) after
+  // Cancel focus is back on Back, a `button`, so a following Space re-opens the dialog natively
+  // (AC3 (vi)) rather than pausing the run.
+  it('the unsaved-changes dialog suspends the hotkeys: Escape (twice) closes it and a playing simulation is untouched; Space on the restored Back re-opens it (AC9)', async () => {
     const user = userEvent.setup();
     const driver = installFrameDriver();
     const { container } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
@@ -3340,20 +3348,42 @@ describe('BattlePage — Simulation hotkeys (Story 3.19)', () => {
     await user.click(runButton());
     const view = await findRunView(container);
     (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.body).toHaveFocus();
 
     await user.keyboard(' ');
     driver.frame(0);
     driver.frame(100);
     expect(view).toHaveAttribute('data-status', 'playing');
-    const cycleBeforeDialog = view.getAttribute('data-cycle');
+    const cycleBeforeDialog = Number(view.getAttribute('data-cycle'));
+    expect(cycleBeforeDialog).toBeGreaterThan(0);
 
     await user.click(backButton());
     const dialog = await screen.findByRole('dialog', { name: 'Unsaved Changes' });
 
+    // (ii): neither key reaches the run — Space would have PAUSED it.
+    fireEvent.keyDown(dialog, { key: ' ' });
+    fireEvent.keyDown(dialog, { key: 'ArrowRight' });
+    expect(view).toHaveAttribute('data-status', 'playing');
+    expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument();
+
+    // (i) + trap 6: the first Escape is Cancel; the second lands while the Paper is still in the
+    // DOM (exit transition), from the restored focus target — and must NOT stop the run.
     fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(view).toHaveAttribute('data-status', 'playing');
-    expect(view).toHaveAttribute('data-cycle', cycleBeforeDialog as string);
+
+    // "Untouched" as a live assertion, not a frozen number: the loop is still attached and still
+    // advancing once frames are driven again (a Stop would have re-seeded to cycle 0).
+    driver.frame(200);
+    driver.frame(300);
+    expect(Number(view.getAttribute('data-cycle'))).toBeGreaterThan(cycleBeforeDialog);
+
+    // (iii): the guard restored focus to Back; Space there is the button's own activation.
+    await waitFor(() => expect(backButton()).toHaveFocus());
+    await user.keyboard(' ');
+    expect(await screen.findByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument();
+    expect(view).toHaveAttribute('data-status', 'playing');
   });
 });

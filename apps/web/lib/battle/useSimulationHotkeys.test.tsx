@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, renderHook } from '@testing-library/react';
 import {
   isSpaceActivator,
@@ -48,6 +48,20 @@ describe('shouldIgnoreHotkey (AC3, pure)', () => {
     return new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
   }
 
+  // Nodes these cases append by hand are not RTL containers, so `cleanup()` never removes them —
+  // a failing assertion in a bare `appendChild … expect … remove()` sequence would leave a
+  // `role="dialog"` on `<body>` and silently suspend every later hook test in the file. The
+  // `afterEach` below is the guarantee; the cases only append.
+  const mounted: Element[] = [];
+  function mount<T extends Element>(node: T): T {
+    document.body.appendChild(node);
+    mounted.push(node);
+    return node;
+  }
+  afterEach(() => {
+    for (const node of mounted.splice(0)) node.remove();
+  });
+
   it('(i) ignores a defaultPrevented event', () => {
     const e = event({ key: ' ' });
     e.preventDefault();
@@ -71,20 +85,17 @@ describe('shouldIgnoreHotkey (AC3, pure)', () => {
   });
 
   it('(iv) ignores when the target is an editable/key-consuming control', () => {
-    const input = document.createElement('input');
-    document.body.appendChild(input);
+    const input = mount(document.createElement('input'));
     const e = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
     Object.defineProperty(e, 'target', { value: input });
     expect(shouldIgnoreHotkey(e)).toBe(true);
-    input.remove();
   });
 
   it('(v) ignores when a dialog is present anywhere on the page', () => {
     const dialog = document.createElement('div');
     dialog.setAttribute('role', 'dialog');
-    document.body.appendChild(dialog);
+    mount(dialog);
     expect(shouldIgnoreHotkey(event({ key: 'Escape' }))).toBe(true);
-    dialog.remove();
   });
 
   it('(v) ignores when the event target is inside a dialog', () => {
@@ -92,16 +103,14 @@ describe('shouldIgnoreHotkey (AC3, pure)', () => {
     dialog.setAttribute('aria-modal', 'true');
     const inner = document.createElement('span');
     dialog.appendChild(inner);
-    document.body.appendChild(dialog);
+    mount(dialog);
     const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
     Object.defineProperty(e, 'target', { value: inner });
     expect(shouldIgnoreHotkey(e)).toBe(true);
-    dialog.remove();
   });
 
   it('(vi) ignores Space when the target natively activates on Space, but not other keys', () => {
-    const button = document.createElement('button');
-    document.body.appendChild(button);
+    const button = mount(document.createElement('button'));
     const spaceEvent = new KeyboardEvent('keydown', {
       key: ' ',
       bubbles: true,
@@ -117,7 +126,6 @@ describe('shouldIgnoreHotkey (AC3, pure)', () => {
     });
     Object.defineProperty(arrowEvent, 'target', { value: button });
     expect(shouldIgnoreHotkey(arrowEvent)).toBe(false);
-    button.remove();
   });
 
   it('does not ignore a plain Space on a loose-focus target', () => {
@@ -125,22 +133,35 @@ describe('shouldIgnoreHotkey (AC3, pure)', () => {
   });
 });
 
-describe('isSpaceActivator', () => {
-  it('is true for a button, a link with href, and ARIA button/link/checkbox/switch/tab roles', () => {
-    const button = document.createElement('button');
-    expect(isSpaceActivator(button)).toBe(true);
-
+describe('isSpaceActivator (FD3 (a) — the whole selector list, so the policy is reviewable)', () => {
+  it('is true for button, a[href] and summary', () => {
+    expect(isSpaceActivator(document.createElement('button'))).toBe(true);
     const link = document.createElement('a');
     link.href = '#';
     expect(isSpaceActivator(link)).toBe(true);
-
-    const ariaButton = document.createElement('div');
-    ariaButton.setAttribute('role', 'button');
-    expect(isSpaceActivator(ariaButton)).toBe(true);
+    expect(isSpaceActivator(document.createElement('summary'))).toBe(true);
   });
 
-  it('is false for a plain div and for null', () => {
+  it.each(['button', 'link', 'checkbox', 'switch', 'tab', 'menuitemcheckbox', 'menuitemradio'])(
+    'is true for role="%s"',
+    (role) => {
+      const el = document.createElement('div');
+      el.setAttribute('role', role);
+      expect(isSpaceActivator(el)).toBe(true);
+    },
+  );
+
+  it('is true for a descendant of an activator (the SVG icon inside a button)', () => {
+    const button = document.createElement('button');
+    const icon = document.createElement('span');
+    button.appendChild(icon);
+    expect(isSpaceActivator(icon)).toBe(true);
+  });
+
+  it('is false for a plain div, an <a> without href, an <input>, and null', () => {
     expect(isSpaceActivator(document.createElement('div'))).toBe(false);
+    expect(isSpaceActivator(document.createElement('a'))).toBe(false);
+    expect(isSpaceActivator(document.createElement('input'))).toBe(false);
     expect(isSpaceActivator(null)).toBe(false);
   });
 });
@@ -326,16 +347,25 @@ describe('useSimulationHotkeys under StrictMode (trap: effects run twice on moun
 });
 
 describe('AC1 shape check', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it('adds no listener before mount and removes it after unmount (mirrors useDirtyGuard.test.tsx)', () => {
     const addSpy = vi.spyOn(window, 'addEventListener');
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
+    const keydownAdds = () => addSpy.mock.calls.filter(([type]) => type === 'keydown');
+    const keydownRemoves = () => removeSpy.mock.calls.filter(([type]) => type === 'keydown');
+
+    // Before mount: the module was imported, nothing else — no listener yet.
+    expect(keydownAdds()).toHaveLength(0);
+
     const bindings = makeBindings();
     const { unmount } = renderHook(() => useSimulationHotkeys(bindings));
+    expect(keydownAdds()).toHaveLength(1);
+    expect(keydownRemoves()).toHaveLength(0);
 
-    expect(addSpy.mock.calls.some(([type]) => type === 'keydown')).toBe(true);
+    // After unmount: the SAME handler removed, and a following keydown reaches no binding.
     unmount();
+    expect(keydownRemoves()).toHaveLength(1);
+    expect(keydownRemoves()[0]?.[1]).toBe(keydownAdds()[0]?.[1]);
+    dispatchKeyDown(document.body, ' ');
+    expect(bindings.onPlayPause).not.toHaveBeenCalled();
   });
 });

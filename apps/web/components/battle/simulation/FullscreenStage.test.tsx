@@ -238,20 +238,29 @@ describe('FullscreenStage (Story 3.18)', () => {
 });
 
 describe('FullscreenStage — keyboard hint (Story 3.19, AC8)', () => {
-  it('renders the hint with F, Space and → while active', () => {
+  // `textContent`, not `getByText`: the hint is ONE flowing `<span>` whose own text nodes join to
+  // `Press to exit fullscreen Play/Pause Next`, so RTL's default exact matcher never sees
+  // `to exit fullscreen` on its own — a `queryByText` for it is `null` in BOTH states.
+  it('renders the hint with F, Space and → while active — and never names Esc (FD4 (a))', () => {
     const { container } = render(stage());
+    const text = container.textContent ?? '';
 
-    expect(container.textContent).toContain('Press');
-    expect(container.textContent).toContain('to exit fullscreen');
-    expect(container.textContent).toContain('Play/Pause');
-    expect(container.textContent).toContain('Next');
-    expect(container.querySelectorAll('kbd')).toHaveLength(3);
+    expect(text).toContain('Press');
+    expect(text).toContain('to exit fullscreen');
+    expect(text).toContain('Play/Pause');
+    expect(text).toContain('Next');
+
+    const keys = Array.from(container.querySelectorAll('kbd')).map((kbd) => kbd.textContent);
+    expect(keys).toEqual(['F', 'Space', '→Right arrow']);
+
+    // `Escape` STOPS in the stage too; a hint naming ESC as the exit key would be false.
+    expect(text).not.toContain('Esc');
   });
 
   it('renders no hint while inactive', () => {
-    render(stage({ active: false }));
+    const { container } = render(stage({ active: false }));
 
-    expect(screen.queryByText('to exit fullscreen')).not.toBeInTheDocument();
+    expect(container.textContent).not.toContain('to exit fullscreen');
     expect(document.querySelectorAll('kbd')).toHaveLength(0);
   });
 

@@ -9,6 +9,15 @@ import { useEffect, useRef } from 'react';
  * boolean, not the `status` string, so the hook interprets nothing and needs no `SimulationStatus`
  * import (FD2 (a)) — the same reason `sim.step()`'s throw while playing (trap 1) can never reach
  * the hook: `canStep` gates the call, the hook never `try`s.
+ *
+ * The hint lines (`<HotkeyHints>`) land in the same story as this hook because NFR-4.1 forbids a
+ * hint with nothing behind it — which is also why 3.12 and 3.18 each left their half for 3.19.
+ * FD3 (a)'s consequence, recorded here because it is the reviewer's first question: `SPACE
+ * Play/Pause` is true whenever focus is LOOSE (`<body>`) or on a non-activating element — after a
+ * pointer click on the dish, after a Gallery Run entry (`?mode=run`, focus starts on `<body>`) —
+ * and NOT while a button holds focus: there Space activates the button, once (rule (vi) below), so
+ * right after Cancel on the unsaved-changes dialog (focus restored to Back) Space re-opens the
+ * dialog, and right after `F` (focus on Exit / the Fullscreen button) Space toggles the stage.
  */
 export interface SimulationHotkeyBindings {
   readonly onPlayPause: () => void;
@@ -97,6 +106,11 @@ export function shouldIgnoreHotkey(event: KeyboardEvent): boolean {
   return false;
 }
 
+/** The four keys, matched the way the `switch` in the listener matches them (trap 7 / trap 11). */
+function isHotkey(key: string): boolean {
+  return key === ' ' || key === 'ArrowRight' || key === 'Escape' || key.toLowerCase() === 'f';
+}
+
 /**
  * A single `window` `keydown` listener, attached on mount and removed on unmount — NEVER
  * re-subscribed when `bindings` changes (the view re-renders at up to 10 Hz while playing; AR-29,
@@ -119,6 +133,12 @@ export function useSimulationHotkeys(bindings: SimulationHotkeyBindings): void {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // The key set first, the suspension rules second: rule (v) is a `document.querySelector`,
+      // and without this filter it would run for every key typed anywhere in Run mode (Tab, a
+      // modifier, a letter) only to be discarded by the `switch` below. `typeof` rather than a
+      // truthiness check — a `keydown` dispatched as a plain `Event` carries no `key` at all, and
+      // `.toLowerCase()` on `undefined` would throw inside a window listener.
+      if (typeof event.key !== 'string' || !isHotkey(event.key)) return;
       if (shouldIgnoreHotkey(event)) return;
 
       const { onPlayPause, onStep, onStop, onToggleFullscreen, canStep } = bindingsRef.current;

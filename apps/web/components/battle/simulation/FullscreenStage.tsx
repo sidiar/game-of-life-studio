@@ -66,6 +66,11 @@ export interface FullscreenStageProps {
   active: boolean;
   /** As GIVEN — `<BattlePage>` applies `battleDisplayName` once (trap 22). */
   battleTitle: string;
+  /**
+   * Spec §3.14 `onExit(): void // ⛶ Exit Fullscreen / F key` — the top overlay's Exit button
+   * calls it directly; the `F` hotkey reaches the SAME `<BattlePage>` setter through
+   * `<BattleSimulationView>`'s composed toggle (Story 3.19, FD5 (a)), never through this prop.
+   */
   onExit(): void;
   hud: FullscreenHudValues;
   /** The bar's own props, whole (spec §3.13) — `<TransportControls>` renders them (FD7). */

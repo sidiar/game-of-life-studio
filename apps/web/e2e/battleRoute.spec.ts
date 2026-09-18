@@ -3433,6 +3433,9 @@ test.describe('Simulation hotkeys (Story 3.19)', () => {
 
     await page.getByRole('button', { name: 'Back to Battles' }).click();
     await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).toBeVisible();
+    // Axe with the dialog OPEN over a playing Run (the 2.16 idiom) — the inert background plus
+    // the hint lines underneath are the state a reviewer cannot see in jsdom.
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
     await page.keyboard.press('Escape');
 
