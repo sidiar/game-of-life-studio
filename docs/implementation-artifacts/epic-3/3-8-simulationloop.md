@@ -206,7 +206,7 @@ review commit; the mutation checks named were run against the dev commit's code.
 - [x] [Review][Patch] Epic 4 lane state (`epic-4: in-progress`, `4-1-…: ready-for-dev`) rode into the 3.8 dev commit from lane 4's create-story running in this primary checkout — neither belongs to this story, and the 4-1 story file behind them is not in the commit. Reverted to `main`'s values; lane 4's own PR carries its flip. [docs/implementation-artifacts/sprint-status.yaml]
 - [x] [Review][Patch] Stale WHO comments outside Task 3's named files: `rng.ts` still said the seed is minted at "Story 3.8/3.10" (FD2 narrowed it to 3.10 — the story's own What-NOT-to-build says so); `conwayGoldens.test.ts` said "exactly as Story 3.8's loop will" (the loop never runs the strategy; `stepGridBuffers` does). [packages/simulation/src/strategy/rng.ts:51,66; packages/simulation/src/strategy/conwayGoldens.test.ts:37]
 - [x] [Review][Patch] The seed-domain reassignment was recorded twice in `deferred-work.md` (the 3-6 entry edited in place, as Task 6 asked, AND repeated as the 3-8 section's first bullet). Duplicate removed. [docs/implementation-artifacts/deferred-work.md]
-- [x] [Review][Patch] Record accuracy: "Agent Model Used: Claude Opus 5" contradicted `Dev Model: sonnet` (the lane dispatched Sonnet; corrected); the File List's "`ready-for-dev` → `review`" described the dev step, not the commit (`backlog` → `review` on `ef4eff1`); "12-line" fake; and the bench "unchanged 3.7 measurement" glossed `repaint-decision` at 0.110 ms vs 0.072 ms (ungated). [docs/implementation-artifacts/3-8-simulationloop.md]
+- [x] [Review][Patch] Record accuracy: "Agent Model Used: Claude Opus 5" contradicted `Dev Model: sonnet` (the lane dispatched Sonnet; corrected); the File List's "`ready-for-dev` → `review`" described the dev step, not the commit (`backlog` → `review` on `ef4eff1`); "12-line" fake; and the bench "unchanged 3.7 measurement" glossed `repaint-decision` at 0.110 ms vs 0.072 ms (ungated). [docs/implementation-artifacts/epic-3/3-8-simulationloop.md]
 - [x] [Review][Defer] `apps/web/lib/canvas/repaintDecision.bench.ts` (~108–120) still says "Story 3.8's loop would rebuild this per frame … that story's cost to shape" — now Story 3.9's per AC5 and the reassigned live-frame entry; `apps/web` was out of this story's scope. — deferred to Story 3.9, recorded in `deferred-work.md`.
 
 Dismissed (8): `ms` validation for 0/negative/NaN/Infinity and NaN timestamps (Task 2 says trust the ladder; noted in the comment instead); a synchronous or throwing `scheduler.request` (RAF is neither; the `FrameScheduler` doc now says so); a late-callback-after-`stop()` guard (RAF's `cancel` is synchronous, and the executing-handle check covers the reachable case); a negative-delta guard (Trap 5 forbids it); the AC4 test asserting frame positions rather than the aggregate (the aggregate fails without FD3 — equivalent); React 18 `RefObject` compatibility (React 19.2.7 is pinned); `repaint-decision` bench variance (ungated); the fake's tolerance of `cancel` on a fired handle (it is what RAF does, now documented as the contract).
@@ -465,9 +465,9 @@ into the `FrameScheduler` shape; nothing in this story references them.
 - `packages/simulation/src/strategy/rng.ts` — the closure-with-state precedent under AR-16.
 - `apps/web/lib/canvas/gridRenderer.ts` — `draw(grid)` semantics (marks-only, baseline-primed),
   AC3's "scheduling lives exclusively in SimulationLoop" and its structural regex test.
-- `docs/implementation-artifacts/3-6-phase-3-the-assembled-cycle.md` FD1 — why the strategy type
+- `docs/implementation-artifacts/epic-3/3-6-phase-3-the-assembled-cycle.md` FD1 — why the strategy type
   carries no buffers and defers the identity question here.
-- `docs/implementation-artifacts/3-7-performance-harness-coverage-gate-flip.md` and
+- `docs/implementation-artifacts/epic-3/3-7-performance-harness-coverage-gate-flip.md` and
   `performance-baseline-validation.md` — the `draw` vs `drawFull` numbers Story 3.9 will need.
 - `docs/implementation-artifacts/deferred-work.md` — seed-domain entry (3.8/3.10 → 3.10), live-frame
   measurement entry (3.8 → 3.9).
@@ -601,7 +601,7 @@ shipped code.
 - `docs/implementation-artifacts/deferred-work.md` (modified — Task 6 bookkeeping)
 - `docs/implementation-artifacts/sprint-status.yaml` (modified — `3-8-simulationloop` from `backlog`
   on `ef4eff1` to `review`; the intermediate `ready-for-dev`/`in-progress` states were never committed)
-- `docs/implementation-artifacts/3-8-simulationloop.md` (this file — task checkboxes, Dev Agent
+- `docs/implementation-artifacts/epic-3/3-8-simulationloop.md` (this file — task checkboxes, Dev Agent
   Record, Status)
 
 ### Change Log

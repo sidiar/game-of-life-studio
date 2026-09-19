@@ -53,6 +53,7 @@ function view(overrides: Partial<BattleSimulationViewProps> = {}) {
       onBack={vi.fn()}
       fullscreen={false}
       onExitFullscreen={vi.fn()}
+      onEnterFullscreen={vi.fn()}
       battleTitle="Three-Way Skirmish"
       {...overrides}
     />
@@ -1285,5 +1286,193 @@ describe('Fullscreen run stage (Story 3.18)', () => {
     act(() => screen.getByRole('button', { name: 'Play' }).click());
     driver.frame(0);
     expect((await axe(container)).violations).toEqual([]);
+  });
+});
+
+describe('Simulation hotkeys (Story 3.19)', () => {
+  it('Space toggles play/pause, through the hook (AC1/AC2)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(view({ startingSpeed: 10 }));
+
+    fireEvent.keyDown(document.body, { key: ' ' });
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+    driver.frame(0);
+    driver.frame(100);
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
+
+    fireEvent.keyDown(document.body, { key: ' ' });
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+  });
+
+  // Trap 1: `sim.step()` throws while playing — the hook never `try`s, `canStep` gates the call
+  // instead, so a keyboard step while playing is a no-op rather than a caught error.
+  it('ArrowRight steps twice while paused, and is a no-op while playing (FR-4.3)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(view({ startingSpeed: 10 }));
+
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+    expect(root(container)).toHaveAttribute('data-cycle', '2');
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+    expect(root(container)).toHaveAttribute('data-cycle', '3');
+
+    // Not wrapped in `expect(...).not.toThrow()`: jsdom routes a throw inside a window listener to
+    // its virtual console, never back to `fireEvent`'s caller, so that assertion could not fail.
+    // The tripwire is Vitest's unhandled-error channel — a `step()` throw here fails the RUN
+    // ("Errors 1 error", exit non-zero; verified by removing the `canStep` gate).
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+    expect(root(container)).toHaveAttribute('data-cycle', '3'); // unchanged by the keypress
+    driver.frame(200);
+    expect(root(container)).toHaveAttribute('data-cycle', '4'); // the loop's own next frame
+  });
+
+  it('Escape stops: paused at cycle 0, with a repaint of the initial grid (FR-4.4)', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const { container } = render(view({ startingSpeed: 10 }));
+    const primesAfterMount = drawFullSpy.mock.calls.length;
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+    expect(drawFullSpy.mock.calls.length).toBe(primesAfterMount + 1);
+  });
+
+  // FD4 (c) — owner's decision, 2026-09-18: in the STAGE, Escape stops AND exits; in the
+  // chassis it keeps stopping only (the test above). One `onStop` binding, one `fullscreen`
+  // branch (`handleEscapeStop` in the view) — `onExitFullscreen` is called only when the stage
+  // is up.
+  it('Escape stops AND exits the stage while fullscreen, but only stops in the chassis (FD4 (c))', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const onExitFullscreen = vi.fn();
+    const { container, rerender } = render(view({ startingSpeed: 10, onExitFullscreen }));
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(onExitFullscreen).not.toHaveBeenCalled();
+
+    rerender(view({ startingSpeed: 10, onExitFullscreen, fullscreen: true }));
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(300);
+    driver.frame(400);
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(root(container)).toHaveAttribute('data-status', 'paused');
+    expect(root(container)).toHaveAttribute('data-cycle', '0');
+    expect(onExitFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  // FD5 (a): `f` in the chassis calls `onEnterFullscreen`; `F` in the stage calls
+  // `onExitFullscreen` — the composed toggle, never a third callback.
+  it('f calls onEnterFullscreen once from the chassis; F calls onExitFullscreen once from the stage', () => {
+    installContexts();
+    const onEnterFullscreen = vi.fn();
+    const onExitFullscreen = vi.fn();
+    const { rerender } = render(view({ onEnterFullscreen, onExitFullscreen }));
+
+    fireEvent.keyDown(document.body, { key: 'f' });
+    expect(onEnterFullscreen).toHaveBeenCalledTimes(1);
+    expect(onExitFullscreen).not.toHaveBeenCalled();
+
+    rerender(view({ onEnterFullscreen, onExitFullscreen, fullscreen: true }));
+
+    fireEvent.keyDown(document.body, { key: 'F' });
+    expect(onExitFullscreen).toHaveBeenCalledTimes(1);
+    expect(onEnterFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  // The 3.18 tripwires, repeated across an `F`-DRIVEN round trip: the key calls the callback, and
+  // the caller (here, standing in for `<BattlePage>`) flips `fullscreen` — canvas identity must
+  // hold exactly as it does for the pointer-driven toggle (`BattleSimulationView.test.tsx`'s own
+  // "Fullscreen run stage (Story 3.18)" describe block).
+  it('an F-driven fullscreen round trip keeps the same canvas node, one construction, no extra drawFull', () => {
+    installContexts();
+    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
+    const onEnterFullscreen = vi.fn();
+    const onExitFullscreen = vi.fn();
+    const { container, rerender } = render(view({ onEnterFullscreen, onExitFullscreen }));
+    const canvasBefore = container.querySelector('canvas');
+    const primesAfterMount = drawFullSpy.mock.calls.length;
+    const constructions = () =>
+      vi
+        .mocked(HTMLCanvasElement.prototype.getContext)
+        .mock.contexts.filter((self) => self === canvasBefore).length;
+    expect(constructions()).toBe(1);
+
+    fireEvent.keyDown(document.body, { key: 'f' });
+    rerender(view({ onEnterFullscreen, onExitFullscreen, fullscreen: true }));
+
+    expect(container.querySelector('canvas')).toBe(canvasBefore);
+    expect(constructions()).toBe(1);
+    expect(drawFullSpy.mock.calls.length).toBe(primesAfterMount);
+
+    fireEvent.keyDown(document.body, { key: 'F' });
+    rerender(view({ onEnterFullscreen, onExitFullscreen, fullscreen: false }));
+
+    expect(container.querySelector('canvas')).toBe(canvasBefore);
+    expect(constructions()).toBe(1);
+    expect(drawFullSpy.mock.calls.length).toBe(primesAfterMount);
+  });
+
+  // AC3 (v): a dialog anywhere on the page suspends the hook — even one rendered by a SIBLING,
+  // never a descendant of this view (the `<UnsavedChangesDialog>` shape from `<BattlePage>`).
+  it('a keydown from inside a rendered dialog sibling does nothing (AC3 (v))', () => {
+    installContexts();
+    const driver = installFrameDriver();
+    const { container } = render(
+      <>
+        {view({ startingSpeed: 10 })}
+        <div role="dialog" data-testid="sibling-dialog" />
+      </>,
+    );
+
+    act(() => screen.getByRole('button', { name: 'Play' }).click());
+    driver.frame(0);
+    driver.frame(100);
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
+
+    fireEvent.keyDown(screen.getByTestId('sibling-dialog'), { key: 'Escape' });
+
+    expect(root(container)).toHaveAttribute('data-status', 'playing');
+    expect(root(container)).toHaveAttribute('data-cycle', '1');
+  });
+
+  // AC1: one listener under StrictMode's double-invoke, none after unmount (Run -> Lab).
+  it('registers exactly one keydown listener under StrictMode, and none after unmount', () => {
+    installContexts();
+    const attached = new Set<EventListenerOrEventListenerObject>();
+    const originalAdd = window.addEventListener.bind(window);
+    const originalRemove = window.removeEventListener.bind(window);
+    vi.spyOn(window, 'addEventListener').mockImplementation((type, listener, options) => {
+      if (type === 'keydown') attached.add(listener);
+      originalAdd(type, listener, options as boolean | AddEventListenerOptions | undefined);
+    });
+    vi.spyOn(window, 'removeEventListener').mockImplementation((type, listener, options) => {
+      if (type === 'keydown') attached.delete(listener);
+      originalRemove(type, listener, options as boolean | EventListenerOptions | undefined);
+    });
+
+    const { unmount } = render(<StrictMode>{view()}</StrictMode>);
+    expect(attached.size).toBe(1);
+
+    unmount();
+    expect(attached.size).toBe(0);
   });
 });

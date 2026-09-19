@@ -609,7 +609,7 @@ Canvas2D facts this story relies on: `fillStyle` set to an unparseable string is
   `packages/simulation/src/loop/stepGridBuffers.ts` (+ test, for the deps shape),
   `packages/simulation/src/strategy/conflictPhase.ts` (age write: born → 0, survivor → `min(age+1,
   max)`, unconditional of `agingEnabled`), `packages/simulation/src/grid/grid.ts` (M14 ref encoding).
-- `docs/implementation-artifacts/3-8-simulationloop.md` (Trap 1, FD2, What NOT to build),
+- `docs/implementation-artifacts/epic-3/3-8-simulationloop.md` (Trap 1, FD2, What NOT to build),
   `3-7-performance-harness-coverage-gate-flip.md` (FD2 "not rasterization", FD5 fixture, Traps),
   `epic-2/2-3-renderer-dirty-region-editing-paths.md` (FD1–FD5, the hybrid, the no-op tests),
   `epic-1/1-8-gridrenderer-static-core.md` (contract, `beginPath` per group),
@@ -759,7 +759,7 @@ Both already anticipated by the story itself; recorded here as confirmed, not ne
   `repaint-diff-path` row in the repaint-decision table)
 - `docs/implementation-artifacts/deferred-work.md` (three 3.9 items closed/reassigned; new
   "Deferred from: Story 3-9" section)
-- `docs/implementation-artifacts/3-9-colour-state-batch-rendering.md` (this file — frontmatter,
+- `docs/implementation-artifacts/epic-3/3-9-colour-state-batch-rendering.md` (this file — frontmatter,
   task checkboxes, Dev Agent Record, Status)
 - `docs/implementation-artifacts/sprint-status.yaml` (`3-9-colour-state-batch-rendering:
   backlog` → `review`)

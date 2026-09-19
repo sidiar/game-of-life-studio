@@ -177,3 +177,59 @@ describe('SimulationControlBar', () => {
     expect((await axe(playing.container)).violations).toEqual([]);
   });
 });
+
+describe('SimulationControlBar — keyboard hints (Story 3.19, AC7)', () => {
+  it('renders the Shortcuts hint with three <kbd>s, in both statuses', () => {
+    const { container, rerender } = renderBar();
+
+    expect(container.textContent).toContain('Shortcuts:');
+    expect(container.querySelectorAll('kbd')).toHaveLength(3);
+
+    rerender(
+      <SimulationControlBar
+        status="playing"
+        onPlayPause={vi.fn()}
+        onStep={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(container.textContent).toContain('Shortcuts:');
+    expect(container.querySelectorAll('kbd')).toHaveLength(3);
+  });
+
+  // Trap 15: DOM text is sentence case; CSS uppercases it.
+  it('DOM text is sentence case — Space / Esc, not SPACE / ESC', () => {
+    const { container } = renderBar();
+
+    expect(container.textContent).toContain('Space');
+    expect(container.textContent).toContain('Esc');
+    expect(container.textContent).not.toContain('SPACE');
+    expect(container.textContent).not.toContain('ESC');
+  });
+
+  // The bar stays presentational: nothing in the hint is focusable, so the tab order pinned above
+  // (body → Play → Next cycle → Stop & reset → body) is unaffected by its presence.
+  it('tab order is unchanged by the hint: body → Play → Next cycle → Stop & reset → body', async () => {
+    const user = userEvent.setup();
+    renderBar();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Play' })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Next cycle' })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Stop & reset' })).toHaveFocus();
+    await user.tab();
+    expect(document.body).toHaveFocus();
+  });
+
+  it('has no axe violations with the hint present, paused or playing', async () => {
+    const paused = renderBar();
+    expect((await axe(paused.container)).violations).toEqual([]);
+    paused.unmount();
+
+    const playing = renderBar({ status: 'playing' });
+    expect((await axe(playing.container)).violations).toEqual([]);
+  });
+});

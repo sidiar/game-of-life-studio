@@ -133,6 +133,8 @@ describe('BattlePage — what the Run view receives (Story 3.11)', () => {
     // Story 3.18 (trap 6): the three stage props, on the toggle path.
     expect(run.fullscreen).toBe(false);
     expect(typeof run.onExitFullscreen).toBe('function');
+    // Story 3.19 (FD5 (a)): the fourth stage prop — the `F` hotkey's entry.
+    expect(typeof run.onEnterFullscreen).toBe('function');
     expect(run.battleTitle).toBe('Three-Way Skirmish');
     expect(screen.queryByTestId('editor')).toBeNull();
   });
@@ -234,6 +236,8 @@ describe('BattlePage — what the Run view receives (Story 3.11)', () => {
     // mount.
     expect(run.fullscreen).toBe(false);
     expect(typeof run.onExitFullscreen).toBe('function');
+    // Story 3.19 (FD5 (a)): the fourth stage prop — the `F` hotkey's entry.
+    expect(typeof run.onEnterFullscreen).toBe('function');
     expect(run.battleTitle).toBe('Three-Way Skirmish');
   });
 
@@ -284,6 +288,33 @@ describe('BattlePage — the fullscreen cell through the mocked view (Story 3.18
     );
     expect(screen.getByRole('button', { name: 'Fullscreen' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // Story 3.19 (FD5 (a)): the SAME round trip, driven through the view's `onEnterFullscreen` prop
+  // instead of the header's button click — proof the key's entry reaches the identical cell.
+  it('hands `fullscreen: true` to the view when the view calls onEnterFullscreen, and onExitFullscreen remounts the header with focus restored', async () => {
+    const user = await renderSkirmish();
+    await enterRun(user);
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.body).toHaveFocus();
+
+    (runRenders.at(-1) as BattleSimulationViewProps).onEnterFullscreen();
+
+    await waitFor(() =>
+      expect((runRenders.at(-1) as BattleSimulationViewProps).fullscreen).toBe(true),
+    );
+    expect(screen.queryByRole('group', { name: 'Mode' })).toBeNull();
+    expect(screen.getByTestId('run')).toHaveAttribute('data-fullscreen', 'true');
+
+    (runRenders.at(-1) as BattleSimulationViewProps).onExitFullscreen();
+
+    await screen.findByRole('group', { name: 'Mode' });
+    await waitFor(() =>
+      expect((runRenders.at(-1) as BattleSimulationViewProps).fullscreen).toBe(false),
+    );
+    // Focus was loose on entry, so the restore effect moves it to the Fullscreen button — the
+    // same "loose focus" branch a pointer-driven exit exercises.
+    expect(screen.getByRole('button', { name: 'Fullscreen' })).toHaveFocus();
   });
 
   // AC6, the "loose focus" guard: when a control the user focused SURVIVES the exit (only a mock

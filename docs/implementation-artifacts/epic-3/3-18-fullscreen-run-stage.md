@@ -607,20 +607,20 @@ on the tree: nothing under `SimulationLayout` carries `position` / `transform` /
   Record "For the reviewer") and the File List omits it — it is a shared-lane file (4.2 / 4.6 / 4.10
   appended tokens; the new block sits directly above 4.10's), so a lane-4 token append is an
   adjacent-hunk merge conflict the reviewer note should name
-  [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md:37-40, 547-554, 843-845, 938-939,
+  [`docs/implementation-artifacts/epic-3/3-18-fullscreen-run-stage.md:37-40, 547-554, 843-845, 938-939,
   1119-1121, 1138-1156`]
 - [x] [Review][Patch] AC3 (Exit `transparent`, HUD "in flow" on `--gol-bg-secondary`), AC4
   (`padding: 20px 24px`, `width: auto; height: 100%`, invariant (i) "dish between them"), AC9 (no
   `box-shadow`) and Task 3 (a) ("no glow, in-flow rows") still describe FD4 (a); the FD4 override's
   "What shipped" omits the Exit button's `--gol-surface-hud` surface (the mockup's `rgba(0,0,0,.4)`)
-  [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md:106-114, 145-152, 274-275, 378-379,
+  [`docs/implementation-artifacts/epic-3/3-18-fullscreen-run-stage.md:106-114, 145-152, 274-275, 378-379,
   675-677`]
 - [x] [Review][Patch] The first review's `[Defer]` "No floor on the fullscreen dish height" reads
   as open while `deferred-work.md` closes it under FD4 (b)
-  [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md:534-541`]
+  [`docs/implementation-artifacts/epic-3/3-18-fullscreen-run-stage.md:534-541`]
 - [x] [Review][Patch] The proposed lane-gate row says 4.15 is "the third consumer of all three";
   the first review corrected README / `deferred-work.md` to third of `<TransportControls>` /
-  `<CycleDigits>`, second of the pills [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md`
+  `<CycleDigits>`, second of the pills [`docs/implementation-artifacts/epic-3/3-18-fullscreen-run-stage.md`
   `Proposed lane gate`]
 - [x] [Review][Patch] Head comments describe the in-flow layout: "the dish box becomes
   height-driven" / "a title row above the dish, a HUD below it"
@@ -676,7 +676,7 @@ channel) and `bg-secondary` (inside). CI for `209f3e6`: see the Change Log line.
   decision-(d) pass did not reach (the Story-section italic, the Dev Notes constraint italic, two
   What-NOT-to-build italics — one also saying "the bundle stayed at 309.1 KB" — the Project
   Structure "Not touched" line and the Debug Log's FD4 summary)
-  [`docs/implementation-artifacts/3-18-fullscreen-run-stage.md:41, 670, 960, 967, 1061, 1151`]
+  [`docs/implementation-artifacts/epic-3/3-18-fullscreen-run-stage.md:41, 670, 960, 967, 1061, 1151`]
 - [x] [Review][Patch] `deferred-work.md`'s second-review preamble still announced the HUD-contrast
   `decision-needed` item as open in the story file [`docs/implementation-artifacts/deferred-work.md:1755-1757`]
 - [x] [Review][Patch] The HUD/dish overlap figures were swapped between the two tiers: the dish is
@@ -685,7 +685,7 @@ channel) and `bg-secondary` (inside). CI for `209f3e6`: see the Change Log line.
   not "≈22px at 1280×720, ≈40px at 1194×834"; `deferred-work.md`'s "~33px at 1280×720" matched
   neither. With the panel now opaque the figure is the band of cells hidden, not dimmed
   [`apps/web/components/battle/simulation/BattleSimulationView.tsx:200`;
-  `docs/implementation-artifacts/3-18-fullscreen-run-stage.md:162`;
+  `docs/implementation-artifacts/epic-3/3-18-fullscreen-run-stage.md:162`;
   `docs/implementation-artifacts/deferred-work.md:1738`]
 - [x] [Review][Patch] `themes.css`'s block comment called the scrim and the glow "these two
   surfaces" — the glow is a `box-shadow` [`apps/web/app/themes.css:147`]
@@ -1163,7 +1163,7 @@ None new. React 19.2.7 (fragments, `inert` passthrough, `autoFocus`); Next 16.2.
   section (`:872-920`: bundle mechanism, §3.10/§3.11 amendments, `lastGrid`), the 3-14 section
   (`:1230-1259`: cycle chrome, coloured pill text, **compact variant `:1248-1252`**), the 3-15
   section (`:1276-`: `status` union `:1288-1290`), the 3-17 sections (`:1416-1475`).
-- `docs/implementation-artifacts/3-17-run-battle-from-gallery.md` (Review Findings, Debug Log),
+- `docs/implementation-artifacts/epic-3/3-17-run-battle-from-gallery.md` (Review Findings, Debug Log),
   `3-16-play-mode-ephemeral-resize.md` (the `<LadderSlider>` lift), `3-14-cycle-counter-population-stats.md`
   (FD2/FD4/FD6/FD8), `3-12-transport-controls.md` (FD1/FD2/FD5/FD6),
   `3-11-mode-toggle-run-view-skeleton.md` (FD5), `lane-gates.yaml`.
@@ -1332,7 +1332,7 @@ Modified:
 - `apps/web/e2e/battleRoute.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/3-18-fullscreen-run-stage.md` (this file)
+- `docs/implementation-artifacts/epic-3/3-18-fullscreen-run-stage.md` (this file)
 - `apps/web/app/themes.css` (FD4 (b), 2026-09-18: `--gol-scrim-top`, `--gol-shadow-dish-glow`;
   the interim `--gol-surface-hud` was removed by second-review decision (d))
 

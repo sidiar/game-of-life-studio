@@ -330,7 +330,7 @@ layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus an independent 
 - [x] [Review][Patch] The driver-side `step` error wrapper (`useSimulation.ts:312-319`) is untested and the Dev Agent Record calls its catch body "unreachable from a valid session" — it is reachable from a throwing cadence publish (`derivePopulation` is already spy-mocked in the test file) [apps/web/lib/battle/useSimulation.ts:312-319, apps/web/lib/battle/useSimulation.test.ts]
 - [x] [Review][Patch] e2e 3.15 (a) never asserts `data-status` after Stop & reset nor the Play label / enabled Next cycle after the second auto-pause; (b)'s `speedSlider(page).fill('4')` carries "20 gen/sec" only as a comment [apps/web/e2e/battleRoute.spec.ts:2620-2700]
 - [x] [Review][Patch] Comment/title nits that read as facts: `block()` "A 4x4 block" (it is a 2×2 block on a 4×4 field); the trap-2 test comment's "0, paused" (the mutation leaves `status` `'playing'`); the throw-test comment says production "behaves the same way" then describes the opposite; `isGridEmpty`'s "`some` allocates a callback closure per call" (the allocation is at the call site); the view test title "one commit" on a test that counts no commits; the hook head comment still quotes the unwrapped `draw: (g) => …` snippet; "FD3" names both 3.10's forwarding renderer and 3.15's wrappers [apps/web/lib/battle/useSimulation.test.ts, apps/web/lib/battle/useSimulation.ts:51-52, packages/simulation/src/grid/grid.ts, apps/web/components/battle/simulation/BattleSimulationView.test.tsx]
-- [x] [Review][Patch] Dev Agent Record omits AC10's Run-chunk gzip size and Task 1 (d)'s mutation confirmation ("reddens under an `age`-reading or early-stop mutation") [docs/implementation-artifacts/3-15-extinction-auto-pause.md]
+- [x] [Review][Patch] Dev Agent Record omits AC10's Run-chunk gzip size and Task 1 (d)'s mutation confirmation ("reddens under an `age`-reading or early-stop mutation") [docs/implementation-artifacts/epic-3/3-15-extinction-auto-pause.md]
 - [x] [Review][Defer] `apps/web/playwright.config.ts` pins `PORT = 4173` with `reuseExistingServer: !CI`, so a lane's local e2e silently runs against whichever worktree's `serve` holds the port — this review's first run of the 3.14/3.15 blocks was 4 red against the epic-4 lane's build (no 3.15 code) and 14/14 green against this tree on a private port [apps/web/playwright.config.ts:5,31] — deferred, pre-existing
 
 ## Dev Notes
@@ -642,7 +642,7 @@ None new. `fast-check` as installed in `packages/simulation` (already imported b
 - `packages/test-utils/src/mockWorkspace.ts` (`placeMockRoster` `:205-278` — the seeded 2×2 blocks
   that settle, never die), `packages/domain/src/survivalRuleSchema.ts` (`:6`, `NumericLiteral
   min(0)` — a `neighborCount eq 0` born rule is expressible).
-- `docs/implementation-artifacts/3-14-cycle-counter-population-stats.md` (Review Findings, Debug
+- `docs/implementation-artifacts/epic-3/3-14-cycle-counter-population-stats.md` (Review Findings, Debug
   Log, traps 1/5/8/11), `3-10-usesimulation-hook.md` (Task 4 seam `:180-190`, FD4/FD5, review
   deferral `:308`), `3-12-transport-controls.md` (`:186`, `:297`, `:556`), `3-8-simulationloop.md`
   (AC7), `deferred-work.md` (**3-10 review `:837-853`**, 3-13 `:982-1022`, 3-14 `:1150-1194`),
@@ -786,7 +786,7 @@ Claude Sonnet 5 (claude-sonnet-5), via the `bmad-dev-story` skill.
 - `docs/implementation-artifacts/deferred-work.md` — 3-10 review entry closed; new "Deferred from:
   Story 3-15" section.
 - `docs/implementation-artifacts/sprint-status.yaml` — `3-15-extinction-auto-pause` status only.
-- `docs/implementation-artifacts/3-15-extinction-auto-pause.md` — this file (frontmatter, task
+- `docs/implementation-artifacts/epic-3/3-15-extinction-auto-pause.md` — this file (frontmatter, task
   checkboxes, Dev Agent Record, Change Log, Status).
 
 ## Change Log

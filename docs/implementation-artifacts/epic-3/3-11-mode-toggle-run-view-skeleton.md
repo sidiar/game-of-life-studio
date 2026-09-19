@@ -759,7 +759,7 @@ cheap invariant Task 6 pins.
   (4.3's `dynamic()` rationale), `apps/web/components/battle/BattlePage.commitSeam.test.tsx` (the
   props-recorder shape), `apps/web/e2e/battleRoute.spec.ts` (`seedWorkspace`, `seedConway`,
   `distinctColorCount`).
-- `docs/implementation-artifacts/3-10-usesimulation-hook.md` (AC9, AC10, FD2, FD3, Traps 1/5/9,
+- `docs/implementation-artifacts/epic-3/3-10-usesimulation-hook.md` (AC9, AC10, FD2, FD3, Traps 1/5/9,
   Dev Agent Record), `deferred-work.md` (3-10 section; the 2.6 pointer-capture entry; the 2.7
   `tool` entry; the 4-1 error-boundary entry), `lane-gates.yaml` (4.24/4.25 on `epic-3`).
 - `docs/project-context.md` — hot state in refs; modes are state not routes; `components/battle/`
@@ -897,7 +897,7 @@ of `/battle` and not of the app — it changes nothing about AC8, which is per r
 - `apps/web/e2e/battleRoute.spec.ts` (modified — Story 3.11 block, 5 tests)
 - `docs/implementation-artifacts/deferred-work.md` (modified — six entries touched, new 3-11 section)
 - `docs/implementation-artifacts/sprint-status.yaml` (modified — 3-11 → review)
-- `docs/implementation-artifacts/3-11-mode-toggle-run-view-skeleton.md` (this file)
+- `docs/implementation-artifacts/epic-3/3-11-mode-toggle-run-view-skeleton.md` (this file)
 
 ### Change Log
 

@@ -624,7 +624,7 @@ Not touched: everything under `packages/simulation/src/engine/`, `eslint.config.
   rule is *not* equivalent
 - [Source: packages/test-utils/src/index.ts] — `CONWAYS_CLASSIC` re-exported as a pass-through, never
   a second copy; `Rng` deliberately not exported (Story 3.6 owns it)
-- [Source: docs/implementation-artifacts/3-1-generic-rules-engine.md] — FD1–FD6 and their outcomes;
+- [Source: docs/implementation-artifacts/epic-3/3-1-generic-rules-engine.md] — FD1–FD6 and their outcomes;
   the M11/M12 review findings folded in; the mandatory `Props`, the `Object.hasOwn` guard, and the
   boundary-escape lessons this story inherits rather than revisits
 - [Source: docs/implementation-artifacts/deferred-work.md] — duplicate rule `id`/`contentHash` within
@@ -783,7 +783,7 @@ focused on one of them (`cellSubject.test.ts` for the property × operand matrix
 - `packages/simulation/src/domainRuleSetCompatibility.test.ts` (modified — bidirectional pin
   extended, stub replaced, FD1/FD3 recorded)
 - `packages/simulation/package.json` (modified — `@gol/test-utils` added as a devDependency)
-- `docs/implementation-artifacts/3-2-gol-rules-layer.md` (this file — tasks checked, Dev Agent
+- `docs/implementation-artifacts/epic-3/3-2-gol-rules-layer.md` (this file — tasks checked, Dev Agent
   Record, Change Log, Status)
 - `docs/implementation-artifacts/sprint-status.yaml` (modified — `3-2-gol-rules-layer: review`)
 

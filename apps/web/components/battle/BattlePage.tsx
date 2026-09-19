@@ -178,6 +178,12 @@ export default function BattlePage({
   // same resolution 3.11 FD5 took for `onExitToLab`. Never a URL param, never persisted, never a
   // third `mode` value (FD1 (d): `BattleMode` is the route param's and the toggle's type).
   //
+  // Story 3.19 (FD5 (a)): the `F` hotkey reaches this SAME cell through the view's two callbacks —
+  // `handleEnterFullscreen` (already passed to the header's Fullscreen button, below) is now ALSO
+  // passed to `<BattleSimulationView>` as `onEnterFullscreen`, and the view composes the toggle
+  // from it and `onExitFullscreen`. `<BattlePage>` gains no new state, hook, effect or sim handler
+  // for the key — it stays two writers of the cell, exactly as before 3.19.
+  //
   // `inFullscreen` is the ONLY value the render reads: a stale `true` behind a `'lab'` mode can
   // never show. Every writer that takes `mode` off `'run'` ALSO clears the cell (`handleModeToggle`
   // and the in-render adjust below) — otherwise a later Run entry would open straight into
@@ -1007,6 +1013,10 @@ export default function BattlePage({
              (trap 22), so an untitled battle reads "Untitled Battle" in both places. */
           fullscreen={inFullscreen}
           onExitFullscreen={handleExitFullscreen}
+          /* Story 3.19 (FD5 (a)): the `F` hotkey's entry — the SAME callback the header's
+             Fullscreen button calls (above), so a keyboard toggle and a pointer toggle reach the
+             identical cell write. */
+          onEnterFullscreen={handleEnterFullscreen}
           battleTitle={battleDisplayName(battleName)}
         />
       )}

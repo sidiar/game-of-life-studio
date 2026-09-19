@@ -759,7 +759,7 @@ None new. React 19.2.7; Next 16.2.10 (`next/link`, `next/navigation` as already 
   tracker), **`:735-738`** (`SectionHeader` after 3.17), `:862-866` (bundle mechanism),
   **`:912-920`** (header over nothing), `:921-927` (disabled reason via `title` → 6.11), `:142`
   (e2e seed fork).
-- `docs/implementation-artifacts/3-16-play-mode-ephemeral-resize.md` (Review Findings, Debug
+- `docs/implementation-artifacts/epic-3/3-16-play-mode-ephemeral-resize.md` (Review Findings, Debug
   Log), `3-11-mode-toggle-run-view-skeleton.md` (FD1, FD4, FD5; `:413`, `:646`),
   `epic-2/2-16-back-navigation-unsaved-changes-guard.md` (FD1 `:353-368`, traps 16/18/21),
   `epic-1/1-13-delete-battle-with-confirmation.md` (`:106-149`, the band and the glyph),

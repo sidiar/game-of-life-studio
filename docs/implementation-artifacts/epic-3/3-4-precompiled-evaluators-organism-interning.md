@@ -531,13 +531,13 @@ Not touched: `eslint.config.mjs`, `scripts/check-engine-boundary.mjs`, `scripts/
 - [Source: docs/project-context.md#Critical Don't-Miss Rules] — never persist a numeric
   `OrganismRef`; the evaluator cache is session-scoped; `MAX_RELEVANT_AGE`'s `+ 1`; no classes and
   no module-level mutable state in the engine; Zod parses at boundaries, never per cell
-- [Source: docs/implementation-artifacts/3-1-generic-rules-engine.md#Dev Agent Record] — FD1–FD6
+- [Source: docs/implementation-artifacts/epic-3/3-1-generic-rules-engine.md#Dev Agent Record] — FD1–FD6
   (the `Payload`/`Props` split, `pattern: unknown`, the typed selector seam, the `src/engine/`
   boundary + its README, the retired placeholders), and M12's origin
-- [Source: docs/implementation-artifacts/3-2-gol-rules-layer.md#Dev Agent Record] — FD1 (payload
+- [Source: docs/implementation-artifacts/epic-3/3-2-gol-rules-layer.md#Dev Agent Record] — FD1 (payload
   types declared in `src/gol/`, the `@gol/domain` edge is **test-only**), **FD2 (the two
   phase-scoped helpers were deliberately deferred to this story)**, FD4 (the three-file split)
-- [Source: docs/implementation-artifacts/3-3-typed-array-grid-neighborhood.md#Dev Agent Record] —
+- [Source: docs/implementation-artifacts/epic-3/3-3-typed-array-grid-neighborhood.md#Dev Agent Record] —
   FD3 (the double-buffer seam as a caller-owned value, the model for this story's cache), FD4 (write
   the unmeasured optimization down, don't build it), **FD5 (`OrganismRef` = index + 1, now M14)**,
   FD6 (`resizeGrid` carries `age`)
@@ -727,7 +727,7 @@ Load-bearing invariants were verified by **mutation**, not just by assertion:
 - `apps/web/lib/canvas/battleThumbnail.ts` (AC10 — comment only)
 - `docs/implementation-artifacts/deferred-work.md` (AC11)
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/3-4-precompiled-evaluators-organism-interning.md`
+- `docs/implementation-artifacts/epic-3/3-4-precompiled-evaluators-organism-interning.md`
 
 ### Change Log
 

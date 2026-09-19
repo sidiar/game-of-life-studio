@@ -613,9 +613,9 @@ the rest recompile untouched; anything larger than that is a signal to re-read F
 - [Source: packages/test-utils/src/gridBuilders.ts] — `emptyGrid` / `gridFromPattern` /
   `placePattern` (dense fixtures to feed the converter), and its own note that the typed-array `Grid`
   lands "in Story 3.3 once its shape is frozen" and sparse is Story 5.3's
-- [Source: docs/implementation-artifacts/3-2-gol-rules-layer.md] — FD1–FD4 and their outcomes, the
+- [Source: docs/implementation-artifacts/epic-3/3-2-gol-rules-layer.md] — FD1–FD4 and their outcomes, the
   M13 amendment, and the trap/scope conventions this story continues
-- [Source: docs/implementation-artifacts/3-1-generic-rules-engine.md] — M11/M12, the boundary lint,
+- [Source: docs/implementation-artifacts/epic-3/3-1-generic-rules-engine.md] — M11/M12, the boundary lint,
   and the "measure before optimising" standard behind FD4
 - [Source: docs/implementation-artifacts/deferred-work.md] — the Reconciliation #3 item explicitly
   assigned to this story (AC10); the `computeEditorGridStats` loop-bound entry closed in 2.14 for
@@ -847,7 +847,7 @@ while the 73 pre-existing tests stayed green.
 - `docs/planning-artifacts/architecture.md` — AC10: Reconciliation #3's clause
 - `docs/implementation-artifacts/deferred-work.md` — AC10 resolved; FD7 + the M14 candidate recorded
 - `docs/implementation-artifacts/sprint-status.yaml` — status tracking
-- `docs/implementation-artifacts/3-3-typed-array-grid-neighborhood.md` — this record
+- `docs/implementation-artifacts/epic-3/3-3-typed-array-grid-neighborhood.md` — this record
 
 **Deleted**
 

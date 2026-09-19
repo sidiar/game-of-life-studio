@@ -5,7 +5,7 @@
  * NOTHING after a step: `draw` is the marks-only Edit path (Story 2.3), and Story 3.8's loop marks
  * no cells by design — a dish that never visibly moves, with nothing thrown
  * (`packages/simulation/src/loop/simulationLoop.ts`, `StepRenderer`'s doc comment, "Trap 1" in
- * `docs/implementation-artifacts/3-8-simulationloop.md`). `toStepRenderer` is the named, obvious
+ * `docs/implementation-artifacts/epic-3/3-8-simulationloop.md`). `toStepRenderer` is the named, obvious
  * object to hand `createSimulationLoop` instead: **Story 3.10's `useSimulation` must wire
  * `renderer: toStepRenderer(gridRenderer)`, never `renderer: gridRenderer` directly** (Decision D).
  *

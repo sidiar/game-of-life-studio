@@ -606,7 +606,7 @@ activation, so a stale line there misinforms every future story. Update the **Te
 - `docs/implementation-artifacts/deferred-work.md` — the bundle-gate ratchet design (3.3 review),
   the four-identical-configs entry (1.2 review), and the five *"Story 3.7's to measure"* entries
   (1.8, 2.3 ×2, 2.10, 3.5 reviews).
-- `docs/implementation-artifacts/3-6-phase-3-the-assembled-cycle.md` — the step contract, FD1/FD2,
+- `docs/implementation-artifacts/epic-3/3-6-phase-3-the-assembled-cycle.md` — the step contract, FD1/FD2,
   and the Dev Agent Record shape this story's record should match.
 - `docs/implementation-artifacts/palette-cvd-validation.md` — the report format to follow.
 - `scripts/check-bundle-size.mjs` — the measure-then-gate script shape, incl. the vacuous-result

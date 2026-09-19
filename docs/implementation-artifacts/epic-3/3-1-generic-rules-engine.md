@@ -593,7 +593,7 @@ buried — if the helper is ever wanted, it is additive and nothing here blocks 
 - `eslint.config.mjs` — a third, independent `no-restricted-imports` block scoping
   `packages/simulation/src/engine/**`
 - `docs/implementation-artifacts/sprint-status.yaml` — `3-1-generic-rules-engine` → `review`
-- `docs/implementation-artifacts/3-1-generic-rules-engine.md` — this record
+- `docs/implementation-artifacts/epic-3/3-1-generic-rules-engine.md` — this record
 
 ### Change Log
 
