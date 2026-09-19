@@ -895,6 +895,14 @@ the tasks, wrote this record, re-ran `ci:dev`.
   missing from `Escape mid-drag cancels`, which had been passing **vacuously** (no drag ever
   started, so "nothing changed" held trivially); it now asserts `li[data-drop="after"]` before
   pressing Escape. 12/12 green on `--repeat-each=2` for the block.
+- **CI's four-browser matrix then failed the three pointer tests on Firefox only** (run
+  `35370582491`, after the sync with `main`): Firefox's Playwright driver does not deliver a
+  `pointermove` at coordinates outside the viewport, captured or not — `data-dragging` painted,
+  no `data-drop` ever did. Chromium, WebKit and tablet all passed the off-screen move. Rewritten
+  around the path FD8 names for a long list: `pressHandle` (scroll the handle into view, down,
+  assert dragging) then `scrollUntilVisible` — `mouse.wheel` on the held column until the target
+  edge is inside the viewport (`rules.scrollBy` on the tablet project, since mobile WebKit has no
+  wheel), then move onto the visible target. 24/24 locally across all four projects.
 - `npm run ci:dev > ci.log 2>&1; echo $?` → **exit 0** (second run, after the fix above).
   - `packages/domain`: **100% stmts / 100% branch / 100% funcs / 100% lines** on every file
     (109 tests) — `RULE_ACTIONS` adds no branch; pinned by `describe('action universe')`.
@@ -953,10 +961,10 @@ the tasks, wrote this record, re-ran `ci:dev`.
 - Task 6: e2e `rule reordering (Story 4.12)` — keyboard move/renumber/focus/announce with the
   consumed top no-op and zero console errors, drag-below (`after`) and drag-above (`before`) with
   drop renumbering, Escape mid-drag, Tab order (handle first, `Alt+Tab` on WebKit), axe after a
-  keyboard reorder. Of the three pointer tests, the two that START on handle 1 (drag-below,
-  Escape) scroll it into view first (see Debug Log); "drag card 3 above card 1" starts on the
-  visible handle 3 and drags to card 1's rect at a negative `clientY` — the FD8 case upward, an
-  off-screen rect still resolving the slot. 4.10's two tests retargeted per AC11c only.
+  keyboard reorder. The three pointer tests share `pressHandle` / `scrollUntilVisible`: the
+  handle is scrolled into view, pressed, and the column is wheeled mid-drag until the target's
+  edge is on screen before the pointer moves onto it — the only path all four Playwright
+  projects deliver (see Debug Log). 4.10's two tests retargeted per AC11c only.
 - Task 7: bundle measured before/after (Debug Log); `deferred-work.md` — two 4.10/4.11 items struck
   as resolved (the `disabled` handle, `RULE_ACTIONS`'s home), one marked partial (arrow-key
   *navigation* between rows → Story 6.11 / the UX touch), and a new `Deferred from: Story
@@ -999,6 +1007,9 @@ the tasks, wrote this record, re-ran `ci:dev`.
   id so a second primary pointer cannot steer or drop the first drag, a dragged card leaving the
   list closes the drag, the announcement clears with the empty state; four comment/record fixes.
   One deferral (`cursor: grabbing` off the handle). Five tests added. Status → done.
+- 2026-09-18 — Synced with `main` after #55 (`deferred-work.md` by rule, main's hunks first).
+  CI's Firefox project failed the three pointer e2e tests (off-screen `pointermove` not
+  delivered); rewritten to wheel the column mid-drag, green on all four projects locally.
 
 Dev Model: sonnet   # follows settled patterns — the PetriDishCanvas pointer idiom, the 4.10 focus-diff effect, the 4.9 status-region idiom, the ruleDraft same-reference helpers; the one new shape (a hand-rolled sortable: pointer plumbing in the card, geometry and state in the editor, a pure moveRule) is pinned with exact handlers, guards, selectors and tests, and no later story builds on it
 Proposed lane gate: none

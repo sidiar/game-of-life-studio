@@ -1988,27 +1988,58 @@ test.describe('rule reordering (Story 4.12)', () => {
     expect(errors).toEqual([]);
   });
 
+  // Three 371px cards never fit the 632px Rules column, so a pointer drag from one end of the
+  // list to the other has to cross the viewport edge. The component handles that by rect (FD8:
+  // an off-screen card's rect still resolves the slot under capture), and Chromium/WebKit deliver
+  // a captured `pointermove` at a y outside the viewport — but Firefox's driver does not, so the
+  // portable path is the one FD8 names for a long list: WHEEL the column mid-drag until the
+  // target is on screen, then move onto it. `mouse.wheel` scrolls whatever is under the pointer,
+  // which is the column while the handle is held; mobile WebKit has no wheel, so the tablet
+  // project scrolls the column directly (the swipe it cannot synthesise). No auto-scroll exists
+  // (FD8, recorded).
+  async function pressHandle(page: Page, rules: Locator, n: number) {
+    await handle(rules, n).scrollIntoViewIfNeeded();
+    const h = await boxOf(handle(rules, n), `handle ${n}`);
+    const x = h.x + h.width / 2;
+    await page.mouse.move(x, h.y + h.height / 2);
+    await page.mouse.down();
+    await expect(rules.locator('li[data-dragging]')).toHaveCount(1);
+    await expect(rules.locator('li[data-dragging]')).toContainText(`Rule ${n}`);
+    return x;
+  }
+
+  async function scrollUntilVisible(
+    page: Page,
+    rules: Locator,
+    target: Locator,
+    edge: 'top' | 'bottom',
+    isMobile: boolean,
+  ) {
+    const viewport = page.viewportSize();
+    if (viewport === null) throw new Error('no viewport');
+    for (let i = 0; i < 12; i += 1) {
+      const box = await boxOf(target, 'drop target');
+      const y = edge === 'top' ? box.y + 4 : box.y + box.height + 4;
+      if (y >= 0 && y <= viewport.height) return y;
+      const delta = edge === 'top' ? -200 : 200;
+      if (isMobile) {
+        await rules.evaluate((el, dy) => el.scrollBy(0, dy), delta);
+      } else {
+        await page.mouse.wheel(0, delta);
+      }
+    }
+    throw new Error(`drop target's ${edge} never entered the viewport`);
+  }
+
   test('pointer: drag card 1 below card 3 — dragging state, after indicator, drop renumbers', async ({
     page,
+    isMobile,
   }) => {
     const rules = await threeCards(page);
 
-    // Adding the third card focused its handle, which scrolled the Rules column past card 1 (the
-    // 4.10 focus effect). Bring handle 1 back on screen before measuring — `boundingBox()` is
-    // viewport-relative and a `mouse.down()` above y = 0 lands on nothing. Card 3's bottom is
-    // then BELOW the viewport (three 371px cards in a 632px column), which is the FD8 case on
-    // purpose: with capture, the handle still receives the move and the off-screen card's rect
-    // still resolves the slot — no auto-scroll needed.
-    await handle(rules, 1).scrollIntoViewIfNeeded();
-    const h1 = await boxOf(handle(rules, 1), 'handle 1');
-    const g3 = await boxOf(cardGroup(rules, 3), 'card 3 group');
-
-    await page.mouse.move(h1.x + h1.width / 2, h1.y + h1.height / 2);
-    await page.mouse.down();
-    await expect(rules.locator('li[data-dragging]')).toHaveCount(1);
-    await expect(rules.locator('li[data-dragging]')).toContainText('Rule 1');
-
-    await page.mouse.move(h1.x + h1.width / 2, g3.y + g3.height + 4, { steps: 8 });
+    const x = await pressHandle(page, rules, 1);
+    const y = await scrollUntilVisible(page, rules, cardGroup(rules, 3), 'bottom', isMobile);
+    await page.mouse.move(x, y, { steps: 8 });
     await expect(rules.locator('li[data-drop="after"]')).toHaveCount(1);
     await expect(rules.locator('li[data-drop="after"]')).toContainText('Rule 3');
 
@@ -2019,15 +2050,12 @@ test.describe('rule reordering (Story 4.12)', () => {
     await expect(handle(rules, 3)).toBeFocused();
   });
 
-  test('pointer: drag card 3 above card 1 — before indicator', async ({ page }) => {
+  test('pointer: drag card 3 above card 1 — before indicator', async ({ page, isMobile }) => {
     const rules = await threeCards(page);
 
-    const h3 = await boxOf(handle(rules, 3), 'handle 3');
-    const g1 = await boxOf(cardGroup(rules, 1), 'card 1 group');
-
-    await page.mouse.move(h3.x + h3.width / 2, h3.y + h3.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(h3.x + h3.width / 2, g1.y + 4, { steps: 8 });
+    const x = await pressHandle(page, rules, 3);
+    const y = await scrollUntilVisible(page, rules, cardGroup(rules, 1), 'top', isMobile);
+    await page.mouse.move(x, y, { steps: 8 });
     await expect(rules.locator('li[data-drop="before"]')).toHaveCount(1);
     await expect(rules.locator('li[data-drop="before"]')).toContainText('Rule 1');
 
@@ -2035,18 +2063,13 @@ test.describe('rule reordering (Story 4.12)', () => {
     await expect.poll(() => badges(rules)).toEqual(['Die', 'Born', 'Survive']);
   });
 
-  test('Escape mid-drag cancels and the editor stays open', async ({ page }) => {
+  test('Escape mid-drag cancels and the editor stays open', async ({ page, isMobile }) => {
     const rules = await threeCards(page);
     const before = await badges(rules);
 
-    // Same scroll note as the drag-below test: handle 1 is above the viewport after three adds.
-    await handle(rules, 1).scrollIntoViewIfNeeded();
-    const h1 = await boxOf(handle(rules, 1), 'handle 1');
-    const g3 = await boxOf(cardGroup(rules, 3), 'card 3 group');
-
-    await page.mouse.move(h1.x + h1.width / 2, h1.y + h1.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(h1.x + h1.width / 2, g3.y + g3.height + 4, { steps: 8 });
+    const x = await pressHandle(page, rules, 1);
+    const y = await scrollUntilVisible(page, rules, cardGroup(rules, 3), 'bottom', isMobile);
+    await page.mouse.move(x, y, { steps: 8 });
     // The drag must be real before Escape is meaningful — without this the cancel assertions
     // below would hold vacuously.
     await expect(rules.locator('li[data-drop="after"]')).toHaveCount(1);
