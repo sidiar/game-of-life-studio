@@ -1615,7 +1615,7 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await expect(rules.getByText('100 / 100')).toBeVisible();
   });
 
-  test('keyboard: delete -> Summary -> Action -> + Add Condition inside a card, and the handle is skipped', async ({
+  test('keyboard: delete -> Summary -> Action -> + Add Condition -> Reorder inside a card', async ({
     page,
     browserName,
   }) => {
@@ -1624,10 +1624,10 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await headerAdd.click();
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
 
-    // Start on the card's first stop, its Delete — the handle before it is `disabled`, so Delete
-    // is where a Tab into the card lands — and walk Delete -> Summary -> Action -> + Add
-    // Condition -> next Delete (Story 4.11 AC11d: the condition builder's own add button is the
-    // card's new last stop).
+    // Start on the card's Delete (its SECOND stop since Story 4.12 — the live Reorder handle is
+    // the first, covered by the 4.12 Tab-order test) and walk Delete -> Summary -> Action -> + Add
+    // Condition (Story 4.11 AC11d: the condition builder's own add button is the card's last
+    // stop) -> the NEXT card's Reorder handle, its first stop (Story 4.12, AC11c) -> Delete.
     await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).focus();
     await page.keyboard.press(tabKey);
     await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
@@ -1637,6 +1637,8 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await expect(
       cardGroup(rules, 1).getByRole('button', { name: '+ Add Condition' }),
     ).toBeFocused();
+    await page.keyboard.press(tabKey);
+    await expect(rules.getByRole('button', { name: 'Reorder rule 2', exact: true })).toBeFocused();
     await page.keyboard.press(tabKey);
     await expect(rules.getByRole('button', { name: 'Delete rule 2', exact: true })).toBeFocused();
 
@@ -1648,11 +1650,11 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await expect(cardGroup(rules, 1).getByRole('textbox', { name: 'Summary' })).toBeFocused();
   });
 
-  test('the drag handle is disabled', async ({ page }) => {
+  test('the drag handle is enabled (Story 4.12)', async ({ page }) => {
     const { rules, emptyAdd } = await openRules(page);
     await emptyAdd.click();
 
-    await expect(rules.getByRole('button', { name: 'Reorder rule 1', exact: true })).toBeDisabled();
+    await expect(rules.getByRole('button', { name: 'Reorder rule 1', exact: true })).toBeEnabled();
   });
 
   test('axe in the empty state', async ({ page }) => {
@@ -1899,6 +1901,214 @@ test.describe('condition builder (Story 4.11)', () => {
     await row(card, 1).min.fill('3');
     await row(card, 1).max.fill('2');
     await expect(card.getByRole('alert')).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});
+
+test.describe('rule reordering (Story 4.12)', () => {
+  type Box = { x: number; y: number; width: number; height: number };
+
+  async function boxOf(locator: Locator, label: string): Promise<Box> {
+    const box = await locator.boundingBox();
+    if (box === null) throw new Error(`${label} has no layout box`);
+    return box;
+  }
+
+  async function openRules(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const rules = dialog.getByRole('region', { name: 'Survival Rules' });
+    const headerAdd = rules.locator('[data-add-rule="header"]');
+    return { dialog, rules, headerAdd };
+  }
+
+  function cardGroup(rules: Locator, n: number) {
+    return rules.getByRole('group', { name: `Rule ${n}`, exact: true });
+  }
+
+  function handle(rules: Locator, n: number) {
+    return rules.getByRole('button', { name: `Reorder rule ${n}`, exact: true });
+  }
+
+  function badges(rules: Locator) {
+    return rules.locator('[data-rule-badge]').allTextContents();
+  }
+
+  // Born / Survive / Die, in that order — the 4.10 axe test's setup.
+  async function threeCards(page: Page) {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    await headerAdd.click();
+    await headerAdd.click();
+    await cardGroup(rules, 2).getByRole('combobox', { name: 'Action' }).selectOption('survive');
+    await cardGroup(rules, 3).getByRole('combobox', { name: 'Action' }).selectOption('die');
+    return rules;
+  }
+
+  test('keyboard: ArrowUp moves, renumbers, keeps focus on the moved card, announces; the top is a consumed no-op; zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const rules = await threeCards(page);
+    await handle(rules, 3).focus();
+
+    // Born / Survive / Die (`ruleActionLabel` — literal, cited: `apps/web/lib`, spec imports
+    // only `@gol/*`, the 4.10 idiom).
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(() => badges(rules)).toEqual(['Born', 'Die', 'Survive']);
+    await expect(handle(rules, 2)).toBeFocused();
+    await expect(rules.locator('[data-reorder-status]')).toHaveText(
+      'Rule moved to position 2 of 3',
+    );
+
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(() => badges(rules)).toEqual(['Die', 'Born', 'Survive']);
+    await expect(handle(rules, 1)).toBeFocused();
+    await expect(rules.locator('[data-reorder-status]')).toHaveText(
+      'Rule moved to position 1 of 3',
+    );
+
+    // The top is a consumed no-op: still `handle(1)`.
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(() => badges(rules)).toEqual(['Die', 'Born', 'Survive']);
+    await expect(handle(rules, 1)).toBeFocused();
+
+    await page.keyboard.press('ArrowDown');
+    await expect.poll(() => badges(rules)).toEqual(['Born', 'Die', 'Survive']);
+    await expect(handle(rules, 2)).toBeFocused();
+
+    expect(errors).toEqual([]);
+  });
+
+  // Three 371px cards never fit the 632px Rules column, so a pointer drag from one end of the
+  // list to the other has to cross the viewport edge. The component handles that by rect (FD8:
+  // an off-screen card's rect still resolves the slot under capture), and Chromium/WebKit deliver
+  // a captured `pointermove` at a y outside the viewport — but Firefox's driver does not, so the
+  // portable path is the one FD8 names for a long list: WHEEL the column mid-drag until the
+  // target is on screen, then move onto it. `mouse.wheel` scrolls whatever is under the pointer,
+  // which is the column while the handle is held; mobile WebKit has no wheel, so the tablet
+  // project scrolls the column directly (the swipe it cannot synthesise). No auto-scroll exists
+  // (FD8, recorded).
+  async function pressHandle(page: Page, rules: Locator, n: number) {
+    await handle(rules, n).scrollIntoViewIfNeeded();
+    const h = await boxOf(handle(rules, n), `handle ${n}`);
+    const x = h.x + h.width / 2;
+    await page.mouse.move(x, h.y + h.height / 2);
+    await page.mouse.down();
+    await expect(rules.locator('li[data-dragging]')).toHaveCount(1);
+    await expect(rules.locator('li[data-dragging]')).toContainText(`Rule ${n}`);
+    return x;
+  }
+
+  async function scrollUntilVisible(
+    page: Page,
+    rules: Locator,
+    target: Locator,
+    edge: 'top' | 'bottom',
+    isMobile: boolean,
+  ) {
+    const viewport = page.viewportSize();
+    if (viewport === null) throw new Error('no viewport');
+    for (let i = 0; i < 12; i += 1) {
+      const box = await boxOf(target, 'drop target');
+      const y = edge === 'top' ? box.y + 4 : box.y + box.height + 4;
+      if (y >= 0 && y <= viewport.height) return y;
+      const delta = edge === 'top' ? -200 : 200;
+      if (isMobile) {
+        await rules.evaluate((el, dy) => el.scrollBy(0, dy), delta);
+      } else {
+        await page.mouse.wheel(0, delta);
+      }
+    }
+    throw new Error(`drop target's ${edge} never entered the viewport`);
+  }
+
+  test('pointer: drag card 1 below card 3 — dragging state, after indicator, drop renumbers', async ({
+    page,
+    isMobile,
+  }) => {
+    const rules = await threeCards(page);
+
+    const x = await pressHandle(page, rules, 1);
+    const y = await scrollUntilVisible(page, rules, cardGroup(rules, 3), 'bottom', isMobile);
+    await page.mouse.move(x, y, { steps: 8 });
+    await expect(rules.locator('li[data-drop="after"]')).toHaveCount(1);
+    await expect(rules.locator('li[data-drop="after"]')).toContainText('Rule 3');
+
+    await page.mouse.up();
+    await expect.poll(() => badges(rules)).toEqual(['Survive', 'Die', 'Born']);
+    await expect(rules.locator('li[data-dragging]')).toHaveCount(0);
+    await expect(rules.locator('li[data-drop]')).toHaveCount(0);
+    await expect(handle(rules, 3)).toBeFocused();
+  });
+
+  test('pointer: drag card 3 above card 1 — before indicator', async ({ page, isMobile }) => {
+    const rules = await threeCards(page);
+
+    const x = await pressHandle(page, rules, 3);
+    const y = await scrollUntilVisible(page, rules, cardGroup(rules, 1), 'top', isMobile);
+    await page.mouse.move(x, y, { steps: 8 });
+    await expect(rules.locator('li[data-drop="before"]')).toHaveCount(1);
+    await expect(rules.locator('li[data-drop="before"]')).toContainText('Rule 1');
+
+    await page.mouse.up();
+    await expect.poll(() => badges(rules)).toEqual(['Die', 'Born', 'Survive']);
+  });
+
+  test('Escape mid-drag cancels and the editor stays open', async ({ page, isMobile }) => {
+    const rules = await threeCards(page);
+    const before = await badges(rules);
+
+    const x = await pressHandle(page, rules, 1);
+    const y = await scrollUntilVisible(page, rules, cardGroup(rules, 3), 'bottom', isMobile);
+    await page.mouse.move(x, y, { steps: 8 });
+    // The drag must be real before Escape is meaningful — without this the cancel assertions
+    // below would hold vacuously.
+    await expect(rules.locator('li[data-drop="after"]')).toHaveCount(1);
+
+    // In WebKit `mouse.down()` does not focus the handle, which is exactly the case the
+    // `document` capture listener exists for — the four-browser matrix on the PR proves it there;
+    // Chromium locally.
+    await page.keyboard.press('Escape');
+    await expect(rules.locator('li[data-dragging]')).toHaveCount(0);
+    await expect(rules.locator('li[data-drop]')).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Organism Editor' })).toBeVisible();
+    await expect.poll(() => badges(rules)).toEqual(before);
+
+    await page.mouse.up();
+    await expect.poll(() => badges(rules)).toEqual(before);
+  });
+
+  test("Tab order: the handle is the card's first stop", async ({ page, browserName }) => {
+    const { rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    await headerAdd.click();
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+
+    await handle(rules, 1).focus();
+    await page.keyboard.press(tabKey);
+    await expect(rules.getByRole('button', { name: 'Delete rule 1', exact: true })).toBeFocused();
+
+    await cardGroup(rules, 1).getByRole('button', { name: '+ Add Condition' }).focus();
+    await page.keyboard.press(tabKey);
+    await expect(handle(rules, 2)).toBeFocused();
+  });
+
+  test('axe after a keyboard reorder', async ({ page }) => {
+    const rules = await threeCards(page);
+    await handle(rules, 1).focus();
+    await page.keyboard.press('ArrowDown');
+    // Never mid-drag — `opacity: 0.5` on the dragged card is a transient pointer state, not one
+    // of the settled states this idiom scans (FD7).
+    await expect.poll(() => badges(rules)).toEqual(['Survive', 'Born', 'Die']);
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);

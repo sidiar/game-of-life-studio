@@ -1,4 +1,4 @@
-import { SurvivalRuleSchema, type SurvivalRule } from '@gol/domain';
+import { RULE_ACTIONS, type RuleAction, type SurvivalRule } from '@gol/domain';
 import { type ConditionDraft, conditionDraftFrom } from './conditionDraft';
 
 /**
@@ -11,12 +11,9 @@ import { type ConditionDraft, conditionDraftFrom } from './conditionDraft';
  * recorded, not silently resolved, in the story's deferred-work entry).
  */
 
-export type RuleAction = SurvivalRule['payload']['action'];
-
-/** The schema's own enum, in its own order — the `<select>` and the badge read this, never a
- * second literal tuple that could drift from it. */
-export const RULE_ACTIONS: readonly RuleAction[] =
-  SurvivalRuleSchema.shape.payload.shape.action.options;
+// Moved to `@gol/domain` in Story 4.12, for symmetry with the condition constants there — this
+// re-export is what keeps every existing importer of `ruleDraft.ts` unchanged.
+export { RULE_ACTIONS, type RuleAction } from '@gol/domain';
 
 /** Born / Survive / Die — the badge text and the `<select>` option text (UX-DR10). */
 export function ruleActionLabel(action: RuleAction): string {
@@ -77,6 +74,24 @@ export function appendRule(rules: readonly RuleDraft[], rule: RuleDraft): readon
 export function removeRule(rules: readonly RuleDraft[], id: string): readonly RuleDraft[] {
   if (!rules.some((rule) => rule.id === id)) return rules;
   return rules.filter((rule) => rule.id !== id);
+}
+
+/** Moves the rule with `id` to `toIndex` (clamped to the list), every other rule by
+ * reference and in its previous relative order. Returns the SAME array reference when `id`
+ * matches nothing or the clamped target IS the rule's current index — a boundary ArrowUp on
+ * the first card must not re-render the list (Story 4.12, FR-2.6: order is priority). */
+export function moveRule(
+  rules: readonly RuleDraft[],
+  id: string,
+  toIndex: number,
+): readonly RuleDraft[] {
+  const from = rules.findIndex((rule) => rule.id === id);
+  const moved = rules[from];
+  if (from === -1 || moved === undefined) return rules;
+  const to = Math.max(0, Math.min(rules.length - 1, toIndex));
+  if (to === from) return rules;
+  const rest = rules.filter((rule) => rule.id !== id);
+  return [...rest.slice(0, to), moved, ...rest.slice(to)];
 }
 
 /** Patches the `payload` of the rule with `id` (summary and/or action). Every other rule is kept

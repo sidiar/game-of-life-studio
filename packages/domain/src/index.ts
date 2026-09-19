@@ -4,6 +4,7 @@ export {
   ConditionSchema,
   NUMERIC_CONDITION_PROPERTIES,
   NUMERIC_OPERATORS,
+  RULE_ACTIONS,
   SurvivalRuleSchema,
   SurvivalRulesSchema,
 } from './survivalRuleSchema';
@@ -12,6 +13,7 @@ export type {
   Condition,
   NumericConditionProperty,
   NumericOperator,
+  RuleAction,
   SurvivalRule,
   SurvivalRules,
 } from './survivalRuleSchema';

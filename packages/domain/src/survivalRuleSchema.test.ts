@@ -5,6 +5,7 @@ import {
   ConditionSchema,
   NUMERIC_CONDITION_PROPERTIES,
   NUMERIC_OPERATORS,
+  RULE_ACTIONS,
   SurvivalRuleSchema,
   SurvivalRulesSchema,
 } from './survivalRuleSchema';
@@ -175,6 +176,15 @@ describe('condition universe', () => {
       'neighborCount',
       'occupantNeighborCount',
     ]);
+  });
+});
+
+describe('action universe', () => {
+  it('RULE_ACTIONS is exactly [born, survive, die], in order, each parsing through the payload action enum', () => {
+    expect(RULE_ACTIONS).toEqual(['born', 'survive', 'die']);
+    for (const action of RULE_ACTIONS) {
+      expect(SurvivalRuleSchema.shape.payload.shape.action.safeParse(action).success).toBe(true);
+    }
   });
 });
 

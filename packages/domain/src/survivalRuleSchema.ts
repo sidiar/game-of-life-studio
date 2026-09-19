@@ -87,3 +87,10 @@ export const SurvivalRulesSchema = z.array(SurvivalRuleSchema); // a generic Rul
 export type Condition = z.infer<typeof ConditionSchema>;
 export type SurvivalRule = z.infer<typeof SurvivalRuleSchema>;
 export type SurvivalRules = z.infer<typeof SurvivalRulesSchema>;
+
+export type RuleAction = z.infer<typeof SurvivalRuleSchema>['payload']['action'];
+// The action universe, read off the schema (the Story 4.10 RULE_ACTIONS rule, moved here in
+// Story 4.12 for symmetry with the condition constants above). Consumers: the editor's
+// action <select> and badge (`ruleDraft.ts` re-exports it), the test-utils matrix.
+export const RULE_ACTIONS: readonly RuleAction[] =
+  SurvivalRuleSchema.shape.payload.shape.action.options;

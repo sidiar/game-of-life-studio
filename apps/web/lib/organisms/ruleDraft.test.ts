@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import fc from 'fast-check';
 import { SurvivalRuleSchema } from '@gol/domain';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
 import type { ConditionDraft } from './conditionDraft';
@@ -7,6 +8,7 @@ import {
   createNewRuleDraft,
   isRuleAction,
   MAX_RULE_SUMMARY_LENGTH,
+  moveRule,
   NEW_RULE_ACTION,
   removeRule,
   ruleActionLabel,
@@ -90,6 +92,82 @@ describe('removeRule', () => {
   it('returns the same reference for an unknown id', () => {
     const rules = [BORN, SURVIVE];
     expect(removeRule(rules, 'nope')).toBe(rules);
+  });
+});
+
+describe('moveRule', () => {
+  const THREE: readonly RuleDraft[] = [BORN, SURVIVE, createNewRuleDraft('x')];
+  const [B, S, X] = THREE;
+
+  it('moves a rule down, others keep relative order', () => {
+    const next = moveRule(THREE, B.id, 2);
+    expect(next).toEqual([S, X, B]);
+    expect(next[0]).toBe(S);
+    expect(next[1]).toBe(X);
+  });
+
+  it('moves a rule up, others keep relative order', () => {
+    const next = moveRule(THREE, X.id, 0);
+    expect(next).toEqual([X, B, S]);
+  });
+
+  it('moves one step down then one step up returns to the start', () => {
+    const down = moveRule(THREE, B.id, 1);
+    expect(down).toEqual([S, B, X]);
+    const up = moveRule(down, B.id, 0);
+    expect(up).toEqual([B, S, X]);
+  });
+
+  it('returns the same reference when the clamped target equals the current index', () => {
+    expect(moveRule(THREE, B.id, 0)).toBe(THREE);
+  });
+
+  it('returns the same reference for an unknown id', () => {
+    expect(moveRule(THREE, 'nope', 1)).toBe(THREE);
+  });
+
+  it('clamps an out-of-range toIndex to the nearest end, and a same-index-after-clamp is a no-op', () => {
+    expect(moveRule(THREE, B.id, 99)).toEqual([S, X, B]);
+    expect(moveRule(THREE, X.id, -1)).toEqual([X, B, S]);
+    // X is already last; clamp(2) === its current index === same reference.
+    expect(moveRule(THREE, X.id, 2)).toBe(THREE);
+  });
+
+  it('never mutates the input array', () => {
+    const before = [...THREE];
+    moveRule(THREE, B.id, 2);
+    expect(THREE).toEqual(before);
+  });
+
+  it('preserves length and the id set', () => {
+    const next = moveRule(THREE, B.id, 2);
+    expect(next).toHaveLength(THREE.length);
+    expect(new Set(next.map((r) => r.id))).toEqual(new Set(THREE.map((r) => r.id)));
+  });
+
+  it('is a permutation for any source/target index (fast-check)', () => {
+    const rules: readonly RuleDraft[] = [
+      createNewRuleDraft('r0'),
+      createNewRuleDraft('r1'),
+      createNewRuleDraft('r2'),
+      createNewRuleDraft('r3'),
+      createNewRuleDraft('r4'),
+    ];
+    fc.assert(
+      fc.property(fc.nat({ max: 4 }), fc.integer(), (sourceIndex, toIndex) => {
+        const rule = rules[sourceIndex];
+        const next = moveRule(rules, rule.id, toIndex);
+        const clamped = Math.max(0, Math.min(rules.length - 1, toIndex));
+
+        expect(next).toHaveLength(rules.length);
+        expect(new Set(next.map((r) => r.id))).toEqual(new Set(rules.map((r) => r.id)));
+        expect(next[clamped]).toBe(rule);
+
+        const others = rules.filter((r) => r.id !== rule.id);
+        const nextOthers = next.filter((r) => r.id !== rule.id);
+        expect(nextOthers).toEqual(others);
+      }),
+    );
   });
 });
 

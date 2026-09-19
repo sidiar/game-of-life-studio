@@ -601,4 +601,57 @@ describe('OrganismEditorModal', () => {
     const results = await axe(document.body);
     expect(results.violations).toEqual([]);
   });
+
+  // Story 4.12: reordering wired through the modal — `<RulesEditor>`'s handle handlers reaching
+  // a real rule's Action combobox, and Escape mid-drag against the REAL MUI `Dialog`.
+  it('reorders with the arrow keys, moving a rule’s Action with it', async () => {
+    const user = userEvent.setup();
+    render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    const headerAdd = headerAddButton(rules);
+    await user.click(headerAdd);
+    await user.click(headerAdd);
+    await user.click(headerAdd);
+
+    const rule2 = within(rules).getByRole('group', { name: 'Rule 2' });
+    await user.selectOptions(within(rule2).getByRole('combobox', { name: 'Action' }), 'survive');
+
+    within(rules).getByRole('button', { name: 'Reorder rule 2' }).focus();
+    await user.keyboard('{ArrowUp}');
+
+    const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+    expect(within(rule1).getByRole('combobox', { name: 'Action' })).toHaveValue('survive');
+    expect(document.activeElement).toBe(
+      within(rules).getByRole('button', { name: 'Reorder rule 1' }),
+    );
+  });
+
+  // The one test that proves the document-capture Escape listener against the REAL MUI `Dialog`
+  // (every other reorder test uses the `RulesEditor.test.tsx` harness).
+  it('Escape mid-drag does not close the dialog; Escape with no drag does', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<OrganismEditorModal open origin="library" onClose={onClose} library={LIBRARY} />);
+
+    const dialog = screen.getByRole('dialog');
+    const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+    const headerAdd = headerAddButton(rules);
+    await user.click(headerAdd);
+    await user.click(headerAdd);
+
+    const handle = within(rules).getByRole('button', { name: 'Reorder rule 1' });
+    fireEvent.pointerDown(handle, { button: 0, isPrimary: true, pointerId: 1 });
+
+    fireEvent.keyDown(handle, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    // The listener lived only for the life of the drag — gone now, so the dialog's own Escape
+    // path works.
+    fireEvent.keyDown(handle, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

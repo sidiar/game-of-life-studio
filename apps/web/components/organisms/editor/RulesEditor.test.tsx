@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
@@ -302,5 +302,355 @@ describe('RulesEditor', () => {
         name: 'Condition 3 value',
       }),
     );
+  });
+
+  // Story 4.12, Task 4. jsdom performs no layout, so every `[data-rule-id]` card's
+  // `getBoundingClientRect()` is spied per element (the `<PetriDishCanvas>` `RECT` idiom) — tops
+  // `0 / 112 / 224`, height 100, so the 12px gap sits between them.
+  function rectsFor(tops: readonly number[]) {
+    const cards = document.querySelectorAll<HTMLElement>('[data-rule-id]');
+    cards.forEach((el, i) => {
+      const top = tops[i];
+      if (top === undefined) return;
+      vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+        top,
+        height: 100,
+        bottom: top + 100,
+        left: 0,
+        right: 500,
+        width: 500,
+        x: 0,
+        y: top,
+        toJSON() {
+          return {};
+        },
+      });
+    });
+  }
+
+  function badges() {
+    return Array.from(document.querySelectorAll('[data-rule-badge]')).map((b) => b.textContent);
+  }
+
+  describe('rule reordering (Story 4.12)', () => {
+    it('ArrowDown moves the rule, renumbers, re-focuses the moved handle, announces; a same-length change elsewhere still moves no focus', async () => {
+      const user = userEvent.setup();
+      let latest: readonly RuleDraft[] = [];
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => {
+            latest = rules;
+          }}
+        />,
+      );
+
+      screen.getByRole('button', { name: 'Reorder rule 1' }).focus();
+      await user.keyboard('{ArrowDown}');
+
+      expect(badges()).toEqual(['Survive', 'Born', 'Die']);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Reorder rule 2' }));
+      const second = screen.getByRole('group', { name: 'Rule 2' });
+      expect(within(second).getByRole('combobox', { name: 'Action' })).toHaveValue('born');
+      expect(screen.getByRole('status')).toHaveTextContent('Rule moved to position 2 of 3');
+      expect(latest[0]).toBe(THREE[1]);
+      expect(latest[2]).toBe(THREE[2]);
+
+      // The existing same-length habit (Story 4.10/4.11): a keystroke elsewhere moves no focus —
+      // the pending-focus ref set by the reorder above was cleared on this render.
+      const third = screen.getByRole('group', { name: 'Rule 3' });
+      const thirdSummary = within(third).getByRole('textbox', { name: 'Summary' });
+      await user.type(thirdSummary, 'x');
+      expect(document.activeElement).toBe(thirdSummary);
+    });
+
+    it('ArrowUp moves it back; the identical sentence is announced by a fresh node', async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={THREE} />);
+
+      screen.getByRole('button', { name: 'Reorder rule 1' }).focus();
+      await user.keyboard('{ArrowDown}');
+      const firstSpan = screen.getByRole('status').querySelector('span');
+
+      await user.keyboard('{ArrowUp}');
+      expect(badges()).toEqual(['Born', 'Survive', 'Die']);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Reorder rule 1' }));
+
+      await user.keyboard('{ArrowDown}');
+      const secondSpan = screen.getByRole('status').querySelector('span');
+      expect(secondSpan).not.toBe(firstSpan);
+      expect(screen.getByRole('status')).toHaveTextContent('Rule moved to position 2 of 3');
+    });
+
+    it('boundary keys are consumed no-ops: no move, no focus change, no announcement', () => {
+      let latest: readonly RuleDraft[] = [];
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => {
+            latest = rules;
+          }}
+        />,
+      );
+
+      const first = screen.getByRole('button', { name: 'Reorder rule 1' });
+      first.focus();
+      expect(fireEvent.keyDown(first, { key: 'ArrowUp' })).toBe(false);
+      expect(document.activeElement).toBe(first);
+      expect(latest).toBe(THREE);
+
+      const third = screen.getByRole('button', { name: 'Reorder rule 3' });
+      third.focus();
+      expect(fireEvent.keyDown(third, { key: 'ArrowDown' })).toBe(false);
+      expect(document.activeElement).toBe(third);
+      expect(latest).toBe(THREE);
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    });
+
+    it('a pointer drag down shows dragging then the after indicator, and commits on drop', () => {
+      let latest: readonly RuleDraft[] = [];
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => {
+            latest = rules;
+          }}
+        />,
+      );
+      rectsFor([0, 112, 224]);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+
+      const listItems = () => screen.getAllByRole('listitem');
+      expect(listItems()[0]).toHaveAttribute('data-dragging');
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+
+      fireEvent.pointerMove(handle1, { pointerId: 1, buttons: 1, clientY: 300 });
+      expect(listItems()[2]).toHaveAttribute('data-drop', 'after');
+      expect(listItems()[0]).not.toHaveAttribute('data-drop');
+      expect(listItems()[1]).not.toHaveAttribute('data-drop');
+
+      fireEvent.pointerUp(handle1, { pointerId: 1 });
+
+      expect(badges()).toEqual(['Survive', 'Die', 'Born']);
+      expect(document.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Reorder rule 3' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Rule moved to position 3 of 3');
+      expect(latest).not.toBe(THREE);
+    });
+
+    it('a pointer drag up shows the before indicator, and commits on drop', () => {
+      render(<Harness initial={THREE} />);
+      rectsFor([0, 112, 224]);
+
+      const handle3 = screen.getByRole('button', { name: 'Reorder rule 3' });
+      fireEvent.pointerDown(handle3, { button: 0, isPrimary: true, pointerId: 1 });
+      fireEvent.pointerMove(handle3, { pointerId: 1, buttons: 1, clientY: 40 });
+
+      const listItems = screen.getAllByRole('listitem');
+      expect(listItems[0]).toHaveAttribute('data-drop', 'before');
+
+      fireEvent.pointerUp(handle3, { pointerId: 1 });
+      expect(badges()).toEqual(['Die', 'Born', 'Survive']);
+    });
+
+    it('a pointer drag back to its own slot commits nothing', () => {
+      let latest: readonly RuleDraft[] = [];
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => {
+            latest = rules;
+          }}
+        />,
+      );
+      rectsFor([0, 112, 224]);
+
+      const handle2 = screen.getByRole('button', { name: 'Reorder rule 2' });
+      fireEvent.pointerDown(handle2, { button: 0, isPrimary: true, pointerId: 1 });
+      fireEvent.pointerMove(handle2, { pointerId: 1, buttons: 1, clientY: 300 });
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(1);
+
+      fireEvent.pointerMove(handle2, { pointerId: 1, buttons: 1, clientY: 160 });
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+
+      fireEvent.pointerUp(handle2, { pointerId: 1 });
+      expect(latest).toBe(THREE);
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    });
+
+    it('Escape mid-drag cancels the drag and is stopped before a keydown listener above it', () => {
+      const spy = vi.fn();
+      let latest: readonly RuleDraft[] = [];
+      render(
+        <div onKeyDown={spy}>
+          <Harness
+            initial={THREE}
+            onState={(rules) => {
+              latest = rules;
+            }}
+          />
+        </div>,
+      );
+      rectsFor([0, 112, 224]);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+      fireEvent.pointerMove(handle1, { pointerId: 1, buttons: 1, clientY: 300 });
+
+      fireEvent.keyDown(handle1, { key: 'Escape' });
+
+      expect(document.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+      expect(spy).not.toHaveBeenCalled();
+
+      fireEvent.pointerUp(handle1, { pointerId: 1 });
+      expect(latest).toBe(THREE);
+
+      // The listener lived only for the life of the drag — gone now, so Escape reaches the spy.
+      fireEvent.keyDown(handle1, { key: 'Escape' });
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('pointercancel mid-drag cancels the drag', () => {
+      let latest: readonly RuleDraft[] = [];
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => {
+            latest = rules;
+          }}
+        />,
+      );
+      rectsFor([0, 112, 224]);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+      fireEvent.pointerMove(handle1, { pointerId: 1, buttons: 1, clientY: 300 });
+      fireEvent.pointerCancel(handle1, { pointerId: 1 });
+
+      expect(document.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+      expect(latest).toBe(THREE);
+    });
+
+    it('a second pointer is ignored: still exactly one dragging card, and its moves are unaffected', () => {
+      render(<Harness initial={THREE} />);
+      rectsFor([0, 112, 224]);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      const handle2 = screen.getByRole('button', { name: 'Reorder rule 2' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+      fireEvent.pointerDown(handle2, { pointerId: 2, button: 0, isPrimary: false });
+
+      expect(document.querySelectorAll('[data-dragging]')).toHaveLength(1);
+      expect(screen.getAllByRole('listitem')[0]).toHaveAttribute('data-dragging');
+
+      fireEvent.pointerMove(handle1, { pointerId: 2, buttons: 1, clientY: 300 });
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+    });
+
+    it('a second PRIMARY pointer on another card (pen + mouse) neither steers nor drops the first drag', () => {
+      let latest: readonly RuleDraft[] = [];
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => {
+            latest = rules;
+          }}
+        />,
+      );
+      rectsFor([0, 112, 224]);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      const handle2 = screen.getByRole('button', { name: 'Reorder rule 2' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+      // Passes the card's own guards (primary for ITS pointer type) — the editor is the guard.
+      fireEvent.pointerDown(handle2, { button: 0, isPrimary: true, pointerId: 2 });
+      expect(document.querySelectorAll('[data-dragging]')).toHaveLength(1);
+      expect(screen.getAllByRole('listitem')[0]).toHaveAttribute('data-dragging');
+
+      fireEvent.pointerMove(handle2, { pointerId: 2, buttons: 1, clientY: 300 });
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+
+      fireEvent.pointerUp(handle2, { pointerId: 2 });
+      expect(document.querySelectorAll('[data-dragging]')).toHaveLength(1);
+      expect(latest).toBe(THREE);
+
+      // The first pointer's drag is intact and still commits.
+      fireEvent.pointerMove(handle1, { pointerId: 1, buttons: 1, clientY: 300 });
+      fireEvent.pointerUp(handle1, { pointerId: 1 });
+      expect(badges()).toEqual(['Survive', 'Die', 'Born']);
+    });
+
+    it('arrow keys are ignored while a pointer drag is open', () => {
+      let latest: readonly RuleDraft[] = [];
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => {
+            latest = rules;
+          }}
+        />,
+      );
+      rectsFor([0, 112, 224]);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+      fireEvent.keyDown(handle1, { key: 'ArrowDown' });
+      expect(latest).toBe(THREE);
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
+
+      fireEvent.pointerMove(handle1, { pointerId: 1, buttons: 1, clientY: 300 });
+      fireEvent.pointerUp(handle1, { pointerId: 1 });
+      expect(badges()).toEqual(['Survive', 'Die', 'Born']);
+      expect(screen.getByRole('status')).toHaveTextContent('Rule moved to position 3 of 3');
+    });
+
+    it('the dragged card leaving the list closes the drag, so the next drag can start', () => {
+      render(<Harness initial={THREE} />);
+      rectsFor([0, 112, 224]);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+      fireEvent.pointerMove(handle1, { pointerId: 1, buttons: 1, clientY: 300 });
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(document.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+
+      const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle, { button: 0, isPrimary: true, pointerId: 3 });
+      expect(screen.getAllByRole('listitem')[0]).toHaveAttribute('data-dragging');
+    });
+
+    it('the announcement does not survive the empty state', () => {
+      render(<Harness initial={THREE.slice(0, 2)} />);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      handle1.focus();
+      fireEvent.keyDown(handle1, { key: 'ArrowDown' });
+      expect(screen.getByRole('status')).toHaveTextContent('Rule moved to position 2 of 2');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Add Rule' }));
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    });
+
+    it('has no axe violations after a keyboard reorder (status populated)', async () => {
+      const { container } = render(<Harness initial={THREE} />);
+
+      const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+      handle.focus();
+      fireEvent.keyDown(handle, { key: 'ArrowDown' });
+
+      expect((await axe(container)).violations).toEqual([]);
+    });
   });
 });
