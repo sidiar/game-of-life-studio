@@ -7,6 +7,41 @@ $0 hosting. **There is no backend in the MVP.**
 For architecture and the rules AI agents must follow, see [`CLAUDE.md`](./CLAUDE.md) and
 [`docs/project-context.md`](./docs/project-context.md).
 
+## How it was built
+
+One person, Claude Code, and a spec-first process on [BMad Method](https://github.com/bmad-code-org/BMAD-METHOD) v6.
+Everything the agents worked from is in the repo, in the order it was written:
+
+1. **Plan** (May–July 2026) — [brief](./docs/planning-artifacts/briefs) → [PRD](./docs/planning-artifacts/prds)
+   → [UX design](./docs/planning-artifacts/ux-designs) → eight [RFCs](./docs/planning-artifacts/rfcs)
+   and [`architecture.md`](./docs/planning-artifacts/architecture.md) → an
+   [adversarial cross-document review](./docs/planning-artifacts/review-adversarial-architecture-rfcs.md)
+   of all of them → two implementation-readiness reports → [`epics.md`](./docs/planning-artifacts/epics.md):
+   six epics, 96 stories, every one traceable to a PRD requirement.
+2. **Deliver** (from 2026-07-16) — one story at a time: a _create_ agent writes the story file
+   from the epic and the specs, a _dev_ agent implements it, a _review_ agent on a different
+   model audits the diff against the acceptance criteria and patches what it can. Each story
+   file under [`docs/implementation-artifacts/`](./docs/implementation-artifacts) carries the
+   dev record, the review findings and — since 2026-08-26 — the run's time and token cost per
+   phase, measured from the agents' own transcripts.
+3. **The pipeline** — since 2026-08-26 the three agents are driven by
+   [`implement-next-story`](https://github.com/sidiar/implement-next-story), a Claude Code skill
+   written for this project and consumed here as a git subtree
+   (`.claude/skills/implement-next-story`, configured by
+   [`implement-next-story.toml`](./implement-next-story.toml)). It takes the next `backlog`
+   story off [`sprint-status.yaml`](./docs/implementation-artifacts/sprint-status.yaml), runs
+   create → implement → review in fresh subagents, opens the pull request and stops. It never
+   merges. Two epics run as parallel lanes in git worktrees, with cross-epic dependencies as
+   rows in [`lane-gates.yaml`](./docs/implementation-artifacts/lane-gates.yaml). 53 story PRs
+   since then; the median story is 67 minutes from start to PR open (the skill's
+   README has the full table, and its [`DESIGN.md`](https://github.com/sidiar/implement-next-story/blob/main/DESIGN.md)
+   records which rules came from incidents on this repo).
+
+What the human does: reads and merges the PRs, answers the `[Review][Decision]` items a review
+leaves in the story file (a PR with one open stays a draft), approves gate rows, and keeps
+[`deferred-work.md`](./docs/implementation-artifacts/deferred-work.md) — the running list of
+what each story chose not to do — honest.
+
 ## Requirements
 
 - Node **24** (`.nvmrc`; `engine-strict=true` fails the install on older Node)
