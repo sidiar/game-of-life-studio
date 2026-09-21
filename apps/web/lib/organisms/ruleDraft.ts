@@ -35,6 +35,17 @@ export const NEW_RULE_ACTION: RuleAction = 'born';
  * accepts up to 120 for records arriving through import/migration. */
 export const MAX_RULE_SUMMARY_LENGTH = 100;
 
+/** Design doc `:768`, verbatim. The displayed-error view of `SurvivalRuleSchema`'s
+ * `conditions.min(1)` (Story 4.13); the persisted-shape view is Story 4.16's parse. */
+export const RULE_NEEDS_CONDITION = 'Rule must have at least one condition';
+
+/** A rule with no rows cannot fire (FR-2.5: AND over zero conditions is not a rule the
+ * engine accepts — `conditions.min(1)`). A rule WITH rows is judged row by row by
+ * `validateConditionDraft`; the two are exclusive, never additive. */
+export function ruleNeedsCondition(rule: RuleDraft): boolean {
+  return rule.conditions.length === 0;
+}
+
 /** The `<select>`'s string value meets the `RuleAction` union here — the one narrowing, never an
  * `as RuleAction` cast (project-context: no escape hatches). */
 export function isRuleAction(value: string): value is RuleAction {

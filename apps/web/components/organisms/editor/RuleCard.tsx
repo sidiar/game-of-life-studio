@@ -46,14 +46,15 @@ import ConditionsEditor from './ConditionsEditor';
  * announcement) live one level up in `<RulesEditor>`, because a lone card has no siblings to
  * measure against. `key={rule.id}` is what keeps this card's `useId()`s and its condition rows'
  * `touched` state attached to the SAME rule across a reorder (RFC-004 §2.4 — identity survives a
- * move; AC3). Story 4.13 flags a zero-condition card at Save.
+ * move; AC3). Story 4.13 threads `showAllErrors` through to `<ConditionsEditor>`, which flags a
+ * zero-condition card at Save.
  *
  * `useId()` gives four ids per card (label, summary, counter, action) — the multi-instance case
  * `<OrganismNameField>`'s comment anticipated. Every decorative glyph (`⋮⋮`, `✕`) is a real
  * `aria-hidden` node inside a button whose accessible name comes from `aria-label` (the Story 4.9
  * review finding: generated content joins a control's accessible name).
  *
- * (Story 4.10) (Story 4.12) (FR-2.5) (FR-2.6) (UX-DR10) (UX-DR11) (UX-DR17) (AR-46)
+ * (Story 4.10) (Story 4.12) (Story 4.13) (FR-2.5) (FR-2.6) (UX-DR10) (UX-DR11) (UX-DR17) (AR-46)
  */
 
 // The drop indicator's shared rule set (Story 4.12, AC1/FD5) — module-level, referenced from the
@@ -241,6 +242,8 @@ export interface RuleCardProps {
   dropIndicator: 'before' | 'after' | null;
   /** The list-level instructions node — every handle's `aria-describedby`. */
   describedBy: string;
+  /** Story 4.13's Save-time override, threaded through to `<ConditionsEditor>`. */
+  showAllErrors: boolean;
 }
 
 export default function RuleCard({
@@ -258,6 +261,7 @@ export default function RuleCard({
   dragging,
   dropIndicator,
   describedBy,
+  showAllErrors,
 }: RuleCardProps) {
   const labelId = useId();
   const summaryId = useId();
@@ -419,6 +423,7 @@ export default function RuleCard({
             conditions={rule.conditions}
             organisms={organisms}
             onConditionsChange={handleConditionsChange}
+            showAllErrors={showAllErrors}
           />
         </CardBody>
       </div>

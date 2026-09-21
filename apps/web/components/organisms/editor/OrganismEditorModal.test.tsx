@@ -7,8 +7,13 @@ import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
-import { ruleActionLabel } from '@/lib/organisms/ruleDraft';
-import OrganismEditorModal, { backLabelFor } from './OrganismEditorModal';
+import { ruleActionLabel, RULE_NEEDS_CONDITION } from '@/lib/organisms/ruleDraft';
+import { ORGANISM_NAME_REQUIRED } from '@/lib/organisms/organismName';
+import OrganismEditorModal, {
+  backLabelFor,
+  errorTargetSelector,
+  SAVE_UNAVAILABLE_NOTICE,
+} from './OrganismEditorModal';
 
 /**
  * Story 4.3's shell contract — the accessible names the rest of Epic 4 (and the e2e) will look the
@@ -50,10 +55,10 @@ describe('OrganismEditorModal', () => {
     expect(backLabelFor(origin)).toBe(label);
   });
 
-  it('renders Save as a genuinely disabled button and a Close button', () => {
+  it('renders Save as an enabled button and a Close button (Story 4.13)', () => {
     render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   });
 
@@ -87,21 +92,6 @@ describe('OrganismEditorModal', () => {
     await user.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  // FD4: disabled, not a no-op handler — so there is nothing to spy on. What CAN be asserted is
-  // that activating it neither closes the dialog nor errors. `fireEvent`, not `user.click`:
-  // user-event REFUSES to click a `pointer-events: none` element (MUI's disabled Button is one),
-  // which already proves a real pointer cannot reach it — the raw dispatch below covers the one
-  // path that bypasses pointer-events, a synthetic click at the node.
-  it('does nothing when Save is activated', () => {
-    const onClose = vi.fn();
-    render(<OrganismEditorModal open origin="library" onClose={onClose} library={LIBRARY} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   // Story 4.4: the body is `<OrganismEditorLayout>`. Its own contract is that component's test;
@@ -280,8 +270,8 @@ describe('OrganismEditorModal', () => {
     expect(probe.style.backgroundColor).not.toBe('');
     expect(selectedSwatch.style.backgroundColor).toBe(probe.style.backgroundColor);
     expect(capCell.style.backgroundColor).toBe(probe.style.backgroundColor);
-    // "Save is unaffected" as a before/after comparison — a `toBeDisabled()` alone would also pass
-    // if the warning had disabled it (it is Story 4.16's inert button either way).
+    // "Save is unaffected" as a before/after comparison — the Story 4.13 gate does not react to a
+    // colour pick, which is neither a name, rule nor condition field it validates.
     expect(within(dialog).getByRole('button', { name: 'Save' }).outerHTML).toBe(saveBefore);
     await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
     expect(within(dialog).getAllByRole('radio')).toHaveLength(PALETTE.length);
@@ -451,7 +441,6 @@ describe('OrganismEditorModal', () => {
 
     const group = within(rules).getByRole('group', { name: 'Rule 1' });
     expect(within(group).getByRole('textbox', { name: 'Summary' })).toHaveFocus();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(within(rules).getAllByRole('textbox')).toHaveLength(1);
     expect(within(basic).getAllByRole('textbox')).toHaveLength(2);
   });
@@ -653,5 +642,321 @@ describe('OrganismEditorModal', () => {
     // path works.
     fireEvent.keyDown(handle, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // Story 4.13: the Save gate, the focus effect and the honest notice, wired through the real
+  // modal. `headerAddButton` is the fixture already defined above.
+  describe('editor validation & feedback (Story 4.13)', () => {
+    it('(11) Save on a fresh draft refuses, reveals the name error, focuses the name field, closes nothing', async () => {
+      const user = userEvent.setup();
+      const onClose = vi.fn();
+      render(<OrganismEditorModal open origin="library" onClose={onClose} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      expect(within(dialog).getByRole('alert')).toHaveTextContent(ORGANISM_NAME_REQUIRED);
+      const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+      expect(name).toBeInvalid();
+      expect(name).toHaveFocus();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(dialog).toBeInTheDocument();
+    });
+
+    it('(12) three errors at once, first focused, all derived and cleared independently', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const headerAdd = headerAddButton(rules);
+      await user.click(headerAdd);
+      await user.click(headerAdd);
+
+      const rule2 = within(rules).getByRole('group', { name: 'Rule 2' });
+      await user.click(within(rule2).getByRole('button', { name: '+ Add Condition' }));
+      await user.selectOptions(
+        within(rule2).getByRole('combobox', { name: 'Condition 1 property' }),
+        'age',
+      );
+      await user.selectOptions(
+        within(rule2).getByRole('combobox', { name: 'Condition 1 operator' }),
+        'range',
+      );
+      await user.type(within(rule2).getByRole('textbox', { name: 'Condition 1 minimum' }), '5');
+      // Max left untouched.
+
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(3);
+      const nameField = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+      expect(nameField).toHaveFocus();
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      expect(within(rule1).getByRole('alert')).toHaveTextContent(RULE_NEEDS_CONDITION);
+      expect(within(rule2).getByRole('alert')).toHaveTextContent(
+        'Max must be a whole number from 0 to 999',
+      );
+
+      await user.type(nameField, 'Glider');
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(2);
+
+      await user.click(save);
+      const addCondition1 = within(rule1).getByRole('button', { name: '+ Add Condition' });
+      expect(addCondition1).toHaveFocus();
+
+      await user.click(addCondition1);
+      expect(within(rule1).queryByRole('alert')).not.toBeInTheDocument();
+
+      await user.click(save);
+      const max = within(rule2).getByRole('textbox', { name: 'Condition 1 maximum' });
+      expect(max).toHaveFocus();
+
+      await user.type(max, '9');
+      expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
+    });
+
+    it('(13) a pair error focuses Min', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      await user.click(headerAddButton(rules));
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+      await user.selectOptions(
+        within(rule1).getByRole('combobox', { name: 'Condition 1 property' }),
+        'age',
+      );
+      await user.selectOptions(
+        within(rule1).getByRole('combobox', { name: 'Condition 1 operator' }),
+        'range',
+      );
+      await user.type(within(rule1).getByRole('textbox', { name: 'Condition 1 minimum' }), '9');
+      await user.type(within(rule1).getByRole('textbox', { name: 'Condition 1 maximum' }), '2');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      expect(within(dialog).getByRole('alert')).toHaveTextContent('Min must be less than Max');
+      expect(within(rule1).getByRole('textbox', { name: 'Condition 1 minimum' })).toHaveFocus();
+    });
+
+    it('(14) zero rules + valid name is not refused, and shows the honest notice (AC4, AC8)', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+
+      expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
+      expect(dialog.querySelectorAll('[aria-invalid="true"]')).toHaveLength(0);
+      expect(document.activeElement).toBe(save);
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      expect(rules.querySelector('[data-rules-empty-state]')).not.toBeNull();
+      const notice = dialog.querySelector('[data-save-notice]');
+      expect(notice).toHaveTextContent(SAVE_UNAVAILABLE_NOTICE);
+      expect(notice).toHaveAttribute('role', 'status');
+    });
+
+    it('(15) the notice hides when the draft turns invalid, and clears on a refused Save', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.type(name, 'Glider');
+      await user.click(save);
+      expect(dialog.querySelector('[data-save-notice]')).not.toBeNull();
+
+      await user.clear(name);
+      expect(dialog.querySelector('[data-save-notice]')).toBeNull();
+
+      await user.click(save);
+      expect(within(dialog).getByRole('alert')).toHaveTextContent(ORGANISM_NAME_REQUIRED);
+      expect(dialog.querySelector('[data-save-notice]')).toBeNull();
+
+      await user.type(name, 'Glider');
+      // Cleared by the refusal — not back until the NEXT valid Save.
+      expect(dialog.querySelector('[data-save-notice]')).toBeNull();
+
+      await user.click(save);
+      expect(dialog.querySelector('[data-save-notice]')).not.toBeNull();
+    });
+
+    describe('errorTargetSelector', () => {
+      it('resolves the three target shapes', () => {
+        expect(errorTargetSelector({ kind: 'name' })).toBe('[data-organism-name]');
+        expect(errorTargetSelector({ kind: 'rule', ruleId: 'r1' })).toBe(
+          '[data-rule-id="r1"] [data-add-condition]',
+        );
+        expect(
+          errorTargetSelector({
+            kind: 'condition',
+            ruleId: 'r1',
+            conditionId: 'c1',
+            field: 'value',
+          }),
+        ).toBe('[data-rule-id="r1"] [data-condition-id="c1"] [data-condition-value]');
+      });
+
+      it('a pair error resolves to min', () => {
+        expect(
+          errorTargetSelector({
+            kind: 'condition',
+            ruleId: 'r1',
+            conditionId: 'c1',
+            field: 'pair',
+          }),
+        ).toBe('[data-rule-id="r1"] [data-condition-id="c1"] [data-condition-min]');
+      });
+
+      it('an id with a quote is escaped', () => {
+        // The literal, not `CSS.escape('a"b')` — an expected value built with the function under
+        // test's own dependency would also pass against an identity polyfill.
+        const selector = errorTargetSelector({ kind: 'rule', ruleId: 'a"b' });
+        expect(selector).toBe('[data-rule-id="a\\"b"] [data-add-condition]');
+      });
+    });
+
+    it('(17) a reorder keeps the error target on the rule id, not its index', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const headerAdd = headerAddButton(rules);
+      await user.click(headerAdd); // rule A — zero conditions
+      await user.click(headerAdd); // rule B — given a valid condition below
+      const ruleB = within(rules).getByRole('group', { name: 'Rule 2' });
+      await user.click(within(ruleB).getByRole('button', { name: '+ Add Condition' }));
+      await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+
+      const ruleA = within(rules).getByRole('group', { name: 'Rule 1' });
+      expect(within(ruleA).getByRole('button', { name: '+ Add Condition' })).toHaveFocus();
+
+      const handleA = within(rules).getByRole('button', { name: 'Reorder rule 1' });
+      handleA.focus();
+      await user.keyboard('{ArrowDown}');
+
+      await user.click(save);
+      const ruleANow = within(rules).getByRole('group', { name: 'Rule 2' });
+      expect(within(ruleANow).getByRole('button', { name: '+ Add Condition' })).toHaveFocus();
+    });
+
+    it('(18) has no axe violations with three errors visible', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const headerAdd = headerAddButton(rules);
+      await user.click(headerAdd);
+      await user.click(headerAdd);
+      const rule2 = within(rules).getByRole('group', { name: 'Rule 2' });
+      await user.click(within(rule2).getByRole('button', { name: '+ Add Condition' }));
+      await user.selectOptions(
+        within(rule2).getByRole('combobox', { name: 'Condition 1 property' }),
+        'age',
+      );
+      await user.selectOptions(
+        within(rule2).getByRole('combobox', { name: 'Condition 1 operator' }),
+        'range',
+      );
+      await user.type(within(rule2).getByRole('textbox', { name: 'Condition 1 minimum' }), '5');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(3);
+
+      expect((await axe(document.body)).violations).toEqual([]);
+    });
+
+    it('(18) has no axe violations with the honest notice visible', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      expect(dialog.querySelector('[data-save-notice]')).not.toBeNull();
+
+      expect((await axe(document.body)).violations).toEqual([]);
+    });
+
+    // Story 4.13 FD3 (the owner's option (c)): a rule or a condition added AFTER a refused Save is
+    // not flagged on mount — `saveAttempted` clears globally on the structural add itself (not
+    // per-control), which is why rule 2's still-present error also hides here, not just rule 3's
+    // absent one. A value edit, a delete and a reorder all leave it sticky; a delete that shrinks
+    // the list followed by an add still un-sticks (the size ref tracks the shrink); and the very
+    // next Save re-flags everything, the newly added control included. `user.click` drains every
+    // commit, so this pins the settled state per step — the "before paint" half of FD3 is the
+    // layout effect's, measured in review, not asserted here.
+    it('(19) a structural add un-sticks saveAttempted; a value edit, a delete or a reorder does not; a later Save re-flags everything', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const headerAdd = headerAddButton(rules);
+      await user.click(headerAdd);
+      await user.click(headerAdd);
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+
+      // Refused: name + both zero-condition rules are flagged — the alert lines AND the boundary
+      // cues (the name's `aria-invalid`, both "+ Add Condition" buttons' `data-invalid`), so the
+      // zero-count below is a clearing, not a selector that never matched.
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(3);
+      expect(dialog.querySelectorAll('[aria-invalid="true"], [data-invalid]')).toHaveLength(3);
+
+      // A value edit (not structural) leaves the override sticky — the two rule errors survive it.
+      await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'G');
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(2);
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      expect(within(rule1).getByRole('alert')).toHaveTextContent(RULE_NEEDS_CONDITION);
+
+      // A reorder (Story 4.12) is not structural either — both errors survive the swap.
+      within(rules).getByRole('button', { name: 'Reorder rule 1' }).focus();
+      await user.keyboard('{ArrowDown}');
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(2);
+
+      // A structural add — a new rule — clears `saveAttempted` globally: rule 2's untouched error
+      // hides too, not merely rule 3's (which never had one to show). Focus lands on the new
+      // card's Summary across the extra commit the clear costs.
+      await user.click(headerAdd);
+      expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
+      expect(dialog.querySelectorAll('[aria-invalid="true"], [data-invalid]')).toHaveLength(0);
+      const rule3 = within(rules).getByRole('group', { name: 'Rule 3' });
+      expect(rule3.querySelector('[data-rule-summary]')).toHaveFocus();
+
+      // A later Save re-flags everything, the added rule included (name stays valid from above).
+      await user.click(save);
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(3);
+      expect(within(rule3).getByRole('alert')).toHaveTextContent(RULE_NEEDS_CONDITION);
+
+      // A structural add reached through a CONDITION (not a rule) un-sticks it the same way.
+      await user.click(within(rule3).getByRole('button', { name: '+ Add Condition' }));
+      expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
+
+      await user.click(save);
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(2); // rule 1, rule 2 — 3 now satisfied
+
+      // A delete is not structural: removing rule 1 (zero rows) drops its own line only; the
+      // other zero-row rule's stays. Then deleting the rule WITH a row (renumbered to 2) shrinks
+      // the size below the count at the last Save, and the next add must still un-stick: the ref
+      // follows the shrink, it is not "the size at Save".
+      await user.click(within(rules).getByRole('button', { name: 'Delete rule 1' }));
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(1);
+      await user.click(within(rules).getByRole('button', { name: 'Delete rule 2' }));
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(1);
+      await user.click(headerAdd);
+      expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
+    });
   });
 });

@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { MAX_ORGANISM_NAME_LENGTH } from '@gol/domain';
 import { exceedsOrganismNameLength, validateOrganismName } from '@/lib/organisms/organismName';
-import { Field, Label } from './fieldStyles';
+import { ErrorText as BaseErrorText, Field, Label } from './fieldStyles';
 
 // `<BattleNameField>`'s `Input` rule set (the reviewed idiom for this exact control — tokens,
 // focus ring, `--gol-border-control` in place of the decorative `--gol-border` the mockup uses,
@@ -55,12 +55,10 @@ const Meta = styled('div')({
 
 // The design doc's "red text and warning icon" (`organism-editor-design.md:772-777`), at the
 // counter's 11px scale, in the house error colour `<SaveErrorLine>` (`BattleEditorView.tsx`)
-// established. `flex: 1; minWidth: 0` so a long message wraps instead of pushing the counter out.
-const ErrorText = styled('p')({
-  margin: 0,
-  fontSize: '11px',
-  lineHeight: 1.4,
-  color: 'var(--gol-danger)',
+// established. `fieldStyles.ts`'s shared `ErrorText` (Story 4.13, the third-caller lift) plus this
+// field's own layout rule: `flex: 1; minWidth: 0` so a long message wraps instead of pushing the
+// counter out of `<Meta>`'s flex row.
+const ErrorText = styled(BaseErrorText)({
   flex: 1,
   minWidth: 0,
 });
@@ -85,6 +83,9 @@ export interface OrganismNameFieldProps {
   /** Defaults to `MAX_ORGANISM_NAME_LENGTH` — the schema's own constant, never a literal. A `50`
    * written here would be a second source for a number `OrganismSchema` already owns. */
   maxLength?: number;
+  /** Story 4.13's Save-time override: every error shows regardless of `touched` (4.5 FD2 kept for
+   * the untouched, unattempted case). */
+  showAllErrors: boolean;
 }
 
 /**
@@ -99,7 +100,8 @@ export interface OrganismNameFieldProps {
  * - FD2 — the required error waits for the first edit (`touched`); the over-limit error is
  *   immediate and does NOT wait for `touched`: a value that arrives over the cap without an edit
  *   (a seeded draft, a lowered cap) is flagged on mount, so the counter's `--gol-danger` and
- *   `aria-invalid` can never disagree.
+ *   `aria-invalid` can never disagree. Story 4.13 adds `showAllErrors`, the Save-time override:
+ *   `touched || overLimit || showAllErrors` — the field's own logic is otherwise unchanged.
  * - FD3 — the draft lives in the modal, not here; this component holds only `touched`.
  * - FD4 — the error line is `role="alert"`, mounted only while an error is visible, so it announces
  *   once per transition and never per keystroke; the counter stays `aria-describedby`-only.
@@ -121,6 +123,7 @@ export default function OrganismNameField({
   value,
   onChange,
   maxLength = MAX_ORGANISM_NAME_LENGTH,
+  showAllErrors,
 }: OrganismNameFieldProps) {
   const inputId = useId();
   const counterId = useId();
@@ -128,7 +131,7 @@ export default function OrganismNameField({
 
   // FD2: flips on the first change event — never on blur (tabbing through an untouched field to
   // reach the next control is not an error) and never on mount (a fresh editor does not open red).
-  // Story 4.13 adds the Save-time override; it is not a prop yet because nothing would read it.
+  // Story 4.13's `showAllErrors` is the Save-time override, applied below alongside `touched`.
   const [touched, setTouched] = useState(false);
   const error = validateOrganismName(value, maxLength);
   // The SAME predicate the validator uses (`organismName.ts`), so the counter's red and the error
@@ -136,7 +139,7 @@ export default function OrganismNameField({
   // untouched field may hide — a value over the cap is wrong however it got there, and hiding the
   // alert while the counter is already red would leave colour as the only indicator (SC 1.4.1).
   const overLimit = exceedsOrganismNameLength(value, maxLength);
-  const visibleError = touched || overLimit ? error : null;
+  const visibleError = touched || overLimit || showAllErrors ? error : null;
 
   return (
     <Field>
@@ -147,6 +150,9 @@ export default function OrganismNameField({
         id={inputId}
         type="text"
         value={value}
+        // The gate's focus target (Story 4.13, `errorTargetSelector`) — the modal must not locate
+        // this control by its label text.
+        data-organism-name
         // FD1 — deliberately NOT `BattleNameField.tsx`'s `.slice(0, maxLength)` + `maxLength`
         // attribute. That clamp exists because the battle name is live-bound with no validating
         // gate, so over-limit had to be made unreachable. The organism editor HAS a gate: this

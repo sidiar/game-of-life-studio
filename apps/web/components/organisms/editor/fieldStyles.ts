@@ -97,3 +97,15 @@ export const TextInput = styled('input')(controlRules);
 
 // The `<AddSelect>` FD3 reasoning: `cursor: pointer` and the UA's own arrow, never hidden.
 export const SelectInput = styled('select')({ ...controlRules, cursor: 'pointer' });
+
+// `<OrganismNameField>`'s `ErrorText` rule set, lifted here at its third caller
+// (`OrganismNameField`, `ConditionRow`, `ConditionsEditor` — the Story 4.7 threshold). Minus the
+// `flex: 1; minWidth: 0` of the name field's own `<Meta>` flex row: each caller adds its own
+// layout rule at the call site (`styled(ErrorText)({ gridColumn: '1 / -1' })` for a grid row,
+// `styled(ErrorText)({ flex: 1, minWidth: 0 })` for the name field's flex row).
+export const ErrorText = styled('p')({
+  margin: 0,
+  fontSize: '11px',
+  lineHeight: 1.4,
+  color: 'var(--gol-danger)',
+});

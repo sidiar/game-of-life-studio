@@ -3,6 +3,7 @@ import fc from 'fast-check';
 import { SurvivalRuleSchema } from '@gol/domain';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
 import type { ConditionDraft } from './conditionDraft';
+import { createNewConditionDraft } from './conditionDraft';
 import {
   appendRule,
   createNewRuleDraft,
@@ -14,6 +15,8 @@ import {
   ruleActionLabel,
   RULE_ACTIONS,
   ruleDraftFrom,
+  ruleNeedsCondition,
+  RULE_NEEDS_CONDITION,
   updateRuleConditions,
   updateRulePayload,
   type RuleDraft,
@@ -71,6 +74,21 @@ describe('createNewRuleDraft', () => {
     const summary = 'x'.repeat(MAX_RULE_SUMMARY_LENGTH);
     const draft = { ...createNewRuleDraft('x'), payload: { summary, action: 'born' as const } };
     expect(SurvivalRuleSchema.shape.payload.safeParse(draft.payload).success).toBe(true);
+  });
+});
+
+describe('ruleNeedsCondition', () => {
+  it('is true for a fresh rule with no conditions', () => {
+    expect(ruleNeedsCondition(createNewRuleDraft('x'))).toBe(true);
+  });
+
+  it('is false once the rule has one condition row', () => {
+    const rule = { ...createNewRuleDraft('x'), conditions: [createNewConditionDraft('c1')] };
+    expect(ruleNeedsCondition(rule)).toBe(false);
+  });
+
+  it('RULE_NEEDS_CONDITION matches the design doc string verbatim', () => {
+    expect(RULE_NEEDS_CONDITION).toBe('Rule must have at least one condition');
   });
 });
 

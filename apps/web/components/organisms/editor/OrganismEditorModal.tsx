@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -18,7 +18,12 @@ import DominanceField from './DominanceField';
 import AgingToggleField from './AgingToggleField';
 import AddRuleButton from './AddRuleButton';
 import RulesEditor from './RulesEditor';
-import { createNewOrganismDraft, type OrganismDraft } from '@/lib/organisms/organismDraft';
+import {
+  createNewOrganismDraft,
+  validateOrganismDraft,
+  type DraftErrorTarget,
+  type OrganismDraft,
+} from '@/lib/organisms/organismDraft';
 import { usersByColorToken } from '@/lib/organisms/colorReuse';
 import { appendRule, createNewRuleDraft, type RuleDraft } from '@/lib/organisms/ruleDraft';
 
@@ -151,6 +156,40 @@ const EditorBody = styled('div')({
   minHeight: 0,
 });
 
+// Story 4.13, AC8: the `<SaveErrorLine>` placement idiom (`BattleEditorView.tsx:376-400`) minus
+// the danger colour — this is not an error, it is the honest transitional "nothing persisted yet"
+// notice. Deleted, along with its one caller, by Story 4.16 (FD1).
+const SaveNotice = styled('p')({
+  margin: 0,
+  padding: '10px 30px',
+  fontSize: '12px',
+  lineHeight: 1.5,
+  color: 'var(--gol-text-secondary)',
+  background: 'var(--gol-bg-primary)',
+  borderBottom: '1px solid var(--gol-border)',
+});
+
+/** Story 4.16 deletes this string along with `SaveNotice`, `noticeRequested` and the modal tests
+ * that pin it. */
+export const SAVE_UNAVAILABLE_NOTICE =
+  'Valid organism — saving to the library is not available yet.';
+
+/** The control that FIXES the error, for `focus()` — not merely the nearest element. Ids through
+ * `CSS.escape` (Story 4.17 seeds them from records). A `pair` error lands on Min: the message
+ * names both, the first is where the user starts. */
+export function errorTargetSelector(target: DraftErrorTarget): string {
+  switch (target.kind) {
+    case 'name':
+      return '[data-organism-name]';
+    case 'rule':
+      return `[data-rule-id="${CSS.escape(target.ruleId)}"] [data-add-condition]`;
+    case 'condition': {
+      const field = target.field === 'pair' ? 'min' : target.field;
+      return `[data-rule-id="${CSS.escape(target.ruleId)}"] [data-condition-id="${CSS.escape(target.conditionId)}"] [data-condition-${field}]`;
+    }
+  }
+}
+
 /**
  * The Organism Editor's full-screen shell (Story 4.3): the `Dialog`, its header and a body that is
  * `<OrganismEditorLayout>`'s three columns (Story 4.4). Holds the editor's draft (`OrganismDraft`,
@@ -174,6 +213,13 @@ const EditorBody = styled('div')({
  * The `'battle'` origin (M5 — the editor opens as a modal over the mounted battle, never a route)
  * changes only the back label; Story 4.24 is its first caller. Reached from the Library via the
  * "+ Create New Organism" control (FR-1.2).
+ *
+ * Story 4.13's gate (`validateOrganismDraft`, `saveAttempted`, focus-to-first-invalid): Save now
+ * runs `validateOrganismDraft(draft)`; an invalid draft flips `saveAttempted` (sticky across value
+ * edits, deletes and reorders; cleared only by a structural add — a new rule or a new condition
+ * row — in the synchronous commit that follows the add, FD3) and focuses the first error's control;
+ * a valid draft shows the transitional `SaveNotice` (AC8, FD1) — Story 4.16 replaces that branch
+ * with the repository write, the close and the toast. (Story 4.13) (UX-DR14) (UX-DR17)
  */
 export default function OrganismEditorModal({
   open,
@@ -194,6 +240,17 @@ export default function OrganismEditorModal({
     createNewOrganismDraft(library.map((organism) => organism.colorToken)),
   );
   const [draft, setDraft] = useState<OrganismDraft>(seed);
+  // Story 4.13 — the Save gate's own ephemeral UI state (RFC-005 Decision 1 / AR-33): the draft
+  // object itself is NOT widened with validation state. `shellRef` scopes the focus effect's
+  // lookup to this modal's own DOM (the dialog portals to `document.body`, and the house forbids
+  // `document.querySelector` from components — `<RulesEditor>`'s rule).
+  const [saveAttempted, setSaveAttempted] = useState(false);
+  const [focusRequest, setFocusRequest] = useState<{
+    seq: number;
+    target: DraftErrorTarget;
+  } | null>(null);
+  const [noticeRequested, setNoticeRequested] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
   // Per render, unmemoised: `library` is the caller's unmemoised `sorted` (a `useMemo` keyed on it
   // would never hit), and the scan is 0.02–0.04 ms at 1,000 organisms (Story 3.7's `library-filter`
   // bench). Story 4.17 passes the library MINUS the organism under edit.
@@ -234,6 +291,64 @@ export default function OrganismEditorModal({
     setSurvivalRules((rules) => appendRule(rules, createNewRuleDraft(id)));
   }, [setSurvivalRules]);
 
+  // A STRUCTURAL add — a new rule (`addRule` above) or a new condition row (`<ConditionsEditor>`'s
+  // `addCondition`, reached through `setSurvivalRules`) — un-sticks `saveAttempted`, so a control
+  // that did not exist at the last refused Save never shows red before the user has typed into it
+  // (AC6's "never red on add", extended past the first Save; Story 4.13 FD3). A value edit, a
+  // delete, or a reorder leaves it sticky: un-sticking on every edit would re-hide a still-present
+  // error, and the trade accepted here is the narrow one — an add hides sibling errors until the
+  // next Save. Tracked as one number — every rule plus every rule's conditions — a proxy that is
+  // exact for today's single-purpose helpers (only the two adds grow it; a batched delete-plus-add
+  // would need an id diff instead). Compared in an effect, not inside `setSurvivalRules`'s
+  // updater, because that updater must stay pure. A LAYOUT effect, deliberately: the clear
+  // schedules a second, synchronous commit that removes the alert line and the `data-invalid` cue
+  // before the browser paints (`<ColorPickerField>`'s collapse idiom); the add's own focus effect
+  // runs in between, and the Summary it focuses keeps focus across the clearing commit. From a
+  // passive effect the same update is lowered to Default priority and lands a task later —
+  // measured in review: the new card mounts with its `role="alert"`, is focused flagged, and
+  // clears only on the next macrotask.
+  // `handleSave` always sets `saveAttempted` back to `true` on a refusal, so the very next Save
+  // re-flags everything, added control included.
+  const structuralSize = draft.survivalRules.reduce(
+    (sum, rule) => sum + 1 + rule.conditions.length,
+    0,
+  );
+  const prevStructuralSizeRef = useRef(structuralSize);
+  useLayoutEffect(() => {
+    if (structuralSize > prevStructuralSizeRef.current) setSaveAttempted(false);
+    prevStructuralSizeRef.current = structuralSize;
+  }, [structuralSize]);
+
+  // Per render, unmemoised: cheap (a name check and a scan of the rows), and the fields recompute
+  // the same per-field validators anyway on every keystroke — a `useMemo` keyed on `draft` would
+  // hit exactly as often as the draft changes.
+  const errors = validateOrganismDraft(draft);
+  const noticeVisible = noticeRequested && errors.length === 0;
+
+  const handleSave = useCallback(() => {
+    const first = errors[0];
+    if (first === undefined) {
+      setNoticeRequested(true); // FD1 — honest, transitional; Story 4.16 replaces this branch
+      return; // with the write, the close and the toast
+    }
+    setNoticeRequested(false);
+    setSaveAttempted(true);
+    setFocusRequest((r) => ({ seq: (r?.seq ?? 0) + 1, target: first.target }));
+  }, [errors]);
+
+  // Keyed on `focusRequest`, not `draft`: a keystroke elsewhere must not steal focus, and a
+  // repeated first error (the same control invalid across two Saves) still needs a fresh request
+  // (`seq`) to re-run this effect. Why an effect and not the click handler: the alert line and the
+  // `aria-describedby` that names it mount on the render `saveAttempted` produces, and a `focus()`
+  // inside the click handler would run before that render, landing on a control with no
+  // description yet. Why no `scrollIntoView`: `focus()` scrolls the nearest scrollable ancestor —
+  // the independently-scrolling Rules column (Story 4.4) — on every engine; a second scroll call
+  // would fight it.
+  useEffect(() => {
+    if (focusRequest === null) return;
+    shellRef.current?.querySelector<HTMLElement>(errorTargetSelector(focusRequest.target))?.focus();
+  }, [focusRequest]);
+
   return (
     <Dialog
       fullScreen
@@ -258,7 +373,7 @@ export default function OrganismEditorModal({
       slotProps={{ paper: { sx: { border: 'none', borderRadius: 0 } } }}
       aria-labelledby={TITLE_ID}
     >
-      <Shell>
+      <Shell ref={shellRef}>
         <EditorHeader>
           <BackButton type="button" onClick={onClose}>
             {/* Decorative glyph; the accessible name must be exactly the label — "left arrow back
@@ -269,13 +384,15 @@ export default function OrganismEditorModal({
               a second instance's id collision is not a reachable state. */}
           <Title id={TITLE_ID}>Organism Editor</Title>
           <Actions>
-            {/* Inert until Story 4.16 wires persistence; genuinely `disabled`, not a no-op,
-                because a control that looks live and does nothing is the worse lie (NFR-4.1). axe
-                exempts disabled controls from `color-contrast`, and MUI's own Button transition is
-                harmless here because this button never changes state — the name's validity
-                (Story 4.5) does NOT toggle it; the story that enables it must re-read
-                `EditorStatusBar.tsx`'s UNDO/SAVE transition notes before adding any state flip. */}
-            <Button type="button" variant="contained" disabled sx={BUTTON_SX}>
+            {/* Story 4.13: Save is now the gate — `handleSave` above runs `validateOrganismDraft`
+                on click. An invalid draft is refused (errors shown, focus moved, nothing closed);
+                a valid draft shows the transitional `SaveNotice` below (FD1) — nothing here
+                persists yet (Story 4.16 lands the repository write, the close and the toast in
+                this branch, replacing the notice). The button never flips `disabled` at runtime
+                any more, so the 4.3 deferred cross-fade note (`:793-799`) does not bite here: that
+                edge was between BUILDS (disabled vs. not), never between states of a live
+                control. */}
+            <Button type="button" variant="contained" onClick={handleSave} sx={BUTTON_SX}>
               Save
             </Button>
             <IconButton
@@ -288,11 +405,25 @@ export default function OrganismEditorModal({
             </IconButton>
           </Actions>
         </EditorHeader>
+        {/* Story 4.13, AC8: honest and transitional — announces on appearance (conditionally
+            mounted, `role="status"`, never `alert`: not an error, must not interrupt). Derived
+            from `errors.length`, not a flag frozen at Save time — a stale "valid" over a draft
+            the user has since broken would be the lie this line exists to avoid. Story 4.16
+            deletes this block along with `noticeRequested` and `SAVE_UNAVAILABLE_NOTICE`. */}
+        {noticeVisible && (
+          <SaveNotice role="status" data-save-notice>
+            {SAVE_UNAVAILABLE_NOTICE}
+          </SaveNotice>
+        )}
         <EditorBody>
           <OrganismEditorLayout
             basicInfo={
               <>
-                <OrganismNameField value={draft.name} onChange={setName} />
+                <OrganismNameField
+                  value={draft.name}
+                  onChange={setName}
+                  showAllErrors={saveAttempted}
+                />
                 <ColorPickerField
                   value={draft.colorToken}
                   onChange={setColorToken}
@@ -318,6 +449,7 @@ export default function OrganismEditorModal({
                 organisms={library}
                 onRulesChange={setSurvivalRules}
                 onAddRule={addRule}
+                showAllErrors={saveAttempted}
               />
             }
           />
