@@ -22,9 +22,9 @@ test.describe('app shell (Story 1.9)', () => {
     const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(bodyBg).toBe('rgb(10, 10, 10)');
 
-    // AC4's no-dead-affordance rule (Story 4.1 AC1), proven in a real browser: exactly two nav
-    // links — Battles and Organisms — Settings is still Story 5.1's.
-    await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(2);
+    // AC4's no-dead-affordance rule (Story 1.9 AC4 / Story 4.1 AC1), proven in a real browser:
+    // exactly three: Battles, Organisms and Settings — the MVP's complete set (Story 5.1).
+    await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(3);
 
     // ⚠️ Wait for hydration BEFORE asserting on errors. page.goto
     // defaults to waitUntil: 'load', and every assertion above resolves against server-rendered

@@ -12,12 +12,13 @@ import AppShell from '@/components/layout/AppShell';
 // presentational shell and grows a branch per route forever. Route groups cost one file move,
 // once. Parentheses do NOT appear in the URL: `(gallery)/page.tsx` still serves `/`.
 //
-// It now hosts `/` AND `/organisms` (Story 4.1). `/settings` (Story 5.1) belongs here too, or it
-// will ship without the shell — the exact trap app/not-found.tsx documents (a route rendered
-// under a layout that never mounts this file gets no nav, no wordmark, no <main>, and every jsdom
-// test stays green because none of them render the orphaned route). Adding a route to this group
-// is a file, not a layout change; the group's name stays historical (FD1) — renaming it to
-// `(shell)` buys nothing at runtime and is not this story's job.
+// It now hosts `/`, `/organisms` (Story 4.1) AND `/settings` (Story 5.1) — the MVP's complete
+// gallery-branch route set. Adding a route to this group is a file, not a layout change; the
+// group's name stays historical (FD1) — renaming it to `(shell)` buys nothing at runtime and is
+// not any one story's job. The trap app/not-found.tsx documents remains real for the NEXT route
+// this group gains: a page rendered under a layout that never mounts this file gets no nav, no
+// wordmark, no <main>, and every jsdom test stays green because none of them render the orphaned
+// route.
 //
 // AppShell owns the <main> landmark for this branch and is otherwise unchanged.
 export default function GalleryLayout({ children }: { children: ReactNode }) {

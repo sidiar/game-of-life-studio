@@ -173,7 +173,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **The stretched link makes all tile text unselectable** — `TitleLink`'s `::after { inset: 0 }` covers the battle name and the date, so a drag starts a link drag instead of a text selection and neither can be copied from the Gallery. Inherent to the stretched-link pattern and the accepted cost of not nesting the delete `<button>` inside an anchor; recorded because the tile's notes cover every other trade-off it makes and not this one. **Revisit only if copying a battle name from the Gallery is ever asked for.**
 
-- **AC5's route count has no automated guard** — AC5 is "routes remain exactly `/` and the battle route", i.e. a *count*, and nothing asserts the "exactly" half. The e2e proves each of the three URLs serves and survives reload, but a stray `app/**/page.tsx` added later would pass typecheck, lint, tests and `build:standalone`. The only evidence today is the build's route table pasted into a Dev Agent Record, which is not a gate. A `readdir`-based unit test over `app/` would do it. **Pick this up in Epic 5**, when `/settings` makes the expected set change for the first time.
+- ~~**AC5's route count has no automated guard**~~ — AC5 is "routes remain exactly `/` and the battle route", i.e. a *count*, and nothing asserts the "exactly" half. The e2e proves each of the three URLs serves and survives reload, but a stray `app/**/page.tsx` added later would pass typecheck, lint, tests and `build:standalone`. The only evidence today is the build's route table pasted into a Dev Agent Record, which is not a gate. A `readdir`-based unit test over `app/` would do it. ~~**Pick this up in Epic 5**, when `/settings` makes the expected set change for the first time.~~ **✅ Resolved in Story 5.1** — `apps/web/app/routes.test.ts` pins the five-file set and the no-dynamic-segment rule.
 
 ## Deferred from: Story 2-2-create-new-battle-gallery-wiring implementation (2026-08-26)
 
@@ -2142,3 +2142,33 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   any of the three". The fix is one line (move focus to Draw on Clear) but it is a design choice
   for both surfaces at once; **Story 6.11** should decide it alongside the pointer-only dish gap
   the 2.5 entry records.
+
+## Deferred from: Story 5-1-settings-page-shell implementation (2026-09-21)
+
+- **Data Management renders for the first time in Story 5.5, not this one** (FD4) — the epic AC
+  names both the Workspace Statistics and Data Management sections in the same sentence and also
+  forbids dead sections. A Data Management card with no control today would be exactly that dead
+  section: the mockup's description for it ("Export, import, and manage…") promises three buttons
+  that arrive in 5.5, 5.9 and 5.10. Workspace Statistics is different because its content already
+  exists — two counts, one `list()` each, through repositories this page owns anyway. **Flagged
+  for Sidiar**, as the one reading in this story that bends an AC's letter to honour its rule: if
+  the empty Data Management frame is wanted now instead, it is a ten-line addition with no other
+  consequence.
+
+- **The section header is now a THIRD hand copy, not a lift** (FD6) — `BattleGallery.tsx`,
+  `OrganismLibrary.tsx` and now `SettingsPage.tsx` each carry their own ~20-line
+  `SectionHeader`/`SectionTitle`/`SectionSubtitle` triplet. `OrganismLibrary.tsx`'s own comment
+  (FD9 of Story 4.1) deferred the lift to "the first story after 3.17 that touches both"
+  `BattleGallery` and `OrganismLibrary"; this story touches neither, and `OrganismLibrary.tsx` is
+  the Epic 4 lane's live file (4.16–4.22 all edit it), so a lane-5 edit there risked a guaranteed
+  merge conflict for a cosmetic gain. **Pick this up in the first story after Epic 4 closes that
+  touches `OrganismLibrary.tsx`** — the lift is now three-way, not two.
+
+- **RFC-005's `<SettingsPage settings={repo}>` tree line and `app/settings/page.tsx` path are
+  stale against what shipped** (`RFC-005:172,197`) — the tree line types the component with one
+  repository; this page takes three (`settings`, `battles`, `organisms` — the counts, and Story
+  5.10's Clear All, need them, the same "add repositories as the story reads them" pattern Story
+  4.1's Library used). The route path sketch (`app/settings/page.tsx`) predates the `(gallery)`
+  route-group split (FD1) and is illustrative, not followed. A docs-reconciliation item for the
+  next RFC touch, alongside the Story 4.1 `/organisms` entry above — **not edited here** (Sidiar
+  owns RFC amendments).
