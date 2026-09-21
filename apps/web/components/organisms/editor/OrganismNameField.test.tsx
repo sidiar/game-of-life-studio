@@ -10,9 +10,22 @@ import OrganismNameField from './OrganismNameField';
  * than a mocked `onChange` that never feeds a new value back in (`BattleNameField.test.tsx`'s
  * harness). Load-bearing for the over-limit test: whether a 6th character is KEPT is only
  * observable if the caller re-renders with whatever the field handed it. */
-function ControlledHarness({ maxLength }: { maxLength?: number }) {
+function ControlledHarness({
+  maxLength,
+  showAllErrors = false,
+}: {
+  maxLength?: number;
+  showAllErrors?: boolean;
+}) {
   const [value, setValue] = useState('');
-  return <OrganismNameField value={value} onChange={setValue} maxLength={maxLength} />;
+  return (
+    <OrganismNameField
+      value={value}
+      onChange={setValue}
+      maxLength={maxLength}
+      showAllErrors={showAllErrors}
+    />
+  );
 }
 
 const field = () => screen.getByRole('textbox', { name: 'Organism Name' });
@@ -30,7 +43,7 @@ describe('OrganismNameField', () => {
   // (a) The accessible name comes from `<label for>`, not text proximity or an `aria-label`
   // (SC 2.5.3) — the 4.4 review's id-equality lesson: match the id, not merely the text.
   it('is a required textbox labelled "Organism Name" through <label for> (AC1, AC5)', () => {
-    render(<OrganismNameField value="" onChange={() => {}} />);
+    render(<OrganismNameField value="" onChange={() => {}} showAllErrors={false} />);
 
     const input = field();
     expect(input).toBeRequired();
@@ -42,7 +55,7 @@ describe('OrganismNameField', () => {
 
   // (b)
   it('shows the placeholder and an empty value on an empty draft (AC1)', () => {
-    render(<OrganismNameField value="" onChange={() => {}} />);
+    render(<OrganismNameField value="" onChange={() => {}} showAllErrors={false} />);
 
     expect(field()).toHaveValue('');
     expect(field()).toHaveAttribute('placeholder', 'e.g., Aggressive Colonizer');
@@ -51,11 +64,13 @@ describe('OrganismNameField', () => {
   // (c) Derived from the export, never `50` — a literal would pin a default that had drifted from
   // `OrganismSchema`'s own cap and keep the suite green while doing it.
   it('the counter defaults to the schema’s cap and tracks the caller’s value (AC1, AC2)', () => {
-    const { rerender } = render(<OrganismNameField value="" onChange={() => {}} />);
+    const { rerender } = render(
+      <OrganismNameField value="" onChange={() => {}} showAllErrors={false} />,
+    );
 
     expect(screen.getByText(`0 / ${MAX_ORGANISM_NAME_LENGTH}`)).toBeInTheDocument();
 
-    rerender(<OrganismNameField value="Glider" onChange={() => {}} />);
+    rerender(<OrganismNameField value="Glider" onChange={() => {}} showAllErrors={false} />);
 
     expect(screen.getByText(`6 / ${MAX_ORGANISM_NAME_LENGTH}`)).toBeInTheDocument();
     expect(screen.queryByText(`0 / ${MAX_ORGANISM_NAME_LENGTH}`)).toBeNull();
@@ -65,14 +80,21 @@ describe('OrganismNameField', () => {
   // (`deferred-work.md`'s code-unit entry). `{...}` deliberately: a JSX attribute STRING is raw
   // text and would not interpret the escape.
   it('counts UTF-16 code units, so an emoji counts as 2 (AC1)', () => {
-    render(<OrganismNameField value={'a\u{1F44D}b'} onChange={() => {}} maxLength={10} />);
+    render(
+      <OrganismNameField
+        value={'a\u{1F44D}b'}
+        onChange={() => {}}
+        maxLength={10}
+        showAllErrors={false}
+      />,
+    );
 
     expect(screen.getByText('4 / 10')).toBeInTheDocument();
   });
 
   // (e) FD2: a fresh editor does not open red. The required error waits for the first edit.
   it('shows no error on mount with an empty value (AC3)', () => {
-    render(<OrganismNameField value="" onChange={() => {}} />);
+    render(<OrganismNameField value="" onChange={() => {}} showAllErrors={false} />);
 
     const input = field();
     expect(screen.queryByRole('alert')).toBeNull();
@@ -140,7 +162,9 @@ describe('OrganismNameField', () => {
   // draft, a lowered cap — is an error on mount. Without this the counter would already be red
   // while `aria-invalid` said false and no alert existed: colour as the only indicator.
   it('flags an over-limit value on mount, before any edit (AC3)', () => {
-    render(<OrganismNameField value="abcdef" onChange={() => {}} maxLength={5} />);
+    render(
+      <OrganismNameField value="abcdef" onChange={() => {}} maxLength={5} showAllErrors={false} />,
+    );
 
     expect(screen.getByRole('alert')).toHaveTextContent('Name cannot exceed 5 characters');
     expect(field()).toBeInvalid();
@@ -183,7 +207,7 @@ describe('OrganismNameField', () => {
   it('calls onChange with the full new value on a keystroke (AC1)', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
-    render(<OrganismNameField value="Glider" onChange={handleChange} />);
+    render(<OrganismNameField value="Glider" onChange={handleChange} showAllErrors={false} />);
 
     await user.type(field(), '!', { initialSelectionStart: 6, initialSelectionEnd: 6 });
 
@@ -233,7 +257,9 @@ describe('OrganismNameField', () => {
   // (m) Three states, because the describedby list and the alert differ in each.
   describe('has no axe accessibility violations (AC7)', () => {
     it('clean', async () => {
-      const { container } = render(<OrganismNameField value="Glider" onChange={() => {}} />);
+      const { container } = render(
+        <OrganismNameField value="Glider" onChange={() => {}} showAllErrors={false} />,
+      );
 
       expect((await axe(container)).violations).toEqual([]);
     });
@@ -256,5 +282,54 @@ describe('OrganismNameField', () => {
 
       expect((await axe(container)).violations).toEqual([]);
     });
+  });
+
+  // (r) Story 4.13's Save-time override: an untouched, empty field shows the required error the
+  // moment `showAllErrors` flips true.
+  it('(r) the override reveals the required error on an untouched empty field (Story 4.13)', () => {
+    render(<OrganismNameField value="" onChange={() => {}} showAllErrors={true} />);
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Organism name is required');
+    expect(field()).toBeInvalid();
+    const ids = describedByIds();
+    expect(ids[0]).toBe(alert.id);
+  });
+
+  // (s) The override has nothing to add to a valid value — it is not a second, stricter check.
+  it('(s) the override reveals nothing on a valid value (Story 4.13)', () => {
+    render(<OrganismNameField value="Glider" onChange={() => {}} showAllErrors={true} />);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(field()).not.toBeInvalid();
+  });
+
+  // (t) Flipping the override mounts the alert exactly once — never a duplicate live region.
+  it('(t) flipping the override on an untouched field mounts the alert once (Story 4.13)', () => {
+    const { rerender } = render(
+      <OrganismNameField value="" onChange={() => {}} showAllErrors={false} />,
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    rerender(<OrganismNameField value="" onChange={() => {}} showAllErrors={true} />);
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  // (u) axe with the override-revealed error.
+  it('(u) has no axe violations with the override-revealed error (Story 4.13)', async () => {
+    const { container } = render(
+      <OrganismNameField value="" onChange={() => {}} showAllErrors={true} />,
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    expect((await axe(container)).violations).toEqual([]);
+  });
+
+  // (v) The gate's focus target — the modal locates this control by attribute, never label text.
+  it('(v) the input carries data-organism-name (Story 4.13)', () => {
+    render(<OrganismNameField value="" onChange={() => {}} showAllErrors={false} />);
+
+    expect(field()).toHaveAttribute('data-organism-name');
   });
 });

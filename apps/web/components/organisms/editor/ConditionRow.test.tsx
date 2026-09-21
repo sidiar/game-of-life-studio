@@ -9,6 +9,8 @@ import {
   createNewConditionDraft,
   MIN_LESS_THAN_MAX,
   operatorLabel,
+  ORGANISM_REQUIRED,
+  wholeNumberMessage,
   type ConditionDraft,
 } from '@/lib/organisms/conditionDraft';
 import ConditionRow, { type ConditionRowProps } from './ConditionRow';
@@ -34,6 +36,7 @@ function renderRow(
     defaultOrganismId: 'org-a',
     onChange,
     onDelete,
+    showAllErrors: false,
     ...overrides,
   };
   const utils = render(
@@ -336,6 +339,92 @@ describe('ConditionRow', () => {
     await user.type(screen.getByRole('textbox', { name: 'Condition 1 maximum' }), '2');
     rerenderRow({ ...range, pattern: ['3', '2'] });
     expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect((await axe(container)).violations).toEqual([]);
+  });
+
+  // (o) Story 4.13's Save-time override: a fresh, untouched scalar row shows its bounds error.
+  it('(o) a fresh scalar row under the override shows its bounds error untouched (Story 4.13)', () => {
+    renderRow({ ...NEIGHBOR_EMPTY, property: 'age', pattern: '' }, { showAllErrors: true });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(wholeNumberMessage('Enter', 0, 999));
+    const value = screen.getByRole('textbox', { name: 'Condition 1 value' });
+    expect(value).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  // (p) The 4.11 "Max hidden while Min untouched" gap, closed by the override.
+  it('(p) a Max-first gap is closed by the override (Story 4.13)', () => {
+    const range: ConditionDraft = {
+      id: 'c1',
+      property: 'age',
+      operator: 'range',
+      pattern: ['5', ''],
+    };
+    renderRow(range, { showAllErrors: true });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(wholeNumberMessage('Max must be', 0, 999));
+    const max = screen.getByRole('textbox', { name: 'Condition 1 maximum' });
+    const min = screen.getByRole('textbox', { name: 'Condition 1 minimum' });
+    expect(max).toHaveAttribute('aria-invalid', 'true');
+    expect(min).not.toHaveAttribute('aria-invalid');
+  });
+
+  // (q) The empty organism select under the override (the 4.11 AC5 case, now with the association).
+  it('(q) an empty organism select shows its error only under the override (Story 4.13)', () => {
+    const draft: ConditionDraft = {
+      id: 'c1',
+      property: 'organismType',
+      operator: 'eq',
+      pattern: '',
+    };
+    const { rerender } = renderRow(draft, { organisms: [], defaultOrganismId: '' });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const value = screen.getByRole('combobox', { name: 'Condition 1 value' });
+    expect(value).not.toHaveAttribute('aria-invalid');
+
+    rerender(
+      <fieldset>
+        <ConditionRow
+          draft={draft}
+          index={0}
+          organisms={[]}
+          defaultOrganismId=""
+          onChange={vi.fn()}
+          onDelete={vi.fn()}
+          showAllErrors={true}
+        />
+      </fieldset>,
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(ORGANISM_REQUIRED);
+    expect(value).toHaveAttribute('aria-invalid', 'true');
+    expect(value).toHaveAttribute('aria-describedby', alert.id);
+  });
+
+  // (r) A valid row shows nothing, override or not.
+  it('(r) a valid row under the override shows nothing (Story 4.13)', () => {
+    renderRow({ ...NEIGHBOR_EMPTY, pattern: '3' }, { showAllErrors: true });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Condition 1 value' })).not.toHaveAttribute(
+      'aria-invalid',
+    );
+  });
+
+  // (s) axe with (p) visible.
+  it('(s) has no axe violations with the Max-first gap visible under the override (Story 4.13)', async () => {
+    const range: ConditionDraft = {
+      id: 'c1',
+      property: 'age',
+      operator: 'range',
+      pattern: ['5', ''],
+    };
+    const { container } = renderRow(range, { showAllErrors: true });
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
     expect((await axe(container)).violations).toEqual([]);
   });
 });

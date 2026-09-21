@@ -67,6 +67,7 @@ function renderCard(
     dragging: false,
     dropIndicator: null,
     describedBy: 'instr',
+    showAllErrors: false,
     ...overrides,
   };
   const utils = render(
@@ -170,6 +171,7 @@ describe('RuleCard', () => {
             dragging={false}
             dropIndicator={null}
             describedBy="instr"
+            showAllErrors={false}
           />
         </ol>
       </>,
@@ -347,6 +349,7 @@ describe('RuleCard', () => {
             dragging={false}
             dropIndicator="after"
             describedBy="instr"
+            showAllErrors={false}
           />
         </ol>
       </>,
@@ -373,6 +376,7 @@ describe('RuleCard', () => {
             dragging={false}
             dropIndicator={null}
             describedBy="instr"
+            showAllErrors={false}
           />
         </ol>
       </>,
@@ -436,5 +440,24 @@ describe('RuleCard', () => {
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
+  });
+
+  // (t) Story 4.13: a zero-condition card under the override shows the rule alert inside its group.
+  it('(t) a zero-condition card under the override shows the rule alert inside its group (Story 4.13)', () => {
+    const emptyRule: RuleDraft = { ...RULE, conditions: [] };
+    renderCard({ rule: emptyRule, showAllErrors: true });
+
+    const group = screen.getByRole('group', { name: 'Rule 1' });
+    expect(within(group).getByRole('alert')).toHaveTextContent(
+      'Rule must have at least one condition',
+    );
+  });
+
+  // (u) A card with Conway's rows under the override shows none.
+  it("(u) a card with Conway's rows under the override shows no rule alert (Story 4.13)", () => {
+    renderCard({ showAllErrors: true });
+
+    const group = screen.getByRole('group', { name: 'Rule 1' });
+    expect(within(group).queryByRole('alert')).not.toBeInTheDocument();
   });
 });

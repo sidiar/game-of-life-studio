@@ -114,6 +114,8 @@ export interface RulesEditorProps {
    * in here mints an id.
    */
   onAddRule(): void;
+  /** Story 4.13's Save-time override, threaded through to every `<RuleCard>`. */
+  showAllErrors: boolean;
 }
 
 /** The reorder gesture in progress: `fromIndex` is where the drag started, `toIndex` is the
@@ -129,6 +131,7 @@ export default function RulesEditor({
   organisms,
   onRulesChange,
   onAddRule,
+  showAllErrors,
 }: RulesEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const prevIdsRef = useRef<readonly string[] | null>(null);
@@ -389,6 +392,7 @@ export default function RulesEditor({
                 dragging={drag?.id === rule.id}
                 dropIndicator={dropTargetId === rule.id ? dropSide : null}
                 describedBy={instructionsId}
+                showAllErrors={showAllErrors}
               />
             ))}
           </RulesList>

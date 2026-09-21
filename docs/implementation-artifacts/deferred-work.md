@@ -1095,11 +1095,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   did — that persisted-shape change stays with Stories 5.7/5.8 (the `.min(1)` entry above). The
   editor's inline "required" error and 4.13's Save gate are the only enforcement; an imported
   workspace with an empty organism name loads and renders an empty card title today.
-- **`role="alert"` per field vs. a Save-time summary.** The inline error line is `role="alert"`,
-  mounted once per transition (FD4). When Story 4.13 adds the summary announcement on Save, it
-  should decide whether the per-field alert stays (a double announcement when Save surfaces an
-  error already shown) or the inline line drops to `role="status"` and the summary alone is
-  assertive.
+- ~~**`role="alert"` per field vs. a Save-time summary.**~~ ✅ Resolved in Story 4.13 (FD6): the
+  per-field `role="alert"` stays, no summary region is added. A refused Save is the assertive case;
+  the one cost — the first error may be read twice on Save (its alert mounts, then focus lands on a
+  control described by it) — is accepted and recorded.
 - **The 2026-06-01 mockup header shows the organism name as display text**
   (`organism-editor.html:49-55, 900`). The shell's title is the static "Organism Editor" (Story 4.3
   FD1) and the name lives in the Basic Information column, as this story's AC says. The story that
@@ -1140,7 +1139,8 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   the Save gate, that AC item refers to Story 4.11's numeric condition inputs; 4.13 should confirm
   this and not add a dominance-specific check. **Confirmed (Story 4.11, 2026-09-17):** the function
   4.13's gate calls per condition row is `validateConditionDraft` (`lib/organisms/conditionDraft.ts`)
-  — nothing else in `RuleDraft`/`OrganismDraft` holds an unvalidated number.
+  — nothing else in `RuleDraft`/`OrganismDraft` holds an unvalidated number. **✅ Confirmed in Story
+  4.13:** `validateOrganismDraft` writes no dominance check.
 - **Story 6.9's default-speed setting and 3.16's Grid Size slider now have two native-range
   precedents** (`SpeedControl.tsx`, `DominanceField.tsx`) and one shared thumb-glow token
   (`--gol-shadow-slider-thumb`) between them. Whichever lands the `<LadderSlider>` /
@@ -1164,7 +1164,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   blurs the textbox first and is fine. 4.13/4.23 should either flush the field (a `commit` exposed
   through a ref, or commit-on-unmount) or accept that pending text is discarded and say so; the
   4.13 item above ("no dominance-specific check") stands, this is about *when* the draft is read,
-  not whether it is valid.
+  not whether it is valid. **Partial — Story 4.13 (FD7):** moot for the gate itself — a pointer
+  Save blurs the textbox first, a keyboard Save means focus has already left it, and no Save
+  hotkey exists. The *when-is-the-draft-read* question re-points to Story 4.23 (the dirty diff)
+  and Story 4.16 (the persisted value); revisit if a Save hotkey ever lands.
 - **`Field` / `Label` / `Slider` styled blocks now exist in three hand copies** —
   `OrganismNameField.tsx` (Field, Label), `SpeedControl.tsx` (Slider) and `DominanceField.tsx`
   (all three). Pre-existing by design (components split by mode; no abstraction over one caller);
@@ -1216,7 +1219,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   Story 6.6's call — the same shape as the 3.16 `<LadderSlider>` / `<RangeSlider>` question above.
 - **The 4.13 Save gate has nothing to check for `agingEnabled`.** It is a boolean the switch can
   only set to `true`/`false` — there is no "invalid" state to guard against, unlike Story 4.11's
-  numeric condition inputs.
+  numeric condition inputs. **✅ Confirmed in Story 4.13:** no `agingEnabled` check written.
 
 ## Deferred from: Story 4-8-color-picker-selection-defaults (2026-09-16)
 
@@ -1259,7 +1262,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **Story 4.13's "no color" validation item is unreachable by construction.** `draft.colorToken`
   is always a `PALETTE` id (seeded by `defaultColorToken`, written only by a radio whose `value` is
   a `PALETTE` id); 4.13 should confirm this and not add a colour-specific check — the same note the
-  4.6 section left for dominance.
+  4.6 section left for dominance. **✅ Confirmed in Story 4.13:** no colour check written; the
+  epic's "no color" AC item is recorded as unreachable by construction, not implemented.
 - **Story 4.25 must pass the battle's library** to `createNewOrganismDraft` / the modal's
   `library` prop — the roster is not the library, and a default derived from the roster alone
   would reuse a token another library organism holds.
@@ -1597,6 +1601,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   errors in AC4 order (min → max → pair) and a field shows only its own error once touched, so a
   Max-first user with Min empty sees nothing until Min is typed. Owner decision (review of 4.11,
   option 1): keep as specified; Story 4.13's Save-time show-everything override surfaces it there.
+  **✅ Resolved in Story 4.13:** the `showAllErrors` override reveals the Max error at Save,
+  regardless of `touched`.
 - **The PRD's per-property tooltips are not built** — `title` is not keyboard-reachable and the
   editor has no tooltip primitive; the copy is PRD-verbatim (FR-2.5) and waits for a help-text
   touch (Story 6.11).
@@ -1606,7 +1612,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **Age's editor cap is 999** (design doc) inside the schema's 65534 — the summary's 100/120 class.
   A record over 999 arriving by import is invalid in edit mode until changed: the bounds error
   shows once its input is touched, or at Story 4.13's Save-time show-everything override — never
-  on mount (4.5 FD2).
+  on mount (4.5 FD2). Surfaces at Save from Story 4.13, as noted above.
 - **Range validates `<` where the schema accepts `<=`** — same class as the age cap, deliberate
   (AC4/FD8): an `[n, n]` range still parses on import, it just cannot be typed in the editor.
 - **Condition delete has no confirmation and shares 4.10's pointer double-click cascade** (FD7) —
@@ -1948,3 +1954,47 @@ owner decision was left open. Deferred:
   while the pointer is over the 16px handle; for the bulk of a real drag the page shows the card
   body's cursor. A body-level `cursor` set for the life of the drag is the fix; it belongs with the
   dragging-CSS item above (the mockup has none) in the UX reconciliation touch.
+
+## Deferred from: Story 4-13-editor-validation-feedback (2026-09-21)
+
+1. **The "Organism saved successfully" toast and the post-save "No rules defined. Organism will
+   have no living cells." warning are Story 4.16's, not this story's.** The epic's AC3 (warning)
+   and AC4 (toast) both report on a *persisted* save, and the design doc places them after
+   "Organism saved to library" / "Editor closes" (`organism-editor-design.md:553-559`) — nothing
+   persists before Story 4.16, and `main` deploys to a public GitHub Pages site on every green
+   merge (`.github/workflows/ci.yml:176-190`), so shipping a "saved" toast over an unpersisted
+   draft would be a lie about data loss. Proposed AC text for Story 4.16 (`epics.md`, at the
+   owner's call): "**And** on a successful save the editor closes and the Library shows the
+   'Organism saved successfully' toast — an in-flow `role="status"` region on the Library,
+   published once the editor's exit transition has finished (`onExited`), never while the dialog
+   is open (`useInertBackground.ts:66-68` sweeps body children appended under a dialog — the toast
+   must publish on `onExited`, not on save); **And** when the saved organism has zero rules the
+   toast is accompanied by the non-blocking 'No rules defined. Organism will have no living cells.'
+   warning." Toast-host facts for that story's create-story: MUI `Snackbar` is the first consumer
+   of the no-op `--mui-palette-SnackbarContent-bg` token (`deferred-work.md:92`); the "Organism
+   deleted" toast is Story 4.22's (`epics.md:1260`), a separate host.
+2. **The AC8 notice (`SaveNotice`, `SAVE_UNAVAILABLE_NOTICE`, `noticeRequested`) is transitional.**
+   Story 4.16 deletes all three, along with modal tests (14)/(15) and e2e test 3 — the honest
+   "nothing persisted yet" line has no reason to exist once a valid Save actually persists.
+3. **No summary live region was added (FD6).** The per-field `role="alert"` lines stay; a summary
+   ("3 errors") would be a third reading of what the alert and the focused control's describedby
+   already say.
+4. **No `aria-invalid` on the Conditions group.** ARIA 1.2 does not allow it on `group`/`button`
+   (FD4); the association is `aria-describedby` on the "+ Add Condition" button instead. Revisit
+   only if an assistive technology is found not to read a button's `aria-describedby`.
+5. **The first error may be announced twice on Save** — its `role="alert"` line mounts, and then
+   focus lands on a control whose `aria-describedby` names that same line. Accepted (FD6); the
+   alternative (dropping the inline line to `role="status"` plus one assertive summary) is a
+   follow-up, not a re-architecture.
+6. **No Save hotkey (Ctrl/Cmd+S) exists**, and none is specified. If one ever lands, FD7's "focus
+   has already left the textbox by the time Save runs" no longer holds for `<DominanceField>`, and
+   a draft-flush (a `commit` exposed through a ref, or commit-on-unmount) is due.
+7. **`ErrorText` now lives in `fieldStyles.ts`** (`OrganismNameField`, `ConditionRow`,
+   `ConditionsEditor` — the Story 4.7 three-callers threshold). `VisuallyHidden` is still at two
+   hand copies (`GridSettingsSection.tsx`, `ColorPickerField.tsx`) — unchanged by this story.
+8. **The mockup has no error CSS at all** (`organism-editor.html` carries no `error`/`invalid` rule
+   sets) — every colour, border and glyph this story ships is 4.5's/4.11's reading of the design
+   doc's prose (`organism-editor-design.md:772-777`), not a mockup trace.
+9. **A rule whose every row is invalid shows one error per row, never a rule-level roll-up** — by
+   design (AC5's exclusivity: a rule with rows carries no zero-condition error, only its rows'
+   own).

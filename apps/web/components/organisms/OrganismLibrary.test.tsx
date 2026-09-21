@@ -376,7 +376,8 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
     expect(dialog).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back to Library' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    // Story 4.13: Save is now the gate's enabled control, not a disabled placeholder.
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
 
   it('Escape closes the editor and returns focus to the create button', async () => {

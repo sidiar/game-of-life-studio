@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef } from 'react';
 import { styled } from '@mui/material/styles';
 import {
   appendCondition,
@@ -10,7 +10,8 @@ import {
   removeCondition,
   replaceCondition,
 } from '@/lib/organisms/conditionDraft';
-import { Fieldset, Legend } from './fieldStyles';
+import { RULE_NEEDS_CONDITION } from '@/lib/organisms/ruleDraft';
+import { ErrorText, Fieldset, Legend } from './fieldStyles';
 import ConditionRow from './ConditionRow';
 
 /**
@@ -29,7 +30,12 @@ import ConditionRow from './ConditionRow';
  * row, else `[data-add-condition]` when no row remains — every target is non-destructive (the
  * Story 4.10 AC5 reasoning); any other change moves nothing.
  *
- * (Story 4.11) (UX-DR10) (UX-DR17)
+ * Story 4.13 flags a zero-condition card at Save: `showAllErrors && conditions.length === 0`
+ * mounts a `role="alert"` line between the legend and the rows, and marks "+ Add Condition" —
+ * the control that fixes the error — with `aria-describedby` and `data-invalid` (FD4: `group` and
+ * `button` do not allow `aria-invalid` in ARIA 1.2; axe's `aria-allowed-attr` fails either).
+ *
+ * (Story 4.11) (Story 4.13) (UX-DR10) (UX-DR14) (UX-DR17)
  */
 
 const AddConditionButton = styled('button')({
@@ -51,6 +57,14 @@ const AddConditionButton = styled('button')({
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '2px',
   },
+  // Story 4.13 (FD4): the border-only boundary cue — `aria-invalid` is not allowed on `button` in
+  // ARIA 1.2 (axe `aria-allowed-attr`), so the button carries `data-invalid` + `aria-describedby`
+  // instead; the label text stays `--gol-text-secondary`, never `--gol-danger` (that pairing on
+  // `--gol-bg-hover`, the hover fill, is the 4.48:1 pair `themeTokens.test.ts` deliberately does
+  // not gate).
+  '&[data-invalid]': {
+    borderColor: 'var(--gol-danger)',
+  },
 });
 
 export interface ConditionsEditorProps {
@@ -60,16 +74,22 @@ export interface ConditionsEditorProps {
   onConditionsChange(
     update: (conditions: readonly ConditionDraft[]) => readonly ConditionDraft[],
   ): void;
+  /** Story 4.13's Save-time override: with zero rows, flags the card at the control that fixes it
+   * ("+ Add Condition") rather than the fieldset (FD4). Passed through to every `<ConditionRow>`. */
+  showAllErrors: boolean;
 }
 
 export default function ConditionsEditor({
   conditions,
   organisms,
   onConditionsChange,
+  showAllErrors,
 }: ConditionsEditorProps) {
   const rootRef = useRef<HTMLFieldSetElement>(null);
   const prevIdsRef = useRef<readonly string[] | null>(null);
   const defaultOrganismId = organisms[0]?.id ?? '';
+  const errorId = useId();
+  const needsCondition = showAllErrors && conditions.length === 0;
 
   const handleChange = useCallback(
     (next: ConditionDraft) => onConditionsChange((c) => replaceCondition(c, next)),
@@ -129,6 +149,11 @@ export default function ConditionsEditor({
   return (
     <Fieldset ref={rootRef} data-conditions>
       <Legend>Conditions (all must match)</Legend>
+      {needsCondition && (
+        <ErrorText id={errorId} role="alert" data-rule-error>
+          <span aria-hidden="true">{'⚠︎'}</span> {RULE_NEEDS_CONDITION}
+        </ErrorText>
+      )}
       {conditions.map((condition, index) => (
         <ConditionRow
           key={condition.id}
@@ -138,9 +163,16 @@ export default function ConditionsEditor({
           defaultOrganismId={defaultOrganismId}
           onChange={handleChange}
           onDelete={handleDelete}
+          showAllErrors={showAllErrors}
         />
       ))}
-      <AddConditionButton type="button" data-add-condition onClick={addCondition}>
+      <AddConditionButton
+        type="button"
+        data-add-condition
+        aria-describedby={needsCondition ? errorId : undefined}
+        data-invalid={needsCondition || undefined}
+        onClick={addCondition}
+      >
         + Add Condition
       </AddConditionButton>
     </Fieldset>

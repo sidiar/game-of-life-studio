@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
 import { conditionDraftFrom, type ConditionDraft } from '@/lib/organisms/conditionDraft';
+import { RULE_NEEDS_CONDITION } from '@/lib/organisms/ruleDraft';
 import ConditionsEditor from './ConditionsEditor';
 
 const ORGANISMS = [
@@ -26,9 +27,11 @@ const TWO: readonly ConditionDraft[] = CONWAYS_CLASSIC.survivalRules[1].conditio
 function Harness({
   initial,
   onState,
+  showAllErrors = false,
 }: {
   initial: readonly ConditionDraft[];
   onState?: (conditions: readonly ConditionDraft[]) => void;
+  showAllErrors?: boolean;
 }) {
   const [conditions, setConditions] = useState<readonly ConditionDraft[]>(initial);
   useEffect(() => {
@@ -39,6 +42,7 @@ function Harness({
       conditions={conditions}
       organisms={ORGANISMS}
       onConditionsChange={(update) => setConditions((current) => update(current))}
+      showAllErrors={showAllErrors}
     />
   );
 }
@@ -183,5 +187,53 @@ describe('ConditionsEditor', () => {
 
     const empty = render(<Harness initial={NONE} />);
     expect((await axe(empty.container)).violations).toEqual([]);
+  });
+
+  // (l) Story 4.13: zero rows + the override shows the alert, and the add button is described and
+  // marked.
+  it('(l) zero rows + override shows the alert; the add button is described and marked (Story 4.13)', () => {
+    render(<Harness initial={NONE} showAllErrors={true} />);
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(RULE_NEEDS_CONDITION);
+    const add = addButton();
+    expect(add).toHaveAttribute('aria-describedby', alert.id);
+    expect(add).toHaveAttribute('data-invalid');
+  });
+
+  // (m) Zero rows without the override — nothing (the existing (a) case, restated for the new prop).
+  it('(m) zero rows without the override shows nothing (Story 4.13)', () => {
+    render(<Harness initial={NONE} showAllErrors={false} />);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(addButton()).not.toHaveAttribute('data-invalid');
+  });
+
+  // (n) Adding a row clears all three on the same render.
+  it('(n) adding a row clears the alert, describedby and data-invalid (Story 4.13)', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={NONE} showAllErrors={true} />);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    await user.click(addButton());
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(addButton()).not.toHaveAttribute('aria-describedby');
+    expect(addButton()).not.toHaveAttribute('data-invalid');
+  });
+
+  // (o) Rows + override → no rule error, only the rows' own.
+  it('(o) rows present under the override show no rule-level error (Story 4.13)', () => {
+    render(<Harness initial={TWO} showAllErrors={true} />);
+
+    expect(screen.queryByText(RULE_NEEDS_CONDITION)).not.toBeInTheDocument();
+  });
+
+  // (p) axe with (l) visible.
+  it('(p) has no axe violations with the zero-condition alert visible (Story 4.13)', async () => {
+    const { container } = render(<Harness initial={NONE} showAllErrors={true} />);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    expect((await axe(container)).violations).toEqual([]);
   });
 });

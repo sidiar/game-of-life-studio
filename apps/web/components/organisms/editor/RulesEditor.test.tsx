@@ -51,9 +51,11 @@ const THREE: readonly RuleDraft[] = [
 function Harness({
   initial,
   onState,
+  showAllErrors = false,
 }: {
   initial: readonly RuleDraft[];
   onState?: (rules: readonly RuleDraft[]) => void;
+  showAllErrors?: boolean;
 }) {
   const [rules, setRules] = useState<readonly RuleDraft[]>(initial);
   useEffect(() => {
@@ -73,6 +75,7 @@ function Harness({
         organisms={ORGANISMS}
         onRulesChange={(update) => setRules((current) => update(current))}
         onAddRule={addRule}
+        showAllErrors={showAllErrors}
       />
     </>
   );
@@ -652,5 +655,15 @@ describe('RulesEditor', () => {
 
       expect((await axe(container)).violations).toEqual([]);
     });
+  });
+
+  // (y) Story 4.13: the override reaches every card.
+  it('(y) the override reaches every card (Story 4.13)', () => {
+    const emptied: readonly RuleDraft[] = [{ ...THREE[0], conditions: [] }, THREE[1], THREE[2]];
+    render(<Harness initial={emptied} showAllErrors={true} />);
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    const first = screen.getByRole('group', { name: 'Rule 1' });
+    expect(within(first).getByRole('alert')).toBeInTheDocument();
   });
 });

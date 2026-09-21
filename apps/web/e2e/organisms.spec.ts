@@ -302,7 +302,8 @@ test.describe('editor modal shell (Story 4.3)', () => {
     expect(scriptsOnOpen).not.toEqual([]);
     await expect(dialog.getByRole('heading', { level: 2, name: 'Organism Editor' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Back to Library' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+    // Story 4.13: Save is now the gate's enabled control.
+    await expect(dialog.getByRole('button', { name: 'Save' })).toBeEnabled();
     await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
 
     // fullScreen: the paper spans the viewport, with the theme's dialog border and radius
@@ -1436,9 +1437,9 @@ test.describe('color reuse warning (Story 4.9)', () => {
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(toggle).toBeFocused();
     await expect(basicInfo.locator('[data-selected-name]')).toHaveText(COLLIDING_NAME);
-    // "Save is unaffected" as a before/after comparison: `toBeDisabled()` alone would also hold if
-    // the warning had disabled it (it is Story 4.16's inert button either way).
-    await expect(saveButton).toBeDisabled();
+    // "Save is unaffected" as a before/after comparison — the Story 4.13 gate does not react to a
+    // colour pick, which is neither a name, rule nor condition field it validates.
+    await expect(saveButton).toBeEnabled();
     expect(await saveButton.evaluate((el) => el.outerHTML)).toBe(saveBefore);
     // The warning is still visible under the chip row while the palette is collapsed.
     await expect(status).toContainText(COLLISION_SENTENCE);
@@ -2109,6 +2110,151 @@ test.describe('rule reordering (Story 4.12)', () => {
     // Never mid-drag — `opacity: 0.5` on the dragged card is a transient pointer state, not one
     // of the settled states this idiom scans (FD7).
     await expect.poll(() => badges(rules)).toEqual(['Survive', 'Born', 'Die']);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});
+
+test.describe('editor validation & feedback (Story 4.13)', () => {
+  async function openRules(page: Page) {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const rules = dialog.getByRole('region', { name: 'Survival Rules' });
+    const headerAdd = rules.locator('[data-add-rule="header"]');
+    return { dialog, rules, headerAdd };
+  }
+
+  function cardGroup(rules: Locator, n: number) {
+    return rules.getByRole('group', { name: `Rule ${n}`, exact: true });
+  }
+
+  function row(card: Locator, n: number) {
+    return {
+      property: card.getByRole('combobox', { name: `Condition ${n} property`, exact: true }),
+      operator: card.getByRole('combobox', { name: `Condition ${n} operator`, exact: true }),
+      value: card
+        .getByRole('combobox', { name: `Condition ${n} value`, exact: true })
+        .or(card.getByRole('textbox', { name: `Condition ${n} value`, exact: true })),
+      min: card.getByRole('textbox', { name: `Condition ${n} minimum`, exact: true }),
+      max: card.getByRole('textbox', { name: `Condition ${n} maximum`, exact: true }),
+    };
+  }
+
+  const save = (dialog: Locator) => dialog.getByRole('button', { name: 'Save' });
+
+  test('a fresh editor Save is refused: the name error, the red state, focus on the name field, zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    const { dialog } = await openRules(page);
+    await save(dialog).click();
+
+    await expect(dialog.getByRole('alert')).toHaveText(/Organism name is required/);
+    const name = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await expect(name).toHaveAttribute('aria-invalid', 'true');
+    await expect(name).toBeFocused();
+    await expect(dialog).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+
+  test('three errors at once, in document order; each clears on its own fix; focus walks the list', async ({
+    page,
+  }) => {
+    const { dialog, rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
+    await headerAdd.click();
+    const card2 = cardGroup(rules, 2);
+    await card2.locator('[data-add-condition]').click();
+    await row(card2, 1).property.selectOption('age');
+    await row(card2, 1).operator.selectOption('range');
+    await row(card2, 1).min.fill('5');
+    // Max left untouched.
+
+    await save(dialog).click();
+    await expect(dialog.getByRole('alert')).toHaveCount(3);
+    const name = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await expect(name).toBeFocused();
+
+    await name.fill('Glider');
+    await expect(dialog.getByRole('alert')).toHaveCount(2);
+
+    await save(dialog).click();
+    const card1 = cardGroup(rules, 1);
+    const addCondition1 = card1.getByRole('button', { name: '+ Add Condition' });
+    await expect(addCondition1).toBeFocused();
+    await expect(addCondition1).toHaveAttribute('data-invalid', 'true');
+    // The 4.5 attribute-selector idiom — `useId` ids carry colons.
+    const describedById = await addCondition1.getAttribute('aria-describedby');
+    expect(describedById).not.toBeNull();
+    await expect(page.locator(`[id="${describedById}"]`)).toHaveText(
+      /Rule must have at least one condition/,
+    );
+
+    await addCondition1.click();
+    await expect(dialog.getByRole('alert')).toHaveCount(1);
+
+    await save(dialog).click();
+    const max = row(card2, 1).max;
+    await expect(max).toBeFocused();
+    await expect(max).toHaveAttribute('aria-invalid', 'true');
+
+    await max.fill('9');
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+  });
+
+  test('zero rules is not refused; the notice is honest', async ({ page, browserName }) => {
+    const { dialog, rules } = await openRules(page);
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
+
+    const saveButton = save(dialog);
+    await saveButton.click();
+
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+    await expect(dialog.locator('[aria-invalid="true"]')).toHaveCount(0);
+    await expect(rules.locator('[data-rules-empty-state]')).toBeVisible();
+    // Not imported: the spec imports only `@gol/*` (the 4.10 idiom) — `SAVE_UNAVAILABLE_NOTICE`'s
+    // literal, from `OrganismEditorModal.tsx`.
+    await expect(dialog.locator('[data-save-notice]')).toHaveText(
+      'Valid organism — saving to the library is not available yet.',
+    );
+    // Focus did not move. WebKit does not focus a `<button>` on click (the 4.3 note), so there
+    // Save itself never received focus either — assert only that the name field did not steal it.
+    if (browserName === 'webkit') {
+      await expect(dialog.getByRole('textbox', { name: 'Organism Name' })).not.toBeFocused();
+    } else {
+      await expect(saveButton).toBeFocused();
+    }
+  });
+
+  test('keyboard-only refusal', async ({ page }) => {
+    const { dialog } = await openRules(page);
+    await save(dialog).focus();
+    await page.keyboard.press('Enter');
+
+    await expect(dialog.getByRole('alert')).toHaveText(/Organism name is required/);
+    const name = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await expect(name).toHaveAttribute('aria-invalid', 'true');
+    await expect(name).toBeFocused();
+
+    // The gate adds no listener — Escape still closes the dialog.
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test('axe after a refused Save', async ({ page }) => {
+    const { dialog } = await openRules(page);
+    await save(dialog).click();
+    await expect(dialog.getByRole('alert')).toBeVisible();
+    // The header Button's own MUI transition (the 4.5 idiom).
+    await page.waitForTimeout(300);
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);

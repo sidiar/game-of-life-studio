@@ -1,6 +1,8 @@
 import { NEW_ORGANISM_DOMINANCE, type Organism } from '@gol/domain';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
-import type { RuleDraft } from './ruleDraft';
+import { type ConditionDraftField, validateConditionDraft } from './conditionDraft';
+import { ruleNeedsCondition, RULE_NEEDS_CONDITION, type RuleDraft } from './ruleDraft';
+import { validateOrganismName } from './organismName';
 
 /**
  * The editor's unsaved organism (RFC-005 Decision 1: ephemeral UI state, local to the modal —
@@ -37,7 +39,8 @@ export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled'
  * editor passes the same list; Story 4.17 does not call this factory at all, it seeds from the
  * record. `survivalRules` seeds to a FRESH empty array per call (Story 4.10) — never a shared
  * module-level `[]` — for the same reason as the rest of the draft: it is diffed against its seed,
- * and a shared array would move with every edit made through this call's own reference.
+ * and a shared array would move with every edit made through this call's own reference. Story
+ * 4.13's validator reads all of them.
  */
 export function createNewOrganismDraft(usedColorTokens: readonly string[]): OrganismDraft {
   return {
@@ -47,4 +50,69 @@ export function createNewOrganismDraft(usedColorTokens: readonly string[]): Orga
     colorToken: defaultColorToken(usedColorTokens),
     survivalRules: [],
   };
+}
+
+// --- Validity — the Save gate's view (Story 4.13). One validator over the fields' own. ---
+
+/** Where an error lives, in the shape the modal's focus effect resolves to a control
+ * (`errorTargetSelector`) — ids, never indices: a rule's index changes on reorder
+ * (Story 4.12) while its id does not (RFC-004 §2.4). */
+export type DraftErrorTarget =
+  | { readonly kind: 'name' }
+  | { readonly kind: 'rule'; readonly ruleId: string }
+  | {
+      readonly kind: 'condition';
+      readonly ruleId: string;
+      readonly conditionId: string;
+      readonly field: ConditionDraftField;
+    };
+
+export interface DraftError {
+  readonly target: DraftErrorTarget;
+  readonly message: string;
+}
+
+/**
+ * Every displayed error the draft holds, in DOCUMENT order — name (Basic Information
+ * column), then each rule in list order, then within a rule either its zero-condition
+ * error OR its rows' errors in row order (exclusive: a rule with rows has no
+ * zero-condition error). `[]` means "valid". The first entry is what Save focuses.
+ *
+ * Calls the SAME validators the fields render from (`validateOrganismName`,
+ * `validateConditionDraft`) so the gate and the inline lines cannot disagree about
+ * what "invalid" means — the `organismName.ts` header's contract. Deliberately checks
+ * NOTHING for `colorToken` (always a PALETTE id — seeded by `defaultColorToken`, written
+ * only by a radio whose value is one), `dominance` (clamped before every commit,
+ * `<DominanceField>` FD4), `agingEnabled` (a boolean) or a rule's summary (clamped at
+ * `MAX_RULE_SUMMARY_LENGTH`): each is valid by construction and a check here would be
+ * dead code with a message no user can reach. Zero rules is NOT an error (design doc
+ * `:551, :764-765`: "Allow save but show warning") — the warning belongs to the save
+ * that proceeds (Story 4.16), not to this gate. No Zod: this is the displayed-error
+ * view; 4.16's parse at the persistence boundary is the other view of the same facts.
+ */
+export function validateOrganismDraft(draft: OrganismDraft): readonly DraftError[] {
+  const errors: DraftError[] = [];
+  const nameError = validateOrganismName(draft.name);
+  if (nameError !== null) errors.push({ target: { kind: 'name' }, message: nameError });
+  for (const rule of draft.survivalRules) {
+    if (ruleNeedsCondition(rule)) {
+      errors.push({ target: { kind: 'rule', ruleId: rule.id }, message: RULE_NEEDS_CONDITION });
+      continue;
+    }
+    for (const condition of rule.conditions) {
+      const error = validateConditionDraft(condition);
+      if (error !== null) {
+        errors.push({
+          target: {
+            kind: 'condition',
+            ruleId: rule.id,
+            conditionId: condition.id,
+            field: error.field,
+          },
+          message: error.message,
+        });
+      }
+    }
+  }
+  return errors;
 }

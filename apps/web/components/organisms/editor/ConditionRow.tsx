@@ -19,7 +19,7 @@ import {
   validateConditionDraft,
   withOperator,
 } from '@/lib/organisms/conditionDraft';
-import { SelectInput, TextInput } from './fieldStyles';
+import { ErrorText as BaseErrorText, SelectInput, TextInput } from './fieldStyles';
 
 /**
  * One condition row — `property -> operator -> value -> ✕` (Story 4.11, AC2). Fully CONTROLLED,
@@ -31,7 +31,8 @@ import { SelectInput, TextInput } from './fieldStyles';
  * numeric text — lives in the parent. Visibility of the row's error follows `touched` (4.5 FD2),
  * per-field: a numeric input flips its own flag on its first `change`, never on blur, never on
  * mount; `pair` needs BOTH the min and max flags. A property change or a scalar<->range operator
- * change clears `touched` — the inputs are new (AC4).
+ * change clears `touched` — the inputs are new (AC4). Story 4.13's `showAllErrors` override shows
+ * every visible error regardless of `touched`, once a Save has been attempted.
  *
  * FD1 — the five-property list follows the AC / design doc / PRD order (Cell State first), not
  * the mockup's four-option selector. FD2 — the cell-state labels carry the PRD's parentheticals.
@@ -42,7 +43,7 @@ import { SelectInput, TextInput } from './fieldStyles';
  * No `role="group"` here and no `<li>` (FD4): the position in each control's `aria-label` is what
  * a screen reader needs, and the fieldset in `<ConditionsEditor>` is the one group.
  *
- * (Story 4.11) (FR-2.5) (UX-DR10) (UX-DR14) (UX-DR17) (AR-46) (Decision C) (Decision E)
+ * (Story 4.11) (Story 4.13) (FR-2.5) (UX-DR10) (UX-DR14) (UX-DR17) (AR-46) (Decision C) (Decision E)
  */
 
 // `.condition-row` (`:628-634`).
@@ -98,13 +99,9 @@ const DeleteButton = styled('button')({
   },
 });
 
-// `<OrganismNameField>`'s `ErrorText` rule set (the validated-input idiom), plus `gridColumn`.
-const ErrorText = styled('p')({
+// `fieldStyles.ts`'s shared `ErrorText` (the validated-input idiom), plus `gridColumn`.
+const ErrorText = styled(BaseErrorText)({
   gridColumn: '1 / -1',
-  margin: 0,
-  fontSize: '11px',
-  lineHeight: 1.4,
-  color: 'var(--gol-danger)',
 });
 
 type Touched = { readonly value: boolean; readonly min: boolean; readonly max: boolean };
@@ -120,6 +117,8 @@ export interface ConditionRowProps {
   defaultOrganismId: string;
   onChange(next: ConditionDraft): void;
   onDelete(id: string): void;
+  /** Story 4.13's Save-time override: every error shows regardless of `touched`. */
+  showAllErrors: boolean;
 }
 
 export default function ConditionRow({
@@ -129,6 +128,7 @@ export default function ConditionRow({
   defaultOrganismId,
   onChange,
   onDelete,
+  showAllErrors,
 }: ConditionRowProps) {
   const [touched, setTouched] = useState<Touched>(UNTOUCHED);
   const errorId = useId();
@@ -136,7 +136,8 @@ export default function ConditionRow({
 
   const error = validateConditionDraft(draft);
   const visible =
-    error !== null && (error.field === 'pair' ? touched.min && touched.max : touched[error.field]);
+    error !== null &&
+    (showAllErrors || (error.field === 'pair' ? touched.min && touched.max : touched[error.field]));
   const errorField = visible ? error.field : null;
 
   // The visible error's own input(s) — `pair` names both range inputs.
@@ -171,6 +172,7 @@ export default function ConditionRow({
         aria-label={`Condition ${n} value`}
         value={draft.pattern}
         data-condition-value
+        {...invalidAttrs('value')}
         onChange={(event) => onChange({ ...draft, pattern: event.target.value })}
       >
         {!hasMatch && (
