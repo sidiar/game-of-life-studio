@@ -2,7 +2,7 @@ import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
 import type { AppRepositories } from './repositories';
-import { hasSchemaStamp, removeDataKeys } from './localStorageAccess';
+import { hasSchemaStamp, measureStorageUsage, removeDataKeys } from './localStorageAccess';
 
 /**
  * The Standalone-mode repository set. Mode selection itself lives in the app's factory
@@ -35,6 +35,13 @@ export function createLocalStorageRepositories(): AppRepositories {
      */
     async isFreshWorkspace(): Promise<boolean> {
       return !hasSchemaStamp();
+    },
+
+    // `async` because the seam is Promise-shaped for every mode (AR-2/27) — a connected-mode
+    // repository's answer is a real network round-trip. It cannot throw on a healthy store: the
+    // meter only ever reads getItem() strings and sums their lengths (FD3) — it never parses.
+    async storageUsage() {
+      return measureStorageUsage();
     },
   };
 }

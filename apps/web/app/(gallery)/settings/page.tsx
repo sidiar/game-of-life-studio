@@ -33,6 +33,7 @@ export default function SettingsRoute() {
       battles={repositories.battles}
       organisms={repositories.organisms}
       seedStatus={status}
+      workspace={repositories}
     />
   );
 }

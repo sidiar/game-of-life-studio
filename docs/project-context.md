@@ -418,6 +418,10 @@ Following instinct here produces code that compiles, passes tests, and violates 
   `GridRendererColors` strings instead of reading the theme itself (Story 1.8), and it recurs
   everywhere a canvas is added — Epic 2's edit-mode canvas and Epic 3's playback canvas both need
   the same substitution step.
+- ⚠️ **`navigator.storage.estimate()` is not the localStorage meter.** Chromium's `usage` excludes
+  localStorage entirely (it meters IndexedDB / Cache Storage / OPFS against the origin quota),
+  Firefox's includes it, and neither can be scoped to `gol:*`. The AR-14 meter sums `STORAGE_KEYS`
+  value lengths × 2 (UTF-16) and never calls `estimate()`, whatever `RFC-006:268` says (Story 5.2).
 
 **Bounds & invariants that are enforced, not assumed**
 

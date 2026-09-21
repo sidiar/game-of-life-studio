@@ -7,6 +7,7 @@ export type {
   BattleRepository,
   OrganismRepository,
   SettingsRepository,
+  StorageUsage,
 } from './repositories';
 
 export { createLocalStorageRepositories } from './createLocalStorageRepositories';
@@ -21,7 +22,12 @@ export { LocalStorageSettingsRepository } from './localStorageSettingsRepository
 // Callers need these to tell "storage is full" apart from "stored data is unreadable" — both are
 // recoverable states the UI reports differently (NFR-7.2 / NFR-7.3).
 export { CorruptDataError } from './errors';
-export { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
+export {
+  measureStorageUsage,
+  QuotaExceededError,
+  STORAGE_KEYS,
+  storageBytesOf,
+} from './localStorageAccess';
 export type { StorageKey } from './localStorageAccess';
 
 // Exported so @gol/test-utils' in-memory fakes can enforce the identical id guard rather than

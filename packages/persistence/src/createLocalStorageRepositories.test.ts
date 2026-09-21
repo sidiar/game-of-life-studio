@@ -104,6 +104,24 @@ describe('clearAll (AC5)', () => {
   });
 });
 
+describe('storageUsage (AR-14, Story 5.2)', () => {
+  it('grows after battles.save() and shrinks after clearAll(), but not to zero', async () => {
+    const repos = createLocalStorageRepositories();
+    const empty = (await repos.storageUsage()).bytes;
+
+    await repos.battles.save(battle());
+    const afterSave = (await repos.storageUsage()).bytes;
+    expect(afterSave).toBeGreaterThan(empty);
+
+    await repos.clearAll();
+    const afterClear = (await repos.storageUsage()).bytes;
+    // clearAll() removes battles/organisms but the gol:schema stamp remains (AC5) — the same
+    // two-key survival the clearAll (AC5) describe block above already pins.
+    expect(afterClear).toBeLessThan(afterSave);
+    expect(afterClear).toBeGreaterThan(0);
+  });
+});
+
 describe('isFreshWorkspace (Story 1.5 AC1)', () => {
   it('is true with no gol:schema record', async () => {
     const repos = createLocalStorageRepositories();

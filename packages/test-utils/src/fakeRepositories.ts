@@ -1,6 +1,7 @@
 import {
   BattleSchema,
   BattleSummarySchema,
+  CURRENT_FORMAT_VERSION,
   OrganismSchema,
   SettingsSchema,
   type Battle,
@@ -12,6 +13,7 @@ import {
   assertSafeCollectionId,
   CorruptDataError,
   STORAGE_KEYS,
+  storageBytesOf,
   type AppRepositories,
   type BattleRepository,
   type OrganismRepository,
@@ -267,6 +269,36 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
 
     async isFreshWorkspace() {
       return !stamped;
+    },
+
+    // Mirrors the real meter through the SAME exported helper (storageBytesOf) rather than
+    // re-stating the arithmetic — the assertSafeCollectionId precedent (FD8): a fake that
+    // re-derives a formula is free to drift from it. Builds the entries the real localStorage
+    // store would hold and hands them to the shared formula.
+    //
+    // One deliberate divergence from the real store: after the last record in a collection is
+    // deleted, the real store still holds `gol:battles -> "{}"` (writeDataKey's empty-collection
+    // write), while this fake's map is simply empty and contributes no pair. The gap is
+    // `(12 + 2) * 2 = 28` bytes per collection — invisible at one-decimal KB precision — and not
+    // worth a per-collection "ever written" flag beside `stamped`.
+    async storageUsage() {
+      const entries: Array<readonly [string, string]> = [];
+      if (stamped) {
+        entries.push([
+          STORAGE_KEYS.schema,
+          JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION }),
+        ]);
+      }
+      if (battleStore.size > 0) {
+        entries.push([STORAGE_KEYS.battles, JSON.stringify(Object.fromEntries(battleStore))]);
+      }
+      if (organismStore.size > 0) {
+        entries.push([STORAGE_KEYS.organisms, JSON.stringify(Object.fromEntries(organismStore))]);
+      }
+      if (settingsStore !== undefined) {
+        entries.push([STORAGE_KEYS.settings, JSON.stringify(settingsStore)]);
+      }
+      return { bytes: storageBytesOf(entries) };
     },
   };
 }
