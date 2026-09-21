@@ -1053,3 +1053,18 @@ claude-sonnet-5 (Claude Code)
 
 Dev Model: sonnet   # follows settled patterns — 4.5/4.11's touched-plus-override error idiom, the ErrorText/⚠︎ line, data-attribute selectors with CSS.escape, the 2.13 in-flow status line; the one new shape (a document-ordered validateOrganismDraft with id-based targets and an attempt-keyed focus effect) is pinned with exact code, selectors and tests, and 4.16 consumes it without reshaping it
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 59s | 59s | 36 | 6,951 | 13,594 | 1,062,986 | 1,083,567 |
+| Step 1 — create | opus-5 | 4 | 20m 17s | 20m 17s | 558 | 177,783 | 2,667,872 | 28,981,864 | 31,828,077 |
+| Step 2 — implement | sonnet-5 | 1 | 34m 48s | 1h 14m | 736 | 116,333 | 897,180 | 95,115,249 | 96,129,498 |
+| Step 3 — review + PR | opus-5 | 4 | 36m 48s | 36m 48s | 436 | 94,670 | 1,961,501 | 22,569,887 | 24,626,494 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 76 | 15,661 | 40,786 | 2,468,135 | 2,524,658 |
+| **Total (create → PR ready)** | | 9 | **1h 32m** | 2h 12m | 1,766 | 395,737 | 5,540,147 | 147,729,986 | **153,667,636** |
+
+Run started 2026-09-21 08:28 CEST; wall clock runs to the point the run stopped for the owner's review. Active excludes 1 idle gap totalling 39m 44s (39m 44s from 09:24) — stretches with no transcript activity in the session or any subagent, such as a usage-limit reset or the machine asleep. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
