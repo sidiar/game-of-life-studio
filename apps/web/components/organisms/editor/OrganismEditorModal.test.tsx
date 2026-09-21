@@ -976,6 +976,9 @@ describe('OrganismEditorModal', () => {
 
     afterEach(() => {
       document.documentElement.style.cssText = '';
+      // This file has no file-level restore and the config sets no `restoreMocks`: a prototype
+      // spy left in place here would serve the next test's canvases too.
+      vi.restoreAllMocks();
     });
 
     it('the Preview & Test region holds the drawing controls, Draw pressed, Clear disabled, and no canvas under jsdom’s bare root', () => {
@@ -1024,15 +1027,17 @@ describe('OrganismEditorModal', () => {
 
     it('drawing does not touch the draft', async () => {
       enableCanvasRendering();
-      const user = userEvent.setup();
-      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
-
-      const dialog = screen.getByRole('dialog');
+      // BEFORE `render`: the construction effect asks for its context on mount, and a spy installed
+      // afterwards would leave the canvas on jsdom's null-context path for the whole test.
       vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
         this: HTMLCanvasElement,
       ) {
         return new RecordingContext2D() as unknown as CanvasRenderingContext2D;
       });
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
       const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
       const canvas = preview.querySelector('canvas') as HTMLCanvasElement;
       vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({

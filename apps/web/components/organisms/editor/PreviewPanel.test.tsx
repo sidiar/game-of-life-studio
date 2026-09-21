@@ -22,19 +22,19 @@ afterEach(() => {
 
 // jsdom keeps the canvas at its 300x150 default (`clientWidth` is 0), giving 7px cells at
 // origin (45, 5) over the 30x20 preview grid — derived, never hardcoded (the house rule).
-function installPerCanvasRecording(): Map<HTMLCanvasElement, RecordingContext2D> {
+function installPerCanvasRecording() {
   const contextsByCanvas = new Map<HTMLCanvasElement, RecordingContext2D>();
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
-    this: HTMLCanvasElement,
-  ) {
-    let ctx = contextsByCanvas.get(this);
-    if (ctx === undefined) {
-      ctx = new RecordingContext2D();
-      contextsByCanvas.set(this, ctx);
-    }
-    return ctx as unknown as CanvasRenderingContext2D;
-  });
-  return contextsByCanvas;
+  const getContextSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockImplementation(function (this: HTMLCanvasElement) {
+      let ctx = contextsByCanvas.get(this);
+      if (ctx === undefined) {
+        ctx = new RecordingContext2D();
+        contextsByCanvas.set(this, ctx);
+      }
+      return ctx as unknown as CanvasRenderingContext2D;
+    });
+  return { contextsByCanvas, getContextSpy };
 }
 
 function stubCanvasRect(canvas: HTMLCanvasElement): void {
@@ -62,7 +62,13 @@ function centreOfCell(canvas: HTMLCanvasElement, col: number, row: number) {
 }
 
 function mount(overrides: Partial<PreviewPanelProps> = {}) {
-  const contexts = installPerCanvasRecording();
+  // `getContextSpy.mock.calls.length` is the construction oracle (the `PetriDishCanvas.test.tsx`
+  // "colors identity" idiom): `GridRenderer` asks for a context in its constructor, and otherwise
+  // only when `resize()` / `setGridLines()` rebuild the grid-line overlay — neither runs on a
+  // props rerender under jsdom (no `ResizeObserver`; the lines flag never changes), so a grown
+  // count means a rebuilt renderer and an unchanged count means none. `drawFull` alone cannot
+  // tell the two apart — the grid effect's external-change path calls it too.
+  const { contextsByCanvas: contexts, getContextSpy } = installPerCanvasRecording();
   const props: PreviewPanelProps = {
     colorToken: 'vermillion',
     agingEnabled: false,
@@ -72,7 +78,7 @@ function mount(overrides: Partial<PreviewPanelProps> = {}) {
   const view = render(<PreviewPanel {...props} />);
   const canvas = view.container.querySelector('canvas');
   if (canvas !== null) stubCanvasRect(canvas);
-  return { ...view, canvas, contexts, props };
+  return { ...view, canvas, contexts, getContextSpy, props };
 }
 
 function drawnRecording(
@@ -86,9 +92,13 @@ function drawnRecording(
 
 describe('PreviewPanel', () => {
   it('renders the dish and its three controls, Draw pressed, Clear disabled', () => {
-    mount();
+    const { container } = mount();
 
-    expect(screen.getByRole('img', { name: 'Petri dish, 30 by 20 cells' })).toBeInTheDocument();
+    const box = container.querySelector<HTMLElement>('[data-preview-dish]');
+    if (box === null) throw new Error('dish box did not render');
+    expect(
+      within(box).getByRole('img', { name: 'Petri dish, 30 by 20 cells' }),
+    ).toBeInTheDocument();
     const group = screen.getByRole('group', { name: 'Drawing tools' });
     const buttons = within(group).getAllByRole('button');
     expect(buttons.map((b) => b.textContent)).toEqual(['Draw', 'Erase', 'Clear']);
@@ -138,14 +148,20 @@ describe('PreviewPanel', () => {
     const { canvas, contexts } = mount();
     if (canvas === null) throw new Error('canvas did not mount');
 
+    // Markers taken AFTER mount: the construction `drawFull` already wrote a `fillStyle` and
+    // `fillRect`s for the background, so an unmarked `toContain` / `some` would pass on an empty
+    // dish. Only the writes the stroke itself appends carry the claim.
+    const recording = drawnRecording(contexts, canvas);
+    const fillsBefore = recording.fillStyleWrites.length;
+    const callsBefore = recording.calls.length;
+
     fireEvent.pointerDown(canvas, centreOfCell(canvas, 3, 4));
     fireEvent.pointerUp(canvas, centreOfCell(canvas, 3, 4));
 
     expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled();
-    const recording = drawnRecording(contexts, canvas);
     const expectedFill = displayColorAt(paletteIndexOf('vermillion'), MAX_AGE_SHADE);
-    expect(recording.fillStyleWrites).toContain(expectedFill);
-    expect(recording.calls.some((c) => c.op === 'fillRect')).toBe(true);
+    expect(recording.fillStyleWrites.slice(fillsBefore)).toContain(expectedFill);
+    expect(recording.calls.slice(callsBefore).some((c) => c.op === 'fillRect')).toBe(true);
   });
 
   it('erasing the same cell empties the dish (AC3)', async () => {
@@ -183,26 +199,28 @@ describe('PreviewPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Clear' }));
 
     expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
-    expect(drawFullSpy).toHaveBeenCalled();
+    // Exactly one: the grid effect's external-change path repaints the cleared grid once. Two
+    // would mean the palette or size identity also moved on a Clear, which nothing here changes.
+    expect(drawFullSpy).toHaveBeenCalledTimes(1);
   });
 
   it('a colour change repaints the drawn cells on the same commit (AC4)', () => {
-    const { canvas, contexts, rerender } = mount({ colorToken: 'vermillion' });
+    const { canvas, contexts, getContextSpy, rerender } = mount({ colorToken: 'vermillion' });
     if (canvas === null) throw new Error('canvas did not mount');
 
     fireEvent.pointerDown(canvas, centreOfCell(canvas, 3, 4));
     fireEvent.pointerUp(canvas, centreOfCell(canvas, 3, 4));
 
-    // `vi.spyOn` on an already-spied method returns the SAME spy instance rather than a fresh
-    // wrapper, so its call count must be zeroed here before the delta is meaningful.
-    const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
-    drawFullSpy.mockClear();
+    const recording = drawnRecording(contexts, canvas);
+    const constructionsBefore = getContextSpy.mock.calls.length;
+    const fillsBefore = recording.fillStyleWrites.length;
     rerender(<PreviewPanel colorToken="azure" agingEnabled={false} colors={COLORS} />);
 
-    expect(drawFullSpy).toHaveBeenCalled(); // a new palette identity reconstructed the renderer
-    const recording = drawnRecording(contexts, canvas);
+    // A new palette identity reconstructed the renderer (a `getContext` call is the constructor's
+    // alone) and the drawn cell came back in the new colour in that same commit.
+    expect(getContextSpy.mock.calls.length).toBeGreaterThan(constructionsBefore);
     const expectedFill = displayColorAt(paletteIndexOf('azure'), MAX_AGE_SHADE);
-    expect(recording.fillStyleWrites).toContain(expectedFill);
+    expect(recording.fillStyleWrites.slice(fillsBefore)).toContain(expectedFill);
   });
 
   it('aging on paints age-0 cells at shade 0 (AC4)', () => {
@@ -212,26 +230,31 @@ describe('PreviewPanel', () => {
     fireEvent.pointerDown(canvas, centreOfCell(canvas, 3, 4));
     fireEvent.pointerUp(canvas, centreOfCell(canvas, 3, 4));
 
+    // Each half reads only the writes its own rerender appended: the recording is cumulative, so
+    // the "off again" colour is already in the log from the initial draw and an unsliced
+    // `toContain` would pass without the second repaint happening at all.
+    const recording = drawnRecording(contexts, canvas);
+    let mark = recording.fillStyleWrites.length;
     rerender(<PreviewPanel colorToken="vermillion" agingEnabled colors={COLORS} />);
-    let recording = drawnRecording(contexts, canvas);
-    expect(recording.fillStyleWrites).toContain(displayColorAt(paletteIndexOf('vermillion'), 0));
+    expect(recording.fillStyleWrites.slice(mark)).toContain(
+      displayColorAt(paletteIndexOf('vermillion'), 0),
+    );
 
+    mark = recording.fillStyleWrites.length;
     rerender(<PreviewPanel colorToken="vermillion" agingEnabled={false} colors={COLORS} />);
-    recording = drawnRecording(contexts, canvas);
-    expect(recording.fillStyleWrites).toContain(
+    expect(recording.fillStyleWrites.slice(mark)).toContain(
       displayColorAt(paletteIndexOf('vermillion'), MAX_AGE_SHADE),
     );
   });
 
   it('a rerender with the SAME token and flag constructs nothing (AC4 memo)', () => {
-    const { rerender } = mount({ colorToken: 'vermillion', agingEnabled: false });
+    const { getContextSpy, rerender } = mount({ colorToken: 'vermillion', agingEnabled: false });
 
-    // `mockClear()` first: `vi.spyOn` on an already-spied method reuses the same spy instance
-    // (installPerCanvasRecording's), so its history already holds the mount's construction calls.
+    const constructionsBefore = getContextSpy.mock.calls.length;
     const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
-    drawFullSpy.mockClear();
     rerender(<PreviewPanel colorToken="vermillion" agingEnabled={false} colors={COLORS} />);
 
+    expect(getContextSpy.mock.calls.length).toBe(constructionsBefore);
     expect(drawFullSpy).not.toHaveBeenCalled();
   });
 
@@ -246,9 +269,15 @@ describe('PreviewPanel', () => {
     rerender(<PreviewPanel colorToken="azure" agingEnabled={false} colors={COLORS} />);
 
     expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled();
+    // Erasing THAT cell empties the dish: the drawn cell survived at its own location, not merely
+    // "some non-empty grid" survived.
+    fireEvent.pointerDown(canvas, centreOfCell(canvas, 3, 4));
+    fireEvent.pointerUp(canvas, centreOfCell(canvas, 3, 4));
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
   });
 
-  it('a drag commits once, Clear enabled (AC1)', () => {
+  it('a drag commits once, Clear enabled (AC1)', async () => {
+    const user = userEvent.setup();
     const { canvas } = mount();
     if (canvas === null) throw new Error('canvas did not mount');
     const drawFullSpy = vi.spyOn(GridRenderer.prototype, 'drawFull');
@@ -259,6 +288,13 @@ describe('PreviewPanel', () => {
 
     expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled();
     expect(drawFullSpy).not.toHaveBeenCalled();
+
+    // Clear-enabled is guaranteed by the pointer-down alone; erasing the START cell and finding
+    // the dish still non-empty is what proves the move extended the stroke past its first cell.
+    await user.click(screen.getByRole('button', { name: 'Erase' }));
+    fireEvent.pointerDown(canvas, centreOfCell(canvas, 2, 4));
+    fireEvent.pointerUp(canvas, centreOfCell(canvas, 2, 4));
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled();
   });
 
   it('has no axe violations in the fresh state or after a draw', async () => {

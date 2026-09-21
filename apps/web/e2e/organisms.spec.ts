@@ -2296,8 +2296,11 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     });
   }
 
-  /** The client point for a preview cell, from the box's own layout (never the geometric centre —
-   * `deferred-work.md:344`'s note on the battle spec) — `floor(min(w/30, h/20))`, centred. */
+  /** The client point for a preview cell, from the CANVAS's own layout (never the geometric
+   * centre — `deferred-work.md:344`'s note on the battle spec) — `floor(min(w/30, h/20))`, centred.
+   * Measure the `img` (the canvas), not `[data-preview-dish]`: the box carries a 1px border, so its
+   * rect is 2px wider than the surface the renderer laid out on, and a `floor` taken over the wrong
+   * width diverges from the renderer's whenever `width / 30` sits just above an integer. */
   function cellCentre(
     box: { x: number; y: number; width: number; height: number },
     col: number,
@@ -2341,9 +2344,40 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     // range, not `toBeCloseTo(_, 0)`, because sub-pixel layout rounding lands the box at 289-290.
     expect(box.width).toBeGreaterThan(285);
     expect(box.width).toBeLessThan(295);
-    expect(box.height).toBeCloseTo(box.width * (2 / 3), 0);
+    // `aspect-ratio: 3 / 2` on a 1px-bordered box: WebKit (and so the tablet project) resolves it
+    // ~2px taller than Chromium/Firefox at the same width (194.66 vs 192.67 at 289 — the first CI
+    // run on this branch, 2026-09-21). A 3px tolerance still fails a missing rule (the box would
+    // collapse to the canvas's own height) without pinning one engine's rounding.
+    expect(Math.abs(box.height - box.width * (2 / 3))).toBeLessThan(3);
 
     expect(errors).toEqual([]);
+  });
+
+  // The FULL tier (≥ 1400: 400px column → 340px box, AC1's "11px cells at DPR 1") is reachable
+  // only behind the 4.4 block's one-off `setViewportSize` — the Story 2.12 precedent, never a
+  // fifth project. `setViewportSize` precedes `goto` so the first layout is already at 1440.
+  test('full tier (≥ 1400): the dish box is ≈ 340 wide and a click still lands on its cell', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
+    if (box === null) throw new Error('preview dish box has no layout box');
+    expect(box.width).toBeGreaterThan(335);
+    expect(box.width).toBeLessThan(345);
+    expect(Math.abs(box.height - box.width * (2 / 3))).toBeLessThan(3); // the WebKit note above
+
+    const canvasBox = await dish(dialog).boundingBox();
+    if (canvasBox === null) throw new Error('preview dish canvas has no layout box');
+    const point = cellCentre(canvasBox, 5, 5);
+    await page.mouse.click(point.x, point.y);
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+    await tool(dialog, 'Erase').click();
+    await page.mouse.click(point.x, point.y);
+    await expect(tool(dialog, 'Clear')).toBeDisabled();
   });
 
   test('Draw -> Clear enabled and the canvas paints more than two colours; Erase the same cell -> Clear disabled; Draw again, Clear -> disabled', async ({
@@ -2353,8 +2387,8 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     await expect(page.getByText("Conway's Classic")).toBeVisible();
     const dialog = await openEditor(page);
 
-    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
-    if (box === null) throw new Error('preview dish box has no layout box');
+    const box = await dish(dialog).boundingBox();
+    if (box === null) throw new Error('preview dish canvas has no layout box');
     const point = cellCentre(box, 5, 5);
 
     await page.mouse.click(point.x, point.y);
@@ -2377,8 +2411,8 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     await expect(page.getByText("Conway's Classic")).toBeVisible();
     const dialog = await openEditor(page);
 
-    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
-    if (box === null) throw new Error('preview dish box has no layout box');
+    const box = await dish(dialog).boundingBox();
+    if (box === null) throw new Error('preview dish canvas has no layout box');
     const from = cellCentre(box, 2, 10);
     const to = cellCentre(box, 20, 10);
 
@@ -2388,6 +2422,11 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     await page.mouse.move(to.x, to.y);
     await page.mouse.up();
 
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+    // Clear-enabled is guaranteed by the pointer-down alone. Erasing the START cell and finding the
+    // dish still non-empty is what proves the move painted past its first cell.
+    await tool(dialog, 'Erase').click();
+    await page.mouse.click(from.x, from.y);
     await expect(tool(dialog, 'Clear')).toBeEnabled();
   });
 
@@ -2403,8 +2442,8 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     ]);
 
     let dialog = await openEditor(page);
-    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
-    if (box === null) throw new Error('preview dish box has no layout box');
+    const box = await dish(dialog).boundingBox();
+    if (box === null) throw new Error('preview dish canvas has no layout box');
     const first = cellCentre(box, 3, 3);
     const second = cellCentre(box, 10, 8);
     await page.mouse.click(first.x, first.y);
@@ -2436,8 +2475,8 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     // Clear is disabled and so is skipped by Tab (browsers do not focus disabled controls) —
     // draw a cell with the mouse first, while still in the default Draw mode, so the Tab walk
     // below has a real stop to land on.
-    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
-    if (box === null) throw new Error('preview dish box has no layout box');
+    const box = await dish(dialog).boundingBox();
+    if (box === null) throw new Error('preview dish canvas has no layout box');
     const point = cellCentre(box, 4, 4);
     await page.mouse.click(point.x, point.y);
     await expect(tool(dialog, 'Clear')).toBeEnabled();
@@ -2458,8 +2497,8 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     await expect(page.getByText("Conway's Classic")).toBeVisible();
     const dialog = await openEditor(page);
 
-    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
-    if (box === null) throw new Error('preview dish box has no layout box');
+    const box = await dish(dialog).boundingBox();
+    if (box === null) throw new Error('preview dish canvas has no layout box');
     const point = cellCentre(box, 5, 5);
     await page.mouse.click(point.x, point.y);
     await expect(tool(dialog, 'Clear')).toBeEnabled();

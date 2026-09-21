@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ERASER_TOOL, refForTool } from '@/lib/battle/tool';
 import { fillGroupOf, resetRefToFillGroupWarnings } from '@/lib/canvas/refToFillGroup';
-import { ageShadeFor } from '@/lib/palette/displayColor';
+import { ageShadeFor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { paletteIndexOf } from '@/lib/palette/paletteRegistry';
 import {
   buildPreviewPalette,
+  PREVIEW_DRAW_TOOL,
   PREVIEW_GRID_SIZE,
   PREVIEW_ORGANISM_ID,
   PREVIEW_ROSTER,
@@ -24,11 +25,13 @@ describe('PREVIEW_GRID_SIZE', () => {
 });
 
 describe('toolForDrawMode', () => {
-  it('draw resolves to the preview organism tool', () => {
+  it('draw resolves to the preview organism tool — the module constant, by identity', () => {
     expect(toolForDrawMode('draw')).toEqual({
       kind: 'organism',
       organismId: PREVIEW_ORGANISM_ID,
     });
+    // Identity, not shape: a stable `tool` prop is the constant's whole reason to exist.
+    expect(toolForDrawMode('draw')).toBe(PREVIEW_DRAW_TOOL);
   });
 
   it('erase IS the shared ERASER_TOOL constant (identity)', () => {
@@ -59,7 +62,9 @@ describe('buildPreviewPalette', () => {
   it('fillGroupOf matches the AC4 shade claim for both aging flags', () => {
     for (const agingEnabled of [false, true]) {
       const palette = buildPreviewPalette({ colorToken: 'vermillion', agingEnabled });
-      const expected = paletteIndexOf('vermillion') * 8 + ageShadeFor(0, agingEnabled);
+      // `MAX_AGE_SHADE + 1` shades per token — the stride `displayColor.ts` derives, not a literal.
+      const expected =
+        paletteIndexOf('vermillion') * (MAX_AGE_SHADE + 1) + ageShadeFor(0, agingEnabled);
       expect(fillGroupOf(palette, 1, 0)).toBe(expected);
     }
   });

@@ -2117,8 +2117,28 @@ commit. These are the rest.
   `playback`" omits the `edit` member this story uses for UX-DR13's drawing; RFC-002 `:272`'s
   "renderStatic … for the preview's paused frames" describes 4.15's stills, not the drawing
   surface (Open flags).
-- **The design doc's "Preview grid smaller (250px)" at the fold tier** (`:652`) is satisfied by
-  `width: 100%` of the 350px column (290px box) — no fold-specific rule was written.
+- **The design doc's "Preview grid smaller (250px)" at the fold tier** (`:652`) is **not
+  implemented** — the box is `width: 100%` of the 350px column (≈ 290px) at the compressed AND
+  fold tiers, because `OrganismEditorLayout` has no FOLD rule for the preview column (its own
+  comment records the 350px choice). A 290px box does not satisfy a 250px spec line; whichever
+  story next touches the fold tier decides whether the design doc's number or the layout's stands
+  (review 2026-09-21 corrected the earlier "satisfied by" wording).
+- **The preview dish is pointer-only, like the battle dish** — recorded on the Story 2.5 entry
+  above (`Cell placement is pointer-only`), which this story extended rather than duplicated;
+  listed here so the debt is discoverable from this story's own section. Story 6.11 covers both
+  surfaces in one design.
 - **A palette change mid-stroke ends the stroke without committing** (`PetriDishCanvas.tsx:328-345`,
   Story 2.10 decision 2(b)) — reachable here only via keyboard on the aging switch while a pointer
   is captured on the dish; inherited, not re-decided.
+
+## Deferred from: code review of 4-14-preview-grid-drawing (2026-09-21)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **The preview's Clear self-disables while focused, so a keyboard activation drops focus to
+  `<body>` inside the dialog's focus trap** (`PreviewPanel.tsx`, `disabled={empty}`) — deferred,
+  pre-existing: it is the battle editor's exact Clear pattern (`EditorToolsSection`,
+  `disabled={stats.livingCells === 0}`, Story 2.15), and Story 4.14's AC2 pins "focus never moves on
+  any of the three". The fix is one line (move focus to Draw on Clear) but it is a design choice
+  for both surfaces at once; **Story 6.11** should decide it alongside the pointer-only dish gap
+  the 2.5 entry records.
