@@ -2272,3 +2272,200 @@ test.describe('editor validation & feedback (Story 4.13)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+test.describe('preview grid & drawing (Story 4.14)', () => {
+  const preview = (dialog: Locator) => dialog.getByRole('region', { name: 'Preview & Test' });
+  const dish = (dialog: Locator) => preview(dialog).getByRole('img', { name: /petri dish/i });
+  const tool = (dialog: Locator, name: string) =>
+    preview(dialog).getByRole('button', { name, exact: true });
+
+  /** Distinct RGBA values actually rasterised on a canvas — the AR-42-permitted smoke check
+   * (`battleRoute.spec.ts`'s `distinctColorCount`, copied with a pointer per the story's Task 4 —
+   * lift on a third copy, `deferred-work.md`). */
+  async function distinctColorCount(canvas: Locator): Promise<number> {
+    return canvas.evaluate((el) => {
+      const canvasEl = el as HTMLCanvasElement;
+      const ctx = canvasEl.getContext('2d');
+      if (ctx === null) return 0;
+      const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+      const seen = new Set<string>();
+      for (let i = 0; i < data.length; i += 4) {
+        seen.add([data[i], data[i + 1], data[i + 2], data[i + 3]].join(','));
+      }
+      return seen.size;
+    });
+  }
+
+  /** The client point for a preview cell, from the box's own layout (never the geometric centre —
+   * `deferred-work.md:344`'s note on the battle spec) — `floor(min(w/30, h/20))`, centred. */
+  function cellCentre(
+    box: { x: number; y: number; width: number; height: number },
+    col: number,
+    row: number,
+  ) {
+    const cellSize = Math.floor(Math.min(box.width / 30, box.height / 20));
+    const drawWidth = cellSize * 30;
+    const drawHeight = cellSize * 20;
+    const originX = box.x + (box.width - drawWidth) / 2;
+    const originY = box.y + (box.height - drawHeight) / 2;
+    return {
+      x: originX + col * cellSize + cellSize / 2,
+      y: originY + row * cellSize + cellSize / 2,
+    };
+  }
+
+  test('the dish and its controls render, Draw pressed, Clear disabled, zero console errors (no ResizeObserver loop)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    await expect(dish(dialog)).toBeAttached();
+    await expect(dish(dialog)).toHaveAccessibleName('Petri dish, 30 by 20 cells');
+    await expect(tool(dialog, 'Draw')).toHaveAttribute('aria-pressed', 'true');
+    await expect(tool(dialog, 'Erase')).toHaveAttribute('aria-pressed', 'false');
+    await expect(tool(dialog, 'Clear')).toBeDisabled();
+
+    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
+    if (box === null) throw new Error('preview dish box has no layout box');
+    // Derived from the viewport's tier (project-context.md: no default project is >= 1400 or
+    // < 1024, so the FULL tier's 340px is unreachable at the default viewports; every project
+    // this suite runs sits in the COMPRESSED band, giving a 350px column and a ~290px box) — a
+    // range, not `toBeCloseTo(_, 0)`, because sub-pixel layout rounding lands the box at 289-290.
+    expect(box.width).toBeGreaterThan(285);
+    expect(box.width).toBeLessThan(295);
+    expect(box.height).toBeCloseTo(box.width * (2 / 3), 0);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('Draw -> Clear enabled and the canvas paints more than two colours; Erase the same cell -> Clear disabled; Draw again, Clear -> disabled', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
+    if (box === null) throw new Error('preview dish box has no layout box');
+    const point = cellCentre(box, 5, 5);
+
+    await page.mouse.click(point.x, point.y);
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+    await expect.poll(() => distinctColorCount(dish(dialog))).toBeGreaterThan(2);
+
+    await tool(dialog, 'Erase').click();
+    await page.mouse.click(point.x, point.y);
+    await expect(tool(dialog, 'Clear')).toBeDisabled();
+
+    await tool(dialog, 'Draw').click();
+    await page.mouse.click(point.x, point.y);
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+    await tool(dialog, 'Clear').click();
+    await expect(tool(dialog, 'Clear')).toBeDisabled();
+  });
+
+  test('a drag paints (one gesture, Clear enabled)', async ({ page }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
+    if (box === null) throw new Error('preview dish box has no layout box');
+    const from = cellCentre(box, 2, 10);
+    const to = cellCentre(box, 20, 10);
+
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    // No `steps` — one `pointermove` (`battleRoute.spec.ts:643-646`'s note).
+    await page.mouse.move(to.x, to.y);
+    await page.mouse.up();
+
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+  });
+
+  test('isolation: open, draw, close leaves localStorage byte-identical; reopening shows an empty dish (M3)', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const before = await page.evaluate(() => [
+      localStorage.getItem('gol:organisms'),
+      localStorage.getItem('gol:battles'),
+    ]);
+
+    let dialog = await openEditor(page);
+    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
+    if (box === null) throw new Error('preview dish box has no layout box');
+    const first = cellCentre(box, 3, 3);
+    const second = cellCentre(box, 10, 8);
+    await page.mouse.click(first.x, first.y);
+    await page.mouse.click(second.x, second.y);
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).not.toBeVisible();
+
+    const after = await page.evaluate(() => [
+      localStorage.getItem('gol:organisms'),
+      localStorage.getItem('gol:battles'),
+    ]);
+    expect(after).toEqual(before);
+
+    dialog = await openEditor(page);
+    await expect(tool(dialog, 'Clear')).toBeDisabled();
+  });
+
+  test('keyboard: Draw -> Tab -> Erase -> Space toggles it -> Tab reaches Clear once enabled', async ({
+    page,
+    browserName,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+
+    // Clear is disabled and so is skipped by Tab (browsers do not focus disabled controls) —
+    // draw a cell with the mouse first, while still in the default Draw mode, so the Tab walk
+    // below has a real stop to land on.
+    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
+    if (box === null) throw new Error('preview dish box has no layout box');
+    const point = cellCentre(box, 4, 4);
+    await page.mouse.click(point.x, point.y);
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+
+    await tool(dialog, 'Draw').focus();
+    await page.keyboard.press(tabKey);
+    await expect(tool(dialog, 'Erase')).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(tool(dialog, 'Erase')).toHaveAttribute('aria-pressed', 'true');
+    await expect(tool(dialog, 'Draw')).toHaveAttribute('aria-pressed', 'false');
+
+    await page.keyboard.press(tabKey);
+    await expect(tool(dialog, 'Clear')).toBeFocused();
+  });
+
+  test('axe after a draw, settled', async ({ page }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
+    if (box === null) throw new Error('preview dish box has no layout box');
+    const point = cellCentre(box, 5, 5);
+    await page.mouse.click(point.x, point.y);
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

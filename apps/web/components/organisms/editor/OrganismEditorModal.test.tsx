@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
@@ -9,6 +9,9 @@ import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
 import { ruleActionLabel, RULE_NEEDS_CONDITION } from '@/lib/organisms/ruleDraft';
 import { ORGANISM_NAME_REQUIRED } from '@/lib/organisms/organismName';
+import { computeGridLayout } from '@/lib/canvas/gridLayout';
+import { PREVIEW_GRID_SIZE } from '@/lib/organisms/previewGrid';
+import { RecordingContext2D } from '@/test-support/recordingContext2d';
 import OrganismEditorModal, {
   backLabelFor,
   errorTargetSelector,
@@ -957,6 +960,118 @@ describe('OrganismEditorModal', () => {
       expect(within(dialog).getAllByRole('alert')).toHaveLength(1);
       await user.click(headerAdd);
       expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
+    });
+  });
+
+  // Story 4.14: the modal's real `colors` memo (`readGridColors`) and the panel it feeds — the
+  // panel's OWN behaviour (draw/erase/clear, palette memo) is `PreviewPanel.test.tsx`'s.
+  describe('preview grid & drawing (Story 4.14)', () => {
+    // jsdom never loads themes.css (`readGridColors` resolves null); writing the tokens onto
+    // `documentElement` is the same workaround `BattlePage.test.tsx:38-45` establishes for the
+    // identical gate — the dialog portals to `document.body`, but the tokens sit on bare `:root`.
+    function enableCanvasRendering() {
+      document.documentElement.style.setProperty('--gol-bg-primary', '#0a0a0a');
+      document.documentElement.style.setProperty('--gol-grid-line', 'rgb(51 51 51 / 0.3)');
+    }
+
+    afterEach(() => {
+      document.documentElement.style.cssText = '';
+    });
+
+    it('the Preview & Test region holds the drawing controls, Draw pressed, Clear disabled, and no canvas under jsdom’s bare root', () => {
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+      const group = within(preview).getByRole('group', { name: 'Drawing tools' });
+      expect(within(group).getByRole('button', { name: 'Draw' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(within(group).getByRole('button', { name: 'Erase' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+      expect(within(group).getByRole('button', { name: 'Clear' })).toBeDisabled();
+      expect(within(preview).queryByRole('img')).toBeNull();
+    });
+
+    it('with the token layer present the canvas mounts inside the Preview region', () => {
+      enableCanvasRendering();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+      expect(
+        within(preview).getByRole('img', { name: 'Petri dish, 30 by 20 cells' }),
+      ).toBeInTheDocument();
+    });
+
+    it('a swatch pick leaves the preview’s controls byte-identical', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+      const group = within(preview).getByRole('group', { name: 'Drawing tools' });
+      const before = group.outerHTML;
+
+      await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+      await user.click(within(dialog).getByRole('radio', { name: PALETTE[9].name }));
+
+      expect(within(preview).getByRole('group', { name: 'Drawing tools' }).outerHTML).toBe(before);
+    });
+
+    it('drawing does not touch the draft', async () => {
+      enableCanvasRendering();
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+        this: HTMLCanvasElement,
+      ) {
+        return new RecordingContext2D() as unknown as CanvasRenderingContext2D;
+      });
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+      const canvas = preview.querySelector('canvas') as HTMLCanvasElement;
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: canvas.width,
+        height: canvas.height,
+        right: canvas.width,
+        bottom: canvas.height,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+      const { cellSize, originX, originY } = computeGridLayout(canvas, PREVIEW_GRID_SIZE, true);
+      const point = {
+        clientX: originX + 3 * cellSize + cellSize / 2,
+        clientY: originY + 4 * cellSize + cellSize / 2,
+        button: 0,
+        isPrimary: true,
+      };
+
+      const nameField = screen.getByRole('textbox', { name: 'Organism Name' });
+      await user.type(nameField, 'Glider');
+      fireEvent.pointerDown(canvas, point);
+      fireEvent.pointerUp(canvas, point);
+      expect(within(preview).getByRole('button', { name: 'Clear' })).toBeEnabled();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      expect(dialog.querySelector('[data-save-notice]')).toHaveTextContent(SAVE_UNAVAILABLE_NOTICE);
+      expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('Glider');
+    });
+
+    it('has no axe violations with the canvas mounted (Story 4.14)', async () => {
+      enableCanvasRendering();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const results = await axe(document.body);
+      expect(results.violations).toEqual([]);
     });
   });
 });

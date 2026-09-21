@@ -225,7 +225,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 ## Deferred from: Story 2-5-click-placement implementation (2026-08-26)
 
-- **Cell placement is pointer-only — there is no keyboard path to the dish** (forced decision 5) — `<PetriDishCanvas variant="edit">` carries `role="img"` + `aria-label` and deliberately no `tabIndex` (Story 2.4 forced decision), and Story 2.5 adds `onPointerDown` placement on top of that. Editing a battle therefore requires a mouse, pen or touch: a **WCAG 2.1.1 (Keyboard)** concern, and one **axe cannot detect** — there is no focusable control for it to flag, so both the component-level and route-level axe scans stay green while the gap is real. None of Story 2.5's ACs (nor 2.6's or 2.7's) ask for a keyboard path, and inventing one here — a focus ring, a cursor cell, arrow-key navigation, Enter/Space to place, and the announcement model that makes any of it usable — would be unreviewed UX with no mockup behind it. Note the fix is not simply adding `tabIndex`: a focusable dish that does nothing on Enter promises interaction it does not deliver (NFR-4.1), which is worse than the current honest absence. **Pick this up in Story 6.11** (the accessibility validation pass), or in whichever story first gives the dish focus — whichever comes first. Story 2.12's `<EditorStatusBar>` is the first component that gives the dish a textual equivalent, which is a prerequisite for announcing what a keyboard placement did.
+- **Cell placement is pointer-only — there is no keyboard path to the dish** (forced decision 5) — `<PetriDishCanvas variant="edit">` carries `role="img"` + `aria-label` and deliberately no `tabIndex` (Story 2.4 forced decision), and Story 2.5 adds `onPointerDown` placement on top of that. Editing a battle therefore requires a mouse, pen or touch: a **WCAG 2.1.1 (Keyboard)** concern, and one **axe cannot detect** — there is no focusable control for it to flag, so both the component-level and route-level axe scans stay green while the gap is real. None of Story 2.5's ACs (nor 2.6's or 2.7's) ask for a keyboard path, and inventing one here — a focus ring, a cursor cell, arrow-key navigation, Enter/Space to place, and the announcement model that makes any of it usable — would be unreviewed UX with no mockup behind it. Note the fix is not simply adding `tabIndex`: a focusable dish that does nothing on Enter promises interaction it does not deliver (NFR-4.1), which is worse than the current honest absence. **Pick this up in Story 6.11** (the accessibility validation pass), or in whichever story first gives the dish focus — whichever comes first. Story 2.12's `<EditorStatusBar>` is the first component that gives the dish a textual equivalent, which is a prerequisite for announcing what a keyboard placement did. — the preview dish (Story 4.14) inherits the same gap; Story 6.11 should cover both surfaces in one design.
 
 - **The e2e seed helper triplication is untouched, and `battleRoute.spec.ts` now layers a fourth init script beside it** — Story 2.5 needed Conway's Classic in the seeded organism library (it is absent from `createMockWorkspace()` while `seedWorkspace()` stamps `gol:schema` so the default seed cannot add it), and the story's own instruction was to extract the shared fixture module only if more than one copy were touched. Rather than edit one of the three hand-synced `buildSeedPayload`/`seedWorkspace` copies and create exactly the silent divergence the standing entry warns about, the organism is merged in by a separate `seedConwaysClassic(page)` init script registered after `seedWorkspace(page)`. That keeps the three copies byte-identical, at the cost of a fourth seeding helper in the same file. **The extraction entry above still stands** — pick it up in the next story that genuinely touches more than one `apps/web/e2e` spec's seeding.
 
@@ -1708,7 +1708,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   PopulationStats + cycle counter + Play/Stop/Step) should REUSE `<TransportControls>`,
   `<CycleDigits>`, `<PopulationPills>` and `<SpeedControl>` rather than re-author them or edit the
   same `simulation/` files concurrently — the lane gate proposed at the end of the 3-18 story
-  file says why. `<VisuallyHidden>` is at `components/` root for the same reason.
+  file says why. `<VisuallyHidden>` is at `components/` root for the same reason. Story 4.14 built
+  the panel; 4.15 mounts `<TransportControls>` / `<CycleDigits>` / `<PopulationPills>` /
+  `<SpeedControl>` under `<PreviewPanel>`'s drawing controls and swaps the edit canvas for a
+  playback one inside `PreviewDishBox` (see the 4.14 Dev Notes' shape).
 - **`<BattleHeader>`'s `disabled` collapse** (the 3-11 entry above) is unchanged by this story:
   the Fullscreen button is NEVER disabled — entering fullscreen touches no editor state, so
   neither the edit lock nor the roster refusal applies (both reach RUN only). The entry stays
@@ -2091,3 +2094,31 @@ commit. These are the rest.
   lands at the same size would mount a brand-new card or row flagged. The exact test is an id-set
   diff (`ids.some((id) => !prev.has(id))` over rule and condition ids); switch to it when a third
   call site appears (Story 4.17's seeding replaces the initialiser, so it does not count).
+
+## Deferred from: Story 4-14-preview-grid-drawing (2026-09-21)
+
+- **`showGridLines` is hard-wired `true` for the preview** (FD5) — FR-8.7 names Gallery/Edit/Play,
+  not the preview; Story 6.6 decides whether the setting reaches it (the modal has no settings
+  repository; 4.24/4.25 open it over `<BattlePage>`, which does).
+- **`PREVIEW_ORGANISM_ID` is a session placeholder** — the canvas's `tool` prop is
+  declared-and-unread (`PetriDishCanvas.tsx:41-47`); the second caller with no organism id is the
+  trigger to make `tool` optional on the edit member or drop it, and 4.15's preview-organism
+  identity (the `:514` mint-site note, the `:1637` `contentHash` note) should replace the
+  placeholder, not add a second.
+- **The canvas's `aria-label` reads "Petri dish, 30 by 20 cells" in the editor** (FD6) — accurate,
+  shared, and a copy decision ("Preview dish"?) for whichever story next touches
+  `<PetriDishCanvas>`'s label.
+- **No undo in the preview** — not in the AC, not in the design doc's drawing steps (`:617-622`);
+  Clear is the recovery.
+- **Draw/Erase are `aria-pressed` buttons, not a `radiogroup`** (FD3).
+- **`distinctColorCount` is now at two copies** (`battleRoute.spec.ts`, `organisms.spec.ts`) —
+  lift on the third.
+- **`component-tree-battle-page.md` §3.10 amendment candidate**: "preview reuse: `static`/second
+  `playback`" omits the `edit` member this story uses for UX-DR13's drawing; RFC-002 `:272`'s
+  "renderStatic … for the preview's paused frames" describes 4.15's stills, not the drawing
+  surface (Open flags).
+- **The design doc's "Preview grid smaller (250px)" at the fold tier** (`:652`) is satisfied by
+  `width: 100%` of the 350px column (290px box) — no fold-specific rule was written.
+- **A palette change mid-stroke ends the stroke without committing** (`PetriDishCanvas.tsx:328-345`,
+  Story 2.10 decision 2(b)) — reachable here only via keyboard on the aging switch while a pointer
+  is captured on the dish; inherited, not re-decided.
