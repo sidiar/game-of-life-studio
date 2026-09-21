@@ -1208,3 +1208,18 @@ Claude Sonnet 5 (claude-sonnet-5)
 
 Dev Model: sonnet   # follows the 3.10/3.11 contract as its second consumer with the two genuinely new pieces (the render-phase roster snapshot, the draft→organism adapter) pinned as exact code, tests and oracles; nothing here is a pattern later stories build on beyond `parseRuleDraft`, which is ten lines with a named inverse
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 39s | 39s | 20 | 3,953 | 10,716 | 582,119 | 596,808 |
+| Step 1 — create | opus-5 | 2 | 25m 08s | 25m 08s | 266 | 126,412 | 1,408,763 | 24,264,257 | 25,799,698 |
+| Step 2 — implement | sonnet-5 | 1 | 47m 02s | 47m 02s | 926 | 174,971 | 819,772 | 120,519,302 | 121,514,971 |
+| Step 3 — review + PR | opus-5 | 4 | 57m 36s | 57m 36s | 580 | 172,655 | 2,031,662 | 41,377,143 | 43,582,040 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 60 | 20,434 | 39,896 | 1,948,161 | 2,008,551 |
+| **Total (create → PR ready)** | | 7 | **2h 10m** | 2h 10m | 1,792 | 477,991 | 4,270,913 | 186,742,821 | **191,493,517** |
+
+Run started 2026-09-21 18:24 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
