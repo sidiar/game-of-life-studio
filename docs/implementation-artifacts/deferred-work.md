@@ -2032,3 +2032,29 @@ Deferred:
   option (`ConditionRow.tsx:175`) is "valid" and the modal shows the "Valid organism" notice.
   Unreachable by UI today; reachable when Story 4.17 seeds from a record that references a deleted
   organism — 4.17 (or 4.16's parse) decides whether that is a gate error or a save-time repair.
+
+## Owner's decisions on the two open reviews of 4-13-editor-validation-feedback (2026-09-21)
+
+- **Sticky `saveAttempted` (decision 1) — option (c) implemented.** A structural add — a new rule
+  (`addRule`) or a new condition row (`<ConditionsEditor>`'s `addCondition`, reached through
+  `setSurvivalRules`) — clears `saveAttempted` globally; a value edit, a delete or a reorder leaves
+  it sticky, and the next Save re-flags everything, the added control included
+  (`OrganismEditorModal.tsx`, the `structuralSize`/`prevStructuralSizeRef` effect). Pinned by
+  `OrganismEditorModal.test.tsx` (19). The story's FD3 note and AC6 wording were updated to match.
+- **The AC8 notice idiom (decision 2) — kept as written; no code change.** The notice stays a
+  conditionally-mounted `<SaveNotice role="status">`; Story 4.16 deletes it. **The house now
+  carries two live-region idioms for a save outcome, and 4.16's toast should pick between them
+  deliberately:**
+  - **Always-mounted** (Story 4.9's `<ColorPickerField>` colour-reuse warning, `:46-54`): the
+    region exists at mount, its text toggles between `''` and the sentence. 4.9's own FD3 records
+    why: "a live region has to exist before its content changes to be announced reliably."
+  - **Conditionally-mounted** (Story 2.13's `<SaveErrorLine>` and this story's `<SaveNotice>`): the
+    region mounts only while the message is showing, relying on the mount itself (not a text
+    change) to trigger the announcement.
+  - **4.16's Library toast AC** ("an in-flow `role="status"` region on the Library, published once
+    the editor's exit transition has finished") should pick the **always-mounted** idiom: a toast
+    on the Library persists across the editor's close transition and can be followed by another
+    save shortly after (open editor, save again) — the exact "second identical message in a row"
+    case the conditionally-mounted idiom does not reliably re-announce (this story's own deferred
+    item above: "a second valid Save on an already-visible notice gives no feedback"). An
+    always-mounted region whose text is cleared and reset avoids that gap.

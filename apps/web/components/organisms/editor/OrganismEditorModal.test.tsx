@@ -888,5 +888,51 @@ describe('OrganismEditorModal', () => {
 
       expect((await axe(document.body)).violations).toEqual([]);
     });
+
+    // Review decision (Owner, 2026-09-21, option (c)): a rule or a condition added AFTER a refused
+    // Save is not flagged on mount — `saveAttempted` clears globally on the structural add itself
+    // (not per-control), which is why rule 2's still-present error also hides here, not just rule
+    // 3's absent one. A value edit stays sticky (no un-stick on the name keystroke below), and the
+    // very next Save re-flags everything, the newly added control included.
+    it('(19) a structural add un-sticks saveAttempted; a value edit does not; a later Save re-flags everything', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const headerAdd = headerAddButton(rules);
+      await user.click(headerAdd);
+      await user.click(headerAdd);
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+
+      // Refused: name + both zero-condition rules are flagged.
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(3);
+
+      // A value edit (not structural) leaves the override sticky — the two rule errors survive it.
+      await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'G');
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(2);
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      expect(within(rule1).getByRole('alert')).toHaveTextContent(RULE_NEEDS_CONDITION);
+
+      // A structural add — a new rule — clears `saveAttempted` globally: rule 2's untouched error
+      // hides too, not merely rule 3's (which never had one to show).
+      await user.click(headerAdd);
+      expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
+      expect(dialog.querySelectorAll('[aria-invalid="true"], [data-invalid]')).toHaveLength(0);
+
+      // A later Save re-flags everything, the added rule included (name stays valid from above).
+      await user.click(save);
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(3);
+      const rule3 = within(rules).getByRole('group', { name: 'Rule 3' });
+      expect(within(rule3).getByRole('alert')).toHaveTextContent(RULE_NEEDS_CONDITION);
+
+      // A structural add reached through a CONDITION (not a rule) un-sticks it the same way.
+      await user.click(within(rule3).getByRole('button', { name: '+ Add Condition' }));
+      expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
+
+      await user.click(save);
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(2); // rule 1, rule 2 — 3 now satisfied
+    });
   });
 });

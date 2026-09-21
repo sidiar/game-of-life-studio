@@ -4,7 +4,7 @@ baseline_commit: 0fa68102ece15da0630af2c3dcb62e42f9e9f40e
 
 # Story 4.13: Editor Validation & Feedback
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -108,8 +108,11 @@ half**: zero rules is not an error, the gate passes it, nothing red appears.
    `group`/`button` and axe's `aria-allowed-attr` fails it (FD4); the `data-invalid` selector is
    the boundary cue, the alert is the text, the describedby is the association. Adding a row
    removes all three on the same render. A freshly added rule (zero rows) shows **nothing** until a
-   Save is attempted — never red on add (4.5 FD2's "never on mount", applied to a new card).
-   (UX-DR14, UX-DR17, FR-2.5)
+   Save is attempted — never red on add (4.5 FD2's "never on mount", applied to a new card). This
+   also holds for a rule or condition added **after** a refused Save: either add is a structural
+   add, which clears `saveAttempted` on the same commit (Owner's review decision (c), 2026-09-21) —
+   so the new control, and every other still-open error, wait for the next Save before showing red
+   again; a value edit never clears it. (UX-DR14, UX-DR17, FR-2.5)
 
 7. **The override is one boolean, threaded, never a context; visibility stays derived.**
    `showAllErrors` is a **required** prop on `<OrganismNameField>`, `<RulesEditor>`, `<RuleCard>`,
@@ -543,7 +546,7 @@ Reviewed on **Opus** against a **Sonnet** implementation (2026-09-21), via three
 layers (Blind Hunter — diff only; Edge Case Hunter — diff + project; Acceptance Auditor — diff +
 story + context). 27 raw findings → 2 `decision-needed`, 12 `patch`, 6 `defer`, 7 dismissed.
 
-- [ ] [Review][Decision] **Sticky `saveAttempted` paints brand-new controls red the instant they
+- [x] [Review][Decision] **Sticky `saveAttempted` paints brand-new controls red the instant they
   mount** — after one refused Save, "+ Add Rule" mounts a `role="alert"` + a red "+ Add Condition"
   on the fresh card in the same commit that focuses its Summary; a new row, or a property/operator
   switch to a numeric input, shows "Enter/Min must be a whole number…" before the user types
@@ -560,7 +563,10 @@ story + context). 27 raw findings → 2 `decision-needed`, 12 `patch`, 6 `defer`
   everything; **(c)** clear `saveAttempted` on structural adds only (add rule / add condition),
   keeping it sticky across value edits. Recommendation: (a) for this story, (b) as a follow-up if the
   4.16/4.17 e2e passes find it jarring.
-- [ ] [Review][Decision] **The AC8 notice is a conditionally-mounted `role="status"`, which the
+  **Owner's decision (2026-09-21): (c)** — clear `saveAttempted` on structural adds only (add rule /
+  add condition); it stays sticky across value edits. Implement, pin with a modal test, update the
+  story's FD3 note and AC6 wording accordingly.
+- [x] [Review][Decision] **The AC8 notice is a conditionally-mounted `role="status"`, which the
   editor's own 4.9 FD3 precedent says is unreliable** — `ColorPickerField.tsx:46-47`: "a live region
   has to exist before its content changes to be announced reliably" (always-mounted region, text
   toggles); `OrganismEditorModal.tsx:384-388` mounts `<SaveNotice role="status">` only while
@@ -572,6 +578,9 @@ story + context). 27 raw findings → 2 `decision-needed`, 12 `patch`, 6 `defer`
   the two idioms in `deferred-work.md` and let 4.16's toast pick the always-mounted one; **(b)**
   switch now to an always-mounted `<SaveNotice role="status">` whose text is `''` or the sentence
   (the 4.9 idiom), update AC8, test (14)/(15) and e2e 3 to assert text rather than presence.
+  **Owner's decision (2026-09-21): (a)** — keep AC8 as written (transitional; Story 4.16 deletes it).
+  No code change; note the two live-region idioms in `deferred-work.md` so 4.16's toast picks the
+  always-mounted one.
 - [x] [Review][Patch] Undisclosed deletion of the Story 4.10 `toBeDisabled()` assertion in "the
   header action adds through the modal" — AC9(a) lists three retargets, Completion Notes say "No
   other pre-existing assertion was touched"; the diff removes a fourth
@@ -668,15 +677,24 @@ path it documents — the other path is the first defer above).
   message no user can reach is dead text. The epic's "no color" item is thereby recorded as
   unreachable, not implemented. Zero rules is not an error (design doc `:551`).
 
-- **FD3 — The override is a threaded boolean, sticky after the first refusal.** `showAllErrors`
-  flows modal → name field, and modal → `<RulesEditor>` → `<RuleCard>` → `<ConditionsEditor>` →
-  `<ConditionRow>` — five hops, all required props. A Context was rejected: the house has no
-  Context-as-state (project-context: three categories, no global store), and five explicit hops
-  are what make "who reads the override" greppable. Sticky because un-sticking it (clearing on
-  every edit) would hide a still-present error the moment the user touched an unrelated field —
-  the 4.11 "Max hidden while Min untouched" class of gap, reintroduced. The fields' own `touched`
-  logic is untouched: with the override `false`, every shipped behaviour is byte-identical (the
-  Story 4.7 proof — the pre-existing tests pass with only the new prop added).
+- **FD3 — The override is a threaded boolean, sticky across value edits, cleared only by a
+  structural add.** `showAllErrors` flows modal → name field, and modal → `<RulesEditor>` →
+  `<RuleCard>` → `<ConditionsEditor>` → `<ConditionRow>` — five hops, all required props. A
+  Context was rejected: the house has no Context-as-state (project-context: three categories, no
+  global store), and five explicit hops are what make "who reads the override" greppable. Sticky
+  because un-sticking it on every edit would hide a still-present error the moment the user touched
+  an unrelated field — the 4.11 "Max hidden while Min untouched" class of gap, reintroduced. The
+  fields' own `touched` logic is untouched: with the override `false`, every shipped behaviour is
+  byte-identical (the Story 4.7 proof — the pre-existing tests pass with only the new prop added).
+  **Review decision (Owner, 2026-09-21, option (c)):** the boolean IS cleared, but only by a
+  *structural* add — a new rule (`addRule`) or a new condition row (`<ConditionsEditor>`'s
+  `addCondition`) — never by a value edit, a delete or a reorder. Without this, a control that did
+  not exist at the last refused Save mounted already-flagged in the same commit that focused its
+  Summary, which contradicted AC6's "never red on add" for anything added after the first refusal.
+  The modal tracks one derived number — every rule plus every rule's conditions — in an effect (not
+  inside `setSurvivalRules`'s updater, which must stay pure); a Save always re-arms `saveAttempted`
+  on a refusal, so the very next Save re-flags everything, the newly added control included. Pinned
+  by `OrganismEditorModal.test.tsx` (19).
 
 - **FD4 — The zero-condition error hangs off "+ Add Condition", not the fieldset.** ARIA 1.2 lists
   `aria-invalid` on textbox/combobox/listbox/slider/spinbutton/checkbox/radiogroup/gridcell/tree
@@ -965,6 +983,30 @@ claude-sonnet-5 (Claude Code)
 - `gh run list --limit 1` — **not run**: this story has not been pushed yet; the check runs after
   the PR opens, per Task 6.
 
+**Owner's decisions applied (2026-09-21)** — `npm run ci:dev > ci.log 2>&1; echo $?` → **exit code
+0**. `lsof -i :4173` returned nothing before the e2e run (no stale preview server).
+- Coverage (unchanged packages confirm no drift — no `packages/*` file touched by this pass):
+  - `@gol/domain`: 100/100/100/100, 109 tests, 6 files.
+  - `@gol/simulation`: 100/100/100/100, 407 tests, 23 files.
+  - `@gol/persistence`: 99.19/96.07/100/100 aggregate, 82 tests, 7 files.
+  - `@gol/test-utils`: 94.44/90.09/100/97.07 aggregate, 89 tests, 6 files.
+  - `apps/web` (no gate): 96.68/92.36/97.41/98.3, **1778 tests, 106 files** (+1 test —
+    `OrganismEditorModal.test.tsx`'s new (19), pinning the structural-add un-stick).
+- Bundle (`npm run bundle:check`, against `apps/web/out`) — **byte-identical to the pre-review
+  figures**: `/` 333.8 KB / 340 KB (6.2 KB headroom); `/battle` 309.3 KB / 310 KB (0.7 KB);
+  `/battle/new` 309.1 KB / 310 KB (0.9 KB); `/organisms` 295.6 KB / 305 KB (9.4 KB). Expected: the
+  new `structuralSize`/`prevStructuralSizeRef` logic is a few lines inside `OrganismEditorModal.tsx`,
+  already on the lazy editor chunk, never `/organisms`'s first load.
+- Bench (`npm run bench` + `bench:check`): frame **7.436 ms** of the 16.667 ms budget (9.231 ms
+  headroom, 55.4%) — unaffected by this pass (no engine/render code touched); the drift from the
+  story's earlier 10.202 ms reading is machine-load noise between runs, not a regression (coverage
+  lines above are identical to the pre-review run).
+- e2e (Chromium only, `npm run e2e:chromium`): **209 passed, 1 skipped** (pre-existing, unrelated)
+  — unchanged from the pre-review run; `e2e/organisms.spec.ts` was not touched by this pass, so the
+  Firefox/WebKit/tablet matrix was not run locally (per the dev step's own rule — that matrix is
+  CI's job on the pushed branch).
+- `gh run list --limit 1` — not run yet; this pass has not been pushed.
+
 ### Completion Notes List
 
 - Implemented Save as the live validation gate over the existing per-field validators, exactly as
@@ -1011,6 +1053,18 @@ claude-sonnet-5 (Claude Code)
   .getByRole('status')`, because the dialog already holds two always-mounted `role="status"`
   regions (the colour picker's reuse warning, the rule reorder announcer) and `getByRole` would
   throw on the multiple match.
+- **Owner's review decisions applied (2026-09-21):** (1) sticky `saveAttempted` — implemented
+  option (c): `OrganismEditorModal.tsx` gained a `structuralSize` (rules + every rule's conditions)
+  tracked in a `useRef`/`useEffect` pair that clears `saveAttempted` only when it grows — a new
+  rule (`addRule`) or a new condition row (reached through `setSurvivalRules`); a value edit, a
+  delete or a reorder leaves it untouched, and `handleSave`'s unconditional `setSaveAttempted(true)`
+  on a refusal re-flags everything on the next Save. Kept out of `setSurvivalRules`'s updater to
+  keep that updater pure (the Story 4.12 review habit). Pinned by
+  `OrganismEditorModal.test.tsx` (19), which also proves a value edit does NOT un-stick it. FD3 and
+  AC6 in this file were reworded to describe the new behaviour. (2) AC8 notice idiom — kept as
+  written, no code change; `deferred-work.md` gained an "Owner's decisions" section naming the
+  house's two live-region idioms (4.9's always-mounted vs. 2.13/4.13's conditionally-mounted) and
+  recommending the always-mounted one for Story 4.16's Library toast.
 
 ### File List
 
@@ -1050,6 +1104,12 @@ claude-sonnet-5 (Claude Code)
   `deferred-work.md`. Re-verified: typecheck, lint, format:check, spec:check, the five touched
   vitest files (133 tests), `organisms.spec.ts` on Chromium (81 passed), bundle:check (unchanged).
   Status → in-progress (open decisions).
+- 2026-09-21 — Owner's decisions applied (dev-story resume): both open `[Review][Decision]` items
+  resolved. Decision 1 (sticky `saveAttempted`) → option (c): a structural add (new rule/condition)
+  now clears it, a value edit does not; pinned by modal test (19); FD3/AC6 reworded. Decision 2
+  (AC8 notice idiom) → kept as written, no code change; `deferred-work.md` records the house's two
+  live-region idioms for Story 4.16's toast to choose from. `npm run ci:dev` green (exit 0), apps/web
+  now at 1778 tests (+1). Status → review.
 
 Dev Model: sonnet   # follows settled patterns — 4.5/4.11's touched-plus-override error idiom, the ErrorText/⚠︎ line, data-attribute selectors with CSS.escape, the 2.13 in-flow status line; the one new shape (a document-ordered validateOrganismDraft with id-based targets and an attempt-keyed focus effect) is pinned with exact code, selectors and tests, and 4.16 consumes it without reshaping it
 Proposed lane gate: none
