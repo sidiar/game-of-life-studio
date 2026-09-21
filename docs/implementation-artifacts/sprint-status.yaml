@@ -145,8 +145,8 @@ development_status:
   epic-4-retrospective: optional
 
   # Epic 5: Sharing, Backup & Workspace Management
-  epic-5: backlog
-  5-1-settings-page-shell: backlog
+  epic-5: in-progress
+  5-1-settings-page-shell: done
   5-2-workspace-statistics: backlog
   5-3-export-envelope-serializer: backlog
   5-4-rule-aware-organism-closure: backlog

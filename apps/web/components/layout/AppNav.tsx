@@ -6,13 +6,16 @@ import { styled } from '@mui/material/styles';
 import { isNavItemActive } from '@/lib/layout/navMatch';
 
 // Story 1.9 AC4 / the no-dead-affordance rule: an entry appears here only once its route exists.
-// Organisms joined in Story 4.1; Settings joins in Story 5.1 — one line here, not before.
-// `match` is per-entry (Story 4.1, deferred-work.md:85): '/' has to be 'exact' because it
-// prefixes every route, while '/organisms' is 'prefix' so it stays active on '/organisms/' (a
-// trailing-slash host) and on any nested path — see lib/layout/navMatch.ts's doc comment.
+// This is now the MVP's complete set — AR-28's three page surfaces (Gallery, Battle, Settings)
+// plus `/organisms`, the fourth top-level route Story 4.1 added; battle routes carry no nav entry
+// by design (they wear their own chassis, not AppShell), so three entries is the whole list. `match` is per-entry (Story 4.1, deferred-work.md:85): '/' has to be 'exact' because
+// it prefixes every route, while '/organisms' and '/settings' are 'prefix' so each stays active on
+// its own trailing-slash host (`/organisms/`, `/settings/`) and on any nested path — see
+// lib/layout/navMatch.ts's doc comment.
 const NAV_ITEMS = [
   { href: '/', label: 'Battles', match: 'exact' },
   { href: '/organisms', label: 'Organisms', match: 'prefix' },
+  { href: '/settings', label: 'Settings', match: 'prefix' },
 ] as const;
 
 const Nav = styled('nav')({

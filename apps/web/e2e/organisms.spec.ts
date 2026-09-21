@@ -57,7 +57,7 @@ test.describe('organisms route (Story 4.1)', () => {
     await expect(page.getByText("Conway's Classic")).toBeVisible();
 
     const nav = page.getByRole('navigation', { name: 'Main' });
-    await expect(nav.getByRole('link')).toHaveCount(2);
+    await expect(nav.getByRole('link')).toHaveCount(3); // Battles, Organisms, Settings (Story 5.1)
     await expect(nav.getByRole('link', { name: 'Organisms' })).toHaveAttribute(
       'aria-current',
       'page',
