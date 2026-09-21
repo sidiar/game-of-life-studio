@@ -98,6 +98,16 @@ const ROUTES = [
     html: 'organisms.html',
     budgetGzipKb: 305,
   },
+  {
+    // New in Story 5.1 — the first story to measure `/settings`. A new measurement, not a raise
+    // (same footing as the `/organisms` entry above; `deferred-work.md`'s "the bundle gate moves
+    // off absolute budgets" entry is being retired separately, and a first measurement for a new
+    // route does not pre-empt that). Measured at 291.5 KB gzip; same formula as every other
+    // entry's initial derivation: ceil((291.5 + 12) / 5) * 5 = 305.
+    name: 'settings (/settings)',
+    html: 'settings.html',
+    budgetGzipKb: 305,
+  },
 ];
 
 function measureRoute({ name, html }) {
