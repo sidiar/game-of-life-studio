@@ -1886,9 +1886,12 @@ the same day: FD4 (c), `Escape` stops AND exits the stage** (commit `a245fe4`). 
   which React flushes synchronously). `useLayoutEffect` (or React 19's `useEffectEvent`) is the
   tighter form. Not changed in review because the idiom was prescribed; **fold into the next hook
   touch or 6.11**.
-- **`installFrameDriver` duplicated across two test files.** `BattlePage.test.tsx` (Story 3.19) now
+- ~~**`installFrameDriver` duplicated across two test files.** `BattlePage.test.tsx` (Story 3.19) now
   carries a verbatim copy of `BattleSimulationView.test.tsx`'s helper. `@gol/test-utils` candidate,
-  alongside the `installContexts()` canvas stubs it pairs with.
+  alongside the `installContexts()` canvas stubs it pairs with.~~ — ✅ **Lifted by the 4.15 review**
+  to `apps/web/test-support/frameDriver.ts` (`@/test-support`, not `@gol/test-utils`: it spies
+  `window` and calls RTL's `act`, both `apps/web`-only). The `installContexts()` stubs stay where
+  they are.
 - **Gallery `runLink` entry absent from the hotkeys e2e block.** Trap 17 named both Run entries;
   only `runButton.click()` + `parkFocus` is exercised. The `?mode=run` path (Story 3.17) starts with
   focus on `<body>` and is the one path where the hints are true from the first frame — a one-test
@@ -2168,9 +2171,15 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   (FD2); and the mockup (`organism-editor.html:770-815, :1208-1217`) shows no speed slider and a
   uniform `.btn-sim` trio — the shipped surface is the Run mode's cluster (FD8) plus the design
   doc's slider.
-- **`installFrameDriver` is at two copies** (`BattleSimulationView.test.tsx`,
+- ~~**`installFrameDriver` is at two copies** (`BattleSimulationView.test.tsx`,
   `PreviewPanel.test.tsx`, and now `OrganismEditorModal.test.tsx` — three copies); lift to
-  `@/test-support` on the next one.
+  `@/test-support` on the next one.~~ — ✅ **Lifted by the 4.15 review** to
+  `apps/web/test-support/frameDriver.ts` (the "lift on the third" rule fired here, not on the
+  next one): `BattleSimulationView.test.tsx`, `BattlePage.test.tsx` (the 3.19 copy above),
+  `PreviewPanel.test.tsx` and `OrganismEditorModal.test.tsx` all import it; the four local copies
+  are gone. `distinctColorCount` stays at two (`battleRoute.spec.ts`, `organisms.spec.ts` — the
+  4.15 block's copy was folded into a file-scope hoist shared with the 4.14 block, together with
+  `preview`/`dish`/`tool`/`cellCentre`).
 - **Stop is the only way back to the sketch after an auto-pause** (FD3): an auto-paused run at
   cycle N shows an empty dish with the tools disabled until Stop; an "auto-pause returns to rest"
   shortcut was considered and rejected (a paused run at cycle N must keep its live grid for Step —
@@ -2182,8 +2191,13 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   the rules column, not the panel.
 - **The preview's starting speed is the schema default** (`DEFAULT_SETTINGS.defaultSpeed`), not
   the user's FR-8.12 setting — Story 6.9 decides, on the same terms as 4.14's grid-lines entry.
-- **`Play` disabled carries no `title`** — the hint line is the disclosure; 3.12 FD6's `title` on
-  Step stays for the playing case only.
+- **`Play` disabled carries no `title` and no `aria-describedby` to the hint** — the hint line
+  (`RunHint`, a plain `<p>` directly under the group) is the disclosure by adjacency in reading
+  order; 3.12 FD6's `title` on Step stays for the playing case only. A disabled button is out of
+  the tab order, so an association would rarely be read — but if the hint ever moves away from
+  the group, or `Play` gains a focusable-disabled treatment (Story 6.11's sweep), wire
+  `aria-describedby` through a `describedBy` prop on `<TransportControls>` (the `<LadderSlider>`
+  form). Review 4.15.
 - **`compact` wraps rather than shrinks** (FD8) — at 290px the cluster renders as two rows (Play +
   Next cycle, then Stop & reset full width); a three-up grid needed the mockup's short labels,
   which 3.18 FD11 rejected for the shared cluster.
@@ -2196,7 +2210,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **The editor chunk's growth landed mostly OUTSIDE the single `grep -rl "Organism Color"` chunk.**
   Turbopack split the newly-shared `@gol/simulation` session/loop/strategy graph (already shipped
   by `/battle`) into two NEW chunk files rather than folding it into the modal's own chunk: the
-  named chunk grew only +0.65 KB gzip (12124 -> 12772 bytes), while the two new chunks together add
+  named chunk grew only +0.63 KB gzip (12124 -> 12772 bytes), while the two new chunks together add
   ~10.6 KB gzip and the WHOLE app's chunk total grew ~7.6 KB gzip net (some code moved out of
   previously editor-only chunks into the new shared ones). `check-bundle-size.mjs`'s own
   measurement (route first-load JS) is unaffected either way, because none of this is on any
@@ -2204,3 +2218,12 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   AC11 anticipated ("unless Turbopack re-splits the engine modules the `/battle` route already
   ships … measured, explained"); no action needed unless a future story wants a single-chunk
   growth number to stay a reliable proxy (it no longer is, once two routes share an engine).
+
+## Deferred from: code review of 4-15-preview-simulation (2026-09-21)
+
+- **`cellCentre` in `organisms.spec.ts` hard-codes the 30×20 preview geometry** (now one
+  file-scope helper shared by the 4.14 and 4.15 blocks; the unit tests read `PREVIEW_GRID_SIZE`).
+  Pre-existing from 4.14: the Playwright spec has no transpile path into `@/lib/organisms/previewGrid`
+  (it would pull `@gol/simulation`), so the literals stay until an e2e-side constants module
+  exists. A grid-size change silently mis-targets every drawn cell — the 4.14/4.15 blocks would
+  fail loudly (Clear stays disabled), which is the current guard.

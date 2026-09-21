@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
@@ -12,6 +12,7 @@ import { ORGANISM_NAME_REQUIRED } from '@/lib/organisms/organismName';
 import { computeGridLayout } from '@/lib/canvas/gridLayout';
 import { PREVIEW_GRID_SIZE } from '@/lib/organisms/previewGrid';
 import { RecordingContext2D } from '@/test-support/recordingContext2d';
+import { installFrameDriver } from '@/test-support/frameDriver';
 import OrganismEditorModal, {
   backLabelFor,
   errorTargetSelector,
@@ -1089,39 +1090,6 @@ describe('OrganismEditorModal', () => {
   // dialog (the draft's real `survivalRules`, through the real `+ Add Rule` / `+ Add Condition`
   // UI) and that closing the dialog stops the loop.
   describe('preview simulation (Story 4.15)', () => {
-    /**
-     * `BattleSimulationView.test.tsx:68-107`'s copy (second instance, recorded in
-     * `deferred-work.md` — lift to `@/test-support` on the third). `frame(now)` fires every
-     * callback queued before the call, inside `act`; a re-request from inside a callback lands in
-     * the next frame.
-     */
-    function installFrameDriver() {
-      const queue: { handle: number; callback: FrameRequestCallback }[] = [];
-      let nextHandle = 1;
-      const raf = vi
-        .spyOn(window, 'requestAnimationFrame')
-        .mockImplementation((callback: FrameRequestCallback) => {
-          const handle = nextHandle++;
-          queue.push({ handle, callback });
-          return handle;
-        });
-      const caf = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((handle: number) => {
-        const index = queue.findIndex((entry) => entry.handle === handle);
-        if (index !== -1) queue.splice(index, 1);
-      });
-      return {
-        raf,
-        caf,
-        frame(now: number): void {
-          const batch = queue.splice(0);
-          act(() => {
-            for (const entry of batch) entry.callback(now);
-          });
-        },
-        pending: () => queue.length,
-      };
-    }
-
     afterEach(() => {
       vi.restoreAllMocks();
     });

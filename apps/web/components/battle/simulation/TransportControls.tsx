@@ -196,7 +196,13 @@ export default function TransportControls({
   const playing = status === 'playing';
 
   return (
-    <Transport role="group" aria-label="Simulation controls" data-compact={compact}>
+    <Transport
+      role="group"
+      aria-label="Simulation controls"
+      // `undefined`, not `false`: React stringifies a boolean `data-*`, and the two existing
+      // callers must not gain a `data-compact="false"` they never asked for (AC9).
+      data-compact={compact ? 'true' : undefined}
+    >
       {/* 3.12 FD1: ONE button, ONE DOM element across the flip — the accessible name states the
           NEXT action ("Play" while paused, "Pause" while playing), no `aria-pressed`. WAI-ARIA's
           toggle-button guidance is explicit that a button with `aria-pressed` must not also

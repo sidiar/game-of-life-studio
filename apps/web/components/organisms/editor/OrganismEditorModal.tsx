@@ -199,7 +199,8 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * `dominance`, Story 4.7's `agingEnabled`/`colorToken`, Story 4.8's `colorToken` seed from
  * `library` and Story 4.10's `survivalRules`, Story 4.12's order) and its seed — no repository
  * call. Story 4.14's preview panel reads `colorToken`/`agingEnabled` and holds its own grid (M3);
- * Story 4.15's run reads `survivalRules` and compiles them at the next Play. The lifecycle (inert
+ * Story 4.15's run reads `survivalRules` and compiles them for the next Play — eagerly, on every
+ * at-rest change; never mid-run (FD2). The lifecycle (inert
  * window, focus restore) stays `useOrganismEditorModal`'s, and a fresh
  * draft per open is the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after
  * every exit, so there is no reset effect and no `key` trick). The `useState` initialiser closes

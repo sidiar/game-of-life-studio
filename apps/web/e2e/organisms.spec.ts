@@ -2273,50 +2273,53 @@ test.describe('editor validation & feedback (Story 4.13)', () => {
   });
 });
 
+// Shared by the 4.14 (preview grid & drawing) and 4.15 (preview simulation) blocks — hoisted to
+// file scope by the 4.15 review so the two blocks read ONE set of locators and one cell geometry.
+const preview = (dialog: Locator) => dialog.getByRole('region', { name: 'Preview & Test' });
+const dish = (dialog: Locator) => preview(dialog).getByRole('img', { name: /petri dish/i });
+const tool = (dialog: Locator, name: string) =>
+  preview(dialog).getByRole('button', { name, exact: true });
+
+/** Distinct RGBA values actually rasterised on a canvas — the AR-42-permitted smoke check
+ * (`battleRoute.spec.ts`'s `distinctColorCount`, copied with a pointer per Story 4.14's Task 4 —
+ * lift on a third copy, `deferred-work.md`). File scope since Story 4.15: its block and 4.14's
+ * share it. */
+async function distinctColorCount(canvas: Locator): Promise<number> {
+  return canvas.evaluate((el) => {
+    const canvasEl = el as HTMLCanvasElement;
+    const ctx = canvasEl.getContext('2d');
+    if (ctx === null) return 0;
+    const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+    const seen = new Set<string>();
+    for (let i = 0; i < data.length; i += 4) {
+      seen.add([data[i], data[i + 1], data[i + 2], data[i + 3]].join(','));
+    }
+    return seen.size;
+  });
+}
+
+/** The client point for a preview cell, from the CANVAS's own layout (never the geometric
+ * centre — `deferred-work.md:344`'s note on the battle spec) — `floor(min(w/30, h/20))`, centred.
+ * Measure the `img` (the canvas), not `[data-preview-dish]`: the box carries a 1px border, so its
+ * rect is 2px wider than the surface the renderer laid out on, and a `floor` taken over the wrong
+ * width diverges from the renderer's whenever `width / 30` sits just above an integer. */
+function cellCentre(
+  box: { x: number; y: number; width: number; height: number },
+  col: number,
+  row: number,
+) {
+  const cellSize = Math.floor(Math.min(box.width / 30, box.height / 20));
+  const drawWidth = cellSize * 30;
+  const drawHeight = cellSize * 20;
+  const originX = box.x + (box.width - drawWidth) / 2;
+  const originY = box.y + (box.height - drawHeight) / 2;
+  return {
+    x: originX + col * cellSize + cellSize / 2,
+    y: originY + row * cellSize + cellSize / 2,
+  };
+}
+
 test.describe('preview grid & drawing (Story 4.14)', () => {
-  const preview = (dialog: Locator) => dialog.getByRole('region', { name: 'Preview & Test' });
-  const dish = (dialog: Locator) => preview(dialog).getByRole('img', { name: /petri dish/i });
-  const tool = (dialog: Locator, name: string) =>
-    preview(dialog).getByRole('button', { name, exact: true });
-
-  /** Distinct RGBA values actually rasterised on a canvas — the AR-42-permitted smoke check
-   * (`battleRoute.spec.ts`'s `distinctColorCount`, copied with a pointer per the story's Task 4 —
-   * lift on a third copy, `deferred-work.md`). */
-  async function distinctColorCount(canvas: Locator): Promise<number> {
-    return canvas.evaluate((el) => {
-      const canvasEl = el as HTMLCanvasElement;
-      const ctx = canvasEl.getContext('2d');
-      if (ctx === null) return 0;
-      const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
-      const seen = new Set<string>();
-      for (let i = 0; i < data.length; i += 4) {
-        seen.add([data[i], data[i + 1], data[i + 2], data[i + 3]].join(','));
-      }
-      return seen.size;
-    });
-  }
-
-  /** The client point for a preview cell, from the CANVAS's own layout (never the geometric
-   * centre — `deferred-work.md:344`'s note on the battle spec) — `floor(min(w/30, h/20))`, centred.
-   * Measure the `img` (the canvas), not `[data-preview-dish]`: the box carries a 1px border, so its
-   * rect is 2px wider than the surface the renderer laid out on, and a `floor` taken over the wrong
-   * width diverges from the renderer's whenever `width / 30` sits just above an integer. */
-  function cellCentre(
-    box: { x: number; y: number; width: number; height: number },
-    col: number,
-    row: number,
-  ) {
-    const cellSize = Math.floor(Math.min(box.width / 30, box.height / 20));
-    const drawWidth = cellSize * 30;
-    const drawHeight = cellSize * 20;
-    const originX = box.x + (box.width - drawWidth) / 2;
-    const originY = box.y + (box.height - drawHeight) / 2;
-    return {
-      x: originX + col * cellSize + cellSize / 2,
-      y: originY + row * cellSize + cellSize / 2,
-    };
-  }
-
   test('the dish and its controls render, Draw pressed, Clear disabled, zero console errors (no ResizeObserver loop)', async ({
     page,
   }) => {
@@ -2510,13 +2513,8 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
 });
 
 test.describe('preview simulation (Story 4.15)', () => {
-  // Local copies of the 4.14 block's helper shapes (the `PreviewCanvas`/`installFrameDriver`
-  // precedent — copy across a feature split rather than reach into a sibling `describe`, so the
-  // 4.14 block stays byte-identical). `deferred-work.md` records the pair as a hoist candidate.
-  const preview = (dialog: Locator) => dialog.getByRole('region', { name: 'Preview & Test' });
-  const dish = (dialog: Locator) => preview(dialog).getByRole('img', { name: /petri dish/i });
-  const tool = (dialog: Locator, name: string) =>
-    preview(dialog).getByRole('button', { name, exact: true });
+  // `preview`/`dish`/`tool`/`cellCentre`/`distinctColorCount` are the file-scope helpers hoisted
+  // out of the 4.14 block (the review's hoist — two blocks share them; no behaviour change).
   const transport = (dialog: Locator) =>
     preview(dialog).getByRole('group', { name: 'Simulation controls' });
   const run = (dialog: Locator, name: string) =>
@@ -2524,34 +2522,72 @@ test.describe('preview simulation (Story 4.15)', () => {
   const cycle = (dialog: Locator) => preview(dialog).locator('[data-preview-cycle]');
   const box = (dialog: Locator) => dialog.locator('[data-preview-dish]');
 
-  function cellCentre(
-    boxRect: { x: number; y: number; width: number; height: number },
-    col: number,
-    row: number,
-  ) {
-    const cellSize = Math.floor(Math.min(boxRect.width / 30, boxRect.height / 20));
-    const drawWidth = cellSize * 30;
-    const drawHeight = cellSize * 20;
-    const originX = boxRect.x + (boxRect.width - drawWidth) / 2;
-    const originY = boxRect.y + (boxRect.height - drawHeight) / 2;
-    return {
-      x: originX + col * cellSize + cellSize / 2,
-      y: originY + row * cellSize + cellSize / 2,
-    };
-  }
-
-  async function distinctColorCount(canvas: Locator): Promise<number> {
+  /** Every distinct RGBA on the canvas, as strings — the EMPTY dish's palette (background plus the
+   * grid lines' anti-aliased shades), taken before anything is drawn. */
+  async function distinctColours(canvas: Locator): Promise<string[]> {
     return canvas.evaluate((el) => {
       const canvasEl = el as HTMLCanvasElement;
       const ctx = canvasEl.getContext('2d');
-      if (ctx === null) return 0;
+      if (ctx === null) return [];
       const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
       const seen = new Set<string>();
       for (let i = 0; i < data.length; i += 4) {
         seen.add([data[i], data[i + 1], data[i + 2], data[i + 3]].join(','));
       }
-      return seen.size;
+      return [...seen];
     });
+  }
+
+  /** The centre of the ONE painted cell, found from the picture itself: the bounding box of every
+   * pixel whose colour is not in the empty dish's palette, and the RGBA at its middle. Returns
+   * the backing-store point and that colour — an exact, geometry-free "is the cell there" oracle.
+   * Geometry-free on purpose: a distinct-colour COUNT cannot serve (an empty dish and a one-cell
+   * dish both rasterise to the same handful of grid-line shades — measured 6 and 6), a whole-
+   * raster hash cannot either (an incremental stroke paint and a fresh full repaint blend the
+   * cell's edge pixels differently), and a per-cell read computed from the CSS-space `cellCentre`
+   * drifts by a cell at DPR 2 (WebKit/tablet). Park the pointer off the dish before reading — the
+   * edit surface paints a hover ghost under it. */
+  async function paintedCell(
+    canvas: Locator,
+    emptyPalette: readonly string[],
+  ): Promise<{ x: number; y: number; rgba: string }> {
+    return canvas.evaluate((el, palette) => {
+      const canvasEl = el as HTMLCanvasElement;
+      const ctx = canvasEl.getContext('2d');
+      if (ctx === null) throw new Error('no 2d context');
+      const { data, width, height } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+      const known = new Set(palette);
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const i = (y * width + x) * 4;
+          const rgba = [data[i], data[i + 1], data[i + 2], data[i + 3]].join(',');
+          if (known.has(rgba)) continue;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+      if (maxX < 0) throw new Error('no painted cell found on the dish');
+      const x = Math.floor((minX + maxX) / 2);
+      const y = Math.floor((minY + maxY) / 2);
+      const i = (y * width + x) * 4;
+      return { x, y, rgba: [data[i], data[i + 1], data[i + 2], data[i + 3]].join(',') };
+    }, emptyPalette);
+  }
+
+  /** The RGBA at a backing-store point. */
+  async function pixelAt(canvas: Locator, point: { x: number; y: number }): Promise<string> {
+    return canvas.evaluate((el, p) => {
+      const canvasEl = el as HTMLCanvasElement;
+      const ctx = canvasEl.getContext('2d');
+      if (ctx === null) return '';
+      return Array.from(ctx.getImageData(p.x, p.y, 1, 1).data).join(',');
+    }, point);
   }
 
   async function drawOneCell(page: Page, dialog: Locator, col: number, row: number) {
@@ -2607,12 +2643,16 @@ test.describe('preview simulation (Story 4.15)', () => {
     await page.goto('/organisms');
     await expect(page.getByText("Conway's Classic")).toBeVisible();
     const dialog = await openEditor(page);
+    const emptyPalette = await distinctColours(dish(dialog));
 
     await drawOneCell(page, dialog, 5, 5);
-    // The drawn-cell colour count, taken BEFORE Play — the oracle for "the dish went empty" is
-    // relative to this (fewer distinct colours), not an absolute count: anti-aliased grid-line
-    // pixels can already push a genuinely two-colour dish past a hardcoded "<= 2".
+    // Taken BEFORE Play, pointer parked off the dish: the drawn dish's colour count (the "went
+    // empty" oracle is relative to it — fewer distinct colours — never an absolute count:
+    // anti-aliased grid-line pixels already push a genuinely two-colour dish past a hardcoded
+    // "<= 2") and the painted cell's interior pixel (the "came back" oracle — `paintedCell`).
+    await page.mouse.move(0, 0);
     const drawnCount = await distinctColorCount(dish(dialog));
+    const cell = await paintedCell(dish(dialog), emptyPalette);
 
     await run(dialog, 'Play').click();
     await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
@@ -2623,13 +2663,17 @@ test.describe('preview simulation (Story 4.15)', () => {
     await expect(tool(dialog, 'Erase')).toBeDisabled();
     await expect(tool(dialog, 'Clear')).toBeDisabled();
     await expect.poll(() => distinctColorCount(dish(dialog))).toBeLessThan(drawnCount);
+    // The run surface shows NO cell where the sketch had one.
+    expect(await pixelAt(dish(dialog), cell)).not.toBe(cell.rgba);
 
     await run(dialog, 'Stop & reset').click();
     await expect(box(dialog)).toHaveAttribute('data-cycle', '0');
-    // The drawn cell is back — proven by the enabled Clear (a fresh edit canvas repaints the
-    // sketch with slightly different anti-aliasing than the original, so an exact colour-count
-    // comparison is not the right oracle here; Clear's state already is one).
+    // The drawn cell is back on TWO oracles: Clear enabled proves the panel's grid still holds
+    // it (sketch ≠ live grid, AR-31); the same interior pixel carrying the same colour it had
+    // before Play proves the fresh edit canvas actually repainted it (the pointer is on Stop,
+    // off the dish, as it was for the first read).
     await expect(tool(dialog, 'Clear')).toBeEnabled();
+    await expect.poll(() => pixelAt(dish(dialog), cell)).toBe(cell.rgba);
   });
 
   test('Next cycle from rest advances exactly one cycle and stays paused (FR-4.3)', async ({
@@ -2664,6 +2708,10 @@ test.describe('preview simulation (Story 4.15)', () => {
 
     await slider.fill('0');
     await expect(slider).toHaveAttribute('aria-valuetext', '1 generation per second');
+    // The marks row is the ladder, in order (`aria-hidden` decoration beside the slider).
+    await expect(slider.locator('xpath=following-sibling::*[@aria-hidden="true"]/span')).toHaveText(
+      ['1', '2', '5', '10', '20'],
+    );
     await slider.focus();
     await page.keyboard.press('End');
     await expect(slider).toHaveAttribute('aria-valuetext', '20 generations per second');
@@ -2676,10 +2724,14 @@ test.describe('preview simulation (Story 4.15)', () => {
     await expect(box(dialog)).toHaveAttribute('data-cycle', '0');
     await expect(box(dialog)).toHaveAttribute('data-status', 'playing');
 
-    // A ref write, no restart: a restart would have re-cloned and stayed playing at cycle 0 for
-    // another full second at the OLD speed.
+    // The speed change applies to the run in flight: at 20 gen/s the ~300 ms already banked is
+    // several cycles' worth, so the auto-pause at cycle 1 lands on the next frame. The BOUNDED
+    // wait is the oracle — the default 5 s expect timeout would also be satisfied by the OLD
+    // speed's first cycle (~700 ms away), proving nothing; 500 ms cannot be. (The one timing
+    // read in this file; the bound sits well clear of both the frame cadence and the old-speed
+    // cycle.)
     await slider.fill('4');
-    await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
+    await expect(box(dialog)).toHaveAttribute('data-status', 'paused', { timeout: 500 });
     await expect(box(dialog)).toHaveAttribute('data-cycle', '1');
   });
 
@@ -2712,6 +2764,9 @@ test.describe('preview simulation (Story 4.15)', () => {
       localStorage.getItem('gol:organisms'),
       localStorage.getItem('gol:battles'),
     ]);
+    // Byte-identity is vacuous over `[null, null]` — the seed must have written the key first
+    // (the 4.1 isolation test's own guard).
+    expect(before[0]).not.toBeNull();
 
     let dialog = await openEditor(page);
     await drawOneCell(page, dialog, 5, 5);
@@ -2743,30 +2798,36 @@ test.describe('preview simulation (Story 4.15)', () => {
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
 
     await drawOneCell(page, dialog, 5, 5);
+    // 1 gen/s: the zero-rule cell dies at cycle 1, so the "playing" window is one full second
+    // rather than the 100 ms it would be at the default speed — wide enough to READ the Pause
+    // name mid-run without racing the auto-pause.
+    const slider = preview(dialog).getByRole('slider', { name: 'Generations per second' });
+    await slider.fill('0');
 
     await tool(dialog, 'Clear').focus();
     await page.keyboard.press(tabKey);
     // `:focus` re-resolves to whatever currently has focus — the SAME DOM element across the
     // Play/Pause flip (3.12 FD1: one button, one element, the accessible name is what changes).
-    const playPauseButton = dialog.locator(':focus');
-    await expect(playPauseButton).toHaveAccessibleName('Play');
+    // Focus is asserted through the NAME the focused element carries at each point, never
+    // through `toBeFocused()` on a `:focus` locator (which is true of any focused element).
+    const focused = dialog.locator(':focus');
+    await expect(focused).toHaveAccessibleName('Play');
 
     await page.keyboard.press('Enter');
     await expect(box(dialog)).toHaveAttribute('data-status', 'playing');
-    await expect(playPauseButton).toBeFocused();
-    // The lone drawn cell has zero rules and dies at cycle 1 — the auto-pause.
+    await expect(focused).toHaveAccessibleName('Pause');
+    // The auto-pause: the same element reads Play again.
     await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
-    await expect(playPauseButton).toHaveAccessibleName('Play');
+    await expect(focused).toHaveAccessibleName('Play');
 
     await page.keyboard.press(tabKey);
     await expect(run(dialog, 'Next cycle')).toBeFocused();
     await page.keyboard.press(tabKey);
     await expect(run(dialog, 'Stop & reset')).toBeFocused();
     await page.keyboard.press(tabKey);
-    const slider = preview(dialog).getByRole('slider', { name: 'Generations per second' });
     await expect(slider).toBeFocused();
-    await page.keyboard.press('ArrowLeft');
-    await expect(slider).toHaveAttribute('aria-valuetext', '5 generations per second');
+    await page.keyboard.press('ArrowRight');
+    await expect(slider).toHaveAttribute('aria-valuetext', '2 generations per second');
   });
 
   test('axe: at rest with the controls, and paused after the extinction', async ({ page }) => {

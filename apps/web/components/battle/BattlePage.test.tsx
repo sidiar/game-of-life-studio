@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import {
@@ -14,6 +14,7 @@ import {
 import { CorruptDataError, QuotaExceededError, type AppRepositories } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
 import { RecordingContext2D } from '@/test-support/recordingContext2d';
+import { installFrameDriver } from '@/test-support/frameDriver';
 import { computeGridLayout } from '@/lib/canvas/gridLayout';
 import { resetRefToFillGroupWarnings } from '@/lib/canvas/refToFillGroup';
 import BattlePage from './BattlePage';
@@ -3261,31 +3262,8 @@ describe('BattlePage — Simulation hotkeys (Story 3.19)', () => {
     });
   }
 
-  /** The `BattleSimulationView.test.tsx` driver, reused here: a manual RAF queue so a driven
-   * Space settles deterministically instead of racing jsdom's own timer-based rAF. */
-  function installFrameDriver() {
-    const queue: { handle: number; callback: FrameRequestCallback }[] = [];
-    let nextHandle = 1;
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(
-      (callback: FrameRequestCallback) => {
-        const handle = nextHandle++;
-        queue.push({ handle, callback });
-        return handle;
-      },
-    );
-    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((handle: number) => {
-      const index = queue.findIndex((entry) => entry.handle === handle);
-      if (index !== -1) queue.splice(index, 1);
-    });
-    return {
-      frame(now: number): void {
-        const batch = queue.splice(0);
-        act(() => {
-          for (const entry of batch) entry.callback(now);
-        });
-      },
-    };
-  }
+  // The manual RAF queue (`@/test-support/frameDriver`, lifted by the Story 4.15 review): a driven
+  // Space settles deterministically instead of racing jsdom's own timer-based rAF.
 
   // FD5 (a): the keyboard twin of the pointer round trip already pinned in the 3.18 describe
   // block above, driven through `user.keyboard('f')` instead of a click on the two buttons.

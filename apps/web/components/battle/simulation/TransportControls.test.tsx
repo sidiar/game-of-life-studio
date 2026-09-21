@@ -21,11 +21,13 @@ function renderTransport(overrides: Partial<ComponentProps<typeof TransportContr
 describe('TransportControls — compact and disabled (Story 4.15)', () => {
   it('defaults to no data-compact, and Play enabled', () => {
     renderTransport();
+    // No attribute at all — not `data-compact="false"` (a boolean prop would stringify), so the
+    // existing callers' DOM is byte-identical to before Story 4.15 (AC9).
     expect(screen.getByRole('group', { name: 'Simulation controls' })).not.toHaveAttribute(
       'data-compact',
-      'true',
     );
     expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Next cycle' })).toBeEnabled();
   });
 
   it('compact renders data-compact="true" on the group, with the same accessible names', () => {
@@ -39,9 +41,11 @@ describe('TransportControls — compact and disabled (Story 4.15)', () => {
     expect(screen.getByRole('button', { name: 'Stop & reset' })).toBeInTheDocument();
   });
 
-  it('disabled while paused disables Play and Next cycle, leaves Stop enabled, and a click fires nothing', () => {
+  it('disabled while paused disables Play and Next cycle, leaves Stop enabled and LIVE, and a click on either disabled button fires nothing', () => {
     const onPlayPause = vi.fn();
-    renderTransport({ disabled: true, onPlayPause });
+    const onStep = vi.fn();
+    const onStop = vi.fn();
+    renderTransport({ disabled: true, onPlayPause, onStep, onStop });
 
     const play = screen.getByRole('button', { name: 'Play' });
     const step = screen.getByRole('button', { name: 'Next cycle' });
@@ -55,7 +59,12 @@ describe('TransportControls — compact and disabled (Story 4.15)', () => {
     // proves no handler is reachable through it (React refuses a listener on a disabled element,
     // same as a real click would).
     fireEvent.click(play);
+    fireEvent.click(step);
     expect(onPlayPause).not.toHaveBeenCalled();
+    expect(onStep).not.toHaveBeenCalled();
+    // The one behavioural claim of "Stop stays enabled" (3.12 FD5): its handler still fires.
+    fireEvent.click(stop);
+    expect(onStop).toHaveBeenCalledTimes(1);
   });
 
   it('axe: disabled while paused has no violations', async () => {

@@ -4,7 +4,7 @@ baseline_commit: 3ae861f61383f0ec29c5de5d0abd2f99da6e2014
 
 # Story 4.15: Preview Simulation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -728,6 +728,35 @@ Notes' forced decisions FD1–FD9 before touching a file** — this story's whol
         and the e2e summary into the Dev Agent Record. Push to `story/4-15-preview-simulation`;
         `gh run list --limit 1` after the PR opens.
 
+### Review Findings
+
+Code review 2026-09-21 (opus, `review_mode: full`; layers: Blind Hunter, Edge Case Hunter,
+Acceptance Auditor). 0 `decision-needed`, 12 `patch`, 1 `defer`, 18 dismissed. Dismissed as
+spec'd-by-design or out of scope: Stop enabled at rest (3.12 FD5), `colorToken` in the session
+key (AC5), a `disabled` guard against `playing` inside `<TransportControls>` (the caller's
+contract, FD4), the empty-grid "extinction" modal case (Task 5 test 27 as written), a `try/catch`
+around `compileSession` (What NOT to build), `useMemo` cache discard re-keying an at-rest run
+(theoretical, no user-visible effect), the render-phase `setRoster` "double session" (a discarded
+render runs no effects — `initialView` only), cosmetic comment placements.
+
+- [x] [Review][Patch] `<TransportControls>` emitted `data-compact="false"` on both existing callers (a boolean `data-*` stringifies) — now `compact ? 'true' : undefined`; test (a) pins "no attribute" [apps/web/components/battle/simulation/TransportControls.tsx]
+- [x] [Review][Patch] `TransportControls.test.tsx` (c) never proved Step is unreachable nor that Stop's handler still fires while `disabled` — both asserted [apps/web/components/battle/simulation/TransportControls.test.tsx]
+- [x] [Review][Patch] `previewOrganism.test.ts`: tautological `dominance: organism!.dominance` → `NEW_ORGANISM_DOMINANCE`; three redundant `expect(() => compileSession(...)).not.toThrow()` beside a live call dropped [apps/web/lib/organisms/previewOrganism.test.ts]
+- [x] [Review][Patch] `PreviewPanel.test.tsx` test 14 lacked the spec'd construction oracle (a playback canvas that mounts but never builds its renderer passed) — the recording map grows + `contexts.has(runCanvas)` [apps/web/components/organisms/editor/PreviewPanel.test.tsx]
+- [x] [Review][Patch] test 21 inlined the condition literal instead of `createNewConditionDraft('c1')` — the real "+ Add Condition" default is now what unblocks [apps/web/components/organisms/editor/PreviewPanel.test.tsx]
+- [x] [Review][Patch] test 23's FD2 tripwire had no positive control (`not.toHaveBeenCalled` passes vacuously if the `{ spy: true }` mock stops intercepting) — a new rules identity now pins `toHaveBeenCalledTimes(1)`; test 18 retitled to what it asserts [apps/web/components/organisms/editor/PreviewPanel.test.tsx]
+- [x] [Review][Patch] the `[]` empty-roster seed (`useState` initialiser for an initially unrunnable draft) was never mounted into — new case: blocked from the first render, Stop a safe no-op, roster follows once runnable [apps/web/components/organisms/editor/PreviewPanel.test.tsx]
+- [x] [Review][Patch] `installFrameDriver` reached its third (fourth, with 3.19's `BattlePage.test.tsx`) copy and the spec's own rule says lift on the third — lifted to `apps/web/test-support/frameDriver.ts`; all four test files import it (helper move only, no assertion touched) [apps/web/test-support/frameDriver.ts]
+- [x] [Review][Patch] `organisms.spec.ts`: the 4.15 block copied `preview`/`dish`/`tool`/`cellCentre`/`distinctColorCount` and its comment cited a `deferred-work.md` hoist record that did not exist — the 4.14 helpers are hoisted to file scope (the spec's preferred call), the copies and the false comment removed [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] e2e test 2 dropped the "sketch came back" repaint oracle; e2e test 4 dropped the spec'd marks assertion and its speed-change read was satisfiable by the OLD speed (default 5 s expect ≫ the ~700 ms remaining at 1 gen/s) — the painted cell is now located from the image itself (`paintedCell`: bounding box of pixels absent from the empty dish's palette) and its interior pixel must go away on extinction and come back after Stop (a colour count cannot serve — an empty and a one-cell dish both rasterise to 6 shades; a whole-raster hash cannot either — stroke vs full repaint blend the edges differently; a CSS-geometry cell read drifts a cell at DPR 2); marks `1 2 5 10 20` asserted; the paused read bounded at 500 ms. Verified on chromium/firefox/webkit/tablet × 2 [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] e2e test 6 compared `[null, null]` if the key were wrong; the keyboard test self-asserted (`:focus` locator `toBeFocused()`), never read the Pause name, and raced the 100 ms auto-pause at 10 gen/s — `before[0]` non-null guard; 1 gen/s window; the focused element's name asserted Play → Pause → Play; `ArrowRight` → 2 gen/s [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] docs: `OrganismEditorModal.tsx` head comment said the rules compile "at the next Play" (they compile eagerly at rest, `useMemo`); Dev Agent Record said the e2e block has 10 tests (9) and "no task deviated" (test 22's oracle is the `getContextSpy` count, not the map size — correct under the per-canvas rig; `useSimulation.test.ts`'s `mount` helper parameter type was widened alongside the appended case); `deferred-work.md` bundle figure 0.65 → 0.63 KB; the `Play`-disabled entry now names the missing `aria-describedby` too [docs/implementation-artifacts/4-15-preview-simulation.md]
+- [x] [Review][Defer] `cellCentre` in `organisms.spec.ts` hard-codes 30×20 (the unit tests read `PREVIEW_GRID_SIZE`; the Playwright spec has no transpile path into `@/lib`) [apps/web/e2e/organisms.spec.ts:2306] — deferred, pre-existing (4.14's helper; recorded in `deferred-work.md`)
+
+Proposed lane-gates row: none — the diff touches no file an Epic 5 story (settings shell,
+statistics, export/import pipeline, migration registry, clear-all-data, corruption handling)
+needs; `deferred-work.md` is append-only and merges cleanly.
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -1112,7 +1141,8 @@ Claude Sonnet 5 (claude-sonnet-5)
   unchanged in shape from Story 3.7's baseline (no engine code touched).
 - e2e:chromium (full suite): **225 passed, 1 skipped** (a pre-existing skip, unrelated to this
   story). `organisms.spec.ts` alone (re-run standalone, twice, for stability): **97/97 passed**
-  both times, including the new `preview simulation (Story 4.15)` block (10 tests).
+  both times, including the new `preview simulation (Story 4.15)` block (9 tests — corrected by the
+  review; the Dev record originally said 10).
 - `lsof -i :4173` before every e2e run: empty (port free) each time.
 
 ### Completion Notes List
@@ -1135,13 +1165,20 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `apps/web/lib/battle/useSimulation.test.ts`'s new `SimulationOrganism` roster case initially
   asserted `cycle === 1` without calling `play()` first (an oversight while transcribing the test)
   — the loop never runs while paused, so `cycle` stayed `0`. Added the missing `play()` call.
-- No HALTs. No new dependencies. No task deviated from the story's exact-code specification;
-  every new file/function name matches the Project Structure Notes list.
+- No HALTs. No new dependencies. Every new file/function name matches the Project Structure Notes
+  list. Two recorded deviations from the spec'd test text (added by the review): Task 4 test 22's
+  rebuilt-renderer oracle is the `getContextSpy` call count, not "the recording map gains a
+  context" — under `installPerCanvasRecording` the map is keyed by canvas element and a rebuild
+  on the same run canvas returns the same context, so the spec's oracle could never fire; and Task
+  2's `useSimulation.test.ts` edit also widened the shared `mount(grid, roster, h)` helper's
+  parameter type from `readonly Organism[]` to `readonly SimulationOrganism[]` (the new case does
+  not typecheck through it otherwise; `Organism[]` still assigns).
 
 ### File List
 
 - New: `apps/web/lib/organisms/previewOrganism.ts`, `apps/web/lib/organisms/previewOrganism.test.ts`,
-  `apps/web/components/battle/simulation/TransportControls.test.tsx`
+  `apps/web/components/battle/simulation/TransportControls.test.tsx`,
+  `apps/web/test-support/frameDriver.ts` (review lift)
 - Modified: `apps/web/lib/organisms/ruleDraft.ts`, `apps/web/lib/organisms/ruleDraft.test.ts`,
   `apps/web/lib/battle/useSimulation.ts`, `apps/web/lib/battle/useSimulation.test.ts`,
   `apps/web/components/battle/simulation/TransportControls.tsx`,
@@ -1149,7 +1186,9 @@ Claude Sonnet 5 (claude-sonnet-5)
   `apps/web/components/organisms/editor/PreviewPanel.test.tsx`,
   `apps/web/components/organisms/editor/OrganismEditorModal.tsx`,
   `apps/web/components/organisms/editor/OrganismEditorModal.test.tsx`, `apps/web/e2e/organisms.spec.ts`,
-  `docs/implementation-artifacts/deferred-work.md`, `docs/implementation-artifacts/sprint-status.yaml`
+  `docs/implementation-artifacts/deferred-work.md`, `docs/implementation-artifacts/sprint-status.yaml`;
+  review lift only (helper import, no assertion touched): `apps/web/components/battle/simulation/BattleSimulationView.test.tsx`,
+  `apps/web/components/battle/BattlePage.test.tsx`
 
 ### Change Log
 
@@ -1157,6 +1196,10 @@ Claude Sonnet 5 (claude-sonnet-5)
   roster snapshot, the `contentHash` stand-in, the hook's `Pick`, the reused cluster with
   `compact`/`disabled`, no population reading), precedent and spec map compiled; status →
   ready-for-dev.
+- 2026-09-21 — Code review (opus, full mode): 0 decisions, 12 patch groups applied (test-strength
+  and helper-lift patches, one source nit — `data-compact` no longer emitted as `"false"` on the
+  existing callers), 1 defer, 18 dismissed; `installFrameDriver` lifted to `@/test-support`; e2e
+  block verified on all four Playwright projects ×2. Status → done.
 - 2026-09-21 — Implemented (dev-story): all 7 tasks complete, all ACs satisfied. `npm run ci:dev`
   exit 0 (typecheck/lint/format/spec-check/boundary-check/coverage/build/bundle/bench/bench-check/
   e2e:chromium all green — 225 e2e passed, 1843+109+407+82 unit tests passed). Two e2e

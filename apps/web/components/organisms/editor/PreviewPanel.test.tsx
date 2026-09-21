@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
@@ -8,10 +8,12 @@ import { resetColourStateWarnings } from '@/lib/canvas/colourStateGroups';
 import { resetRefToFillGroupWarnings } from '@/lib/canvas/refToFillGroup';
 import { computeGridLayout } from '@/lib/canvas/gridLayout';
 import { RecordingContext2D } from '@/test-support/recordingContext2d';
+import { installFrameDriver } from '@/test-support/frameDriver';
 import { displayColorAt, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { paletteIndexOf } from '@/lib/palette/paletteRegistry';
 import { PREVIEW_GRID_SIZE } from '@/lib/organisms/previewGrid';
 import { previewOrganismFrom } from '@/lib/organisms/previewOrganism';
+import { createNewConditionDraft } from '@/lib/organisms/conditionDraft';
 import { createNewRuleDraft, ruleDraftFrom, type RuleDraft } from '@/lib/organisms/ruleDraft';
 import PreviewPanel, { type PreviewPanelProps } from './PreviewPanel';
 
@@ -30,38 +32,6 @@ function idCounter() {
 /** Conway's Classic as `RuleDraft`s — the roster that survives (Decision B.5, no auto-pause). */
 function conwayRules(): readonly RuleDraft[] {
   return CONWAYS_CLASSIC.survivalRules.map((rule) => ruleDraftFrom(rule, idCounter()));
-}
-
-/**
- * `BattleSimulationView.test.tsx:68-107`'s copy (a SECOND instance — the `PreviewPanel` rig
- * cannot import a `.test.tsx` file; recorded in `deferred-work.md`, lift to `@/test-support` on
- * the third copy). `frame(now)` fires every callback queued before the call, inside `act`.
- */
-function installFrameDriver() {
-  const queue: { handle: number; callback: FrameRequestCallback }[] = [];
-  let nextHandle = 1;
-  const raf = vi
-    .spyOn(window, 'requestAnimationFrame')
-    .mockImplementation((callback: FrameRequestCallback) => {
-      const handle = nextHandle++;
-      queue.push({ handle, callback });
-      return handle;
-    });
-  const caf = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((handle: number) => {
-    const index = queue.findIndex((entry) => entry.handle === handle);
-    if (index !== -1) queue.splice(index, 1);
-  });
-  return {
-    raf,
-    caf,
-    frame(now: number): void {
-      const batch = queue.splice(0);
-      act(() => {
-        for (const entry of batch) entry.callback(now);
-      });
-    },
-    pending: () => queue.length,
-  };
 }
 
 afterEach(() => {
@@ -425,11 +395,12 @@ describe('PreviewPanel — simulation (Story 4.15)', () => {
 
   it('a fresh draft (zero rules) + one drawn cell: Play steps to cycle 1, the dish empties, and the run auto-pauses (AC4)', () => {
     const driver = installFrameDriver();
-    const { container, canvas } = mount();
+    const { container, canvas, contexts } = mount();
     if (canvas === null) throw new Error('canvas did not mount');
 
     fireEvent.pointerDown(canvas, centreOfCell(canvas, 5, 5));
     fireEvent.pointerUp(canvas, centreOfCell(canvas, 5, 5));
+    const canvasesBefore = contexts.size;
 
     fireEvent.click(within(transport(container)).getByRole('button', { name: 'Play' }));
     expect(box(container)).toHaveAttribute('data-status', 'playing');
@@ -440,6 +411,12 @@ describe('PreviewPanel — simulation (Story 4.15)', () => {
     const runCanvas = container.querySelector('canvas');
     expect(runCanvas).not.toBeNull();
     expect(runCanvas).not.toBe(canvas);
+    // ...and that new element CONSTRUCTED its renderer: the recording map (keyed by canvas
+    // element, offscreen overlay canvases included) grew AND holds the run canvas itself. A
+    // playback canvas that mounts but never builds would leave the run headless and the map as
+    // it was.
+    expect(contexts.size).toBeGreaterThan(canvasesBefore);
+    expect(contexts.has(runCanvas as HTMLCanvasElement)).toBe(true);
 
     driver.frame(0);
     driver.frame(100);
@@ -572,7 +549,7 @@ describe('PreviewPanel — simulation (Story 4.15)', () => {
     expect(box(container)).toHaveAttribute('data-status', 'playing');
   });
 
-  it('rule edits AT REST rebind the run without touching the speed', () => {
+  it('rule edits and strokes AT REST leave the speed and the cycle untouched (hook state survives the rebind; the rebind itself is the AC2 reverse-direction case above)', () => {
     const { container, rerender, props } = mount();
     const slider = screen.getByRole('slider', { name: 'Generations per second' });
     fireEvent.change(slider, { target: { value: '2' } });
@@ -639,10 +616,11 @@ describe('PreviewPanel — simulation (Story 4.15)', () => {
     expect(screen.getByRole('button', { name: 'Draw' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Erase' })).toBeEnabled();
 
+    // The REAL "+ Add Condition" default (`createNewConditionDraft` — `cellState = empty`, valid
+    // by construction): a change to that default that stopped unblocking would fail here.
     const ruleWithCondition: RuleDraft = {
-      id: 'r1',
-      conditions: [{ id: 'c1', property: 'cellState', operator: 'eq', pattern: 'empty' }],
-      payload: { summary: '', action: 'born' },
+      ...createNewRuleDraft('r1'),
+      conditions: [createNewConditionDraft('c1')],
     };
     rerender(<PreviewPanel {...props} survivalRules={[ruleWithCondition]} />);
     expect(within(transport(container)).getByRole('button', { name: 'Play' })).toBeEnabled();
@@ -718,6 +696,34 @@ describe('PreviewPanel — simulation (Story 4.15)', () => {
     rerender(<PreviewPanel {...props} />);
     rerender(<PreviewPanel {...props} />);
     expect(previewOrganismFrom).not.toHaveBeenCalled();
+    // The positive control — without it the `not.toHaveBeenCalled` above would pass vacuously if
+    // the `{ spy: true }` mock ever stopped intercepting the panel's import: a NEW rules identity
+    // is exactly one re-derivation, no more.
+    rerender(<PreviewPanel {...props} survivalRules={conwayRules()} />);
+    expect(previewOrganismFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it('an initially unrunnable draft seeds an empty roster: Play and Next cycle are disabled from the first render, the hint shows, and Stop is a safe no-op', () => {
+    // The `[]` fallback in the roster's `useState` initialiser — the one path the other cases
+    // never mount into (they start runnable and rerender into the blocked state).
+    const { container, rerender, props } = mount({ survivalRules: [createNewRuleDraft('r1')] });
+
+    expect(within(transport(container)).getByRole('button', { name: 'Play' })).toBeDisabled();
+    expect(within(transport(container)).getByRole('button', { name: 'Next cycle' })).toBeDisabled();
+    expect(screen.getByText('Fix the rule errors to run the preview.')).toBeInTheDocument();
+    expect(box(container)).toHaveAttribute('data-status', 'paused');
+    expect(box(container)).toHaveAttribute('data-cycle', '0');
+    expect(screen.getByRole('button', { name: 'Draw' })).toBeEnabled();
+
+    // Stop on an empty-roster session at rest: enabled (3.12 FD5), does not throw, changes nothing.
+    fireEvent.click(within(transport(container)).getByRole('button', { name: 'Stop & reset' }));
+    expect(box(container)).toHaveAttribute('data-status', 'paused');
+    expect(box(container)).toHaveAttribute('data-cycle', '0');
+
+    // The roster follows the draft the moment it becomes runnable — the seed was not sticky.
+    rerender(<PreviewPanel {...props} survivalRules={[]} />);
+    expect(within(transport(container)).getByRole('button', { name: 'Play' })).toBeEnabled();
+    expect(screen.queryByText('Fix the rule errors to run the preview.')).toBeNull();
   });
 
   it('unmount mid-run stops the loop (3.10 obligation 3)', () => {

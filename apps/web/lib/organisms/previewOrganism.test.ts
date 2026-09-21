@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { CELL_STATES } from '@gol/domain';
+import { CELL_STATES, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
 import { compileSession } from '@gol/simulation';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
 import type { ConditionDraft } from './conditionDraft';
@@ -27,7 +27,7 @@ describe('previewOrganismFrom', () => {
       id: PREVIEW_ORGANISM_ID,
       name: PREVIEW_ORGANISM_NAME,
       colorToken: draft.colorToken,
-      dominance: organism!.dominance,
+      dominance: NEW_ORGANISM_DOMINANCE,
       survivalRules: [],
     });
   });
@@ -60,14 +60,12 @@ describe('previewOrganismFrom', () => {
   it('the compile guarantee: compileSession does not throw for a fresh draft or Conway drafts, and ref 1 is the preview id', () => {
     const fresh = previewOrganismFrom(createNewOrganismDraft([]));
     expect(fresh).not.toBeNull();
-    expect(() => compileSession([fresh!])).not.toThrow();
+    // A plain call IS the no-throw proof — `compileSession` throwing fails the test outright.
     expect(compileSession([fresh!]).refById.get(PREVIEW_ORGANISM_ID)).toBe(1);
 
     const conway = previewOrganismFrom({ colorToken: 'vermillion', survivalRules: conwayDrafts() });
     expect(conway).not.toBeNull();
-    const compiled = compileSession([conway!]);
-    expect(() => compileSession([conway!])).not.toThrow();
-    expect(compiled.refById.get(PREVIEW_ORGANISM_ID)).toBe(1);
+    expect(compileSession([conway!]).refById.get(PREVIEW_ORGANISM_ID)).toBe(1);
   });
 
   it('an organismType condition targeting a name absent from the one-organism roster compiles to a never-match, not an error (Decision E.3)', () => {
@@ -80,9 +78,7 @@ describe('previewOrganismFrom', () => {
     };
     const organism = previewOrganismFrom({ colorToken: 'vermillion', survivalRules: [rule] });
     expect(organism).not.toBeNull();
-    const compiled = compileSession([organism!]);
-    expect(() => compileSession([organism!])).not.toThrow();
-    expect(compiled.refById.size).toBe(1);
+    expect(compileSession([organism!]).refById.size).toBe(1);
   });
 
   it('the returned object satisfies SimulationOrganism with exactly its five keys', () => {
