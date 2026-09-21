@@ -22,6 +22,10 @@ analysed:
     against: 3
     date: 2026-09-13
     approved_by: Sidiar
+  - lane: 5
+    against: 4
+    date: 2026-09-21
+    approved_by: Sidiar
 
 gates:
   - story: 4-15-preview-simulation
@@ -38,3 +42,8 @@ gates:
     requires: epic-3
     why: >-
       Same surface as 4.24.
+  - story: 5-4-rule-aware-organism-closure
+    requires: 4-19-usage-rule-reference-derivations
+    why: >-
+      5.4's AC says the closure reuses the Story 4.19 rule-reference derivation (Decision E.5),
+      and no such derivation exists on main yet — 5.4 must consume 4.19's module, not define it.
