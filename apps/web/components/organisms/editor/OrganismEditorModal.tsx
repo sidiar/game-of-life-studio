@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -18,6 +18,7 @@ import DominanceField from './DominanceField';
 import AgingToggleField from './AgingToggleField';
 import AddRuleButton from './AddRuleButton';
 import RulesEditor from './RulesEditor';
+import PreviewPanel from './PreviewPanel';
 import {
   createNewOrganismDraft,
   validateOrganismDraft,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/organisms/organismDraft';
 import { usersByColorToken } from '@/lib/organisms/colorReuse';
 import { appendRule, createNewRuleDraft, type RuleDraft } from '@/lib/organisms/ruleDraft';
+import { readGridColors } from '@/lib/canvas/themeColors';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -196,7 +198,8 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * RFC-005 Decision 1 — ephemeral UI state, local to the modal; Story 4.5's `name`, Story 4.6's
  * `dominance`, Story 4.7's `agingEnabled`/`colorToken`, Story 4.8's `colorToken` seed from
  * `library` and Story 4.10's `survivalRules`, Story 4.12's order) and its seed — no repository
- * call; the lifecycle (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh
+ * call. Story 4.14's preview panel reads `colorToken`/`agingEnabled` and holds its own grid (M3);
+ * the lifecycle (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh
  * draft per open is the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after
  * every exit, so there is no reset effect and no `key` trick). The `useState` initialiser closes
  * over the `library` prop — legitimate because it runs once per mount and the `mounted` gate
@@ -220,6 +223,7 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * row — in the synchronous commit that follows the add, FD3) and focuses the first error's control;
  * a valid draft shows the transitional `SaveNotice` (AC8, FD1) — Story 4.16 replaces that branch
  * with the repository write, the close and the toast. (Story 4.13) (UX-DR14) (UX-DR17)
+ * (Story 4.14)
  */
 export default function OrganismEditorModal({
   open,
@@ -255,6 +259,15 @@ export default function OrganismEditorModal({
   // would never hit), and the scan is 0.02–0.04 ms at 1,000 organisms (Story 3.7's `library-filter`
   // bench). Story 4.17 passes the library MINUS the organism under edit.
   const usersByToken = usersByColorToken(library);
+  // Story 4.14: resolved ONCE here (`getComputedStyle` forces a style recalculation) and passed
+  // down to `<PreviewPanel>` — the `<BattlePage>` form (`BattlePage.tsx:420-427`). `document` is
+  // guarded for the prerender even though this file is `ssr: false` (the house form, costs
+  // nothing); `documentElement`, not `shellRef.current`, because the dialog portals to
+  // `document.body` while the `--gol-*` tokens sit on bare `:root`.
+  const colors = useMemo(
+    () => (typeof document === 'undefined' ? null : readGridColors(document.documentElement)),
+    [],
+  );
   // A functional update, so `setDominance` below cannot clobber a name change that landed in the
   // same batch.
   const setName = useCallback((name: string) => setDraft((d) => ({ ...d, name })), []);
@@ -450,6 +463,13 @@ export default function OrganismEditorModal({
                 onRulesChange={setSurvivalRules}
                 onAddRule={addRule}
                 showAllErrors={saveAttempted}
+              />
+            }
+            preview={
+              <PreviewPanel
+                colorToken={draft.colorToken}
+                agingEnabled={draft.agingEnabled}
+                colors={colors}
               />
             }
           />
