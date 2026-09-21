@@ -15,6 +15,7 @@ import { cyclesPerPublish, msPerCycle, type GenPerSec } from './simulationSpeed'
 import {
   useSimulation,
   type PlaybackRenderer,
+  type SimulationOrganism,
   type UseSimulationOptions,
   type UseSimulationResult,
 } from './useSimulation';
@@ -147,7 +148,7 @@ function harness(genPerSec: GenPerSec = 10, seed: number = FIXED_SEED): Harness 
  * the render-phase reset would loop ("Too many re-renders"), which is the documented hazard, not
  * a hook bug.
  */
-function mount(grid: Grid, roster: readonly Organism[], h: Harness) {
+function mount(grid: Grid, roster: readonly SimulationOrganism[], h: Harness) {
   return renderHook(() => useSimulation(grid, roster, h.opts));
 }
 
@@ -1065,5 +1066,34 @@ describe('useSimulation — the error-stop follows the same path (AC6, FD3, Stor
 
     act(() => result.current.play());
     expect(h.scheduler.pending()).toBe(1);
+  });
+});
+
+describe('useSimulation — accepts a SimulationOrganism roster (Story 4.15, FD6)', () => {
+  it('runs one step over a roster typed as SimulationOrganism[], built without schemaVersion or agingEnabled', () => {
+    const {
+      schemaVersion: _schemaVersion,
+      agingEnabled: _agingEnabled,
+      ...draftOrganism
+    } = CONWAYS_CLASSIC;
+    const roster: readonly SimulationOrganism[] = [draftOrganism];
+    const h = harness(10);
+    const { result } = mount(blinker(), roster, h);
+
+    act(() => result.current.play());
+    act(() => h.scheduler.frame(0));
+    act(() => h.scheduler.frame(msPerCycle(10)));
+
+    expect(result.current.cycle).toBe(1);
+    expect(result.current.population).toEqual([
+      {
+        organismId: draftOrganism.id,
+        name: draftOrganism.name,
+        colorToken: draftOrganism.colorToken,
+        count: 3,
+        pct: 100,
+        extinct: false,
+      },
+    ]);
   });
 });

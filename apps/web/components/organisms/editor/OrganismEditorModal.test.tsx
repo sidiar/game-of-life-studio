@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
@@ -131,7 +131,11 @@ describe('OrganismEditorModal', () => {
     // regions: exactly two textboxes, one slider, one switch and (once the palette is open)
     // PALETTE.length radios exist, and all are the ones above.
     expect(within(dialog).getAllByRole('textbox')).toHaveLength(2);
-    expect(within(dialog).getAllByRole('slider')).toHaveLength(1);
+    // Two sliders in the whole dialog: Dominance (Basic Information) and the Preview & Test
+    // column's "Generations per second" speed control (Story 4.15) — the whole-dialog count
+    // stays deliberate, so it is pinned right alongside the scoped Basic-Information count below.
+    expect(within(dialog).getAllByRole('slider')).toHaveLength(2);
+    expect(within(basic).getAllByRole('slider')).toHaveLength(1);
     expect(within(dialog).getAllByRole('switch')).toHaveLength(1);
     expect(within(dialog).queryAllByRole('radio')).toHaveLength(0);
     await user.click(within(basic).getByRole('button', { name: 'Change Color' }));
@@ -1074,6 +1078,147 @@ describe('OrganismEditorModal', () => {
     it('has no axe violations with the canvas mounted (Story 4.14)', async () => {
       enableCanvasRendering();
       render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const results = await axe(document.body);
+      expect(results.violations).toEqual([]);
+    });
+  });
+
+  // Story 4.15: the panel's own run behaviour (Play/Pause/Step/Stop, the roster snapshot, the
+  // canvas swap) is `PreviewPanel.test.tsx`'s; what the MODAL owes is that the run reaches the
+  // dialog (the draft's real `survivalRules`, through the real `+ Add Rule` / `+ Add Condition`
+  // UI) and that closing the dialog stops the loop.
+  describe('preview simulation (Story 4.15)', () => {
+    /**
+     * `BattleSimulationView.test.tsx:68-107`'s copy (second instance, recorded in
+     * `deferred-work.md` — lift to `@/test-support` on the third). `frame(now)` fires every
+     * callback queued before the call, inside `act`; a re-request from inside a callback lands in
+     * the next frame.
+     */
+    function installFrameDriver() {
+      const queue: { handle: number; callback: FrameRequestCallback }[] = [];
+      let nextHandle = 1;
+      const raf = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation((callback: FrameRequestCallback) => {
+          const handle = nextHandle++;
+          queue.push({ handle, callback });
+          return handle;
+        });
+      const caf = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((handle: number) => {
+        const index = queue.findIndex((entry) => entry.handle === handle);
+        if (index !== -1) queue.splice(index, 1);
+      });
+      return {
+        raf,
+        caf,
+        frame(now: number): void {
+          const batch = queue.splice(0);
+          act(() => {
+            for (const entry of batch) entry.callback(now);
+          });
+        },
+        pending: () => queue.length,
+      };
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('the Preview & Test region holds the Simulation controls group, the Generations per second slider and a Cycle readout reading 0000', () => {
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+      expect(
+        within(preview).getByRole('group', { name: 'Simulation controls' }),
+      ).toBeInTheDocument();
+      expect(
+        within(preview).getByRole('slider', { name: 'Generations per second' }),
+      ).toBeInTheDocument();
+      expect(preview.querySelector('[data-preview-cycle]')).toHaveTextContent('0000');
+    });
+
+    it('"+ Add Rule" blocks Play through the real draft; the first condition unblocks it (AC6)', async () => {
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+
+      await user.click(headerAddButton(rules));
+      expect(within(preview).getByRole('button', { name: 'Play' })).toBeDisabled();
+      expect(
+        within(preview).getByText('Fix the rule errors to run the preview.'),
+      ).toBeInTheDocument();
+
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+
+      expect(within(preview).getByRole('button', { name: 'Play' })).toBeEnabled();
+      expect(within(preview).queryByText('Fix the rule errors to run the preview.')).toBeNull();
+    });
+
+    it('a headless run under jsdom’s bare root: Play advances one cycle to an empty-dish auto-pause, and the draft is untouched', async () => {
+      const driver = installFrameDriver();
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+      // `colors === null` under jsdom's bare root (no `--gol-*` tokens): no canvas mounts, but the
+      // hook still runs — the documented headless state (3.10).
+      expect(within(preview).queryByRole('img')).toBeNull();
+
+      const nameField = screen.getByRole('textbox', { name: 'Organism Name' });
+      await user.type(nameField, 'Glider');
+
+      await user.click(within(preview).getByRole('button', { name: 'Play' }));
+      driver.frame(0);
+      driver.frame(100);
+
+      expect(preview.querySelector('[data-preview-cycle]')).toHaveTextContent('0001');
+      expect(within(preview).getByRole('button', { name: 'Play' })).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('Glider');
+    });
+
+    it('Escape mid-run closes the dialog and stops the loop', async () => {
+      const driver = installFrameDriver();
+      const user = userEvent.setup();
+      const onClose = vi.fn();
+      const { rerender } = render(
+        <OrganismEditorModal open origin="library" onClose={onClose} library={LIBRARY} />,
+      );
+
+      const dialog = screen.getByRole('dialog');
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+      await user.click(within(preview).getByRole('button', { name: 'Play' }));
+      driver.frame(0);
+
+      await user.keyboard('{Escape}');
+      expect(onClose).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <OrganismEditorModal open={false} origin="library" onClose={onClose} library={LIBRARY} />,
+      );
+      // MUI's exit transition defers the actual unmount past this render — wait for it rather
+      // than assume it is synchronous.
+      await waitFor(() => expect(driver.caf).toHaveBeenCalled());
+      expect(driver.pending()).toBe(0);
+    });
+
+    it('axe: the run paused after an extinction has no violations', async () => {
+      const driver = installFrameDriver();
+      const user = userEvent.setup();
+      render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
+
+      const dialog = screen.getByRole('dialog');
+      const preview = within(dialog).getByRole('region', { name: 'Preview & Test' });
+      await user.click(within(preview).getByRole('button', { name: 'Play' }));
+      driver.frame(0);
+      driver.frame(100);
 
       const results = await axe(document.body);
       expect(results.violations).toEqual([]);

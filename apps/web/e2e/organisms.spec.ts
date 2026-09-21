@@ -2508,3 +2508,281 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+test.describe('preview simulation (Story 4.15)', () => {
+  // Local copies of the 4.14 block's helper shapes (the `PreviewCanvas`/`installFrameDriver`
+  // precedent — copy across a feature split rather than reach into a sibling `describe`, so the
+  // 4.14 block stays byte-identical). `deferred-work.md` records the pair as a hoist candidate.
+  const preview = (dialog: Locator) => dialog.getByRole('region', { name: 'Preview & Test' });
+  const dish = (dialog: Locator) => preview(dialog).getByRole('img', { name: /petri dish/i });
+  const tool = (dialog: Locator, name: string) =>
+    preview(dialog).getByRole('button', { name, exact: true });
+  const transport = (dialog: Locator) =>
+    preview(dialog).getByRole('group', { name: 'Simulation controls' });
+  const run = (dialog: Locator, name: string) =>
+    transport(dialog).getByRole('button', { name, exact: true });
+  const cycle = (dialog: Locator) => preview(dialog).locator('[data-preview-cycle]');
+  const box = (dialog: Locator) => dialog.locator('[data-preview-dish]');
+
+  function cellCentre(
+    boxRect: { x: number; y: number; width: number; height: number },
+    col: number,
+    row: number,
+  ) {
+    const cellSize = Math.floor(Math.min(boxRect.width / 30, boxRect.height / 20));
+    const drawWidth = cellSize * 30;
+    const drawHeight = cellSize * 20;
+    const originX = boxRect.x + (boxRect.width - drawWidth) / 2;
+    const originY = boxRect.y + (boxRect.height - drawHeight) / 2;
+    return {
+      x: originX + col * cellSize + cellSize / 2,
+      y: originY + row * cellSize + cellSize / 2,
+    };
+  }
+
+  async function distinctColorCount(canvas: Locator): Promise<number> {
+    return canvas.evaluate((el) => {
+      const canvasEl = el as HTMLCanvasElement;
+      const ctx = canvasEl.getContext('2d');
+      if (ctx === null) return 0;
+      const { data } = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+      const seen = new Set<string>();
+      for (let i = 0; i < data.length; i += 4) {
+        seen.add([data[i], data[i + 1], data[i + 2], data[i + 3]].join(','));
+      }
+      return seen.size;
+    });
+  }
+
+  async function drawOneCell(page: Page, dialog: Locator, col: number, row: number) {
+    const dishBox = await dish(dialog).boundingBox();
+    if (dishBox === null) throw new Error('preview dish canvas has no layout box');
+    const point = cellCentre(dishBox, col, row);
+    await page.mouse.click(point.x, point.y);
+  }
+
+  test('the controls render at rest, no horizontal overflow, zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    await expect(run(dialog, 'Play')).toBeEnabled();
+    await expect(run(dialog, 'Next cycle')).toBeEnabled();
+    await expect(run(dialog, 'Stop & reset')).toBeEnabled();
+    await expect(
+      preview(dialog).getByRole('slider', { name: 'Generations per second' }),
+    ).toHaveAttribute('aria-valuetext', '10 generations per second');
+    await expect(cycle(dialog)).toHaveText('Cycle0000');
+    await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
+    await expect(box(dialog)).toHaveAttribute('data-cycle', '0');
+
+    // Compressed tier (1280): the column fits the wrapped cluster with no scroll.
+    expect(await preview(dialog).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('full tier (≥ 1400): the Preview & Test region still has no horizontal overflow', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    expect(await preview(dialog).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  });
+
+  test('draw one cell (zero rules) -> Play -> auto-pause at cycle 1 with an empty dish; tools disabled; Stop restores the sketch (AC2, AC4, AC7)', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    await drawOneCell(page, dialog, 5, 5);
+    // The drawn-cell colour count, taken BEFORE Play — the oracle for "the dish went empty" is
+    // relative to this (fewer distinct colours), not an absolute count: anti-aliased grid-line
+    // pixels can already push a genuinely two-colour dish past a hardcoded "<= 2".
+    const drawnCount = await distinctColorCount(dish(dialog));
+
+    await run(dialog, 'Play').click();
+    await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
+    await expect(box(dialog)).toHaveAttribute('data-cycle', '1');
+    await expect(run(dialog, 'Play')).toBeVisible();
+
+    await expect(tool(dialog, 'Draw')).toBeDisabled();
+    await expect(tool(dialog, 'Erase')).toBeDisabled();
+    await expect(tool(dialog, 'Clear')).toBeDisabled();
+    await expect.poll(() => distinctColorCount(dish(dialog))).toBeLessThan(drawnCount);
+
+    await run(dialog, 'Stop & reset').click();
+    await expect(box(dialog)).toHaveAttribute('data-cycle', '0');
+    // The drawn cell is back — proven by the enabled Clear (a fresh edit canvas repaints the
+    // sketch with slightly different anti-aliasing than the original, so an exact colour-count
+    // comparison is not the right oracle here; Clear's state already is one).
+    await expect(tool(dialog, 'Clear')).toBeEnabled();
+  });
+
+  test('Next cycle from rest advances exactly one cycle and stays paused (FR-4.3)', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    await drawOneCell(page, dialog, 5, 5);
+
+    await run(dialog, 'Next cycle').click();
+    await expect(box(dialog)).toHaveAttribute('data-cycle', '1');
+    await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
+    await expect(tool(dialog, 'Draw')).toBeDisabled();
+    await expect(run(dialog, 'Next cycle')).toBeEnabled();
+
+    await run(dialog, 'Stop & reset').click();
+    await expect(box(dialog)).toHaveAttribute('data-cycle', '0');
+  });
+
+  // FR-4.2: no rules are authored here (the condition builder's own e2e path is 4.11/4.13's) —
+  // the zero-rule draft dies at cycle 1, which is all this test needs to prove the speed change
+  // took effect without a restart.
+  test('speed: the slider is the ladder; a change while playing neither pauses nor resets (FR-4.2)', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const slider = preview(dialog).getByRole('slider', { name: 'Generations per second' });
+
+    await slider.fill('0');
+    await expect(slider).toHaveAttribute('aria-valuetext', '1 generation per second');
+    await slider.focus();
+    await page.keyboard.press('End');
+    await expect(slider).toHaveAttribute('aria-valuetext', '20 generations per second');
+
+    await drawOneCell(page, dialog, 5, 5);
+    await slider.fill('0');
+    await run(dialog, 'Play').click();
+    // The first cycle at 1 gen/s is 1000 ms away — a generous window well short of it.
+    await page.waitForTimeout(300);
+    await expect(box(dialog)).toHaveAttribute('data-cycle', '0');
+    await expect(box(dialog)).toHaveAttribute('data-status', 'playing');
+
+    // A ref write, no restart: a restart would have re-cloned and stayed playing at cycle 0 for
+    // another full second at the OLD speed.
+    await slider.fill('4');
+    await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
+    await expect(box(dialog)).toHaveAttribute('data-cycle', '1');
+  });
+
+  test('"+ Add Rule" blocks Play with the hint; "+ Add Condition" unblocks (AC6)', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    await dialog.getByRole('button', { name: '+ Add Rule' }).first().click();
+    await expect(run(dialog, 'Play')).toBeDisabled();
+    await expect(
+      preview(dialog).getByText('Fix the rule errors to run the preview.'),
+    ).toBeVisible();
+    await expect(run(dialog, 'Stop & reset')).toBeEnabled();
+
+    await dialog.getByRole('button', { name: '+ Add Condition' }).click();
+    await expect(run(dialog, 'Play')).toBeEnabled();
+    await expect(preview(dialog).getByText('Fix the rule errors to run the preview.')).toBeHidden();
+  });
+
+  test('isolation (M3): open, draw, Play, wait for the auto-pause, Stop, close leaves localStorage byte-identical; reopening shows a fresh dish and run', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const before = await page.evaluate(() => [
+      localStorage.getItem('gol:organisms'),
+      localStorage.getItem('gol:battles'),
+    ]);
+
+    let dialog = await openEditor(page);
+    await drawOneCell(page, dialog, 5, 5);
+    await run(dialog, 'Play').click();
+    await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
+    await run(dialog, 'Stop & reset').click();
+
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).not.toBeVisible();
+
+    const after = await page.evaluate(() => [
+      localStorage.getItem('gol:organisms'),
+      localStorage.getItem('gol:battles'),
+    ]);
+    expect(after).toEqual(before);
+
+    dialog = await openEditor(page);
+    await expect(cycle(dialog)).toHaveText('Cycle0000');
+    await expect(tool(dialog, 'Clear')).toBeDisabled();
+  });
+
+  test('keyboard: draw a cell; Tab from Clear reaches Play; Enter plays; the same button reads Pause then Play again; the walk continues to the slider', async ({
+    page,
+    browserName,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+
+    await drawOneCell(page, dialog, 5, 5);
+
+    await tool(dialog, 'Clear').focus();
+    await page.keyboard.press(tabKey);
+    // `:focus` re-resolves to whatever currently has focus — the SAME DOM element across the
+    // Play/Pause flip (3.12 FD1: one button, one element, the accessible name is what changes).
+    const playPauseButton = dialog.locator(':focus');
+    await expect(playPauseButton).toHaveAccessibleName('Play');
+
+    await page.keyboard.press('Enter');
+    await expect(box(dialog)).toHaveAttribute('data-status', 'playing');
+    await expect(playPauseButton).toBeFocused();
+    // The lone drawn cell has zero rules and dies at cycle 1 — the auto-pause.
+    await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
+    await expect(playPauseButton).toHaveAccessibleName('Play');
+
+    await page.keyboard.press(tabKey);
+    await expect(run(dialog, 'Next cycle')).toBeFocused();
+    await page.keyboard.press(tabKey);
+    await expect(run(dialog, 'Stop & reset')).toBeFocused();
+    await page.keyboard.press(tabKey);
+    const slider = preview(dialog).getByRole('slider', { name: 'Generations per second' });
+    await expect(slider).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(slider).toHaveAttribute('aria-valuetext', '5 generations per second');
+  });
+
+  test('axe: at rest with the controls, and paused after the extinction', async ({ page }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    const dialog = await openEditor(page);
+
+    let { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+
+    await drawOneCell(page, dialog, 5, 5);
+    await run(dialog, 'Play').click();
+    await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
+    await page.waitForTimeout(300);
+
+    ({ violations } = await new AxeBuilder({ page }).analyze());
+    expect(violations).toEqual([]);
+  });
+});

@@ -1,5 +1,5 @@
-import { RULE_ACTIONS, type RuleAction, type SurvivalRule } from '@gol/domain';
-import { type ConditionDraft, conditionDraftFrom } from './conditionDraft';
+import { RULE_ACTIONS, type Condition, type RuleAction, type SurvivalRule } from '@gol/domain';
+import { type ConditionDraft, conditionDraftFrom, conditionFromDraft } from './conditionDraft';
 
 /**
  * The rule-under-edit vocabulary (Story 4.10, FR-2.5/FR-2.6). Lives in `lib/organisms/` — the
@@ -131,6 +131,30 @@ export function updateRuleConditions(
   const conditions = update(target.conditions);
   if (conditions === target.conditions) return rules;
   return rules.map((rule) => (rule.id === id ? { ...rule, conditions } : rule));
+}
+
+/** A rule ready for the engine, minus the hash the save path mints (Story 4.16): `id` kept
+ * (RFC-004 §2.4), every condition through `conditionFromDraft`. Story 4.15's preview stamps
+ * a session-only `contentHash` on top; 4.16 stamps the real one. */
+export type ParsedRuleDraft = Omit<SurvivalRule, 'contentHash'>;
+
+/**
+ * The persisted-shape view of a rule draft — the inverse of `ruleDraftFrom`, and the ONE
+ * place a `RuleDraft` becomes engine input. `null` when the rule cannot run: no conditions
+ * (`ruleNeedsCondition` — `[].every` is true, so the engine would fire it for every cell,
+ * `validateRules.ts`), or a condition `parseConditionDraft` rejects. Reads the SAME parse
+ * `validateConditionDraft` reads (`conditionDraft.ts:22-25`), so the Save gate (Story 4.13)
+ * and a runnable preview (Story 4.15) cannot disagree about what "invalid" means.
+ */
+export function parseRuleDraft(rule: RuleDraft): ParsedRuleDraft | null {
+  if (ruleNeedsCondition(rule)) return null;
+  const conditions: Condition[] = [];
+  for (const draft of rule.conditions) {
+    const condition = conditionFromDraft(draft);
+    if (condition === null) return null;
+    conditions.push(condition);
+  }
+  return { id: rule.id, conditions, payload: rule.payload };
 }
 
 /** A persisted rule as a draft: `contentHash` dropped, the rule's own `id` KEPT (RFC-004 §2.4 —

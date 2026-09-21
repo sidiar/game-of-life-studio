@@ -11,6 +11,7 @@ import {
   MAX_RULE_SUMMARY_LENGTH,
   moveRule,
   NEW_RULE_ACTION,
+  parseRuleDraft,
   removeRule,
   ruleActionLabel,
   RULE_ACTIONS,
@@ -250,6 +251,57 @@ describe('ruleDraftFrom', () => {
       id: 'x',
       conditions: [],
       payload: { summary: '', action: 'born' },
+    });
+  });
+});
+
+describe('parseRuleDraft', () => {
+  it('a rule with zero conditions parses to null', () => {
+    expect(parseRuleDraft(createNewRuleDraft('r1'))).toBeNull();
+  });
+
+  it('a rule whose one condition is unrunnable parses to null', () => {
+    const rule: RuleDraft = {
+      id: 'r1',
+      conditions: [{ id: 'c1', property: 'neighborCount', operator: 'eq', pattern: 'abc' }],
+      payload: { summary: '', action: 'born' },
+    };
+    expect(parseRuleDraft(rule)).toBeNull();
+  });
+
+  it("round-trips CONWAYS_CLASSIC's rules through ruleDraftFrom", () => {
+    for (const rule of CONWAYS_CLASSIC.survivalRules) {
+      const draft = ruleDraftFrom(rule, counter());
+      const parsed = parseRuleDraft(draft);
+      expect(parsed).toEqual({ id: rule.id, conditions: rule.conditions, payload: rule.payload });
+      expect(parsed && 'contentHash' in parsed).toBe(false);
+    }
+  });
+
+  it('the parsed conditions are a NEW array carrying no draft id', () => {
+    const draft = ruleDraftFrom(
+      CONWAYS_CLASSIC.survivalRules.find((r) => r.payload.action === 'born')!,
+      counter(),
+    );
+    const parsed = parseRuleDraft(draft);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.conditions).not.toBe(draft.conditions);
+    for (const condition of parsed!.conditions) {
+      expect('id' in condition).toBe(false);
+    }
+  });
+
+  it('a range draft with text bounds parses to a numeric [min, max] pattern', () => {
+    const rule: RuleDraft = {
+      id: 'r1',
+      conditions: [{ id: 'c1', property: 'age', operator: 'range', pattern: ['2', '3'] }],
+      payload: { summary: '', action: 'survive' },
+    };
+    const parsed = parseRuleDraft(rule);
+    expect(parsed).toEqual({
+      id: 'r1',
+      conditions: [{ property: 'age', operator: 'range', pattern: [2, 3] }],
+      payload: { summary: '', action: 'survive' },
     });
   });
 });

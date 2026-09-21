@@ -512,7 +512,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   two copies must move together, `seededRng.test.ts` deliberately accepts negative seeds, and a
   single run-boundary site now covers every production path — so the RNG-level check buys nothing
   until a SECOND production mint site appears (Story 4.15's preview is the candidate; it should
-  reuse the hook's mint rather than add one). Enforce in both copies in that story, together.
+  reuse the hook's mint rather than add one). Enforce in both copies in that story, together. —
+  **Story 4.15 adds no mint site**: the preview reuses `useSimulation`'s `mintSeed` through the
+  hook; the RNG-level check stays deferred on the same terms.
 
 ## Deferred from: Story 3-7 performance harness (2026-09-10)
 
@@ -1636,7 +1638,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   consumers and the engine's `Record<CellProperty, …>` separately, which is the intended pair.
 - **4.15's preview needs `contentHash` before 4.16's hasher exists** — `validateSurvivalRules`
   rejects a hash-less rule; Story 4.15 decides (a session-only placeholder hash, or landing after
-  4.16).
+  4.16). — ✅ **Decided in Story 4.15 (FD5): the session-only stand-in is the rule's own `id`**
+  (`previewOrganism.ts`); the preview never needs the real hash (one organism per session — no two
+  lists are compared), so 4.16's hasher does NOT replace it.
 ## Deferred from: Story 3-18-fullscreen-run-stage implementation (2026-09-17)
 
 - **`component-tree-battle-page.md` amendment candidates** (planning artifact, not edited — the
@@ -1711,7 +1715,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   file says why. `<VisuallyHidden>` is at `components/` root for the same reason. Story 4.14 built
   the panel; 4.15 mounts `<TransportControls>` / `<CycleDigits>` / `<PopulationPills>` /
   `<SpeedControl>` under `<PreviewPanel>`'s drawing controls and swaps the edit canvas for a
-  playback one inside `PreviewDishBox` (see the 4.14 Dev Notes' shape).
+  playback one inside `PreviewDishBox` (see the 4.14 Dev Notes' shape). — **Done in Story 4.15**
+  for `<TransportControls>` (with `compact`/`disabled`), `<CycleDigits>` and `<SpeedControl>`;
+  `<PopulationPills>` was NOT mounted (FD9) — see the 4-15 section.
 - **`<BattleHeader>`'s `disabled` collapse** (the 3-11 entry above) is unchanged by this story:
   the Fullscreen button is NEVER disabled — entering fullscreen touches no editor state, so
   neither the edit lock nor the roster refusal applies (both reach RUN only). The entry stays
@@ -2104,7 +2110,12 @@ commit. These are the rest.
   declared-and-unread (`PetriDishCanvas.tsx:41-47`); the second caller with no organism id is the
   trigger to make `tool` optional on the edit member or drop it, and 4.15's preview-organism
   identity (the `:514` mint-site note, the `:1637` `contentHash` note) should replace the
-  placeholder, not add a second.
+  placeholder, not add a second. — **Story 4.15 keeps the id as the preview organism's SESSION
+  IDENTITY** (`previewOrganismFrom`) rather than replacing it: the drawn grid's ref 1, the
+  palette's slot 1 and the compiled roster's ref 1 all resolve through one constant. Story 4.17's
+  self-reference (`organismType eq <own id>`) is the reason the adapter will one day take `selfId`
+  and rewrite that pattern to `PREVIEW_ORGANISM_ID` before compiling — not built here (no caller
+  has an id; the 4.9 FD1 dead-handle rule).
 - **The canvas's `aria-label` reads "Petri dish, 30 by 20 cells" in the editor** (FD6) — accurate,
   shared, and a copy decision ("Preview dish"?) for whichever story next touches
   `<PetriDishCanvas>`'s label.
@@ -2142,3 +2153,54 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   any of the three". The fix is one line (move focus to Draw on Clear) but it is a design choice
   for both surfaces at once; **Story 6.11** should decide it alongside the pointer-only dish gap
   the 2.5 entry records.
+
+## Deferred from: Story 4-15-preview-simulation (2026-09-21)
+
+- **No population reading in the preview** (FD9) — spec §8/§3.12 name a "compact `PopulationStats`"
+  and the 3.18 pointer names `<PopulationPills>`; the editor mockup has none, the AC has none, and
+  a pill would show the run's *snapshot* colour/name beside a canvas that follows the live palette
+  (4.14 AC4) — two colours for one organism the moment a swatch is picked mid-run. Candidate: a
+  living-cell count line (`sim.population[0]?.count`), which cannot go stale; decide with the next
+  UX pass.
+- **Design-doc amendment candidates** (`organism-editor-design.md:512-516`, `:789`, `:849-850`):
+  "Updates in real-time as rules change" / "Debounce preview simulation updates (300ms after rule
+  change)" / OQ-3 are answered by the epic AC — rule edits apply on the next run, never mid-run
+  (FD2); and the mockup (`organism-editor.html:770-815, :1208-1217`) shows no speed slider and a
+  uniform `.btn-sim` trio — the shipped surface is the Run mode's cluster (FD8) plus the design
+  doc's slider.
+- **`installFrameDriver` is at two copies** (`BattleSimulationView.test.tsx`,
+  `PreviewPanel.test.tsx`, and now `OrganismEditorModal.test.tsx` — three copies); lift to
+  `@/test-support` on the next one.
+- **Stop is the only way back to the sketch after an auto-pause** (FD3): an auto-paused run at
+  cycle N shows an empty dish with the tools disabled until Stop; an "auto-pause returns to rest"
+  shortcut was considered and rejected (a paused run at cycle N must keep its live grid for Step —
+  the two states are indistinguishable at the hook). A "Stop to draw again" affordance is a copy
+  candidate.
+- **`organismType` conditions never match in the preview** — the roster is one organism, so
+  "Occupied by X" compiles to `NO_MATCH_REF` (Decision E.3; the design doc's "runs organism in
+  isolation"). A hint beside such a condition ("does not apply in the preview") is a candidate for
+  the rules column, not the panel.
+- **The preview's starting speed is the schema default** (`DEFAULT_SETTINGS.defaultSpeed`), not
+  the user's FR-8.12 setting — Story 6.9 decides, on the same terms as 4.14's grid-lines entry.
+- **`Play` disabled carries no `title`** — the hint line is the disclosure; 3.12 FD6's `title` on
+  Step stays for the playing case only.
+- **`compact` wraps rather than shrinks** (FD8) — at 290px the cluster renders as two rows (Play +
+  Next cycle, then Stop & reset full width); a three-up grid needed the mockup's short labels,
+  which 3.18 FD11 rejected for the shared cluster.
+- **A Pause that beats the first cycle returns to rest** (`cycle === 0`): the dish flips back to
+  the edit surface — by design (nothing happened), recorded because it looks like a bug to someone
+  who presses Play/Pause quickly at 1 gen/s.
+- **4.24/4.25 will mount this panel over `<BattlePage>`** — in Lab mode only (the pencils and
+  "+ Create" are Lab-side), so two `Simulation controls` groups never coexist; the modal's `inert`
+  on the page behind is the second guard. Say so in 4.24's story.
+- **The editor chunk's growth landed mostly OUTSIDE the single `grep -rl "Organism Color"` chunk.**
+  Turbopack split the newly-shared `@gol/simulation` session/loop/strategy graph (already shipped
+  by `/battle`) into two NEW chunk files rather than folding it into the modal's own chunk: the
+  named chunk grew only +0.65 KB gzip (12124 -> 12772 bytes), while the two new chunks together add
+  ~10.6 KB gzip and the WHOLE app's chunk total grew ~7.6 KB gzip net (some code moved out of
+  previously editor-only chunks into the new shared ones). `check-bundle-size.mjs`'s own
+  measurement (route first-load JS) is unaffected either way, because none of this is on any
+  route's first load — it is the editor's lazy-loaded group. Recorded exactly as
+  AC11 anticipated ("unless Turbopack re-splits the engine modules the `/battle` route already
+  ships … measured, explained"); no action needed unless a future story wants a single-chunk
+  growth number to stay a reliable proxy (it no longer is, once two routes share an engine).
