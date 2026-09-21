@@ -889,12 +889,15 @@ describe('OrganismEditorModal', () => {
       expect((await axe(document.body)).violations).toEqual([]);
     });
 
-    // Review decision (Owner, 2026-09-21, option (c)): a rule or a condition added AFTER a refused
-    // Save is not flagged on mount — `saveAttempted` clears globally on the structural add itself
-    // (not per-control), which is why rule 2's still-present error also hides here, not just rule
-    // 3's absent one. A value edit stays sticky (no un-stick on the name keystroke below), and the
-    // very next Save re-flags everything, the newly added control included.
-    it('(19) a structural add un-sticks saveAttempted; a value edit does not; a later Save re-flags everything', async () => {
+    // Story 4.13 FD3 (the owner's option (c)): a rule or a condition added AFTER a refused Save is
+    // not flagged on mount — `saveAttempted` clears globally on the structural add itself (not
+    // per-control), which is why rule 2's still-present error also hides here, not just rule 3's
+    // absent one. A value edit, a delete and a reorder all leave it sticky; a delete that shrinks
+    // the list followed by an add still un-sticks (the size ref tracks the shrink); and the very
+    // next Save re-flags everything, the newly added control included. `user.click` drains every
+    // commit, so this pins the settled state per step — the "before paint" half of FD3 is the
+    // layout effect's, measured in review, not asserted here.
+    it('(19) a structural add un-sticks saveAttempted; a value edit, a delete or a reorder does not; a later Save re-flags everything', async () => {
       const user = userEvent.setup();
       render(<OrganismEditorModal open origin="library" onClose={vi.fn()} library={LIBRARY} />);
 
@@ -906,8 +909,11 @@ describe('OrganismEditorModal', () => {
       const save = within(dialog).getByRole('button', { name: 'Save' });
       await user.click(save);
 
-      // Refused: name + both zero-condition rules are flagged.
+      // Refused: name + both zero-condition rules are flagged — the alert lines AND the boundary
+      // cues (the name's `aria-invalid`, both "+ Add Condition" buttons' `data-invalid`), so the
+      // zero-count below is a clearing, not a selector that never matched.
       expect(within(dialog).getAllByRole('alert')).toHaveLength(3);
+      expect(dialog.querySelectorAll('[aria-invalid="true"], [data-invalid]')).toHaveLength(3);
 
       // A value edit (not structural) leaves the override sticky — the two rule errors survive it.
       await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'G');
@@ -915,16 +921,23 @@ describe('OrganismEditorModal', () => {
       const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
       expect(within(rule1).getByRole('alert')).toHaveTextContent(RULE_NEEDS_CONDITION);
 
+      // A reorder (Story 4.12) is not structural either — both errors survive the swap.
+      within(rules).getByRole('button', { name: 'Reorder rule 1' }).focus();
+      await user.keyboard('{ArrowDown}');
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(2);
+
       // A structural add — a new rule — clears `saveAttempted` globally: rule 2's untouched error
-      // hides too, not merely rule 3's (which never had one to show).
+      // hides too, not merely rule 3's (which never had one to show). Focus lands on the new
+      // card's Summary across the extra commit the clear costs.
       await user.click(headerAdd);
       expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
       expect(dialog.querySelectorAll('[aria-invalid="true"], [data-invalid]')).toHaveLength(0);
+      const rule3 = within(rules).getByRole('group', { name: 'Rule 3' });
+      expect(rule3.querySelector('[data-rule-summary]')).toHaveFocus();
 
       // A later Save re-flags everything, the added rule included (name stays valid from above).
       await user.click(save);
       expect(within(dialog).getAllByRole('alert')).toHaveLength(3);
-      const rule3 = within(rules).getByRole('group', { name: 'Rule 3' });
       expect(within(rule3).getByRole('alert')).toHaveTextContent(RULE_NEEDS_CONDITION);
 
       // A structural add reached through a CONDITION (not a rule) un-sticks it the same way.
@@ -933,6 +946,17 @@ describe('OrganismEditorModal', () => {
 
       await user.click(save);
       expect(within(dialog).getAllByRole('alert')).toHaveLength(2); // rule 1, rule 2 — 3 now satisfied
+
+      // A delete is not structural: removing rule 1 (zero rows) drops its own line only; the
+      // other zero-row rule's stays. Then deleting the rule WITH a row (renumbered to 2) shrinks
+      // the size below the count at the last Save, and the next add must still un-stick: the ref
+      // follows the shrink, it is not "the size at Save".
+      await user.click(within(rules).getByRole('button', { name: 'Delete rule 1' }));
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(1);
+      await user.click(within(rules).getByRole('button', { name: 'Delete rule 2' }));
+      expect(within(dialog).getAllByRole('alert')).toHaveLength(1);
+      await user.click(headerAdd);
+      expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
     });
   });
 });

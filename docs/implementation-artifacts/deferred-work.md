@@ -2005,7 +2005,8 @@ owner decision was left open. Deferred:
 
 Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
 Two owner decisions were left open in the story file (sticky `saveAttempted` on controls mounted
-after a refusal; conditionally-mounted vs. always-mounted `role="status"` for the AC8 notice).
+after a refusal; conditionally-mounted vs. always-mounted `role="status"` for the AC8 notice) —
+**both decided by Sidiar on 2026-09-21** and recorded in the "Owner's decisions" section below.
 Deferred:
 
 - **The AC8 notice re-mounts on a repairing keystroke, not on a Save.** After a valid Save, a
@@ -2045,16 +2046,48 @@ Deferred:
   conditionally-mounted `<SaveNotice role="status">`; Story 4.16 deletes it. **The house now
   carries two live-region idioms for a save outcome, and 4.16's toast should pick between them
   deliberately:**
-  - **Always-mounted** (Story 4.9's `<ColorPickerField>` colour-reuse warning, `:46-54`): the
+  - **Always-mounted** (Story 4.9's `<ColorPickerField>` colour-reuse warning, `:46-47`, the
+    region itself at `[data-color-reuse-status]`): the
     region exists at mount, its text toggles between `''` and the sentence. 4.9's own FD3 records
     why: "a live region has to exist before its content changes to be announced reliably."
   - **Conditionally-mounted** (Story 2.13's `<SaveErrorLine>` and this story's `<SaveNotice>`): the
     region mounts only while the message is showing, relying on the mount itself (not a text
     change) to trigger the announcement.
   - **4.16's Library toast AC** ("an in-flow `role="status"` region on the Library, published once
-    the editor's exit transition has finished") should pick the **always-mounted** idiom: a toast
-    on the Library persists across the editor's close transition and can be followed by another
-    save shortly after (open editor, save again) — the exact "second identical message in a row"
-    case the conditionally-mounted idiom does not reliably re-announce (this story's own deferred
-    item above: "a second valid Save on an already-visible notice gives no feedback"). An
-    always-mounted region whose text is cleared and reset avoids that gap.
+    the editor's exit transition has finished") should pick the **always-mounted** idiom, for 4.9
+    FD3's reason: the region has to exist before its content changes, and a toast that appears
+    once the editor's exit transition has finished is content arriving into a page that is
+    already settled. The "second identical message in a row" case (open editor, save again) is
+    NOT an argument between the idioms — the conditionally-mounted precedent handles it by
+    unmounting first (`BattlePage.tsx:788-791`, "Cleared at the START of the attempt … Unmounting
+    the line first makes every attempt's outcome audible"), and this story's own gap ("a second
+    valid Save on an already-visible notice gives no feedback") is a `setNoticeRequested(true)`-
+    on-`true` no-op, not a property of the idiom. Whichever idiom 4.16 takes, a repeat needs a
+    clear-then-set. *(Corrected by the second review, 2026-09-21.)*
+
+## Deferred from: code review of 4-13-editor-validation-feedback (2026-09-21, second review)
+
+Reviewed on **Opus** against the **Sonnet** commit that applied the owner's two decisions
+(`41de359`), via the same three layers plus a raw-`dispatchEvent` timing probe. Six findings were
+patched in the review commit — the load-bearing two: the un-stick was a passive effect, so the
+added card mounted flagged, was focused flagged and cleared only on the next macrotask (measured;
+it is a layout effect now, clearing in the synchronous commit before paint), and the e2e "three
+errors at once …" still encoded the pre-decision count, which is why CI's e2e job was red on the
+commit. These are the rest.
+
+- **Residual of option (c), accepted: a property/operator switch on an existing row still mounts
+  its numeric input red after a refused Save.** The switch is a value edit — `structuralSize` is
+  unchanged — so `saveAttempted` stays on, `<ConditionRow>`'s `showAllErrors` short-circuit shows
+  "Enter/Min must be a whole number…" before a keystroke, and the `setTouched(UNTOUCHED)` resets on
+  the switch (`ConditionRow.tsx`) stay dead under the override. This was the second symptom in the
+  first review's decision text; (c) fixes the first (structural adds) by design. The fix, if the
+  4.16/4.17 e2e passes find it jarring, is option (b) from that finding — a per-control
+  `mountedUnderSeq` against the attempt sequence — or an id-diff on the condition's *shape*
+  (`id|property|isRange`) feeding the same clear; either is a story-sized change to the override,
+  not a patch. `ConditionRow.tsx`'s header records the split.
+- **`structuralSize` is a proxy for "something was added", exact for today's call sites only.**
+  Only `addRule` and `addCondition` grow it, and every list helper is single-purpose, so "grew ⇔
+  added" holds. A future batched delete-with-rows + add, a replace, or a duplicate-rule helper that
+  lands at the same size would mount a brand-new card or row flagged. The exact test is an id-set
+  diff (`ids.some((id) => !prev.has(id))` over rule and condition ids); switch to it when a third
+  call site appears (Story 4.17's seeding replaces the initialiser, so it does not count).

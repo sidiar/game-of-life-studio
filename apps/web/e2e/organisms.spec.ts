@@ -2198,11 +2198,16 @@ test.describe('editor validation & feedback (Story 4.13)', () => {
       /Rule must have at least one condition/,
     );
 
+    // A structural add un-sticks the override (FD3): card 1's line goes because its error is fixed,
+    // and card 2's untouched-Max line goes because only the override was showing it. The next Save
+    // re-flags Max alone — name valid, card 1 now has a (valid, default) row.
     await addCondition1.click();
-    await expect(dialog.getByRole('alert')).toHaveCount(1);
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+    const max = row(card2, 1).max;
+    await expect(max).not.toHaveAttribute('aria-invalid', 'true');
 
     await save(dialog).click();
-    const max = row(card2, 1).max;
+    await expect(dialog.getByRole('alert')).toHaveCount(1);
     await expect(max).toBeFocused();
     await expect(max).toHaveAttribute('aria-invalid', 'true');
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -216,8 +216,8 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  *
  * Story 4.13's gate (`validateOrganismDraft`, `saveAttempted`, focus-to-first-invalid): Save now
  * runs `validateOrganismDraft(draft)`; an invalid draft flips `saveAttempted` (sticky across value
- * edits, cleared only by a structural add — a new rule or a new condition row, Owner's decision
- * (c), 2026-09-21 — never by an edit, a delete or a reorder) and focuses the first error's control;
+ * edits, deletes and reorders; cleared only by a structural add — a new rule or a new condition
+ * row — in the synchronous commit that follows the add, FD3) and focuses the first error's control;
  * a valid draft shows the transitional `SaveNotice` (AC8, FD1) — Story 4.16 replaces that branch
  * with the repository write, the close and the toast. (Story 4.13) (UX-DR14) (UX-DR17)
  */
@@ -291,24 +291,30 @@ export default function OrganismEditorModal({
     setSurvivalRules((rules) => appendRule(rules, createNewRuleDraft(id)));
   }, [setSurvivalRules]);
 
-  // Review decision (Owner, 2026-09-21, option (c)): a STRUCTURAL add — a new rule (`addRule`
-  // above) or a new condition row (`<ConditionsEditor>`'s `addCondition`, reached through
-  // `setSurvivalRules`) un-sticks `saveAttempted`, so a control that did not exist at the last
-  // refused Save is not painted red on the very commit that mounts it (AC6's "never red on add",
-  // extended past the first Save to every later one). A value edit, a delete, or a reorder (Story
-  // 4.12) leaves it sticky — FD3's "un-sticking on every edit would re-hide a still-present error"
-  // reasoning still holds for anything that is not brand new. Tracked as one number — every rule
-  // plus every rule's conditions — because either kind of add increases it and nothing else does;
-  // `handleSave` below always sets `saveAttempted` back to `true` on a refusal, so the very next
-  // Save re-flags everything, added control included. Compared in an effect, not inline in
-  // `setSurvivalRules`'s updater, because that updater must stay pure (the Story 4.12 review's
-  // "keep every updater pure" habit) — `setSaveAttempted` is a side effect.
+  // A STRUCTURAL add — a new rule (`addRule` above) or a new condition row (`<ConditionsEditor>`'s
+  // `addCondition`, reached through `setSurvivalRules`) — un-sticks `saveAttempted`, so a control
+  // that did not exist at the last refused Save never shows red before the user has typed into it
+  // (AC6's "never red on add", extended past the first Save; Story 4.13 FD3). A value edit, a
+  // delete, or a reorder leaves it sticky: un-sticking on every edit would re-hide a still-present
+  // error, and the trade accepted here is the narrow one — an add hides sibling errors until the
+  // next Save. Tracked as one number — every rule plus every rule's conditions — a proxy that is
+  // exact for today's single-purpose helpers (only the two adds grow it; a batched delete-plus-add
+  // would need an id diff instead). Compared in an effect, not inside `setSurvivalRules`'s
+  // updater, because that updater must stay pure. A LAYOUT effect, deliberately: the clear
+  // schedules a second, synchronous commit that removes the alert line and the `data-invalid` cue
+  // before the browser paints (`<ColorPickerField>`'s collapse idiom); the add's own focus effect
+  // runs in between, and the Summary it focuses keeps focus across the clearing commit. From a
+  // passive effect the same update is lowered to Default priority and lands a task later —
+  // measured in review: the new card mounts with its `role="alert"`, is focused flagged, and
+  // clears only on the next macrotask.
+  // `handleSave` always sets `saveAttempted` back to `true` on a refusal, so the very next Save
+  // re-flags everything, added control included.
   const structuralSize = draft.survivalRules.reduce(
     (sum, rule) => sum + 1 + rule.conditions.length,
     0,
   );
   const prevStructuralSizeRef = useRef(structuralSize);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (structuralSize > prevStructuralSizeRef.current) setSaveAttempted(false);
     prevStructuralSizeRef.current = structuralSize;
   }, [structuralSize]);
