@@ -1974,7 +1974,8 @@ owner decision was left open. Deferred:
    of the no-op `--mui-palette-SnackbarContent-bg` token (`deferred-work.md:92`); the "Organism
    deleted" toast is Story 4.22's (`epics.md:1260`), a separate host.
 2. **The AC8 notice (`SaveNotice`, `SAVE_UNAVAILABLE_NOTICE`, `noticeRequested`) is transitional.**
-   Story 4.16 deletes all three, along with modal tests (14)/(15) and e2e test 3 — the honest
+   Story 4.16 deletes all three, along with modal tests (14)/(15), the second "(18)" (axe with the
+   notice visible) and e2e test 3 — the honest
    "nothing persisted yet" line has no reason to exist once a valid Save actually persists.
 3. **No summary live region was added (FD6).** The per-field `role="alert"` lines stay; a summary
    ("3 errors") would be a third reading of what the alert and the focused control's describedby
@@ -1991,10 +1992,43 @@ owner decision was left open. Deferred:
    a draft-flush (a `commit` exposed through a ref, or commit-on-unmount) is due.
 7. **`ErrorText` now lives in `fieldStyles.ts`** (`OrganismNameField`, `ConditionRow`,
    `ConditionsEditor` — the Story 4.7 three-callers threshold). `VisuallyHidden` is still at two
-   hand copies (`GridSettingsSection.tsx`, `ColorPickerField.tsx`) — unchanged by this story.
+   hand copies (`ColorPickerField.tsx`, `RulesEditor.tsx` — the 4.12 entry above; the shared
+   `components/VisuallyHidden.tsx` is what `GridSettingsSection` imports) — unchanged by this story.
 8. **The mockup has no error CSS at all** (`organism-editor.html` carries no `error`/`invalid` rule
    sets) — every colour, border and glyph this story ships is 4.5's/4.11's reading of the design
    doc's prose (`organism-editor-design.md:772-777`), not a mockup trace.
 9. **A rule whose every row is invalid shows one error per row, never a rule-level roll-up** — by
    design (AC5's exclusivity: a rule with rows carries no zero-condition error, only its rows'
    own).
+
+## Deferred from: code review of 4-13-editor-validation-feedback (2026-09-21)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+Two owner decisions were left open in the story file (sticky `saveAttempted` on controls mounted
+after a refusal; conditionally-mounted vs. always-mounted `role="status"` for the AC8 notice).
+Deferred:
+
+- **The AC8 notice re-mounts on a repairing keystroke, not on a Save.** After a valid Save, a
+  breaking edit hides the notice (derived from `errors.length`) and the repairing edit brings it
+  back — and re-announces it — with no Save click; only a *refused* Save clears `noticeRequested`
+  (`OrganismEditorModal.tsx:296, :302`). Per AC8's derivation; Story 4.16 deletes the notice.
+- **A second valid Save on an already-visible notice gives no feedback** — `setNoticeRequested(true)`
+  is a no-op on `true`. Story 4.16 replaces the branch with the write, the close and the toast.
+- **The gate validates the name with the default cap while `<OrganismNameField>` accepts a
+  `maxLength` override** (`organismDraft.ts` calls `validateOrganismName(draft.name)`; the field's
+  prop is a 4.5 test seam the modal never passes). The two views of "valid" diverge the day a caller
+  passes it — either drop the prop or thread the cap through `validateOrganismDraft`.
+- **`errorTargetSelector`'s `value` target is DOM-verified only for `max`, `min`/`pair` and
+  `rule`.** A scalar numeric textbox or an organism `<select>` as the first error is string-tested
+  only (`OrganismEditorModal.test.tsx`, the `errorTargetSelector` describe). Story 4.17's
+  seeded-record tests (a dangling organism id, an out-of-range age) are the natural DOM pin.
+- **`ORGANISM_REQUIRED` is unfixable when `organisms` is empty** — `defaultOrganismId` falls to `''`
+  (`ConditionsEditor.tsx:90`), the row's `<select>` offers only the placeholder, and the gate focuses
+  a control that cannot satisfy it. Reachable once Story 4.17 passes library-minus-self and the sole
+  organism is the one under edit; that story should either hide the organism-type property when the
+  list is empty or message it.
+- **A dangling organism id passes the gate.** `validateOrganismDraft` takes no library and
+  `parseConditionDraft` checks only `pattern.length === 0`, so a row rendering the "Unknown organism"
+  option (`ConditionRow.tsx:175`) is "valid" and the modal shows the "Valid organism" notice.
+  Unreachable by UI today; reachable when Story 4.17 seeds from a record that references a deleted
+  organism — 4.17 (or 4.16's parse) decides whether that is a gate error or a save-time repair.

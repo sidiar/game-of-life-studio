@@ -12,7 +12,8 @@ import { validateOrganismName } from './organismName';
  * assignment, Story 4.23 diffs one object against one seed for the editor's own dirty scope
  * (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one field per story — 4.6
  * `dominance`, 4.7 `agingEnabled`/`colorToken`, 4.8's M6 colour seed and 4.10's `survivalRules` are
- * done. It will never be `Omit<Organism, 'id' | 'schemaVersion'>`: the rules are `RuleDraft`s, not
+ * done, and Story 4.13's validator (`validateOrganismDraft`, below) reads all of them. It will
+ * never be `Omit<Organism, 'id' | 'schemaVersion'>`: the rules are `RuleDraft`s, not
  * `SurvivalRule`s (`ruleDraft.ts`'s header — a draft rule cannot satisfy the persisted schema the
  * moment "+ Add Rule" is pressed), so Story 4.16's save path parses `{ ...rule, contentHash }` per
  * rule rather than the draft matching the entity type field-for-field. A `Pick` of the domain
@@ -39,8 +40,7 @@ export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled'
  * editor passes the same list; Story 4.17 does not call this factory at all, it seeds from the
  * record. `survivalRules` seeds to a FRESH empty array per call (Story 4.10) — never a shared
  * module-level `[]` — for the same reason as the rest of the draft: it is diffed against its seed,
- * and a shared array would move with every edit made through this call's own reference. Story
- * 4.13's validator reads all of them.
+ * and a shared array would move with every edit made through this call's own reference.
  */
 export function createNewOrganismDraft(usedColorTokens: readonly string[]): OrganismDraft {
   return {

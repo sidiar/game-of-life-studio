@@ -657,13 +657,25 @@ describe('RulesEditor', () => {
     });
   });
 
-  // (y) Story 4.13: the override reaches every card.
+  // (y) Story 4.13: the override reaches every card — a non-first card too, and a card with rows
+  // gets nothing.
   it('(y) the override reaches every card (Story 4.13)', () => {
-    const emptied: readonly RuleDraft[] = [{ ...THREE[0], conditions: [] }, THREE[1], THREE[2]];
+    const emptied: readonly RuleDraft[] = [
+      { ...THREE[0], conditions: [] },
+      THREE[1],
+      { ...THREE[2], conditions: [] },
+    ];
     render(<Harness initial={emptied} showAllErrors={true} />);
 
-    expect(screen.getAllByRole('alert')).toHaveLength(1);
-    const first = screen.getByRole('group', { name: 'Rule 1' });
-    expect(within(first).getByRole('alert')).toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    expect(
+      within(screen.getByRole('group', { name: 'Rule 1' })).getByRole('alert'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('group', { name: 'Rule 2' })).queryByRole('alert'),
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole('group', { name: 'Rule 3' })).getByRole('alert'),
+    ).toBeInTheDocument();
   });
 });

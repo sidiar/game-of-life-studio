@@ -4,7 +4,7 @@ baseline_commit: 0fa68102ece15da0630af2c3dcb62e42f9e9f40e
 
 # Story 4.13: Editor Validation & Feedback
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -537,6 +537,106 @@ half**: zero rules is not an error, the gate passes it, nothing red appears.
         Record. Push to `story/4-13-editor-validation-feedback`; `gh run list --limit 1` after the
         PR opens.
 
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (2026-09-21), via three parallel adversarial
+layers (Blind Hunter — diff only; Edge Case Hunter — diff + project; Acceptance Auditor — diff +
+story + context). 27 raw findings → 2 `decision-needed`, 12 `patch`, 6 `defer`, 7 dismissed.
+
+- [ ] [Review][Decision] **Sticky `saveAttempted` paints brand-new controls red the instant they
+  mount** — after one refused Save, "+ Add Rule" mounts a `role="alert"` + a red "+ Add Condition"
+  on the fresh card in the same commit that focuses its Summary; a new row, or a property/operator
+  switch to a numeric input, shows "Enter/Min must be a whole number…" before the user types
+  (`OrganismEditorModal.tsx:298-306` never clears `saveAttempted`; `ConditionsEditor.tsx:92`,
+  `ConditionRow.tsx:137-139` short-circuit `touched`, so the `setTouched(UNTOUCHED)` resets at
+  `ConditionRow.tsx:279/:296` are dead under the override). FD3 chose sticky deliberately (un-sticking
+  on edits would re-hide a still-present error), but AC6's "never red on add" and 4.5 FD2's "never on
+  mount" no longer hold for controls added after the first refusal, and no test pins either reading.
+  Options: **(a)** keep FD3 as-is — a global sticky override; record the consequence in
+  `deferred-work.md` and pin it with a modal test ("a rule added after a refused Save is flagged on
+  mount"); **(b)** exempt controls mounted after the last attempt — thread an `attemptSeq` (the
+  `focusRequest.seq`) instead of a boolean, each field/card captures the seq it mounted under and
+  shows errors only when `attemptSeq > mountedUnderSeq` or `touched`; a later Save re-flags
+  everything; **(c)** clear `saveAttempted` on structural adds only (add rule / add condition),
+  keeping it sticky across value edits. Recommendation: (a) for this story, (b) as a follow-up if the
+  4.16/4.17 e2e passes find it jarring.
+- [ ] [Review][Decision] **The AC8 notice is a conditionally-mounted `role="status"`, which the
+  editor's own 4.9 FD3 precedent says is unreliable** — `ColorPickerField.tsx:46-47`: "a live region
+  has to exist before its content changes to be announced reliably" (always-mounted region, text
+  toggles); `OrganismEditorModal.tsx:384-388` mounts `<SaveNotice role="status">` only while
+  `noticeVisible`. The 2.13 `<SaveErrorLine>` precedent (`deferred-work.md:358`) supports the
+  conditional form, so the house now carries both idioms and the story's proposed 4.16 toast AC
+  ("an in-flow `role="status"` region on the Library, published once the editor's exit transition has
+  finished") inherits whichever wins. Nothing tests the announcement, only the attribute (test (14)).
+  Options: **(a)** keep AC8 as written — the notice is transitional and Story 4.16 deletes it; note
+  the two idioms in `deferred-work.md` and let 4.16's toast pick the always-mounted one; **(b)**
+  switch now to an always-mounted `<SaveNotice role="status">` whose text is `''` or the sentence
+  (the 4.9 idiom), update AC8, test (14)/(15) and e2e 3 to assert text rather than presence.
+- [x] [Review][Patch] Undisclosed deletion of the Story 4.10 `toBeDisabled()` assertion in "the
+  header action adds through the modal" — AC9(a) lists three retargets, Completion Notes say "No
+  other pre-existing assertion was touched"; the diff removes a fourth
+  [`OrganismEditorModal.test.tsx:441` (was `:451`)]. Record corrected.
+- [x] [Review][Patch] e2e "axe after a refused Save" scans only the name error — AC10/Task 5 test 5
+  specify "name + rule errors visible"; the served build's `data-invalid` add-condition border and
+  `data-rule-error` line were never under `@axe-core/playwright` [`e2e/organisms.spec.ts:2252`].
+- [x] [Review][Patch] `CSS.escape` test is tautological — the expected value is built with the same
+  `CSS.escape('a"b')` the implementation calls [`OrganismEditorModal.test.tsx:649-652`].
+- [x] [Review][Patch] Test (y) "the override reaches every card" empties only card 1 — proves the
+  first card only [`RulesEditor.test.tsx:661-668`].
+- [x] [Review][Patch] `validateOrganismDraft` tests: (c) expects `validateOrganismName(name)` (the
+  dependency under test), (k)'s `fc.string()` never reaches the >50 branch, and its model casts
+  `c.pattern as string` twice [`organismDraft.test.ts:56-62, 158-200`].
+- [x] [Review][Patch] `deferred-work.md` item 2 lists what 4.16 deletes as "(14)/(15) and e2e 3" —
+  the second "(18)" (axe with the notice) also pins `[data-save-notice]` [`deferred-work.md:2005`].
+- [x] [Review][Patch] `deferred-work.md` item 7 misnames the `VisuallyHidden` hand copies as
+  `GridSettingsSection.tsx` + `ColorPickerField.tsx` — `GridSettingsSection` imports the shared one;
+  the copies are `ColorPickerField.tsx:228` and `RulesEditor.tsx:93` (as `:1936` records)
+  [`deferred-work.md:1993`].
+- [x] [Review][Patch] Task 2's "the draft grows one field per story" header sentence was appended to
+  `createNewOrganismDraft`'s docblock instead of the file header [`organismDraft.ts:42-43`].
+- [x] [Review][Patch] Name-field test (r) asserts only `ids[0]` — Task 3 (r) says describedby order
+  `[alert.id, counter.id]` [`OrganismNameField.test.tsx:284-294`].
+- [x] [Review][Patch] Literal duplicates where the task named the constant — (o) `999` for
+  `MAX_AGE_LITERAL`, (g) `'Select an organism'` for `ORGANISM_REQUIRED`
+  [`ConditionRow.test.tsx:347`, `organismDraft.test.ts:74`].
+- [x] [Review][Patch] Two story-vs-code divergences unrecorded: `data-invalid` renders `"true"`
+  (React), not the `''` Task 5 test 2 asserts; (14)/(15) use `[data-save-notice]` because
+  `within(dialog).getByRole('status')` matches the colour picker's and the reorder announcer's
+  always-mounted regions too [`ConditionsEditor.tsx:173`, `OrganismEditorModal.test.tsx:591-620`].
+- [x] [Review][Patch] `ConditionRow.tsx`'s header still says a property/operator change "clears
+  `touched` — the inputs are new (AC4)" — under the override that reset is a no-op; the comment
+  misdescribes the shipped behaviour whichever way the decision above goes [`ConditionRow.tsx:31-35`].
+- [x] [Review][Defer] After a valid Save the notice hides on a breaking edit and re-mounts (and
+  re-announces) on the repairing keystroke, with no Save click — per AC8's derivation; only the
+  refused branch clears `noticeRequested` [`OrganismEditorModal.tsx:296, :302`] — deferred, Story
+  4.16 deletes the notice.
+- [x] [Review][Defer] A second valid Save on an already-visible notice gives no feedback
+  (`setNoticeRequested(true)` is a no-op) [`OrganismEditorModal.tsx:298-301`] — deferred, Story 4.16
+  replaces the branch.
+- [x] [Review][Defer] The gate validates the name with the default cap while `<OrganismNameField>`
+  accepts a `maxLength` override the modal never passes — the two views of "valid" diverge the day
+  someone does [`organismDraft.ts:97`, `OrganismNameField.tsx:85`] — deferred, pre-existing 4.5 prop.
+- [x] [Review][Defer] `errorTargetSelector`'s `value` target is DOM-verified only for `max`, `min`/
+  `pair` and `rule`; a scalar textbox or organism `<select>` target is string-tested only
+  [`OrganismEditorModal.test.tsx:628-636`] — deferred, coverage; 4.17's seeded-record tests are the
+  natural home.
+- [x] [Review][Defer] `ORGANISM_REQUIRED` is unfixable when `organisms` is empty — the gate focuses a
+  `<select>` whose only option is the placeholder [`ConditionsEditor.tsx:90`, `ConditionRow.tsx:171-177`]
+  — deferred, reachable only once Story 4.17 passes library-minus-self for a sole organism.
+- [x] [Review][Defer] A dangling organism id (the "Unknown organism" option) passes the gate —
+  `parseConditionDraft` checks only `pattern.length === 0` [`organismDraft.ts:95-117`,
+  `ConditionRow.tsx:175`] — deferred, unreachable by UI until Story 4.17 seeds from records.
+
+Dismissed (7): `toBeInvalid()` "cannot fail on a required input" (the input is `aria-required`, not
+`required` — `checkValidity()` is unaffected; jest-dom resolves on `aria-invalid`, the 4.5 idiom);
+`useCallback([errors])` never memoises (story-specified, honest deps, harmless); the
+`RULE_NEEDS_CONDITION` verbatim pin is a change detector (story-specified — the test IS where a copy
+drift is caught); `data-rule-error` is never read (story-specified hook, mirrors
+`data-condition-error`); the WebKit branch of e2e 3 is a weak negative (story-specified form);
+AC9(d) "`OrganismLibrary` (+ tests) unedited" violated (disclosed in the record — the AC text was
+wrong); the modal test (15) comment "not back until the NEXT valid Save" (accurate for the refused
+path it documents — the other path is the first defer above).
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -888,9 +988,14 @@ claude-sonnet-5 (Claude Code)
   call sites now wrap the shared base with their own layout rule, byte-identical rendered output.
 - Retargeted exactly the tests AC9 lists (`OrganismEditorModal.test.tsx:53-58` disabled→enabled,
   `:97-105` deleted, `:283-285` comment-only, `e2e/organisms.spec.ts:305` and `:1439-1442`
-  disabled→enabled) plus one test AC9 does not name but that the behaviour change broke:
+  disabled→enabled) plus two edits AC9 does not name but that the behaviour change forced:
   `OrganismLibrary.test.tsx`'s "opens the editor..." case also asserted `toBeDisabled()` on Save
-  and needed the same retarget. No other pre-existing assertion was touched.
+  and needed the same retarget; and the Story 4.10 case "the header action adds through the modal"
+  (`OrganismEditorModal.test.tsx:441`, was `:451`) asserted `toBeDisabled()` after adding a rule —
+  that line was **deleted**, not retargeted (a `toBeEnabled()` there would assert nothing 4.10 cared
+  about: the intent was "adding a rule does not flip Save", which has no meaning once Save is always
+  enabled). No other pre-existing assertion was touched. *(Disclosure added in review — the original
+  record omitted the 4.10 deletion.)*
 - `deferred-work.md` updated per Task 6: seven prior entries closed/confirmed/partially-resolved
   (4.5's alert-vs-summary question, 4.6's two dominance entries, 4.7's aging entry, 4.8's colour
   entry, 4.11's two entries), plus a new "Deferred from: Story 4-13" section with the nine items
@@ -898,6 +1003,14 @@ claude-sonnet-5 (Claude Code)
   again/no-hotkey/ErrorText-location/no-mockup-CSS/no-rollup notes).
 - `docs/project-context.md` left unedited, as instructed — no new rule met the "unobvious" bar on
   its own.
+- Two places where the code departs from the task text as written *(recorded in review)*:
+  `data-invalid={needsCondition || undefined}` renders `data-invalid="true"` (React stringifies a
+  boolean `data-*`), not the `''` Task 5 test 2 spells — the e2e asserts `'true'`, the CSS selector
+  `&[data-invalid]` is value-agnostic; and modal tests (14)/(15) locate the notice by
+  `[data-save-notice]` + `toHaveAttribute('role', 'status')` rather than `within(dialog)
+  .getByRole('status')`, because the dialog already holds two always-mounted `role="status"`
+  regions (the colour picker's reuse warning, the rule reorder announcer) and `getByRole` would
+  throw on the multiple match.
 
 ### File List
 
@@ -927,6 +1040,16 @@ claude-sonnet-5 (Claude Code)
   `SaveNotice`); `ErrorText` lifted to `fieldStyles.ts`; `deferred-work.md` updated per Task 6;
   `npm run ci:dev` green (exit 0), including the new Story 4.13 unit, component and e2e coverage.
   Status → review.
+- 2026-09-21 — Reviewed (code-review, Opus over Sonnet; three parallel layers): 2 decisions left for
+  the owner (sticky `saveAttempted` on controls mounted after a refusal; conditional vs.
+  always-mounted `role="status"` for the AC8 notice), 12 patches applied (e2e axe now scans the
+  rule error too; four test tautologies/overclaims fixed; `MAX_AGE_LITERAL`/`ORGANISM_REQUIRED`/
+  `organismNameTooLong` in place of literals; the fast-check name arbitrary now crosses the cap;
+  two comment corrections; two `deferred-work.md` corrections; the Dev Agent Record now discloses
+  the 4.10 assertion deletion and the two task-text divergences), 6 items deferred to
+  `deferred-work.md`. Re-verified: typecheck, lint, format:check, spec:check, the five touched
+  vitest files (133 tests), `organisms.spec.ts` on Chromium (81 passed), bundle:check (unchanged).
+  Status → in-progress (open decisions).
 
 Dev Model: sonnet   # follows settled patterns — 4.5/4.11's touched-plus-override error idiom, the ErrorText/⚠︎ line, data-attribute selectors with CSS.escape, the 2.13 in-flow status line; the one new shape (a document-ordered validateOrganismDraft with id-based targets and an attempt-keyed focus effect) is pinned with exact code, selectors and tests, and 4.16 consumes it without reshaping it
 Proposed lane gate: none

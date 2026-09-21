@@ -816,8 +816,10 @@ describe('OrganismEditorModal', () => {
       });
 
       it('an id with a quote is escaped', () => {
+        // The literal, not `CSS.escape('a"b')` — an expected value built with the function under
+        // test's own dependency would also pass against an identity polyfill.
         const selector = errorTargetSelector({ kind: 'rule', ruleId: 'a"b' });
-        expect(selector).toBe(`[data-rule-id="${CSS.escape('a"b')}"] [data-add-condition]`);
+        expect(selector).toBe('[data-rule-id="a\\"b"] [data-add-condition]');
       });
     });
 

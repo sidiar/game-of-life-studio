@@ -32,7 +32,9 @@ import { ErrorText as BaseErrorText, SelectInput, TextInput } from './fieldStyle
  * per-field: a numeric input flips its own flag on its first `change`, never on blur, never on
  * mount; `pair` needs BOTH the min and max flags. A property change or a scalar<->range operator
  * change clears `touched` — the inputs are new (AC4). Story 4.13's `showAllErrors` override shows
- * every visible error regardless of `touched`, once a Save has been attempted.
+ * every error regardless of `touched` once a Save has been attempted — and it is sticky for the
+ * life of the modal (4.13 FD3), so after the first refusal that `touched` reset is a no-op: a new
+ * numeric input opens red until it is valid.
  *
  * FD1 — the five-property list follows the AC / design doc / PRD order (Cell State first), not
  * the mockup's four-option selector. FD2 — the cell-state labels carry the PRD's parentheticals.

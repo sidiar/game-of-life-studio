@@ -2250,9 +2250,16 @@ test.describe('editor validation & feedback (Story 4.13)', () => {
   });
 
   test('axe after a refused Save', async ({ page }) => {
-    const { dialog } = await openRules(page);
+    // AC10: name + rule errors visible, focus on the name field — the served build's red
+    // "+ Add Condition" border and its `aria-describedby` line are what this scan is for.
+    const { dialog, rules, headerAdd } = await openRules(page);
+    await headerAdd.click();
     await save(dialog).click();
-    await expect(dialog.getByRole('alert')).toBeVisible();
+    await expect(dialog.getByRole('alert')).toHaveCount(2);
+    await expect(
+      cardGroup(rules, 1).getByRole('button', { name: '+ Add Condition' }),
+    ).toHaveAttribute('data-invalid', 'true');
+    await expect(dialog.getByRole('textbox', { name: 'Organism Name' })).toBeFocused();
     // The header Button's own MUI transition (the 4.5 idiom).
     await page.waitForTimeout(300);
 

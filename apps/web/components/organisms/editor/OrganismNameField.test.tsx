@@ -293,7 +293,11 @@ describe('OrganismNameField', () => {
     expect(alert).toHaveTextContent('Organism name is required');
     expect(field()).toBeInvalid();
     const ids = describedByIds();
+    expect(ids).toHaveLength(2);
     expect(ids[0]).toBe(alert.id);
+    expect(document.getElementById(ids[1] as string)).toHaveTextContent(
+      `0 / ${MAX_ORGANISM_NAME_LENGTH}`,
+    );
   });
 
   // (s) The override has nothing to add to a valid value — it is not a second, stricter check.

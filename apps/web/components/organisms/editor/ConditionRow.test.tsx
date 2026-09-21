@@ -7,6 +7,7 @@ import {
   cellStateLabel,
   conditionPropertyLabel,
   createNewConditionDraft,
+  MAX_AGE_LITERAL,
   MIN_LESS_THAN_MAX,
   operatorLabel,
   ORGANISM_REQUIRED,
@@ -347,7 +348,7 @@ describe('ConditionRow', () => {
     renderRow({ ...NEIGHBOR_EMPTY, property: 'age', pattern: '' }, { showAllErrors: true });
 
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent(wholeNumberMessage('Enter', 0, 999));
+    expect(alert).toHaveTextContent(wholeNumberMessage('Enter', 0, MAX_AGE_LITERAL));
     const value = screen.getByRole('textbox', { name: 'Condition 1 value' });
     expect(value).toHaveAttribute('aria-invalid', 'true');
   });
@@ -363,7 +364,7 @@ describe('ConditionRow', () => {
     renderRow(range, { showAllErrors: true });
 
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent(wholeNumberMessage('Max must be', 0, 999));
+    expect(alert).toHaveTextContent(wholeNumberMessage('Max must be', 0, MAX_AGE_LITERAL));
     const max = screen.getByRole('textbox', { name: 'Condition 1 maximum' });
     const min = screen.getByRole('textbox', { name: 'Condition 1 minimum' });
     expect(max).toHaveAttribute('aria-invalid', 'true');

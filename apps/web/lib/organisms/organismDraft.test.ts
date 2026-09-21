@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { NEW_ORGANISM_DOMINANCE } from '@gol/domain';
+import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { PALETTE } from '@/lib/palette/paletteRegistry';
-import { ORGANISM_NAME_REQUIRED, validateOrganismName } from './organismName';
-import { createNewConditionDraft, MAX_AGE_LITERAL, wholeNumberMessage } from './conditionDraft';
+import { ORGANISM_NAME_REQUIRED, organismNameTooLong } from './organismName';
+import {
+  createNewConditionDraft,
+  MAX_AGE_LITERAL,
+  ORGANISM_REQUIRED,
+  wholeNumberMessage,
+  type ConditionDraft,
+} from './conditionDraft';
 import { createNewOrganismDraft, validateOrganismDraft } from './organismDraft';
 import { createNewRuleDraft, moveRule, RULE_NEEDS_CONDITION, type RuleDraft } from './ruleDraft';
 
@@ -58,10 +64,10 @@ describe('validateOrganismDraft', () => {
   });
 
   it('(c) a 51-character name gives the too-long message, not the required one', () => {
-    const name = 'x'.repeat(51);
-    const errors = validateOrganismDraft({ ...base, name });
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toEqual({ target: { kind: 'name' }, message: validateOrganismName(name) });
+    const name = 'x'.repeat(MAX_ORGANISM_NAME_LENGTH + 1);
+    expect(validateOrganismDraft({ ...base, name })).toEqual([
+      { target: { kind: 'name' }, message: organismNameTooLong(MAX_ORGANISM_NAME_LENGTH) },
+    ]);
   });
 
   it('(d) one rule with zero conditions gives a rule-level error', () => {
@@ -110,7 +116,7 @@ describe('validateOrganismDraft', () => {
       },
       {
         target: { kind: 'condition', ruleId: 'r1', conditionId: 'c2', field: 'value' },
-        message: 'Select an organism',
+        message: ORGANISM_REQUIRED,
       },
     ]);
   });
@@ -170,37 +176,43 @@ describe('validateOrganismDraft', () => {
     const arbRule = fc
       .nat({ max: 3 })
       .chain((rowCount) => fc.tuple(...Array.from({ length: rowCount }, () => scalarText)));
+    // `maxLength: 60` so the arbitrary crosses the 50-character cap — fast-check's default string
+    // size never reaches the too-long branch.
+    const arbName = fc.string({ maxLength: MAX_ORGANISM_NAME_LENGTH + 10 });
+    // The model is hand-computed, never the validators under test: over the cap or blank is a
+    // name error; a scalar row is invalid exactly when its text is not a digit string.
+    const nameInvalid = (name: string) =>
+      name.length > MAX_ORGANISM_NAME_LENGTH || name.trim().length === 0;
+    const rowInvalid = (pattern: string) => !/^\d+$/.test(pattern);
 
     fc.assert(
-      fc.property(fc.string(), fc.array(arbRule, { maxLength: 4 }), (name, ruleRows) => {
+      fc.property(arbName, fc.array(arbRule, { maxLength: 4 }), (name, ruleRows) => {
         const rules: RuleDraft[] = ruleRows.map((rows, ruleIndex) => ({
           ...createNewRuleDraft(`r${ruleIndex}`),
-          conditions: rows.map((pattern, rowIndex) => ({
+          conditions: rows.map((pattern, rowIndex): ConditionDraft => ({
             id: `r${ruleIndex}-c${rowIndex}`,
-            property: 'age' as const,
-            operator: 'eq' as const,
+            property: 'age',
+            operator: 'eq',
             pattern,
           })),
         }));
 
         const errors = validateOrganismDraft({ ...base, name, survivalRules: rules });
 
-        const nameInvalid = validateOrganismName(name) !== null ? 1 : 0;
-        const ruleErrorCount = rules.reduce((sum, rule) => {
-          if (rule.conditions.length === 0) return sum + 1;
-          return sum + rule.conditions.filter((c) => !/^\d+$/.test(c.pattern as string)).length;
-        }, 0);
-        expect(errors).toHaveLength(nameInvalid + ruleErrorCount);
+        const ruleErrorCount = ruleRows.reduce(
+          (sum, rows) => sum + (rows.length === 0 ? 1 : rows.filter(rowInvalid).length),
+          0,
+        );
+        expect(errors).toHaveLength((nameInvalid(name) ? 1 : 0) + ruleErrorCount);
 
         const ruleIdsInErrors = errors
           .map((e) => (e.target.kind === 'name' ? null : e.target.ruleId))
           .filter((id): id is string => id !== null);
-        const expectedOrder = rules.flatMap((rule) => {
-          if (rule.conditions.length === 0) return [rule.id];
-          return rule.conditions
-            .filter((c) => !/^\d+$/.test(c.pattern as string))
-            .map(() => rule.id);
-        });
+        const expectedOrder = ruleRows.flatMap((rows, ruleIndex) =>
+          rows.length === 0
+            ? [`r${ruleIndex}`]
+            : rows.filter(rowInvalid).map(() => `r${ruleIndex}`),
+        );
         expect(ruleIdsInErrors).toEqual(expectedOrder);
       }),
     );
