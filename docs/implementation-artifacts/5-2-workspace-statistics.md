@@ -701,3 +701,18 @@ claude-sonnet-5 (Claude Sonnet 5), via the `implement-next-story` skill's `bmad-
 
 Dev Model: sonnet   # every design call (aggregate port, UTF-16 unit, estimate() refusal, Pick prop, resource fold, format rule, file placement) is fixed in FD1–FD9; what remains follows the 5.1 / 1.4 / 1.6 patterns
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 27s | 27s | 10 | 2,130 | 3,614 | 512,488 | 518,242 |
+| Step 1 — create | opus-5 | 1 | 13m 05s | 13m 05s | 150 | 55,086 | 389,784 | 9,766,826 | 10,211,846 |
+| Step 2 — implement | sonnet-5 | 1 | 13m 12s | 13m 12s | 432 | 54,218 | 548,583 | 33,158,137 | 33,761,370 |
+| Step 3 — review + PR | opus-5 | 4 | 14m 31s | 14m 31s | 416 | 91,775 | 779,448 | 20,747,095 | 21,618,734 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 42 | 15,652 | 28,379 | 2,293,871 | 2,337,944 |
+| **Total (create → PR ready)** | | 6 | **41m 15s** | 41m 15s | 1,008 | 203,209 | 1,721,429 | 64,184,546 | **66,110,192** |
+
+Run started 2026-09-21 20:02 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
