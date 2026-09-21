@@ -991,3 +991,18 @@ Claude Sonnet 5 (dev-story)
 
 Dev Model: sonnet   # follows settled patterns end to end — the edit canvas, its box, its colors/palette wiring and its test rig are all Epic 2/3 precedent reused unmodified; the one new piece (a panel-local grid, a two-mode tool row, a two-field palette memo) is pinned with exact code, names and tests, and Story 4.15 grows into it without reshaping it
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 52s | 52s | 32 | 5,504 | 12,791 | 939,987 | 958,314 |
+| Step 1 — create | opus-5 | 1 | 17m 55s | 17m 55s | 258 | 76,400 | 536,137 | 26,409,900 | 27,022,695 |
+| Step 2 — implement | sonnet-5 | 1 | 26m 53s | 26m 53s | 662 | 90,971 | 596,909 | 66,424,971 | 67,113,513 |
+| Step 3 — review + PR | opus-5 | 4 | 40m 23s | 40m 23s | 544 | 125,678 | 1,671,944 | 32,974,217 | 34,772,383 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 74 | 18,126 | 38,924 | 2,396,975 | 2,454,099 |
+| **Total (create → PR ready)** | | 6 | **1h 26m** | 1h 26m | 1,496 | 298,553 | 2,817,781 | 126,749,075 | **129,866,905** |
+
+Run started 2026-09-21 14:13 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
