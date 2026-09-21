@@ -2172,7 +2172,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   route-group split (FD1) and is illustrative, not followed. A docs-reconciliation item for the
   next RFC touch, alongside the Story 4.1 `/organisms` entry above — **not edited here** (Sidiar
   owns RFC amendments). Story 5.2 added a fourth prop (`workspace`, a `Pick` of the aggregate), so
-  the tree line is now two props short.
+  the RFC's one-repository tree line is now three props short.
 
 ## Deferred from: code review of 5-1-settings-page-shell (2026-09-21)
 
@@ -2211,8 +2211,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   chunks in Cache Storage happen to weigh, or 0; (2) Firefox's DOES include localStorage, so the
   same workspace would read differently per browser on a page whose job is a truthful number; (3) it
   is origin-wide and cannot be scoped to `gol:*`, which the epic AC (`epics.md:1341`) requires. The
-  meter sums `STORAGE_KEYS` value lengths instead (`packages/persistence/src/localStorageAccess.ts`)
-  and never calls `estimate()`. A docs-reconciliation item for the next RFC-006 touch — **not
+  meter sums `key.length + value.length` × 2 over `STORAGE_KEYS` instead
+  (`packages/persistence/src/localStorageAccess.ts`) and never calls `estimate()`. A docs-reconciliation item for the next RFC-006 touch — **not
   edited here** (Sidiar owns RFC amendments).
 
 - **The meter's unit is UTF-16 code units × 2, while `RFC-006:268`'s "~12 KB per 100×60 battle"

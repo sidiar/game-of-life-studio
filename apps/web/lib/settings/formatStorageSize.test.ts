@@ -39,14 +39,18 @@ describe('formatStorageSize', () => {
     expect(formatStorageSize(Math.round(1.62 * MB))).toBe('1.62 MB');
   });
 
-  it('formats a larger MB value with the house thousands separator', () => {
+  it('formats a larger MB value at two decimals', () => {
     expect(formatStorageSize(10 * MB + 512 * KB)).toBe('10.50 MB');
   });
 
-  it('never renders KiB, bytes, or a lowercase unit', () => {
+  it('never renders KiB, MiB, bytes, or a lowercase unit', () => {
     for (const bytes of [0, 500, 2458, MB - 1, MB, 10 * MB]) {
       const result = formatStorageSize(bytes);
-      expect(result).not.toMatch(/kib|bytes|kb$|mb$/);
+      // Case-insensitive on purpose: a case-sensitive `/kib/` would let `1.0 KiB` through — the
+      // exact spelling this test exists to forbid. The positive shape below is what pins the
+      // uppercase `KB` / `MB` the mockup spells (FD5); `/kb$/i` would reject them.
+      expect(result).not.toMatch(/kib|mib|bytes/i);
+      expect(result).toMatch(/^[\d,]+\.\d+ (KB|MB)$/);
     }
   });
 });

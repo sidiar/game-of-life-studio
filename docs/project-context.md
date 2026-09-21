@@ -420,8 +420,9 @@ Following instinct here produces code that compiles, passes tests, and violates 
   the same substitution step.
 - ⚠️ **`navigator.storage.estimate()` is not the localStorage meter.** Chromium's `usage` excludes
   localStorage entirely (it meters IndexedDB / Cache Storage / OPFS against the origin quota),
-  Firefox's includes it, and neither can be scoped to `gol:*`. The AR-14 meter sums `STORAGE_KEYS`
-  value lengths × 2 (UTF-16) and never calls `estimate()`, whatever `RFC-006:268` says (Story 5.2).
+  Firefox's includes it, and neither can be scoped to `gol:*`. The AR-14 meter sums `key.length +
+  value.length` × 2 (UTF-16) over `STORAGE_KEYS` and never calls `estimate()`, whatever
+  `RFC-006:268` says (Story 5.2).
 
 **Bounds & invariants that are enforced, not assumed**
 

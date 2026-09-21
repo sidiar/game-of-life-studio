@@ -4,7 +4,7 @@ baseline_commit: c1a4bbbf7ee7b0766ebb53a6fcc127c378b11888
 
 # Story 5.2: Workspace Statistics
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -270,6 +270,57 @@ reviewer can check independently. AC5–AC8 are repo-derived: obligations the sh
   - [x] `npm run ci:dev > /tmp/ci.log 2>&1; echo $?` (never piped). Paste the exit code, the five
         bundle lines (before and after) and the e2e summary into the Dev Agent Record. Push to
         `story/5-2-workspace-statistics`; check `gh run list --limit 1` once the PR exists.
+
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (2026-09-21), via three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 32 unique findings: 10 `patch` (all
+applied below), 0 `decision-needed`, 0 `defer`, 22 dismissed.
+
+- [x] [Review][Patch] The `KiB` guard was vacuous — `/kib|bytes|kb$|mb$/` is case-sensitive, so
+      `1.0 KiB` passed the test named for forbidding it; now `/kib|mib|bytes/i` plus the positive
+      shape `/^[\d,]+\.\d+ (KB|MB)$/` [apps/web/lib/settings/formatStorageSize.test.ts:46-56]
+- [x] [Review][Patch] FD8 divergence comment's arithmetic was wrong — `(12 + 2) * 2 = 28` fits
+      neither key (`gol:battles` is 11 code units → 26, `gol:organisms` 13 → 30); the spec's FD8
+      carries the same `12` [packages/test-utils/src/fakeRepositories.ts:280-283]
+- [x] [Review][Patch] Three prose sites said the meter sums "value lengths" while `storageBytesOf`
+      sums `key.length + value.length` — the load-bearing rule file documented a formula the code
+      does not implement [docs/project-context.md:421-424; docs/implementation-artifacts/deferred-work.md:2207-2209;
+      packages/persistence/src/createLocalStorageRepositories.ts:41-42]
+- [x] [Review][Patch] Dev Agent Record miscounts — "all six `toHaveLength(2)` sites" (baseline had
+      four; the spec's six was never measured) and "8 tests in `localStorageAccess.test.ts`" (seven)
+      [docs/implementation-artifacts/5-2-workspace-statistics.md:559,580]
+- [x] [Review][Patch] The appended RFC-005 sentence said "two props short" — the RFC types one
+      repository and the page now takes four, so three [docs/implementation-artifacts/deferred-work.md:2175]
+- [x] [Review][Patch] Stale `readStats()` comment named two tiles ("Saved Battles, then Organisms")
+      while the file's own assertions read `stats['Storage Used']` off that pairing
+      [apps/web/app/(gallery)/settings/page.test.tsx:24]
+- [x] [Review][Patch] The persistence meter test's comment claimed "the same two-key survival" but
+      never wrote a settings record, so `afterClear > 0` was satisfied by the stamp alone and
+      Decision F was not pinned through the meter; its `empty` baseline was named but never
+      asserted `0` [packages/persistence/src/createLocalStorageRepositories.test.ts:108-127]
+- [x] [Review][Patch] The NFR-7.2/7.3 "tell storage-full apart from unreadable" comment sat above an
+      export block that now also carried the meter helpers; split into its own export with its own
+      reason [packages/persistence/src/index.ts:22-31]
+- [x] [Review][Patch] Test name "with the house thousands separator" asserted `'10.50 MB'`, which
+      has none — the only separator pin is `MB - 1 → '1,024.0 KB'`; renamed to what it checks
+      [apps/web/lib/settings/formatStorageSize.test.ts:42]
+- [x] [Review][Patch] `const workspace = createMockWorkspace()` (the user's data) three lines from
+      `workspace={repos}` (the repository aggregate) in the same test — renamed the locals
+      `mockWorkspace` [apps/web/components/settings/SettingsPage.test.tsx:63,93,259]
+
+Dismissed with reason (not noise, but decided by the spec or covered by a documented precondition):
+prefix-scan vs `STORAGE_KEYS` enumeration (FD2); the 1 MiB boundary on the raw value (FD5);
+`StorageUsage` as a one-field object (AC2); `workspace` as the prop name (FD7); NaN/negative/GB-tier
+inputs to `formatStorageSize` (documented precondition — the meter only sums lengths, localStorage
+caps near 10 MiB); `workspace` object identity in the deps (`useAsyncResource`'s documented
+precondition, satisfied by the page's `useMemo`); `vi.stubEnv` restore (the file's `afterEach`
+already calls `vi.unstubAllEnvs()`); `kbOf` / `toKb` duplicated across jsdom and Playwright (two
+runtimes, no shared alias in `e2e/`); the fake re-stating the stored record shapes (FD8 accepts it —
+the formula is shared, the shapes are the fake's to model); `?? 0` on the ready branch (unreachable
+without data; 5.1's pattern); the e2e "Create Your First Battle" link (the standalone build's
+production seed writes no battles) and its rounding step (a saved battle is ≥ 12 KB, the KB step
+is ~0.1 KB); a never-settling `storageUsage()` (RFC-005's hook has no timeout by design).
 
 ## Dev Notes
 
@@ -556,7 +607,7 @@ claude-sonnet-5 (Claude Sonnet 5), via the `implement-next-story` skill's `bmad-
   `measureStorageUsage` (the localStorage-specific reader) added to
   `packages/persistence/src/localStorageAccess.ts` — same file as `STORAGE_KEYS` (FD9, no new
   module in the bundle graph). `createLocalStorageRepositories()` wires `storageUsage()` to
-  `measureStorageUsage()`. All four re-exported from `index.ts`. New tests: 8 in
+  `measureStorageUsage()`. All four re-exported from `index.ts`. New tests: 7 in
   `localStorageAccess.test.ts` (empty, the ×2 constant, a non-BMP code-unit pin, empty-store
   measure, an unrelated key excluded, all four `STORAGE_KEYS` counted including
   `gol:settings`/`gol:schema`, a non-JSON `gol:battles` counted without throwing) + 1 in
@@ -577,7 +628,7 @@ claude-sonnet-5 (Claude Sonnet 5), via the `implement-next-story` skill's `bmad-
   loader now `Promise.all([battles.list(), organisms.list(), workspace.storageUsage()])` with
   deps `[battles, organisms, workspace, seedStatus]`. The page boundary
   (`app/(gallery)/settings/page.tsx`) passes `workspace={repositories}`. `SettingsPage.test.tsx`:
-  all six `toHaveLength(2)` sites moved to `3`, every render call gained `workspace={repos}`, and
+  all four `toHaveLength(2)` sites moved to `3` (the spec said six; the baseline had four), every render call gained `workspace={repos}`, and
   5 new/extended tests (Storage Used equals the shared formula; the seeding→ready flip re-runs
   `storageUsage` too — `toHaveBeenCalledTimes(2)`; page-scoped refresh via
   unmount/save/remount; a rejecting `workspace.storageUsage()` renders the alert; the
@@ -639,6 +690,14 @@ claude-sonnet-5 (Claude Sonnet 5), via the `implement-next-story` skill's `bmad-
   fake's mirror through the shared `storageBytesOf` helper, `formatStorageSize`, the third
   Workspace Statistics tile, and the AC4 page-scoped-refresh proof (jsdom + e2e). All ACs (1–8)
   satisfied; no bundle budget raised; `npm run ci:dev` exit 0. Status → review.
+- 2026-09-21: Code review (Opus over Sonnet) — 10 patches applied (vacuous `KiB` guard, FD8
+  arithmetic, "value lengths" → key + value in three prose sites, record miscounts, RFC-005 prop
+  count, stale `readStats()` order, settings record + `0` baseline in the persistence meter test,
+  `index.ts` export split, a test name, `mockWorkspace` locals), 0 deferred, 0 decisions. Full
+  `npm run ci` (all four Playwright projects): 888 passed / 8 red, all eight pre-existing and
+  local-only (2× the Story 3.12 `toBeFocused` on WebKit/tablet; 6× 30 s `page.goto` contention
+  timeouts that pass serially with `--workers=1`, 12/12). Post-patch gates green; bundle
+  unchanged (333.9 / 309.4 / 309.2 / 295.7 / 291.7 KB). Status → done.
 
 Dev Model: sonnet   # every design call (aggregate port, UTF-16 unit, estimate() refusal, Pick prop, resource fold, format rule, file placement) is fixed in FD1–FD9; what remains follows the 5.1 / 1.4 / 1.6 patterns
 Proposed lane gate: none

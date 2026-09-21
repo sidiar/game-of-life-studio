@@ -39,7 +39,7 @@ export function createLocalStorageRepositories(): AppRepositories {
 
     // `async` because the seam is Promise-shaped for every mode (AR-2/27) — a connected-mode
     // repository's answer is a real network round-trip. It cannot throw on a healthy store: the
-    // meter only ever reads getItem() strings and sums their lengths (FD3) — it never parses.
+    // meter only ever reads getItem() strings and sums key + value lengths (FD3) — it never parses.
     async storageUsage() {
       return measureStorageUsage();
     },

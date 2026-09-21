@@ -60,8 +60,8 @@ describe('SettingsPage', () => {
   });
 
   it('ready: renders the counts derived from the fixtures, with dt/dd pairs associated', async () => {
-    const workspace = createMockWorkspace();
-    const repos = createFakeRepositories(workspace);
+    const mockWorkspace = createMockWorkspace();
+    const repos = createFakeRepositories(mockWorkspace);
 
     render(
       <SettingsPage
@@ -78,8 +78,8 @@ describe('SettingsPage', () => {
     });
 
     const stats = readStats();
-    expect(stats['Saved Battles']).toBe(String(workspace.battles.length));
-    expect(stats.Organisms).toBe(String(workspace.organisms.length));
+    expect(stats['Saved Battles']).toBe(String(mockWorkspace.battles.length));
+    expect(stats.Organisms).toBe(String(mockWorkspace.organisms.length));
 
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     const cardTitle = screen.getByRole('heading', { level: 2, name: 'Workspace Statistics' });
@@ -90,8 +90,8 @@ describe('SettingsPage', () => {
   });
 
   it('ready: Storage Used equals formatStorageSize(storageUsage().bytes) and is not the empty figure', async () => {
-    const workspace = createMockWorkspace();
-    const repos = createFakeRepositories(workspace);
+    const mockWorkspace = createMockWorkspace();
+    const repos = createFakeRepositories(mockWorkspace);
 
     render(
       <SettingsPage
@@ -256,8 +256,8 @@ describe('SettingsPage', () => {
 
     unmount();
 
-    const workspace = createMockWorkspace();
-    await repos.battles.save(workspace.battles[0]);
+    const mockWorkspace = createMockWorkspace();
+    await repos.battles.save(mockWorkspace.battles[0]);
 
     render(
       <SettingsPage

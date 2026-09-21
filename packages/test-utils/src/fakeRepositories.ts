@@ -279,8 +279,9 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
     // One deliberate divergence from the real store: after the last record in a collection is
     // deleted, the real store still holds `gol:battles -> "{}"` (writeDataKey's empty-collection
     // write), while this fake's map is simply empty and contributes no pair. The gap is
-    // `(12 + 2) * 2 = 28` bytes per collection — invisible at one-decimal KB precision — and not
-    // worth a per-collection "ever written" flag beside `stamped`.
+    // `(key.length + 2) * 2` bytes per collection — 26 for `gol:battles` (11 code units), 30 for
+    // `gol:organisms` (13) — invisible at one-decimal KB precision, and not worth a per-collection
+    // "ever written" flag beside `stamped`.
     async storageUsage() {
       const entries: Array<readonly [string, string]> = [];
       if (stamped) {

@@ -21,7 +21,7 @@ function kbOf(text: string): number {
 // `<dd>` maps to the ARIA "definition" role, which is name-from-author-PROHIBITED (unlike `<dt>`'s
 // "term" role) — so `getByRole('definition', { name })` cannot resolve a specific tile. Terms and
 // definitions are read as parallel lists instead and paired by index, exactly the order
-// <WorkspaceStatistics> renders them in (Saved Battles, then Organisms).
+// <WorkspaceStatistics> renders them in (Saved Battles, Organisms, Storage Used).
 function readStats() {
   const terms = screen.getAllByRole('term').map((el) => el.textContent);
   const definitions = screen.getAllByRole('definition').map((el) => el.textContent);
