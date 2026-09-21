@@ -4,7 +4,7 @@ baseline_commit: 3ae861f61383f0ec29c5de5d0abd2f99da6e2014
 
 # Story 5.1: Settings Page Shell
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -299,6 +299,28 @@ shape Story 4.1 used for `/organisms`, which is this story's precedent throughou
         Record. Push to `story/5-1-settings-page-shell` and check `gh run list --limit 1` once the
         PR exists — a local green is not proof.
 
+### Review Findings
+
+Reviewed 2026-09-21 on **Opus** against the **Sonnet** implementation (`7f32592`), via three parallel
+adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 0 `decision-needed`,
+12 `patch`, 3 `defer`, 16 dismissed.
+
+- [x] [Review][Patch] "Loading while seeding, even after both loads have resolved" passes vacuously — two `await Promise.resolve()` ticks do not reach the resources' settle (the chain needs four), so the assertion holds with the `seedStatus === 'seeding'` clause deleted; use the `OrganismLibrary.test.tsx:27-40` shape (spies + `waitFor(() => expect(spy).toHaveResolved())`) [apps/web/components/settings/SettingsPage.test.tsx:21-41]
+- [x] [Review][Patch] `readStats()` pairs terms and definitions by index with no length guard — a `dt`/`dd` count mismatch yields an `undefined` typed as `string` and a misleading failure [apps/web/components/settings/SettingsPage.test.tsx:12, apps/web/app/(gallery)/settings/page.test.tsx:44]
+- [x] [Review][Patch] e2e reads definitions positionally (`.first()`/`.nth(1)`) while terms are matched by text — scope each `dd` to its tile; the nav test's title says "neither" but never asserts Organisms is not current on `/` [apps/web/e2e/settings.spec.ts:25-40,33-54]
+- [x] [Review][Patch] Route-set guard uses `endsWith('page.tsx')`, which counts a colocated `homepage.tsx` as a route — match the basename exactly [apps/web/app/routes.test.ts:24]
+- [x] [Review][Patch] `gol:settings` absence is asserted in one page test, not "after every test" (Task 2) — the StrictMode and `NODE_ENV=development` mounts never check it; assert in `afterEach` before `clear()` [apps/web/app/(gallery)/settings/page.test.tsx:56-59]
+- [x] [Review][Patch] `AppNav.tsx` header cites AR-28 for "three page surfaces (Battles, Organisms, Settings)" — AR-28 names Gallery, Battle and Settings; `/organisms` is the fourth top-level route (`epics.md:1001`) [apps/web/components/layout/AppNav.tsx:9]
+- [x] [Review][Patch] AC-id drift: the `/` and `/organisms` test names gained a Settings assertion (Story 5.1 AC2) but still read `(Story 4.1 AC2)` only [apps/web/components/layout/AppNav.test.tsx:36,48]
+- [x] [Review][Patch] `page.tsx` cites FD1/FD2/FD5 with no story qualifier (precedent: `organisms/page.tsx` writes "FD2 (Story 4.1)"); the third section-header copy lacks the literal `(Story 5.1)` note Task 3 asked for [apps/web/app/(gallery)/settings/page.tsx:8-22, apps/web/components/settings/SettingsPage.tsx:17-22]
+- [x] [Review][Patch] Stale citation `deferred-work.md:187` (blank line) — the `aria-busy` trap entry is at `:192` [apps/web/components/settings/SettingsPage.tsx:107]
+- [x] [Review][Patch] Stray `"` after the closing backtick in the new FD6 entry [docs/implementation-artifacts/deferred-work.md:2162]
+- [x] [Review][Patch] `aria-busy` scoping is documented at length and asserted nowhere — pin `true` while loading and `false` once ready in the unit tests [apps/web/components/settings/SettingsPage.tsx:110]
+- [x] [Review][Patch] Dev Agent Record: Task 6's before-measurement was not taken ("no separate before/after build") yet the ≤0.5 KB claim is asserted — the actual evidence is Story 4.14's record (`4-14-*.md:880-883`: 333.8/309.3/309.1/295.6, byte-identical, delta 0.0 KB); also "6 new/edited files" lists five, and the `deferred-work.md:722` `error.tsx` third surface the spec asked to note is not noted [docs/implementation-artifacts/5-1-settings-page-shell.md:530-541]
+- [x] [Review][Defer] Route-set guard does not cover `route.ts` handlers or `page.{js,jsx,mdx}` — Next serves those too and a `route.ts` fails `output: 'export'` only at build [apps/web/app/routes.test.ts:24-46] — deferred, pre-existing gap shape (the guard is new but the repo is TS-only; widen when a second route-defining basename ever appears)
+- [x] [Review][Defer] One alert string for three failure sources — a corrupt `gol:settings`, a rejecting `list()`, and a failed seed WRITE all read "Something went wrong loading your settings." [apps/web/components/settings/SettingsPage.tsx:113] — deferred, pre-existing (FD3 assigns copy and the reset offer to Story 5.11; carry the three-source distinction there)
+- [x] [Review][Defer] "Seeds gol:organisms exactly once" is proven by the final key set, which a double write of the same key also satisfies — a `setItem` spy count would prove it [apps/web/app/(gallery)/settings/page.test.tsx:88-104] — deferred, pre-existing (identical shape in `app/(gallery)/page.test.tsx` and `organisms/page.test.tsx`; strengthen all three together)
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -523,8 +545,8 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `npm run format:check` — clean after `prettier --write` on the three new/edited files it first
   flagged (`SettingsPage.tsx`, `SettingsPage.test.tsx`, `e2e/settings.spec.ts`).
 - `apps/web` unit suite (`npx vitest run`): 111 test files, 1824 tests, all passing (includes the
-  6 new/edited files this story touches: `AppNav.test.tsx`, `not-found.test.tsx`, `routes.test.ts`,
-  `settings/page.test.tsx`, `SettingsPage.test.tsx`).
+  five new/edited test files this story touches: `AppNav.test.tsx`, `not-found.test.tsx`,
+  `routes.test.ts`, `settings/page.test.tsx`, `SettingsPage.test.tsx`).
 - `npm run build:standalone`: succeeds; Route (app) table lists `/`, `/_not-found`, `/battle`,
   `/battle/new`, `/organisms`, `/settings` — six static entries, all `○ (Static)`.
 - `node scripts/check-bundle-size.mjs` — five routes measured, all within budget:
@@ -535,10 +557,14 @@ Claude Sonnet 5 (claude-sonnet-5)
   - `organisms (/organisms)`: 295.6 KB gzip / 305 KB budget (9.4 KB headroom)
   - `settings (/settings)` — NEW: 291.5 KB gzip / 305 KB budget (13.5 KB headroom); budget derived
     as `ceil((291.5 + 12) / 5) * 5 = 305`.
-  - AppNav's one added entry moved `home`/`organisms` by well under the ≤0.5 KB expectation (no
-    separate before/after build was taken — the existing headroom on both routes, plus the size of
-    the change, a single object literal and one more `<Link>` render, made a dedicated
-    measurement unnecessary).
+  - AppNav's one added entry moved `home`/`organisms` by **0.0 KB**. No separate before-build was
+    taken in this branch; the "before" figures are Story 4.14's record on `main` (the merge base,
+    `4-14-preview-grid-drawing.md:880-883`): home 333.8 / battle 309.3 / battle-new 309.1 /
+    organisms 295.6 — byte-identical to the four figures above (review 2026-09-21 corrected this
+    line: the original read the delta off the size of the change rather than off a measurement).
+  - `deferred-work.md:722` (no `error.tsx` under `app/(gallery)/`) gains a third surface with this
+    route — `createRepositories()` throwing inside `useMemo` would white-screen `/settings` with no
+    shell, as it would `/` and `/organisms`. Pre-existing, same owner; noted, not fixed.
 - `npm run ci:dev > /tmp/ci.log 2>&1; echo $?` (redirected to a file, not piped, per
   `project-context.md`'s pipe-swallowed-exit-code warning) — **exit code 0**. Full chain:
   typecheck → lint → format:check → spec:check → boundary:check → test:coverage → build:standalone
@@ -546,8 +572,16 @@ Claude Sonnet 5 (claude-sonnet-5)
   headroom, 53.3% of the frame — unchanged by this story, no engine code touched). `e2e:chromium`:
   **223 passed, 1 skipped** (the skip is `deleteBattle.spec.ts`'s pre-existing touch-pointer test,
   which only runs on the tablet/touch project — unrelated to this story).
-- Pushed to `story/5-1-settings-page-shell`; `gh run list` to be checked once CI has run on the
-  pushed branch (a local green is not proof — `project-context.md`).
+- Pushed to `story/5-1-settings-page-shell`; CI fires on `pull_request` only, so the four-browser
+  run happens once the PR is opened — check it there (a local green is not proof —
+  `project-context.md`).
+- Review (2026-09-21, Opus): full `npm run ci` locally — quality chain green; e2e **884 passed,
+  4 skipped, 8 failed**, none in `settings.spec.ts`. Six were 30 s `page.goto` timeouts under the
+  four-project contention (all six green when re-run serially, `--workers=1`); the other two are
+  the pre-existing Story 3.12 "Tab reaches Play…" red on local WebKit/tablet that every Epic 3
+  record since 3.13 names and that is green on the Linux runner. Nothing red is this story's.
+  Post-patch: `npm run ci:dev` exit 0 and the patched `settings.spec.ts` green on all four
+  projects (see the review commit).
 
 ### Completion Notes List
 
@@ -632,6 +666,13 @@ Claude Sonnet 5 (claude-sonnet-5)
 - 2026-09-21 — Implemented (dev-story): Tasks 1–7 complete, all 9 ACs satisfied, `npm run ci:dev`
   green (exit 0) — 223/224 e2e tests passing (1 pre-existing, unrelated touch-pointer skip),
   1824/1824 `apps/web` unit tests passing, coverage/bundle/bench gates all green; status → review.
+- 2026-09-21 — Code review (Opus, three adversarial layers): 12 patches applied (vacuous
+  loading-while-seeding flush → spies + `toHaveResolved`; `readStats` length guard; e2e tile values
+  scoped to their term instead of `definition.nth(i)`; nav e2e asserts Organisms on `/`;
+  `routes.test.ts` basename equality; `gol:settings` null asserted in `afterEach`; `aria-busy`
+  pinned in both states; AR-28 attribution, AC-id drift, FD qualifiers, stale `:187` citation,
+  deferred-work typo, Dev Agent Record evidence), 3 deferred to `deferred-work.md`, 0 decisions
+  open; status → done.
 
 Dev Model: sonnet   # follows the page-boundary, route-group, AppNav and e2e patterns Story 4.1 fixed; every design call (sections, gating, seed, header copy) is decided in the FDs above
 Proposed lane gate: none

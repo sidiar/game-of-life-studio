@@ -1,5 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+
+// A stat tile's value, scoped to the tile whose term matches — never `definition.nth(i)`: terms are
+// matched by text, so reading the value by POSITION silently reads a different tile's number the
+// day Story 5.2 inserts Storage Used or reorders the grid (review 2026-09-21). `<dd>`'s
+// "definition" role is name-from-author-prohibited, so the term's wrapper is the only handle.
+function statValue(page: Page, term: string) {
+  return page.getByRole('term').filter({ hasText: term }).locator('..').getByRole('definition');
+}
 
 // Thin e2e (RFC-008 Decision 2), the Story 4.1 block of organisms.spec.ts:33-152 as the template.
 test.describe('settings route (Story 5.1)', () => {
@@ -19,22 +27,18 @@ test.describe('settings route (Story 5.1)', () => {
     // reachable once useWorkspaceSeed's and SettingsPage's own resources have both settled —
     // every errors/axe assertion below comes AFTER this, or it races hydration
     // (appShell.spec.ts:29-40).
-    const savedBattlesTerm = page.getByRole('term').filter({ hasText: 'Saved Battles' });
-    await expect(savedBattlesTerm).toBeVisible();
+    await expect(page.getByRole('term').filter({ hasText: 'Saved Battles' })).toBeVisible();
     // The production seed writes Conway's Classic only — no battles.
-    await expect(page.getByRole('definition').first()).toHaveText('0');
-    const organismsTerm = page.getByRole('term').filter({ hasText: 'Organisms' });
-    await expect(organismsTerm).toBeVisible();
-    await expect(page.getByRole('definition').nth(1)).toHaveText('1');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('0');
+    await expect(page.getByRole('term').filter({ hasText: 'Organisms' })).toBeVisible();
+    await expect(statValue(page, 'Organisms')).toHaveText('1');
 
     expect(errors).toEqual([]);
   });
 
-  test('nav: Settings carries aria-current on /settings, and neither does on /', async ({
-    page,
-  }) => {
+  test('nav: on /settings only Settings is current; on / only Battles is', async ({ page }) => {
     await page.goto('/settings');
-    await expect(page.getByRole('definition').nth(1)).toHaveText('1');
+    await expect(statValue(page, 'Organisms')).toHaveText('1');
 
     const nav = page.getByRole('navigation', { name: 'Main' });
     await expect(nav.getByRole('link')).toHaveCount(3);
@@ -50,6 +54,7 @@ test.describe('settings route (Story 5.1)', () => {
       'aria-current',
       'page',
     );
+    await expect(nav.getByRole('link', { name: 'Organisms' })).not.toHaveAttribute('aria-current');
     await expect(nav.getByRole('link', { name: 'Settings' })).not.toHaveAttribute('aria-current');
   });
 
@@ -91,7 +96,7 @@ test.describe('settings route (Story 5.1)', () => {
     await expect(settingsLink).toHaveAttribute('aria-current', 'page');
     await expect(nav.getByRole('link', { name: 'Battles' })).not.toHaveAttribute('aria-current');
     await expect(nav.getByRole('link', { name: 'Organisms' })).not.toHaveAttribute('aria-current');
-    await expect(page.getByRole('definition').nth(1)).toHaveText('1');
+    await expect(statValue(page, 'Organisms')).toHaveText('1');
     expect(errors).toEqual([]);
   });
 
@@ -121,7 +126,7 @@ test.describe('settings route (Story 5.1)', () => {
     await page.goto('/settings');
     const before = await page.evaluate(() => localStorage.getItem('gol:settings'));
     expect(before).toBeNull();
-    await expect(page.getByRole('definition').nth(1)).toHaveText('1');
+    await expect(statValue(page, 'Organisms')).toHaveText('1');
     const after = await page.evaluate(() => localStorage.getItem('gol:settings'));
     expect(after).toBeNull();
   });
@@ -135,7 +140,7 @@ test.describe('settings route (Story 5.1)', () => {
     }, seeded);
 
     await page.goto('/settings');
-    await expect(page.getByRole('definition').nth(1)).toHaveText('1');
+    await expect(statValue(page, 'Organisms')).toHaveText('1');
 
     const after = await page.evaluate(() => localStorage.getItem('gol:settings'));
     expect(after).toBe(seeded);
@@ -143,7 +148,7 @@ test.describe('settings route (Story 5.1)', () => {
 
   test('has no axe accessibility violations', async ({ page }) => {
     await page.goto('/settings');
-    await expect(page.getByRole('definition').nth(1)).toHaveText('1');
+    await expect(statValue(page, 'Organisms')).toHaveText('1');
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);

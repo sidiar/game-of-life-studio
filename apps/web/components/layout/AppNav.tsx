@@ -6,9 +6,9 @@ import { styled } from '@mui/material/styles';
 import { isNavItemActive } from '@/lib/layout/navMatch';
 
 // Story 1.9 AC4 / the no-dead-affordance rule: an entry appears here only once its route exists.
-// This is now the MVP's complete set — AR-28's three page surfaces (Battles, Organisms, Settings)
-// plus the fact that battle routes carry no nav entry by design (they wear their own chassis, not
-// AppShell). `match` is per-entry (Story 4.1, deferred-work.md:85): '/' has to be 'exact' because
+// This is now the MVP's complete set — AR-28's three page surfaces (Gallery, Battle, Settings)
+// plus `/organisms`, the fourth top-level route Story 4.1 added; battle routes carry no nav entry
+// by design (they wear their own chassis, not AppShell), so three entries is the whole list. `match` is per-entry (Story 4.1, deferred-work.md:85): '/' has to be 'exact' because
 // it prefixes every route, while '/organisms' and '/settings' are 'prefix' so each stays active on
 // its own trailing-slash host (`/organisms/`, `/settings/`) and on any nested path — see
 // lib/layout/navMatch.ts's doc comment.

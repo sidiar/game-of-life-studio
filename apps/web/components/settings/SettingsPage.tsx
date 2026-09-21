@@ -16,7 +16,7 @@ export interface SettingsPageProps {
 const HEADING_ID = 'settings-heading';
 
 // Mockup: .section-header/.section-title/.section-subtitle (settings.html:88-103,361-364).
-// FD6 — a THIRD hand copy, not a lift: OrganismLibrary.tsx's own header copy (FD9 of Story 4.1)
+// FD6 (Story 5.1) — a THIRD hand copy of BattleGallery.tsx's and OrganismLibrary.tsx's, not a lift: OrganismLibrary.tsx's own header copy (FD9 of Story 4.1)
 // defers the lift to "the first story after 3.17 that touches both" BattleGallery and
 // OrganismLibrary. This story touches neither, and OrganismLibrary.tsx is the Epic 4 lane's live
 // file (4.16-4.22 all edit it) — a lane-5 edit there is a guaranteed merge conflict for a cosmetic
@@ -105,7 +105,7 @@ export default function SettingsPage({
         <SectionSubtitle>Configure workspace and preferences</SectionSubtitle>
       </SectionHeader>
       {/* aria-busy scoped to this wrapper only, never the outer <section> — the
-          deferred-work.md:187 trap Story 4.1 also avoided. Story 5.5's Data Management card will
+          deferred-work.md:192 trap Story 4.1 also avoided. Story 5.5's Data Management card will
           live inside this same <section>, outside this wrapper, once it renders. */}
       <div aria-busy={status === 'loading'}>
         {status === 'loading' && <StatusText>Loading settings…</StatusText>}

@@ -2159,7 +2159,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `OrganismLibrary.tsx` and now `SettingsPage.tsx` each carry their own ~20-line
   `SectionHeader`/`SectionTitle`/`SectionSubtitle` triplet. `OrganismLibrary.tsx`'s own comment
   (FD9 of Story 4.1) deferred the lift to "the first story after 3.17 that touches both"
-  `BattleGallery` and `OrganismLibrary"; this story touches neither, and `OrganismLibrary.tsx` is
+  `BattleGallery` and `OrganismLibrary`; this story touches neither, and `OrganismLibrary.tsx` is
   the Epic 4 lane's live file (4.16–4.22 all edit it), so a lane-5 edit there risked a guaranteed
   merge conflict for a cosmetic gain. **Pick this up in the first story after Epic 4 closes that
   touches `OrganismLibrary.tsx`** — the lift is now three-way, not two.
@@ -2172,3 +2172,31 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   route-group split (FD1) and is illustrative, not followed. A docs-reconciliation item for the
   next RFC touch, alongside the Story 4.1 `/organisms` entry above — **not edited here** (Sidiar
   owns RFC amendments).
+
+## Deferred from: code review of 5-1-settings-page-shell (2026-09-21)
+
+Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adversarial layers.
+
+- **The route-set guard pins `page.tsx` only** — `apps/web/app/routes.test.ts` (Story 5.1 AC8) walks
+  `app/` for basenames equal to `page.tsx` and for `[` in any path. Next also builds a route from
+  `page.{js,jsx,mdx}` and a handler from `route.{ts,js}`, and a `route.ts` under `output: 'export'`
+  fails at build exactly as a dynamic segment does (Decision K.5) — the guard would pass silently on
+  either. The repo is TypeScript-only and has no MDX pipeline, so the gap is theoretical today; widen
+  the filter (and add a `route.*` = `[]` assertion) the first time a second route-defining basename
+  appears, not before.
+
+- **One alert string for three failure sources** — `SettingsPage.tsx` renders "Something went wrong
+  loading your settings." for a corrupt `gol:settings` (`CorruptDataError`), a rejecting
+  `battles.list()`/`organisms.list()`, AND a failed seed write (`seedStatus === 'error'`, e.g.
+  `QuotaExceededError`). Only the first is a settings problem; the third is a write failure reported
+  as a read failure. FD3 hands the copy and the reset offer to **Story 5.11** — carry the
+  three-source distinction there (at minimum a different sentence for the seed-write case), so the
+  rescue path does not offer to reset a settings record that was never the problem.
+
+- **"Seeds `gol:organisms` exactly once" is proven by the final key set, not a write count** — the
+  StrictMode test in `app/(gallery)/settings/page.test.tsx` (and its two siblings,
+  `app/(gallery)/page.test.tsx` and `organisms/page.test.tsx`) asserts
+  `Object.keys(stored) === [CONWAYS_CLASSIC_ID]`, which a double write of the same key also
+  satisfies. The `hasRun` guard in `useWorkspaceSeed` is what actually prevents the second run; a
+  `vi.spyOn(Storage.prototype, 'setItem')` count on `STORAGE_KEYS.organisms` would pin it. Same shape
+  in all three boundaries — strengthen them together, not one at a time.

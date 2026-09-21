@@ -10,6 +10,9 @@ import SettingsPage from './SettingsPage';
 function readStats() {
   const terms = screen.getAllByRole('term').map((el) => el.textContent);
   const definitions = screen.getAllByRole('definition').map((el) => el.textContent);
+  // Index pairing is only sound when the two lists are the same length — otherwise a tile's value
+  // reads as `undefined` typed as `string` and the failure points at the wrong assertion.
+  expect(definitions).toHaveLength(terms.length);
   return Object.fromEntries(terms.map((term, i) => [term, definitions[i]])) as Record<
     string,
     string | null
@@ -19,6 +22,9 @@ function readStats() {
 describe('SettingsPage', () => {
   it('shows "Loading settings…" while seeding, even after both loads have resolved (Story 4.1 review lesson)', async () => {
     const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+    const load = vi.spyOn(repos.settings, 'load');
+    const listBattles = vi.spyOn(repos.battles, 'list');
+    const listOrganisms = vi.spyOn(repos.organisms, 'list');
 
     render(
       <SettingsPage
@@ -30,12 +36,23 @@ describe('SettingsPage', () => {
     );
 
     expect(screen.getByText('Loading settings…')).toBeInTheDocument();
-    // Flush the fake's own promises — the loads resolve quickly, but seedStatus is still
-    // 'seeding' and must keep the page in its loading state regardless.
-    await Promise.resolve();
-    await Promise.resolve();
+    // Let every load actually SETTLE first — the useAsyncResource chain
+    // (`Promise.resolve().then(load).then(set)`) is four microtask ticks deep, so a fixed number of
+    // `await Promise.resolve()` flushes asserts against resources that are still 'loading' on
+    // their own, and the test stays green with the `seedStatus === 'seeding'` clause deleted from
+    // the fold (review 2026-09-21; the OrganismLibrary.test.tsx:27-40 shape).
+    await waitFor(() => {
+      expect(load).toHaveResolved();
+      expect(listBattles).toHaveResolved();
+      expect(listOrganisms).toHaveResolved();
+    });
     expect(screen.getByText('Loading settings…')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+    // The wrapper is what carries aria-busy — never the outer section (deferred-work.md:192).
+    expect(screen.getByText('Loading settings…').parentElement).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
   });
 
   it('ready: renders the counts derived from the fixtures, with dt/dd pairs associated', async () => {
@@ -60,9 +77,11 @@ describe('SettingsPage', () => {
     expect(stats.Organisms).toBe(String(workspace.organisms.length));
 
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Workspace Statistics' }),
-    ).toBeInTheDocument();
+    const cardTitle = screen.getByRole('heading', { level: 2, name: 'Workspace Statistics' });
+    expect(cardTitle).toBeInTheDocument();
+    // aria-busy flips back off once ready — the wrapper is the card's grandparent
+    // (wrapper > Container > Card > h2).
+    expect(cardTitle.closest('[aria-busy]')).toHaveAttribute('aria-busy', 'false');
   });
 
   it('a rejecting settings.load() renders an alert and no h2 (FD3 — never degrades to defaults)', async () => {

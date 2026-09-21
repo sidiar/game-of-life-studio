@@ -33,7 +33,7 @@ describe('AppNav', () => {
     expect(links[2]).toHaveTextContent(/^Settings$/);
   });
 
-  it('on / — Battles carries aria-current="page", Organisms and Settings do not (Story 4.1 AC2)', () => {
+  it('on / — Battles carries aria-current="page", Organisms and Settings do not (Story 4.1 AC2 / Story 5.1 AC2)', () => {
     mockPathname.value = '/';
     render(<AppNav />);
 
@@ -45,7 +45,7 @@ describe('AppNav', () => {
     expect(settings).not.toHaveAttribute('aria-current');
   });
 
-  it('on /organisms — Organisms carries aria-current="page", Battles and Settings do not (Story 4.1 AC2)', () => {
+  it('on /organisms — Organisms carries aria-current="page", Battles and Settings do not (Story 4.1 AC2 / Story 5.1 AC2)', () => {
     mockPathname.value = '/organisms';
     render(<AppNav />);
 

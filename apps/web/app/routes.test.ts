@@ -1,6 +1,6 @@
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, sep } from 'node:path';
+import { basename, dirname, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // `dirname(fileURLToPath(...))`, not `new URL('.', import.meta.url)`: under Vitest's Vite-based
@@ -20,8 +20,10 @@ const APP_DIR = dirname(fileURLToPath(import.meta.url));
 describe('app/ route set (Story 5.1 AC8)', () => {
   it('pins the exact set of page.tsx files — five after this story', () => {
     const entries = readdirSync(APP_DIR, { recursive: true }) as string[];
+    // Basename EQUALITY, not endsWith: a colocated `homepage.tsx` component ends in the same eight
+    // characters and is not a route.
     const pages = entries
-      .filter((entry) => entry.endsWith('page.tsx'))
+      .filter((entry) => basename(entry) === 'page.tsx')
       .map((entry) => entry.split(sep).join('/'))
       .sort();
 

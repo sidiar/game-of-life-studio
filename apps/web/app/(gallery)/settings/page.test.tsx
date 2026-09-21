@@ -14,6 +14,8 @@ import SettingsRoute from './page';
 function readStats() {
   const terms = screen.getAllByRole('term').map((el) => el.textContent);
   const definitions = screen.getAllByRole('definition').map((el) => el.textContent);
+  // Index pairing is only sound when the two lists are the same length.
+  expect(definitions).toHaveLength(terms.length);
   return Object.fromEntries(terms.map((term, i) => [term, definitions[i]])) as Record<
     string,
     string | null
@@ -24,6 +26,10 @@ function readStats() {
 // applied to the third page boundary.
 describe('SettingsRoute', () => {
   afterEach(() => {
+    // AC5, after EVERY mount here — including the StrictMode and NODE_ENV=development paths, the
+    // two most likely to write an extra key: the shell reads gol:settings and never writes it
+    // (Decision F). Asserted before clear(), or there is nothing left to assert against.
+    expect(localStorage.getItem(STORAGE_KEYS.settings)).toBeNull();
     localStorage.clear();
     vi.unstubAllEnvs();
   });
