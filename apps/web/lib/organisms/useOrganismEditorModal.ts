@@ -48,11 +48,12 @@ export interface UseOrganismEditorModalResult {
 
 export interface UseOrganismEditorModalOptions {
   /**
-   * Fired once the exit transition has finished AFTER a successful save (Story 4.16, FD4) — never
-   * before: `useInertBackground.ts:66-68` sweeps body children appended while the dialog is still
-   * open, so a status published at save time would be inerted, and a Library reload mid-fade would
-   * re-render the still-mounted modal with a `library` that now contains the just-saved organism,
-   * flagging its own colour in the Story 4.9 reuse warning for the fade's duration.
+   * Fired once the exit transition has finished, after the editor is CLOSED, carrying the LAST
+   * successfully saved record in the session — never before, and never once per save (Story 4.16,
+   * FD4; amended 2026-09-22, Task 11: the editor stays open through every save, so this is now a
+   * close-time hand-off, not a save-time one). `useInertBackground.ts:66-68` sweeps body children
+   * appended while the dialog is still open, so a reload published under a still-mounted dialog
+   * would be inerted.
    */
   onSaved?(organism: Organism): void;
 }
@@ -84,15 +85,10 @@ export function useOrganismEditorModal(
    */
   const restoreFocusRef = useRef(false);
 
-  // Story 4.16, FD4: holds the just-saved record across the exit transition — set by
-  // `handleSaved`, consumed and cleared by `handleExited`. `null` means "closed without saving".
+  // Story 4.16, FD4, Task 11: holds the LATEST saved record across every save-while-open and
+  // across the exit transition — overwritten by every `handleSaved` call (the last record wins),
+  // consumed and cleared by `handleExited`. `null` means "closed without saving".
   const pendingSavedRef = useRef<Organism | null>(null);
-
-  // `mounted`, readable from the stable callbacks below without a dep (review 2026-09-22): a
-  // write that resolves AFTER an Escape-close's exit has finished reaches `handleSaved` with no
-  // `handleExited` left to fire — the record was stashed and then replayed on the NEXT, unrelated
-  // close. Kept in step by the two places `mounted` changes, `requestCreate` and `handleExited`.
-  const mountedRef = useRef(false);
 
   // A latest-value ref, assigned in an effect below, so a caller whose `onSaved` option changes
   // identity between open and exit still gets the LATEST one called — and so `modalProps`' own
@@ -138,31 +134,24 @@ export function useOrganismEditorModal(
 
   const requestCreate = useCallback(() => {
     restoreFocusRef.current = true;
-    mountedRef.current = true;
     setMounted(true);
     setDialogOpen(true);
   }, []);
 
-  // Close ✕, Back and Escape all land here. Nothing else moves — no repository call, no state
-  // beyond the modal's own lifecycle; the unsaved-changes guard (Story 4.23) inserts itself in
-  // front of this callback later.
+  // Close ✕, Back and Escape all land here — routed through the modal's own guarded handler
+  // (Task 12) so none of them can fire while a write is in flight. Nothing else moves — no
+  // repository call, no state beyond the modal's own lifecycle; the unsaved-changes guard
+  // (Story 4.23) inserts itself in front of this callback later.
   const handleClose = useCallback(() => setDialogOpen(false), []);
 
-  // Story 4.16, FD4: the SAME close channel as `handleClose` above — a save is the opposite of a
-  // discard, so it must NOT be guarded (Story 4.23's guard has one door to stand in front of, and
-  // this is not it). Stashes `organism` for `handleExited` to hand on once the fade has finished,
-  // then starts the identical fade `handleClose` starts. `restoreFocusRef` is already armed from
-  // `requestCreate`, so a save-close restores focus exactly like a plain Close.
+  // Story 4.16, FD4. Amended 2026-09-22 (Task 11, AC3): the editor stays open through a save, so
+  // this is no longer a close channel — it only STASHES the latest record (overwriting; the last
+  // save in the session wins) for `handleExited` to hand on once the user actually closes and the
+  // fade has finished. With Task 12's close-lock in place, a write can never resolve after the
+  // dialog has exited, so the earlier "report at once if already unmounted" branch is dead code
+  // and has been removed along with its test.
   const handleSaved = useCallback((organism: Organism) => {
-    // Already exited (the user closed during the in-flight write and the fade outlasted it):
-    // there is no `handleExited` ahead to hand the record on, and FD4's ordering guarantee — the
-    // caller's `onSaved` runs only once `mounted` has cleared — is already met. Report now.
-    if (!mountedRef.current) {
-      onSavedRef.current?.(organism);
-      return;
-    }
     pendingSavedRef.current = organism;
-    setDialogOpen(false);
   }, []);
 
   // Only once the fade has finished is it safe to unmount the modal, release `inert` and schedule
@@ -172,7 +161,6 @@ export function useOrganismEditorModal(
   // dialog (the `useInertBackground` sweep), and the Story 4.9 reuse warning would otherwise flag
   // the just-saved organism's own colour for the fade's duration.
   const handleExited = useCallback(() => {
-    mountedRef.current = false;
     setMounted(false);
     const saved = pendingSavedRef.current;
     pendingSavedRef.current = null;

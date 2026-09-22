@@ -3,11 +3,10 @@
 import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
-import { CONWAYS_CLASSIC_ID, type Organism } from '@gol/domain';
+import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import type { OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { normalizeOrganismSearch, organismNameMatches } from '@/lib/organisms/organismNameMatches';
-import { saveOutcomeMessage } from '@/lib/organisms/saveOutcome';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
 import { useOrganismEditorModal } from '@/lib/organisms/useOrganismEditorModal';
 import { useAsyncResource } from '@/lib/useAsyncResource';
@@ -182,21 +181,6 @@ const CountBadge = styled('span')({
   whiteSpace: 'nowrap',
 });
 
-// Story 4.16, FD5: the house's in-flow save outcome idiom, structurally the
-// `ColorPickerField.tsx:380-390` `role="status"` region — always mounted, with the sentence
-// mounting as its child. Not MUI `Snackbar`, no floating layer, no auto-dismiss (the owner's
-// 2026-09-21 decision, `deferred-work.md:2054-2079`).
-const SaveOutcomeLine = styled('p')({
-  margin: '0 0 25px',
-  padding: '10px 14px',
-  fontSize: '12px',
-  lineHeight: 1.5,
-  color: 'var(--gol-text-primary)',
-  background: 'var(--gol-bg-secondary)',
-  borderLeft: '2px solid var(--gol-accent)',
-  overflowWrap: 'anywhere',
-});
-
 // Mockup: .organism-grid (:191-197).
 const CardGrid = styled('ul')({
   display: 'grid',
@@ -219,8 +203,11 @@ function organismCountLabel(shown: number, total: number, filtering: boolean): s
  *
  * Since Story 4.3 it also renders the editor's entry point: the "+ Create New Organism" control
  * and the lazily loaded `<OrganismEditorModal>` it opens. Since Story 4.16 the modal receives
- * `organisms` — this SAME injected prop, typed to the interface — and reports a successful save
- * back through `onSaved`: a `resource.reload()` (FD6) plus the in-flow outcome sentence (FD5).
+ * `organisms` — this SAME injected prop, typed to the interface — and, once the editor is
+ * CLOSED, reports the last saved record back through `onSaved`: a `resource.reload()` (FD6) and
+ * nothing else. Amended 2026-09-22 (Task 11): the outcome sentence itself moved INTO the editor
+ * (`OrganismEditorModal`'s own `SaveOutcomeLine`) now that Save no longer closes it — this
+ * component has no live region of its own to publish into any more.
  *
  * No `battles` prop yet: RFC-005's tree gives the Library both repositories for the usage index,
  * but that index is Story 4.19's — an unused prop today would be a lie about what this component
@@ -238,24 +225,20 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
   // hot simulation state.
   const [searchText, setSearchText] = useState('');
 
-  // Story 4.16, FD5: the outcome of the most recent save, or `null` for "the region is empty".
-  // Cleared at the START of the next open (`openEditor` below) so a second identical outcome
-  // re-announces through the always-mounted `role="status"` region.
-  const [saveOutcome, setSaveOutcome] = useState<string | null>(null);
-
   // Story 4.16, FD6: `reload()` — stale-while-revalidate, so the grid and count badge stay
   // mounted through the refetch (no `'loading'` flash). Destructured because `reload`'s identity
   // is stable while `resource` itself is a fresh object every render — depending on the latter
   // re-created this callback on every render and re-ran the hook's `onSavedRef` effect with it
   // (review 2026-09-22).
   const { reload } = resource;
-  const onSaved = useCallback(
-    (organism: Organism) => {
-      reload();
-      setSaveOutcome(saveOutcomeMessage(organism));
-    },
-    [reload],
-  );
+  // Amended 2026-09-22 (Task 11): the editor no longer closes on save, so this fires once, when
+  // the user actually leaves the editor, with the LAST record saved in the session — a plain
+  // reload, nothing else (the record itself is unused: TS allows a callback with fewer formal
+  // parameters than the `onSaved?(organism: Organism)` option type). The outcome sentence itself
+  // is the modal's own `SaveOutcomeLine` now.
+  const onSaved = useCallback(() => {
+    reload();
+  }, [reload]);
 
   // Called HERE, from the component that renders the modal, because the hook's effects have to be
   // the modal's PARENT effects to order correctly against MUI's focus trap. The hook's own header
@@ -266,14 +249,6 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
     mounted: editorMounted,
     modalProps,
   } = useOrganismEditorModal('library', { onSaved });
-
-  // Clears the outcome region at the START of every open — the Story 2.13 clear-then-set idiom —
-  // so a second identical outcome re-announces (the region emptied in between, which is what
-  // makes the child's mount, not just its text, the thing that triggers the announcement).
-  const openEditor = useCallback(() => {
-    setSaveOutcome(null);
-    requestCreate();
-  }, [requestCreate]);
 
   // Folded at render, exactly as BattleGallery folds seedStatus against its own load state
   // (Story 4.1) — never written into the resource itself, which would risk a cascading setState.
@@ -320,7 +295,7 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
               `data-create-organism` is the focus-restore anchor `useOrganismEditorModal` looks up
               by DOM query once the modal's exit transition ends (never a captured element — WebKit
               does not focus a <button> on click). */}
-          <CreateButton type="button" onClick={openEditor} data-create-organism="">
+          <CreateButton type="button" onClick={requestCreate} data-create-organism="">
             + Create New Organism
           </CreateButton>
           <SearchField role="search">
@@ -340,13 +315,6 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
           </CountBadge>
         )}
       </Toolbar>
-      {/* Story 4.16, FD5: always mounted, BETWEEN the toolbar and the aria-busy wrapper — never
-          inside it (the create button must stay the toolbar's first Tab stop,
-          `deferred-work.md:802-806`, and this region must survive every `status`). The child
-          mounts with the text, the `ColorPickerField.tsx:380-390` idiom verbatim in structure. */}
-      <div role="status" data-save-status>
-        {saveOutcome !== null && <SaveOutcomeLine data-save-outcome>{saveOutcome}</SaveOutcomeLine>}
-      </div>
       <div aria-busy={status === 'loading'}>
         {status === 'loading' && <StatusText>Loading organisms…</StatusText>}
         {status === 'error' && (

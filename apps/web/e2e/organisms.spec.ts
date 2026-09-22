@@ -204,11 +204,7 @@ test.describe('organism card grid (Story 4.2)', () => {
       ruleCount === 0 ? 'No rules' : ruleCount === 1 ? '1 rule' : `${ruleCount} rules`;
     await expect(card.getByText(ruleLabel, { exact: true })).toBeVisible();
 
-    // Two `role="status"` regions exist now (Story 4.16's always-mounted save-outcome line) — the
-    // count badge is the one whose text names "Organism(s)".
-    await expect(page.getByRole('status').filter({ hasText: /Organisms?$/ })).toHaveText(
-      '1 Organism',
-    );
+    await expect(page.getByRole('status')).toHaveText('1 Organism');
 
     expect(errors).toEqual([]);
   });
@@ -233,18 +229,14 @@ test.describe('organism card grid (Story 4.2)', () => {
 
     await expect(page.getByText('No organisms match “zzz”.')).toBeVisible();
     await expect(page.getByRole('article')).toHaveCount(0);
-    await expect(page.getByRole('status').filter({ hasText: /Organisms?$/ })).toHaveText(
-      '0 of 1 Organism',
-    );
+    await expect(page.getByRole('status')).toHaveText('0 of 1 Organism');
     await expect(search).toBeFocused();
 
     await search.fill('con');
     await expect(page.getByRole('article', { name: "Conway's Classic" })).toBeVisible();
 
     await search.fill('');
-    await expect(page.getByRole('status').filter({ hasText: /Organisms?$/ })).toHaveText(
-      '1 Organism',
-    );
+    await expect(page.getByRole('status')).toHaveText('1 Organism');
 
     const after = await page.evaluate(() => localStorage.getItem('gol:organisms'));
     expect(after).toBe(before);
@@ -2838,6 +2830,9 @@ test.describe('preview simulation (Story 4.15)', () => {
   });
 });
 
+// Amended 2026-09-22 (Task 11, AC3): Save keeps the editor open and reports in place — every test
+// below now asserts the IN-DIALOG `[data-save-outcome]` first, then clicks Back to reach the
+// Library's own refresh/refocus effects the old flow got from Save alone.
 test.describe('create & save organism (Story 4.16)', () => {
   /** Fills the name and adds one rule with the default (valid) condition. */
   async function fillValidDraft(dialog: Locator, name = 'Glider') {
@@ -2848,9 +2843,10 @@ test.describe('create & save organism (Story 4.16)', () => {
     await card1.getByRole('button', { name: '+ Add Condition' }).click();
   }
 
-  const countBadge = (page: Page) => page.getByRole('status').filter({ hasText: /Organisms?$/ });
+  const countBadge = (page: Page) => page.getByRole('status');
+  const back = (dialog: Locator) => dialog.getByRole('button', { name: 'Back to Library' });
 
-  test('happy path: save persists, closes, announces, refreshes the grid, and survives reload', async ({
+  test('happy path: save publishes the in-dialog outcome; Back closes, refreshes the grid, and the record survives reload', async ({
     page,
   }) => {
     const errors: string[] = [];
@@ -2866,8 +2862,11 @@ test.describe('create & save organism (Story 4.16)', () => {
     await fillValidDraft(dialog, 'Glider');
     await save(dialog).click();
 
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('[data-save-outcome]')).toHaveText('Organism saved successfully.');
+
+    await back(dialog).click();
     await expect(dialog).not.toBeVisible();
-    await expect(page.locator('[data-save-outcome]')).toHaveText('Organism saved successfully.');
     await expect(page.getByText('Glider')).toBeVisible();
     await expect(countBadge(page)).toHaveText('2 Organisms');
 
@@ -2895,7 +2894,9 @@ test.describe('create & save organism (Story 4.16)', () => {
     expect(errors).toEqual([]);
   });
 
-  test('zero rules: the outcome line carries both sentences; the card exists', async ({ page }) => {
+  test('zero rules: the in-dialog outcome line carries both sentences; the card exists after Back', async ({
+    page,
+  }) => {
     await page.goto('/organisms');
     await expect(page.getByText("Conway's Classic")).toBeVisible();
 
@@ -2903,10 +2904,13 @@ test.describe('create & save organism (Story 4.16)', () => {
     await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
     await save(dialog).click();
 
-    await expect(dialog).not.toBeVisible();
-    await expect(page.locator('[data-save-outcome]')).toHaveText(
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('[data-save-outcome]')).toHaveText(
       'Organism saved successfully. No rules defined. Organism will have no living cells.',
     );
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
     await expect(page.getByText('Glider')).toBeVisible();
   });
 
@@ -2919,6 +2923,8 @@ test.describe('create & save organism (Story 4.16)', () => {
     const dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
     await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await back(dialog).click();
     await expect(dialog).not.toBeVisible();
 
     await page.goto('/battle/new');
@@ -2928,13 +2934,21 @@ test.describe('create & save organism (Story 4.16)', () => {
     await expect(addSelect.getByRole('option', { name: 'Glider' })).toHaveCount(1);
   });
 
-  test('focus returns to the create button after a save-close', async ({ page, browserName }) => {
+  test('focus: Save is focused once a successful write settles, and the create button is focused after Back', async ({
+    page,
+    browserName,
+  }) => {
     await page.goto('/organisms');
     await expect(page.getByText("Conway's Classic")).toBeVisible();
 
     const dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
     await save(dialog).click();
+
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await expect(save(dialog)).toBeFocused();
+
+    await back(dialog).click();
     await expect(dialog).not.toBeVisible();
 
     if (browserName === 'webkit') {
@@ -2983,10 +2997,14 @@ test.describe('create & save organism (Story 4.16)', () => {
     });
 
     await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await back(dialog).click();
     await expect(dialog).not.toBeVisible();
   });
 
-  test('keyboard: focus Save, press Enter — the happy path completes', async ({ page }) => {
+  test('keyboard: focus Save, press Enter — the happy path completes, then Back', async ({
+    page,
+  }) => {
     await page.goto('/organisms');
     await expect(page.getByText("Conway's Classic")).toBeVisible();
 
@@ -2995,9 +3013,35 @@ test.describe('create & save organism (Story 4.16)', () => {
     await save(dialog).focus();
     await page.keyboard.press('Enter');
 
+    await expect(dialog.locator('[data-save-outcome]')).toHaveText('Organism saved successfully.');
+    await back(dialog).click();
     await expect(dialog).not.toBeVisible();
-    await expect(page.locator('[data-save-outcome]')).toHaveText('Organism saved successfully.');
     await expect(page.getByText('Glider')).toBeVisible();
+  });
+
+  // Story 4.16, Task 11: a second Save in the SAME session (same id, upserted) — Back adds
+  // exactly ONE card, named with the SECOND (latest) name.
+  test('Save, rename, Save again, Back: exactly one new card, with the second name', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider');
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+
+    const name = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await name.fill('Glider Mk II');
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toHaveText('Organism saved successfully.');
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText('Glider Mk II')).toBeVisible();
+    await expect(page.getByText('Glider', { exact: true })).not.toBeVisible();
+    await expect(countBadge(page)).toHaveText('2 Organisms');
   });
 
   test('axe: no violations with the outcome line visible, and with the alert visible', async ({
@@ -3009,11 +3053,13 @@ test.describe('create & save organism (Story 4.16)', () => {
     let dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
     await save(dialog).click();
-    await expect(dialog).not.toBeVisible();
-    await expect(page.locator('[data-save-outcome]')).toBeVisible();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
 
     let { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
 
     dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider 2');

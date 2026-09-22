@@ -685,7 +685,9 @@ The Organism Editor is a full-screen modal overlay interface for creating and ed
 - Organism Library → "Edit" button on organism cards (populated state)
 
 **Exit Points:**
-- Save & Close → Returns to Organism Library
+- Save → saves the organism and keeps the editor open with the outcome line; a later Save updates
+  the same organism (amended 2026-09-22, Story 4.16 Task 11 — matches the Battle Editor pattern);
+  Back returns to the Organism Library, refreshed
 - Cancel → Shows unsaved changes warning, returns to library
 - Delete (edit mode only) → if used in any Battle/on grid, or targeted by another organism's rules (FR-1.4 rule-reference accounting), blocked with an error; if unused and untargeted, shows confirmation, returns to library (Conway's Classic: Delete always disabled — protected default, FR-1.5)
 

@@ -4,7 +4,7 @@ baseline_commit: 2e4dcf0
 
 # Story 4.16: Create & Save Organism
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -443,9 +443,9 @@ across every installed workspace; a "saved" toast over a write that failed) are 
   - [x] `sprint-status.yaml`: `4-16-create-save-organism: in-progress` at start, `review` at the
         end; Dev Agent Record with every command and its actual exit code.
 
-- [ ] **Task 11 — Save keeps the editor open (AC2, AC3 as amended 2026-09-22)** — owner's scope
+- [x] **Task 11 — Save keeps the editor open (AC2, AC3 as amended 2026-09-22)** — owner's scope
   change after review; mirror the Battle Editor, do not invent a second idiom
-  - [ ] Modal (`OrganismEditorModal.tsx`): `const [saveStamp, setSaveStamp] = useState<{ id: string }
+  - [x] Modal (`OrganismEditorModal.tsx`): `const [saveStamp, setSaveStamp] = useState<{ id: string }
         | null>(null)`; `saveOrganism` uses `saveStamp?.id ?? crypto.randomUUID()` (still minted
         inside the `try`), sets the stamp on success. Release `isSaving`/`savingRef` in `finally`
         on BOTH outcomes again (the review's "hold after success" patch is superseded: the dialog
@@ -464,7 +464,7 @@ across every installed workspace; a "saved" toast over a write that failed) are 
         (`document.activeElement`), which closes the review's first `[Defer]` for this editor.
         Update the header comment (`:247-248`, `:474-475`) and the `onSaved` docblock (`:72-76`):
         the parent no longer closes on save.
-  - [ ] Hook (`useOrganismEditorModal.ts`): `handleSaved` only stashes into `pendingSavedRef`
+  - [x] Hook (`useOrganismEditorModal.ts`): `handleSaved` only stashes into `pendingSavedRef`
         (overwriting — the LAST record wins) and no longer calls `setDialogOpen(false)`;
         `handleExited` is unchanged (hands the stashed record on after `mounted` clears, then
         clears it). With Task 12 in place a write cannot resolve after the exit any more, so the
@@ -472,7 +472,7 @@ across every installed workspace; a "saved" toast over a write that failed) are 
         docblock. Tests: (a) `onSaved` from the modal does NOT close the dialog; (b) Back after a
         save → the caller's `onSaved` fires once, after exit, with the last record; (c) two saves
         then Back → fires once with the second record; (d) close without a save → never fires.
-  - [ ] Library (`OrganismLibrary.tsx`): `onSaved` is `reload()` only; remove `saveOutcome`,
+  - [x] Library (`OrganismLibrary.tsx`): `onSaved` is `reload()` only; remove `saveOutcome`,
         `SaveOutcomeLine`, the `data-save-status` region and the `openEditor` clear; the
         `saveOutcomeMessage` import goes. Restore the Story 4.1/4.2 count-badge tests
         (`OrganismLibrary.test.tsx`, `organisms.spec.ts`) to their pre-4.16 single-`role="status"`
@@ -482,11 +482,11 @@ across every installed workspace; a "saved" toast over a write that failed) are 
         sentence; Back → the dialog leaves → the new card and `4 Organisms` (same badge node, no
         `'loading'` reset, `list` called exactly twice), focus on the create button; a rejected
         save → dialog open, no outcome line, alert present, `list` once.
-  - [ ] e2e (`organisms.spec.ts`): retarget the seven Story 4.16 tests — happy path asserts the
+  - [x] e2e (`organisms.spec.ts`): retarget the seven Story 4.16 tests — happy path asserts the
         in-dialog outcome line, then Back, then the card and the badge; zero-rules likewise; the
         focus test asserts the Save button after save and the create button after Back; add one
         test: Save, rename, Save again, Back → exactly one new card, with the second name.
-  - [ ] Docs: `organism-editor-design.md:43` ("Save & Close") → "**Save**: saves the organism and
+  - [x] Docs: `organism-editor-design.md:43` ("Save & Close") → "**Save**: saves the organism and
         keeps the editor open with the outcome line; a later Save updates the same organism";
         `:558-559` → "4. Outcome line inside the editor: \"Organism saved successfully\" 5. Back
         returns to the Organism Library, refreshed"; `ux-design-complete.md:688` likewise. Add to
@@ -496,15 +496,15 @@ across every installed workspace; a "saved" toast over a write that failed) are 
         `bundle:check`; `/organisms` first load should shrink (region + helper leave), the editor
         chunk grow by roughly the same; record the figures.
 
-- [ ] **Task 12 — lock the close while a write is in flight (review decision, owner chose (b))**
-  - [ ] Modal: the Back button gets `disabled={isSaving}` (the `BattlePage.tsx:1010`
+- [x] **Task 12 — lock the close while a write is in flight (review decision, owner chose (b))**
+  - [x] Modal: the Back button gets `disabled={isSaving}` (the `BattlePage.tsx:1010`
         `backDisabled={isSaving}` idiom, same `transition: 'none'` reason as Save); the dialog's
         `onClose` (Escape / backdrop / ✕) becomes a no-op while `savingRef.current` — one guarded
         handler, not three. Tests: Escape and a Back click during an in-flight write do not close
         (dialog still present after the write resolves); Escape after it resolves closes as before.
-  - [ ] `deferred-work.md`: strike the "Escape during an in-flight organism save is allowed" entry
+  - [x] `deferred-work.md`: strike the "Escape during an in-flight organism save is allowed" entry
         as `✅ Closed in Story 4.16 (review decision (b))`; update the Open flags bullet below.
-  - [ ] The review's `[Review][Decision]` item under Review Findings: tick it once this task is
+  - [x] The review's `[Review][Decision]` item under Review Findings: tick it once this task is
         done and note "(b), implemented in Task 12".
 
 ### Review Findings
@@ -513,7 +513,7 @@ Code review 2026-09-22 (opus, second pair of eyes on a sonnet implementation): B
 only), Edge Case Hunter (diff + project), Acceptance Auditor (diff + story + project-context). 1
 `decision-needed`, 16 `patch`, 2 `defer`, 10 dismissed as noise.
 
-- [ ] [Review][Decision] **Escape/Close/Back during an in-flight write — keep it allowed, or lock the close while saving?** **→ Owner's answer (2026-09-22): (b) — lock the close while saving; see Task 12. The owner also changed scope at the same time: Save keeps the editor open (AC3 amended, Task 11) — (b) rules out (1) — no exit can happen while a write is in flight; the editor staying open rules out (2) — a resolved save closes nothing; (3) shrinks to a visible state — the typed text is still on screen in the open editor and the next Save writes it as an update of the same id.** — The story's open flag chose "allowed" on the premise that the write is sub-millisecond. The write is `projectOrganismForSave` (one `crypto.subtle.digest` per rule, thread-pool) + `organisms.save()`; against localStorage it is a few ms, against a Connected-mode API repository it is a round-trip. Three residuals exist only when the write outlasts the ~195 ms exit fade, and none has a fix that does not need the owner's intent: (1) a write that REJECTS after the dialog has exited is reported nowhere — the `role="alert"` lives in the unmounted modal, and "nothing was lost" is then untrue from the user's side; (2) a write that resolves after the user has already reopened a fresh editor calls `handleSaved`, which closes the NEW editor (discarding its draft) and announces the OLD record; (3) fields stay editable while a write is in flight, so keystrokes typed in that window are silently not in the saved record. (The fourth residual — a write that resolves after the exit but before any reopen was dropped, then replayed on the next unrelated close — was a plain bug and is patched below.) Options: **(a) keep allowed**, accept (1)–(3) as Connected-mode residuals and record them in `deferred-work.md` for RFC-001's API repository story; **(b) lock the close while saving** — `onClose` (✕ / Back / Escape) is a no-op while `isSaving`, the `<UnsavedChangesDialog>` `pending` idiom; removes all three at the cost of a lock on a few-ms window today, and Story 4.23's guard then has a second condition to respect; **(c) keep allowed but session-bind the late outcome** — the hook stamps a session id per `requestCreate`, a late `handleSaved` from a stale session neither closes nor stashes but queues its report for after the current session exits; fixes (2), leaves (1) and (3). Files: `apps/web/components/organisms/editor/OrganismEditorModal.tsx` (`saveOrganism`), `apps/web/lib/organisms/useOrganismEditorModal.ts` (`handleSaved`/`handleClose`), `deferred-work.md` (the "Escape during an in-flight organism save is allowed" entry, which currently asserts a "still reports" that the patched code now honours only for the no-reopen case).
+- [x] [Review][Decision] **Escape/Close/Back during an in-flight write — keep it allowed, or lock the close while saving?** **→ Owner's answer (2026-09-22): (b) — lock the close while saving; see Task 12. The owner also changed scope at the same time: Save keeps the editor open (AC3 amended, Task 11) — (b) rules out (1) — no exit can happen while a write is in flight; the editor staying open rules out (2) — a resolved save closes nothing; (3) shrinks to a visible state — the typed text is still on screen in the open editor and the next Save writes it as an update of the same id.** — The story's open flag chose "allowed" on the premise that the write is sub-millisecond. The write is `projectOrganismForSave` (one `crypto.subtle.digest` per rule, thread-pool) + `organisms.save()`; against localStorage it is a few ms, against a Connected-mode API repository it is a round-trip. Three residuals exist only when the write outlasts the ~195 ms exit fade, and none has a fix that does not need the owner's intent: (1) a write that REJECTS after the dialog has exited is reported nowhere — the `role="alert"` lives in the unmounted modal, and "nothing was lost" is then untrue from the user's side; (2) a write that resolves after the user has already reopened a fresh editor calls `handleSaved`, which closes the NEW editor (discarding its draft) and announces the OLD record; (3) fields stay editable while a write is in flight, so keystrokes typed in that window are silently not in the saved record. (The fourth residual — a write that resolves after the exit but before any reopen was dropped, then replayed on the next unrelated close — was a plain bug and is patched below.) Options: **(a) keep allowed**, accept (1)–(3) as Connected-mode residuals and record them in `deferred-work.md` for RFC-001's API repository story; **(b) lock the close while saving** — `onClose` (✕ / Back / Escape) is a no-op while `isSaving`, the `<UnsavedChangesDialog>` `pending` idiom; removes all three at the cost of a lock on a few-ms window today, and Story 4.23's guard then has a second condition to respect; **(c) keep allowed but session-bind the late outcome** — the hook stamps a session id per `requestCreate`, a late `handleSaved` from a stale session neither closes nor stashes but queues its report for after the current session exits; fixes (2), leaves (1) and (3). Files: `apps/web/components/organisms/editor/OrganismEditorModal.tsx` (`saveOrganism`), `apps/web/lib/organisms/useOrganismEditorModal.ts` (`handleSaved`/`handleClose`), `deferred-work.md` (the "Escape during an in-flight organism save is allowed" entry, which currently asserts a "still reports" that the patched code now honours only for the no-reopen case). **Resolved: (b), implemented in Task 12.**
 - [x] [Review][Patch] A second Save during the exit fade after a SUCCESSFUL write writes a second organism — `finally` re-enables the button while the dialog is still mounted and interactive for ~195 ms; a double-click or a second Enter lands as a second `organisms.save()` with a fresh id. Hold `isSaving`/`savingRef` on success (the modal is unmounting; the parent's close is the release), release only on failure; move `onSaved(record)` out of the `try` so a throw from the parent is not reported as a failed save that actually succeeded [apps/web/components/organisms/editor/OrganismEditorModal.tsx:373-409]
 - [x] [Review][Patch] A save that resolves AFTER an Escape-close's exit transition is dropped, then replayed on the next unrelated close — `handleSaved` only stashes into `pendingSavedRef` and `handleExited` has already fired; reproduced with a probe (caller's `onSaved` 0 calls after the late resolution, 1 call after the next plain Close). Hand the record on immediately when the dialog is no longer mounted [apps/web/lib/organisms/useOrganismEditorModal.ts:149-167]
 - [x] [Review][Patch] `SAVE_SX` comment says "the write itself is sub-millisecond (a localStorage `setItem`)" — the disabled window is the digest(s) + the write, and the claim underpins the Escape decision above; reword [apps/web/components/organisms/editor/OrganismEditorModal.tsx:46-51]
@@ -955,6 +955,67 @@ targeted runs along the way):
   boundary:check, `test:coverage` (117 files / 1925 tests), `build:standalone`, `bundle:check` (all
   5 routes within budget), `bench`/`bench:check` (green), `e2e:chromium` (238 passed, whole suite).
 
+---
+
+**Resume (2026-09-22): review continuation implementing Tasks 11 and 12.**
+
+- `apps/web` `npx tsc --noEmit` (repo-wide, run repeatedly across the session) — exit 0 throughout,
+  no round-trips needed.
+- `apps/web` `npx eslint` on every touched file — exit 0, no warnings introduced.
+- `apps/web` `npx vitest run lib/organisms/useOrganismEditorModal.test.tsx` — 15 tests passed
+  (exit 0); the "a save-close" describe block rewritten to "a save" (Task 11): the save-arriving
+  test no longer closes the dialog, a new "two saves then Back fires once with the SECOND record"
+  case added, and the dead "record arriving after an Escape-close has fully exited" scenario (and
+  its `mountedRef` support code) removed — Task 12's close-lock makes a write resolving after an
+  exit unreachable.
+- `apps/web` `npx vitest run components/organisms/editor/OrganismEditorModal.test.tsx` — 74 tests
+  passed (exit 0; up from 67): three Story 4.9 tests rescoped off `getByRole('status')` (now
+  ambiguous — a second `role="status"` region, the save outcome, lives in this dialog too) onto
+  `[data-color-reuse-status]`; (25)/(25b) rewritten for "released after every outcome" and "same id
+  upserted, `list()` grew by ONE"; four new cases added — (31) the outcome line publishes and the
+  dialog stays open, (32) it clears-then-refills across two attempts, (33)/(34) focus returns to
+  Save after a successful and a rejected write (proven by an explicit `blur()` — jsdom does not
+  itself implement the browser's disabled-drops-focus fixup, unlike a real engine, so the test
+  simulates that fixup rather than relying on it) — plus a `close is locked while saving (Task 12)`
+  block: Escape, a Back click and the ✕ button are all no-ops while a write is in flight, and each
+  closes normally once it has settled.
+- `apps/web` `npx vitest run components/organisms/OrganismLibrary.test.tsx` — 30 tests passed
+  (exit 0): the count-badge test restored to the pre-4.16 single-`role="status"` selector (Task 11
+  removed the Library's own status region, so the ambiguity Task 8 introduced is gone); tests
+  (a)/(c)/(d)/(e)/(f)/(g) rewritten against the new flow (Save → assert the in-dialog outcome, THEN
+  Back → assert the reload/refocus effects); (b) likewise, plus (d) retargeted from "reopening
+  empties the region" (no longer meaningful — the modal remounts fresh either way) to "a second
+  Save in the same session clears then re-fills the outcome line; Back adds exactly ONE card, with
+  the LATEST name" (Task 11's upsert pin, exercised through the real wire).
+- `apps/web` `npx vitest run` (whole app) — 117 files, 1934 tests passed (exit 0); a single flake
+  reproduced under full-suite concurrency (`BattlePage.modeToggle.test.tsx`'s unrelated focus-restore
+  case, nothing to do with this story's files) — confirmed green in isolation on two separate runs,
+  the same class of contention flake `docs/project-context.md` records for the Playwright matrix.
+- `npm run build:standalone && npm run bundle:check` — exit 0; `/organisms` first load 295.6 KB /
+  305 KB gzip (9.4 KB headroom) — down from the review's 295.8 KB (9.2 KB), the −0.2 KB the removed
+  status region + `saveOutcomeMessage` import were expected to cost (Task 11's own prediction, now
+  measured); the other four routes unchanged (home 333.6 KB, battle 309.4 KB, battle/new 309.2 KB,
+  settings 291.3 KB — all within budget). The lazy editor chunk (`0dja1743kxpn1.js` in this build)
+  measured 46.4 KB raw / 13.1 KB gzip, against the review's recorded ~46.8 KB / 13.2 KB — flat to
+  very slightly smaller: the new `saveStamp`/`saveOutcome`/focus-effect code roughly offsets what
+  Task 11 deleted from the modal (the old "hold after success" branching) and Task 12 added
+  (`handleRequestClose`), so no ±0.5 KB explanation is owed.
+- `npx playwright test e2e/organisms.spec.ts --project=chromium` — 104 passed (exit 0): the seven
+  Story 4.16 tests retargeted (Save now asserts the in-dialog `[data-save-outcome]` first, then a
+  `Back to Library` click reaches the card/badge/focus effects) plus one new test, "Save, rename,
+  Save again, Back: exactly one new card, with the second name" (Task 11's e2e pin); the three
+  count-badge assertions across the file (`organism card grid`, search, and the 4.16 block's
+  `countBadge` helper) reverted to the pre-4.16 plain `page.getByRole('status')` — the Library has
+  exactly one `role="status"` element again now that the outcome region lives in the modal.
+- `npm run ci:dev` (full local gate) — first run failed on `format:check` (unformatted
+  `OrganismEditorModal.tsx` and `OrganismLibrary.test.tsx`, `prettier --write`'d); second run
+  **exit 0** — typecheck, lint (the same 1 pre-existing unrelated `BattleGallery.tsx` warning),
+  format:check, spec:check (261 ids resolve), boundary:check, `test:coverage` (117 files / 1934
+  tests, `packages/domain` 111, `@gol/simulation` 407, `@gol/persistence` 82, `@gol/test-utils` 89),
+  `build:standalone`, `bundle:check` (all 5 routes within budget), `bench` (NFR-1.1 frame 8.748 ms
+  against 16.667 ms, 47.5% headroom) / `bench:check` (green), `e2e:chromium` (239 passed, 1 skipped,
+  whole suite, including all 8 Story 4.16 tests).
+
 ### Completion Notes List
 
 - **Task 1** — `ORGANISM_SCHEMA_VERSION = 1 as const` added to `packages/domain/src/organismSchema.ts`
@@ -1050,6 +1111,46 @@ targeted runs along the way):
   contains), settings 291.3 KB/305 KB (13.7 KB). `sprint-status.yaml` updated to `in-progress` at
   start, `review` at the end.
 
+- **Task 11 (2026-09-22 resume)** — Save keeps the editor open (AC2/AC3 as amended, the owner's
+  "match the Battle Editor" call). `OrganismEditorModal.tsx`: `saveStamp: { id: string } | null`,
+  set on the first success and read back on every later attempt in the SAME mount, so
+  `organisms.save()` upserts one organism instead of minting a sibling; `saveOrganism` restructured
+  to a plain `try`/`catch`/`finally`, releasing `isSaving`/`savingRef` on BOTH outcomes again (the
+  review's "hold after success" patch is dead — the dialog no longer unmounts on save) and calling
+  `onSaved(record)` AFTER the `finally`, outside the `try`/`catch`, only on success — the id-mint
+  and `onSaved`-outside-`try` properties from the original implementation are both preserved, just
+  re-homed around the new structure. `saveOutcome` state (`null` = nothing to report, cleared
+  alongside `saveError` at the start of every attempt) feeds an always-mounted
+  `<div role="status" data-save-status>` between the header and `SaveErrorLine`, whose child
+  (`SaveOutcomeLine`, moved verbatim from the Library) mounts with `saveOutcomeMessage(record)`.
+  `saveOutcomeMessage` is now imported by the modal, not the Library. A `saveButtonRef` plus a
+  settle counter (`saveSettledSeq`) drive a `useEffect` that calls `.focus()` on Save once the DOM
+  has actually committed `disabled={false}` — a synchronous call inside the handler would target a
+  still-disabled button and be a no-op. Hook (`useOrganismEditorModal.ts`): `handleSaved` now only
+  overwrites `pendingSavedRef` (the LAST record wins) and no longer calls `setDialogOpen(false)`;
+  the `mountedRef` late-save branch (dead once Task 12's close-lock lands — a write can never
+  resolve after an exit any more) removed along with its test. Library (`OrganismLibrary.tsx`):
+  `onSaved` is `reload()` only; `saveOutcome`/`SaveOutcomeLine`/the `[data-save-status]` region/the
+  `openEditor` wrapper all removed (the create button's `onClick` goes back to `requestCreate`
+  directly); the `Organism` type import and the now-unneeded rescoped count-badge selectors go with
+  them. Tests and e2e retargeted throughout (see Debug Log); docs (`organism-editor-design.md`,
+  `ux-design-complete.md`) and `deferred-work.md` updated to match (see below and Task 12).
+- **Task 12 (2026-09-22 resume)** — lock the close while a write is in flight (the owner's review
+  decision (b), superseding the story's original "allowed" open flag). `OrganismEditorModal.tsx`:
+  one guarded handler, `handleRequestClose` (`if (savingRef.current) return; onClose();`), wired to
+  the `Dialog`'s `onClose` (Escape, and the backdrop — unreachable under `fullScreen`, kept for
+  documentation) and the ✕ `IconButton`'s `onClick`; the Back button gets `disabled={isSaving}`
+  directly rather than routing through the guard, since it is a visible control the user can see go
+  inert. `deferred-work.md`'s "Escape during an in-flight organism save is allowed" entry struck
+  `✅ Closed in Story 4.16 (review decision (b), Task 12)`, with the three residuals the review's
+  `[Review][Decision]` raised recorded as resolved (no exit can happen mid-write; a resolved save
+  closes nothing since the editor stays open; the typed text is visible on screen and the next Save
+  upserts it) and the now-dead late-save patch noted retired. The review's own `[Review][Decision]`
+  item ticked with "(b), implemented in Task 12." Three new tests pin the lock (Escape, a Back
+  click via `fireEvent` — bypassing React's synthetic disabled-click suppression to pin the
+  `disabled` attribute itself, not merely a handler guard — and the ✕ button), each also proving the
+  close works again once the write settles.
+
 ### File List
 
 **New**
@@ -1072,6 +1173,9 @@ targeted runs along the way):
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
+- `docs/implementation-artifacts/4-16-create-save-organism.md` (Tasks 11/12, Review Findings decision tick, this record)
+- `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md` (Task 11)
+- `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/ux-design-complete.md` (Task 11)
 
 ### Change Log
 
@@ -1079,6 +1183,7 @@ targeted runs along the way):
 |---|---|
 | 2026-09-22 | Code review (opus): 16 patches applied — Save held after a successful write (double-write during the exit fade), late save after an Escape-close reported at once instead of replayed on the next close, `onSaved` outside the `try`, `reload` destructured, test-strength fixes ((20)(22)(24)(25)(25b), Library (a), `useAsyncResource` superseded-load with an `act` positive control, `organismRecord` (g) `ZodError`), `sortKeysDeep` predicate, four comment/doc corrections (SAVE_SX, `ORGANISM_SCHEMA_VERSION`, `saveFailureMessage` head, bundle narrative), `deferred-work.md:38` struck, AC9/Task 8 conflict noted; 2 defers; 1 `[Review][Decision]` left open (Escape during an in-flight write). Status → in-progress. |
 | 2026-09-22 | Story 4.16 implemented: `ORGANISM_SCHEMA_VERSION`, the real `contentHash` hasher, the save projection, the two message helpers, `useAsyncResource.reload()`, the modal's write path, the hook's save-close channel, the Library's outcome line, e2e coverage, and deferred-work bookkeeping. Status → review. |
+| 2026-09-22 | Owner decisions after review, implemented: Task 11 — Save keeps the editor open (AC2/AC3 amended); the outcome line, `saveStamp` upsert-by-id and the focus-restore effect all move into/onto the modal, the Library's own status region and `openEditor` wrapper are removed. Task 12 — the close (✕/Back/Escape) is locked while a write is in flight, resolving the review's `[Review][Decision]` as option (b). Tests and e2e retargeted; docs (`organism-editor-design.md`, `ux-design-complete.md`, `deferred-work.md`) updated. `npm run ci:dev` green end to end (typecheck, lint, format, spec:check, boundary:check, 1934 unit/coverage tests, build:standalone, bundle:check, bench/bench:check, 239 e2e on Chromium). Status → review. |
 
 ---
 

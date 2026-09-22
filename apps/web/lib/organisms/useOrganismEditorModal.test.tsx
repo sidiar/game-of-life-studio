@@ -241,9 +241,14 @@ describe('useOrganismEditorModal', () => {
     expect(hook().modalProps).toBe(first);
   });
 
-  // Story 4.16, FD4: the save-close is the SAME two-phase shape as a plain Close, and the
-  // caller's `onSaved` is deferred to `onExited`.
-  describe('a save-close (modalProps.onSaved)', () => {
+  // Story 4.16, FD4. Amended 2026-09-22 (Task 11, AC3): a save no longer closes the dialog — it
+  // only stashes the record. The caller's `onSaved` fires once, with the LAST stashed record,
+  // when the user actually closes the editor (Back/Escape/✕) and the exit transition finishes.
+  // Task 12's close-lock (proven in `OrganismEditorModal.test.tsx`, not here — the guard lives in
+  // the modal) means a write can never resolve after the dialog has exited, so the earlier
+  // "record arriving after an Escape-close has fully exited" scenario and its stale-record replay
+  // guard are dead; both were removed along with the `mountedRef` branch that produced them.
+  describe('a save (modalProps.onSaved)', () => {
     const record: Organism = {
       schemaVersion: 1,
       id: 'saved-1',
@@ -253,8 +258,9 @@ describe('useOrganismEditorModal', () => {
       agingEnabled: false,
       survivalRules: [],
     };
+    const record2: Organism = { ...record, name: 'Glider Mk II' };
 
-    it("closes the dialog (open false, mounted true) and does NOT yet call the caller's onSaved", async () => {
+    it('does NOT close the dialog', async () => {
       const onSaved = vi.fn();
       const user = userEvent.setup();
       render(<Probe onSaved={onSaved} />);
@@ -262,18 +268,20 @@ describe('useOrganismEditorModal', () => {
 
       act(() => hook().modalProps.onSaved(record));
 
-      expect(hook().modalProps.open).toBe(false);
+      expect(hook().modalProps.open).toBe(true);
       expect(hook().mounted).toBe(true);
       expect(onSaved).not.toHaveBeenCalled();
     });
 
-    it("after onExited, mounted is false and the caller's onSaved was called once with the record", async () => {
+    it("Back after a save closes the dialog and, once exited, calls the caller's onSaved once with the record", async () => {
       const onSaved = vi.fn();
       const user = userEvent.setup();
       render(<Probe onSaved={onSaved} />);
       await user.click(createButton());
 
       act(() => hook().modalProps.onSaved(record));
+      act(() => hook().modalProps.onClose());
+      expect(onSaved).not.toHaveBeenCalled();
       await act(async () => {
         hook().modalProps.onExited?.();
       });
@@ -283,7 +291,24 @@ describe('useOrganismEditorModal', () => {
       expect(onSaved).toHaveBeenCalledWith(record);
     });
 
-    it('a plain onClose never calls onSaved on its own onExited', async () => {
+    it('two saves then Back fires once, with the SECOND (last) record', async () => {
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      render(<Probe onSaved={onSaved} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onSaved(record));
+      act(() => hook().modalProps.onSaved(record2));
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(onSaved).toHaveBeenCalledWith(record2);
+    });
+
+    it('a close without any save in the session never calls onSaved', async () => {
       const onSaved = vi.fn();
       const user = userEvent.setup();
       render(<Probe onSaved={onSaved} />);
@@ -297,13 +322,14 @@ describe('useOrganismEditorModal', () => {
       expect(onSaved).not.toHaveBeenCalled();
     });
 
-    it('restores focus to the create button after a save-close, exactly like a plain Close', async () => {
+    it('restores focus to the create button after Back following a save, exactly like a plain Close', async () => {
       const onSaved = vi.fn();
       const user = userEvent.setup();
       render(<Probe onSaved={onSaved} />);
       await user.click(createButton());
 
       act(() => hook().modalProps.onSaved(record));
+      act(() => hook().modalProps.onClose());
       await act(async () => {
         hook().modalProps.onExited?.();
       });
@@ -311,7 +337,7 @@ describe('useOrganismEditorModal', () => {
       expect(document.activeElement).toBe(createButton());
     });
 
-    it('a caller whose onSaved changes identity between open and exit gets the LATEST one called', async () => {
+    it('a caller whose onSaved changes identity between the save and Back gets the LATEST one called', async () => {
       const first = vi.fn();
       const second = vi.fn();
       const user = userEvent.setup();
@@ -319,7 +345,8 @@ describe('useOrganismEditorModal', () => {
       await user.click(createButton());
 
       act(() => hook().modalProps.onSaved(record));
-      // The option identity changes AFTER the save-close, before the exit transition finishes.
+      act(() => hook().modalProps.onClose());
+      // The option identity changes AFTER Back, before the exit transition finishes.
       rerender(<Probe onSaved={second} />);
       await act(async () => {
         hook().modalProps.onExited?.();
@@ -341,38 +368,6 @@ describe('useOrganismEditorModal', () => {
       rerender(<Probe onSaved={vi.fn()} />);
 
       expect(hook().modalProps).toBe(first);
-    });
-
-    // Review 2026-09-22: the user closed during an in-flight write and the fade OUTLASTED the
-    // write. `handleExited` has already fired, so nothing ahead can hand the record on — it must
-    // be reported now, and must NOT be replayed on the next, unrelated close (which is what the
-    // stash-only shape did: 0 calls after the late resolution, 1 after the next plain Close).
-    it('a record arriving after an Escape-close has fully exited is reported at once, not on the next close', async () => {
-      const onSaved = vi.fn();
-      const user = userEvent.setup();
-      render(<Probe onSaved={onSaved} />);
-      await user.click(createButton());
-
-      act(() => hook().modalProps.onClose());
-      await act(async () => {
-        hook().modalProps.onExited?.();
-      });
-      expect(hook().mounted).toBe(false);
-
-      // The in-flight write resolves late — the (now unmounted) modal reports through the same
-      // stable `onSaved` it was handed at mount.
-      act(() => hook().modalProps.onSaved(record));
-      expect(onSaved).toHaveBeenCalledTimes(1);
-      expect(onSaved).toHaveBeenCalledWith(record);
-      expect(hook().mounted).toBe(false);
-
-      // The next cycle is a plain open/close: nothing stale is replayed.
-      await user.click(createButton());
-      act(() => hook().modalProps.onClose());
-      await act(async () => {
-        hook().modalProps.onExited?.();
-      });
-      expect(onSaved).toHaveBeenCalledTimes(1);
     });
   });
 });

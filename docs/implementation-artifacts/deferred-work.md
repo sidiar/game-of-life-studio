@@ -2289,15 +2289,17 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 ## Deferred from: Story 4-16-create-save-organism (2026-09-22)
 
-- **Two live-region idioms now ship side by side, deliberately.** The Library's save outcome
-  (`<OrganismLibrary>`'s `[data-save-status]`) is an always-mounted `role="status"` region whose
-  child mounts with the sentence (the `ColorPickerField.tsx:380-390` idiom); the in-modal write
-  failure (`OrganismEditorModal`'s `[data-save-error]`) is a conditionally-mounted `role="alert"`
-  line (the Story 2.13 idiom). Both are per the owner's 2026-09-21 decision, not a drift between
-  the two — an outcome is announced, a failure interrupts.
-- **No auto-dismiss on the Library's outcome line** — the sentence stays until the next editor
-  open. Open flag: a 5-8s timed dismissal is a `setTimeout` plus fake-timer tests, deferred until
-  the 4.17/4.22 flows show whether the persistent line reads as clutter.
+- **Two live-region idioms ship side by side, deliberately — both now IN the modal.** Amended
+  2026-09-22 (Task 11, AC3 amended): the save outcome (`OrganismEditorModal`'s `[data-save-status]`
+  / `[data-save-outcome]`) moved OUT of `<OrganismLibrary>` and into the editor itself — it is an
+  always-mounted `role="status"` region whose child mounts with the sentence (the
+  `ColorPickerField.tsx:380-390` idiom); the in-modal write failure (`[data-save-error]`) is a
+  conditionally-mounted `role="alert"` line (the Story 2.13 idiom), sitting right beside it. Both
+  are per the owner's 2026-09-21 decision, not a drift between the two — an outcome is announced, a
+  failure interrupts. The Library itself has no live region of its own any more.
+- **No auto-dismiss on the (now in-modal) outcome line** — the sentence stays until the next Save
+  or the editor closes. Open flag: a 5-8s timed dismissal is a `setTimeout` plus fake-timer tests,
+  deferred until the 4.17/4.22 flows show whether the persistent line reads as clutter.
 - **The organism name is persisted RAW/untrimmed** (FD3) — trailing/leading whitespace round-trips
   exactly as typed, matching the battle save path. Open flag: if a trimmed name is wanted later,
   it is a one-line change in `projectOrganismForSave`, but then the gate's counter and the stored
@@ -2312,21 +2314,28 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **`useAsyncResource.reload()` now exists** (Story 4.16, FD6, additive). `<BattleGallery>`'s own
   `reloadToken` reducer predates it and is a candidate to migrate onto the hook's `reload()` in a
   later touch — not done here, since `<BattleGallery>` is untouched by this story on purpose.
-- **Escape/Close/Back during an in-flight organism save is allowed** (FD4/FD9) — the write still
+- ~~**Escape/Close/Back during an in-flight organism save is allowed** (FD4/FD9) — the write still
   lands and still reports, after the close. The alternative (disable Close/Back/Escape while
-  saving) would lock the dialog for a sub-millisecond window; not built.
-  - **Review 2026-09-22:** "still reports" was only true when the write resolved BEFORE the exit
-    fade finished — a later resolution was stashed and replayed on the next unrelated close;
-    patched (`useOrganismEditorModal.ts`, `handleSaved` hands a late record on at once). The
-    window is the projection's `crypto.subtle.digest` per rule plus the write — a few ms against
-    localStorage, a round-trip against an API repository — not sub-millisecond. Three residuals
-    remain and are the owner's call, recorded as the open `[Review][Decision]` in
-    `4-16-create-save-organism.md`: a write that REJECTS after the exit is reported nowhere; a
-    write that resolves after a fresh editor was reopened closes that editor and announces the old
-    record; edits typed during the in-flight window are not in the saved record.
-- **Story 4.17 needs `projectOrganismForSave` to take the record's existing `id` and decide a
-  `schemaVersion` restamp policy** for an EDIT save (this story only ever mints a fresh id and
-  stamps the current constant) — flagged, not decided, here.
+  saving) would lock the dialog for a sub-millisecond window; not built.~~ **✅ Closed in Story
+  4.16 (review decision (b), Task 12, 2026-09-22):** the close (✕ / Back / Escape) is now a no-op
+  while `savingRef.current` — one guarded handler for Escape/backdrop/✕, `disabled={isSaving}` on
+  Back. Combined with Task 11 (Save no longer closes the editor), this removes all three residuals
+  the review's `[Review][Decision]` raised: (1) a rejecting write can no longer resolve after an
+  exit, because no exit can happen while a write is in flight; (2) the editor staying open means a
+  resolved save closes nothing, so there is no "fresh editor" for a late save to close; (3) the
+  typed text stays on screen in the still-open editor and the next Save writes it as an update of
+  the same id (`saveStamp`). The review's own `[Review][Decision]` item is ticked with this note.
+  - **Review 2026-09-22 (superseded by the above):** "still reports" was only true when the write
+    resolved BEFORE the exit fade finished — a later resolution was stashed and replayed on the
+    next unrelated close; patched (`useOrganismEditorModal.ts`, `handleSaved` hands a late record
+    on at once). That patch and its dedicated test are now dead code under the close-lock (a write
+    can never resolve after an exit any more) and were removed along with the `mountedRef` branch
+    that produced them.
+- **`saveStamp` is the seam Story 4.17 seeds from the opened organism** (Task 11) — replaces this
+  entry's earlier "flagged, not decided" for the `id` half of `projectOrganismForSave`: an edit
+  session just needs to seed `saveStamp` with the record's existing id at mount, and every Save in
+  that session already upserts it. The `schemaVersion` restamp-or-keep policy for an EDIT save is
+  still open and is Story 4.17's to decide.
 
 ## Deferred from: code review of 4-16-create-save-organism (2026-09-22)
 

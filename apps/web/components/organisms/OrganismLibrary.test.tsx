@@ -325,21 +325,17 @@ describe('OrganismLibrary', () => {
     expect(results.violations).toEqual([]);
   });
 
+  // Story 4.16 Task 11 (2026-09-22): the save-outcome region moved INTO the editor modal, so this
+  // component is back to having exactly one `role="status"` element — the pre-4.16 selector.
   it('shows the count badge only once ready, as a role="status"', async () => {
     const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
 
     const { rerender } = render(<OrganismLibrary organisms={organisms} seedStatus="seeding" />);
-    // The save-outcome region (Story 4.16) is always mounted, empty, and is the only status role
-    // before the list is ready — the count badge itself does not exist yet.
-    expect(
-      screen.getAllByRole('status').some((el) => /Organisms?$/.test(el.textContent ?? '')),
-    ).toBe(false);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
     rerender(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
     await waitFor(() => {
-      expect(screen.getAllByRole('status').some((el) => el.textContent === '3 Organisms')).toBe(
-        true,
-      );
+      expect(screen.getByRole('status')).toHaveTextContent('3 Organisms');
     });
   });
 });
@@ -519,10 +515,23 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
  * `OrganismEditorModal.test.tsx` cannot pin (the save happens over a MODAL it renders directly,
  * with a fake `organisms`/`onSaved` rig) and `useOrganismEditorModal.test.tsx` cannot pin either
  * (it stands in for the Library with a `<Probe>`). Only here is the whole wire real: the create
- * button, the modal, the hook's `onSaved`, the Library's `resource.reload()` and its outcome line.
+ * button, the modal, the hook's `onSaved` and the Library's `resource.reload()`. Amended
+ * 2026-09-22 (Task 11): the outcome line itself moved INTO the modal (`OrganismEditorModal`'s own
+ * `[data-save-outcome]`) — Save no longer closes the editor, so this block now saves, asserts the
+ * IN-DIALOG outcome, then clicks Back to reach the reload/refocus effects the old flow got from
+ * Save alone.
  */
 describe('OrganismLibrary — save flow (Story 4.16)', () => {
   const createButton = () => screen.getByRole('button', { name: '+ Create New Organism' });
+
+  /** The modal's OWN save-outcome region (Task 11) — scoped by its `data-*` hook, never
+   * `getByRole('status')`: `<ColorPickerField>`'s reuse-warning region is a SECOND `role="status"`
+   * inside this same dialog. */
+  function saveStatusRegion(dialog: HTMLElement): HTMLElement {
+    const el = dialog.querySelector<HTMLElement>('[data-save-status]');
+    if (el === null) throw new Error('the save-outcome status region is not in the dialog');
+    return el;
+  }
 
   /** Fills the name and adds one rule with the default (valid) condition — the minimal valid
    * draft this block saves. */
@@ -538,31 +547,33 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), name);
   }
 
-  it('(a) open, name, Save: the dialog leaves and [data-save-outcome] reads ORGANISM_SAVED — the status region existed before the save', async () => {
+  it('(a) open, name, Save: the dialog STAYS OPEN and its own [data-save-outcome] reads ORGANISM_SAVED', async () => {
     const user = userEvent.setup();
     const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
 
     render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
-    // Queried right after render, before any save — the region must already exist, empty.
-    expect(document.querySelector('[data-save-status]')).not.toBeNull();
-    expect(document.querySelector('[data-save-outcome]')).toBeNull();
-
     await user.click(createButton());
-    await screen.findByRole('dialog', { name: 'Organism Editor' });
-    await fillValidDraft(user);
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    // The region is the MODAL's own now (Task 11) — mounted, empty, before any save.
+    expect(saveStatusRegion(dialog)).toBeEmptyDOMElement();
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await fillValidDraft(user);
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
     // Exactly the one sentence — `toHaveTextContent(string)` is a substring match that the
     // zero-rules variant (c) would satisfy too (review 2026-09-22).
-    expect(document.querySelector('[data-save-outcome]')).toHaveTextContent(
-      new RegExp(`^${ORGANISM_SAVED.replace(/[.]/g, '\\.')}$`),
-    );
+    await waitFor(() => {
+      expect(saveStatusRegion(dialog)).toHaveTextContent(
+        new RegExp(`^${ORGANISM_SAVED.replace(/[.]/g, '\\.')}$`),
+      );
+    });
+    // AC3, amended 2026-09-22: Save no longer closes the editor.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('(b) the grid shows the new card in sortLibrary position and the count badge reads the new total — no "loading" reset, list() called exactly twice', async () => {
+  it('(b) Back after a save shows the new card in sortLibrary position, the SAME count-badge node reads the new total (no "loading" reset, list() called exactly twice), and focus returns to the create button', async () => {
     const user = userEvent.setup();
     const mocks = createMockOrganisms();
     const { organisms } = createFakeRepositories({ organisms: mocks });
@@ -571,16 +582,16 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length));
 
-    const countBadgeBefore = screen
-      .getAllByRole('status')
-      .find((el) => /Organisms?$/.test(el.textContent ?? ''))!;
+    const countBadgeBefore = screen.getByRole('status');
     expect(countBadgeBefore).toHaveTextContent(`${mocks.length} Organisms`);
 
     await user.click(createButton());
-    await screen.findByRole('dialog', { name: 'Organism Editor' });
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
     await fillValidDraft(user, 'Aardvark'); // sorts first, case-folded
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saveStatusRegion(dialog)).not.toBeEmptyDOMElement());
 
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => {
       expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length + 1);
@@ -589,16 +600,15 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(headings[0]).toBe('Aardvark');
 
-    const countBadgeAfter = screen
-      .getAllByRole('status')
-      .find((el) => /Organisms?$/.test(el.textContent ?? ''))!;
+    const countBadgeAfter = screen.getByRole('status');
     // The SAME DOM node — a 'loading' reset in between would unmount and remount it.
     expect(countBadgeAfter).toBe(countBadgeBefore);
     expect(countBadgeAfter).toHaveTextContent(`${mocks.length + 1} Organisms`);
     expect(list).toHaveBeenCalledTimes(2);
+    expect(createButton()).toHaveFocus();
   });
 
-  it('(c) zero rules reads both sentences', async () => {
+  it('(c) zero rules reads both sentences, in the still-open dialog', async () => {
     const user = userEvent.setup();
     const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
 
@@ -606,17 +616,20 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
-    await screen.findByRole('dialog', { name: 'Organism Editor' });
-    await user.type(screen.getByRole('textbox', { name: 'Organism Name' }), 'Glider');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(document.querySelector('[data-save-outcome]')).toHaveTextContent(
-      `${ORGANISM_SAVED} ${NO_RULES_WARNING}`,
-    );
+    await waitFor(() => {
+      expect(saveStatusRegion(dialog)).toHaveTextContent(`${ORGANISM_SAVED} ${NO_RULES_WARNING}`);
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('(d) reopening the editor empties the region, and a second save re-fills it', async () => {
+  // Story 4.16, Task 11: the outcome line clears at the START of the next attempt (never a stale
+  // sentence sitting under a fresh one) and a second Save in the SAME session upserts the same
+  // organism — Back adds exactly ONE card, named with the LATEST save.
+  it('(d) a second Save in the same session clears then re-fills the outcome line; Back adds exactly ONE card, with the LATEST name', async () => {
     const user = userEvent.setup();
     const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
 
@@ -624,23 +637,31 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
-    await screen.findByRole('dialog', { name: 'Organism Editor' });
-    await user.type(screen.getByRole('textbox', { name: 'Organism Name' }), 'Glider');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(document.querySelector('[data-save-outcome]')).not.toBeNull();
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    // At least one rule, so the outcome is ORGANISM_SAVED alone, not the zero-rules pair.
+    await fillValidDraft(user, 'Glider');
+    const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saveStatusRegion(dialog)).not.toBeEmptyDOMElement());
 
-    await user.click(createButton());
-    await screen.findByRole('dialog', { name: 'Organism Editor' });
-    expect(document.querySelector('[data-save-outcome]')).toBeNull();
+    await user.type(name, ' Mk II');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(saveStatusRegion(dialog)).toHaveTextContent(
+        new RegExp(`^${ORGANISM_SAVED.replace(/[.]/g, '\\.')}$`),
+      );
+    });
 
-    await user.type(screen.getByRole('textbox', { name: 'Organism Name' }), 'Glider 2');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(document.querySelector('[data-save-outcome]')).not.toBeNull();
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4));
+
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(headings).toContain('Glider Mk II');
+    expect(headings).not.toContain('Glider');
   });
 
-  it('(e) focus is on the create button after a save-close', async () => {
+  it('(e) focus is on the create button after Back following a save', async () => {
     const user = userEvent.setup();
     const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
 
@@ -648,15 +669,17 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
-    await screen.findByRole('dialog', { name: 'Organism Editor' });
-    await user.type(screen.getByRole('textbox', { name: 'Organism Name' }), 'Glider');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saveStatusRegion(dialog)).not.toBeEmptyDOMElement());
 
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(createButton()).toHaveFocus();
   });
 
-  it('(f) a rejected save leaves the region empty, the dialog open, and list() called once', async () => {
+  it('(f) a rejected save leaves the dialog open with the alert visible and no outcome line; list() called once', async () => {
     const user = userEvent.setup();
     const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
     const list = vi.spyOn(organisms, 'list');
@@ -666,30 +689,31 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
-    await screen.findByRole('dialog', { name: 'Organism Editor' });
-    await user.type(screen.getByRole('textbox', { name: 'Organism Name' }), 'Glider');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
-    await screen.findByRole('alert');
+    await within(dialog).findByRole('alert');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(document.querySelector('[data-save-outcome]')).toBeNull();
+    expect(saveStatusRegion(dialog)).toBeEmptyDOMElement();
     expect(list).toHaveBeenCalledTimes(1);
   });
 
-  it('(g) has no axe violations with the outcome line visible', async () => {
+  it('(g) has no axe violations with the outcome line visible in the still-open dialog', async () => {
     const user = userEvent.setup();
     const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    const { container } = render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
-    await screen.findByRole('dialog', { name: 'Organism Editor' });
-    await user.type(screen.getByRole('textbox', { name: 'Organism Name' }), 'Glider');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saveStatusRegion(dialog)).not.toBeEmptyDOMElement());
 
-    const results = await axe(container);
-    expect(results.violations).toEqual([]);
+    // The dialog portals to `document.body`, outside `render()`'s own container — scan the whole
+    // body, the idiom `OrganismEditorModal.test.tsx`'s axe tests already use for this reason.
+    expect((await axe(document.body)).violations).toEqual([]);
   });
 });

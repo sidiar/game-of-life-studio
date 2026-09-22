@@ -31,6 +31,7 @@ import { appendRule, createNewRuleDraft, type RuleDraft } from '@/lib/organisms/
 import { readGridColors } from '@/lib/canvas/themeColors';
 import { projectOrganismForSave } from '@/lib/organisms/organismRecord';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
+import { saveOutcomeMessage } from '@/lib/organisms/saveOutcome';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -68,10 +69,12 @@ export interface OrganismEditorLifecycleProps {
    */
   onExited?(): void;
   /**
-   * The write succeeded (Story 4.16): the parent hook closes the dialog and, once the exit
-   * transition has finished, hands the saved record on to the caller's own `onSaved` (FD4). This
-   * is the SAME close channel as `onClose` from the hook's point of view — a save is the opposite
-   * of discarding, and it must not be guarded.
+   * The write succeeded (Story 4.16). Amended 2026-09-22 (Task 11, AC3): the parent hook now only
+   * STASHES the record — it does NOT close the dialog. The editor stays open so a later Save in
+   * the same session updates the SAME organism (`saveStamp`, below). Only when the user actually
+   * closes (Back / Escape / ✕) does the hook hand the LAST saved record on to the caller's own
+   * `onSaved`, once the exit transition has finished (FD4) — a close without any save in the
+   * session hands nothing on.
    */
   onSaved(organism: Organism): void;
 }
@@ -197,6 +200,22 @@ const SaveErrorLine = styled('p')({
   borderBottom: '1px solid var(--gol-border)',
 });
 
+// Story 4.16, FD5 / Task 11 (2026-09-22): the "toast" is the house's in-flow status line, moved
+// INTO the editor now that Save no longer closes it — verbatim from `<OrganismLibrary>`, which no
+// longer has a publisher for it. Structurally the `ColorPickerField.tsx:380-390` idiom: an
+// always-mounted `role="status"` region whose child mounts with the sentence. Not MUI `Snackbar`,
+// no floating layer, no auto-dismiss.
+const SaveOutcomeLine = styled('p')({
+  margin: '0 0 25px',
+  padding: '10px 14px',
+  fontSize: '12px',
+  lineHeight: 1.5,
+  color: 'var(--gol-text-primary)',
+  background: 'var(--gol-bg-secondary)',
+  borderLeft: '2px solid var(--gol-accent)',
+  overflowWrap: 'anywhere',
+});
+
 /** The control that FIXES the error, for `focus()` — not merely the nearest element. Ids through
  * `CSS.escape` (Story 4.17 seeds them from records). A `pair` error lands on Min: the message
  * names both, the first is where the user starts. */
@@ -244,9 +263,13 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * `validateOrganismDraft(draft)`; an invalid draft flips `saveAttempted` (sticky across value
  * edits, deletes and reorders; cleared only by a structural add — a new rule or a new condition
  * row — in the synchronous commit that follows the add, FD3) and focuses the first error's control.
- * A valid draft now WRITES (Story 4.16): `projectOrganismForSave` → `organisms.save()` → `onSaved`
- * on success, or the in-flow `SaveErrorLine` alert on a rejection — nothing here is transitional
- * any more. (Story 4.13) (UX-DR14) (UX-DR17) (Story 4.14) (Story 4.15) (Story 4.16)
+ * A valid draft now WRITES (Story 4.16): `projectOrganismForSave` → `organisms.save()` → the
+ * in-flow `SaveOutcomeLine` status on success or the `SaveErrorLine` alert on a rejection — the
+ * editor STAYS OPEN either way (AC3, amended 2026-09-22, Task 11: the owner's "match the Battle
+ * Editor" call). A later Save in the same session reuses the first success's id (`saveStamp`), so
+ * it updates the same organism; the parent hook only hands the record on to the Library, and
+ * Back/Escape/✕ are locked while a write is in flight (Task 12), when the editor is eventually
+ * closed. (Story 4.13) (UX-DR14) (UX-DR17) (Story 4.14) (Story 4.15) (Story 4.16)
  */
 export default function OrganismEditorModal({
   open,
@@ -281,15 +304,29 @@ export default function OrganismEditorModal({
   // Story 4.16, AC5 / FD7: the write's own ephemeral UI state (RFC-005 Decision 1 / AR-33) — none
   // of it lives on the draft. `null` is "nothing to report", never `''`.
   const [saveError, setSaveError] = useState<string | null>(null);
-  // AC2: Save is `disabled` for the duration of the write and — review 2026-09-22 — stays held
-  // after a SUCCESSFUL one, until the parent unmounts this modal: the dialog is still mounted and
-  // interactive for the ~195 ms exit fade, and a released button there let a double-click or a
-  // second Enter write a second organism with a fresh id. Only a FAILED write releases it (the
-  // dialog stays open and Save must be usable again). `savingRef` is the re-entrancy guard a
-  // second click races against — `organisms.save()` is a whole-collection read-modify-write over
-  // one key (Story 2.13 AC4's reason), so two interleaved writes can lose one outright.
+  // AC2: Save is `disabled` for the duration of the write. Task 11 (2026-09-22) supersedes the
+  // earlier review's "hold after a success until unmount": the dialog no longer closes on save,
+  // so there is no exit-fade window for a released button to be double-clicked through — Save is
+  // released on BOTH outcomes, in `finally`. `savingRef` is still the re-entrancy guard a second
+  // click races against — `organisms.save()` is a whole-collection read-modify-write over one key
+  // (Story 2.13 AC4's reason) — and, as of Task 12, the guard the close channel checks too.
   const [isSaving, setIsSaving] = useState(false);
   const savingRef = useRef(false);
+  // Story 4.16, AC3 (Task 11): the id a later Save in THIS session reuses, so a second write
+  // upserts the same organism instead of minting a sibling — `organisms.save()` upserts by id.
+  // Set once, on the first success; read back (never overwritten with a fresh uuid) forever after.
+  const [saveStamp, setSaveStamp] = useState<{ id: string } | null>(null);
+  // The success half of the in-flow outcome pair; `saveError` is the failure half. `null` is
+  // "nothing to report" — the same idiom as `saveError`. Never both set at once (Task 11).
+  const [saveOutcome, setSaveOutcome] = useState<string | null>(null);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
+  // Bumped once per settled attempt (success or failure) so an effect can move focus back to Save
+  // AFTER the DOM has committed `disabled={false}` — a synchronous `focus()` call, before that
+  // commit, targets a still-disabled button and is a spec-mandated no-op (the same ordering
+  // problem the `focusRequest` effect below solves for the refusal branch). Keyed on a counter,
+  // not on `isSaving` itself, so the initial mount (already `isSaving === false`) never steals
+  // focus from wherever the page put it.
+  const [saveSettledSeq, setSaveSettledSeq] = useState(0);
   const shellRef = useRef<HTMLDivElement>(null);
   // Per render, unmemoised: `library` is the caller's unmemoised `sorted` (a `useMemo` keyed on it
   // would never hit), and the scan is 0.02–0.04 ms at 1,000 organisms (Story 3.7's `library-filter`
@@ -373,15 +410,18 @@ export default function OrganismEditorModal({
   // hit exactly as often as the draft changes.
   const errors = validateOrganismDraft(draft);
 
-  // Story 4.16, AC1/AC2/AC5, FD3/FD4/FD7: the whole save, hoisted into a function that reports its
-  // OUTCOME (the `BattlePage.tsx:750-848` shape, trimmed to this modal's needs) — `handleSave`
-  // below stays the fire-and-forget entry point the Save `<Button>` has always called.
+  // Story 4.16, AC1/AC2/AC3/AC5, FD3/FD4/FD7, Task 11: the whole save, hoisted into a function
+  // that reports its OUTCOME (the `BattlePage.tsx:750-848` shape, trimmed to this modal's needs)
+  // — `handleSave` below stays the fire-and-forget entry point the Save `<Button>` has always
+  // called.
   const saveOrganism = useCallback(async (): Promise<void> => {
     if (savingRef.current) return;
     const first = errors[0];
     // Cleared at the START of every attempt, success or refusal — an identical message
-    // re-rendered in place would not re-announce through `role="alert"` (the Story 2.13 idiom).
+    // re-rendered in place would not re-announce through `role="alert"`/`role="status"` (the
+    // Story 2.13 idiom). Never both lines mounted at once.
     setSaveError(null);
+    setSaveOutcome(null);
     if (first !== undefined) {
       setSaveAttempted(true);
       setFocusRequest((r) => ({ seq: (r?.seq ?? 0) + 1, target: first.target }));
@@ -389,36 +429,60 @@ export default function OrganismEditorModal({
     }
     savingRef.current = true;
     setIsSaving(true);
-    let record: Organism;
+    let record: Organism | null = null;
     try {
       // Minted INSIDE `try` (Story 2.16 review lesson): a throw above it would skip the release
-      // below and wedge `isSaving`/`savingRef` forever.
-      const id = crypto.randomUUID();
+      // below and wedge `isSaving`/`savingRef` forever. Reused from `saveStamp` on every attempt
+      // AFTER the first successful one in this session (Task 11) — `organisms.save()` upserts by
+      // id, so a later Save updates the organism this editor already created instead of minting a
+      // sibling.
+      const id = saveStamp?.id ?? crypto.randomUUID();
       record = await projectOrganismForSave(draft, id);
       await organisms.save(record);
     } catch (error) {
       setSaveError(saveFailureMessage(error, 'organism'));
-      // The ONLY release (review 2026-09-22): the dialog stays open on a failure and Save must be
-      // usable again. A success deliberately leaves `isSaving`/`savingRef` held — the parent's
-      // `onSaved` starts the close, the dialog is still mounted and interactive through the exit
-      // fade, and a released button there let a double-click / second Enter write a second
-      // organism (a whole-collection read-modify-write, racing the first). The unmount is the
-      // release.
+      record = null;
+    } finally {
+      // Released on BOTH outcomes (Task 11 supersedes the earlier review's "hold after success"):
+      // the dialog no longer unmounts on a successful write, so there is no exit-fade window for a
+      // released button to be double-clicked through — a second click after success is a
+      // deliberate upsert of the same id, refused only by `savingRef` while THIS write is pending.
       savingRef.current = false;
       setIsSaving(false);
-      return;
+      setSaveSettledSeq((n) => n + 1);
     }
-    // OUTSIDE the `try`: once `organisms.save()` has resolved the record IS in storage, and a throw
-    // from the parent's own handling must not be reported as "this organism could not be saved".
-    // Escape/Close/Back during an in-flight write is allowed: the write still lands and still
-    // reports, nothing is lost, and the outcome is announced after a close the user already asked
-    // for (the hook hands a late record on even once the dialog has exited).
-    onSaved(record);
-  }, [errors, draft, organisms, onSaved]);
+    // OUTSIDE the `try`/`catch`: once `organisms.save()` has resolved the record IS in storage,
+    // and a throw from `onSaved`'s own handling must not be reported as "this organism could not
+    // be saved". Back/Escape/✕ are locked while a write is in flight (Task 12), so there is no
+    // longer a "closed before this resolves" case to reason about.
+    if (record !== null) {
+      setSaveStamp({ id: record.id });
+      setSaveOutcome(saveOutcomeMessage(record));
+      onSaved(record);
+    }
+  }, [errors, draft, organisms, onSaved, saveStamp]);
 
   const handleSave = useCallback(() => {
     void saveOrganism();
   }, [saveOrganism]);
+
+  // Story 4.16, AC3, Task 12 (owner's review decision, 2026-09-22, option (b)): Escape and the
+  // backdrop (unreachable under `fullScreen`, kept for documentation) both route through the
+  // dialog's `onClose`; the ✕ button calls it directly. One guarded handler for both, rather than
+  // checking `savingRef.current` twice — the Back button below gets `disabled={isSaving}` instead,
+  // since it is a visible control the user can see go inert, unlike Escape or a backdrop click.
+  const handleRequestClose = useCallback(() => {
+    if (savingRef.current) return;
+    onClose();
+  }, [onClose]);
+
+  // Story 4.16, AC3: focus returns to Save once the write settles, success or failure — while
+  // `isSaving` the button is `disabled`, which drops focus to `<body>` (the HTML focus-fixup
+  // rule), and the editor is still the user's place.
+  useEffect(() => {
+    if (saveSettledSeq === 0) return;
+    saveButtonRef.current?.focus();
+  }, [saveSettledSeq]);
 
   // Keyed on `focusRequest`, not `draft`: a keystroke elsewhere must not steal focus, and a
   // repeated first error (the same control invalid across two Saves) still needs a fresh request
@@ -438,11 +502,11 @@ export default function OrganismEditorModal({
       fullScreen
       open={open}
       // Fires for Escape — and for a backdrop click, which a fullScreen dialog cannot receive
-      // (the paper covers the backdrop). It is the SINGLE close channel, the same one the two
-      // header buttons call directly, and the one Story 4.23's unsaved-changes guard will insert
-      // itself in front of. `disableEscapeKeyDown` was removed from Modal in MUI v9
-      // (`<DeleteBattleDialog>` records the finding) — there is no prop-level alternative.
-      onClose={onClose}
+      // (the paper covers the backdrop). Routed through `handleRequestClose` (Task 12), which is a
+      // no-op while a write is in flight — `disableEscapeKeyDown` was removed from Modal in MUI v9
+      // (`<DeleteBattleDialog>` records the finding), so this guard is the only lock available.
+      // Still the one channel Story 4.23's unsaved-changes guard will insert itself in front of.
+      onClose={handleRequestClose}
       onTransitionExited={onExited}
       // The parent hook manages focus for every close path. MUI's default restore-to-trigger
       // reads `document.activeElement` at OPEN time, and WebKit does not focus a `<button>` on
@@ -459,7 +523,15 @@ export default function OrganismEditorModal({
     >
       <Shell ref={shellRef}>
         <EditorHeader>
-          <BackButton type="button" onClick={onClose}>
+          <BackButton
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            // Task 12: locked while a write is in flight, the `BattlePage.tsx:1010`
+            // `backDisabled={isSaving}` idiom. This styled button carries no `transition` of its
+            // own (only the `:hover`/`:focus-visible` pseudo-classes do), so — unlike Save's MUI
+            // `Button` — there is no mid-fade axe trap to override here.
+          >
             {/* Decorative glyph; the accessible name must be exactly the label — "left arrow back
                 to library" is noise. The house `←`, not the AC's `◄` ASCII stand-in (FD3). */}
             <span aria-hidden="true">←</span> {backLabelFor(origin)}
@@ -468,32 +540,43 @@ export default function OrganismEditorModal({
               a second instance's id collision is not a reachable state. */}
           <Title id={TITLE_ID}>Organism Editor</Title>
           <Actions>
-            {/* Story 4.13's gate, Story 4.16's write: `handleSave` runs `validateOrganismDraft` on
-                click. An invalid draft is refused (errors shown, focus moved, nothing closed,
-                nothing written); a valid draft writes through `organisms.save()` — success closes
-                the editor and reports through the Library (`onSaved`); a rejection surfaces as the
-                in-flow `SaveErrorLine` alert below and the dialog stays open. `disabled` from the
-                click until a FAILED write releases it or a successful one unmounts the modal
-                (AC2, FD8; review 2026-09-22) — never at rest. */}
+            {/* Story 4.13's gate, Story 4.16's write, Task 11's stay-open amendment: `handleSave`
+                runs `validateOrganismDraft` on click. An invalid draft is refused (errors shown,
+                focus moved, nothing closed, nothing written); a valid draft writes through
+                `organisms.save()` — success publishes the in-flow `SaveOutcomeLine` status and
+                keeps the editor open (a later Save upserts the same organism); a rejection
+                surfaces as the `SaveErrorLine` alert below. Either way the dialog stays open and
+                focus returns to this button once the write settles. `disabled` from the click
+                until the write settles, success or failure (AC2, AC3, FD8) — never at rest. */}
             <Button
               type="button"
               variant="contained"
               onClick={handleSave}
               disabled={isSaving}
               sx={SAVE_SX}
+              ref={saveButtonRef}
             >
               Save
             </Button>
             <IconButton
               type="button"
               aria-label="Close"
-              onClick={onClose}
+              onClick={handleRequestClose}
               sx={{ color: 'var(--gol-text-primary)' }}
             >
               <span aria-hidden="true">✕</span>
             </IconButton>
           </Actions>
         </EditorHeader>
+        {/* Story 4.16, AC3, FD5, Task 11: the in-flow outcome region — always mounted, between the
+            header and the body, beside `SaveErrorLine`. The child mounts with the sentence (the
+            `ColorPickerField.tsx:380-390` idiom); cleared at the START of every attempt so a
+            repeat success re-announces. Never both this and the alert line at once. */}
+        <div role="status" data-save-status>
+          {saveOutcome !== null && (
+            <SaveOutcomeLine data-save-outcome>{saveOutcome}</SaveOutcomeLine>
+          )}
+        </div>
         {/* Story 4.16, AC5, FD7: a refused write, reported inside the editor beside the untouched
             draft. `role="alert"` (assertive, not `status`): a failed save IS an error, unlike the
             honest-but-not-yet-persisted notice this block replaces. Conditionally mounted and

@@ -302,9 +302,11 @@ describe('OrganismEditorModal', () => {
     const conwaysColorName = resolvePaletteColor(CONWAYS_CLASSIC.colorToken).name;
     await user.click(within(dialog).getByRole('radio', { name: conwaysColorName }));
 
-    expect(within(dialog).getByRole('status')).toHaveTextContent(
-      `${CONWAYS_CLASSIC.name} already uses this color.`,
-    );
+    // Story 4.16 Task 11 added a SECOND `role="status"` region to this dialog (the save outcome
+    // line) — scope to the colour-reuse one by its own `data-*` hook, never `getByRole('status')`.
+    const reuseStatus = dialog.querySelector('[data-color-reuse-status]');
+    if (reuseStatus === null) throw new Error('the color-reuse status region is not in the dialog');
+    expect(reuseStatus).toHaveTextContent(`${CONWAYS_CLASSIC.name} already uses this color.`);
     expect(dialog.querySelector('[data-selected-name]')).toHaveTextContent(conwaysColorName);
     const selectedSwatch = dialog.querySelector('[data-selected-swatch]') as HTMLElement | null;
     if (selectedSwatch === null) throw new Error('the selected swatch is not in the dialog');
@@ -333,7 +335,10 @@ describe('OrganismEditorModal', () => {
   it('the M6 default is silent at open (Story 4.9)', () => {
     mountModal();
 
-    expect(within(screen.getByRole('dialog')).getByRole('status')).toBeEmptyDOMElement();
+    const dialog = screen.getByRole('dialog');
+    const reuseStatus = dialog.querySelector('[data-color-reuse-status]');
+    if (reuseStatus === null) throw new Error('the color-reuse status region is not in the dialog');
+    expect(reuseStatus).toBeEmptyDOMElement();
   });
 
   // Story 4.9, FD2: a default that COLLIDES (every token in use) is still silent — the seed
@@ -356,7 +361,12 @@ describe('OrganismEditorModal', () => {
     mountModal({ library: fullLibrary });
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
+    const reuseStatus = () => {
+      const el = dialog.querySelector('[data-color-reuse-status]');
+      if (el === null) throw new Error('the color-reuse status region is not in the dialog');
+      return el;
+    };
+    expect(reuseStatus()).toBeEmptyDOMElement();
     expect(dialog.querySelector('[data-selected-name]')).toHaveTextContent(PALETTE[1].name);
 
     await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
@@ -366,10 +376,10 @@ describe('OrganismEditorModal', () => {
       'data-in-use',
       'true',
     );
-    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
+    expect(reuseStatus()).toBeEmptyDOMElement();
     await user.click(within(dialog).getByRole('radio', { name: PALETTE[0].name }));
 
-    expect(within(dialog).getByRole('status')).toHaveTextContent(
+    expect(reuseStatus()).toHaveTextContent(
       `${fullLibrary[0].name} and Extra Sky already use this color.`,
     );
   });
@@ -1151,7 +1161,7 @@ describe('OrganismEditorModal', () => {
       expect(rule1).toBeInTheDocument();
     });
 
-    it('(25) re-entrancy: two rapid clicks call save once; Save is disabled while pending and STAYS held after a success', async () => {
+    it('(25) re-entrancy: two rapid clicks call save once; Save is disabled while pending and enabled again after a success', async () => {
       const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
       let resolveSave!: () => void;
       const saveSpy = vi.spyOn(organisms, 'save').mockImplementation(
@@ -1180,17 +1190,17 @@ describe('OrganismEditorModal', () => {
         resolveSave();
       });
       await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-      // Review 2026-09-22: NOT re-enabled after a success. The parent is closing the dialog and
-      // it stays mounted and interactive through the exit fade; a released button there let a
-      // double-click write a second organism. The unmount is the release (a failure releases —
+      // Task 11 (2026-09-22) supersedes the earlier review's "hold after success": the dialog no
+      // longer closes on save, so there is no exit-fade window for a released button to be
+      // double-clicked through — Save is released after EVERY outcome (a failure already did —
       // (23)/(26) pin that).
-      expect(save).toBeDisabled();
+      await waitFor(() => expect(save).toBeEnabled());
     });
 
-    // Review 2026-09-22: the double-click that (25) guards against, end to end — the second click
-    // lands AFTER the first write has resolved (the fake resolves in microtasks) while the modal is
-    // still mounted, exactly the exit-fade window. One record, not two.
-    it('(25b) a second Save after a successful write, with the modal still mounted, writes nothing', async () => {
+    // Story 4.16, Task 11 (2026-09-22): a second Save in the same session — the id is REUSED
+    // (`saveStamp`), so `organisms.save()` upserts the same organism rather than minting a
+    // sibling. One record in the library, not two.
+    it('(25b) a second Save after a successful write updates the SAME organism — same id, list() grew by ONE', async () => {
       const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
       const saveSpy = vi.spyOn(organisms, 'save');
       const onSaved = vi.fn();
@@ -1203,17 +1213,19 @@ describe('OrganismEditorModal', () => {
 
       await user.click(save);
       await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-      expect(save).toBeDisabled();
+      await waitFor(() => expect(save).toBeEnabled());
 
-      // A disabled button is inert to a real click; `fireEvent` bypasses that, so this also pins
-      // the `savingRef` guard behind the `disabled` attribute.
-      fireEvent.click(save);
-      await user.keyboard('{Enter}');
-      await act(async () => {});
+      const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+      await user.type(name, ' Mk II');
+      await user.click(save);
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
 
-      expect(saveSpy).toHaveBeenCalledTimes(1);
-      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(saveSpy).toHaveBeenCalledTimes(2);
+      const firstId = (saveSpy.mock.calls[0]?.[0] as Organism).id;
+      const secondId = (saveSpy.mock.calls[1]?.[0] as Organism).id;
+      expect(secondId).toBe(firstId);
       expect((await organisms.list()).length).toBe(LIBRARY.length + 1);
+      expect(await organisms.load(firstId)).toMatchObject({ name: 'Glider Mk II' });
     });
 
     it('(26) crypto.randomUUID throwing reports the generic sentence and releases isSaving (Save is usable again)', async () => {
@@ -1320,6 +1332,207 @@ describe('OrganismEditorModal', () => {
 
       expect(dish?.getAttribute('data-status')).toBe(statusBefore);
       expect(dish?.getAttribute('data-cycle')).toBe(cycleBefore);
+    });
+
+    // Story 4.16, Task 11 (AC3): the outcome line is the modal's OWN region now (moved from the
+    // Library) — a valid save publishes it in place, the dialog never closes.
+    it('(31) a valid save publishes the outcome line in the dialog, which stays open', async () => {
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      mountModal({ organisms, onSaved });
+
+      const dialog = screen.getByRole('dialog');
+      await fillValidDraft(user, dialog);
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+      expect(dialog).toBeInTheDocument();
+      expect(dialog.querySelector('[data-save-outcome]')).toHaveTextContent(
+        'Organism saved successfully.',
+      );
+    });
+
+    // Story 4.16, Task 11: the region clears at the START of the NEXT attempt (never both lines
+    // mounted at once) and re-fills once that attempt settles.
+    it('(32) the outcome line clears at the start of the next attempt and a failure never shows both lines', async () => {
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      vi.spyOn(organisms, 'save').mockRejectedValueOnce(new QuotaExceededError('gol:organisms'));
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      mountModal({ organisms, onSaved });
+
+      const dialog = screen.getByRole('dialog');
+      await fillValidDraft(user, dialog);
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+
+      await within(dialog).findByRole('alert');
+      expect(dialog.querySelector('[data-save-outcome]')).toBeNull();
+
+      await user.click(save);
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+      expect(dialog.querySelector('[data-save-error]')).toBeNull();
+      expect(dialog.querySelector('[data-save-outcome]')).toHaveTextContent(
+        'Organism saved successfully.',
+      );
+    });
+
+    // Story 4.16, Task 11: focus returns to Save once the write settles — while `isSaving` the
+    // button is `disabled`, which drops focus to `<body>` (the HTML focus-fixup rule).
+    it('(33) focus returns to Save once a successful write settles', async () => {
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      let resolveSave!: () => void;
+      vi.spyOn(organisms, 'save').mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave = resolve;
+          }),
+      );
+      const user = userEvent.setup();
+      mountModal({ organisms });
+
+      const dialog = screen.getByRole('dialog');
+      await fillValidDraft(user, dialog);
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+
+      await waitFor(() => expect(save).toBeDisabled());
+      // jsdom does not implement the browser's "a disabled control drops focus to <body>"
+      // fixup (unlike a real engine — the fact `[Review][Defer]` records for this same button),
+      // so simulate it directly: the fact under test is the EFFECT that restores focus, not the
+      // browser's own blur.
+      save.blur();
+      expect(save).not.toHaveFocus();
+
+      await act(async () => {
+        resolveSave();
+      });
+      await waitFor(() => expect(save).toHaveFocus());
+    });
+
+    it('(34) focus returns to Save once a rejected write settles', async () => {
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      let resolveSave!: () => void;
+      vi.spyOn(organisms, 'save').mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            resolveSave = () => reject(new QuotaExceededError('gol:organisms'));
+          }),
+      );
+      const user = userEvent.setup();
+      mountModal({ organisms });
+
+      const dialog = screen.getByRole('dialog');
+      await fillValidDraft(user, dialog);
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+
+      await waitFor(() => expect(save).toBeDisabled());
+      save.blur();
+      expect(save).not.toHaveFocus();
+
+      await act(async () => {
+        resolveSave();
+      });
+      await within(dialog).findByRole('alert');
+      await waitFor(() => expect(save).toHaveFocus());
+    });
+
+    // Story 4.16, Task 12 (owner's review decision, 2026-09-22, option (b)): the close is locked
+    // while a write is in flight — Escape, Back and the ✕ button all become no-ops.
+    describe('close is locked while saving (Task 12)', () => {
+      it('Escape does not close the dialog while a write is in flight, and closes once it settles', async () => {
+        const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+        let resolveSave!: () => void;
+        vi.spyOn(organisms, 'save').mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveSave = resolve;
+            }),
+        );
+        const onClose = vi.fn();
+        const user = userEvent.setup();
+        mountModal({ organisms, onClose });
+
+        const dialog = screen.getByRole('dialog');
+        await fillValidDraft(user, dialog);
+        await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+
+        await user.keyboard('{Escape}');
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        await act(async () => {
+          resolveSave();
+        });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+
+        await user.keyboard('{Escape}');
+        expect(onClose).toHaveBeenCalledTimes(1);
+      });
+
+      it('a Back click does not close the dialog while a write is in flight, and Back is disabled meanwhile', async () => {
+        const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+        let resolveSave!: () => void;
+        vi.spyOn(organisms, 'save').mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveSave = resolve;
+            }),
+        );
+        const onClose = vi.fn();
+        const user = userEvent.setup();
+        mountModal({ organisms, onClose });
+
+        const dialog = screen.getByRole('dialog');
+        await fillValidDraft(user, dialog);
+        await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+        const back = within(dialog).getByRole('button', { name: 'Back to Library' });
+        await waitFor(() => expect(back).toBeDisabled());
+
+        // A disabled button is inert to a real click; `fireEvent` bypasses that, pinning the
+        // `disabled` attribute itself, not merely a guard inside the handler.
+        fireEvent.click(back);
+        expect(onClose).not.toHaveBeenCalled();
+
+        await act(async () => {
+          resolveSave();
+        });
+        await waitFor(() => expect(back).toBeEnabled());
+
+        await user.click(back);
+        expect(onClose).toHaveBeenCalledTimes(1);
+      });
+
+      it('the ✕ button does not close the dialog while a write is in flight', async () => {
+        const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+        let resolveSave!: () => void;
+        vi.spyOn(organisms, 'save').mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveSave = resolve;
+            }),
+        );
+        const onClose = vi.fn();
+        const user = userEvent.setup();
+        mountModal({ organisms, onClose });
+
+        const dialog = screen.getByRole('dialog');
+        await fillValidDraft(user, dialog);
+        await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+
+        await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+        expect(onClose).not.toHaveBeenCalled();
+
+        await act(async () => {
+          resolveSave();
+        });
+        await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+      });
     });
   });
 
