@@ -1,3 +1,14 @@
+/**
+ * ⚠️ `package.json` declares `"sideEffects": false` for this package, which is only true while no
+ * module under `src/` registers anything at import time (Story 5.3, owner's decision 2026-09-22).
+ * Module-level work today is limited to defining and freezing values — including one parse,
+ * `DEFAULT_SETTINGS = Object.freeze(SettingsSchema.parse({}))`, whose result nothing outside its
+ * own module depends on at import time. Add an import-time registration, polyfill or side effect
+ * anything relies on, and the bundler will drop it from any route that does not import it by name —
+ * silently, with every unit test still green. JSON takes no comment, so the invariant lives here, at
+ * the barrel every consumer goes through.
+ */
+
 export {
   CELL_STATES,
   CONDITION_PROPERTIES,
@@ -46,3 +57,30 @@ export type { PrunedBattleGrid } from './battleProjection';
 // Story 4.17 for the FR-1.3 edit gate; Story 4.19 extends the same module.
 export { buildUsageIndex } from './usageIndex';
 export type { UsageIndex } from './usageIndex';
+
+// The RFC-006 export envelope (Story 5.3) — the schema of record for every file this app writes,
+// and the dense-at-rest <-> sparse-on-the-wire conversion around it (AR-9 / AR-10). `IsoTimestamp`
+// stays out of the barrel: it is shared between two files in THIS package and no other package
+// parses a bare timestamp.
+export {
+  BattleExportSchema,
+  EXPORT_KINDS,
+  PlacedCellSchema,
+  WorkspaceExportSchema,
+} from './workspaceExportSchema';
+export type {
+  BattleExport,
+  BattleExportWire,
+  ExportKind,
+  PlacedCell,
+  WorkspaceExport,
+  WorkspaceExportWire,
+} from './workspaceExportSchema';
+
+export {
+  fromBattleExport,
+  fromEnvelope,
+  toBattleExport,
+  toEnvelope,
+} from './workspaceExportProjection';
+export type { ExportMeta } from './workspaceExportProjection';

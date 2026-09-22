@@ -1,0 +1,897 @@
+---
+baseline_commit: aa8ff8e1a79e607ed8b707a757ff00f042fa1047
+---
+
+# Story 5.3: Export Envelope & Serializer
+
+Status: done
+
+<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+
+## Story
+
+As a developer,
+I want a versioned serializer for all file exchange,
+so that every exported file is self-describing and future-migratable.
+
+## Acceptance Criteria
+
+From `epics.md#Story 5.3: Export Envelope & Serializer` (`epics.md:1344-1356`), decomposed into what
+a reviewer can check independently. AC6–AC9 are repo-derived: obligations the shipped schemas, the
+`AppRepositories` seam, the coverage gates and two standing forward-references already impose on
+"the story that mints the envelope".
+
+1. **`WorkspaceExportSchema` is the versioned envelope, and it is the schema of record for every
+   export** (AR-10, FR-6.3). Fields, exactly: `formatVersion` (a `z.literal(CURRENT_FORMAT_VERSION)`
+   — the constant already exported from `@gol/domain`, not a new `1`), `appVersion` (provenance
+   string, never branched on), `exportedAt` (ISO timestamp), `kind` (`'workspace' | 'battle'`),
+   `organisms` (`z.array(OrganismSchema)`), `battles` (`z.array(BattleExportSchema)`). No other
+   top-level field (RFC-006 Decision 2, `RFC-006:104-158`).
+
+2. **`BattleExportSchema` carries the battle sparsely: `{ id, name, gridDimensions, cells,
+   createdAt, updatedAt }`** — `gridDimensions` reusing `EditableGridPresetSchema` (Decision G.1;
+   the field is deliberately *not* spelled `gridSize` — that is the at-rest name), `cells` an array
+   of `{ x, y, organismId }`, and **no roster field** (Decision H.2 — the envelope carries cells
+   only). Its `superRefine` rejects, each with its own `path`: a cell outside
+   `gridDimensions` (`x >= cols || y >= rows`), duplicate `(x,y)` coordinates (corrupt, never
+   last-wins), and more than 255 distinct `organismId`s in one battle (Decision G.2/G.3).
+
+3. **Grids convert dense-at-rest → sparse-on-the-wire at the serializer boundary, and back**
+   (AR-9). Two pure functions in `@gol/domain`: `toBattleExport(battle)` walks the dense
+   `gridState` and emits one cell per non-zero value, and `fromBattleExport(battleExport)` rebuilds
+   `gridState` + `organismIds` from the cells alone. ⚠️ **The `cells` array is ordered by ascending
+   roster ref (row-major within each organism), and the inverse assigns refs by order of first
+   appearance in `cells`** — that ordering contract is what makes AC4 hold for *every* schema-valid
+   battle rather than only for some (FD3). It is not a cosmetic choice and must not be "simplified"
+   to a single row-major pass.
+
+4. **Round-trip identity holds: serialize → parse → validate reproduces the exact workspace**
+   (AR-44), pinned three ways (AR-41):
+   - a fast-check property in `@gol/domain` over generated battles: `fromBattleExport(toBattleExport(b))`
+     deep-equals `b`, including `organismIds` order and every cell value;
+   - a whole-envelope test that goes through real JSON:
+     `fromEnvelope(WorkspaceExportSchema.parse(JSON.parse(JSON.stringify(toEnvelope(…)))))`
+     deep-equals the input battles and organisms — `Date` timestamps in, `Date` timestamps out
+     (FD4);
+   - the **sparse↔typed** composition in `@gol/simulation`, closing `deferred-work.md:392`:
+     `gridToDense ∘ fromBattleExport ∘ toBattleExport ∘ gridFromDense` is the identity on
+     `occupant`. Composed from the two existing halves — no third converter (FD8).
+
+5. **Settings are structurally absent from every envelope** (AR-12 / Decision F.1). Pinned, not
+   asserted in prose: `WorkspaceExportSchema` has no `settings` key, and a hand-built envelope
+   carrying one parses successfully with the field **stripped** — `'settings' in parsed === false`.
+   `SettingsSchema` is not imported by any file this story adds.
+
+6. **`WorkspaceSerializer` exists as a factory over the injected ports and exports the workspace
+   kind.** `createWorkspaceSerializer({ repos, appVersion, now })` in `@gol/persistence` returns a
+   `WorkspaceSerializer` whose `exportWorkspace()` reads `battles.listFull()` + `organisms.list()`
+   (both already on the interface) and returns the wire envelope. `exportBattle(id)` is **out of
+   scope** — its organism set is the Story 5.4 closure (`lane-gates.yaml` already gates 5.4 on
+   4.19); `parse`/`migrate`/`import` are Stories 5.7/5.8. The factory takes `appVersion` and `now`
+   as injected values, never reading a clock or a constant of its own (FD5).
+
+7. **This story adds no `apps/web` file and no `apps/web` import.** The serializer is wired to the
+   UI by Story 5.5; nothing under `apps/web` references it yet. Consequence, and an AC because it
+   is checkable: **no `budgetGzipKb` moves, and every one of the five `check-bundle-size.mjs`
+   routes is within the tool's precision of a FRESH `main` build** (amended 2026-09-22 by the
+   owner's decision on FD10 — the original "byte-identical to the 5.2 figures" wording assumed
+   staying out of `apps/web` kept the bundle still, which is false: `apps/web` imports the
+   `@gol/domain` barrel, so a new module enters its graph the moment `index.ts` re-exports it.
+   The mechanism that keeps the routes flat is `"sideEffects": false` on `@gol/domain`, not a
+   budget move; at the tool's one decimal, two builds of the same source already differ by
+   ±0.1 KB, so strict byte-identity is not achievable by any change including no change at all).
+   `/battle` has 0.6 KB of headroom and a raise is what Sidiar refuses (`deferred-work.md:397`).
+
+8. **The two standing forward-references to "Story 5.3" that this story can discharge, are
+   discharged in writing.** (a) `PALETTE_VERSION` is **not** stamped into the envelope
+   (`1-7-palette-token-registry-display-color-lut.md:271` named 5.3 as the owner of that call) —
+   FD7 records why, and the discharge is recorded in `deferred-work.md` (the archived 1.7 file is
+   left untouched — Task 5). (b) `deferred-work.md:392`'s
+   sparse↔typed round-trip lands as AC4's third bullet and its entry is struck. Neither is left as
+   a silent omission.
+
+9. **Coverage gates pass at their real tiers with no config change.** Everything this story adds to
+   `@gol/domain` sits under the **≥90% per-file** gate, and everything added to `@gol/persistence`
+   under the ~80% aggregate one; `npm run ci:dev` exits 0 and its result is reported, not inferred.
+
+## Tasks / Subtasks
+
+- [x] **Task 1 — The envelope schemas in `@gol/domain`** (AC: 1, 2, 5, 9)
+  - [x] New `packages/domain/src/workspaceExportSchema.ts`. Import `CURRENT_FORMAT_VERSION` from
+        `./settingsSchema`, `EditableGridPresetSchema` + `OrganismSchema` from `./organismSchema`,
+        `MAX_BATTLE_NAME_LENGTH` + `IsoTimestamp` from `./battleSchema`.
+  - [x] **Export `IsoTimestamp` from `battleSchema.ts`** (it is module-private today, line 10). Do
+        not re-declare it here — `battleSchema.ts:4-9`'s own comment already says RFC-006 spells
+        these fields as ISO strings and that this is "what lets the two schemas share a value".
+        Keep it out of the package barrel unless a second package needs it (it does not).
+  - [x] `export const EXPORT_KINDS = ['workspace', 'battle'] as const;` +
+        `export const PlacedCellSchema = z.object({ x: z.number().int().min(0), y:
+        z.number().int().min(0), organismId: z.string().min(1) })`. ⚠️ `.min(1)` on `organismId`,
+        matching `BattleSchema.organismIds`'s element schema — RFC-006's bare `z.string()` is
+        looser than the entity it round-trips to.
+  - [x] `export const BattleExportSchema = z.object({ id: z.uuid(), name:
+        z.string().max(MAX_BATTLE_NAME_LENGTH), gridDimensions: EditableGridPresetSchema, cells:
+        z.array(PlacedCellSchema), createdAt: IsoTimestamp, updatedAt: IsoTimestamp })
+        .superRefine(…)` with the three AC2 issues, each carrying `path: ['cells']` and a message
+        in the house voice (see `battleSchema.ts:33-72` for the exact shape and tone). Cite
+        `(Decision G.2)` / `(Decision G.3)` / `(Decision H.2)` so `spec:check` resolves them.
+  - [x] `export const WorkspaceExportSchema = z.object({ formatVersion:
+        z.literal(CURRENT_FORMAT_VERSION), appVersion: z.string(), exportedAt: IsoTimestamp, kind:
+        z.enum(EXPORT_KINDS), organisms: z.array(OrganismSchema), battles:
+        z.array(BattleExportSchema) })`. A comment above it states the absent field explicitly —
+        settings never travel, in either kind (Decision F.1 / AR-12) — because the invariant is
+        the *absence* and a reader cannot see it otherwise.
+  - [x] Types: `export type PlacedCell = z.infer<typeof PlacedCellSchema>`,
+        `BattleExport`/`WorkspaceExport` = `z.infer<…>` (hydrated `Date`s), and
+        `export type WorkspaceExportWire = z.input<typeof WorkspaceExportSchema>` — the
+        `JSON.stringify`-ready shape (FD4). `export type ExportKind = (typeof EXPORT_KINDS)[number]`.
+  - [x] ⚠️ Zod **v4** spellings: `z.uuid()`, `z.iso.datetime()`, `ctx.addIssue({ code: 'custom',
+        path, message })`. RFC-006's `z.string().uuid()` / `z.string().datetime()` are v3 and do
+        not exist on this install — the repo's own schemas are the reference, not the RFC snippet.
+  - [x] `workspaceExportSchema.test.ts`: `formatVersion: 2` is rejected (the literal, not a range);
+        a `kind` outside the two is rejected; an out-of-bounds cell, a duplicate coordinate pair,
+        and a 256-distinct-id battle each fail with the expected `path`; a legal 255-distinct-id
+        battle passes (the boundary is `>`, not `>=`); `exportedAt` comes back a `Date`;
+        **AC5**: an envelope literal carrying `settings: {…}` parses and the result has no
+        `settings` key (`expect('settings' in parsed).toBe(false)`).
+
+- [x] **Task 2 — Dense↔sparse projection in `@gol/domain`** (AC: 3, 4, 9)
+  - [x] New `packages/domain/src/workspaceExportProjection.ts`, sitting to `workspaceExportSchema.ts`
+        as `battleProjection.ts` sits to `battleSchema.ts` (schema vs. projection — the established
+        split). Read `battleProjection.ts`'s header first: its ref-remap hazard is the same hazard
+        in the other direction.
+  - [x] `export function toBattleExport(battle: Battle): z.input<typeof BattleExportSchema>` —
+        one row-major pass bucketing cells by ref (`buckets[ref].push({ x: col, y: row,
+        organismId: battle.organismIds[ref - 1] })`), then concatenate buckets `1..organismIds.length`.
+        `ref = index + 1` (M14). `createdAt`/`updatedAt` are emitted as `.toISOString()`.
+        O(cells), one pass — **not** a scan per ref.
+  - [x] `export function fromBattleExport(be: BattleExport): Battle` — walk `cells` in order,
+        assigning each new `organismId` the next ref (`organismIds.push(id)`), and write
+        `gridState[y][x] = ref`. Allocate `gridState` from `gridDimensions` first
+        (`emptyGrid`-shaped: a NEW row array per row, never `Array(rows).fill([])`). Returns a
+        `Battle` with `Date` timestamps.
+  - [x] ⚠️ **Do not call `pruneAndRemapBattleGrid` here.** Its output order is "first-placed-slot"
+        over an *input roster*; `fromBattleExport` has no roster to start from and its order comes
+        from `cells`. The two agree by construction only because of FD3's emission order — which is
+        the thing under test, so using the projection to produce the expectation would make the
+        test vacuous.
+  - [x] `export function toEnvelope(kind, battles, organisms, meta): WorkspaceExportWire` where
+        `meta` is `{ appVersion: string; exportedAt: Date }`, and
+        `export function fromEnvelope(envelope: WorkspaceExport): { battles: Battle[]; organisms:
+        Organism[] }`. Both pure; no clock, no `Date.now()`, no module-level constant (FD5).
+  - [x] `workspaceExportProjection.test.ts`:
+        - hand-built fixtures first — a 2-organism 50×30 battle whose roster order is the
+          **reverse** of row-major first appearance (this is the case a row-major emission gets
+          wrong, and it must be a named test, not only a generated one);
+        - an empty grid exports `cells: []` and comes back with `organismIds: []`;
+        - **fast-check property (AC4, AR-41)**: generate `(cols, rows)` from the two presets and a
+          dense grid of refs, canonicalize through `pruneAndRemapBattleGrid` to get a schema-valid
+          `Battle`, then assert `fromBattleExport(toBattleExport(b))` `toEqual`s `b`. Model it on
+          `packages/simulation/src/grid/grid.test.ts:311`'s `arbDense`, and keep run counts at the
+          fast-check default — this is a 6,000-cell grid at the larger preset.
+        - **whole-envelope JSON round trip (AC4)**: `toEnvelope` → `JSON.stringify` → `JSON.parse`
+          → `WorkspaceExportSchema.parse` → `fromEnvelope`, deep-equal to the input. Include
+          `CONWAYS_CLASSIC` among the organisms so a real `survivalRules` payload crosses the wire.
+  - [x] `packages/domain/src/index.ts`: export the schemas, the constants, the four projection
+        functions, and `export type { … }` for every type (`isolatedModules`).
+
+- [x] **Task 3 — `WorkspaceSerializer` in `@gol/persistence`** (AC: 6, 9)
+  - [x] New `packages/persistence/src/workspaceSerializer.ts`:
+        ```ts
+        export interface WorkspaceSerializerDeps {
+          repos: AppRepositories;
+          /** Provenance only, never branched on (Decision I.4) — see FD5 for why it is injected. */
+          appVersion: string;
+          now: () => Date;
+        }
+        export interface WorkspaceSerializer {
+          exportWorkspace(): Promise<WorkspaceExportWire>;
+        }
+        export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): WorkspaceSerializer
+        ```
+        A factory returning an object, matching `createLocalStorageRepositories`, **not** a class —
+        RFC-006's `class WorkspaceSerializer` snippet is illustrative and the repo's aggregate-level
+        assembly is already a factory (FD6).
+  - [x] `exportWorkspace()` = `Promise.all([repos.battles.listFull(), repos.organisms.list()])` →
+        `toEnvelope('workspace', battles, organisms, { appVersion, exportedAt: now() })`. Two
+        comments: why `listFull()` and not `list()` (the summary has no `gridState`), and the
+        fault-isolation note — `listFull()` **skips** corrupt records rather than throwing
+        (`localStorageBattleRepository.ts`), so an export of a partly-corrupt store silently omits
+        the unreadable battles. That is the repository's existing contract, not this story's to
+        change; record it in `deferred-work.md` for Story 5.11 (load-time corruption handling),
+        which owns telling the user.
+  - [x] Barrel: `export { createWorkspaceSerializer } from './workspaceSerializer';` +
+        `export type { WorkspaceSerializer, WorkspaceSerializerDeps } from './workspaceSerializer';`
+  - [x] `workspaceSerializer.test.ts` (jsdom, like its siblings) against
+        `createFakeRepositories()` from `@gol/test-utils` — never a hand-rolled fake
+        (project-context Testing rules). Assert: `kind === 'workspace'`; `formatVersion ===
+        CURRENT_FORMAT_VERSION`; `exportedAt` is the injected clock's ISO string (so a fixed
+        `now: () => new Date('2026-01-01T00:00:00.000Z')` makes it exact); `appVersion` is the
+        injected string verbatim; a seeded battle appears with its cells and none of its
+        `gridState`; the output has no `settings` key; `JSON.stringify(envelope)` parses back
+        through `WorkspaceExportSchema` (the wire type really is wire-shaped).
+  - [x] ❌ Do **not** add `exportBattle`, a `kind: 'battle'` code path, a closure walk, a download,
+        a filename, `migrate()`, or `importWorkspace()`. Those are 5.4/5.5/5.6/5.7/5.8 and every
+        one of them has its own AC.
+
+- [x] **Task 4 — The sparse↔typed composition test** (AC: 4, 8b)
+  - [x] In `packages/simulation/src/grid/grid.test.ts`, extend the
+        `describe('grid properties (fast-check)')` block (line 311) with the composed identity:
+        dense → `gridFromDense` → `gridToDense` → wrap as a `Battle` → `toBattleExport` →
+        `fromBattleExport` → `gridFromDense` again, asserting `occupant` equality. Update the
+        block's comment at `:312-313` — it currently says the sparse form "does not exist until
+        Story 5.3's WorkspaceSerializer builds it", which stops being true here.
+  - [x] Test file only: no `packages/simulation/src` change, so the ≥90% per-file gate there is
+        untouched. `@gol/simulation` already depends on `@gol/domain`; no `package.json` edit.
+  - [x] ⚠️ `age` is **not** part of this identity — `gridToDense` drops it by design, and the
+        at-rest/wire shapes carry no age at all (A-2). Assert on `occupant`, `width`, `height`.
+
+- [x] **Task 5 — Record what this story decides and defers** (AC: 8)
+  - [x] `docs/implementation-artifacts/deferred-work.md`: strike the `:392` sparse↔typed entry with
+        a one-line resolution naming Task 4's test; add a new "Deferred from: Story 5.3" section
+        carrying (a) the `appVersion` source question FD5 leaves to Story 5.5, (b) the
+        `listFull()`-skips-corrupt export gap for Story 5.11, (c) FD3's emission-order contract as
+        a thing a later "simplification" would silently break.
+  - [x] `docs/implementation-artifacts/epic-1/1-7-palette-token-registry-display-color-lut.md:271`:
+        the `PALETTE_VERSION` line named Story 5.3 as the decider. Do **not** edit an archived
+        story file — record the discharge in `deferred-work.md` instead, quoting the line, with
+        FD7's reasoning.
+  - [x] `docs/project-context.md`: nothing to add. The `formatVersion`-is-the-only-branch trap
+        (`:405-407`) already covers this story and needs no new bullet. ⚠️ If the dev finds a
+        genuine new conflict between an RFC snippet and the shipped code, surface it — do not
+        silently pick one (project-context Usage Guidelines).
+
+- [x] **Task 6 — Gates** (AC: 7, 9)
+  - [x] `npm run ci:dev > /tmp/ci-5-3.log 2>&1; echo $?` — redirect and echo, never pipe to `tail`
+        (project-context Development Workflow: a pipe reports *tail's* exit code).
+  - [x] Record `packages/domain` and `packages/persistence` coverage figures; domain is **per-file**
+        ≥90%, so every new file must carry its own coverage — a well-covered projection cannot
+        rescue a thin schema file.
+  - [x] `node scripts/check-bundle-size.mjs` before and after; report all five routes. AC7 expects
+        **no `budgetGzipKb` move, and every route within the tool's precision of a FRESH `main`
+        build** (amended 2026-09-22 with AC7 — "no movement at all" rested on the same false
+        premise). Compare against a fresh `main` build in this worktree, never against a stale
+        `.next`. If a route moves beyond that precision, find the mechanism that makes the new
+        modules droppable — `"sideEffects": false` on the package that grew is the one FD10 used;
+        moving a budget is never the answer.
+
+### Review Findings
+
+Reviewed on **Fable** against an **Opus** implementation (2026-09-22), via three parallel layers
+(Blind Hunter, Edge Case Hunter, Acceptance Auditor), `review_mode: full`. 31 raw findings → 3
+`decision-needed` (a fourth, the CI-red property timeout, was added in `c4f8ef5` once the PR's
+first run had reported), 9 `patch`, 1 `defer`, 11 dismissed (dangling `organismId`s are RFC-006
+Decision 5's `assertReferentialClosure` at import, not the schema's; unparsed-`Battle` guards are
+"Zod at boundaries, not everywhere"; the fast-check generator's canonicalization equals the
+schema-valid set because `BattleSchema` already rejects unplaced and duplicate roster ids; the three
+`path: ['cells']` issues are what AC2/Task 1 prescribe; `H-9` is RFC-006's own tag).
+
+- [x] [Review][Decision] **AC7 is not met as written, and the remedy — `"sideEffects": false` on
+      `packages/domain/package.json` (FD10) — is a shared-package build-config change no AC or task
+      named.** AC7 says all five routes are byte-identical to the 5.2 figures; the branch measures
+      333.8 / 309.5 / 309.3 / 295.8 / 291.7 (four of five differ, two of them +0.1 KB over a fresh
+      `main` build, inside the tool's one-decimal drift), and Task 6's third box is checked although
+      its premise ("any movement means an `apps/web` import") was found false. The flag itself is
+      verified true of every module in `packages/domain/src` (only `Object.freeze`/`deepFreeze` on
+      module-local constants and `SettingsSchema.parse({})` for `DEFAULT_SETTINGS` run at module
+      level), no `budgetGzipKb` moved, and it is a mechanism change rather than a threshold move —
+      but it has no guard (the first module that registers anything at import time is silently
+      tree-shaken out of production while every unit test stays green), and it is the owner's call
+      whether a story may change a shared package's bundling contract on its own authority.
+      Options: **(a)** accept FD10 as the amendment — reword AC7/Task 6 to "no `budgetGzipKb` moves
+      and every route is within the tool's precision of a fresh `main` build", keep the flag, add
+      a one-line invariant note to `packages/domain/src/index.ts`'s header (JSON takes no comment),
+      and let the next story near a ceiling take `@gol/simulation`/`@gol/persistence`/
+      `@gol/test-utils` the same way; **(b)** accept FD10 and extend the flag to all four packages
+      now, in one PR, so the invariant is repo-wide rather than one package's; **(c)** revert the
+      flag and accept +0.3 KB on every route as the honest cost of two barrel modules (within
+      budget; AC7 reworded to "no `budgetGzipKb` moves"); **(d)** reject — find a mechanism that is
+      not a package-level flag (e.g. a second entry point for the export modules).
+      **Owner's decision (Sidiar, 2026-09-22): (a) — accept FD10 as the amendment.** Keep
+      `"sideEffects": false` on `@gol/domain`; reword AC7 and Task 6's third box to "no
+      `budgetGzipKb` moves and every route is within the tool's precision of a fresh `main`
+      build"; add the one-line invariant note to `packages/domain/src/index.ts`'s header (the
+      flag is only true while no domain module registers anything at import time). The next
+      story that needs headroom may take `@gol/simulation`/`@gol/persistence`/`@gol/test-utils`
+      the same way, one at a time. Rationale: this changes the gate's *mechanism* rather than
+      relaxing its threshold, which is the standing preference; extending to all four packages
+      now (b) would widen an unguarded invariant beyond the package this story touches.
+- [x] [Review][Decision] **`packages/persistence/src/workspaceSerializer.test.ts` imports
+      `@gol/test-utils` with no `package.json` edge, and the undeclared edge blinds Turbo's cache.**
+      The Dev Record framed it as "circular-dependency warning vs. an undeclared import that resolves
+      through the symlink". The review adds the consequence: Turbo hashes `test:coverage` from the
+      package's own inputs plus its DECLARED workspace dependencies, the task is cached, and CI
+      restores `.turbo` — so a later change to `fakeRepositories.ts` that breaks this test replays
+      the previous green run locally and in CI. Nothing enforces declared edges (`boundary:check`
+      covers `packages/simulation/src/engine/` only; root ESLint applies `recommended` to
+      `packages/**`). `packages/domain/src/workspaceExportProjection.test.ts` refuses the same cycle
+      on principle and hand-rolls `denseGrid`, so the two test files in this story take opposite
+      positions. Options: **(a)** declare `@gol/test-utils` as a `devDependency` of
+      `@gol/persistence` and accept Turbo's `WARNING Circular package dependency detected` on every
+      task (turbo 2.10.5 warns, never fails — measured), so the cache invalidates correctly;
+      **(b)** keep the undeclared import and accept the cache gap, recorded (the `deferred-work.md`
+      entry now states it) — the test is one file and the fake changes rarely; **(c)** split the
+      in-memory fakes into a package depending only on `@gol/domain` (the clean fix, its own
+      story); **(d)** move this test's fake to a minimal in-file stub of the two `list` methods it
+      uses, breaking the project's "never hand-roll a fake repository" rule once, in the open. The
+      `deferred-work.md` entry was updated to carry the cache consequence either way.
+      **Owner's decision (Sidiar, 2026-09-22): (a) — declare the devDependency.** Add
+      `@gol/test-utils` as a `devDependency` of `@gol/persistence` so Turbo hashes
+      `test:coverage` from the real edge, and accept `WARNING Circular package dependency
+      detected` on every task (turbo 2.10.5 warns, never fails — measured). Rationale: the
+      cycle exists already, through the workspace symlink; declaring it does not create one,
+      it stops hiding it from the tooling, and a cache that replays a stale green run is the
+      larger harm. (c), splitting the fakes into a `@gol/domain`-only package, stays the clean
+      fix and remains recorded in `deferred-work.md` as the eventual resolution — with this
+      decision as its trigger. `workspaceExportProjection.test.ts` keeps its hand-rolled
+      `denseGrid`: it is a fixture, not a repository fake, so no rule pulls it either way.
+      ⚠️ **BLOCKED — the decision's premise was measured wrong, and (a) cannot be implemented as
+      worded (dev, 2026-09-22).** The edge was added, `npm install` run, and `npm run ci:dev`
+      failed at step 7 of 11. Turbo 2.10.5 WARNS about the cycle only on tasks with no `^`
+      dependency — `typecheck`, `test`, `test:coverage`, which `turbo.json` deliberately gives none
+      — but `build` and `build:standalone` both carry `dependsOn: ["^build"]`, and there the cycle
+      is a hard error that exits 1 before running anything:
+      `x Cyclic dependency detected: @gol/test-utils#build, @gol/persistence#build`
+      (reproducible with `npx turbo run build --dry=json`, exit 1, while `npx turbo run typecheck
+      --dry=json` exits 0 with only the warning). `build:standalone` is step 7 of both `npm run ci`
+      and `npm run ci:dev`, so the edge reds every gate chain, locally and on PR #71. The edge and
+      its lockfile line were therefore **reverted**; everything else in this resume is unaffected.
+      The remaining options, none of which a story may take on its own authority:
+      **(a′)** drop `dependsOn: ["^build"]` from `turbo.json`'s `build` task — the cycle becomes a
+      warning everywhere, but it changes the repo-wide task graph and `build:standalone`'s own
+      `^build` would still need the same treatment;
+      **(b′)** drop the `build` script from `@gol/test-utils` (it is a duplicate `tsc --noEmit`;
+      `typecheck` already covers it) — narrower, but still an edit to a shared package's script set
+      that every future `^build` consumer inherits;
+      **(c)** as before — split the in-memory fakes into a package depending only on `@gol/domain`,
+      its own story; this is now the only fix that leaves the task graph alone, and it closes the
+      cache gap too;
+      **(b)** as before — keep the undeclared import and the recorded cache gap. This is the state
+      the tree is in now, so it is also the do-nothing option.
+      `deferred-work.md`'s entry carries the full measurement either way.
+      **Owner's FINAL decision (Sidiar, 2026-09-22), after the measurement above: (b) — keep the
+      undeclared import and the recorded cache gap.** This is the tree's current state, so there is
+      nothing further to implement; the earlier (a) stands reverted. Rationale: (a′) and (b′) both
+      edit a shared build contract — the repo-wide task graph, or a shared package's script set
+      every future `^build` consumer inherits — to serve one test file's cache accuracy, and
+      `build:standalone`'s own `^build` would need the same treatment either way. That blast radius
+      is out of proportion to the defect, which is a stale cached green run for a single test file
+      whose fake changes rarely. (c), splitting the in-memory fakes into a `@gol/domain`-only
+      package, remains the real fix and stays recorded in `deferred-work.md` as its own story, with
+      this decision as its trigger. Item closed; no code change.
+- [x] [Review][Decision] **`WorkspaceExportSchema` refines nothing across its collections: a
+      `kind: 'battle'` envelope may carry zero or fifty battles, and two battles (or two organisms)
+      may share an `id`.** RFC-006 Decision 2 defines the battle export as "the same schema, filtered
+      to ONE battle plus the organisms it references", and the schema header restates it in prose
+      only; `BattleSchema` and this file both already treat a duplicate (roster id / coordinate) as
+      corrupt-never-last-wins, yet duplicate `battles[].id` / `organisms[].id` parse cleanly and
+      Story 5.8's `replaceAll` would collapse them last-wins with no error. The story forbade a
+      `kind: 'battle'` code path (5.4/5.6 own it) and RFC-006 Decision 5 puts cross-collection
+      checks in a separate `assertReferentialClosure` step at import, so it is unclear which of
+      these belong in the schema of record and which in 5.4/5.8. Options: **(a)** add a
+      `superRefine` on `WorkspaceExportSchema` now for both — `kind === 'battle' ⇒
+      battles.length === 1` (path `['battles']`) and unique `battles[].id` / `organisms[].id` (paths
+      `['battles']` / `['organisms']`) — since the format is minted here and 5.4–5.8 build on it;
+      **(b)** add only the duplicate-id refinements now (structural, matching the house stance) and
+      leave the cardinality to 5.4, which defines the battle kind; **(c)** add nothing to the
+      schema — 5.8's `assertReferentialClosure` step grows a duplicate-id check and 5.4 adds the
+      cardinality refinement when it mints `exportBattle`; **(d)** cardinality now, duplicates to
+      5.8. Whichever is picked, it should be recorded in the RFC-006 variances entry.
+      **Owner's decision (Sidiar, 2026-09-22): (b) — duplicate-id refinements now, cardinality
+      to 5.4.** Add a `superRefine` on `WorkspaceExportSchema` rejecting duplicate `battles[].id`
+      (path `['battles']`) and duplicate `organisms[].id` (path `['organisms']`), with a negative
+      test for each. Do NOT add the `kind === 'battle' ⇒ battles.length === 1` refinement here.
+      Rationale: the two are different kinds of rule. A duplicate id is structural corruption, and
+      the schema of record should take the same corrupt-never-last-wins stance `BattleSchema`
+      already takes for a duplicate roster id — leaving it to 5.8 would let `replaceAll` collapse
+      two records silently. Cardinality only has meaning once `kind: 'battle'` has a producer, and
+      this story deliberately forbade that code path, so 5.4 specifies it when it mints
+      `exportBattle`. Record both halves in the RFC-006 variances entry in `deferred-work.md`.
+- [x] [Review][Decision] **CI on PR #71 is RED: the round-trip identity property timed out.**
+      `@gol/domain#test:coverage` failed on run 35726671334 —
+      `workspaceExportProjection.test.ts:194` "fromBattleExport(toBattleExport(b)) is the identity
+      on every schema-valid battle" hit `Test timed out in 5000ms` after 6310ms. **Not a
+      counterexample**: the invariant held, no shrunk input was reported, and `npm run ci:dev` was
+      green on the dev machine — the GitHub runner is simply slower than the 5s Vitest default.
+      `packages/simulation/src/grid/grid.test.ts`'s composition property took 4627ms in the same
+      run and is next in line to fail. The generator's own comment (lines 174-176) defends the real
+      preset sizes against a smaller cap, so shrinking it is argued against in-code.
+      **Owner's decision (Sidiar, 2026-09-22): explicit per-test timeout.** Pass an explicit
+      timeout (30_000) as the third argument of BOTH `it(...)` calls — this property and
+      `grid.test.ts`'s `gridToDense . fromBattleExport . toBattleExport . gridFromDense` identity —
+      with a one-line comment at each saying why (a 100-run property over real preset grids
+      legitimately exceeds a default meant as a hang-guard). Do NOT lower `numRuns`, do NOT set
+      `testTimeout` package-wide, and do NOT shrink the generator. Re-run CI and confirm green.
+- [x] [Review][Patch] `toBattleExport` aliased `battle.gridSize` into the wire object while `fromBattleExport` spreads the other way — now spread on both sides, asserted [packages/domain/src/workspaceExportProjection.ts:87]
+- [x] [Review][Patch] Header claimed `pruneAndRemapBattleGrid` must not be reached for while the tests call it in the generator — the comment now draws the input-canonicalization vs. expectation line [packages/domain/src/workspaceExportProjection.ts:23-26]
+- [x] [Review][Patch] "One pass plus one concatenation" described a cell-by-cell push loop — now `buckets.flat()`, which is the promised concatenation [packages/domain/src/workspaceExportProjection.ts:54,79-82]
+- [x] [Review][Patch] `EXPORT_KINDS` contents were asserted inside the "rejects a kind" test — moved into its own `it` [packages/domain/src/workspaceExportSchema.test.ts:72]
+- [x] [Review][Patch] No negative test for a malformed timestamp on the envelope — added `exportedAt: 'yesterday'` rejected at `['exportedAt']` [packages/domain/src/workspaceExportSchema.test.ts]
+- [x] [Review][Patch] Serializer comment promised per-record skipping only; a whole-collection corruption throws `CorruptDataError` from `readCollection`, and a skipped ORGANISM leaves battles with ids the file does not carry — comment and the 5.11 deferred entry now say both [packages/persistence/src/workspaceSerializer.ts:58-63]
+- [x] [Review][Patch] The "four RFC-006 variances" entry omitted the fifth a reader would correct back: `WorkspaceExport` is the hydrated shape and `exportWorkspace()` returns `WorkspaceExportWire`, not Decision 4's `Promise<WorkspaceExport>` [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] The `@gol/test-utils` deferred entry missed the Turbo cache consequence — added [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] New `deferred-work.md` section heading had no blank line before it, alone in the file [docs/implementation-artifacts/deferred-work.md:2414]
+- [x] [Review][Defer] `exportWorkspace()` rejects with `CorruptDataError` when `gol:battles` / `gol:organisms` is not an object keyed by id [packages/persistence/src/workspaceSerializer.ts:64-68] — deferred, pre-existing `readCollection` contract; Story 5.11 owns corruption handling
+
+#### Second review round — final (2026-09-22)
+
+Reviewed on **Fable** against the **Opus** implementation as it stands after the owner's four
+decisions and the sync with `main` (#70), `review_mode: full`, three parallel layers (Blind Hunter,
+Edge Case Hunter, Acceptance Auditor). 34 raw findings → 0 `decision-needed`, 19 `patch`, 0 `defer`,
+16 dismissed (the wire `name` schema was claimed looser than `BattleSchema`'s — verified identical,
+`z.string().max(MAX_BATTLE_NAME_LENGTH)` on both; dangling `organismId`s across the two collections
+are RFC-006 Decision 5's import closure, as the first round already ruled; offset and
+sub-millisecond timestamps are the shared at-rest parser by design and the app only ever writes
+`Z`; a density knob on the fast-check generator would reopen the generator the owner just ruled on
+in Decision 4, and the sparse regime has no code path beyond `ref === 0`, which the empty-grid test
+pins; the composed identity's name is AC4's own wording; a `turbo.json` input glob for the cache
+gap is Decision 2 (b)'s territory; an invalid `Date` from the injected clock, fast-check shrink
+time, the second `cells` pass in the 255 check, Decision 3's record split across two adjacent
+entries, the "one-line" strike and the first round's 31-vs-24 arithmetic are cosmetic or not
+verifiable). Every AC (1–9, AC7 as amended) and all four owner decisions were re-audited against the
+code and hold; the residue is documentation that stopped at Decision 2's "reopened" state, plus
+test-coverage gaps the first round did not name.
+
+- [x] [Review][Patch] Completion Notes still describe Decision 2 as "three of four implemented, one blocked" / "reverted, item reopened" though the item is closed as (b) [docs/implementation-artifacts/5-3-export-envelope-serializer.md:699-721]
+- [x] [Review][Patch] Completion Notes' reviewer bullet repeats the disproven "turbo 2.10.5 warns rather than failing" measurement and names a different trigger for the clean fix than the owner's decision [docs/implementation-artifacts/5-3-export-envelope-serializer.md:750-757]
+- [x] [Review][Patch] `deferred-work.md`'s `@gol/test-utils` entry ends at "the decision item reopened on the story" and never records the final (b) decision or that it is (c)'s trigger [docs/implementation-artifacts/deferred-work.md:2648]
+- [x] [Review][Patch] Change Log has no row for the final Decision 2 outcome, and it and the File List count "seven entries" where the section holds eight [docs/implementation-artifacts/5-3-export-envelope-serializer.md:801-804,820]
+- [x] [Review][Patch] "Four RFC-006 variances" heading enumerates six; echoed as "four" in Completion Notes and File List [docs/implementation-artifacts/deferred-work.md:2601; 5-3-export-envelope-serializer.md:776,804]
+- [x] [Review][Patch] File List misstates the sprint-status transition — `ready-for-dev` never occurs; the branch's net change is `backlog → review` [docs/implementation-artifacts/5-3-export-envelope-serializer.md:805-806]
+- [x] [Review][Patch] The "Review-decision resume" paragraph is spliced into the Debug Log list without a blank line and renders inside the preceding bullet [docs/implementation-artifacts/5-3-export-envelope-serializer.md:682]
+- [x] [Review][Patch] FD10 is cited by AC7, Task 6 and the first round's Decision 1 but the Forced decisions list stops at FD9 — FD10 is defined only inside Completion Notes [docs/implementation-artifacts/5-3-export-envelope-serializer.md:504]
+- [x] [Review][Patch] AC8(a) says "1.7's entry is marked resolved" while Task 5 forbids editing the archived file and the discharge lives in `deferred-work.md` [docs/implementation-artifacts/5-3-export-envelope-serializer.md:88]
+- [x] [Review][Patch] First round's header counts "3 `decision-needed`" while four items follow — the CI-red decision was added in `c4f8ef5` after the count was written [docs/implementation-artifacts/5-3-export-envelope-serializer.md:260]
+- [x] [Review][Patch] `index.ts` header says module-level work is "limited to defining and freezing values" while `DEFAULT_SETTINGS` runs `SettingsSchema.parse({})` at import time — the header is the flag's only guard and understates what already runs [packages/domain/src/index.ts:4]
+- [x] [Review][Patch] Schema comment says this story "forbade a `kind: 'battle'` code path outright" while `toEnvelope('battle', …)` is exported and tested — what is absent is the producer (`exportBattle`), not the kind [packages/domain/src/workspaceExportSchema.ts:152-154]
+- [x] [Review][Patch] `toEnvelope` / `fromEnvelope` copy the `organisms` array but share each `Organism`, while the test title says "never aliases the caller's arrays" and the file's own `gridDimensions` rationale argues against sharing — the actual contract (array copied, elements shared, why that is safe) is stated nowhere [packages/domain/src/workspaceExportProjection.ts:154,170; packages/domain/src/workspaceExportProjection.test.ts:248]
+- [x] [Review][Patch] `fromBattleExport` relies on `BattleExportSchema`'s refinements (an unparsed `y >= rows` throws, `x >= cols` silently widens a row) but, unlike `toBattleExport`, names no guarantor; `toBattleExport`'s comment also omits its rectangularity (`row.length`) assumption [packages/domain/src/workspaceExportProjection.ts:70-77,120]
+- [x] [Review][Patch] Out-of-bounds rejection is pinned at 50×30 only; the Testing standards require the bound at 100×60 too (`x: 100` / `y: 60` rejected, `x: 50` accepted there) [packages/domain/src/workspaceExportSchema.test.ts:170]
+- [x] [Review][Patch] Duplicate-coordinate test uses two different organism ids only; an identical `{x,y,organismId}` pair de-duplicated "leniently" would pass it [packages/domain/src/workspaceExportSchema.test.ts:199]
+- [x] [Review][Patch] `formatVersion: 2` and `'x'.repeat(101)` are magic numbers beside the constants they duplicate — `CURRENT_FORMAT_VERSION + 1` and `MAX_BATTLE_NAME_LENGTH + 1` [packages/domain/src/workspaceExportSchema.test.ts:61,268]
+- [x] [Review][Patch] `workspaceSerializer.test.ts` hand-rolls a 50×30 dense grid while importing from the package that provides `emptyGrid`; the cycle justification the domain test uses does not apply here [packages/persistence/src/workspaceSerializer.test.ts:35-37]
+- [x] [Review][Patch] Generator comment justifies real preset sizes with a probability claim that does not hold (≤6 refs drawn uniformly make the roster-order mismatch near-certain even at 12×12); the real reason is Decision A and the Testing standards — both presets, the bounds at the size that matters [packages/domain/src/workspaceExportProjection.test.ts:176-178]
+
+## Dev Notes
+
+### Forced decisions (made here so the dev agent does not have to)
+
+- **FD1 — The schemas and the pure conversions live in `@gol/domain`; only the repository-driven
+  serializer lives in `@gol/persistence`.** Three facts decide it and they all point the same way.
+  (a) `organismSchema.ts:61` already says, in the tree: *"Single-sourced here; RFC-006's export
+  envelope reuses it in a later story (Decision G.1)"* — the envelope was planned to sit beside
+  `EditableGridPresetSchema`. (b) AR-7 makes Zod schemas the single source of truth for the
+  entities `@gol/domain` owns, and the envelope is those entities in another shape, not a storage
+  concern. (c) Coverage: `@gol/domain` is **≥90% per file** and `@gol/persistence` is ~80%
+  aggregate *because* persistence "is carried by round-trip tests" (its own `vitest.config.ts`
+  says so) — putting the round-trip logic itself in the 80% tier would measure the conversion by
+  the gate that exists on the assumption something else measures it. The serializer factory stays
+  in persistence because it is the only package that may import `AppRepositories`, and it is thin
+  enough that the 80% tier is honest for it.
+
+- **FD2 — `gridDimensions`, not `gridSize`; `x`/`y`, not `col`/`row`; `width`/`height` stays the
+  engine's.** Four spellings of the same two numbers now exist in the tree and every one of them
+  is deliberate: `gridSize: {cols, rows}` at rest (`BattleSchema`), `gridDimensions: {cols, rows}`
+  on the wire (RFC-006 Decision 2), `width`/`height` on the runtime `Grid` (`@gol/simulation`),
+  and `x`/`y` per cell. The wire name differs from the at-rest name so a `grep` tells you which
+  side of the boundary a piece of code is on — which is exactly the confusion `battleRecord.ts`'s
+  header goes out of its way to prevent. Do not "unify" them.
+
+- **FD3 — `cells` is emitted in ascending-ref order (row-major within each ref), and the inverse
+  assigns refs by first appearance. This is what makes round-trip identity literal.** The envelope
+  carries no roster (Decision H.2), so `organismIds` must be *reconstructed* from `cells` — and
+  its **order** is load-bearing, because a cell value is `roster index + 1` (M14). Emit row-major
+  and reconstruct by first row-major appearance, and any battle whose roster order differs from
+  its grid's first-appearance order round-trips to a *permuted* roster with a correspondingly
+  remapped `gridState`: the same picture, a different record, and `toEqual` red. Roster order is
+  editor order (`pruneAndRemapBattleGrid` preserves "first-placed-**slot**" order — slots, not
+  coordinates), so the mismatch is the normal case, not an edge case. Emitting by ascending ref
+  makes first-appearance-in-`cells` order **identical to roster order for every schema-valid
+  battle**, unconditionally — no normalization of stored data, no roster field, no "identity up to
+  permutation" weasel in the AC. The cost is a file grouped by organism rather than by row, which
+  is if anything more readable. ⚠️ The contract now belongs to the *format*: a hand-written file
+  with interleaved cells still imports correctly (first appearance still defines the roster), it
+  simply picks a different roster order than its author may have expected. Say so in the schema
+  comment.
+
+- **FD4 — The wire shape is `z.input<typeof WorkspaceExportSchema>`; the parsed shape carries
+  `Date`s.** `IsoTimestamp = z.iso.datetime().transform(s => new Date(s))` (`battleSchema.ts:10`)
+  is reused rather than re-declared, exactly as that file's own comment anticipates. So
+  `toEnvelope` returns ISO strings (ready for `JSON.stringify`) and `WorkspaceExportSchema.parse`
+  returns `Date`s (ready for `fromEnvelope` to hand back real `Battle`s, whose `createdAt` is a
+  `Date`). A property test that compares a `toEnvelope` output to a parsed one directly will fail
+  on `Date` vs `string` and the failure will look like a bug in the conversion; compare at the
+  `Battle` level, which is the level AC4 is written at.
+
+- **FD5 — `appVersion` and the clock are injected, and this story does not choose where
+  `appVersion` comes from.** Every `package.json` in the workspace is `"version": "0.0.0"`; there
+  is no app-version constant anywhere. Three options exist (a constant in `packages/*` that
+  duplicates the root `package.json` and drifts; a build-time `NEXT_PUBLIC_*` read, which
+  project-context confines to `lib/mode.ts`; a literal at the page boundary), and **none of them
+  is this story's to pick**: the first caller at a page boundary is Story 5.5, and picking here
+  would mint a constant nothing reads for two stories. Injecting both values also removes the
+  hidden clock, which is what lets `exportedAt` be asserted exactly rather than with a regex.
+  Record the three options in `deferred-work.md` for 5.5.
+
+- **FD6 — A factory, not a class.** RFC-006 Decision 4 shows `class WorkspaceSerializer { constructor(private repos) }`.
+  The repo's repositories *are* classes, but its **aggregate-level assembly** is
+  `createLocalStorageRepositories(): AppRepositories` — a factory over an interface — and the
+  serializer is aggregate-level (it spans battles and organisms, the same reason `clearAll()` sits
+  on the aggregate). The factory also takes DI that a `new` call would have to thread through a
+  constructor object anyway. `WorkspaceSerializer` survives as the **interface** name, so the
+  RFC's vocabulary and AR-10's are intact.
+
+- **FD7 — The envelope does not stamp `PALETTE_VERSION`, and that discharges Story 1.7's
+  forward-reference.** `1-7-palette-token-registry-display-color-lut.md:271` says *"❌ Stamping
+  `PALETTE_VERSION` into any persisted or exported record — Story 5.3 owns the envelope."* The
+  call is no: (a) `WorkspaceExportSchema` as specified has no such field (RFC-006 Decision 2), and
+  adding one would make the envelope's field list diverge from the schema of record on its first
+  day; (b) Decision I.4 makes `PALETTE_VERSION` a stamp on the *token registry*, for provenance,
+  with **additive palette changes needing no migration at all** and destructive ones riding a
+  `formatVersion` step — so an envelope copy would be a second version axis that Decision I exists
+  to forbid; (c) mechanically, the constant lives in `apps/web/lib/palette/paletteRegistry.ts:20`
+  and a `packages/*` schema cannot import it without inverting the seam. An unknown `colorToken`
+  in a same-`formatVersion` file already degrades gracefully (default + warn, NFR-7.3), which is
+  the case a stamp would have been for.
+
+- **FD8 — The sparse↔typed round trip is a *composition* test in `@gol/simulation`, not a third
+  converter.** `deferred-work.md:392` prescribes it: *"if it composes the two conversions
+  (`sparse↔dense` there, `dense↔typed` here) rather than writing a third, the property to pin is
+  that the composition is the identity."* It cannot live in `@gol/domain` — domain must not depend
+  on `@gol/simulation` (the dependency runs the other way) — and putting it in `@gol/test-utils`
+  would separate it from the `arbDense` generator it reuses. So: `packages/simulation/src/grid/grid.test.ts`,
+  test file only.
+
+- **FD9 — Nothing in `apps/web` changes, and that is an AC, not an omission.** The serializer has
+  no consumer until Story 5.5's download button. Unused exported code is the established pattern
+  here (`listFull()` and `replaceAll()` have both been on the interface since Story 1.4 carrying
+  "Story 5.5" / "Story 5.8" doc comments), and it keeps `/battle`'s 0.6 KB of headroom exactly
+  where it is. If the dev finds themselves adding an import under `apps/web`, the story has grown
+  into 5.5 — stop.
+
+- **FD10 — made by the dev, ratified by the owner's review Decision 1: `"sideEffects": false` on
+  `@gol/domain`, because AC7's premise was false.** Staying out of `apps/web` does not keep the
+  bundle still: `apps/web` imports the `@gol/domain` barrel, so every module `index.ts` re-exports
+  enters its graph (+0.3 KB per route here, measured against a fresh `main` build). The flag makes
+  unreferenced modules droppable; it is a mechanism change, not a threshold move, and it is only
+  true while no domain module registers anything at import time — the guard is `index.ts`'s header.
+  Full measurement in the Completion Notes and `deferred-work.md`.
+
+### What exists — read these before writing a line
+
+| File | Why it matters here |
+|---|---|
+| `packages/domain/src/battleSchema.ts` | `IsoTimestamp` (`:10`, to export); the four `superRefine` issues and their `path`/message voice to mirror; `:4-9`'s comment on why timestamps are ISO strings and `z.input` is the serialized form. |
+| `packages/domain/src/battleProjection.ts` | `pruneAndRemapBattleGrid` — the ref-remap hazard written out at length, the same hazard `fromBattleExport` faces from the other side; also the canonicalizer AC4's generator uses. |
+| `packages/domain/src/organismSchema.ts` | `EditableGridPresetSchema` (`:61` names this story), `OrganismSchema`, `ORGANISM_SCHEMA_VERSION` — the stamp axis that is **not** `formatVersion`. |
+| `packages/domain/src/settingsSchema.ts` | `CURRENT_FORMAT_VERSION` (`:8`) and the comment saying it is *this story's* envelope literal. Also the AR-12 header — the reason nothing here imports `SettingsSchema`. |
+| `packages/persistence/src/repositories.ts` | `AppRepositories`; `listFull()`'s doc comment ("the WorkspaceSerializer export path"); the aggregate-method voice. |
+| `packages/persistence/src/createLocalStorageRepositories.ts` | The factory-over-interface shape FD6 follows. |
+| `packages/persistence/src/localStorageBattleRepository.ts` | `listFull()` **skips** corrupt records rather than throwing — the fault-isolation fact Task 3 records. |
+| `packages/persistence/src/localStorageBattleRepository.test.ts:58` | `it('writes the dense gridState at rest (sparse cells are wire-only)')` — the shipped precedent AC3 is the other half of. |
+| `packages/simulation/src/grid/grid.ts` | `gridFromDense` / `gridToDense` / `Grid`; the M14 ref-encoding comment (`:42-52`). |
+| `packages/simulation/src/grid/grid.test.ts:311-313` | `arbDense` — the fast-check generator to model AC4 on — and the comment Task 4 updates. |
+| `packages/test-utils/src/fakeRepositories.ts` | `createFakeRepositories(seed)` — the fake Task 3's test uses; note `structuredClone` does **not** typecheck in `packages/*` (`lib: ["ES2022"]`, no `@types/node`) — it uses `JSON.parse(JSON.stringify(x))`. |
+| `packages/test-utils/src/gridBuilders.ts:5` | "NOT sparse `cells` conversion — that is the Story 5.3 serializer" — and `emptyGrid`'s `Array.from` comment, the row-aliasing trap `fromBattleExport` must not fall into. |
+| `apps/web/lib/battle/battleRecord.ts:28-52` | `projectBattleForSave` — the runtime→dense direction, and the header that says the envelope "appears nowhere here". |
+| `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md:104-158` | Decision 2 — the normative envelope, in Zod v3 spelling. |
+| `packages/domain/vitest.config.ts` | `perFile: true` at 90 — why each new domain file needs its own coverage. |
+
+### Architecture compliance
+
+- **AR-9 / RFC-006 Decision 2** — dense at rest, sparse on the wire, converted at the serializer
+  boundary. The at-rest shape is untouched by this story; no repository changes.
+- **AR-10** — the versioned envelope lands here; the closure (5.4) and the atomic import (5.8) do
+  not. AR-10 is one line describing three stories.
+- **AR-12 / Decision F.1** — no settings field, in either `kind`. AC5 pins the *absence*.
+- **Decision G.1/G.2/G.3** — `EditableGridPresetSchema` reused for `gridDimensions`; cell bounds
+  and duplicate coordinates refined at the import boundary; the 255-distinct-organism cap enforced
+  on the envelope as well as at rest.
+- **Decision H.1/H.2** — the envelope carries cells only. The round trip is lossless *because*
+  the roster ≡ the placed set; if that invariant were ever relaxed, this story's identity property
+  is the test that goes red first.
+- **Decision I / I.4** — `formatVersion` is a `z.literal`, so a newer file fails `parse`. That is
+  the *floor*, not the feature: the graceful "app too old" message and the source-keyed
+  `MIGRATIONS` chain are Story 5.7's, which runs `migrate()` **before** `parse()`. Do not add
+  version-range tolerance here to be helpful — it would make 5.7's rejection path unreachable.
+- **M14** — `ref = index + 1`, slot 0 empty. Both directions of the conversion turn on it.
+- **AR-2/27** — the serializer takes `AppRepositories` as an injected dependency and imports no
+  concrete repository. `packages/domain` imports nothing from `packages/persistence`.
+- **No DOM types in `packages/*`** — the new `@gol/domain` files must compile under
+  `lib: ["ES2022"]`: no `structuredClone`, no `Blob`, no `URL`, no `Buffer`. The download
+  (`Blob`/`URL.createObjectURL`) is Story 5.5's, in `apps/web`.
+- **AR-39 / NFR-5.1** — domain ≥90% per file; persistence ~80% aggregate.
+- **Spec-id hygiene** — write `AR-9`, `AR-10`, `AR-12`, `AR-41`, `AR-44`, `FR-6.3`, `NFR-7.3`,
+  `M14`, `Decision F`, `Decision G`, `Decision H`, `Decision I`, `RFC-006`, `Story 5.3` exactly so;
+  `spec:check` tokenises code comments and fails on an ID that resolves to nothing.
+
+### Library / framework notes (installed versions, no research needed)
+
+- **Zod 4.4.3.** `z.uuid()`, `z.iso.datetime()`, `z.literal(x)`, `z.enum(arrayConst)`,
+  `.superRefine((v, ctx) => ctx.addIssue({ code: 'custom', path, message }))`. Unknown keys are
+  **stripped** by default — that is the mechanism AC5 tests, not a loophole to close with
+  `.strict()`. `z.input<T>` / `z.infer<T>` differ wherever a `.transform()` runs.
+- **fast-check 4.9.0** is a **root** devDependency, so `@gol/domain` can import it with no
+  `package.json` change (`@gol/simulation` and `apps/web` already do). ⚠️ `apps/web/lib/organisms/conditionDraft.ts`
+  imports fast-check from **production** code — do not copy that pattern; test files only.
+- **Vitest 4** — `packages/domain` runs `environment: 'node'`, `packages/persistence` runs
+  `'jsdom'`. A new persistence test inherits jsdom whether it needs it or not; that is fine.
+- **`isolatedModules: true`** — every type re-export in a barrel is `export type { … }`.
+- No `noUncheckedIndexedAccess` — `organismIds[ref - 1]` types as `string`, not `string | undefined`.
+  The bounds are guaranteed by `BattleSchema`'s own refinement, not by the compiler; a comment
+  should say which.
+
+### Testing standards
+
+- Derive expectations from fixtures and from the schemas, never from a hand-typed envelope literal
+  — with one exception: the AC5 settings-stripping test and the `formatVersion: 2` rejection are
+  *supposed* to be hand-built, because they test what the schema refuses.
+- The fast-check property must generate battles that are **schema-valid** (route them through
+  `pruneAndRemapBattleGrid`), or it will spend its runs discovering that `BattleSchema` rejects
+  random input — a property about the wrong thing.
+- Use `@gol/test-utils`' `createFakeRepositories` and `gridBuilders`; never hand-roll a fake
+  repository or a dense grid literal larger than a few rows.
+- Keep both grid presets in play (Decision A — dimensions are parameters, never constants). A test
+  that only ever uses 50×30 has not exercised the bounds refinement at the size that matters.
+- Never pixel- or snapshot-test anything; there is no UI in this story.
+- Name the AC in the `describe`/`it` title where the assertion is an AC's proof (house convention,
+  5.1 review) — and move the id if the assertion moves.
+
+### Previous story intelligence
+
+- **Story 5.2** (`5-2-workspace-statistics.md`) — the immediate parent. Its FD1 (why a
+  cross-namespace operation goes on the aggregate, not a repository) is the same argument FD6 makes
+  for the serializer; its FD9 (bundle: a module added to the graph costs every route ~0.1–0.2 KB
+  even with almost no code in it) is why AC7 expects *zero* movement here and why that is only
+  achievable by staying out of `apps/web`. Its FD4 is the precedent for **recording** a conflict
+  with an RFC line rather than silently overriding it — FD7 follows the same form.
+- **Story 3.3** (`epic-3/3-3-typed-array-grid-neighborhood.md`) — owns `gridFromDense`/`gridToDense`
+  and the `arbDense` generator; it deliberately left the sparse half here and said so in the open
+  (`deferred-work.md:392`, the M13 precedent). Task 4 is the other end of that handshake.
+- **Story 2.13** — `projectBattleForSave` and the `pruneAndRemapBattleGrid` split; its
+  deferred-work entry about the double allocation is the note to remember when 5.5 runs the
+  projection over a whole workspace, not now.
+- **Story 1.4 / 1.5** — `writeKey`'s candidate-string discipline and the `gol:schema` stamp that
+  already writes `{ formatVersion: CURRENT_FORMAT_VERSION }`; `localStorageAccess.test.ts:155-158`
+  pins that a `formatVersion: 99` stamp is read back unchanged and **never branched on** — the
+  same posture the envelope literal takes from the other side.
+- **Story 1.7** — `PALETTE_VERSION` and the forward-reference FD7 discharges.
+
+### Git intelligence
+
+Last 12 commits on `main`: Story 4.16 (create & save organism, PR #69) and its two review rounds,
+Story 5.2 (PR #67), and the CI e2e matrix split (#68). None touch `packages/domain`'s schema files
+or `packages/persistence` beyond 5.2's meter. Surfaces shared with the Epic 4 lane on this story:
+`packages/domain/src/index.ts` (additive exports — Story 4.19 will add its derivations to the same
+barrel, so expect a textual merge, not a semantic one) and `packages/domain/src/battleSchema.ts`
+(one line changed: `IsoTimestamp` gains an `export`). Neither is a dependency in either direction;
+see the lane-gate line at the end.
+
+### Project Structure Notes
+
+- New: `packages/domain/src/workspaceExportSchema.ts` (+ `.test.ts`),
+  `packages/domain/src/workspaceExportProjection.ts` (+ `.test.ts`),
+  `packages/persistence/src/workspaceSerializer.ts` (+ `.test.ts`).
+- Modified: `packages/domain/src/battleSchema.ts` (export `IsoTimestamp`),
+  `packages/domain/src/index.ts`, `packages/persistence/src/index.ts`,
+  `packages/simulation/src/grid/grid.test.ts` (test only),
+  `docs/implementation-artifacts/deferred-work.md`.
+- Naming: camelCase files, never dotted; `<Entity>Schema` for Zod schemas; `WorkspaceSerializer` is
+  an interface (no `Schema` suffix — nothing parses it).
+- Untouched on purpose: every file under `apps/web` (AC7), every repository implementation,
+  `packages/test-utils` (no new fake surface — the serializer is not on `AppRepositories`),
+  `scripts/check-bundle-size.mjs` (measured, not edited), every RFC.
+- Variances, recorded not absorbed: RFC-006 Decision 2's Zod v3 spellings and its bare
+  `z.string()` for `organismId`; RFC-006 Decision 4's `class`; RFC-006's silence on cell ordering
+  (FD3 fills it). All → `deferred-work.md` in Task 5.
+
+### References
+
+- `docs/planning-artifacts/epics.md:1344-1356` — Story 5.3 ACs; `:168` AR-9; `:169` AR-10; `:171`
+  AR-12; `:213` AR-39; `:215` AR-41; `:218` AR-44; `:1357-1368` (5.4, the next consumer);
+  `:1369-1390` (5.5/5.6, the first callers).
+- `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md:104-158` — Decision 2, the
+  normative envelope; `:159-184` Decision 3 (migration — Story 5.7, not here); `:185-216`
+  Decision 4 (export assembly); `:217-247` Decision 5 (import — Story 5.8); `:248-256` Decision 6
+  (settings never travel).
+- `docs/planning-artifacts/architecture.md:222-237` Decision E; `:238-250` Decision F; `:251-262`
+  Decision G; `:263-275` Decision H; `:276-288` Decision I.
+- `docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md:399-409` FR-6.3 (the field list
+  this envelope satisfies); `:390-396` FR-6.1; `:778-780` A-2 (initial state only).
+- `docs/implementation-artifacts/deferred-work.md:392` (the sparse↔typed handshake Task 4 closes);
+  `:386` (double allocation — 5.5's, not this story's); `:397` (bundle gate: mechanism, never a
+  raise).
+- `docs/implementation-artifacts/epic-1/1-7-palette-token-registry-display-color-lut.md:271` —
+  the `PALETTE_VERSION` forward-reference FD7 discharges.
+- `docs/implementation-artifacts/5-2-workspace-statistics.md` — FD1, FD4, FD9 and the five bundle
+  figures AC7 compares against.
+- `docs/implementation-artifacts/lane-gates.yaml` — the 5-vs-4 analysis (2026-09-21) and 5.4's
+  existing row; this story has none.
+- `docs/project-context.md` — Language rules (no DOM in `packages/*`, `isolatedModules`, Zod at
+  boundaries), Testing rules (fakes from `@gol/test-utils`, property tests, coverage tiers), Code
+  Quality (`spec:check`, comments explain WHY), Development Workflow (`ci:dev`, the pipe trap, the
+  commit gate).
+
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Opus 5 (1M context) — `bmad-dev-story`, lane `--epic 5`.
+
+### Debug Log References
+
+- `npm run ci:dev` → **exit 0** (log: `/tmp/ci-5-3.log`). Chain: typecheck → lint → format:check →
+  spec:check → boundary:check → coverage → build:standalone → bundle → bench → bench:check →
+  e2e:chromium.
+- `npm run spec:check` → exit 0; 267 cited ids resolve, 3/6 reconciliation citations resolve.
+- Bundle, measured three ways rather than assumed (see FD10 below): pre-existing `.next` at `main`
+  → 333.9 / 309.4 / 309.2 / 295.7 / 291.7; a **fresh** `origin/main` build in this worktree →
+  333.8 / 309.5 / 309.3 / 295.7 / 291.6; this branch → **333.8 / 309.5 / 309.3 / 295.8 / 291.7**.
+  No `budgetGzipKb` moved.
+
+**Review-decision resume (2026-09-22).** `npm run ci:dev` → **exit 0** (log:
+`/tmp/ci-5-3-resume2.log`). Coverage unchanged at its tiers: `@gol/domain` **100 / 100 / 100 / 100**
+(144 tests, +4), `@gol/persistence` **99.28 / 96.22 / 100 / 100**, `@gol/simulation` **100** across,
+`@gol/test-utils` 94.67 / 90.82 / 100 / 97.2. Bundle **333.8 / 309.5 / 309.3 / 295.8 / 291.7** —
+identical to the pre-review figures, and no `budgetGzipKb` moved (the duplicate-id `superRefine` is
+inside `@gol/domain`, which `"sideEffects": false` keeps droppable). The two property tests now
+carry an explicit 30s timeout; measured locally **351ms** and **329ms** uninstrumented, against the
+**6310ms** and **4627ms** the GitHub runner took under coverage instrumentation on run 35726671334 —
+so the headroom is roughly 5x the observed CI worst case, not a hair's breadth over it.
+
+- Coverage: `@gol/domain` **100 / 100 / 100 / 100** (140 tests, per-file ≥90 gate);
+  `@gol/simulation` **100 / 100 / 100 / 100** (408 tests); `@gol/persistence` **99.28 stmts /
+  96.22 branches / 100 funcs / 100 lines** (96 tests, ~80 aggregate gate); `@gol/test-utils`
+  94.67 / 90.82 / 100 / 97.2 (94 tests, unchanged).
+
+### Completion Notes List
+
+**Resume after the owner's decisions (2026-09-22) — three of four implemented in code; the fourth
+was blocked on a premise that measurement disproved and then closed by the owner as (b), no code
+change.**
+
+- ✅ **Decision 1 (AC7 / `"sideEffects": false`) — option (a).** The flag stays on `@gol/domain`
+  alone; AC7 and Task 6's third box are reworded to "no `budgetGzipKb` moves, and every route within
+  the tool's precision of a fresh `main` build", each carrying why the original wording was
+  unachievable. The unguarded invariant now has the only guard JSON permits: a header note on
+  `packages/domain/src/index.ts`, the barrel every consumer goes through, saying the flag is true
+  only while no domain module registers anything at import time.
+- ⚠️ **Decision 2 (`@gol/test-utils` edge) — option (a) was NOT IMPLEMENTABLE; reverted, item
+  reopened, then closed by the owner's FINAL decision as (b): keep the undeclared import and the
+  recorded cache gap.** The devDependency was added and `npm install` run; `npm run ci:dev` then failed at
+  step 7 of 11. The decision rested on "turbo 2.10.5 warns, never fails — measured", and that
+  measurement covered only tasks with no `^` dependency. `turbo.json` gives `typecheck`, `test` and
+  `test:coverage` none, so they warn — but `build` and `build:standalone` both carry
+  `dependsOn: ["^build"]`, where the cycle is a hard error that exits 1 before running anything
+  (`x Cyclic dependency detected: @gol/test-utils#build, @gol/persistence#build`; reproducible with
+  `npx turbo run build --dry=json`, exit 1, while `npx turbo run typecheck --dry=json` exits 0).
+  `build:standalone` is step 7 of both `npm run ci` and `npm run ci:dev`, so the edge reds every
+  gate chain including PR #71's. The edge and its lockfile line were reverted, the import comment
+  now records why declaring it is not merely unpleasant but impossible today, and the decision item
+  carries the measurement plus two new options — neither of which a story may take on its own
+  authority, since both edit a shared build contract (`^build` on `turbo.json`'s `build` task, or
+  `@gol/test-utils`'s duplicate `build` script). The owner declined both for exactly that reason;
+  (c), splitting the fakes into a `@gol/domain`-only package, stays the real fix as its own story.
+- ✅ **Decision 3 (schema refinements) — option (b).** `WorkspaceExportSchema` gains a `superRefine`
+  rejecting a duplicate `battles[].id` at path `['battles']` and a duplicate `organisms[].id` at
+  path `['organisms']`, with a negative test for each. The cardinality rule is deliberately absent
+  and **pinned as absent**: a test asserts that a `kind: 'battle'` envelope with two battles, and
+  one with none, both parse — so Story 5.4 inherits a stated behaviour rather than an oversight.
+  Both halves are recorded in the RFC-006 variances entry in `deferred-work.md`.
+- ✅ **Decision 4 (CI red — property timeout) — explicit per-test timeout.** `30_000` as the third
+  argument of both `it(...)` calls, each with a comment saying why. `numRuns` untouched, no
+  package-wide `testTimeout`, generator unshrunk.
+
+All nine ACs are met (AC7 as amended). Three things a reviewer should look at first, because they are decisions this
+story made that the story file did not pre-decide:
+
+- **FD10 (new) — AC7's premise was false and the fix was `"sideEffects": false` on `@gol/domain`,
+  not a budget raise.** "Adds no `apps/web` file and no `apps/web` import" does **not** imply the
+  bundle cannot move: `apps/web` imports the `@gol/domain` BARREL, so the two new modules entered
+  its graph the moment `index.ts` re-exported them, costing **+0.3 KB on every route** — exactly
+  Story 5.2 FD9's ~0.1–0.2 KB per added module, times two. Staying out of `apps/web` is not
+  sufficient; being *droppable* is. `packages/domain/package.json` now declares
+  `"sideEffects": false`, which is plainly true of that package (every module defines and exports
+  values; no registration, no polyfill, no module-level effect anything relies on) and lets the
+  bundler drop what no route imports. After it, three routes are byte-identical to a fresh `main`
+  build and two sit 0.1 KB above — inside the drift two builds of the *same* source already show at
+  the tool's one-decimal precision. ⚠️ Strict byte-identity as AC7 words it is not achievable at
+  that precision by any change, including no change at all. Full measurement in `deferred-work.md`,
+  along with the note that `@gol/simulation`/`@gol/persistence`/`@gol/test-utils` are equally pure
+  and are the next story's free headroom if a route ever gets close.
+
+- **`workspaceSerializer.test.ts` imports `@gol/test-utils` WITHOUT a `package.json` edge.** The
+  story's Task 3 requires `createFakeRepositories()` and the project's testing rules forbid a
+  hand-rolled fake — but `@gol/test-utils` depends on `@gol/persistence`, and declaring the reverse
+  edge closes a package cycle that is a HARD ERROR on every `^build` task (`build:standalone` is
+  step 7 of the gate chain — measured during the review resume; the first measurement, "warns
+  rather than failing", covered only the tasks with no `^` dependency). The import resolves through
+  the workspace symlink and needs no task ordering, because these packages export TS source and
+  have no emit step. The file carries the reasoning at the import; `deferred-work.md` carries the
+  clean fix — splitting the fakes into a `@gol/domain`-only package, its own story — with the
+  owner's Decision 2 (b) as its trigger.
+
+- **FD3's emission order is the load-bearing part of this story.** `toBattleExport` emits `cells`
+  grouped by ascending roster ref, not row-major, and `fromBattleExport` assigns refs by first
+  appearance — the pairing is what makes AC4 an identity on the *record* rather than "up to a
+  permutation of the roster". The named reversed-roster test in `workspaceExportProjection.test.ts`
+  is the one that goes red if someone "simplifies" it to a single pass; the fast-check property
+  alone would also catch it, but not legibly.
+
+Discharged forward-references (AC8): (a) `PALETTE_VERSION` is **not** stamped into the envelope —
+the call, its three reasons and the quoted Story 1.7 line are in `deferred-work.md`; the archived
+1.7 story file is deliberately not edited. (b) `deferred-work.md:392`'s sparse↔typed round trip is
+struck, closed by `grid.test.ts`'s `describe('sparse <-> typed round trip (AR-41, AR-44)')`, which
+composes the four shipped functions rather than writing a fifth.
+
+Out of scope and deliberately absent, each with its own owning story: `exportBattle(id)` and the
+rule-aware organism closure (5.4); the download, the filename and the `appVersion` source (5.5);
+`migrate()` (5.7); `importWorkspace()` (5.8). Nothing under `apps/web` changed.
+
+Six RFC-006 variances (Zod v3 spellings, the bare `z.string()` for `organismId`, `class` vs
+factory, RFC-006's silence on cell ordering, and — from the review — the `Wire`/hydrated type split
+and the duplicate-id refinement) are recorded in `deferred-work.md` rather than
+silently absorbed, following Story 5.2 FD4's precedent. `docs/project-context.md` needed no new
+bullet, as Task 5 predicted.
+
+### File List
+
+**Added**
+
+- `packages/domain/src/workspaceExportSchema.ts`
+- `packages/domain/src/workspaceExportSchema.test.ts`
+- `packages/domain/src/workspaceExportProjection.ts`
+- `packages/domain/src/workspaceExportProjection.test.ts`
+- `packages/persistence/src/workspaceSerializer.ts`
+- `packages/persistence/src/workspaceSerializer.test.ts`
+
+**Modified**
+
+- `packages/domain/src/battleSchema.ts` — `IsoTimestamp` gains an `export` (one line + comment).
+- `packages/domain/src/index.ts` — barrel: the envelope schemas, constants, four projection
+  functions and every type.
+- `packages/domain/package.json` — `"sideEffects": false` (FD10).
+- `packages/persistence/src/index.ts` — barrel: `createWorkspaceSerializer` + its two types.
+- `packages/simulation/src/grid/grid.test.ts` — test only: the composed sparse↔typed identity, and
+  the stale Story 3.3 FD7 comment it makes untrue.
+- `docs/implementation-artifacts/deferred-work.md` — the `:392` entry struck; a "Deferred from:
+  Story 5.3" section (FD10's measurements, the `appVersion` source for 5.5, the
+  `listFull()`-skips-corrupt export gap for 5.11, FD3's ordering contract, the `PALETTE_VERSION`
+  discharge, the six RFC-006 variances, the cardinality half handed to 5.4, the `@gol/test-utils`
+  import).
+- `docs/implementation-artifacts/sprint-status.yaml` — `5-3-export-envelope-serializer`:
+  `backlog` → `review` net of the branch (the review round moved it through `in-progress` and
+  back); the final review sets `done`.
+- `docs/implementation-artifacts/5-3-export-envelope-serializer.md` — this record.
+
+### Change Log
+
+| Date | Change |
+|---|---|
+| 2026-09-22 | Task 1 — `WorkspaceExportSchema` / `BattleExportSchema` / `PlacedCellSchema` / `EXPORT_KINDS` in `@gol/domain`; `IsoTimestamp` exported from `battleSchema.ts`; 18 schema tests including AC5's settings-stripping and the 255/256 boundary. |
+| 2026-09-22 | Task 2 — `toBattleExport` / `fromBattleExport` / `toEnvelope` / `fromEnvelope`; the FD3 ascending-ref emission order; 11 tests including the named reversed-roster case, the fast-check identity at both presets, and the whole-envelope JSON round trip. |
+| 2026-09-22 | Task 3 — `createWorkspaceSerializer` in `@gol/persistence`, a factory over `AppRepositories` with injected `appVersion` and clock; 6 tests against `createFakeRepositories()`. |
+| 2026-09-22 | Task 4 — the composed sparse↔typed identity in `packages/simulation/src/grid/grid.test.ts`, closing `deferred-work.md:392`; the stale FD7 comment updated. |
+| 2026-09-22 | Task 5 — `deferred-work.md`: `:392` struck, "Deferred from: Story 5.3" added (seven entries incl. the `PALETTE_VERSION` discharge and FD10). |
+| 2026-09-22 | Task 6 — `npm run ci:dev` exit 0. FD10: `"sideEffects": false` on `@gol/domain` after a pristine-`main` comparison showed the barrel re-export costing +0.3 KB on every route; no budget moved. |
+| 2026-09-22 | Code review (Fable, `review_mode: full`) — 9 patches applied (gridSize spread symmetry, `buckets.flat()`, two comment corrections, two test additions, three `deferred-work.md` corrections), 1 defer, 3 `[Review][Decision]` items left open for the owner; status → `in-progress`. |
+| 2026-09-22 | Owner's decisions implemented (resume): D1 AC7/Task 6 reworded + `index.ts` invariant note; D3 duplicate-id `superRefine` on `WorkspaceExportSchema` + 4 tests (2 negative, 2 pinning cardinality's deliberate absence); D4 explicit `30_000` timeouts on both fast-check identity properties. D2 (declare `@gol/test-utils`) reverted — the edge is a FATAL turbo cycle on `^build`, not a warning; item reopened with the measurement and two new options. `npm run ci:dev` exit 0. |
+| 2026-09-22 | Owner's FINAL Decision 2: (b) — keep the undeclared `@gol/test-utils` import and the recorded cache gap; no code change (`c0c21ab`). Second review round (Fable, `review_mode: full`, after the sync with `main` #70) — 19 patches applied, 0 defers, 0 decisions: the record brought up to Decision 2's final state (Completion Notes, Change Log, File List, `deferred-work.md`), "Four" → six variances, FD10 listed under Forced decisions, AC8(a) and the first round's decision count made exact, the `index.ts` header and three code comments made true of the code (`DEFAULT_SETTINGS` parse, no `kind: 'battle'` PRODUCER, shared-elements contract, `fromBattleExport`'s guarantor), and four test additions (100×60 bounds, same-organism duplicate coordinate, constants over magic numbers, `emptyGrid`). Status → `done`. |
+
+Dev Model: opus   # mints the wire format, the dense↔sparse contract and the cell-ordering identity argument that Stories 5.4–5.8 all build on; there is no serializer pattern in the tree to follow
+Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 46s | 46s | 36 | 4,941 | 13,933 | 1,057,226 | 1,076,136 |
+| Step 1 — create | opus-5 | 2 | 11m 01s | 11m 01s | 272 | 5,116 | 830,443 | 12,289,237 | 13,125,068 |
+| Step 2 — implement | opus-5 | 1 | 19m 48s | 19m 48s | 250 | 5,179 | 459,867 | 17,134,137 | 17,599,433 |
+| Step 3 — review + PR | fable-5-1 | 4 | 13m 00s | 13m 00s | 3,404 | 16,499 | 1,715,052 | 12,052,645 | 13,787,600 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 82 | 25,276 | 50,404 | 2,641,026 | 2,716,788 |
+| **Total (create → PR ready)** | | 7 | **44m 35s** | 44m 35s | 3,962 | 31,735 | 3,019,295 | 42,533,245 | **45,588,237** |
+
+Run started 2026-09-22 13:36 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
