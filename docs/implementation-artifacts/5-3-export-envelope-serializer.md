@@ -689,3 +689,18 @@ bullet, as Task 5 predicted.
 
 Dev Model: opus   # mints the wire format, the dense↔sparse contract and the cell-ordering identity argument that Stories 5.4–5.8 all build on; there is no serializer pattern in the tree to follow
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 46s | 46s | 36 | 4,941 | 13,933 | 1,057,226 | 1,076,136 |
+| Step 1 — create | opus-5 | 2 | 11m 01s | 11m 01s | 272 | 5,116 | 830,443 | 12,289,237 | 13,125,068 |
+| Step 2 — implement | opus-5 | 1 | 19m 48s | 19m 48s | 250 | 5,179 | 459,867 | 17,134,137 | 17,599,433 |
+| Step 3 — review + PR | fable-5-1 | 4 | 13m 00s | 13m 00s | 3,404 | 16,499 | 1,715,052 | 12,052,645 | 13,787,600 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 82 | 25,276 | 50,404 | 2,641,026 | 2,716,788 |
+| **Total (create → PR ready)** | | 7 | **44m 35s** | 44m 35s | 3,962 | 31,735 | 3,019,295 | 42,533,245 | **45,588,237** |
+
+Run started 2026-09-22 13:36 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
