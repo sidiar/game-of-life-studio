@@ -1006,3 +1006,18 @@ targeted runs along the way):
 Dev Model: sonnet   # every shape is a settled precedent (2.13's save path, 4.13's gate, 4.9's live region, battleRecord's projection); the two new facts — the hash scheme and the schemaVersion axis — are pinned by ten literals and a domain constant, so there is nothing to design, only to follow
 
 Proposed lane gate: none   # `useAsyncResource` gains one additive field and no Epic 5 story edits that file; 5.2 (#67) reads through it unchanged; nothing in Epic 5 depends on the organism save path (5.3/5.5/5.8 consume `contentHash`, never compute it)
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 42s | 42s | 26 | 4,079 | 12,165 | 764,598 | 780,868 |
+| Step 1 — create | opus-5 | 1 | 19m 49s | 19m 49s | 256 | 85,747 | 977,000 | 22,375,065 | 23,438,068 |
+| Step 2 — implement | sonnet-5 | 1 | 34m 39s | 34m 39s | 900 | 140,949 | 1,010,043 | 129,289,618 | 130,441,510 |
+| Step 3 — review + PR | opus-5 | 4 | 20m 04s | 20m 04s | 536 | 137,229 | 1,084,531 | 36,015,722 | 37,238,018 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 64 | 20,810 | 44,791 | 2,104,198 | 2,169,863 |
+| **Total (create → PR ready)** | | 6 | **1h 15m** | 1h 15m | 1,718 | 368,004 | 3,083,739 | 188,445,003 | **191,898,464** |
+
+Run started 2026-09-22 08:40 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
