@@ -1039,3 +1039,18 @@ Modified:
 Dev Model: opus   # the gate-before-editor lifecycle (one inert window across two dialogs, sequential handoff, focus restore to a per-card trigger) is a new pattern 4.18 (Clone & Edit), 4.21 (delete block), 4.23 (dialog over the editor) and 4.24 (battle variant) all build on; the FDs settle its shape but the hook rewrite and its jsdom-unobservable ordering claims are where a follower-model implementation fails silently
 
 Proposed lane gate: none   # this story touches no file Epic 5's next stories edit (5.3–5.5 read repositories and `packages/persistence` only), adds one pure module to `packages/domain` that 4.19 — not any 5.x story — extends, and the existing `5-4 → 4-19` gate already covers Epic 5's only dependency on that module; FD7's `schemaVersion` restamp is a decision Story 5.7 should read, not a code dependency
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 35s | 35s | 22 | 3,727 | 10,308 | 643,329 | 657,386 |
+| Step 1 — create | opus-5 | 2 | 18m 15s | 18m 15s | 306 | 5,808 | 1,550,213 | 21,709,761 | 23,266,088 |
+| Step 2 — implement | opus-5 | 1 | 25m 11s | 25m 11s | 378 | 7,468 | 482,535 | 38,082,124 | 38,572,505 |
+| Step 3 — review + PR | fable-5-1 | 8 | 35m 07s | 1h 00m | 8,620 | 29,966 | 4,365,934 | 36,483,539 | 40,888,059 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 84 | 27,442 | 181,998 | 3,074,781 | 3,284,305 |
+| **Total (create → PR ready)** | | 11 | **1h 19m** | 1h 44m | 9,326 | 46,969 | 6,408,990 | 96,918,753 | **103,384,038** |
+
+Run started 2026-09-22 12:07 CEST; wall clock runs to the point the run stopped for the owner's review. Active excludes 1 idle gap totalling 25m 50s (25m 50s from 13:07) — stretches with no transcript activity in the session or any subagent, such as a usage-limit reset or the machine asleep. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
