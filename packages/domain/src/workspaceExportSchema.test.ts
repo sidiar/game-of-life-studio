@@ -69,13 +69,20 @@ describe('WorkspaceExportSchema (AC1)', () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.issues.some((i) => i.path[0] === 'kind')).toBe(true);
-    expect([...EXPORT_KINDS]).toEqual(['workspace', 'battle']);
   });
 
-  it('accepts both export kinds', () => {
+  it('names exactly the two RFC-006 kinds, and accepts both', () => {
+    expect([...EXPORT_KINDS]).toEqual(['workspace', 'battle']);
     for (const kind of EXPORT_KINDS) {
       expect(WorkspaceExportSchema.safeParse(envelope({ kind })).success).toBe(true);
     }
+  });
+
+  it('rejects a malformed exportedAt at its own path — hand-edited files are the stated use case', () => {
+    const result = WorkspaceExportSchema.safeParse(envelope({ exportedAt: 'yesterday' }));
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.path[0] === 'exportedAt')).toBe(true);
   });
 
   it('carries appVersion verbatim — provenance, never branched on (Decision I.4)', () => {

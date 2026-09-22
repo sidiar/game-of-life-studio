@@ -58,9 +58,13 @@ export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): Worksp
       // ⚠️ `listFull()` SKIPS a corrupt record rather than throwing (see
       // `localStorageBattleRepository.ts`) — the fault-isolation stance that keeps one bad battle
       // from blanking the whole Gallery. Exporting a partly-corrupt store therefore silently omits
-      // the unreadable battles. That is the repository's existing contract, not this function's to
-      // change; telling the user belongs to Story 5.11 (load-time corruption handling), and the gap
-      // is recorded in `deferred-work.md` against it.
+      // the unreadable battles (and `organisms.list()` does the same for organisms, so a skipped
+      // organism leaves the exported battles that place it with ids the file no longer carries).
+      // Only a per-RECORD failure is skipped: a whole collection that is not an object keyed by id
+      // throws `CorruptDataError` from `readCollection`, and this call rejects with it. That is the
+      // repository's existing contract, not this function's to change; telling the user belongs to
+      // Story 5.11 (load-time corruption handling), and the gap is recorded in `deferred-work.md`
+      // against it.
       const [battles, organisms] = await Promise.all([
         repos.battles.listFull(),
         repos.organisms.list(),

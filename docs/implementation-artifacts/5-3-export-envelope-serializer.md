@@ -4,7 +4,7 @@ baseline_commit: aa8ff8e1a79e607ed8b707a757ff00f042fa1047
 
 # Story 5.3: Export Envelope & Serializer
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -243,6 +243,85 @@ a reviewer can check independently. AC6–AC9 are repo-derived: obligations the 
   - [x] `node scripts/check-bundle-size.mjs` before and after; report all five routes. AC7 expects
         **no movement at all**. If any route moves, something under `apps/web` imported this
         story's code — that is the bug, not the budget.
+
+### Review Findings
+
+Reviewed on **Fable** against an **Opus** implementation (2026-09-22), via three parallel layers
+(Blind Hunter, Edge Case Hunter, Acceptance Auditor), `review_mode: full`. 31 raw findings → 3
+`decision-needed`, 9 `patch`, 1 `defer`, 11 dismissed (dangling `organismId`s are RFC-006
+Decision 5's `assertReferentialClosure` at import, not the schema's; unparsed-`Battle` guards are
+"Zod at boundaries, not everywhere"; the fast-check generator's canonicalization equals the
+schema-valid set because `BattleSchema` already rejects unplaced and duplicate roster ids; the three
+`path: ['cells']` issues are what AC2/Task 1 prescribe; `H-9` is RFC-006's own tag).
+
+- [ ] [Review][Decision] **AC7 is not met as written, and the remedy — `"sideEffects": false` on
+      `packages/domain/package.json` (FD10) — is a shared-package build-config change no AC or task
+      named.** AC7 says all five routes are byte-identical to the 5.2 figures; the branch measures
+      333.8 / 309.5 / 309.3 / 295.8 / 291.7 (four of five differ, two of them +0.1 KB over a fresh
+      `main` build, inside the tool's one-decimal drift), and Task 6's third box is checked although
+      its premise ("any movement means an `apps/web` import") was found false. The flag itself is
+      verified true of every module in `packages/domain/src` (only `Object.freeze`/`deepFreeze` on
+      module-local constants and `SettingsSchema.parse({})` for `DEFAULT_SETTINGS` run at module
+      level), no `budgetGzipKb` moved, and it is a mechanism change rather than a threshold move —
+      but it has no guard (the first module that registers anything at import time is silently
+      tree-shaken out of production while every unit test stays green), and it is the owner's call
+      whether a story may change a shared package's bundling contract on its own authority.
+      Options: **(a)** accept FD10 as the amendment — reword AC7/Task 6 to "no `budgetGzipKb` moves
+      and every route is within the tool's precision of a fresh `main` build", keep the flag, add
+      a one-line invariant note to `packages/domain/src/index.ts`'s header (JSON takes no comment),
+      and let the next story near a ceiling take `@gol/simulation`/`@gol/persistence`/
+      `@gol/test-utils` the same way; **(b)** accept FD10 and extend the flag to all four packages
+      now, in one PR, so the invariant is repo-wide rather than one package's; **(c)** revert the
+      flag and accept +0.3 KB on every route as the honest cost of two barrel modules (within
+      budget; AC7 reworded to "no `budgetGzipKb` moves"); **(d)** reject — find a mechanism that is
+      not a package-level flag (e.g. a second entry point for the export modules).
+- [ ] [Review][Decision] **`packages/persistence/src/workspaceSerializer.test.ts` imports
+      `@gol/test-utils` with no `package.json` edge, and the undeclared edge blinds Turbo's cache.**
+      The Dev Record framed it as "circular-dependency warning vs. an undeclared import that resolves
+      through the symlink". The review adds the consequence: Turbo hashes `test:coverage` from the
+      package's own inputs plus its DECLARED workspace dependencies, the task is cached, and CI
+      restores `.turbo` — so a later change to `fakeRepositories.ts` that breaks this test replays
+      the previous green run locally and in CI. Nothing enforces declared edges (`boundary:check`
+      covers `packages/simulation/src/engine/` only; root ESLint applies `recommended` to
+      `packages/**`). `packages/domain/src/workspaceExportProjection.test.ts` refuses the same cycle
+      on principle and hand-rolls `denseGrid`, so the two test files in this story take opposite
+      positions. Options: **(a)** declare `@gol/test-utils` as a `devDependency` of
+      `@gol/persistence` and accept Turbo's `WARNING Circular package dependency detected` on every
+      task (turbo 2.10.5 warns, never fails — measured), so the cache invalidates correctly;
+      **(b)** keep the undeclared import and accept the cache gap, recorded (the `deferred-work.md`
+      entry now states it) — the test is one file and the fake changes rarely; **(c)** split the
+      in-memory fakes into a package depending only on `@gol/domain` (the clean fix, its own
+      story); **(d)** move this test's fake to a minimal in-file stub of the two `list` methods it
+      uses, breaking the project's "never hand-roll a fake repository" rule once, in the open. The
+      `deferred-work.md` entry was updated to carry the cache consequence either way.
+- [ ] [Review][Decision] **`WorkspaceExportSchema` refines nothing across its collections: a
+      `kind: 'battle'` envelope may carry zero or fifty battles, and two battles (or two organisms)
+      may share an `id`.** RFC-006 Decision 2 defines the battle export as "the same schema, filtered
+      to ONE battle plus the organisms it references", and the schema header restates it in prose
+      only; `BattleSchema` and this file both already treat a duplicate (roster id / coordinate) as
+      corrupt-never-last-wins, yet duplicate `battles[].id` / `organisms[].id` parse cleanly and
+      Story 5.8's `replaceAll` would collapse them last-wins with no error. The story forbade a
+      `kind: 'battle'` code path (5.4/5.6 own it) and RFC-006 Decision 5 puts cross-collection
+      checks in a separate `assertReferentialClosure` step at import, so it is unclear which of
+      these belong in the schema of record and which in 5.4/5.8. Options: **(a)** add a
+      `superRefine` on `WorkspaceExportSchema` now for both — `kind === 'battle' ⇒
+      battles.length === 1` (path `['battles']`) and unique `battles[].id` / `organisms[].id` (paths
+      `['battles']` / `['organisms']`) — since the format is minted here and 5.4–5.8 build on it;
+      **(b)** add only the duplicate-id refinements now (structural, matching the house stance) and
+      leave the cardinality to 5.4, which defines the battle kind; **(c)** add nothing to the
+      schema — 5.8's `assertReferentialClosure` step grows a duplicate-id check and 5.4 adds the
+      cardinality refinement when it mints `exportBattle`; **(d)** cardinality now, duplicates to
+      5.8. Whichever is picked, it should be recorded in the RFC-006 variances entry.
+- [x] [Review][Patch] `toBattleExport` aliased `battle.gridSize` into the wire object while `fromBattleExport` spreads the other way — now spread on both sides, asserted [packages/domain/src/workspaceExportProjection.ts:87]
+- [x] [Review][Patch] Header claimed `pruneAndRemapBattleGrid` must not be reached for while the tests call it in the generator — the comment now draws the input-canonicalization vs. expectation line [packages/domain/src/workspaceExportProjection.ts:23-26]
+- [x] [Review][Patch] "One pass plus one concatenation" described a cell-by-cell push loop — now `buckets.flat()`, which is the promised concatenation [packages/domain/src/workspaceExportProjection.ts:54,79-82]
+- [x] [Review][Patch] `EXPORT_KINDS` contents were asserted inside the "rejects a kind" test — moved into its own `it` [packages/domain/src/workspaceExportSchema.test.ts:72]
+- [x] [Review][Patch] No negative test for a malformed timestamp on the envelope — added `exportedAt: 'yesterday'` rejected at `['exportedAt']` [packages/domain/src/workspaceExportSchema.test.ts]
+- [x] [Review][Patch] Serializer comment promised per-record skipping only; a whole-collection corruption throws `CorruptDataError` from `readCollection`, and a skipped ORGANISM leaves battles with ids the file does not carry — comment and the 5.11 deferred entry now say both [packages/persistence/src/workspaceSerializer.ts:58-63]
+- [x] [Review][Patch] The "four RFC-006 variances" entry omitted the fifth a reader would correct back: `WorkspaceExport` is the hydrated shape and `exportWorkspace()` returns `WorkspaceExportWire`, not Decision 4's `Promise<WorkspaceExport>` [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] The `@gol/test-utils` deferred entry missed the Turbo cache consequence — added [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] New `deferred-work.md` section heading had no blank line before it, alone in the file [docs/implementation-artifacts/deferred-work.md:2414]
+- [x] [Review][Defer] `exportWorkspace()` rejects with `CorruptDataError` when `gol:battles` / `gol:organisms` is not an object keyed by id [packages/persistence/src/workspaceSerializer.ts:64-68] — deferred, pre-existing `readCollection` contract; Story 5.11 owns corruption handling
 
 ## Dev Notes
 
@@ -606,6 +685,7 @@ bullet, as Task 5 predicted.
 | 2026-09-22 | Task 4 — the composed sparse↔typed identity in `packages/simulation/src/grid/grid.test.ts`, closing `deferred-work.md:392`; the stale FD7 comment updated. |
 | 2026-09-22 | Task 5 — `deferred-work.md`: `:392` struck, "Deferred from: Story 5.3" added (seven entries incl. the `PALETTE_VERSION` discharge and FD10). |
 | 2026-09-22 | Task 6 — `npm run ci:dev` exit 0. FD10: `"sideEffects": false` on `@gol/domain` after a pristine-`main` comparison showed the barrel re-export costing +0.3 KB on every route; no budget moved. |
+| 2026-09-22 | Code review (Fable, `review_mode: full`) — 9 patches applied (gridSize spread symmetry, `buckets.flat()`, two comment corrections, two test additions, three `deferred-work.md` corrections), 1 defer, 3 `[Review][Decision]` items left open for the owner; status → `in-progress`. |
 
 Dev Model: opus   # mints the wire format, the dense↔sparse contract and the cell-ordering identity argument that Stories 5.4–5.8 all build on; there is no serializer pattern in the tree to follow
 Proposed lane gate: none

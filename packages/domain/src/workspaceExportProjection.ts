@@ -23,7 +23,9 @@
  * ⚠️ **`pruneAndRemapBattleGrid` is deliberately NOT called here.** Its output order is
  * first-placed-slot over an INPUT roster; `fromBattleExport` has no roster to start from. The two
  * agree only because of the emission order above — which is the thing under test, so reaching for
- * the projection to produce the expectation would make the test vacuous.
+ * the projection to produce the EXPECTATION would make the test vacuous. (The tests do call it, but
+ * only to canonicalize generated INPUT into a schema-valid battle before the identity is asserted —
+ * the expectation is the input itself, never the projection's output.)
  */
 
 import type { Battle } from './battleSchema';
@@ -51,7 +53,7 @@ export interface ExportMeta {
 }
 
 /**
- * Dense `gridState` -> sparse `cells`, one pass over the grid plus one concatenation.
+ * Dense `gridState` -> sparse `cells`, one pass over the grid plus one flatten of the buckets.
  *
  * Bucketed by ref rather than scanned once per ref: a 100x60 grid is 6,000 cells and a roster may
  * hold 255 entries (Decision G.3), so the per-ref scan is 1.5M reads for the same answer.
@@ -76,15 +78,15 @@ export function toBattleExport(battle: Battle): BattleExportWire {
     }
   }
 
-  const cells: PlacedCell[] = [];
-  for (let ref = 1; ref <= organismIds.length; ref++) {
-    for (const cell of buckets[ref]) cells.push(cell);
-  }
+  // Bucket order IS ref order, and slot 0 is empty, so flattening is the whole concatenation.
+  const cells: PlacedCell[] = buckets.flat();
 
   return {
     id: battle.id,
     name: battle.name,
-    gridDimensions: battle.gridSize,
+    // Spread, as `fromBattleExport` spreads `gridDimensions` the other way: the wire object may
+    // outlive the call, and sharing the preset object would let an edit to one write through.
+    gridDimensions: { ...battle.gridSize },
     cells,
     createdAt: battle.createdAt.toISOString(),
     updatedAt: battle.updatedAt.toISOString(),

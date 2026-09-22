@@ -2411,6 +2411,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   tests click Save with the pointer under jsdom, which focuses on click). Same class as the WebKit
   `:focus` branch above; a positive claim about where focus IS on WebKit would pin both — deferred,
   pre-existing idiom (Back had the identical path before Task 13).
+
 ## Deferred from: Story 5-3-export-envelope-serializer implementation (2026-09-22)
 
 - **AC7's premise was wrong, and the fix was `"sideEffects": false` on `@gol/domain` — NOT a budget
@@ -2457,7 +2458,14 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   to the serializer, and "tell the user" is a UI decision. **Pick this up in Story 5.11**
   (load-time corruption handling), which owns telling the user about unreadable records; the export
   path needs either a count of skipped battles surfaced to the caller or an explicit refusal, and
-  5.11 is the story with the standing to choose.
+  5.11 is the story with the standing to choose. Two sharpenings from the 5.3 code review: (a)
+  `organisms.list()` skips the same way, and a skipped organism leaves every exported battle that
+  places it holding an id the file does not carry — a file that Story 5.8's
+  `assertReferentialClosure` (RFC-006 Decision 5) will then REJECT on import, so the backup is not
+  merely incomplete but unimportable as written; (b) only per-RECORD corruption is skipped — a
+  whole collection that is not an object keyed by id throws `CorruptDataError` from
+  `readCollection`, and `exportWorkspace()` rejects with it rather than exporting an empty
+  collection. 5.11 should decide both together.
 
 - **The `cells` emission order is a contract of the FORMAT, and a later "simplification" would break
   it silently.** `toBattleExport` emits cells grouped by ascending roster ref (row-major within each
@@ -2497,9 +2505,13 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `createWorkspaceSerializer` is a factory over an interface, matching this repo's aggregate-level
   assembly (`createLocalStorageRepositories`) — the interface name survives, so the RFC's vocabulary
   and AR-10's are intact (FD6). (4) RFC-006 is SILENT on cell ordering; FD3 fills that gap and the
-  entry above records why it matters. None of these is a defect in the RFC — they are an eighteen-
-  month-old design doc meeting a shipped toolchain — but they are the lines a future reader would
-  otherwise "correct" back.
+  entry above records why it matters. (5) Decision 2 types every timestamp as `z.string().datetime()`,
+  so its `z.infer` `WorkspaceExport` carries STRINGS and Decision 4's `exportWorkspace()` returns
+  `Promise<WorkspaceExport>`; the shipped schema reuses `IsoTimestamp` (a `.transform` to `Date`),
+  which splits the type into `WorkspaceExport` (hydrated, `Date`s) and `WorkspaceExportWire`
+  (strings), and `exportWorkspace()` returns `Promise<WorkspaceExportWire>` (FD4). None of these is
+  a defect in the RFC — they are an eighteen-month-old design doc meeting a shipped toolchain — but
+  they are the lines a future reader would otherwise "correct" back.
 
 - **`packages/persistence/src/workspaceSerializer.test.ts` imports `@gol/test-utils` without a
   `package.json` edge.** The project's testing rules forbid hand-rolling a fake repository, so the
@@ -2509,7 +2521,25 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   warns rather than failing). The import resolves through the workspace symlink and needs no task
   ordering, because these packages export TS source and have no emit step (`build` is
   `tsc --noEmit`). ⚠️ It is still an UNDECLARED dependency and nothing in the lint config catches
-  one. The clean fix is to split the in-memory fakes out of `@gol/test-utils` into a package that
-  depends on nothing but `@gol/domain`, which is more than one story's worth of churn for one test
-  file. **Revisit if a second `packages/persistence` test needs the fakes** — at two the split is
-  paying for itself; at one it is not.
+  one — and (5.3 code review) the cost is not only hygiene: **Turbo hashes a task from the package's
+  own inputs plus its DECLARED workspace dependencies**, `test:coverage` is cached
+  (`turbo.json`: `outputs: ["coverage/**"]`) and CI restores `.turbo`, so a later change to
+  `packages/test-utils/src/fakeRepositories.ts` that breaks this test leaves
+  `@gol/persistence#test:coverage`'s hash unchanged and replays the previous green run. The
+  trade-off actually taken was Turbo's circular-dependency WARNING on every task vs. a cache that
+  cannot invalidate this one test; `@gol/simulation` takes the same edge as a DECLARED
+  `devDependency` without a cycle because `@gol/test-utils` does not depend on it. The clean fix is
+  to split the in-memory fakes out of `@gol/test-utils` into a package that depends on nothing but
+  `@gol/domain`, which is more than one story's worth of churn for one test file. Left as an open
+  `[Review][Decision]` on the story rather than revisited at a count.
+
+## Deferred from: code review of 5-3-export-envelope-serializer (2026-09-22)
+
+- **`exportWorkspace()` rejects with `CorruptDataError` when a whole collection is unparseable.**
+  `readCollection` throws when `gol:battles` or `gol:organisms` is not an object keyed by id
+  (`localStorageAccess.ts:80-88`); `listFull()` / `list()` only skip per-RECORD failures. The
+  serializer propagates the throw rather than exporting an empty collection, which is the safer of
+  the two behaviours but is not what its comment originally promised (now corrected). Pre-existing
+  repository contract, not introduced by 5.3; **Story 5.11** owns load-time corruption handling and
+  should decide whether an export over a corrupt collection refuses (today) or exports what parses
+  with a warning — the same choice as the per-record entry above.

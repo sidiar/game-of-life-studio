@@ -61,6 +61,7 @@ describe('toBattleExport (AC3)', () => {
       { x: 11, y: 7, organismId: 'alpha' },
     ]);
     expect(exported.gridDimensions).toEqual({ cols: 50, rows: 30 });
+    expect(exported.gridDimensions).not.toBe(b.gridSize);
   });
 
   it('emits ISO strings for both timestamps — the wire shape is JSON-ready (FD4)', () => {
