@@ -57,9 +57,9 @@ export function isRuleAction(value: string): value is RuleAction {
  * `conditions` allowed empty. `SurvivalRuleSchema` requires `conditions.min(1)` and a non-empty
  * `contentHash` — neither exists the moment "+ Add Rule" is pressed (conditions are Story 4.11's,
  * the hash is Story 4.16's), so the draft cannot be the persisted type. Same nesting on purpose:
- * Story 4.16 parses `{ ...rule, contentHash }`, Story 4.17 seeds `rules.map(strip hash)` — and
- * with conditions as `ConditionDraft`s — text patterns and an editor-only id; Story 4.16 maps them
- * through `conditionFromDraft`.
+ * Story 4.16 parses `{ ...rule, contentHash }`, Story 4.17 seeds `rules.map(ruleDraftFrom)` — hash
+ * dropped, id kept — with conditions as `ConditionDraft`s — text patterns and an editor-only id;
+ * Story 4.16 maps them through `conditionFromDraft`.
  */
 export interface RuleDraft {
   readonly id: string;
@@ -159,7 +159,7 @@ export function parseRuleDraft(rule: RuleDraft): ParsedRuleDraft | null {
 
 /** A persisted rule as a draft: `contentHash` dropped, the rule's own `id` KEPT (RFC-004 §2.4 —
  * never re-minted), each condition through `conditionDraftFrom` with an id from `nextId`.
- * Story 4.17's seed and the test fixtures' one source of `RuleDraft`s. */
+ * `organismDraftFrom`'s (Story 4.17) and the test fixtures' one source of `RuleDraft`s. */
 export function ruleDraftFrom(rule: SurvivalRule, nextId: () => string): RuleDraft {
   return {
     id: rule.id,

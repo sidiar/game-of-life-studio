@@ -284,9 +284,10 @@ export default function RulesEditor({
       return;
     }
 
-    // `CSS.escape`, because the id is a schema-level `string().min(1)`, not a uuid: this story
-    // mints uuids, but Story 4.17 seeds ids from persisted records, and a `"` or `\` in one would
-    // otherwise make `querySelector` throw inside this effect and unmount the editor.
+    // `CSS.escape`, because the id is a schema-level `string().min(1)`, not a uuid: a create
+    // mints uuids, but an edit session (Story 4.17) seeds ids from persisted records, and a `"`
+    // or `\` in one would otherwise make `querySelector` throw inside this effect and unmount the
+    // editor.
     const cardControl = (id: string, control: string) =>
       root?.querySelector<HTMLElement>(`[data-rule-id="${CSS.escape(id)}"] ${control}`);
 

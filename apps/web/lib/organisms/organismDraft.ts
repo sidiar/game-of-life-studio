@@ -1,7 +1,12 @@
 import { NEW_ORGANISM_DOMINANCE, type Organism } from '@gol/domain';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { type ConditionDraftField, validateConditionDraft } from './conditionDraft';
-import { ruleNeedsCondition, RULE_NEEDS_CONDITION, type RuleDraft } from './ruleDraft';
+import {
+  ruleDraftFrom,
+  ruleNeedsCondition,
+  RULE_NEEDS_CONDITION,
+  type RuleDraft,
+} from './ruleDraft';
 import { validateOrganismName } from './organismName';
 
 /**
@@ -9,7 +14,7 @@ import { validateOrganismName } from './organismName';
  * `<OrganismEditorModal>` holds it in `useState`, never `useOrganismEditorModal`, which owns
  * lifecycle only and sits in the first-load chunk). One typed object from the first field, not one
  * `useState` per field: Story 4.17 seeds the whole draft from a loaded `Organism` in one
- * assignment, Story 4.23 diffs one object against one seed for the editor's own dirty scope
+ * assignment (`organismDraftFrom`, below), Story 4.23 diffs one object against one seed for the editor's own dirty scope
  * (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one field per story — 4.6
  * `dominance`, 4.7 `agingEnabled`/`colorToken`, 4.8's M6 colour seed and 4.10's `survivalRules` are
  * done, and Story 4.13's validator (`validateOrganismDraft`, below) reads all of them. It will
@@ -37,8 +42,8 @@ export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled'
  * to equal `CONWAYS_CLASSIC.agingEnabled`, which is a coincidence, not a derivation. `colorToken`
  * is the M6 default for the library the editor opened over (Story 4.8, FR-2.3): `usedColorTokens`
  * is one token per organism, taken from the caller's loaded library — Story 4.25's battle-origin
- * editor passes the same list; Story 4.17 does not call this factory at all, it seeds from the
- * record. `survivalRules` seeds to a FRESH empty array per call (Story 4.10) — never a shared
+ * editor passes the same list; an edit session (Story 4.17) never calls this factory, it seeds
+ * from the record through `organismDraftFrom`. `survivalRules` seeds to a FRESH empty array per call (Story 4.10) — never a shared
  * module-level `[]` — for the same reason as the rest of the draft: it is diffed against its seed,
  * and a shared array would move with every edit made through this call's own reference.
  */
@@ -49,6 +54,27 @@ export function createNewOrganismDraft(usedColorTokens: readonly string[]): Orga
     agingEnabled: false,
     colorToken: defaultColorToken(usedColorTokens),
     survivalRules: [],
+  };
+}
+
+/**
+ * Seeds an edit session from a loaded record (Story 4.17) — the inverse of `projectOrganismForSave`
+ * minus `id` / `schemaVersion`, which are the save path's (the modal's `saveStamp` carries the id
+ * from mount; the version is restamped from `ORGANISM_SCHEMA_VERSION` on write). Pure: `nextId` is
+ * the condition-id source `ruleDraftFrom` contracts for — never `crypto` in here, so a test can
+ * count the calls and the seed stays deterministic. `name` is RAW as stored (the projection wrote
+ * it raw, so trimming here would make an unchanged re-save differ from the record). Rules keep the
+ * record's order and their own `id`s (RFC-004 §2.4 — re-minting would fork rule identity on every
+ * edit); `contentHash` is dropped and recomputed at save, so an UNCHANGED re-save reproduces the
+ * record byte for byte (the round-trip identity `organismDraft.test.ts` pins).
+ */
+export function organismDraftFrom(organism: Organism, nextId: () => string): OrganismDraft {
+  return {
+    name: organism.name,
+    dominance: organism.dominance,
+    agingEnabled: organism.agingEnabled,
+    colorToken: organism.colorToken,
+    survivalRules: organism.survivalRules.map((rule) => ruleDraftFrom(rule, nextId)),
   };
 }
 

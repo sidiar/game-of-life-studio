@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useEffect, useState } from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Organism } from '@gol/domain';
-import { createFakeRepositories } from '@gol/test-utils';
+import { CONWAYS_CLASSIC, createFakeRepositories, createMockOrganisms } from '@gol/test-utils';
 import OrganismEditorModal from '@/components/organisms/editor/OrganismEditorModal';
+import OrganismInUseDialog from '@/components/organisms/OrganismInUseDialog';
 import {
   useOrganismEditorModal,
   type UseOrganismEditorModalResult,
@@ -57,13 +58,26 @@ function hook(): UseOrganismEditorModalResult {
   return latest;
 }
 
+// Story 4.17: a small library for the edit entry. The usage counts are the PROBE's, not derived —
+// this file pins the hook's gate on the number it is handed, `OrganismLibrary.test.tsx` pins that
+// the number comes from `buildUsageIndex`.
+const LIBRARY: readonly Organism[] = [CONWAYS_CLASSIC, ...createMockOrganisms()];
+const USED_IN: Readonly<Record<string, number>> = {
+  [CONWAYS_CLASSIC.id]: 0,
+  [LIBRARY[1].id]: 2,
+};
+
 /**
  * Stands in for `<OrganismLibrary>`: the create trigger carries the `[data-create-organism]` hook
- * the focus restore looks up, an "elsewhere" control models focus the user placed somewhere real,
- * and the REAL modal is mounted on `mounted` — the caller's conditional mount, and the reason the
- * hook exposes `mounted` at all.
+ * the focus restore looks up, an Edit button per organism carries `data-edit-organism-id`
+ * (Story 4.17), an "elsewhere" control models focus the user placed somewhere real, and the REAL
+ * modal and the REAL in-use dialog are mounted on `mounted` / `gateMounted` — the caller's two
+ * conditional mounts, and the reason the hook exposes both flags at all.
  */
-function Probe({ onSaved }: { onSaved?: (organism: Organism) => void } = {}) {
+function Probe({
+  onSaved,
+  cards = LIBRARY,
+}: { onSaved?: (organism: Organism) => void; cards?: readonly Organism[] } = {}) {
   const result = useOrganismEditorModal('library', { onSaved });
   useEffect(() => {
     latest = result;
@@ -71,26 +85,39 @@ function Probe({ onSaved }: { onSaved?: (organism: Organism) => void } = {}) {
   // A FRESH fake per Probe instance — a shared repository across renders would leak a saved
   // record from one test's assertions into another's. The lazy-initialiser form runs once per
   // mount (`useRef(...).current` reads a ref during render, which `react-hooks/refs` now flags).
-  const [organisms] = useState(() => createFakeRepositories().organisms);
+  const [organisms] = useState(() => createFakeRepositories({ organisms: [...LIBRARY] }).organisms);
 
   return (
     <>
       <button type="button" data-create-organism="" onClick={result.requestCreate}>
         + Create New Organism
       </button>
+      {cards.map((organism) => (
+        <button
+          key={organism.id}
+          type="button"
+          data-edit-organism-id={organism.id}
+          onClick={() => result.requestEdit(organism, USED_IN[organism.id] ?? 0)}
+        >
+          Edit {organism.name}
+        </button>
+      ))}
       <button type="button" data-testid="elsewhere">
         Elsewhere
       </button>
-      {/* The hook's test is about lifecycle; an empty library is a legal, honest input here
-          (Story 4.8) — this file does not exercise the colour seed. */}
+      {result.gateMounted && <OrganismInUseDialog {...result.gateProps} />}
       {result.mounted && (
-        <OrganismEditorModal {...result.modalProps} library={[]} organisms={organisms} />
+        <OrganismEditorModal {...result.modalProps} library={LIBRARY} organisms={organisms} />
       )}
     </>
   );
 }
 
 const createButton = () => screen.getByRole('button', { name: '+ Create New Organism' });
+const editButton = (organism: Organism) =>
+  screen.getByRole('button', { name: `Edit ${organism.name}` });
+const editorDialog = () => screen.queryByRole('dialog', { name: 'Organism Editor' });
+const gateDialog = () => screen.queryByRole('dialog', { name: /^Used in \d+ Battles?$/ });
 
 afterEach(() => {
   latest = null;
@@ -368,6 +395,194 @@ describe('useOrganismEditorModal', () => {
       rerender(<Probe onSaved={vi.fn()} />);
 
       expect(hook().modalProps).toBe(first);
+    });
+  });
+
+  // Story 4.17: the edit entry and the FR-1.3 gate. The gate → editor handoff is SEQUENTIAL (the
+  // editor mounts only from the gate's `onExited`), the inert window is ONE union across both,
+  // and focus restores to the edited card's own Edit button by DOM lookup.
+  describe('edit organism from library (Story 4.17)', () => {
+    const unused = LIBRARY[0];
+    const used = LIBRARY[1];
+
+    it('(a) requestEdit with usedInBattles 0 mounts and opens the editor on the organism, with no gate', async () => {
+      const user = userEvent.setup();
+      render(<Probe />);
+
+      await user.click(editButton(unused));
+
+      expect(hook().mounted).toBe(true);
+      expect(hook().modalProps.open).toBe(true);
+      expect(hook().modalProps.organism).toBe(unused);
+      expect(hook().gateMounted).toBe(false);
+      expect(gateDialog()).toBeNull();
+      expect(editorDialog()).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue(unused.name);
+    });
+
+    it('(b) requestEdit with usedInBattles 2 mounts and opens the gate with that count, and NOT the editor', async () => {
+      const user = userEvent.setup();
+      render(<Probe />);
+
+      await user.click(editButton(used));
+
+      expect(hook().gateMounted).toBe(true);
+      expect(hook().gateProps.open).toBe(true);
+      expect(hook().gateProps.usedInBattles).toBe(2);
+      expect(hook().mounted).toBe(false);
+      expect(editorDialog()).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Used in 2 Battles' })).toBeInTheDocument();
+    });
+
+    it("(c) Cancel closes the gate; after its exit the gate is unmounted, focus is on THAT organism's Edit button, and the editor never mounted", async () => {
+      const user = userEvent.setup();
+      render(<Probe />);
+      await user.click(editButton(used));
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+      await waitFor(() =>
+        expect(within(gate).getByRole('button', { name: 'Cancel' })).toHaveFocus(),
+      );
+
+      await user.click(within(gate).getByRole('button', { name: 'Cancel' }));
+
+      expect(hook().gateProps.open).toBe(false);
+      expect(hook().gateMounted).toBe(true);
+      await act(async () => {
+        hook().gateProps.onExited?.();
+      });
+
+      expect(hook().gateMounted).toBe(false);
+      expect(hook().mounted).toBe(false);
+      expect(editorDialog()).toBeNull();
+      expect(document.activeElement).toBe(editButton(used));
+    });
+
+    it('(d) Edit Anyway closes the gate while still mounted, editor NOT yet mounted; after the gate exits, the editor opens on the organism', async () => {
+      const user = userEvent.setup();
+      render(<Probe />);
+      await user.click(editButton(used));
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+
+      await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+
+      expect(hook().gateProps.open).toBe(false);
+      expect(hook().gateMounted).toBe(true);
+      expect(hook().mounted).toBe(false);
+      expect(editorDialog()).toBeNull();
+
+      await act(async () => {
+        hook().gateProps.onExited?.();
+      });
+
+      expect(hook().gateMounted).toBe(false);
+      expect(hook().mounted).toBe(true);
+      expect(hook().modalProps.open).toBe(true);
+      expect(hook().modalProps.organism).toBe(used);
+      expect(editorDialog()).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue(used.name);
+    });
+
+    it('(e) the background stays inert across the gate → editor handoff', async () => {
+      const user = userEvent.setup();
+      const background = appendBackground();
+      render(<Probe />);
+      await user.click(editButton(used));
+      expect(isInert(background)).toBe(true);
+
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+      await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+      // Gate closed, fading: still inert.
+      expect(isInert(background)).toBe(true);
+
+      await act(async () => {
+        hook().gateProps.onExited?.();
+      });
+      // Editor mounted: still inert — the union never dipped.
+      expect(isInert(background)).toBe(true);
+      expect(hook().mounted).toBe(true);
+
+      act(() => hook().modalProps.onClose());
+      expect(isInert(background)).toBe(true);
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+      expect(isInert(background)).toBe(false);
+    });
+
+    it("(f) after (d), Back on the editor restores focus to the organism's Edit button once exited", async () => {
+      const user = userEvent.setup();
+      render(<Probe />);
+      await user.click(editButton(used));
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+      await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+      await act(async () => {
+        hook().gateProps.onExited?.();
+      });
+      expect(editorDialog()).toBeInTheDocument();
+
+      screen.getByRole('button', { name: 'Close' }).focus();
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(hook().mounted).toBe(false);
+      expect(document.activeElement).toBe(editButton(used));
+    });
+
+    it('(g) when that Edit button is gone at restore time, focus falls back to the create button', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(<Probe />);
+      await user.click(editButton(unused));
+      expect(editorDialog()).toBeInTheDocument();
+
+      // The card leaves the grid while the editor is open (the organism was deleted elsewhere).
+      rerender(<Probe cards={LIBRARY.filter((o) => o.id !== unused.id)} />);
+      expect(screen.queryByRole('button', { name: `Edit ${unused.name}` })).toBeNull();
+
+      screen.getByRole('button', { name: 'Close' }).focus();
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(document.activeElement).toBe(createButton());
+    });
+
+    it('(h) modalProps.organism is null after requestCreate, and is cleared only after the editor has exited', async () => {
+      const user = userEvent.setup();
+      render(<Probe />);
+
+      await user.click(createButton());
+      expect(hook().modalProps.organism).toBeNull();
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      await user.click(editButton(unused));
+      expect(hook().modalProps.organism).toBe(unused);
+      act(() => hook().modalProps.onClose());
+      // Fading: closed to the user, the record still rides `modalProps` for the mounted modal.
+      expect(hook().modalProps.open).toBe(false);
+      expect(hook().modalProps.organism).toBe(unused);
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+      expect(hook().modalProps.organism).toBeNull();
+    });
+
+    it('(i) modalProps and gateProps identities are stable across an unrelated re-render', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(<Probe />);
+      await user.click(editButton(used));
+      const modalBefore = hook().modalProps;
+      const gateBefore = hook().gateProps;
+
+      rerender(<Probe />);
+
+      expect(hook().modalProps).toBe(modalBefore);
+      expect(hook().gateProps).toBe(gateBefore);
     });
   });
 });

@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
-import { CONWAYS_CLASSIC_ID } from '@gol/domain';
-import type { OrganismRepository } from '@gol/persistence';
+import { buildUsageIndex, CONWAYS_CLASSIC_ID, type Organism } from '@gol/domain';
+import type { BattleRepository, OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { normalizeOrganismSearch, organismNameMatches } from '@/lib/organisms/organismNameMatches';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
@@ -29,8 +29,22 @@ import OrganismCard from './OrganismCard';
  */
 const OrganismEditorModal = dynamic(() => import('./editor/OrganismEditorModal'), { ssr: false });
 
+// Story 4.17: the FR-1.3 in-use warning, a second `dynamic()` boundary beside the editor's, for
+// the same reasons — the MUI Dialog stack stays out of the first load, and a closed dialog is never
+// in the first paint. Not rendered from inside the editor chunk: the gate opens BEFORE the editor
+// exists (a Cancel never fetches the editor chunk at all). Modules shared with the editor chunk
+// (the Dialog stack) are hoisted into a common async chunk at bundle time.
+const OrganismInUseDialog = dynamic(() => import('./OrganismInUseDialog'), { ssr: false });
+
 export interface OrganismLibraryProps {
   organisms: OrganismRepository;
+  /**
+   * Story 4.17 (RFC-005 `:168-172`): the Library reads the battle list for the AR-15 usage index —
+   * "Used in N Battles" before an edit opens. Interface-typed, injected from the page boundary's one
+   * `createRepositories()` (AR-2/AR-27); never reaches the modal (Story 4.20's footer will need it
+   * there, and an unread prop is a lie about what a component reads).
+   */
+  battles: BattleRepository;
   seedStatus: WorkspaceSeedStatus;
 }
 
@@ -209,17 +223,35 @@ function organismCountLabel(shown: number, total: number, filtering: boolean): s
  * (`OrganismEditorModal`'s own `SaveOutcomeLine`) now that Save no longer closes it — this
  * component has no live region of its own to publish into any more.
  *
- * No `battles` prop yet: RFC-005's tree gives the Library both repositories for the usage index,
- * but that index is Story 4.19's — an unused prop today would be a lie about what this component
- * reads.
+ * Since Story 4.17 every card carries an Edit action (FR-1.3): the Library derives the AR-15 usage
+ * index from `battles.list()` and hands each click to the hook's `requestEdit` with the organism's
+ * count — `0` opens the editor directly on the record, `≥ 1` opens the "Used in N Battles"
+ * warning first. The editor receives the same `library` list for both modes and excludes the
+ * organism under edit itself.
  */
-export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibraryProps) {
-  // Deps: `organisms` is useMemo-stable from the page boundary; `seedStatus` is a string — both
-  // satisfy useAsyncResource's stable/fixed-length precondition. Re-running list() on the
-  // seedStatus flip is deliberate (Story 4.1): while seeding, the first read hits a pre-seed
-  // store, so the dep re-runs it once the seed settles — one cheap extra localStorage read
-  // (NFR-1.4) rather than threading a "skip" flag through the hook.
-  const resource = useAsyncResource(() => organisms.list(), [organisms, seedStatus]);
+export default function OrganismLibrary({ organisms, battles, seedStatus }: OrganismLibraryProps) {
+  // Deps: `organisms`/`battles` are useMemo-stable from the page boundary; `seedStatus` is a
+  // string — all satisfy useAsyncResource's stable/fixed-length precondition. Re-running the
+  // reads on the seedStatus flip is deliberate (Story 4.1): while seeding, the first read hits a
+  // pre-seed store, so the dep re-runs it once the seed settles — one cheap extra localStorage
+  // read (NFR-1.4) rather than threading a "skip" flag through the hook.
+  //
+  // ONE resource over BOTH lists (Story 4.17, FD2), not RFC-005 `:307-313`'s separate
+  // `useOrganismUsage` sketch: `'ready'` must mean both lists are in hand, or an Edit clicked
+  // while the battle list is still pending reads a usage of `0` and opens a placed organism with
+  // no warning — silently. And no `.catch(() => [])` on `battles.list()` (the `<BattleGallery>`
+  // idiom for the OTHER list): a swallowed rejection is the same silent `0`. `battles.list()`
+  // rejects only on whole-key corruption of `gol:battles` (a bad RECORD is skipped by the
+  // repository), the condition that already blanks the Gallery today, and Story 5.11 owns
+  // load-time corruption UX — so it lands in the existing `'error'` state here.
+  const resource = useAsyncResource(
+    () => Promise.all([organisms.list(), battles.list()]),
+    [organisms, battles, seedStatus],
+  );
+  const [loadedOrganisms, summaries] = resource.data ?? [[], []];
+  // `summaries` is referentially stable between loads (`resource.data` is one object per settle),
+  // so this memo hits on every search keystroke and misses only on a (re)load.
+  const usage = useMemo(() => buildUsageIndex(summaries), [summaries]);
 
   // Ephemeral UI state only (RFC-005 Decision 1) — never persisted, never in a ref: this is not
   // hot simulation state.
@@ -246,9 +278,19 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
   // above is load-bearing and a static import of that module would defeat it.
   const {
     requestCreate,
+    requestEdit,
     mounted: editorMounted,
     modalProps,
+    gateMounted,
+    gateProps,
   } = useOrganismEditorModal('library', { onSaved });
+
+  // Story 4.17, AC1: the count is the number of DISTINCT saved battles whose placed set holds the
+  // id (Decision H: "used" = placed) — read from the SAME settled list the page holds.
+  const onRequestEdit = useCallback(
+    (organism: Organism) => requestEdit(organism, usage.get(organism.id)?.length ?? 0),
+    [requestEdit, usage],
+  );
 
   // Folded at render, exactly as BattleGallery folds seedStatus against its own load state
   // (Story 4.1) — never written into the resource itself, which would risk a cascading setState.
@@ -268,7 +310,7 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
   // `<OrganismSearchAdd>` already closed for this exact shape of predicate over an uncapped
   // library (`deferred-work.md:337`, ~0.02-0.04 ms for 1,000 organisms): far past any realistic
   // workspace, and roughly one keystroke's worth of budget for a scan that runs once per render.
-  const sorted = sortLibrary(resource.data ?? []);
+  const sorted = sortLibrary(loadedOrganisms);
   const query = normalizeOrganismSearch(searchText);
   const visible =
     query === ''
@@ -331,7 +373,11 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
             <CardGrid role="list" aria-label="Organisms">
               {visible.map((organism) => (
                 <li key={organism.id}>
-                  <OrganismCard organism={organism} system={organism.id === CONWAYS_CLASSIC_ID} />
+                  <OrganismCard
+                    organism={organism}
+                    system={organism.id === CONWAYS_CLASSIC_ID}
+                    onRequestEdit={() => onRequestEdit(organism)}
+                  />
                 </li>
               ))}
             </CardGrid>
@@ -347,6 +393,9 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
       {editorMounted && (
         <OrganismEditorModal {...modalProps} library={sorted} organisms={organisms} />
       )}
+      {/* Story 4.17: the in-use gate, mounted on ITS window (the hook's `gateMounted`), for the
+          same fetch-on-first-open / fade-before-unmount reasons as the editor above. */}
+      {gateMounted && <OrganismInUseDialog {...gateProps} />}
     </section>
   );
 }

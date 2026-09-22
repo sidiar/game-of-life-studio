@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE } from '@gol/domain';
+import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE, type Organism } from '@gol/domain';
+import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { PALETTE } from '@/lib/palette/paletteRegistry';
 import { ORGANISM_NAME_REQUIRED, organismNameTooLong } from './organismName';
@@ -11,7 +12,8 @@ import {
   wholeNumberMessage,
   type ConditionDraft,
 } from './conditionDraft';
-import { createNewOrganismDraft, validateOrganismDraft } from './organismDraft';
+import { createNewOrganismDraft, organismDraftFrom, validateOrganismDraft } from './organismDraft';
+import { projectOrganismForSave } from './organismRecord';
 import { createNewRuleDraft, moveRule, RULE_NEEDS_CONDITION, type RuleDraft } from './ruleDraft';
 
 describe('createNewOrganismDraft', () => {
@@ -47,6 +49,75 @@ describe('createNewOrganismDraft', () => {
     const first = createNewOrganismDraft([]);
     const second = createNewOrganismDraft([]);
     expect(first.survivalRules).not.toBe(second.survivalRules);
+  });
+});
+
+describe('organismDraftFrom (Story 4.17)', () => {
+  /** A counting id source — the test asserts how many condition ids the seed asked for. */
+  function countingIds(): { nextId: () => string; calls: () => number } {
+    let n = 0;
+    return {
+      nextId: () => `cond-${++n}`,
+      calls: () => n,
+    };
+  }
+
+  it("(a) seeds every scalar, both rules in order with the record's ids, hashes dropped, one fresh id per condition", () => {
+    const ids = countingIds();
+    const draft = organismDraftFrom(CONWAYS_CLASSIC, ids.nextId);
+
+    expect(draft.name).toBe(CONWAYS_CLASSIC.name);
+    expect(draft.dominance).toBe(CONWAYS_CLASSIC.dominance);
+    expect(draft.agingEnabled).toBe(CONWAYS_CLASSIC.agingEnabled);
+    expect(draft.colorToken).toBe(CONWAYS_CLASSIC.colorToken);
+    expect(draft.survivalRules.map((rule) => rule.id)).toEqual(
+      CONWAYS_CLASSIC.survivalRules.map((rule) => rule.id),
+    );
+    for (const rule of draft.survivalRules) expect(rule).not.toHaveProperty('contentHash');
+
+    const conditionCount = CONWAYS_CLASSIC.survivalRules.reduce(
+      (sum, rule) => sum + rule.conditions.length,
+      0,
+    );
+    expect(ids.calls()).toBe(conditionCount);
+    const conditionIds = draft.survivalRules.flatMap((rule) => rule.conditions.map((c) => c.id));
+    expect(new Set(conditionIds).size).toBe(conditionCount);
+    for (const id of conditionIds) expect(id).toMatch(/^cond-\d+$/);
+  });
+
+  // The load-bearing one: an UNCHANGED re-save must reproduce the record byte for byte — rule
+  // ids, hashes, order and `schemaVersion` — or every edit session silently forks rule identity.
+  it('(b) seed ∘ project is the identity on CONWAYS_CLASSIC and every mock organism', async () => {
+    const records: Organism[] = [CONWAYS_CLASSIC, ...createMockOrganisms()];
+    for (const organism of records) {
+      const draft = organismDraftFrom(organism, () => crypto.randomUUID());
+      await expect(projectOrganismForSave(draft, organism.id)).resolves.toEqual(organism);
+    }
+  });
+
+  it('(c) a numeric range condition round-trips through text', async () => {
+    const patientDefender = createMockOrganisms()[1];
+    const rangeRule = patientDefender.survivalRules.find((rule) =>
+      rule.conditions.some((c) => c.operator === 'range'),
+    );
+    expect(rangeRule).toBeDefined();
+
+    const draft = organismDraftFrom(patientDefender, () => crypto.randomUUID());
+    const seededRange = draft.survivalRules
+      .flatMap((rule) => rule.conditions)
+      .find((c) => c.operator === 'range');
+    expect(seededRange?.pattern).toEqual(['3', '4']);
+
+    const saved = await projectOrganismForSave(draft, patientDefender.id);
+    const savedRange = saved.survivalRules
+      .flatMap((rule) => rule.conditions)
+      .find((c) => c.operator === 'range');
+    expect(savedRange?.pattern).toEqual([3, 4]);
+  });
+
+  it('(d) a name with trailing whitespace seeds RAW, as stored', () => {
+    const draft = organismDraftFrom({ ...CONWAYS_CLASSIC, name: 'Trailing  ' }, () => 'x');
+    expect(draft.name).toBe('Trailing  ');
   });
 });
 

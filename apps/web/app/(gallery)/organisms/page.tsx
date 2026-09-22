@@ -22,5 +22,13 @@ export default function OrganismsPage() {
   // No <main> here — AppShell owns the single <main> landmark for the (gallery) branch; this page
   // renders only its own content into it. No useDocumentTitle either (FD4): the Library claims no
   // document.title, same convention as HomePage.
-  return <OrganismLibrary organisms={repositories.organisms} seedStatus={status} />;
+  // Both repositories (Story 4.17, RFC-005's tree): the Library reads the battle list for the
+  // AR-15 usage index behind every Edit.
+  return (
+    <OrganismLibrary
+      organisms={repositories.organisms}
+      battles={repositories.battles}
+      seedStatus={status}
+    />
+  );
 }

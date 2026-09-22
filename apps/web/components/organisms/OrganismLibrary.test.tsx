@@ -2,8 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { NEW_ORGANISM_DOMINANCE } from '@gol/domain';
-import { CONWAYS_CLASSIC, createFakeRepositories, createMockOrganisms } from '@gol/test-utils';
+import { NEW_ORGANISM_DOMINANCE, type Organism } from '@gol/domain';
+import { CorruptDataError } from '@gol/persistence';
+import {
+  CONWAYS_CLASSIC,
+  createFakeRepositories,
+  createMockOrganisms,
+  createMockWorkspace,
+} from '@gol/test-utils';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { DEFAULT_COLOR_TOKEN, PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
@@ -27,10 +33,10 @@ afterEach(() => {
 describe('OrganismLibrary', () => {
   it('shows loading copy while seedStatus is "seeding", even after list() has resolved', async () => {
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories({ organisms: mocks });
+    const { organisms, battles } = createFakeRepositories({ organisms: mocks });
     const list = vi.spyOn(organisms, 'list');
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="seeding" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="seeding" />);
 
     // Let the fake's list() promise settle FIRST — asserting synchronously after render would
     // pass on resource.status === 'loading' alone, with the seedStatus clause of the fold deleted.
@@ -44,15 +50,17 @@ describe('OrganismLibrary', () => {
   // dropping the dep leaves every other test here green.
   it('re-runs list() when seedStatus flips from "seeding" to "ready", rendering the seeded rows', async () => {
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories();
+    const { organisms, battles } = createFakeRepositories();
     const list = vi.spyOn(organisms, 'list');
 
-    const { rerender } = render(<OrganismLibrary organisms={organisms} seedStatus="seeding" />);
+    const { rerender } = render(
+      <OrganismLibrary organisms={organisms} battles={battles} seedStatus="seeding" />,
+    );
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
 
     // The "seed" lands while the first read is already settled against an empty store.
     for (const organism of mocks) await organisms.save(organism);
-    rerender(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    rerender(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
 
     await waitFor(() => {
       expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length);
@@ -65,9 +73,9 @@ describe('OrganismLibrary', () => {
   // that each chip paints the LUT-resolved identity-shade colour, never a literal hex.
   it('renders each organism as a card once ready, in name order, with the right chip colour, and nothing else', async () => {
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories({ organisms: mocks });
+    const { organisms, battles } = createFakeRepositories({ organisms: mocks });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
 
     await waitFor(() => {
       for (const organism of mocks) {
@@ -104,9 +112,9 @@ describe('OrganismLibrary', () => {
   });
 
   it('shows role="alert" when seedStatus is "error"', () => {
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="error" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="error" />);
 
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Something went wrong loading your organisms.',
@@ -117,8 +125,9 @@ describe('OrganismLibrary', () => {
     const organisms = {
       list: vi.fn().mockRejectedValue(new Error('boom')),
     } as unknown as Parameters<typeof OrganismLibrary>[0]['organisms'];
+    const { battles } = createFakeRepositories();
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
@@ -128,9 +137,11 @@ describe('OrganismLibrary', () => {
   });
 
   it('renders exactly one h1, "Organism Library"', async () => {
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    const { container } = render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    const { container } = render(
+      <OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />,
+    );
 
     await waitFor(() => {
       expect(
@@ -141,9 +152,11 @@ describe('OrganismLibrary', () => {
   });
 
   it('has no axe accessibility violations once ready', async () => {
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    const { container } = render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    const { container } = render(
+      <OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />,
+    );
 
     await waitFor(() => screen.getByText(createMockOrganisms()[0].name));
 
@@ -155,9 +168,11 @@ describe('OrganismLibrary', () => {
   // BEFORE Conway's Classic, so insertion order alone would put it last.
   it("orders the grid Conway's Classic first, then the rest by name", async () => {
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories({ organisms: [...mocks, CONWAYS_CLASSIC] });
+    const { organisms, battles } = createFakeRepositories({
+      organisms: [...mocks, CONWAYS_CLASSIC],
+    });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
 
     await waitFor(() => {
       const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
@@ -173,9 +188,11 @@ describe('OrganismLibrary', () => {
   it('filters the grid live by name, updating the count badge, and clearing restores it', async () => {
     const user = userEvent.setup();
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories({ organisms: [...mocks, CONWAYS_CLASSIC] });
+    const { organisms, battles } = createFakeRepositories({
+      organisms: [...mocks, CONWAYS_CLASSIC],
+    });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
 
     const search = await screen.findByRole('textbox', { name: 'Search organisms' });
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4));
@@ -199,9 +216,9 @@ describe('OrganismLibrary', () => {
 
   it('shows a message, not an empty control, when the search matches nothing — the input stays and keeps focus', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
 
     const search = await screen.findByRole('textbox', { name: 'Search organisms' });
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
@@ -221,13 +238,16 @@ describe('OrganismLibrary', () => {
   it('never calls save/delete/replaceAll while searching — list() is called exactly once', async () => {
     const user = userEvent.setup();
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories({ organisms: [...mocks, CONWAYS_CLASSIC] });
+    const { organisms, battles } = createFakeRepositories({
+      organisms: [...mocks, CONWAYS_CLASSIC],
+    });
     const list = vi.spyOn(organisms, 'list');
+    const battleList = vi.spyOn(battles, 'list');
     const save = vi.spyOn(organisms, 'save');
     const del = vi.spyOn(organisms, 'delete');
     const replaceAll = vi.spyOn(organisms, 'replaceAll');
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
 
     const search = await screen.findByRole('textbox', { name: 'Search organisms' });
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4));
@@ -238,6 +258,7 @@ describe('OrganismLibrary', () => {
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4));
 
     expect(list).toHaveBeenCalledTimes(1);
+    expect(battleList).toHaveBeenCalledTimes(1);
     expect(save).not.toHaveBeenCalled();
     expect(del).not.toHaveBeenCalled();
     expect(replaceAll).not.toHaveBeenCalled();
@@ -250,9 +271,9 @@ describe('OrganismLibrary', () => {
   it('seeds the picker at the next unused token of the loaded library (M6) (Story 4.8)', async () => {
     const user = userEvent.setup();
     const fixture = [CONWAYS_CLASSIC, ...createMockOrganisms()];
-    const { organisms } = createFakeRepositories({ organisms: fixture });
+    const { organisms, battles } = createFakeRepositories({ organisms: fixture });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(fixture.length));
 
     await user.click(screen.getByRole('button', { name: '+ Create New Organism' }));
@@ -266,13 +287,16 @@ describe('OrganismLibrary', () => {
 
   // Story 4.3 retargets this: the create button is the FIRST child of the toolbar's left group
   // (mockup `:405-406` — button before the search container), so DOM order and visual order agree
-  // (SC 2.4.3) and it is the first stop.
-  it('tabs from the create button to the search input, then the first card, then the second, in grid order', async () => {
+  // (SC 2.4.3) and it is the first stop. Story 4.17 retargets the card stops to each card's Edit
+  // button (AC7): the article is no longer focusable, so one Tab per card lands on its one control.
+  it("tabs from the create button to the search input, then the first card's Edit button, then the second's, in grid order", async () => {
     const user = userEvent.setup();
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories({ organisms: [...mocks, CONWAYS_CLASSIC] });
+    const { organisms, battles } = createFakeRepositories({
+      organisms: [...mocks, CONWAYS_CLASSIC],
+    });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
 
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4));
 
@@ -283,19 +307,26 @@ describe('OrganismLibrary', () => {
     expect(screen.getByRole('textbox', { name: 'Search organisms' })).toHaveFocus();
 
     await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole('article', { name: "Conway's Classic" }));
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: "Edit Conway's Classic" }),
+    );
+    expect(document.activeElement?.closest('article')).toBe(
+      screen.getByRole('article', { name: "Conway's Classic" }),
+    );
 
     await user.tab();
     expect(document.activeElement).toBe(
-      screen.getByRole('article', { name: 'Aggressive Colonizer' }),
+      screen.getByRole('button', { name: 'Edit Aggressive Colonizer' }),
     );
   });
 
   it('has no axe violations while filtered', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    const { container } = render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    const { container } = render(
+      <OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />,
+    );
     const search = await screen.findByRole('textbox', { name: 'Search organisms' });
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
@@ -308,9 +339,11 @@ describe('OrganismLibrary', () => {
 
   it('has no axe violations in the zero-match state', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    const { container } = render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    const { container } = render(
+      <OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />,
+    );
     const search = await screen.findByRole('textbox', { name: 'Search organisms' });
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
@@ -324,12 +357,14 @@ describe('OrganismLibrary', () => {
   // Story 4.16 Task 11 (2026-09-22): the save-outcome region moved INTO the editor modal, so this
   // component is back to having exactly one `role="status"` element — the pre-4.16 selector.
   it('shows the count badge only once ready, as a role="status"', async () => {
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    const { rerender } = render(<OrganismLibrary organisms={organisms} seedStatus="seeding" />);
+    const { rerender } = render(
+      <OrganismLibrary organisms={organisms} battles={battles} seedStatus="seeding" />,
+    );
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
-    rerender(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    rerender(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('3 Organisms');
     });
@@ -351,26 +386,28 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
   // The toolbar sits OUTSIDE the aria-busy wrapper on purpose: a control that vanishes while the
   // list loads is `deferred-work.md`'s "controls inside aria-busy" mistake, not repeated here.
   it('renders the create button in the loading, error and ready states', async () => {
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    const { rerender } = render(<OrganismLibrary organisms={organisms} seedStatus="seeding" />);
+    const { rerender } = render(
+      <OrganismLibrary organisms={organisms} battles={battles} seedStatus="seeding" />,
+    );
     expect(screen.getByText('Loading organisms…')).toBeInTheDocument();
     expect(createButton()).toBeInTheDocument();
 
-    rerender(<OrganismLibrary organisms={organisms} seedStatus="error" />);
+    rerender(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="error" />);
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(createButton()).toBeInTheDocument();
 
-    rerender(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    rerender(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
     expect(createButton()).toBeInTheDocument();
   });
 
   it('opens the editor as a labelled dialog when the create button is clicked', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
@@ -385,9 +422,9 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
 
   it('Escape closes the editor and returns focus to the create button', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -401,9 +438,9 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
 
   it('Close closes the editor and returns focus to the create button', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -417,9 +454,9 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
 
   it('Back closes the editor and returns focus to the create button', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -438,9 +475,9 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
   it('reopens with an empty, error-free name field — the draft does not survive an exit (Story 4.5)', async () => {
     const user = userEvent.setup();
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories({ organisms: mocks });
+    const { organisms, battles } = createFakeRepositories({ organisms: mocks });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length));
 
     await user.click(createButton());
@@ -485,13 +522,14 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
   // View-only proof: an open/close cycle must never write to the repository, and must not re-list.
   it('never calls save/delete/replaceAll across an open/close cycle — list() is called exactly once', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
     const list = vi.spyOn(organisms, 'list');
+    const battleList = vi.spyOn(battles, 'list');
     const save = vi.spyOn(organisms, 'save');
     const del = vi.spyOn(organisms, 'delete');
     const replaceAll = vi.spyOn(organisms, 'replaceAll');
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -500,6 +538,7 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     expect(list).toHaveBeenCalledTimes(1);
+    expect(battleList).toHaveBeenCalledTimes(1);
     expect(save).not.toHaveBeenCalled();
     expect(del).not.toHaveBeenCalled();
     expect(replaceAll).not.toHaveBeenCalled();
@@ -545,9 +584,9 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
 
   it('(a) open, name, Save: the dialog STAYS OPEN and its own [data-save-outcome] reads ORGANISM_SAVED', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -579,10 +618,10 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
   it('(b) Back after a save shows the new card in sortLibrary position, the SAME count-badge node reads the new total (no "loading" reset, list() called exactly twice), and focus returns to the create button', async () => {
     const user = userEvent.setup();
     const mocks = createMockOrganisms();
-    const { organisms } = createFakeRepositories({ organisms: mocks });
+    const { organisms, battles } = createFakeRepositories({ organisms: mocks });
     const list = vi.spyOn(organisms, 'list');
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length));
 
     const countBadgeBefore = screen.getByRole('status');
@@ -613,9 +652,9 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
 
   it('(c) zero rules reads both sentences, in the still-open dialog', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -634,10 +673,10 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
   // organism — Back adds exactly ONE card, named with the LATEST save.
   it('(d) a second Save in the same session clears then re-fills the outcome line; Back adds exactly ONE card, with the LATEST name', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
     const save = vi.spyOn(organisms, 'save');
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -670,9 +709,9 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
 
   it('(e) focus is on the create button after Back following a save', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -688,11 +727,11 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
 
   it('(f) a rejected save leaves the dialog open with the alert visible and no outcome line; list() called once', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
     const list = vi.spyOn(organisms, 'list');
     vi.spyOn(organisms, 'save').mockRejectedValueOnce(new Error('boom'));
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -708,9 +747,9 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
 
   it('(g) has no axe violations with the outcome line visible in the still-open dialog', async () => {
     const user = userEvent.setup();
-    const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
-    render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
 
     await user.click(createButton());
@@ -721,6 +760,192 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
 
     // The dialog portals to `document.body`, outside `render()`'s own container — scan the whole
     // body, the idiom `OrganismEditorModal.test.tsx`'s axe tests already use for this reason.
+    expect((await axe(document.body)).violations).toEqual([]);
+  });
+});
+
+/**
+ * Story 4.17: the edit flow THROUGH the real Library, the real hook, the real in-use dialog and
+ * the real modal — the only place the usage count comes from `buildUsageIndex` over a real
+ * `battles.list()`. The mock workspace places Aggressive Colonizer in BOTH battles and Conway's
+ * Classic in battle B only; `unused-glider` is placed nowhere.
+ */
+describe('OrganismLibrary — edit organism from library (Story 4.17)', () => {
+  const UNUSED: Organism = { ...CONWAYS_CLASSIC, id: 'unused-glider', name: 'Glider' };
+  const USED_NAME = 'Aggressive Colonizer';
+
+  function rig() {
+    const workspace = createMockWorkspace();
+    const fakes = createFakeRepositories({
+      organisms: [CONWAYS_CLASSIC, ...workspace.organisms, UNUSED],
+      battles: workspace.battles,
+    });
+    return { ...fakes, workspace };
+  }
+
+  const editButton = (name: string) => screen.getByRole('button', { name: `Edit ${name}` });
+  const inUseDialog = () => screen.queryByRole('dialog', { name: /^Used in \d+ Battles?$/ });
+  const editorDialog = () => screen.queryByRole('dialog', { name: 'Organism Editor' });
+
+  async function ready() {
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(5));
+  }
+
+  it("(a) an unused organism's Edit opens the editor directly, populated, with no in-use dialog ever shown", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton('Glider'));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    expect(within(dialog).getByRole('textbox', { name: 'Organism Name' })).toHaveValue('Glider');
+    expect(inUseDialog()).toBeNull();
+  });
+
+  it("(b) a used organism's Edit opens the 'Used in 2 Battles' dialog — title and sentence — and NOT the editor; nothing is written", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    const save = vi.spyOn(organisms, 'save');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton(USED_NAME));
+
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    expect(gate).toHaveTextContent(
+      'This organism is used in 2 Battles. Editing it will affect all Battles that use it. Clone this organism first to create a Battle-specific variant?',
+    );
+    expect(editorDialog()).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("(c) Cancel dismisses the warning, focus returns to that card's Edit button, and the editor never mounted", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton(USED_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await waitFor(() => expect(within(gate).getByRole('button', { name: 'Cancel' })).toHaveFocus());
+    await user.click(within(gate).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(inUseDialog()).toBeNull());
+    expect(editorDialog()).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(editButton(USED_NAME)));
+  });
+
+  it('(d) Edit Anyway: the warning leaves FIRST, then the editor opens populated with the record', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles, workspace } = rig();
+    const used = workspace.organisms[0];
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton(USED_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+
+    // Sequential, not stacked: the warning is still in the DOM (fading) and no editor exists yet.
+    expect(inUseDialog()).not.toBeNull();
+    expect(editorDialog()).toBeNull();
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    expect(inUseDialog()).toBeNull();
+    expect(within(dialog).getByRole('textbox', { name: 'Organism Name' })).toHaveValue(used.name);
+    expect(within(dialog).getByRole('textbox', { name: 'Dominance value' })).toHaveValue(
+      String(used.dominance),
+    );
+    expect(within(dialog).getAllByRole('group', { name: /^Rule \d+$/ })).toHaveLength(
+      used.survivalRules.length,
+    );
+  });
+
+  it("(e) rename + Save + Back: the card shows the new name in sort position, the SAME badge node reads the SAME total, lists were read exactly twice, save once with the SAME id, focus on the renamed card's Edit", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles, workspace } = rig();
+    const used = workspace.organisms[0];
+    const list = vi.spyOn(organisms, 'list');
+    const battleList = vi.spyOn(battles, 'list');
+    const save = vi.spyOn(organisms, 'save');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+    const badgeBefore = screen.getByRole('status');
+    expect(badgeBefore).toHaveTextContent(/^5 Organisms$/);
+
+    await user.click(editButton(USED_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+    await user.clear(name);
+    await user.type(name, 'Zealous Colonizer'); // sorts last, case-folded
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(dialog.querySelector('[data-save-outcome]')).not.toBeNull());
+
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+
+    await waitFor(() => {
+      const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+      expect(headings[headings.length - 1]).toBe('Zealous Colonizer');
+    });
+    expect(screen.queryByRole('heading', { level: 2, name: USED_NAME })).toBeNull();
+    expect(screen.getAllByRole('listitem')).toHaveLength(5);
+    const badgeAfter = screen.getByRole('status');
+    expect(badgeAfter).toBe(badgeBefore);
+    expect(badgeAfter).toHaveTextContent(/^5 Organisms$/);
+    expect(battleList).toHaveBeenCalledTimes(2);
+    expect((save.mock.calls[0]?.[0] as Organism).id).toBe(used.id);
+    await waitFor(() => expect(document.activeElement).toBe(editButton('Zealous Colonizer')));
+  });
+
+  it('(f) a rejecting battles.list() puts the Library in the error state — no cards, no Edit buttons', async () => {
+    const { organisms, battles } = rig();
+    vi.spyOn(battles, 'list').mockRejectedValue(new CorruptDataError('gol:battles', 'x'));
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Something went wrong loading your organisms.',
+      ),
+    );
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: /^Edit / })).toHaveLength(0);
+  });
+
+  it("(g) Conway's Classic (SYSTEM) has an Edit button and, placed in battle B, gates with 'Used in 1 Battle'", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    const edit = editButton("Conway's Classic");
+    expect(edit).toBeEnabled();
+    await user.click(edit);
+
+    expect(await screen.findByRole('dialog', { name: 'Used in 1 Battle' })).toBeInTheDocument();
+    expect(editorDialog()).toBeNull();
+  });
+
+  it('(h) has no axe violations with the in-use dialog settled, and with the seeded editor open', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+    expect((await axe(document.body)).violations).toEqual([]);
+
+    await user.click(editButton(USED_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await waitFor(() => expect(within(gate).getByRole('button', { name: 'Cancel' })).toHaveFocus());
+    expect((await axe(document.body)).violations).toEqual([]);
+
+    await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+    await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await waitFor(() => expect(inUseDialog()).toBeNull());
     expect((await axe(document.body)).violations).toEqual([]);
   });
 });

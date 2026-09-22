@@ -55,9 +55,13 @@ function mountModal(
     library?: readonly Organism[];
     organisms?: OrganismRepository;
     onSaved?: (organism: Organism) => void;
+    /** Story 4.17: a record makes this an edit session; the default `null` keeps every earlier
+     * call a create, unchanged. */
+    organism?: Organism | null;
   } = {},
 ) {
   const library = overrides.library ?? LIBRARY;
+  const organism = overrides.organism ?? null;
   const organisms =
     overrides.organisms ?? createFakeRepositories({ organisms: [...library] }).organisms;
   const onSaved = overrides.onSaved ?? vi.fn();
@@ -67,6 +71,7 @@ function mountModal(
     <OrganismEditorModal
       open
       origin={origin}
+      organism={organism}
       onClose={onClose}
       library={library}
       organisms={organisms}
@@ -446,6 +451,7 @@ describe('OrganismEditorModal', () => {
       <OrganismEditorModal
         open={false}
         origin="library"
+        organism={null}
         onClose={vi.fn()}
         library={LIBRARY}
         organisms={createFakeRepositories({ organisms: LIBRARY }).organisms}
@@ -1445,6 +1451,7 @@ describe('OrganismEditorModal', () => {
         <OrganismEditorModal
           open
           origin="library"
+          organism={null}
           onClose={onClose}
           library={LIBRARY}
           organisms={organisms}
@@ -1462,6 +1469,7 @@ describe('OrganismEditorModal', () => {
         <OrganismEditorModal
           open={false}
           origin="library"
+          organism={null}
           onClose={onClose}
           library={LIBRARY}
           organisms={organisms}
@@ -1903,6 +1911,7 @@ describe('OrganismEditorModal', () => {
         <OrganismEditorModal
           open
           origin="library"
+          organism={null}
           onClose={onClose}
           library={LIBRARY}
           organisms={organisms}
@@ -1922,6 +1931,7 @@ describe('OrganismEditorModal', () => {
         <OrganismEditorModal
           open={false}
           origin="library"
+          organism={null}
           onClose={onClose}
           library={LIBRARY}
           organisms={organisms}
@@ -1947,6 +1957,318 @@ describe('OrganismEditorModal', () => {
 
       const results = await axe(document.body);
       expect(results.violations).toEqual([]);
+    });
+  });
+
+  // Story 4.17: the same shell with `organism` set. The load-bearing claims — the FIRST Save
+  // upserts the opened record rather than minting a sibling (39/40), an unchanged re-save is
+  // byte-identical (39), and the organism never warns about its own colour (41) — are the three
+  // silent failures the story's Dev Notes name.
+  describe('edit organism from library (Story 4.17)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    // Patient Defender: dominance 45, aging ON, three rules including a `range` condition and an
+    // `age` condition — the widest fixture the mock workspace offers for a populated editor.
+    const EDITED = createMockOrganisms()[1];
+    const OTHERS = [CONWAYS_CLASSIC, ...createMockOrganisms().filter((o) => o.id !== EDITED.id)];
+    const EDIT_LIBRARY = [EDITED, ...OTHERS];
+
+    function mountEdit(
+      overrides: Parameters<typeof mountModal>[0] = {},
+    ): ReturnType<typeof mountModal> {
+      return mountModal({ organism: EDITED, library: EDIT_LIBRARY, ...overrides });
+    }
+
+    it('(37) opens fully populated: every field shows the record, the title is unchanged, no outcome line', () => {
+      mountEdit();
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAccessibleName('Organism Editor');
+      expect(within(dialog).getByRole('textbox', { name: 'Organism Name' })).toHaveValue(
+        EDITED.name,
+      );
+      expect(dialog.querySelector('[data-selected-name]')).toHaveTextContent(
+        resolvePaletteColor(EDITED.colorToken).name,
+      );
+      expect(within(dialog).getByRole('slider', { name: 'Dominance' })).toHaveValue(
+        String(EDITED.dominance),
+      );
+      expect(within(dialog).getByRole('textbox', { name: 'Dominance value' })).toHaveValue(
+        String(EDITED.dominance),
+      );
+      expect(within(dialog).getByRole('switch', { name: 'Aging Degradation' })).toHaveAttribute(
+        'aria-checked',
+        String(EDITED.agingEnabled),
+      );
+
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      EDITED.survivalRules.forEach((rule, index) => {
+        const card = within(rules).getByRole('group', { name: `Rule ${index + 1}` });
+        expect(card).toHaveAttribute('data-rule-id', rule.id);
+        expect(within(card).getByRole('textbox', { name: 'Summary' })).toHaveValue(
+          rule.payload.summary,
+        );
+        rule.conditions.forEach((condition, c) => {
+          const n = c + 1;
+          expect(
+            within(card).getByRole('combobox', { name: `Condition ${n} property` }),
+          ).toHaveValue(condition.property);
+          expect(
+            within(card).getByRole('combobox', { name: `Condition ${n} operator` }),
+          ).toHaveValue(condition.operator);
+          if (Array.isArray(condition.pattern)) {
+            expect(
+              within(card).getByRole('textbox', { name: `Condition ${n} minimum` }),
+            ).toHaveValue(String(condition.pattern[0]));
+            expect(
+              within(card).getByRole('textbox', { name: `Condition ${n} maximum` }),
+            ).toHaveValue(String(condition.pattern[1]));
+          } else if (condition.property === 'cellState') {
+            expect(
+              within(card).getByRole('combobox', { name: `Condition ${n} value` }),
+            ).toHaveValue(condition.pattern);
+          } else {
+            expect(within(card).getByRole('textbox', { name: `Condition ${n} value` })).toHaveValue(
+              String(condition.pattern),
+            );
+          }
+        });
+      });
+      expect(within(rules).getAllByRole('group', { name: /^Rule \d+$/ })).toHaveLength(
+        EDITED.survivalRules.length,
+      );
+      expect(dialog.querySelector('[data-save-outcome]')).toBeNull();
+    });
+
+    it('(38) steals no focus on mount — the active element is outside every rule card and row', () => {
+      mountEdit();
+
+      const active = document.activeElement;
+      expect(active?.closest('[data-rule-id]')).toBeNull();
+      expect(active?.closest('[data-condition-row]')).toBeNull();
+    });
+
+    it('(39) Save with NO edits writes the opened record byte for byte, adds no organism, and hands it to onSaved', async () => {
+      const organisms = createFakeRepositories({ organisms: EDIT_LIBRARY }).organisms;
+      const saveSpy = vi.spyOn(organisms, 'save');
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      mountEdit({ organisms, onSaved });
+      const before = (await organisms.list()).length;
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+      expect(saveSpy.mock.calls[0]?.[0]).toEqual(EDITED);
+      expect((await organisms.list()).length).toBe(before);
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(onSaved).toHaveBeenCalledWith(EDITED);
+    });
+
+    it('(40) rename + Save upserts the SAME id — no new organism — and a second Save in the session does too', async () => {
+      const organisms = createFakeRepositories({ organisms: EDIT_LIBRARY }).organisms;
+      const saveSpy = vi.spyOn(organisms, 'save');
+      const user = userEvent.setup();
+      mountEdit({ organisms });
+      const before = (await organisms.list()).length;
+
+      const name = screen.getByRole('textbox', { name: 'Organism Name' });
+      await user.clear(name);
+      await user.type(name, 'Patient Defender v2');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+
+      const first = saveSpy.mock.calls[0]?.[0] as Organism;
+      expect(first.id).toBe(EDITED.id);
+      expect(first.name).toBe('Patient Defender v2');
+      expect(first.schemaVersion).toBe(ORGANISM_SCHEMA_VERSION);
+      const listed = await organisms.list();
+      expect(listed.length).toBe(before);
+      expect(listed.find((o) => o.id === EDITED.id)?.name).toBe('Patient Defender v2');
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
+      expect((saveSpy.mock.calls[1]?.[0] as Organism).id).toBe(EDITED.id);
+      expect((await organisms.list()).length).toBe(before);
+    });
+
+    it("(41) never warns about its own colour: silent on open, silent on a re-pick of its own token, and warns with only the OTHER holder's name", async () => {
+      const user = userEvent.setup();
+      // EDITED is the sole holder of `azure` in EDIT_LIBRARY.
+      mountEdit();
+
+      const dialog = screen.getByRole('dialog');
+      const reuseStatus = () => {
+        const el = dialog.querySelector('[data-color-reuse-status]');
+        if (el === null) throw new Error('the color-reuse status region is not in the dialog');
+        return el;
+      };
+      expect(reuseStatus()).toBeEmptyDOMElement();
+      const ownName = resolvePaletteColor(EDITED.colorToken).name;
+      const unusedToken = PALETTE.find(
+        (entry) => !EDIT_LIBRARY.some((o) => o.colorToken === entry.id),
+      );
+      if (unusedToken === undefined) throw new Error('no unused palette token');
+
+      // The picker collapses after every pick (Story 4.8), so it is re-opened before each one.
+      await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+      await user.click(within(dialog).getByRole('radio', { name: unusedToken.name }));
+      expect(reuseStatus()).toBeEmptyDOMElement();
+      await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+      await user.click(within(dialog).getByRole('radio', { name: ownName }));
+      expect(reuseStatus()).toBeEmptyDOMElement();
+      // Positive control in the same block: a token another organism holds DOES warn.
+      const conwaysName = resolvePaletteColor(CONWAYS_CLASSIC.colorToken).name;
+      await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+      await user.click(within(dialog).getByRole('radio', { name: conwaysName }));
+      expect(reuseStatus()).toHaveTextContent(`${CONWAYS_CLASSIC.name} already uses this color.`);
+    });
+
+    // The direct measurement of `others` excluding self (`deferred-work.md:1443-1445`'s exact
+    // failure): the seed swatch's in-use dot reflects OTHER holders only. Re-picking the seed token
+    // stays silent even when shared — the Story 4.9 FD2 rule ("the token the draft opened on never
+    // warns") is a token comparison, and the record's token IS the seed.
+    it("(41b) the seed swatch is dotted only when ANOTHER organism holds EDITED's token, and re-picking it is silent either way", async () => {
+      const user = userEvent.setup();
+      const seedSwatch = (dialog: HTMLElement) =>
+        dialog.querySelector(`[data-color-token="${EDITED.colorToken}"]`);
+      const reuseStatus = (dialog: HTMLElement) => {
+        const el = dialog.querySelector('[data-color-reuse-status]');
+        if (el === null) throw new Error('the color-reuse status region is not in the dialog');
+        return el;
+      };
+      const unusedToken = PALETTE.find(
+        (entry) => entry.id !== EDITED.colorToken && !OTHERS.some((o) => o.colorToken === entry.id),
+      );
+      if (unusedToken === undefined) throw new Error('no unused palette token');
+
+      // Sole holder: not dotted.
+      const sole = mountEdit();
+      let dialog = screen.getByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+      expect(seedSwatch(dialog)).toHaveAttribute('data-in-use', 'false');
+      sole.unmount();
+
+      // A twin holds the same token: dotted, because of the TWIN — and still silent on re-pick.
+      const twin = { ...CONWAYS_CLASSIC, id: 'twin', name: 'Twin', colorToken: EDITED.colorToken };
+      mountEdit({ library: [EDITED, twin, ...OTHERS] });
+      dialog = screen.getByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+      expect(seedSwatch(dialog)).toHaveAttribute('data-in-use', 'true');
+      await user.click(within(dialog).getByRole('radio', { name: unusedToken.name }));
+      expect(reuseStatus(dialog)).toBeEmptyDOMElement();
+      await user.click(within(dialog).getByRole('button', { name: 'Change Color' }));
+      await user.click(
+        within(dialog).getByRole('radio', { name: resolvePaletteColor(EDITED.colorToken).name }),
+      );
+      expect(reuseStatus(dialog)).toBeEmptyDOMElement();
+    });
+
+    it('(42) the organism-type dropdown lists every OTHER organism and never the one under edit', async () => {
+      const user = userEvent.setup();
+      mountEdit();
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      await user.selectOptions(
+        within(rule1).getByRole('combobox', { name: 'Condition 1 property' }),
+        'organismType',
+      );
+
+      const value = within(rule1).getByRole('combobox', { name: 'Condition 1 value' });
+      const optionValues = within(value)
+        .getAllByRole('option')
+        .map((option) => (option as HTMLOptionElement).value);
+      expect(optionValues).toEqual(OTHERS.map((o) => o.id));
+      expect(optionValues).not.toContain(EDITED.id);
+      expect(within(value).queryByRole('option', { name: EDITED.name })).toBeNull();
+    });
+
+    it('(43) a seeded self-reference renders as `Unknown organism` and is NOT refused at Save', async () => {
+      const selfRef: Organism = {
+        ...EDITED,
+        survivalRules: [
+          {
+            ...EDITED.survivalRules[0],
+            conditions: [
+              { property: 'cellState', operator: 'eq', pattern: 'occupied' },
+              { property: 'organismType', operator: 'eq', pattern: EDITED.id },
+            ],
+          },
+        ],
+      };
+      const organisms = createFakeRepositories({ organisms: [selfRef, ...OTHERS] }).organisms;
+      const saveSpy = vi.spyOn(organisms, 'save');
+      const user = userEvent.setup();
+      mountModal({ organism: selfRef, library: [selfRef, ...OTHERS], organisms });
+
+      const dialog = screen.getByRole('dialog');
+      const rule1 = within(dialog).getByRole('group', { name: 'Rule 1' });
+      const value = within(rule1).getByRole('combobox', { name: 'Condition 2 value' });
+      expect(value).toHaveValue(EDITED.id);
+      expect(
+        (within(value).getByRole('option', { selected: true }) as HTMLOptionElement).textContent,
+      ).toBe('Unknown organism');
+
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+      expect(within(dialog).queryByRole('alert')).toBeNull();
+    });
+
+    it('(44) editing the sole organism: the Organism Type property option is disabled, the other four enabled', async () => {
+      const user = userEvent.setup();
+      mountModal({ organism: CONWAYS_CLASSIC, library: [CONWAYS_CLASSIC] });
+
+      const dialog = screen.getByRole('dialog');
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      await user.click(headerAddButton(rules));
+      const added = within(rules).getByRole('group', {
+        name: `Rule ${CONWAYS_CLASSIC.survivalRules.length + 1}`,
+      });
+      await user.click(within(added).getByRole('button', { name: '+ Add Condition' }));
+
+      const property = within(added).getByRole('combobox', { name: 'Condition 1 property' });
+      const options = within(property).getAllByRole('option') as HTMLOptionElement[];
+      expect(options).toHaveLength(5);
+      for (const option of options) {
+        if (option.value === 'organismType') expect(option).toBeDisabled();
+        else expect(option).toBeEnabled();
+      }
+    });
+
+    it('(45) a refused Save focuses the control of a seeded rule whose id holds a quote and a backslash (CSS.escape end to end)', async () => {
+      const awkward: Organism = {
+        ...EDITED,
+        survivalRules: [
+          {
+            ...EDITED.survivalRules[2],
+            id: 'r"1\\',
+            conditions: [{ property: 'age', operator: 'eq', pattern: 3 }],
+          },
+        ],
+      };
+      const user = userEvent.setup();
+      mountModal({ organism: awkward, library: [awkward, ...OTHERS] });
+
+      const dialog = screen.getByRole('dialog');
+      const rule1 = within(dialog).getByRole('group', { name: 'Rule 1' });
+      expect(rule1).toHaveAttribute('data-rule-id', 'r"1\\');
+      const value = within(rule1).getByRole('textbox', { name: 'Condition 1 value' });
+      expect(value).toHaveValue('3');
+      await user.clear(value);
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      expect(document.activeElement).toBe(value);
+    });
+
+    it('(46) has no axe violations on the seeded editor', async () => {
+      mountEdit();
+
+      expect((await axe(document.body)).violations).toEqual([]);
     });
   });
 });
