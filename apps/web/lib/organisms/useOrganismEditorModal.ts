@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Organism } from '@gol/domain';
 import type {
   OrganismEditorLifecycleProps,
   OrganismEditorOrigin,
@@ -45,7 +46,22 @@ export interface UseOrganismEditorModalResult {
   modalProps: OrganismEditorLifecycleProps;
 }
 
-export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganismEditorModalResult {
+export interface UseOrganismEditorModalOptions {
+  /**
+   * Fired once the exit transition has finished, after the editor is CLOSED, carrying the LAST
+   * successfully saved record in the session — never before, and never once per save (Story 4.16,
+   * FD4; amended 2026-09-22, Task 11: the editor stays open through every save, so this is now a
+   * close-time hand-off, not a save-time one). `useInertBackground.ts:66-68` sweeps body children
+   * appended while the dialog is still open, so a reload published under a still-mounted dialog
+   * would be inerted.
+   */
+  onSaved?(organism: Organism): void;
+}
+
+export function useOrganismEditorModal(
+  origin: OrganismEditorOrigin,
+  options?: UseOrganismEditorModalOptions,
+): UseOrganismEditorModalResult {
   /**
    * Two cells, not one, because the modal has three phases and not two: open, EXITING, closed.
    * `dialogOpen` drives the fade; `mounted` outlives it and is cleared only once the exit
@@ -68,6 +84,19 @@ export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganis
    * idiom `<DeleteBattleDialog>` and `useLeaveGuard` both already use.
    */
   const restoreFocusRef = useRef(false);
+
+  // Story 4.16, FD4, Task 11: holds the LATEST saved record across every save-while-open and
+  // across the exit transition — overwritten by every `handleSaved` call (the last record wins),
+  // consumed and cleared by `handleExited`. `null` means "closed without saving".
+  const pendingSavedRef = useRef<Organism | null>(null);
+
+  // A latest-value ref, assigned in an effect below, so a caller whose `onSaved` option changes
+  // identity between open and exit still gets the LATEST one called — and so `modalProps`' own
+  // identity (memoised below) is unaffected by a changing `onSaved` option.
+  const onSavedRef = useRef(options?.onSaved);
+  useEffect(() => {
+    onSavedRef.current = options?.onSaved;
+  }, [options?.onSaved]);
 
   // Called from the PARENT of the modal so it spans the exit transition, and so MUI's own
   // focus-trap move (a child effect) has already happened — inerting a subtree that still holds
@@ -109,14 +138,39 @@ export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganis
     setDialogOpen(true);
   }, []);
 
-  // Close ✕, Back and Escape all land here. Nothing else moves — no repository call, no state
-  // beyond the modal's own lifecycle; the unsaved-changes guard (Story 4.23) inserts itself in
-  // front of this callback later.
+  // Close ✕, Back and Escape all land here. This callback is NOT itself guarded against an
+  // in-flight write — the Task 12/13 lock lives in the modal (Escape routes through its
+  // `handleRequestClose`; Back and ✕ are `disabled={isSaving}`), so it holds for the three user close
+  // paths and for nothing else that may one day reach `modalProps.onClose` directly (review
+  // 2026-09-22). Nothing else moves — no repository call, no state beyond the modal's own
+  // lifecycle; the unsaved-changes guard (Story 4.23) inserts itself in front of this callback
+  // later, and inherits the lock only through those three controls.
   const handleClose = useCallback(() => setDialogOpen(false), []);
 
+  // Story 4.16, FD4. Amended 2026-09-22 (Task 11, AC3): the editor stays open through a save, so
+  // this is no longer a close channel — it only STASHES the latest record (overwriting; the last
+  // save in the session wins) for `handleExited` to hand on once the user actually closes and the
+  // fade has finished. With Task 12's close-lock and the modal's own "no Save during the exit
+  // fade" guard in place, no USER action can leave a write resolving after the dialog has exited,
+  // so the earlier "report at once if already unmounted" branch is dead code and has been removed
+  // along with its test. The one remaining path — the whole Library unmounting mid-write (a route
+  // change) — lands the write and reports nothing; `deferred-work.md` records it.
+  const handleSaved = useCallback((organism: Organism) => {
+    pendingSavedRef.current = organism;
+  }, []);
+
   // Only once the fade has finished is it safe to unmount the modal, release `inert` and schedule
-  // the focus restore. Clearing `mounted` does all three.
-  const handleExited = useCallback(() => setMounted(false), []);
+  // the focus restore. Clearing `mounted` does all three — and, when the close followed a save
+  // (`pendingSavedRef` set), hands the record on to the caller's `onSaved` AFTER `mounted` clears:
+  // the Library must not reload or announce the outcome under a still-mounted, still-`inert`
+  // dialog (the `useInertBackground` sweep), and the Story 4.9 reuse warning would otherwise flag
+  // the just-saved organism's own colour for the fade's duration.
+  const handleExited = useCallback(() => {
+    setMounted(false);
+    const saved = pendingSavedRef.current;
+    pendingSavedRef.current = null;
+    if (saved !== null) onSavedRef.current?.(saved);
+  }, []);
 
   const modalProps = useMemo<OrganismEditorLifecycleProps>(
     () => ({
@@ -124,8 +178,9 @@ export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganis
       origin,
       onClose: handleClose,
       onExited: handleExited,
+      onSaved: handleSaved,
     }),
-    [dialogOpen, origin, handleClose, handleExited],
+    [dialogOpen, origin, handleClose, handleExited, handleSaved],
   );
 
   return { requestCreate, mounted, modalProps };

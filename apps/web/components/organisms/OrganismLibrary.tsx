@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
@@ -202,9 +202,12 @@ function organismCountLabel(shown: number, total: number, filtering: boolean): s
  * — this component never imports a concrete repository or calls createRepositories().
  *
  * Since Story 4.3 it also renders the editor's entry point: the "+ Create New Organism" control
- * and the lazily loaded `<OrganismEditorModal>` it opens. The modal receives no repository yet —
- * nothing to persist until Story 4.16 — and when it does, it will be a prop typed to the
- * interface, passed down from here.
+ * and the lazily loaded `<OrganismEditorModal>` it opens. Since Story 4.16 the modal receives
+ * `organisms` — this SAME injected prop, typed to the interface — and, once the editor is
+ * CLOSED, reports the last saved record back through `onSaved`: a `resource.reload()` (FD6) and
+ * nothing else. Amended 2026-09-22 (Task 11): the outcome sentence itself moved INTO the editor
+ * (`OrganismEditorModal`'s own `SaveOutcomeLine`) now that Save no longer closes it — this
+ * component has no live region of its own to publish into any more.
  *
  * No `battles` prop yet: RFC-005's tree gives the Library both repositories for the usage index,
  * but that index is Story 4.19's — an unused prop today would be a lie about what this component
@@ -222,11 +225,30 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
   // hot simulation state.
   const [searchText, setSearchText] = useState('');
 
+  // Story 4.16, FD6: `reload()` — stale-while-revalidate, so the grid and count badge stay
+  // mounted through the refetch (no `'loading'` flash). Destructured because `reload`'s identity
+  // is stable while `resource` itself is a fresh object every render — depending on the latter
+  // re-created this callback on every render and re-ran the hook's `onSavedRef` effect with it
+  // (review 2026-09-22).
+  const { reload } = resource;
+  // Amended 2026-09-22 (Task 11): the editor no longer closes on save, so this fires once, when
+  // the user actually leaves the editor, with the LAST record saved in the session — a plain
+  // reload, nothing else (the record itself is unused: TS allows a callback with fewer formal
+  // parameters than the `onSaved?(organism: Organism)` option type). The outcome sentence itself
+  // is the modal's own `SaveOutcomeLine` now.
+  const onSaved = useCallback(() => {
+    reload();
+  }, [reload]);
+
   // Called HERE, from the component that renders the modal, because the hook's effects have to be
   // the modal's PARENT effects to order correctly against MUI's focus trap. The hook's own header
   // records why it lives in `lib/organisms/` rather than beside the modal — the dynamic import
   // above is load-bearing and a static import of that module would defeat it.
-  const { requestCreate, mounted: editorMounted, modalProps } = useOrganismEditorModal('library');
+  const {
+    requestCreate,
+    mounted: editorMounted,
+    modalProps,
+  } = useOrganismEditorModal('library', { onSaved });
 
   // Folded at render, exactly as BattleGallery folds seedStatus against its own load state
   // (Story 4.1) — never written into the resource itself, which would risk a cascading setState.
@@ -320,8 +342,11 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
           `document.body` regardless of where this sits in the tree. */}
       {/* `sorted` is the same list the cards render, so the editor's default colour is derived
           from exactly what the user sees (Story 4.8); unmemoised because the modal reads it once
-          (Story 4.9 reads it per render and that is still one prop). */}
-      {editorMounted && <OrganismEditorModal {...modalProps} library={sorted} />}
+          (Story 4.9 reads it per render and that is still one prop). `organisms` is the SAME prop
+          this component received (Story 4.16, AR-2/AR-27) — the modal's only side effect. */}
+      {editorMounted && (
+        <OrganismEditorModal {...modalProps} library={sorted} organisms={organisms} />
+      )}
     </section>
   );
 }

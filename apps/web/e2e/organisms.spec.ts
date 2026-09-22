@@ -29,6 +29,26 @@ async function openEditor(page: Page) {
   return dialog;
 }
 
+// Hoisted out of the 4.13 block (Story 4.16 review preference): the 4.16 block reuses them
+// rather than forking a copy, and the 4.13 block below is unchanged in behaviour.
+function cardGroup(rules: Locator, n: number) {
+  return rules.getByRole('group', { name: `Rule ${n}`, exact: true });
+}
+
+function row(card: Locator, n: number) {
+  return {
+    property: card.getByRole('combobox', { name: `Condition ${n} property`, exact: true }),
+    operator: card.getByRole('combobox', { name: `Condition ${n} operator`, exact: true }),
+    value: card
+      .getByRole('combobox', { name: `Condition ${n} value`, exact: true })
+      .or(card.getByRole('textbox', { name: `Condition ${n} value`, exact: true })),
+    min: card.getByRole('textbox', { name: `Condition ${n} minimum`, exact: true }),
+    max: card.getByRole('textbox', { name: `Condition ${n} maximum`, exact: true }),
+  };
+}
+
+const save = (dialog: Locator) => dialog.getByRole('button', { name: 'Save' });
+
 // Thin e2e (RFC-008 Decision 2), same fixtures/patterns as home.spec.ts / appShell.spec.ts.
 test.describe('organisms route (Story 4.1)', () => {
   test('renders the Organism Library against the served static export, with zero console errors', async ({
@@ -2126,24 +2146,6 @@ test.describe('editor validation & feedback (Story 4.13)', () => {
     return { dialog, rules, headerAdd };
   }
 
-  function cardGroup(rules: Locator, n: number) {
-    return rules.getByRole('group', { name: `Rule ${n}`, exact: true });
-  }
-
-  function row(card: Locator, n: number) {
-    return {
-      property: card.getByRole('combobox', { name: `Condition ${n} property`, exact: true }),
-      operator: card.getByRole('combobox', { name: `Condition ${n} operator`, exact: true }),
-      value: card
-        .getByRole('combobox', { name: `Condition ${n} value`, exact: true })
-        .or(card.getByRole('textbox', { name: `Condition ${n} value`, exact: true })),
-      min: card.getByRole('textbox', { name: `Condition ${n} minimum`, exact: true }),
-      max: card.getByRole('textbox', { name: `Condition ${n} maximum`, exact: true }),
-    };
-  }
-
-  const save = (dialog: Locator) => dialog.getByRole('button', { name: 'Save' });
-
   test('a fresh editor Save is refused: the name error, the red state, focus on the name field, zero console errors', async ({
     page,
   }) => {
@@ -2215,29 +2217,9 @@ test.describe('editor validation & feedback (Story 4.13)', () => {
     await expect(dialog.getByRole('alert')).toHaveCount(0);
   });
 
-  test('zero rules is not refused; the notice is honest', async ({ page, browserName }) => {
-    const { dialog, rules } = await openRules(page);
-    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
-
-    const saveButton = save(dialog);
-    await saveButton.click();
-
-    await expect(dialog.getByRole('alert')).toHaveCount(0);
-    await expect(dialog.locator('[aria-invalid="true"]')).toHaveCount(0);
-    await expect(rules.locator('[data-rules-empty-state]')).toBeVisible();
-    // Not imported: the spec imports only `@gol/*` (the 4.10 idiom) — `SAVE_UNAVAILABLE_NOTICE`'s
-    // literal, from `OrganismEditorModal.tsx`.
-    await expect(dialog.locator('[data-save-notice]')).toHaveText(
-      'Valid organism — saving to the library is not available yet.',
-    );
-    // Focus did not move. WebKit does not focus a `<button>` on click (the 4.3 note), so there
-    // Save itself never received focus either — assert only that the name field did not steal it.
-    if (browserName === 'webkit') {
-      await expect(dialog.getByRole('textbox', { name: 'Organism Name' })).not.toBeFocused();
-    } else {
-      await expect(saveButton).toBeFocused();
-    }
-  });
+  // "zero rules is not refused; the notice is honest" moved to the Story 4.16 block below (test
+  // 2, "zero rules") — the notice it pinned (`SAVE_UNAVAILABLE_NOTICE`) no longer exists; Save now
+  // WRITES on a zero-rule, valid-name draft.
 
   test('keyboard-only refusal', async ({ page }) => {
     const { dialog } = await openRules(page);
@@ -2842,6 +2824,257 @@ test.describe('preview simulation (Story 4.15)', () => {
     await run(dialog, 'Play').click();
     await expect(box(dialog)).toHaveAttribute('data-status', 'paused');
     await page.waitForTimeout(300);
+
+    ({ violations } = await new AxeBuilder({ page }).analyze());
+    expect(violations).toEqual([]);
+  });
+});
+
+// Amended 2026-09-22 (Task 11, AC3): Save keeps the editor open and reports in place — every test
+// below now asserts the IN-DIALOG `[data-save-outcome]` first, then clicks Back to reach the
+// Library's own refresh/refocus effects the old flow got from Save alone.
+test.describe('create & save organism (Story 4.16)', () => {
+  /** Fills the name and adds one rule with the default (valid) condition. */
+  async function fillValidDraft(dialog: Locator, name = 'Glider') {
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill(name);
+    const rules = dialog.getByRole('region', { name: 'Survival Rules' });
+    await rules.locator('[data-add-rule="header"]').click();
+    const card1 = cardGroup(rules, 1);
+    await card1.getByRole('button', { name: '+ Add Condition' }).click();
+  }
+
+  const countBadge = (page: Page) => page.getByRole('status');
+  const back = (dialog: Locator) => dialog.getByRole('button', { name: 'Back to Library' });
+
+  test('happy path: save publishes the in-dialog outcome; Back closes, refreshes the grid, and the record survives reload', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider');
+    await save(dialog).click();
+
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('[data-save-outcome]')).toHaveText('Organism saved successfully.');
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText('Glider')).toBeVisible();
+    await expect(countBadge(page)).toHaveText('2 Organisms');
+
+    const stored = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('gol:organisms') ?? '{}') as Record<string, unknown>,
+    );
+    const record = Object.values(stored).find(
+      (o): o is Record<string, unknown> =>
+        typeof o === 'object' && o !== null && (o as Record<string, unknown>).name === 'Glider',
+    );
+    expect(record).toBeDefined();
+    expect(record?.schemaVersion).toBe(1);
+    const rules = record?.survivalRules as Array<Record<string, unknown>>;
+    expect(rules).toHaveLength(1);
+    expect(rules[0].contentHash).toMatch(/^[0-9a-f]{64}$/);
+    expect((rules[0].conditions as unknown[])[0]).toEqual({
+      property: 'cellState',
+      operator: 'eq',
+      pattern: 'empty',
+    });
+
+    await page.reload();
+    await expect(page.getByText('Glider')).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+
+  test('zero rules: the in-dialog outcome line carries both sentences; the card exists after Back', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const dialog = await openEditor(page);
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
+    await save(dialog).click();
+
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('[data-save-outcome]')).toHaveText(
+      'Organism saved successfully. No rules defined. Organism will have no living cells.',
+    );
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText('Glider')).toBeVisible();
+  });
+
+  test('FR-7.15: the saved organism is in the battle add-dropdown on the next visit to /battle/new', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider');
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+
+    await page.goto('/battle/new');
+    const addSelect = page
+      .getByRole('complementary')
+      .getByRole('combobox', { name: /add organism/i });
+    await expect(addSelect.getByRole('option', { name: 'Glider' })).toHaveCount(1);
+  });
+
+  test('focus: Save is focused once a successful write settles, and the create button is focused after Back', async ({
+    page,
+    browserName,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider');
+    await save(dialog).click();
+
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await expect(save(dialog)).toBeFocused();
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+
+    if (browserName === 'webkit') {
+      // WebKit does not focus a <button> on click (the 4.3 note) — assert only that focus is not
+      // left inside a dialog.
+      await expect(
+        page.locator(':focus').locator('xpath=ancestor-or-self::*[@role="dialog"]'),
+      ).toHaveCount(0);
+    } else {
+      await expect(page.getByRole('button', { name: CREATE })).toBeFocused();
+    }
+  });
+
+  test('quota, in a real browser: the dialog stays, the alert reads the quota sentence, gol:organisms is byte-identical, and a retry succeeds', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider');
+
+    const before = await page.evaluate(() => localStorage.getItem('gol:organisms'));
+
+    await page.evaluate(() => {
+      const proto = Storage.prototype;
+      (window as unknown as { __setItem: typeof proto.setItem }).__setItem = proto.setItem;
+      proto.setItem = function () {
+        throw new DOMException('full', 'QuotaExceededError');
+      };
+    });
+
+    await save(dialog).click();
+
+    await expect(dialog.getByRole('alert')).toHaveText(
+      /Storage is full, so this organism was not saved\./,
+    );
+    await expect(dialog).toBeVisible();
+    const after = await page.evaluate(() => localStorage.getItem('gol:organisms'));
+    expect(after).toBe(before);
+
+    await page.evaluate(() => {
+      Storage.prototype.setItem = (
+        window as unknown as { __setItem: typeof Storage.prototype.setItem }
+      ).__setItem;
+    });
+
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test('keyboard: focus Save, press Enter — the happy path completes, then Back', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider');
+    await save(dialog).focus();
+    await page.keyboard.press('Enter');
+
+    await expect(dialog.locator('[data-save-outcome]')).toHaveText('Organism saved successfully.');
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText('Glider')).toBeVisible();
+  });
+
+  // Story 4.16, Task 11: a second Save in the SAME session (same id, upserted) — Back adds
+  // exactly ONE card, named with the SECOND (latest) name.
+  test('Save, rename, Save again, Back: exactly one new card, with the second name', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    const dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider');
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+
+    const name = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await name.fill('Glider Mk II');
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toHaveText('Organism saved successfully.');
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText('Glider Mk II')).toBeVisible();
+    await expect(page.getByText('Glider', { exact: true })).not.toBeVisible();
+    await expect(countBadge(page)).toHaveText('2 Organisms');
+  });
+
+  test('axe: no violations with the outcome line visible, and with the alert visible', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+
+    let dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider');
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+
+    let { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+
+    dialog = await openEditor(page);
+    await fillValidDraft(dialog, 'Glider 2');
+    await page.evaluate(() => {
+      const proto = Storage.prototype;
+      (window as unknown as { __setItem: typeof proto.setItem }).__setItem = proto.setItem;
+      proto.setItem = function () {
+        throw new DOMException('full', 'QuotaExceededError');
+      };
+    });
+    await save(dialog).click();
+    const alert = dialog.getByRole('alert');
+    await expect(alert).toBeVisible();
+    // The Save button has `transition: 'none'` (FD8) — settled the instant it re-enables.
+    await expect(save(dialog)).toBeEnabled();
 
     ({ violations } = await new AxeBuilder({ page }).analyze());
     expect(violations).toEqual([]);

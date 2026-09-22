@@ -40,7 +40,11 @@ Battle Editor (Edit Mode)            ← third entry point (FR-3.12)
 
 ### Exit Points
 
-- **Save & Close**: Saves organism, closes editor, returns to the entry context
+- **Save**: saves the organism and keeps the editor open with the outcome line; a later Save
+  updates the same organism (amended 2026-09-22, Story 4.16 Task 11 — replaces the original
+  "Save & Close" exit, to match the Battle Editor pattern, which also stays open after Save).
+  Back, ✕ and Escape then all return to the entry context, refreshed with the saved organism;
+  all three are locked while a write is in flight — Back and ✕ disabled, Escape a no-op (Tasks 12–13)
 - **Cancel**: Discards changes, closes editor, returns to the entry context
 - **Delete** (edit mode only): Shows confirmation, deletes organism, closes editor
 
@@ -555,8 +559,9 @@ The Organism Editor uses a **full-screen overlay** design with three main column
    - If validation fails: Show inline error messages, focus first error
    - If validation passes: Continue
 3. Organism saved to library
-4. Editor closes, returns to Organism Library
-5. Success message (toast): "Organism saved successfully"
+4. Outcome line inside the editor: "Organism saved successfully"; Save stays live — a later Save
+   updates the same organism
+5. Back (or ✕ / Escape) returns to the Organism Library, refreshed
 
 **Unsaved Changes Warning:**
 - If user clicks "Cancel" or "Back" with unsaved changes:

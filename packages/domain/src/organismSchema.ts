@@ -18,6 +18,15 @@ export const MAX_DOMINANCE = 100;
 // FR-1.5): the protected default is deliberately mid-range; a new custom organism starts low.
 export const NEW_ORGANISM_DOMINANCE = 5;
 
+// Story 4.16 / AR-11 / Decision I.4: the STAMP a newly authored organism record is written with —
+// a different axis from `CURRENT_FORMAT_VERSION` (Story 1.5 forced decision 3: both are `1` today
+// and a future `formatVersion` bump that does not touch the organism/rules shape must not restamp
+// organisms). Asserted at load, never branched on. `CONWAYS_CLASSIC` keeps its literal `1` (Story
+// 4.16 FD2: `defaultWorkspace.ts` is out of that story's scope), and `organismSchema.test.ts` pins
+// that the two agree — a future bump has to touch both, through a migration; this constant is what
+// that migration step references.
+export const ORGANISM_SCHEMA_VERSION = 1 as const;
+
 export const OrganismSchema = z.object({
   // Write-time stamp updated by RFC-006's formatVersion chain and asserted at load
   // (Decision I.4) — never branched on independently. Floored at 1 because the migration

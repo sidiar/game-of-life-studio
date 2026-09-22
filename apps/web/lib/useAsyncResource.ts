@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export type AsyncResourceStatus = 'loading' | 'ready' | 'error';
 
 export interface AsyncResource<T> {
   data: T | undefined;
   status: AsyncResourceStatus;
+  /** Re-runs `load` — stale-while-revalidate: `status` stays `'ready'` and `data` stays the
+   * PREVIOUS value until the new promise settles (Story 4.16, FD6). Stable identity across
+   * renders. See the hook's own docblock for the full contract. */
+  reload(): void;
 }
 
 // Element-wise Object.is, the same comparison React itself applies to a dependency array. The
@@ -47,16 +51,26 @@ function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
  * while the effect does NOT re-run. No request is ever started and the caller spins forever, with
  * only a dev-mode console error. Same rule as every other hook: never vary the deps array's shape.
  *
- * `reload` is deliberately not implemented. RFC-005's sketch (`() => load().then(setData)`) sets
- * no status and honours no liveness flag; nothing in this story needs it, and it belongs to the
- * story that does — written correctly there rather than shipped broken here.
+ * `reload()` — stale-while-revalidate (Story 4.16, FD6, AC8). Calling it re-runs `load` with
+ * `status` still `'ready'` and `data` still the PREVIOUS value until the new promise settles: the
+ * card grid and count badge a caller has on screen stay mounted through a reload, with no
+ * `'loading'` flash. The per-invocation liveness flag below already discards a superseded
+ * request, so a reload fired while a previous load is still in flight is harmless. `reload` is
+ * implemented as a token appended to the EFFECT's own dependency array — never to `deps` itself —
+ * so it is not part of the render-phase `sameDeps` reset above: a reload never flips `status` back
+ * to `'loading'`, which a `deps`-based counter (the `<BattleGallery>` `reloadToken` idiom) would.
+ * Consumers who need "a refetch is in flight" as a state do not get one — nothing here needs it.
  */
 export function useAsyncResource<T>(load: () => Promise<T>, deps: unknown[]): AsyncResource<T> {
-  const [resource, setResource] = useState<AsyncResource<T>>({
+  const [resource, setResource] = useState<{ data: T | undefined; status: AsyncResourceStatus }>({
     data: undefined,
     status: 'loading',
   });
   const [settledDeps, setSettledDeps] = useState<unknown[]>(deps);
+  // Bumped by `reload()`. An EFFECT dep only (see below) — never compared by `sameDeps`, so a
+  // reload cannot trigger the render-phase 'loading' reset.
+  const [reloadToken, setReloadToken] = useState(0);
+  const reload = useCallback(() => setReloadToken((n) => n + 1), []);
 
   // A deps change starts a NEW request, and leaving the previous request's 'ready'/'error' — and
   // its DATA — in place would show the old resource's outcome as though it were the new one's,
@@ -98,9 +112,13 @@ export function useAsyncResource<T>(load: () => Promise<T>, deps: unknown[]): As
     };
     // `load` is intentionally absent: callers pass an inline closure that is a new function every
     // render, so including it would re-run the effect forever. `deps` is the caller's declared
-    // identity for the request — the same contract RFC-005's snippet specifies.
+    // identity for the request — the same contract RFC-005's snippet specifies. `reloadToken` is
+    // appended so `reload()` re-runs this effect WITHOUT being part of `sameDeps`'s render-phase
+    // reset above (Story 4.16, FD6) — the spread keeps the array's length fixed at "the caller's
+    // deps, plus one", which is what `sameDeps`'s own precondition (never vary the deps array's
+    // shape) requires of every OTHER render this hook sees.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, reloadToken]);
 
-  return resource;
+  return { ...resource, reload };
 }

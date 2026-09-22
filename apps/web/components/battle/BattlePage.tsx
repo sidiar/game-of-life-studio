@@ -9,7 +9,7 @@ import type { AppRepositories } from '@gol/persistence';
 import { appTitle } from '@/lib/appTitle';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { projectBattleForSave } from '@/lib/battle/battleRecord';
-import { saveFailureMessage } from '@/lib/battle/saveFailureMessage';
+import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import { useBattleDraft } from '@/lib/battle/useBattleDraft';
 import { buildRefToFillGroup, MAX_ROSTER_SIZE } from '@/lib/canvas/refToFillGroup';
@@ -829,7 +829,7 @@ export default function BattlePage({
     } catch (error) {
       // ❌ Never swallowed: an unreported save failure is the worst outcome in this story. `isDirty`
       // is deliberately left TRUE.
-      setSaveError(saveFailureMessage(error));
+      setSaveError(saveFailureMessage(error, 'battle'));
       return false;
     } finally {
       savingRef.current = false;

@@ -25,6 +25,7 @@ export {
   MIN_DOMINANCE,
   MAX_DOMINANCE,
   NEW_ORGANISM_DOMINANCE,
+  ORGANISM_SCHEMA_VERSION,
 } from './organismSchema';
 export type { Organism, EditableGridPreset } from './organismSchema';
 
