@@ -10,15 +10,16 @@ import { toDisplayOrganism } from '@/lib/displayOrganisms';
 // (organism-library.html:192-261, 309-332, 404-444). Story 4.2's FD1 trimmed the mockup's usage
 // line, rules SENTENCE and action buttons off the card — Dominance/Aging/rule-count ship, "Used in
 // N battles" is FR-1.7's (4.19/4.20), the rules sentence needs Story 4.10's action/condition
-// vocabulary. Of the action row, Edit ships (Story 4.17); Clone/Delete are 4.18/4.22 and join the
-// same row (a button that does nothing is a dead affordance, NFR-4.1).
+// vocabulary. Of the action row, Edit (Story 4.17) and Clone (Story 4.18) ship; Delete is 4.22's
+// and joins the same row (a button that does nothing is a dead affordance, NFR-4.1).
 //
-// The tab-stop policy, decided in Story 4.17 (closing Story 4.2's provisional FD5): the Edit
-// button is the card's ONE keyboard stop, and the `<article>` is not focusable. A stop wrapping a
-// stop is legal but noisy — every card would cost two Tabs. `aria-labelledby` stays on the article
-// (it still names the region for a screen reader's landmark/article navigation), and
-// `:focus-within` still lifts the card when its button is focused, so the keyboard path keeps the
-// hover state (the Story 1.9 parity rule).
+// The tab-stop policy, decided in Story 4.17 (closing Story 4.2's provisional FD5): the card has
+// TWO keyboard stops, Edit then Clone — both real actions — and the `<article>` is not focusable.
+// The 4.17 decision was "the article is not a stop", not "one stop per card"; a stop wrapping a
+// stop is legal but noisy, which is why the article itself stays out of the tab order.
+// `aria-labelledby` stays on the article (it still names the region for a screen reader's
+// landmark/article navigation), and `:focus-within` still lifts the card when either button is
+// focused, so the keyboard path keeps the hover state (the Story 1.9 parity rule).
 //
 // AR-46: the organism's resolved colour is an inline `style`, never a styled prop or a token —
 // `RFC-007` Decision 5 says organism colours are not theme variables, and there is no
@@ -134,14 +135,14 @@ const RulesLine = styled('p')({
   margin: 0,
 });
 
-// Mockup: .card-actions (:309-312). Edit only, today; Story 4.18's Clone and 4.22's Delete join it.
+// Mockup: .card-actions (:309-312). Edit and Clone ship; 4.22's Delete joins the same row.
 const CardActions = styled('div')({
   display: 'flex',
   gap: '8px',
   marginTop: '16px',
 });
 
-// Mockup: .action-btn (:314-332), with the house substitutions:
+// Mockup: .action-btn (:314-332, :342-349), with the house substitutions:
 //   1. border: var(--gol-border-control), not var(--gol-border) — SC 1.4.11 needs 3:1 for a
 //      boundary that identifies a CONTROL; --gol-border measures 1.57:1 (`BattleTile.tsx`'s
 //      `actionChrome` records the measurement and the forbidden fix).
@@ -149,8 +150,12 @@ const CardActions = styled('div')({
 //      records (`OrganismLibrary.tsx`): an axe scan landing mid-fade measures a contrast no settled
 //      state has, and the Library's e2e scans right after the editor closes — when this button has
 //      just been re-focused and is mid-hover-transition on a real pointer.
-//   3. A real `:focus-visible` ring, since this button IS the card's keyboard stop.
-const EditButton = styled('button')({
+//   3. A real `:focus-visible` ring, since these buttons ARE the card's keyboard stops.
+// Renamed from `EditButton` (Story 4.18): the substitutions above now serve two buttons, not one.
+// `flex: 1` splits the row evenly, which is what the mockup's `.card-actions` does for its
+// multi-button row. `&:disabled` / `&:disabled:hover` are the mockup's own disabled state
+// (`:342-349`) — the disabled hover is reset so a disabled button gives no false affordance.
+const ActionButton = styled('button')({
   flex: 1,
   background: 'transparent',
   border: '1px solid var(--gol-border-control)',
@@ -170,6 +175,15 @@ const EditButton = styled('button')({
   '&:focus-visible': {
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '2px',
+  },
+  '&:disabled': {
+    opacity: 0.4,
+    cursor: 'not-allowed',
+  },
+  '&:disabled:hover': {
+    borderColor: 'var(--gol-border-control)',
+    background: 'transparent',
+    transform: 'none',
   },
   '@media (prefers-reduced-motion: reduce)': {
     '&:hover': { transform: 'none' },
@@ -211,19 +225,34 @@ export interface OrganismCardProps {
    * whether the FR-1.3 warning or the editor opens.
    */
   onRequestEdit(): void;
+  /**
+   * The Clone button's click (Story 4.18, AC1). The card knows nothing else — it does not create
+   * the clone, does not open an editor, and carries no id of its own beyond what the Library
+   * already passed via `organism`. The `<BattleTile>` `onRequestDelete(): void` contract, again.
+   */
+  onRequestClone(): void;
+  /**
+   * Disables ONLY the Clone button while this card's clone write is in flight (Story 4.18, FD5) —
+   * the Library's `cloningRef` latch is the re-entrancy authority; this is just the affordance.
+   * Edit stays enabled throughout, matching the mockup's per-button `disabled` (only Delete is
+   * disabled there).
+   */
+  cloning?: boolean;
 }
 
 /**
  * One organism in the Library grid (AC1, AC2, AC3, AC6; `Story 4.2`, `FR-1.1`). `organism` is a plain
  * domain value, never a repository (`AR-2`, `AR-27`) — the Library injects repositories at the
  * page boundary and passes down resolved records, never a repository reference, to this component.
- * The Edit action (Story 4.17) renders on EVERY card, Conway's Classic included: M9 protects it
- * from deletion, not editing.
+ * The Edit (Story 4.17) and Clone (Story 4.18) actions render on EVERY card, Conway's Classic
+ * included: M9 protects it from deletion, not from editing or cloning.
  */
 export default function OrganismCard({
   organism,
   system = false,
   onRequestEdit,
+  onRequestClone,
+  cloning = false,
 }: OrganismCardProps) {
   const display = toDisplayOrganism(organism);
   // `useId()`, not a hand-rolled id — this is a hydrated, statically exported page
@@ -253,14 +282,25 @@ export default function OrganismCard({
             reader's button list needs to tell them apart. `data-edit-organism-id` is the focus
             restore's lookup key (`useOrganismEditorModal`) — the id, not the name, because names
             are not unique. */}
-        <EditButton
+        <ActionButton
           type="button"
           aria-label={`Edit ${display.name}`}
           data-edit-organism-id={organism.id}
           onClick={() => onRequestEdit()}
         >
           Edit
-        </EditButton>
+        </ActionButton>
+        {/* `data-clone-organism-id` mirrors Edit's lookup attribute — no restore-focus consumer
+            reads it today, but it keeps the two actions symmetric for whatever does next. */}
+        <ActionButton
+          type="button"
+          aria-label={`Clone ${display.name}`}
+          data-clone-organism-id={organism.id}
+          disabled={cloning}
+          onClick={() => onRequestClone()}
+        >
+          Clone
+        </ActionButton>
       </CardActions>
       {system && <SystemTag>SYSTEM</SystemTag>}
     </Card>

@@ -1469,7 +1469,12 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   the first place a user sees their own duplicate names beside each other)~~ or whichever story
   next touches the sentence. **Story 4.17 passed on it (review 2026-09-22):** the story touches
   neither `colorReuseWarning` nor the sentence, and its Edit buttons (`aria-label="Edit <name>"`)
-  are one more consumer of the same naming model — see the 4.17 review section below.
+  are one more consumer of the same naming model — see the 4.17 review section below. **Story 4.18
+  adds a THIRD consumer (2026-09-22):** `cloneOrganismName` mints no uniqueness pass by design
+  (FD2), so cloning the same organism N times produces N records all named `X (Copy)` — two clones
+  of one organism now read exactly as ambiguous as the pre-existing duplicate-name case above, and
+  their Clone/Edit `aria-label`s collide the same way. No new decision needed here; the naming
+  model this entry owns already covers it.
 
 ## Deferred from: Story 3-17-run-battle-from-gallery (2026-09-17)
 
@@ -2403,12 +2408,15 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 ## Deferred from: Story 4-17-edit-organism-from-library (2026-09-22)
 
-- **Clone & Edit is not rendered on the in-use dialog** (FD5) — `<OrganismInUseDialog>` ships
+- ~~**Clone & Edit is not rendered on the in-use dialog** (FD5) — `<OrganismInUseDialog>` ships
   Cancel / Edit Anyway, the FR-3.12 battle-variant shape. The AC's third action routes through
   Story 4.18's clone path (the "(Copy)" name, the colour reuse, the repository write), which is not
   on `main`; a button that does nothing is a dead affordance (NFR-4.1). **Story 4.18 adds it**, with
   a `pending` guard on the dialog's `onClose` for the clone's write, and stashes the clone in the
-  hook's `proceedRef` instead of the original.
+  hook's `proceedRef` instead of the original.~~ **✅ Closed in Story 4.18 (2026-09-22):** the
+  dialog ships Cancel / Clone & Edit / Edit Anyway; `handleGateCloneAndEdit` writes the clone
+  through the injected `onCloneAndEdit` option, guards the gate with `gatePending`, and stashes the
+  clone in `proceedRef` for `handleGateExited` to open the editor on.
 - **The `[N]` in "Used in N Battles" is plain text** — no battle names, no click-through. FR-1.7's
   popover / footer is **Story 4.20's**, which will need `battles` on the modal too (it is
   deliberately NOT passed there today — an unread prop is a lie).
@@ -2507,3 +2515,33 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   tests click Save with the pointer under jsdom, which focuses on click). Same class as the WebKit
   `:focus` branch above; a positive claim about where focus IS on WebKit would pin both — deferred,
   pre-existing idiom (Back had the identical path before Task 13).
+
+## Deferred from: Story 4-18-clone-organism (2026-09-22)
+
+- **No success sentence for a clone** (FD10) — the new card and the count badge's own change are
+  the only announcement; a symmetric outcome line ("[Name] added to your library.") would need
+  copy no spec supplies and, if it used `role="status"`, a same-story fix to the 4.16/4.17 e2e's
+  unscoped `getByRole('status')` count assertions. Flagged for the owner in the story file's own
+  "Open flags"; a small, contained follow-up if wanted.
+- **The card's Clone does not open the editor and offers no rename prompt** — the AC's own shape
+  (`onRequestClone(): void`, no return value the card could act on). A user who wants to rename
+  immediately must find the new card and click its own Edit.
+- **`X (Copy) (Copy)` rather than a `(Copy 2)` allocator** (FD2) — `Organism.name` has no
+  uniqueness constraint anywhere, so repeated cloning stacks the literal suffix rather than
+  counting; the 50-character cap truncates the HEAD, never the suffix, so the marker survives.
+- **Focus after a card Clone stays on the Clone button** — the click never moves focus (no
+  `restoreFocusRef` write from the card's entry point, unlike Clone & Edit's gate handoff); the new
+  card is not focused and is not announced beyond the count badge's own text change.
+- **For Story 4.19/4.21: a clone creates no reference TO the source, but its copied rules DO add a
+  second `organismType` reference to every organism the source's rules target** — cloning an
+  organism whose rules target organism X doubles X's rule-reference count without X itself being
+  touched. Decision E.5's rule-reference index (Story 4.19) must count RULES, not organisms, if
+  that is the intended semantic; flagged here before that story's design is fixed.
+- **A route-level unmount mid-clone lands the write and reports nothing** — the same residual the
+  4.16 Task-12 entry already records for the editor's own save (`:2385-2388` above): the writer's
+  `await organisms.save(clone)` can resolve after the Library has unmounted (browser Back, address
+  bar), and a rejection in that window is lost silently. Sub-millisecond against localStorage;
+  RFC-001's API repository story owns the general fix.
+- **No `origin`/`cloneable` prop on `<OrganismInUseDialog>` yet** — Story 4.24's battle-origin
+  warning must NOT show Clone & Edit (M5, PRD `:127`); the dialog's head comment flags where that
+  prop lands, and this entry is the paper trail for it.

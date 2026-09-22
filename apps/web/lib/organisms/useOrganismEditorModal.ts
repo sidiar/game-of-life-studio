@@ -43,6 +43,15 @@ import { useInertBackground } from '@/lib/useInertBackground';
  * `useInertBackground` and the focus effect below must run as the modal's PARENT effects so MUI's
  * focus-trap move (a child effect) has already happened — the same placement rule
  * `useDeleteBattleDialog` and `useLeaveGuard` record at their own call sites.
+ *
+ * Story 4.18 adds Clone & Edit to the gate through the SAME `proceedRef` handoff `handleGateExited`
+ * already reads — only `gatePending` is new. The clone's WRITE belongs to the caller (this hook
+ * owns sequencing, not persistence): `onCloneAndEdit` is injected, called with the gate's
+ * `organism`, and returns the new record or `null` when the write was refused and already
+ * reported by its owner. `gatePending` exists so the gate cannot be dismissed between the write
+ * starting and `proceedRef` being stashed — the only window in which a Cancel could strand a
+ * written clone behind no editor — and a failed clone resolves to `null`, degenerating the
+ * handoff to a plain Cancel.
  */
 export interface UseOrganismEditorModalResult {
   /** Wire to the create button. */
@@ -80,6 +89,13 @@ export interface UseOrganismEditorModalOptions {
    * would be inerted.
    */
   onSaved?(organism: Organism): void;
+  /**
+   * The gate's Clone & Edit action (Story 4.18, AC9). Injected by the component that HOLDS the
+   * repository (AR-2/AR-27 — this hook imports none); returns the new record, or `null` when the
+   * write was refused AND already reported by its owner. Held in a latest-value ref, exactly as
+   * `onSaved` is, so `gateProps`'s identity does not track a changing option.
+   */
+  onCloneAndEdit?(source: Organism): Promise<Organism | null>;
 }
 
 export function useOrganismEditorModal(
@@ -142,6 +158,17 @@ export function useOrganismEditorModal(
   useEffect(() => {
     onSavedRef.current = options?.onSaved;
   }, [options?.onSaved]);
+
+  // The gate's Clone & Edit option, held the same way (Story 4.18).
+  const onCloneAndEditRef = useRef(options?.onCloneAndEdit);
+  useEffect(() => {
+    onCloneAndEditRef.current = options?.onCloneAndEdit;
+  }, [options?.onCloneAndEdit]);
+
+  // The clone's write window (Story 4.18, FD6/FD7): true from the moment Clone & Edit is clicked
+  // until the injected writer resolves. Disables all three gate buttons and guards its `onClose`,
+  // so Escape/backdrop cannot dismiss the gate mid-write.
+  const [gatePending, setGatePending] = useState(false);
 
   // Called from the PARENT of the modal so it spans the exit transition, and so MUI's own
   // focus-trap move (a child effect) has already happened — inerting a subtree that still holds
@@ -237,6 +264,29 @@ export function useOrganismEditorModal(
     setGateOpen(false);
   }, [gate]);
 
+  // Story 4.18, AC9/AC11, FD7: a SYNCHRONOUS callback that `void`s an inner async run — never an
+  // `async` function handed straight to a `(): void` prop (React 19 / project-context). Bails if
+  // there is no gate organism or a write is already in flight (the re-entrancy guard also covers a
+  // programmatic caller). The write's resolution can land after this hook's owner has unmounted
+  // (a route change) — no new guard needed: nothing renders from a discarded `setState`, and the
+  // identical residual is already accepted for the editor's own save.
+  const handleGateCloneAndEdit = useCallback(() => {
+    const source = gate?.organism;
+    if (source === undefined || gatePending) return;
+    void (async () => {
+      setGatePending(true);
+      const clone = (await onCloneAndEditRef.current?.(source)) ?? null;
+      setGatePending(false);
+      proceedRef.current = clone;
+      if (clone !== null) {
+        // Focus lands on what the user just made (FD11) — the DOM lookup's create-button fallback
+        // still covers a card filtered out by name.
+        restoreFocusRef.current = { kind: 'edit', organismId: clone.id };
+      }
+      setGateOpen(false);
+    })();
+  }, [gate, gatePending]);
+
   // The handoff. All four `setState`s in ONE handler — React batches them into one commit, so
   // `anyMounted` goes gate → editor without a `false` in between (the inert window never
   // releases, the focus effect never fires). After a Cancel `next` is `null`: the gate unmounts,
@@ -303,11 +353,21 @@ export function useOrganismEditorModal(
     () => ({
       open: gateOpen,
       usedInBattles: gate?.usedInBattles ?? 0,
+      pending: gatePending,
       onCancel: handleGateCancel,
+      onCloneAndEdit: handleGateCloneAndEdit,
       onEditAnyway: handleGateEditAnyway,
       onExited: handleGateExited,
     }),
-    [gateOpen, gate, handleGateCancel, handleGateEditAnyway, handleGateExited],
+    [
+      gateOpen,
+      gate,
+      gatePending,
+      handleGateCancel,
+      handleGateCloneAndEdit,
+      handleGateEditAnyway,
+      handleGateExited,
+    ],
   );
 
   return {

@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
 import { buildUsageIndex, CONWAYS_CLASSIC_ID, type Organism } from '@gol/domain';
 import type { BattleRepository, OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
+import { cloneOrganismRecord } from '@/lib/organisms/organismClone';
 import { normalizeOrganismSearch, organismNameMatches } from '@/lib/organisms/organismNameMatches';
+import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
 import { useOrganismEditorModal } from '@/lib/organisms/useOrganismEditorModal';
 import { useAsyncResource } from '@/lib/useAsyncResource';
@@ -228,6 +230,11 @@ function organismCountLabel(shown: number, total: number, filtering: boolean): s
  * count — `0` opens the editor directly on the record, `≥ 1` opens the "Used in N Battles"
  * warning first. The editor receives the same `library` list for both modes and excludes the
  * organism under edit itself.
+ *
+ * Since Story 4.18 every card also carries a Clone action (FR-1.6): this component owns the ONE
+ * `cloneOrganism` writer (FD3) both the card's Clone and the gate's Clone & Edit call — mint,
+ * project (`cloneOrganismRecord`), `organisms.save()`, `reload()` — and the ONE `[data-clone-error]`
+ * alert a refused write reports into.
  */
 export default function OrganismLibrary({ organisms, battles, seedStatus }: OrganismLibraryProps) {
   // Deps: `organisms`/`battles` are useMemo-stable from the page boundary; `seedStatus` is a
@@ -274,6 +281,45 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     reload();
   }, [reload]);
 
+  // Story 4.18: the clone id, not a boolean (FD5) — only the clicked card's Clone button disables;
+  // disabling every card's for a sub-millisecond localStorage write would be a visible flicker
+  // across the whole grid. `cloningRef` is the re-entrancy AUTHORITY (set synchronously, before any
+  // await, and shared with the gate's Clone & Edit path so the two entry points cannot interleave);
+  // `cloning` is only the affordance the disabled attribute reads.
+  const cloningRef = useRef<string | null>(null);
+  const [cloning, setCloning] = useState<string | null>(null);
+  const [cloneError, setCloneError] = useState<string | null>(null);
+
+  // Story 4.18, FD3: ONE writer for both entry points — the card's Clone and the gate's Clone &
+  // Edit differ only in what happens AFTER the write. Mints both ids at the call site (as
+  // `saveOrganism` mints the editor's — the repository mints none), projects through the pure,
+  // synchronous `cloneOrganismRecord` (FD1), writes, and reloads HERE rather than from the editor's
+  // `onSaved` (FD9): a Clone & Edit closed WITHOUT a save never fires `onSaved`, so the clone's card
+  // would be missing until the next page load, and reloading here also means the editor's `library`
+  // already holds the clone by the time it mounts. A rejection is REPORTED (this component owns the
+  // alert) and returned as `null` — never rethrown into the hook, which owns no error surface.
+  const cloneOrganism = useCallback(
+    async (source: Organism): Promise<Organism | null> => {
+      if (cloningRef.current !== null) return null;
+      cloningRef.current = source.id;
+      setCloning(source.id);
+      setCloneError(null);
+      try {
+        const clone = cloneOrganismRecord(source, crypto.randomUUID(), () => crypto.randomUUID());
+        await organisms.save(clone);
+        reload();
+        return clone;
+      } catch (error) {
+        setCloneError(saveFailureMessage(error, 'organism'));
+        return null;
+      } finally {
+        cloningRef.current = null;
+        setCloning(null);
+      }
+    },
+    [organisms, reload],
+  );
+
   // Called HERE, from the component that renders the modal, because the hook's effects have to be
   // the modal's PARENT effects to order correctly against MUI's focus trap. The hook's own header
   // records why it lives in `lib/organisms/` rather than beside the modal — the dynamic import
@@ -285,7 +331,7 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     modalProps,
     gateMounted,
     gateProps,
-  } = useOrganismEditorModal('library', { onSaved });
+  } = useOrganismEditorModal('library', { onSaved, onCloneAndEdit: cloneOrganism });
 
   // Story 4.17, AC1: the count is the number of DISTINCT saved battles whose placed set holds the
   // id (Decision H: "used" = placed) — read from the SAME settled list the page holds.
@@ -359,6 +405,18 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
           </CountBadge>
         )}
       </Toolbar>
+      {/* Story 4.18, AC10/FD10: OUTSIDE the aria-busy wrapper, the same reason the toolbar is — a
+          refused clone must not be withheld while a reload is in flight. `role="alert"`, never a
+          second `role="status"`: the count badge above is the page's only status node, and
+          `e2e/organisms.spec.ts`'s `countBadge = page.getByRole('status')` is unscoped, so a second
+          one would turn every 4.16/4.17 badge assertion into a strict-mode failure. Success gets no
+          sentence of its own — the new card and the badge's own count change are already the
+          announcement. */}
+      {cloneError !== null && (
+        <StatusText role="alert" data-clone-error>
+          {cloneError}
+        </StatusText>
+      )}
       <div aria-busy={status === 'loading'}>
         {status === 'loading' && <StatusText>Loading organisms…</StatusText>}
         {status === 'error' && (
@@ -379,6 +437,10 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
                     organism={organism}
                     system={organism.id === CONWAYS_CLASSIC_ID}
                     onRequestEdit={() => onRequestEdit(organism)}
+                    cloning={cloning === organism.id}
+                    onRequestClone={() => {
+                      void cloneOrganism(organism);
+                    }}
                   />
                 </li>
               ))}

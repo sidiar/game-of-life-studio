@@ -48,10 +48,22 @@ export interface OrganismInUseDialogProps {
   usedInBattles: number;
   /** Escape and backdrop both route here. Changes nothing at all; focus goes back to the card. */
   onCancel(): void;
+  /** Clone the organism, then proceed to the editor on the CLONE, once this dialog has fully
+   * exited (Story 4.18, AC9). The write itself is not this dialog's concern — it fires the
+   * callback and waits for `pending` to clear. */
+  onCloneAndEdit(): void;
   /** Proceed to the editor on the SAME organism, once this dialog has fully exited. */
   onEditAnyway(): void;
+  /**
+   * A Clone & Edit write started from this dialog is in flight (Story 4.18, FD6). Disables all
+   * three actions AND guards `onClose`, so Escape/backdrop cannot dismiss the dialog mid-write —
+   * the same window `<UnsavedChangesDialog>`'s `pending` closes. `disableEscapeKeyDown` was
+   * removed from Modal in MUI v9, so `onClose` is the only place that guard can live.
+   */
+  pending: boolean;
   /** Fired once the close transition has fully finished — the hook's cue to open the editor
-   * (after Edit Anyway) or to unmount this dialog and restore focus (after Cancel). */
+   * (after Edit Anyway or Clone & Edit) or to unmount this dialog and restore focus (after
+   * Cancel). */
   onExited?(): void;
 }
 
@@ -61,14 +73,19 @@ export interface OrganismInUseDialogProps {
  * that at least one saved battle places, so an edit that will change every one of those battles
  * (FR-7.15) is deliberate.
  *
- * Two actions, not the AC's three: Clone & Edit routes through Story 4.18's clone path, which
- * owns "[Name] (Copy)", the colour reuse and the repository write. Building it here would either
- * duplicate 4.18 or ship a button that does nothing — a dead affordance (NFR-4.1, the rule this
- * page already applied to Edit/Clone/Delete in Story 4.2). The two-button dialog is exactly
- * FR-3.12's battle variant (`prd.md:127`), so it is spec-backed; 4.18 adds the third button and,
- * with it, a `pending` guard on `onClose` for the clone's write (the `<UnsavedChangesDialog>`
- * shape). Until then nothing asynchronous runs from this dialog, so `onClose` is unguarded. The
- * battle-origin variant (Story 4.24) is the same two buttons, so there is no `origin` prop yet.
+ * Three actions now: Cancel / Clone & Edit / Edit Anyway, the `<UnsavedChangesDialog>` shape —
+ * safe-first `autoFocus`, middle, recommended-last `contained`. Clone & Edit routes through
+ * `useOrganismEditorModal`'s injected writer and the hook's `proceedRef` handoff (Story 4.18):
+ * this dialog fires `onCloneAndEdit()` and waits for `pending` to clear, and owns no
+ * "[Name] (Copy)", colour or repository logic of its own — that stays in `<OrganismLibrary>`
+ * (FD3). `pending` is the clone's write window and is why `onClose` is guarded: without it,
+ * Escape during the write closes the gate before the clone id is stashed, and the write lands
+ * with no editor and no explanation.
+ *
+ * The battle-origin variant (FR-3.12 / Story 4.24) is **Edit Anyway / Cancel only** — no Clone &
+ * Edit from the Battle Editor (M5, PRD `:127`) — so 4.24 will need an `origin` prop or a
+ * `cloneable` flag to withhold the middle button; this comment is where that decision lands.
+ * `organismInUseMessage` is unchanged: its clone sentence is now true.
  *
  * Composed exactly like `<UnsavedChangesDialog>` — the paper width, Cancel-first with
  * `autoFocus`, `disableRestoreFocus`, `onTransitionExited` — so the app keeps ONE dialog idiom.
@@ -80,15 +97,23 @@ export default function OrganismInUseDialog({
   open,
   usedInBattles,
   onCancel,
+  onCloneAndEdit,
   onEditAnyway,
+  pending,
   onExited,
 }: OrganismInUseDialogProps) {
   return (
     <Dialog
       open={open}
       // Fires for both Escape and backdrop click; Cancel is the non-destructive action either way,
-      // so there is no reason to branch on MUI's `reason` argument.
-      onClose={onCancel}
+      // so there is no reason to branch on MUI's `reason` argument — but it must not fire while a
+      // clone write is in flight. `disableEscapeKeyDown` was removed from Modal in MUI v9, so this
+      // callback is the ONLY place that guard can live (`<DeleteBattleDialog>` records the
+      // finding).
+      onClose={() => {
+        if (pending) return;
+        onCancel();
+      }}
       onTransitionExited={onExited}
       // `useOrganismEditorModal` manages focus for every close path. MUI's default
       // restore-to-trigger reads `document.activeElement` at OPEN time, and WebKit does not focus
@@ -113,6 +138,7 @@ export default function OrganismInUseDialog({
         <Button
           type="button"
           onClick={onCancel}
+          disabled={pending}
           autoFocus
           color="inherit"
           variant="outlined"
@@ -120,7 +146,18 @@ export default function OrganismInUseDialog({
         >
           Cancel
         </Button>
-        <Button type="button" onClick={onEditAnyway} variant="contained" sx={BUTTON_SX}>
+        {/* Middle slot, plain — the `<UnsavedChangesDialog>` shape's middle button, text variant,
+            default colour. The accessible name has a real `&`, written `&amp;` in JSX. */}
+        <Button type="button" onClick={onCloneAndEdit} disabled={pending} sx={BUTTON_SX}>
+          Clone &amp; Edit
+        </Button>
+        <Button
+          type="button"
+          onClick={onEditAnyway}
+          disabled={pending}
+          variant="contained"
+          sx={BUTTON_SX}
+        >
           Edit Anyway
         </Button>
       </DialogActions>
