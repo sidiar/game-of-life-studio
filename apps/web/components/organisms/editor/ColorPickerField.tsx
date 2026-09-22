@@ -66,8 +66,10 @@ import { colorReuseWarning } from '@/lib/organisms/colorReuse';
  * exists. The chip's name is plain text, NOT a live region: the radio change already announces
  * the new name, and a live region would read it a second time (the Story 3.13 trap).
  *
- * Followers: Story 4.14 reads `draft.colorToken` for the preview grid; Story 4.17 seeds `value`
- * and `seedValue` from the record and excludes the organism under edit from `usersByToken`.
+ * Consumers: Story 4.14 reads `draft.colorToken` for the preview grid; an edit session
+ * (Story 4.17) seeds `value` and `seedValue` from the record, and the modal hands this field a
+ * `usersByToken` built from the library MINUS the organism under edit — which is why a re-pick of
+ * the record's own colour is silent by the same `seedValue` comparison.
  * `useId()` for every id — the field is not a singleton (Story 4.24's battle-origin editor is a
  * second instance, and two groups sharing a `name` would deselect each other).
  *

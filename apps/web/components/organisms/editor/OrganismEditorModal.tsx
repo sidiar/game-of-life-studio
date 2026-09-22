@@ -22,6 +22,7 @@ import RulesEditor from './RulesEditor';
 import PreviewPanel from './PreviewPanel';
 import {
   createNewOrganismDraft,
+  organismDraftFrom,
   validateOrganismDraft,
   type DraftErrorTarget,
   type OrganismDraft,
@@ -61,6 +62,16 @@ export interface OrganismEditorLifecycleProps {
   open: boolean;
   /** Drives the contextual back label (UX-DR5). 'battle' is Story 4.24's entry point. */
   origin: OrganismEditorOrigin;
+  /**
+   * `null` is a create; a record is an edit session on THAT organism (Story 4.17). Held by
+   * `useOrganismEditorModal` for the whole mount — through the exit fade, the `<DeleteBattleDialog>`
+   * `confirming` lesson: the `mounted` gate keeps this modal alive ~195 ms after close, and a
+   * record emptied at close would re-seed nothing. Read at mount for the seed and the
+   * `saveStamp`, and on every render for `others` (the library minus self) — which is only
+   * coherent because the hook never changes it while this modal is mounted (`requestEdit` is a
+   * no-op during that window). The whole mode switch: no title change, no `mode` prop.
+   */
+  organism: Organism | null;
   /** Close ✕, the back label and Escape all route here. Story 4.23 guards it. */
   onClose(): void;
   /**
@@ -84,8 +95,9 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
    * The loaded library — an entity list, never a repository (AR-2/AR-27: this modal still calls
    * nothing that persists through it). Read ONCE, at mount, for the M6 default-colour seed
    * (Story 4.8) and on EVERY render for the reuse warning (Story 4.9) and the organism-type
-   * dropdown (Story 4.11); Story 4.17 excludes the organism under edit. The seed is taken from
-   * whatever the caller had loaded at open time (FD9).
+   * dropdown (Story 4.11), both of which see it MINUS the organism under edit (`others`, below —
+   * Story 4.17). The caller passes the whole loaded list, unchanged, for both modes. The seed is
+   * taken from whatever the caller had loaded at open time (FD9).
    */
   library: readonly Organism[];
   /**
@@ -278,11 +290,21 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * Editor" call). A later Save in the same session reuses the first success's id (`saveStamp`), so
  * it updates the same organism; the parent hook only hands the record on to the Library, and
  * Back/Escape/✕ are locked while a write is in flight (Task 12), when the editor is eventually
- * closed. (Story 4.13) (UX-DR14) (UX-DR17) (Story 4.14) (Story 4.15) (Story 4.16)
+ * closed.
+ *
+ * An edit session (Story 4.17) is the same shell with `organism` set: the seed is
+ * `organismDraftFrom(organism)` instead of the create factory, `saveStamp` carries `organism.id`
+ * from mount so the FIRST Save already upserts the opened record, and the two library views — the
+ * colour-reuse warning and the organism-type dropdown — see `others`, the library minus the
+ * organism under edit (an organism must never warn about its own colour, and RFC-004 §2.1.1's
+ * `organismType` names a specific OTHER organism). Everything else — the gate, the write, the
+ * close-lock, the outcome lines, the preview — is byte-identical. (Story 4.13) (UX-DR14)
+ * (UX-DR17) (Story 4.14) (Story 4.15) (Story 4.16) (Story 4.17)
  */
 export default function OrganismEditorModal({
   open,
   origin,
+  organism,
   onClose,
   onExited,
   onSaved,
@@ -295,10 +317,15 @@ export default function OrganismEditorModal({
   //
   // The seed is held, not recomputed: it is what Story 4.23 diffs the draft against (the factory's
   // own contract — "the draft is diffed against its seed"), and it is what makes the FR-2.3 rule
-  // "the default never warns" a token comparison rather than a flag (Story 4.9, FD2). Story 4.17
-  // replaces this ONE initialiser with the record.
+  // "the default never warns" a token comparison rather than a flag (Story 4.9, FD2). An edit
+  // session (Story 4.17) seeds from the record instead. That branch is IMPURE (it mints condition
+  // ids through `crypto.randomUUID()`), which is fine for a lazy initialiser and would not be for
+  // an updater: React keeps exactly ONE result of the initialiser, and `draft` below is initialised
+  // from `seed`'s VALUE, so the two cannot disagree about which ids the rows carry.
   const [seed] = useState<OrganismDraft>(() =>
-    createNewOrganismDraft(library.map((organism) => organism.colorToken)),
+    organism === null
+      ? createNewOrganismDraft(library.map((entry) => entry.colorToken))
+      : organismDraftFrom(organism, () => crypto.randomUUID()),
   );
   const [draft, setDraft] = useState<OrganismDraft>(seed);
   // Story 4.13 — the Save gate's own ephemeral UI state (RFC-005 Decision 1 / AR-33): the draft
@@ -323,9 +350,16 @@ export default function OrganismEditorModal({
   const savingRef = useRef(false);
   // Story 4.16, AC3 (Task 11): the id a later Save in THIS session reuses, so a second write
   // upserts the same organism instead of minting a sibling — `organisms.save()` upserts by id.
-  // Set once, on the first success (`saveOrganism` guards the set on `null`); read back — never
-  // overwritten with a fresh uuid — for the rest of the mount.
-  const [saveStamp, setSaveStamp] = useState<{ id: string } | null>(null);
+  // For a create: set once, on the first success (`saveOrganism` guards the set on `null`); read
+  // back — never overwritten with a fresh uuid — for the rest of the mount. An edit session
+  // (Story 4.17) is stamped FROM MOUNT with the opened record's id, so its first Save is already an
+  // upsert of that organism and the `null` guard is simply never true for it. The record's
+  // `schemaVersion` is not carried over: `projectOrganismForSave` restamps `ORGANISM_SCHEMA_VERSION`
+  // (Decision I.4 — the version is a stamp of the shape the record was WRITTEN in, and the
+  // projection's final `OrganismSchema.parse` proves that shape is the current one).
+  const [saveStamp, setSaveStamp] = useState<{ id: string } | null>(
+    organism === null ? null : { id: organism.id },
+  );
   // The success half of the in-flow outcome pair; `saveError` is the failure half. `null` is
   // "nothing to report" — the same idiom as `saveError`. Never both set at once (Task 11).
   const [saveOutcome, setSaveOutcome] = useState<string | null>(null);
@@ -338,10 +372,16 @@ export default function OrganismEditorModal({
   // focus from wherever the page put it.
   const [saveSettledSeq, setSaveSettledSeq] = useState(0);
   const shellRef = useRef<HTMLDivElement>(null);
-  // Per render, unmemoised: `library` is the caller's unmemoised `sorted` (a `useMemo` keyed on it
-  // would never hit), and the scan is 0.02–0.04 ms at 1,000 organisms (Story 3.7's `library-filter`
-  // bench). Story 4.17 passes the library MINUS the organism under edit.
-  const usersByToken = usersByColorToken(library);
+  // The library MINUS the organism under edit (Story 4.17) — what BOTH library views read: the
+  // colour-reuse warning (an organism must never warn about its own colour — `seedValue` is the
+  // record's token, and a re-pick of it stays silent by the same comparison) and the organism-type
+  // dropdown (RFC-004 §2.1.1: `organismType` names a specific OTHER organism; the create flow has
+  // never listed self). Derived HERE, not by the caller, because this is the component that knows
+  // `organism`, so the Library keeps passing one list with one meaning. Per render, unmemoised:
+  // `library` is the caller's unmemoised `sorted` (a `useMemo` keyed on it would never hit), and
+  // the scan is 0.02–0.04 ms at 1,000 organisms (Story 3.7's `library-filter` bench).
+  const others = organism === null ? library : library.filter((entry) => entry.id !== organism.id);
+  const usersByToken = usersByColorToken(others);
   // Story 4.14: resolved ONCE here (`getComputedStyle` forces a style recalculation) and passed
   // down to `<PreviewPanel>` — the `<BattlePage>` form (`BattlePage.tsx:420-427`). `document` is
   // guarded for the prerender even though this file is `ssr: false` (the house form, costs
@@ -668,7 +708,7 @@ export default function OrganismEditorModal({
             rules={
               <RulesEditor
                 rules={draft.survivalRules}
-                organisms={library}
+                organisms={others}
                 onRulesChange={setSurvivalRules}
                 onAddRule={addRule}
                 showAllErrors={saveAttempted}

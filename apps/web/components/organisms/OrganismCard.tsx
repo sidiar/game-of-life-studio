@@ -6,16 +6,19 @@ import type { Organism } from '@gol/domain';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 
 // Mockup: .organism-card / .card-header / .organism-color / .organism-name / .card-stats /
-// .stat-item / .rules-preview / .organism-card.preloaded::before
-// (organism-library.html:192-261, 404-444). FD1 trims the mockup's usage line, rules SENTENCE and
-// action buttons off the card — Dominance/Aging/rule-count ship, "Used in N battles" is FR-1.7's
-// (4.19/4.20), the rules sentence needs Story 4.10's action/condition vocabulary, and Edit/Clone/
-// Delete are 4.17/4.18/4.22 (a button that does nothing is a dead affordance, NFR-4.1).
+// .stat-item / .rules-preview / .card-actions / .action-btn / .organism-card.preloaded::before
+// (organism-library.html:192-261, 309-332, 404-444). Story 4.2's FD1 trimmed the mockup's usage
+// line, rules SENTENCE and action buttons off the card — Dominance/Aging/rule-count ship, "Used in
+// N battles" is FR-1.7's (4.19/4.20), the rules sentence needs Story 4.10's action/condition
+// vocabulary. Of the action row, Edit ships (Story 4.17); Clone/Delete are 4.18/4.22 and join the
+// same row (a button that does nothing is a dead affordance, NFR-4.1).
 //
-// FD5: the `<article>` itself is the tab stop, for now. Organism cards open a modal in Story 4.17,
-// which does not exist yet, so there is no inner control to be the stop instead — `tabIndex={0}` +
-// `aria-labelledby` names the stop after the organism it represents and lights the hover state via
-// `:focus-within`. Story 4.17 decides whether the article stays a stop once Edit lands inside it.
+// The tab-stop policy, decided in Story 4.17 (closing Story 4.2's provisional FD5): the Edit
+// button is the card's ONE keyboard stop, and the `<article>` is not focusable. A stop wrapping a
+// stop is legal but noisy — every card would cost two Tabs. `aria-labelledby` stays on the article
+// (it still names the region for a screen reader's landmark/article navigation), and
+// `:focus-within` still lifts the card when its button is focused, so the keyboard path keeps the
+// hover state (the Story 1.9 parity rule).
 //
 // AR-46: the organism's resolved colour is an inline `style`, never a styled prop or a token —
 // `RFC-007` Decision 5 says organism colours are not theme variables, and there is no
@@ -29,12 +32,12 @@ function ruleCountLabel(count: number): string {
 
 // Copies `<BattleTile>`'s `Tile` shape (`BattleTile.tsx:52-76`) — surface, border, padding,
 // `position: relative` (the SYSTEM tag's containing block), enumerated transitions, the
-// hover/focus-within lift and its reduced-motion escape — plus a real `:focus-visible` ring, which
-// `<BattleTile>` does not need because ITS focusable element is the nested title link, not the
-// article itself. `:focus-within` matches the article ITSELF when it is the focused element, which
-// is what gives the keyboard path the same state as hover (the Story 1.9 parity rule). **No
-// `cursor: pointer`**: this card has no click action until Story 4.17, and a pointer cursor on a
-// non-interactive surface is a dead affordance (NFR-4.1).
+// hover/focus-within lift and its reduced-motion escape. `:focus-within` matches when the Edit
+// button inside is focused, which is what gives the keyboard path the same state as hover (the
+// Story 1.9 parity rule); the article itself is not focusable (Story 4.17), so it carries no
+// `:focus-visible` ring — the button has its own. **No `cursor: pointer` on the article**: the
+// surface has no click action of its own (the Edit BUTTON has the cursor), and a pointer cursor on
+// a non-interactive surface is a dead affordance (NFR-4.1).
 const Card = styled('article')({
   background: 'var(--gol-bg-secondary)',
   border: '1px solid var(--gol-border)',
@@ -51,10 +54,6 @@ const Card = styled('article')({
   // (mockup `.preloaded`, `:213-215`, does the same).
   '&[data-system]': {
     borderColor: 'var(--gol-accent)',
-  },
-  '&:focus-visible': {
-    outline: '2px solid var(--gol-accent)',
-    outlineOffset: '2px',
   },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
@@ -135,6 +134,48 @@ const RulesLine = styled('p')({
   margin: 0,
 });
 
+// Mockup: .card-actions (:309-312). Edit only, today; Story 4.18's Clone and 4.22's Delete join it.
+const CardActions = styled('div')({
+  display: 'flex',
+  gap: '8px',
+  marginTop: '16px',
+});
+
+// Mockup: .action-btn (:314-332), with the house substitutions:
+//   1. border: var(--gol-border-control), not var(--gol-border) — SC 1.4.11 needs 3:1 for a
+//      boundary that identifies a CONTROL; --gol-border measures 1.57:1 (`BattleTile.tsx`'s
+//      `actionChrome` records the measurement and the forbidden fix).
+//   2. ❌ NO `transition`. The mockup's `all 0.2s` is exactly the trap this page's `<CreateButton>`
+//      records (`OrganismLibrary.tsx`): an axe scan landing mid-fade measures a contrast no settled
+//      state has, and the Library's e2e scans right after the editor closes — when this button has
+//      just been re-focused and is mid-hover-transition on a real pointer.
+//   3. A real `:focus-visible` ring, since this button IS the card's keyboard stop.
+const EditButton = styled('button')({
+  flex: 1,
+  background: 'transparent',
+  border: '1px solid var(--gol-border-control)',
+  color: 'var(--gol-text-primary)',
+  padding: '10px 14px',
+  fontSize: '12px',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  '&:hover': {
+    borderColor: 'var(--gol-accent)',
+    background: 'var(--gol-bg-hover)',
+    transform: 'translateY(-1px)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+  '@media (prefers-reduced-motion: reduce)': {
+    '&:hover': { transform: 'none' },
+  },
+});
+
 // Mockup: .organism-card.preloaded::before (:220-232) — reimplemented as REAL TEXT, not a
 // pseudo-element, so it is in the accessibility tree and a screen reader hears why Delete will be
 // disabled once Story 4.22 adds it (AC3, M9). No `aria-label` on it (Story 4.2 review): a
@@ -164,14 +205,26 @@ export interface OrganismCardProps {
    * — this card stays dumb about which organism is protected.
    */
   system?: boolean;
+  /**
+   * The Edit button's click (Story 4.17, FR-1.3). The `<BattleTile>` `onRequestDelete(): void`
+   * contract: the card knows nothing about usage — the Library computes the count and decides
+   * whether the FR-1.3 warning or the editor opens.
+   */
+  onRequestEdit(): void;
 }
 
 /**
  * One organism in the Library grid (AC1, AC2, AC3, AC6; `Story 4.2`, `FR-1.1`). `organism` is a plain
  * domain value, never a repository (`AR-2`, `AR-27`) — the Library injects repositories at the
  * page boundary and passes down resolved records, never a repository reference, to this component.
+ * The Edit action (Story 4.17) renders on EVERY card, Conway's Classic included: M9 protects it
+ * from deletion, not editing.
  */
-export default function OrganismCard({ organism, system = false }: OrganismCardProps) {
+export default function OrganismCard({
+  organism,
+  system = false,
+  onRequestEdit,
+}: OrganismCardProps) {
   const display = toDisplayOrganism(organism);
   // `useId()`, not a hand-rolled id — this is a hydrated, statically exported page
   // (`BattleNameField.tsx:110-113`'s precedent), and a hardcoded id breaks the moment the grid
@@ -179,7 +232,7 @@ export default function OrganismCard({ organism, system = false }: OrganismCardP
   const nameId = useId();
 
   return (
-    <Card tabIndex={0} aria-labelledby={nameId} data-system={system ? '' : undefined}>
+    <Card aria-labelledby={nameId} data-system={system ? '' : undefined}>
       <CardHeader>
         <ColorChip aria-hidden="true" style={{ background: display.color, color: display.color }} />
         <CardName id={nameId}>{display.name}</CardName>
@@ -195,6 +248,20 @@ export default function OrganismCard({ organism, system = false }: OrganismCardP
         </StatItem>
       </CardStats>
       <RulesLine>{ruleCountLabel(organism.survivalRules.length)}</RulesLine>
+      <CardActions>
+        {/* `aria-label`, not visible text alone: every card's button reads "Edit", and a screen
+            reader's button list needs to tell them apart. `data-edit-organism-id` is the focus
+            restore's lookup key (`useOrganismEditorModal`) — the id, not the name, because names
+            are not unique. */}
+        <EditButton
+          type="button"
+          aria-label={`Edit ${display.name}`}
+          data-edit-organism-id={organism.id}
+          onClick={() => onRequestEdit()}
+        >
+          Edit
+        </EditButton>
+      </CardActions>
       {system && <SystemTag>SYSTEM</SystemTag>}
     </Card>
   );

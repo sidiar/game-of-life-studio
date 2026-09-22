@@ -51,6 +51,11 @@ export { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID, DEFAULT_WORKSPACE } from './defaul
 export { pruneAndRemapBattleGrid } from './battleProjection';
 export type { PrunedBattleGrid } from './battleProjection';
 
+// The AR-15 organism-usage index, derived from `battles.list()` summaries (Decision H.4). Landed in
+// Story 4.17 for the FR-1.3 edit gate; Story 4.19 extends the same module.
+export { buildUsageIndex } from './usageIndex';
+export type { UsageIndex } from './usageIndex';
+
 // The RFC-006 export envelope (Story 5.3) — the schema of record for every file this app writes,
 // and the dense-at-rest <-> sparse-on-the-wire conversion around it (AR-9 / AR-10). `IsoTimestamp`
 // stays out of the barrel: it is shared between two files in THIS package and no other package

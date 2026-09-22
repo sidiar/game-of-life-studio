@@ -6,6 +6,7 @@ import {
   CONWAYS_CLASSIC_ID,
   NUMERIC_OPERATORS,
   OrganismSchema,
+  buildUsageIndex,
 } from '@gol/domain';
 import {
   createMockBattles,
@@ -210,5 +211,18 @@ describe('the two mock battles', () => {
     expect(battleA.updatedAt.toISOString()).toBe('2026-07-20T09:00:00.000Z');
     expect(battleB.createdAt.toISOString()).toBe('2026-07-22T14:30:00.000Z');
     expect(battleB.updatedAt.toISOString()).toBe('2026-07-25T18:15:00.000Z');
+  });
+
+  // Pins the fixture the Story 4.17 Library tests and e2e seed from: Aggressive Colonizer is
+  // "Used in 2 Battles", Conway's Classic "Used in 1 Battle". It lives HERE and not beside
+  // `buildUsageIndex` because `@gol/domain` cannot import this package (it depends on domain).
+  it('the AR-15 usage index over the mock battles places Aggressive Colonizer in both and Conway in B only', () => {
+    const usage = buildUsageIndex(createMockBattles());
+
+    expect(usage.get(MOCK_ORGANISM_IDS.aggressiveColonizer)).toEqual([
+      MOCK_BATTLE_IDS.battleA,
+      MOCK_BATTLE_IDS.battleB,
+    ]);
+    expect(usage.get(CONWAYS_CLASSIC_ID)).toEqual([MOCK_BATTLE_IDS.battleB]);
   });
 });
