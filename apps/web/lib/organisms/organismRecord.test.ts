@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ORGANISM_SCHEMA_VERSION, OrganismSchema } from '@gol/domain';
+import { MAX_ORGANISM_NAME_LENGTH, ORGANISM_SCHEMA_VERSION, OrganismSchema } from '@gol/domain';
 import { CONWAYS_CLASSIC } from '@gol/test-utils';
 import { createNewOrganismDraft, type OrganismDraft } from './organismDraft';
 import { projectOrganismForSave } from './organismRecord';
@@ -94,8 +94,14 @@ describe('projectOrganismForSave', () => {
 
   // A draft the editor's own helpers cannot build — pin the schema boundary directly (Task 3 g).
   it('a name over MAX_ORGANISM_NAME_LENGTH throws a ZodError — the parse is the second line of defence', async () => {
-    const draft: OrganismDraft = { ...createNewOrganismDraft([]), name: 'x'.repeat(51) };
-    await expect(projectOrganismForSave(draft, ID)).rejects.toThrow();
+    const draft: OrganismDraft = {
+      ...createNewOrganismDraft([]),
+      name: 'x'.repeat(MAX_ORGANISM_NAME_LENGTH + 1),
+    };
+    // The CLASS is the claim — a bare `rejects.toThrow()` would accept a digest failure too. By
+    // `name` rather than `instanceof`: `apps/web` does not depend on `zod` directly, and the
+    // schema is the boundary being pinned, not the library (review 2026-09-22).
+    await expect(projectOrganismForSave(draft, ID)).rejects.toMatchObject({ name: 'ZodError' });
   });
 
   it('proves the parse and the hash together, not in isolation', async () => {

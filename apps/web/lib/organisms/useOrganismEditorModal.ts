@@ -88,6 +88,12 @@ export function useOrganismEditorModal(
   // `handleSaved`, consumed and cleared by `handleExited`. `null` means "closed without saving".
   const pendingSavedRef = useRef<Organism | null>(null);
 
+  // `mounted`, readable from the stable callbacks below without a dep (review 2026-09-22): a
+  // write that resolves AFTER an Escape-close's exit has finished reaches `handleSaved` with no
+  // `handleExited` left to fire — the record was stashed and then replayed on the NEXT, unrelated
+  // close. Kept in step by the two places `mounted` changes, `requestCreate` and `handleExited`.
+  const mountedRef = useRef(false);
+
   // A latest-value ref, assigned in an effect below, so a caller whose `onSaved` option changes
   // identity between open and exit still gets the LATEST one called — and so `modalProps`' own
   // identity (memoised below) is unaffected by a changing `onSaved` option.
@@ -132,6 +138,7 @@ export function useOrganismEditorModal(
 
   const requestCreate = useCallback(() => {
     restoreFocusRef.current = true;
+    mountedRef.current = true;
     setMounted(true);
     setDialogOpen(true);
   }, []);
@@ -147,6 +154,13 @@ export function useOrganismEditorModal(
   // then starts the identical fade `handleClose` starts. `restoreFocusRef` is already armed from
   // `requestCreate`, so a save-close restores focus exactly like a plain Close.
   const handleSaved = useCallback((organism: Organism) => {
+    // Already exited (the user closed during the in-flight write and the fade outlasted it):
+    // there is no `handleExited` ahead to hand the record on, and FD4's ordering guarantee — the
+    // caller's `onSaved` runs only once `mounted` has cleared — is already met. Report now.
+    if (!mountedRef.current) {
+      onSavedRef.current?.(organism);
+      return;
+    }
     pendingSavedRef.current = organism;
     setDialogOpen(false);
   }, []);
@@ -158,6 +172,7 @@ export function useOrganismEditorModal(
   // dialog (the `useInertBackground` sweep), and the Story 4.9 reuse warning would otherwise flag
   // the just-saved organism's own colour for the fade's duration.
   const handleExited = useCallback(() => {
+    mountedRef.current = false;
     setMounted(false);
     const saved = pendingSavedRef.current;
     pendingSavedRef.current = null;

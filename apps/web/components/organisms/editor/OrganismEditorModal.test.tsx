@@ -997,11 +997,15 @@ describe('OrganismEditorModal', () => {
       const record = saveSpy.mock.calls[0]?.[0] as Organism;
       expect(OrganismSchema.safeParse(record).success).toBe(true);
       expect(record.schemaVersion).toBe(ORGANISM_SCHEMA_VERSION);
-      expect(record.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(record.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       expect(record.name).toBe('Glider');
       expect(record.dominance).toBe(NEW_ORGANISM_DOMINANCE);
       expect(record.agingEnabled).toBe(false);
-      expect(PALETTE.some((entry) => entry.id === record.colorToken)).toBe(true);
+      // The DRAFT's colour — the M6 seed derived from `library` at mount (Story 4.8), not merely
+      // some palette member.
+      expect(record.colorToken).toBe(
+        defaultColorToken(LIBRARY.map((organism) => organism.colorToken)),
+      );
       expect(record.survivalRules).toHaveLength(1);
       const rule = record.survivalRules[0];
       expect(rule.id).toBe(ruleId);
@@ -1043,6 +1047,7 @@ describe('OrganismEditorModal', () => {
       await user.click(save); // empty name — invalid by construction
 
       expect(within(dialog).getByRole('alert')).toHaveTextContent(ORGANISM_NAME_REQUIRED);
+      expect(within(dialog).getByRole('textbox', { name: 'Organism Name' })).toHaveFocus();
       expect(saveSpy).not.toHaveBeenCalled();
       expect(onSaved).not.toHaveBeenCalled();
     });
@@ -1092,7 +1097,8 @@ describe('OrganismEditorModal', () => {
     it('(24) the alert line clears at the START of the next attempt, before the write settles', async () => {
       const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
       let resolveSecond!: () => void;
-      vi.spyOn(organisms, 'save')
+      const saveSpy = vi
+        .spyOn(organisms, 'save')
         .mockRejectedValueOnce(new QuotaExceededError('gol:organisms'))
         .mockImplementationOnce(
           () =>
@@ -1114,6 +1120,8 @@ describe('OrganismEditorModal', () => {
       // `setState` in the handler, before any `await`.
       await user.click(save);
       expect(dialog.querySelector('[data-save-error]')).toBeNull();
+      // `save` sits behind the awaited digest — reach it before resolving it (review 2026-09-22).
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
       await act(async () => {
         resolveSecond();
       });
@@ -1143,7 +1151,7 @@ describe('OrganismEditorModal', () => {
       expect(rule1).toBeInTheDocument();
     });
 
-    it('(25) re-entrancy: two rapid clicks call save once; Save is disabled while pending and enabled after', async () => {
+    it('(25) re-entrancy: two rapid clicks call save once; Save is disabled while pending and STAYS held after a success', async () => {
       const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
       let resolveSave!: () => void;
       const saveSpy = vi.spyOn(organisms, 'save').mockImplementation(
@@ -1152,8 +1160,9 @@ describe('OrganismEditorModal', () => {
             resolveSave = resolve;
           }),
       );
+      const onSaved = vi.fn();
       const user = userEvent.setup();
-      mountModal({ organisms });
+      mountModal({ organisms, onSaved });
 
       const dialog = screen.getByRole('dialog');
       await fillValidDraft(user, dialog);
@@ -1163,12 +1172,48 @@ describe('OrganismEditorModal', () => {
       fireEvent.click(save);
 
       await waitFor(() => expect(save).toBeDisabled());
-      expect(saveSpy).toHaveBeenCalledTimes(1);
+      // `save` sits behind the awaited digest — wait for it rather than assert the count on the
+      // first render after the click (review 2026-09-22).
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
 
       await act(async () => {
         resolveSave();
       });
-      await waitFor(() => expect(save).toBeEnabled());
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+      // Review 2026-09-22: NOT re-enabled after a success. The parent is closing the dialog and
+      // it stays mounted and interactive through the exit fade; a released button there let a
+      // double-click write a second organism. The unmount is the release (a failure releases —
+      // (23)/(26) pin that).
+      expect(save).toBeDisabled();
+    });
+
+    // Review 2026-09-22: the double-click that (25) guards against, end to end — the second click
+    // lands AFTER the first write has resolved (the fake resolves in microtasks) while the modal is
+    // still mounted, exactly the exit-fade window. One record, not two.
+    it('(25b) a second Save after a successful write, with the modal still mounted, writes nothing', async () => {
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      const saveSpy = vi.spyOn(organisms, 'save');
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      mountModal({ organisms, onSaved });
+
+      const dialog = screen.getByRole('dialog');
+      await fillValidDraft(user, dialog);
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+
+      await user.click(save);
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+      expect(save).toBeDisabled();
+
+      // A disabled button is inert to a real click; `fireEvent` bypasses that, so this also pins
+      // the `savingRef` guard behind the `disabled` attribute.
+      fireEvent.click(save);
+      await user.keyboard('{Enter}');
+      await act(async () => {});
+
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect((await organisms.list()).length).toBe(LIBRARY.length + 1);
     });
 
     it('(26) crypto.randomUUID throwing reports the generic sentence and releases isSaving (Save is usable again)', async () => {

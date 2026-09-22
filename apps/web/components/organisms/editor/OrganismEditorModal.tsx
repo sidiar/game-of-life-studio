@@ -46,8 +46,11 @@ const BUTTON_SX = { fontSize: '13px', padding: '12px 24px' } as const;
 // Story 4.16, FD8: `deferred-work.md:795-801` named this story as the first MUI `Button` whose
 // `disabled` flips on an axe-scanned route. MUI `Button` ships a 250ms `background-color`/`color`
 // transition, and an axe scan landing mid-fade measures a contrast no settled state has
-// (`EditorStatusBar.tsx` UNDO/SAVE record the identical trap). The write itself is sub-millisecond
-// (a localStorage `setItem`); the override costs nothing and removes the whole class of failure.
+// (`EditorStatusBar.tsx` UNDO/SAVE record the identical trap). The disabled window is the
+// projection (one `crypto.subtle.digest` per rule) plus the write — a few milliseconds against
+// localStorage, a round-trip against an API repository — and a failed write re-enables the button
+// with the dialog still open and the e2e scanning right after; the override costs nothing and
+// removes the whole class of failure.
 const SAVE_SX = { ...BUTTON_SX, transition: 'none' } as const;
 
 export type OrganismEditorOrigin = 'library' | 'battle';
@@ -278,10 +281,13 @@ export default function OrganismEditorModal({
   // Story 4.16, AC5 / FD7: the write's own ephemeral UI state (RFC-005 Decision 1 / AR-33) — none
   // of it lives on the draft. `null` is "nothing to report", never `''`.
   const [saveError, setSaveError] = useState<string | null>(null);
-  // AC2: Save is `disabled` ONLY for the duration of the write. `savingRef` is the re-entrancy
-  // guard a second click races against — `organisms.save()` is a whole-collection
-  // read-modify-write over one key (Story 2.13 AC4's reason), so two interleaved writes can lose
-  // one outright.
+  // AC2: Save is `disabled` for the duration of the write and — review 2026-09-22 — stays held
+  // after a SUCCESSFUL one, until the parent unmounts this modal: the dialog is still mounted and
+  // interactive for the ~195 ms exit fade, and a released button there let a double-click or a
+  // second Enter write a second organism with a fresh id. Only a FAILED write releases it (the
+  // dialog stays open and Save must be usable again). `savingRef` is the re-entrancy guard a
+  // second click races against — `organisms.save()` is a whole-collection read-modify-write over
+  // one key (Story 2.13 AC4's reason), so two interleaved writes can lose one outright.
   const [isSaving, setIsSaving] = useState(false);
   const savingRef = useRef(false);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -383,25 +389,31 @@ export default function OrganismEditorModal({
     }
     savingRef.current = true;
     setIsSaving(true);
+    let record: Organism;
     try {
-      // Minted INSIDE `try` (Story 2.16 review lesson): a throw above it would skip `finally` and
-      // wedge `isSaving`/`savingRef` forever.
+      // Minted INSIDE `try` (Story 2.16 review lesson): a throw above it would skip the release
+      // below and wedge `isSaving`/`savingRef` forever.
       const id = crypto.randomUUID();
-      const record = await projectOrganismForSave(draft, id);
+      record = await projectOrganismForSave(draft, id);
       await organisms.save(record);
-      // Fired BEFORE `finally` runs: the parent hook starts closing the dialog on this call, and
-      // the two `setState`s below land on a still-mounted modal (React 19 batches a resolved
-      // promise's updates; the fade holds the modal mounted through them either way) — harmless,
-      // never an "unmounted component" warning. Escape/Close/Back during an in-flight write is
-      // allowed: the write still lands and still reports, nothing is lost, and the outcome is
-      // simply announced after a close the user already asked for.
-      onSaved(record);
     } catch (error) {
       setSaveError(saveFailureMessage(error, 'organism'));
-    } finally {
+      // The ONLY release (review 2026-09-22): the dialog stays open on a failure and Save must be
+      // usable again. A success deliberately leaves `isSaving`/`savingRef` held — the parent's
+      // `onSaved` starts the close, the dialog is still mounted and interactive through the exit
+      // fade, and a released button there let a double-click / second Enter write a second
+      // organism (a whole-collection read-modify-write, racing the first). The unmount is the
+      // release.
       savingRef.current = false;
       setIsSaving(false);
+      return;
     }
+    // OUTSIDE the `try`: once `organisms.save()` has resolved the record IS in storage, and a throw
+    // from the parent's own handling must not be reported as "this organism could not be saved".
+    // Escape/Close/Back during an in-flight write is allowed: the write still lands and still
+    // reports, nothing is lost, and the outcome is announced after a close the user already asked
+    // for (the hook hands a late record on even once the dialog has exited).
+    onSaved(record);
   }, [errors, draft, organisms, onSaved]);
 
   const handleSave = useCallback(() => {
@@ -460,8 +472,9 @@ export default function OrganismEditorModal({
                 click. An invalid draft is refused (errors shown, focus moved, nothing closed,
                 nothing written); a valid draft writes through `organisms.save()` — success closes
                 the editor and reports through the Library (`onSaved`); a rejection surfaces as the
-                in-flow `SaveErrorLine` alert below and the dialog stays open. `disabled` for the
-                write's duration only (AC2, FD8) — never at rest. */}
+                in-flow `SaveErrorLine` alert below and the dialog stays open. `disabled` from the
+                click until a FAILED write releases it or a successful one unmounts the modal
+                (AC2, FD8; review 2026-09-22) — never at rest. */}
             <Button
               type="button"
               variant="contained"

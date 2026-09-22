@@ -4,7 +4,7 @@ baseline_commit: 2e4dcf0
 
 # Story 4.16: Create & Save Organism
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -116,6 +116,12 @@ across every installed workspace; a "saved" toast over a write that failed) are 
    test's final `[data-save-notice]` assertion is retargeted to the new outcome; e2e 4.13 test 3
    ("zero rules is not refused; the notice is honest") is retargeted into the 4.16 block. No other
    4.3–4.15 test is touched; if any other test fails, the change is wrong, not the test.
+   > **Review note (2026-09-22):** this AC collides with Task 8 / FD5 — the always-mounted
+   > `<div role="status" data-save-status>` is a second `role="status"` element on `/organisms`,
+   > so Story 4.1/4.2's count-badge tests (`OrganismLibrary.test.tsx` ×2, the 4.2 e2e block ×3)
+   > had to be rescoped to the badge (`/Organisms?$/`). Those tests are outside the literal
+   > 4.3–4.15 range but inside this AC's intent; the rescoping is the only sensible resolution
+   > (the region is the owner's 2026-09-21 call) and is recorded here rather than left silent.
 
 10. **Isolation holds.** Close/Back/Escape without Save still writes nothing (the existing "never
     calls save/delete/replaceAll across an open/close cycle" tests stay green as written); the
@@ -422,6 +428,35 @@ across every installed workspace; a "saved" toast over a write that failed) are 
         route moves more than ±0.5 KB, say why.
   - [x] `sprint-status.yaml`: `4-16-create-save-organism: in-progress` at start, `review` at the
         end; Dev Agent Record with every command and its actual exit code.
+
+### Review Findings
+
+Code review 2026-09-22 (opus, second pair of eyes on a sonnet implementation): Blind Hunter (diff
+only), Edge Case Hunter (diff + project), Acceptance Auditor (diff + story + project-context). 1
+`decision-needed`, 16 `patch`, 2 `defer`, 10 dismissed as noise.
+
+- [ ] [Review][Decision] **Escape/Close/Back during an in-flight write — keep it allowed, or lock the close while saving?** — The story's open flag chose "allowed" on the premise that the write is sub-millisecond. The write is `projectOrganismForSave` (one `crypto.subtle.digest` per rule, thread-pool) + `organisms.save()`; against localStorage it is a few ms, against a Connected-mode API repository it is a round-trip. Three residuals exist only when the write outlasts the ~195 ms exit fade, and none has a fix that does not need the owner's intent: (1) a write that REJECTS after the dialog has exited is reported nowhere — the `role="alert"` lives in the unmounted modal, and "nothing was lost" is then untrue from the user's side; (2) a write that resolves after the user has already reopened a fresh editor calls `handleSaved`, which closes the NEW editor (discarding its draft) and announces the OLD record; (3) fields stay editable while a write is in flight, so keystrokes typed in that window are silently not in the saved record. (The fourth residual — a write that resolves after the exit but before any reopen was dropped, then replayed on the next unrelated close — was a plain bug and is patched below.) Options: **(a) keep allowed**, accept (1)–(3) as Connected-mode residuals and record them in `deferred-work.md` for RFC-001's API repository story; **(b) lock the close while saving** — `onClose` (✕ / Back / Escape) is a no-op while `isSaving`, the `<UnsavedChangesDialog>` `pending` idiom; removes all three at the cost of a lock on a few-ms window today, and Story 4.23's guard then has a second condition to respect; **(c) keep allowed but session-bind the late outcome** — the hook stamps a session id per `requestCreate`, a late `handleSaved` from a stale session neither closes nor stashes but queues its report for after the current session exits; fixes (2), leaves (1) and (3). Files: `apps/web/components/organisms/editor/OrganismEditorModal.tsx` (`saveOrganism`), `apps/web/lib/organisms/useOrganismEditorModal.ts` (`handleSaved`/`handleClose`), `deferred-work.md` (the "Escape during an in-flight organism save is allowed" entry, which currently asserts a "still reports" that the patched code now honours only for the no-reopen case).
+- [x] [Review][Patch] A second Save during the exit fade after a SUCCESSFUL write writes a second organism — `finally` re-enables the button while the dialog is still mounted and interactive for ~195 ms; a double-click or a second Enter lands as a second `organisms.save()` with a fresh id. Hold `isSaving`/`savingRef` on success (the modal is unmounting; the parent's close is the release), release only on failure; move `onSaved(record)` out of the `try` so a throw from the parent is not reported as a failed save that actually succeeded [apps/web/components/organisms/editor/OrganismEditorModal.tsx:373-409]
+- [x] [Review][Patch] A save that resolves AFTER an Escape-close's exit transition is dropped, then replayed on the next unrelated close — `handleSaved` only stashes into `pendingSavedRef` and `handleExited` has already fired; reproduced with a probe (caller's `onSaved` 0 calls after the late resolution, 1 call after the next plain Close). Hand the record on immediately when the dialog is no longer mounted [apps/web/lib/organisms/useOrganismEditorModal.ts:149-167]
+- [x] [Review][Patch] `SAVE_SX` comment says "the write itself is sub-millisecond (a localStorage `setItem`)" — the disabled window is the digest(s) + the write, and the claim underpins the Escape decision above; reword [apps/web/components/organisms/editor/OrganismEditorModal.tsx:46-51]
+- [x] [Review][Patch] Tests (24)/(25) assert `save` was reached synchronously after a click, but `organisms.save()` sits behind an `await`ed digest — `toBeDisabled()` is true on `waitFor`'s first check, so the following `toHaveBeenCalledTimes(1)` / `resolveSecond()` race the thread pool; wait for the spy count first [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:1092-1172]
+- [x] [Review][Patch] Library test (a) asserts `toHaveTextContent(ORGANISM_SAVED)` — a substring match that the zero-rules sentence also satisfies; anchor it so the one-sentence case is proven to be exactly one sentence [apps/web/components/organisms/OrganismLibrary.test.tsx:558]
+- [x] [Review][Patch] `useAsyncResource` "drops a superseded reload" is not Task 5 (b)'s scenario (the initial load is resolved BEFORE the first reload) and its late resolution lands outside `act`, so a broken liveness flag would still pass; run the described scenario (reload while the FIRST load is pending) and resolve the stale promise inside `act` [apps/web/lib/useAsyncResource.test.tsx:240-274]
+- [x] [Review][Patch] `<OrganismLibrary>`'s `onSaved` depends on `[resource]` — a fresh object every render, so the `useCallback` never memoises and the hook's `onSavedRef` effect re-runs each render; destructure the stable `reload` and depend on it (the story's `[resource.reload]` intent) [apps/web/components/organisms/OrganismLibrary.tsx:246-256]
+- [x] [Review][Patch] Task 3 (g) names a `ZodError` and the `MAX_ORGANISM_NAME_LENGTH` boundary but asserts a bare `rejects.toThrow()` over a hard-coded `51`; pin the class and derive the length from the constant [apps/web/lib/organisms/organismRecord.test.ts:96-98]
+- [x] [Review][Patch] `ORGANISM_SCHEMA_VERSION`'s comment says `CONWAYS_CLASSIC`'s literal is "unrelated", while the test beside it pins that the two "must agree by construction"; the seed's literal is out of scope, not unrelated — reword [packages/domain/src/organismSchema.ts:21-26]
+- [x] [Review][Patch] Test (20)'s id oracle `/^[0-9a-f-]{36}$/` accepts 36 hyphens; use the 8-4-4-4-12 shape [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:1000]
+- [x] [Review][Patch] `sortKeysDeep` uses `value as Record<string, unknown>` where Task 2 said "no cast"; a type predicate narrows without one [apps/web/lib/organisms/ruleContentHash.ts:53-63]
+- [x] [Review][Patch] Dev Agent Record's bundle narrative is invented — "down from the 11.5 KB Story 4.15 measured, a ~2.3 KB move" against a 4.15 record that reads `/organisms` 295.6 KB / 305 KB (9.4 KB headroom); the real move is +0.2 KB; re-measure and correct [docs/implementation-artifacts/4-16-create-save-organism.md — Completion Notes, Task 10]
+- [x] [Review][Patch] `deferred-work.md:38` is closed by a trailing sub-bullet but its heading line is not struck — every other closed entry in that file is `~~…~~ — ✅ Closed in Story N`, and a scan of open debt by unstruck headings still lists it [docs/implementation-artifacts/deferred-work.md:38]
+- [x] [Review][Patch] AC9 ("no other 4.3–4.15 test is touched; if any other test fails, the change is wrong, not the test") collides with Task 8's always-mounted `role="status"` region: Story 4.1/4.2's count-badge tests (`OrganismLibrary.test.tsx`, `organisms.spec.ts`) had to be rescoped to the second region. The record discloses the edits but the conflict was resolved silently; note it under AC9 [docs/implementation-artifacts/4-16-create-save-organism.md — AC9]
+- [x] [Review][Patch] Test (20) asserts `colorToken` is merely a palette member rather than the draft's M6 seed (`defaultColorToken(LIBRARY…)`, which the 4.8 test already computes); test (22) claims "the 4.13 refusal (name alert, focus)" but never asserts focus [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:1004-1048]
+- [x] [Review][Patch] `saveFailureMessage.ts`'s head comment says `BattleEditorView.test.tsx` / `BattlePage.test.tsx` assert the `'battle'` sentences byte-identically; they assert fragments (`/could not be saved/i`, a truncated prop literal) — the byte-identity pin is the new `saveFailureMessage.test.ts`; cite that instead [apps/web/lib/saveFailureMessage.ts:17-22]
+- [x] [Review][Defer] Disabling the focused Save on a failed write drops keyboard focus to `<body>` (the HTML focus-fixup rule); the `role="alert"` still announces but the keyboard user is left at the document root — the same `disabled`-while-saving idiom `<EditorStatusBar>`'s SAVE / `<BattlePage>` ship, and no refocus is specified [apps/web/components/organisms/editor/OrganismEditorModal.tsx:478] — deferred, pre-existing idiom
+- [x] [Review][Defer] The WebKit branch of the save-close focus e2e ("focus is not inside a dialog") is satisfied by NO element being focused — the Story 4.13 e2e's idiom, inherited verbatim [apps/web/e2e/organisms.spec.ts:2940-2945] — deferred, pre-existing idiom
+
+Dismissed (10): clearing `pendingSavedRef` at `requestCreate` (a reopen mid-fade keeps the dialog mounted, and the eventual close reports correctly); `mountModal`'s `[...library]` spread vs tests passing `LIBRARY` directly (`createFakeRepositories` copies its input through JSON either way); the moved helper's "Story 5.4" → "Story 5.5" (5.5 is `export-workspace` on the board — a correction); `toContain('organism')` beside an exact `toBe` (Task 4 asked for both); old-path importers (none — `grep` and `typecheck` agree); test (30)'s redundant re-read; a rejecting `reload()` after a successful save showing the success sentence over the load-error copy (both statements are true); duplicate/whitespace-variant names (no uniqueness requirement exists; raw name is the story's own open flag); insecure-context `crypto` (FD1 specifies the generic sentence, no fallback); e2e test 5 not asserting the alert cleared on retry (the dialog it lives in is asserted gone).
+
 
 ## Dev Notes
 
@@ -927,11 +962,14 @@ targeted runs along the way):
   allowed, and 4.17's open `id`/`schemaVersion` policy question). Bundle
   (`npm run build:standalone && npm run bundle:check`), all five routes within budget: home 333.6
   KB/340 KB (6.4 KB headroom), battle 309.4 KB/310 KB (0.6 KB), battle/new 309.2 KB/310 KB (0.8 KB),
-  organisms 295.8 KB/305 KB (9.2 KB — down from the 11.5 KB Story 4.15 measured, a ~2.3 KB move as
-  expected: the status region + `saveOutcomeMessage` land on `/organisms`'s first load; the editor
-  chunk itself, which carries the hasher/projection/failure-helper growth, is lazy and outside
-  every route's first-load measurement), settings 291.3 KB/305 KB (13.7 KB). `sprint-status.yaml`
-  updated to `in-progress` at start, `review` at the end.
+  organisms 295.8 KB/305 KB (9.2 KB headroom — Story 4.15 recorded 295.6 KB / 9.4 KB, so the move
+  is +0.2 KB, inside Task 10's ±0.5 KB band: the status region + `saveOutcomeMessage` are what land
+  on `/organisms`'s first load; the editor chunk, which carries the hasher/projection/failure-helper
+  growth, is lazy and outside every route's first-load measurement — re-measured in the 2026-09-22
+  review at 13.2 KB gzip / 46.8 KB raw for the whole chunk, and the review corrected this
+  paragraph, whose first version cited a "11.5 KB → 9.2 KB, ~2.3 KB move" that no 4.15 record
+  contains), settings 291.3 KB/305 KB (13.7 KB). `sprint-status.yaml` updated to `in-progress` at
+  start, `review` at the end.
 
 ### File List
 
@@ -960,6 +998,7 @@ targeted runs along the way):
 
 | Date | Change |
 |---|---|
+| 2026-09-22 | Code review (opus): 16 patches applied — Save held after a successful write (double-write during the exit fade), late save after an Escape-close reported at once instead of replayed on the next close, `onSaved` outside the `try`, `reload` destructured, test-strength fixes ((20)(22)(24)(25)(25b), Library (a), `useAsyncResource` superseded-load with an `act` positive control, `organismRecord` (g) `ZodError`), `sortKeysDeep` predicate, four comment/doc corrections (SAVE_SX, `ORGANISM_SCHEMA_VERSION`, `saveFailureMessage` head, bundle narrative), `deferred-work.md:38` struck, AC9/Task 8 conflict noted; 2 defers; 1 `[Review][Decision]` left open (Escape during an in-flight write). Status → in-progress. |
 | 2026-09-22 | Story 4.16 implemented: `ORGANISM_SCHEMA_VERSION`, the real `contentHash` hasher, the save projection, the two message helpers, `useAsyncResource.reload()`, the modal's write path, the hook's save-close channel, the Library's outcome line, e2e coverage, and deferred-work bookkeeping. Status → review. |
 
 ---

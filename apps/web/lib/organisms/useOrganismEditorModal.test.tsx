@@ -342,5 +342,37 @@ describe('useOrganismEditorModal', () => {
 
       expect(hook().modalProps).toBe(first);
     });
+
+    // Review 2026-09-22: the user closed during an in-flight write and the fade OUTLASTED the
+    // write. `handleExited` has already fired, so nothing ahead can hand the record on — it must
+    // be reported now, and must NOT be replayed on the next, unrelated close (which is what the
+    // stash-only shape did: 0 calls after the late resolution, 1 after the next plain Close).
+    it('a record arriving after an Escape-close has fully exited is reported at once, not on the next close', async () => {
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      render(<Probe onSaved={onSaved} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+      expect(hook().mounted).toBe(false);
+
+      // The in-flight write resolves late — the (now unmounted) modal reports through the same
+      // stable `onSaved` it was handed at mount.
+      act(() => hook().modalProps.onSaved(record));
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(onSaved).toHaveBeenCalledWith(record);
+      expect(hook().mounted).toBe(false);
+
+      // The next cycle is a plain open/close: nothing stale is replayed.
+      await user.click(createButton());
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+      expect(onSaved).toHaveBeenCalledTimes(1);
+    });
   });
 });

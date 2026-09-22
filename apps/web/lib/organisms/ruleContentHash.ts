@@ -49,15 +49,19 @@ function sortKeysDeep(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortKeysDeep);
   }
-  if (typeof value === 'object' && value !== null) {
-    const record = value as Record<string, unknown>;
+  if (isRecord(value)) {
     const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(record).sort()) {
-      sorted[key] = sortKeysDeep(record[key]);
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = sortKeysDeep(value[key]);
     }
     return sorted;
   }
   return value;
+}
+
+/** The `typeof`/`null` narrowing as a predicate, so the object branch indexes without a cast. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 /** The canonical string a rule's content hashes over — exported so its exact shape is pinned by

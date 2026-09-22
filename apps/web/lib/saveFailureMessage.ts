@@ -17,9 +17,10 @@ import { CorruptDataError, QuotaExceededError } from '@gol/persistence';
  * Moved here from `lib/battle/saveFailureMessage.ts` (Story 4.16, FD7): two copies of a
  * three-branch function that differ only by a noun is the wrong kind of duplication, and this is
  * the second caller (the organism editor) — a third hand copy would be the one the house lifts at.
- * The `'battle'` sentences below are BYTE-IDENTICAL to what shipped before the move
- * (`BattleEditorView.test.tsx`, `BattlePage.test.tsx:1904-1964` assert them); only the signature
- * gained the `subject` parameter.
+ * The `'battle'` sentences below are BYTE-IDENTICAL to what shipped before the move — pinned by
+ * `saveFailureMessage.test.ts`'s three `'battle'` literals (`BattleEditorView.test.tsx` and
+ * `BattlePage.test.tsx` only match fragments of them); only the signature gained the `subject`
+ * parameter.
  */
 export function saveFailureMessage(error: unknown, subject: 'battle' | 'organism'): string {
   if (error instanceof QuotaExceededError) {

@@ -35,7 +35,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 ## Deferred from: code review of 1-5-default-workspace-seeding (2026-08-05)
 
-- **Conway's Classic rule `id`/`contentHash` are hand-generated literals awaiting the real generator** — Story 1.5's forced decision 2: RFC-004 §2.4 specifies an opaque generated `id` and a `sha256`-over-canonicalized-content `contentHash`, but the generator is authored where organisms are authored (Epic 4) and the hasher is consumed by the evaluator cache (Story 3.4). Neither exists yet, so the two rules in `packages/domain/src/defaultWorkspace.ts` carry values generated once and pasted. They must **not** be computed at seed time — a per-install hash breaks FR-8.4's deep-equal "unmodified default" baseline and cross-install export dedupe.
+- ~~**Conway's Classic rule `id`/`contentHash` are hand-generated literals awaiting the real generator**~~ — **✅ Closed in Story 4.16** (the closing sub-bullet below; struck in the 2026-09-22 review so a scan by unstruck headings no longer lists it). Story 1.5's forced decision 2: RFC-004 §2.4 specifies an opaque generated `id` and a `sha256`-over-canonicalized-content `contentHash`, but the generator is authored where organisms are authored (Epic 4) and the hasher is consumed by the evaluator cache (Story 3.4). Neither exists yet, so the two rules in `packages/domain/src/defaultWorkspace.ts` carry values generated once and pasted. They must **not** be computed at seed time — a per-install hash breaks FR-8.4's deep-equal "unmodified default" baseline and cross-install export dedupe.
   - **The canonicalization is now pinned in the file's header comment and verified reproducible** (review 2026-08-05): `sha256hex(JSON.stringify(sortKeysDeep({ conditions, payload })))`, keys sorted deeply in `Array#sort` order, array order preserved, `id` excluded. Both shipped literals reproduce exactly under that scheme.
   - **Story 1.6 extends this set**: the 8 AR-45 mock-organism rules in `packages/test-utils/src/mockWorkspace.ts` (3 for Aggressive Colonizer, 3 for Patient Defender, 2 for Chaotic Spreader) are generated with the identical scheme and pasted the same way. Unlike Conway's, these are **not** a cross-install identity baseline — they carry no identity-pinning test, and regenerating them is harmless — but they must match the scheme anyway, giving Epic 4's real hasher a set of 10 rules total (2 Conway + 8 mock) to validate against instead of just 2.
   - **Confirmed at Story 3.4 (2026-09-09): the evaluator cache CONSUMES `contentHash` and neither generates nor parses one.** `compileEvaluators.ts`'s cache key is `JSON.stringify(rules.map(r => r.contentHash))` — no hashing, no prefix-matching (`sha256:` or otherwise), no content comparison, no parsing of any kind (AR-21). So this entry is untouched by Epic 3: the literals stay hand-generated, the identity-pinning assertions stay valid, and nothing in `packages/simulation` forks rule identity. **Still Epic 4's to pick up** (rule authoring / hash generation): the real hasher must either match this scheme byte-for-byte, or the affected literals get regenerated through it — Conway's Classic's *and* `defaultWorkspace.test.ts`'s identity-pinning assertions in the same change (mandatory); the Story 1.6 mock rules only if convenient, since nothing pins their identity. A silent mismatch on Conway's forks rule identity across every already-installed workspace — the pinning test exists to force that conversation rather than let it ship.
@@ -2315,7 +2315,33 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **Escape/Close/Back during an in-flight organism save is allowed** (FD4/FD9) — the write still
   lands and still reports, after the close. The alternative (disable Close/Back/Escape while
   saving) would lock the dialog for a sub-millisecond window; not built.
+  - **Review 2026-09-22:** "still reports" was only true when the write resolved BEFORE the exit
+    fade finished — a later resolution was stashed and replayed on the next unrelated close;
+    patched (`useOrganismEditorModal.ts`, `handleSaved` hands a late record on at once). The
+    window is the projection's `crypto.subtle.digest` per rule plus the write — a few ms against
+    localStorage, a round-trip against an API repository — not sub-millisecond. Three residuals
+    remain and are the owner's call, recorded as the open `[Review][Decision]` in
+    `4-16-create-save-organism.md`: a write that REJECTS after the exit is reported nowhere; a
+    write that resolves after a fresh editor was reopened closes that editor and announces the old
+    record; edits typed during the in-flight window are not in the saved record.
 - **Story 4.17 needs `projectOrganismForSave` to take the record's existing `id` and decide a
   `schemaVersion` restamp policy** for an EDIT save (this story only ever mints a fresh id and
   stamps the current constant) — flagged, not decided, here.
+
+## Deferred from: code review of 4-16-create-save-organism (2026-09-22)
+
+- **Disabling the focused Save on a FAILED organism write drops keyboard focus to `<body>`** —
+  the HTML focus-fixup rule blurs an element that becomes `disabled`; the button re-enables after
+  the rejection but nothing refocuses it, so a keyboard user hears the `role="alert"` and is then
+  at the document root (`OrganismEditorModal.tsx`, `disabled={isSaving}`). The same
+  `disabled`-while-saving idiom `<EditorStatusBar>`'s SAVE / `<BattlePage>` ship, and no story
+  specifies a refocus after a failed write; whichever story next touches the failure line should
+  decide between refocusing Save, focusing the alert, or `aria-disabled` — deferred, pre-existing
+  idiom.
+- **The WebKit branch of the save-close focus e2e is satisfied by NO element being focused** —
+  `expect(page.locator(':focus').locator('xpath=ancestor-or-self::*[@role="dialog"]')).toHaveCount(0)`
+  passes trivially when `:focus` matches nothing, which is exactly the "focus dropped to body"
+  failure mode above (`e2e/organisms.spec.ts`, Story 4.16 test 4). Inherited verbatim from the
+  Story 4.13 e2e's branch; a stronger WebKit assertion needs a positive claim about where focus
+  IS on that engine — deferred, pre-existing idiom.
 

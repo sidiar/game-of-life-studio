@@ -1,6 +1,6 @@
 import { StrictMode, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAsyncResource } from './useAsyncResource';
 
@@ -256,22 +256,25 @@ describe('useAsyncResource', () => {
     }
 
     render(<ReloadProbe />);
-    initial.resolve('v1');
-    await waitFor(() => expect(screen.getByTestId('data')).toHaveTextContent('v1'));
+    expect(screen.getByTestId('status')).toHaveTextContent('loading');
 
+    // Task 5 (b): `reload()` while the FIRST load is still pending — the reload supersedes it.
     await userEvent.click(screen.getByRole('button', { name: 'reload' }));
-    // A second reload before the first reload settles — supersedes it.
-    const reloadB = deferred<string>();
-    load.mockReturnValueOnce(reloadB.promise);
-    await userEvent.click(screen.getByRole('button', { name: 'reload' }));
+    expect(load).toHaveBeenCalledTimes(2);
 
-    reloadB.resolve('v3');
-    await waitFor(() => expect(screen.getByTestId('data')).toHaveTextContent('v3'));
+    reloadA.resolve('v2');
+    await waitFor(() => expect(screen.getByTestId('data')).toHaveTextContent('v2'));
+    expect(screen.getByTestId('status')).toHaveTextContent('ready');
 
-    // The superseded reload answers late — must be dropped on the floor.
-    reloadA.resolve('v2 (stale)');
-    await reloadA.promise;
-    expect(screen.getByTestId('data')).toHaveTextContent('v3');
+    // The superseded FIRST load answers late — must be dropped on the floor. Resolved inside
+    // `act` so that, were the liveness flag broken, its `setResource` would flush and this
+    // assertion would go red (a bare `await` leaves that update unflushed and the test
+    // vacuously green — review 2026-09-22; verified red against a hook with the flag removed).
+    await act(async () => {
+      initial.resolve('v1 (stale)');
+      await initial.promise;
+    });
+    expect(screen.getByTestId('data')).toHaveTextContent('v2');
   });
 
   // Task 5 (c): reload identity is stable across renders (a caller may pass it to a memoised

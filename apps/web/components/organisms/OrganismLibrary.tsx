@@ -243,16 +243,18 @@ export default function OrganismLibrary({ organisms, seedStatus }: OrganismLibra
   // re-announces through the always-mounted `role="status"` region.
   const [saveOutcome, setSaveOutcome] = useState<string | null>(null);
 
-  // Story 4.16, FD6: `resource.reload()` — stale-while-revalidate, so the grid and count badge
-  // stay mounted through the refetch (no `'loading'` flash). `resource` itself is not stable
-  // (`useAsyncResource` returns a fresh object every render), only `reload`'s identity is — so the
-  // callback is re-created each render rather than deps-lying about `resource`.
+  // Story 4.16, FD6: `reload()` — stale-while-revalidate, so the grid and count badge stay
+  // mounted through the refetch (no `'loading'` flash). Destructured because `reload`'s identity
+  // is stable while `resource` itself is a fresh object every render — depending on the latter
+  // re-created this callback on every render and re-ran the hook's `onSavedRef` effect with it
+  // (review 2026-09-22).
+  const { reload } = resource;
   const onSaved = useCallback(
     (organism: Organism) => {
-      resource.reload();
+      reload();
       setSaveOutcome(saveOutcomeMessage(organism));
     },
-    [resource],
+    [reload],
   );
 
   // Called HERE, from the component that renders the modal, because the hook's effects have to be

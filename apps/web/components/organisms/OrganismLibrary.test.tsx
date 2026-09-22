@@ -555,7 +555,11 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(document.querySelector('[data-save-outcome]')).toHaveTextContent(ORGANISM_SAVED);
+    // Exactly the one sentence — `toHaveTextContent(string)` is a substring match that the
+    // zero-rules variant (c) would satisfy too (review 2026-09-22).
+    expect(document.querySelector('[data-save-outcome]')).toHaveTextContent(
+      new RegExp(`^${ORGANISM_SAVED.replace(/[.]/g, '\\.')}$`),
+    );
   });
 
   it('(b) the grid shows the new card in sortLibrary position and the count badge reads the new total — no "loading" reset, list() called exactly twice', async () => {
