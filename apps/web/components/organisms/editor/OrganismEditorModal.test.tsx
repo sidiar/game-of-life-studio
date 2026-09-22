@@ -1631,7 +1631,7 @@ describe('OrganismEditorModal', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
       });
 
-      it('the ✕ button does not close the dialog while a write is in flight', async () => {
+      it('the ✕ button is disabled and does not close the dialog while a write is in flight, and re-enables once it settles (Task 13)', async () => {
         const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
         let resolveSave!: () => void;
         const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
@@ -1647,9 +1647,13 @@ describe('OrganismEditorModal', () => {
         const dialog = screen.getByRole('dialog');
         await fillValidDraft(user, dialog);
         await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+        const closeButton = within(dialog).getByRole('button', { name: 'Close' });
+        await waitFor(() => expect(closeButton).toBeDisabled());
 
-        await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+        // A disabled control is inert to a real click; `fireEvent` bypasses that, pinning the
+        // `disabled` attribute itself (Task 13) rather than only the `handleRequestClose` guard
+        // Task 12 already covers.
+        fireEvent.click(closeButton);
         expect(onClose).not.toHaveBeenCalled();
 
         // The write sits behind an awaited digest — wait for it to be REACHED before resolving
@@ -1658,8 +1662,38 @@ describe('OrganismEditorModal', () => {
         await act(async () => {
           resolveSave();
         });
-        await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+        await waitFor(() => expect(closeButton).toBeEnabled());
+
+        await user.click(closeButton);
         expect(onClose).toHaveBeenCalledTimes(1);
+      });
+
+      it('the ✕ button re-enables after a rejected write settles (Task 13)', async () => {
+        const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+        let resolveSave!: () => void;
+        const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
+          () =>
+            new Promise<void>((_resolve, reject) => {
+              resolveSave = () => reject(new QuotaExceededError('gol:organisms'));
+            }),
+        );
+        const user = userEvent.setup();
+        mountModal({ organisms });
+
+        const dialog = screen.getByRole('dialog');
+        await fillValidDraft(user, dialog);
+        await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+        const closeButton = within(dialog).getByRole('button', { name: 'Close' });
+        await waitFor(() => expect(closeButton).toBeDisabled());
+
+        // The write sits behind an awaited digest — wait for it to be REACHED before resolving
+        // (review 2026-09-22): `resolveSave` is unassigned until `organisms.save` runs.
+        await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+        await act(async () => {
+          resolveSave();
+        });
+        await within(dialog).findByRole('alert');
+        await waitFor(() => expect(closeButton).toBeEnabled());
       });
     });
   });

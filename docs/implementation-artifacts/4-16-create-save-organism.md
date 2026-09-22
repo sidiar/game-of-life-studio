@@ -4,7 +4,7 @@ baseline_commit: 2e4dcf0
 
 # Story 4.16: Create & Save Organism
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -517,14 +517,14 @@ across every installed workspace; a "saved" toast over a write that failed) are 
   - [x] The review's `[Review][Decision]` item under Review Findings: tick it once this task is
         done and note "(b), implemented in Task 12".
 
-- [ ] **Task 13 — disable ✕ while a write is in flight (second review decision, owner chose (b))**
-  - [ ] Modal: the ✕ `IconButton` gets `disabled={isSaving}` like Back, with the FD8 `transition:
+- [x] **Task 13 — disable ✕ while a write is in flight (second review decision, owner chose (b))**
+  - [x] Modal: the ✕ `IconButton` gets `disabled={isSaving}` like Back, with the FD8 `transition:
         'none'` override in its `sx` (the MUI cross-fade trap) and whatever the house disabled
         styling for an icon button is (mirror `BackButton`'s disabled trio if the icon button has
         none). The `handleRequestClose` guard stays — Escape and backdrop still need it.
-  - [ ] Test: ✕ is `disabled` during an in-flight write and enabled again after it settles
+  - [x] Test: ✕ is `disabled` during an in-flight write and enabled again after it settles
         (success and rejection); a click on it while saving does not close.
-  - [ ] Tick the second review's `[Review][Decision]` item once done, noting "(b), implemented in
+  - [x] Tick the second review's `[Review][Decision]` item once done, noting "(b), implemented in
         Task 13".
 
 ### Review Findings
@@ -558,7 +558,7 @@ Dismissed (10): clearing `pendingSavedRef` at `requestCreate` (a reopen mid-fade
 
 Resume review 2026-09-22 (opus, second pair of eyes on the sonnet Tasks 11–12 resume, diff `6db83f8..HEAD`): Blind Hunter (diff only), Edge Case Hunter (diff + project), Acceptance Auditor (diff + story + project-context + UX docs). 1 `decision-needed`, 13 `patch`, 1 `defer`, 10 dismissed as noise. CI: no run exists for the resume push (`996bf56`) — the last green run (35702085285) is on `6db83f8`; the review commit's push is the first run on Tasks 11–12.
 
-- [ ] [Review][Decision] **The ✕ button stays enabled but silently inert while a write is in flight — keep Task 12's guard-only design, or disable it like Back?** **→ Owner's answer (2026-09-22): (b) — `disabled={isSaving}` on the ✕ `IconButton` too, with the `transition: 'none'` override (FD8) and a test; see Task 13.** Task 12 as written routes Escape/backdrop/✕ through one guarded `handleRequestClose` and gives only Back `disabled={isSaving}`; the dev's comment justified the split with "Back is a visible control the user can see go inert, unlike Escape or a backdrop click" — but ✕ is exactly as visible as Back. A sighted user clicks a live-looking button and nothing happens; a screen-reader user hears "Close, button" with no disabled state. (The resume review gave Back the house disabled trio so ITS lock is at least visible; ✕ has none.) Options: **(a) keep as specified** — guard only, the window is a few ms against localStorage, and revisit when RFC-001's API repository makes it a round-trip; **(b) `disabled={isSaving}` on the ✕ `IconButton` too**, keeping the guard for Escape — MUI `IconButton` carries the same 250 ms transition as `Button`, so it needs the `transition: 'none'` override for the axe scan (FD8's reason) and a test beside the Back one; **(c) `aria-disabled={isSaving}` on ✕** — announced to AT, still clickable-and-ignored for the pointer, no transition concern. Files: `apps/web/components/organisms/editor/OrganismEditorModal.tsx` (the ✕ `IconButton`, `handleRequestClose`), its test's "close is locked while saving (Task 12)" block.
+- [x] [Review][Decision] **The ✕ button stays enabled but silently inert while a write is in flight — keep Task 12's guard-only design, or disable it like Back?** **→ Owner's answer (2026-09-22): (b) — `disabled={isSaving}` on the ✕ `IconButton` too, with the `transition: 'none'` override (FD8) and a test; see Task 13.** Task 12 as written routes Escape/backdrop/✕ through one guarded `handleRequestClose` and gives only Back `disabled={isSaving}`; the dev's comment justified the split with "Back is a visible control the user can see go inert, unlike Escape or a backdrop click" — but ✕ is exactly as visible as Back. A sighted user clicks a live-looking button and nothing happens; a screen-reader user hears "Close, button" with no disabled state. (The resume review gave Back the house disabled trio so ITS lock is at least visible; ✕ has none.) Options: **(a) keep as specified** — guard only, the window is a few ms against localStorage, and revisit when RFC-001's API repository makes it a round-trip; **(b) `disabled={isSaving}` on the ✕ `IconButton` too**, keeping the guard for Escape — MUI `IconButton` carries the same 250 ms transition as `Button`, so it needs the `transition: 'none'` override for the axe scan (FD8's reason) and a test beside the Back one; **(c) `aria-disabled={isSaving}` on ✕** — announced to AT, still clickable-and-ignored for the pointer, no transition concern. Files: `apps/web/components/organisms/editor/OrganismEditorModal.tsx` (the ✕ `IconButton`, `handleRequestClose`), its test's "close is locked while saving (Task 12)" block. **Resolved: (b), implemented in Task 13.**
 - [x] [Review][Patch] A Save clicked during the ~195 ms exit fade after a CLEAN close (Back/Escape/✕ with nothing in flight) starts a write the close-lock cannot see — the dialog is still mounted and interactive with `open={false}`, and a write outlasting the fade resolves after `onExited`, exactly the stash-then-replay the removed `mountedRef` branch guarded; `saveOrganism` now refuses while `!open` (test (36): Escape → `open={false}` → click + Enter on Save → `save` never called, `list()` unchanged) [apps/web/components/organisms/editor/OrganismEditorModal.tsx:427-433]
 - [x] [Review][Patch] The settle-focus effect refocused Save unconditionally, yanking the caret from a field the user moved into during the write (a round-trip against an API repository); guarded on loose focus — `<body>`, `null`, or anything outside the editor `Shell` (MUI's trap parks focus on the dialog container after the fixup blur) — the `<BattlePage>` fullscreen-exit rule; test (35) clicks into the name field mid-write and keeps it [apps/web/components/organisms/editor/OrganismEditorModal.tsx:503-516]
 - [x] [Review][Patch] `savingRef` was released in `finally` BEFORE `setSaveStamp` ran (outside the `try`), so the re-entrancy guard was open for one tick while the closure still held `saveStamp === null` — safe only by React batching; the stamp and the outcome now set inside `try` right after `organisms.save()` resolves, before the release, and the stamp is set on the FIRST success only (the state comment said "set once" while the code set it every pass) [apps/web/components/organisms/editor/OrganismEditorModal.tsx:456-484]
@@ -954,7 +954,8 @@ This story's files: `components/organisms/{OrganismLibrary,editor/OrganismEditor
 ### Agent Model Used
 
 Claude Opus 5 (1M context) — implement-next-story lane-epic-4 run, 2026-09-22 (create + review).
-Implementation and the Tasks 11–12 resume: Claude Sonnet. Resume review: Claude Opus 5.
+Implementation and the Tasks 11–12 resume: Claude Sonnet. Resume review: Claude Opus 5. Task 13
+resume (second review's decision, owner's answer): Claude Sonnet 5.
 
 ### Debug Log References
 
@@ -1070,6 +1071,24 @@ targeted runs along the way):
   `build:standalone`, `bundle:check` (all 5 routes within budget), `bench` (NFR-1.1 frame 8.748 ms
   against 16.667 ms, 47.5% headroom) / `bench:check` (green), `e2e:chromium` (239 passed, 1 skipped,
   whole suite, including all 8 Story 4.16 tests).
+
+---
+
+**Resume (2026-09-22): review continuation implementing Task 13 (owner's answer to the second
+review's `[Review][Decision]`).**
+
+- `apps/web` `npx vitest run components/organisms/editor/OrganismEditorModal.test.tsx` — 77 tests
+  passed (exit 0; up from 75): the existing "the ✕ button does not close the dialog while a write
+  is in flight" case rewritten to also pin the `disabled` attribute itself (`fireEvent.click` on
+  the disabled control, `toBeDisabled()`/`toBeEnabled()` around the settle, like the Back-button
+  test) and one new case added for the rejection path (`toBeEnabled()` after a `QuotaExceededError`
+  settle).
+- `npm run typecheck` — exit 0, no round-trips.
+- `npx eslint` on both touched files — exit 0, no warnings.
+- `npx prettier --check` on both touched files — exit 0 (already formatted; the commit's
+  lint-staged `prettier --write` hook is a no-op here).
+- `apps/web` `npx vitest run` (whole app) — 118 files, 1952 tests passed (exit 0; up from 117
+  files / 1934 tests — the two rewritten/added modal cases are the only delta).
 
 ### Completion Notes List
 
@@ -1205,6 +1224,21 @@ targeted runs along the way):
   click via `fireEvent` — bypassing React's synthetic disabled-click suppression to pin the
   `disabled` attribute itself, not merely a handler guard — and the ✕ button), each also proving the
   close works again once the write settles.
+- **Task 13 (2026-09-22 resume)** — disable ✕ while a write is in flight (the owner's answer to
+  the second review's `[Review][Decision]`, option (b), same reasoning as Back). `OrganismEditorModal.tsx`:
+  the ✕ `IconButton` gets `disabled={isSaving}` and its `sx` gains `transition: 'none'` (FD8 — MUI's
+  `IconButton` root still transitions `background-color` on `duration.shortest` and its disabled
+  `color` swap to the pinned `action.disabled` token is instant, so an axe scan mid-fade would
+  measure an unsettled state, the same class of trap `SAVE_SX` already guards). No custom disabled
+  trio was added: MUI's own disabled `color` is already pinned to `--gol-action-disabled`
+  (`themeTokens.test.ts`'s contrast gate) and IS the house disabled styling for a borderless,
+  backgroundless control — `BackButton`'s trio exists because that button has a border/background
+  of its own to keep visible, which `IconButton` does not. `handleRequestClose`'s guard is
+  unchanged and still the only lock Escape and the backdrop have. One existing test rewritten to
+  additionally pin the `disabled` attribute (via `fireEvent.click`, bypassing React's synthetic
+  disabled-click suppression, exactly the Back-button test's method) across a successful settle,
+  and one new test added for a rejected settle. The second review's `[Review][Decision]` item
+  ticked with "(b), implemented in Task 13."
 
 ### File List
 
@@ -1228,7 +1262,7 @@ targeted runs along the way):
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/4-16-create-save-organism.md` (Tasks 11/12, Review Findings decision tick, this record)
+- `docs/implementation-artifacts/4-16-create-save-organism.md` (Tasks 11/12/13, Review Findings decision ticks, this record)
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md` (Task 11)
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/ux-design-complete.md` (Task 11)
 
@@ -1240,6 +1274,7 @@ targeted runs along the way):
 | 2026-09-22 | Story 4.16 implemented: `ORGANISM_SCHEMA_VERSION`, the real `contentHash` hasher, the save projection, the two message helpers, `useAsyncResource.reload()`, the modal's write path, the hook's save-close channel, the Library's outcome line, e2e coverage, and deferred-work bookkeeping. Status → review. |
 | 2026-09-22 | Resume review (opus): 13 patches applied — `!open` guard on Save during the exit fade (test (36)), loose-focus-only refocus (test (35)), `saveStamp`/outcome set before the guard release and set once, the second Story 4.2 count-badge assertion restored, Back's disabled trio, five spy-wait fixes, like-for-like Escape test, the clear-at-start pin rewritten ((32), Library (d)), Library (a) asserted past the fade, hook/modal/deferred-work wording on what the lock does and does not cover, story-file bookkeeping (AC9/AC11/Open flags/FD banner/Review Findings marks/Debug Log), `deferred-work.md` strikes, UX-doc pointer and close paths; 1 defer (4.24/4.25 "Save & Close" planning lines); 1 `[Review][Decision]` left open (✕ enabled-but-inert while saving). Status → in-progress. |
 | 2026-09-22 | Owner decisions after review, implemented: Task 11 — Save keeps the editor open (AC2/AC3 amended); the outcome line, `saveStamp` upsert-by-id and the focus-restore effect all move into/onto the modal, the Library's own status region and `openEditor` wrapper are removed. Task 12 — the close (✕/Back/Escape) is locked while a write is in flight, resolving the review's `[Review][Decision]` as option (b). Tests and e2e retargeted; docs (`organism-editor-design.md`, `ux-design-complete.md`, `deferred-work.md`) updated. `npm run ci:dev` green end to end (typecheck, lint, format, spec:check, boundary:check, 1934 unit/coverage tests, build:standalone, bundle:check, bench/bench:check, 239 e2e on Chromium). Status → review. |
+| 2026-09-22 | Owner decision after the second review, implemented: Task 13 — the ✕ `IconButton` gets `disabled={isSaving}` like Back, with the FD8 `transition: 'none'` override, resolving the second review's `[Review][Decision]` as option (b). One existing test strengthened to pin the `disabled` attribute, one new test added for the rejection path. `typecheck`/`lint`/`format:check` green; `OrganismEditorModal.test.tsx` 77 tests, whole-app suite 118 files / 1952 tests, all green. Status → review. |
 
 ---
 

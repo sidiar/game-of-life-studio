@@ -590,11 +590,25 @@ export default function OrganismEditorModal({
             >
               Save
             </Button>
+            {/* Story 4.16, Task 13 (second review decision, owner's option (b), 2026-09-22):
+                locked like Back while a write is in flight — the review found the ✕ exactly as
+                visible as Back, so a guard-only no-op (Task 12) left a live-looking button that
+                silently ignores the click. `disabled={isSaving}` here, plus the FD8
+                `transition: 'none'` SAVE_SX already carries: MUI's IconButton root still
+                transitions `background-color` on `duration.shortest`, and `color` swaps to the
+                pinned `action.disabled` token the instant `disabled` flips, so an axe scan
+                landing mid-fade would measure an unsettled state. MUI's own disabled `color`
+                (already pinned to `--gol-action-disabled`, `themeTokens.test.ts`'s contrast gate)
+                IS the house disabled styling here — unlike `BackButton`, this control has no
+                border or background of its own for that trio to touch.
+                `handleRequestClose`'s guard stays for Escape and the backdrop, which `disabled`
+                cannot reach. */}
             <IconButton
               type="button"
               aria-label="Close"
               onClick={handleRequestClose}
-              sx={{ color: 'var(--gol-text-primary)' }}
+              disabled={isSaving}
+              sx={{ color: 'var(--gol-text-primary)', transition: 'none' }}
             >
               <span aria-hidden="true">✕</span>
             </IconButton>
