@@ -7,7 +7,11 @@ import { EditableGridPresetSchema } from './organismSchema';
 // *after* validation, so it cannot rescue a parse that already failed on the raw string.
 // RFC-001 §3's load snippet assumes the opposite and cannot work; RFC-006 already spells these
 // two fields as ISO strings, so this is also what lets the two schemas share a value.
-const IsoTimestamp = z.iso.datetime().transform((s) => new Date(s));
+// Exported (Story 5.3) rather than re-declared by `workspaceExportSchema.ts`: the paragraph above
+// already says RFC-006 spells these fields as ISO strings, and sharing the value is what keeps the
+// at-rest and on-the-wire timestamps from drifting into two subtly different parsers. Not in the
+// package barrel — no second package needs it.
+export const IsoTimestamp = z.iso.datetime().transform((s) => new Date(s));
 
 // FR-3.9 (Story 2.11): the single source for the name cap. `BattleSchema` and `BattleSummarySchema`
 // both enforce it below, and `apps/web`'s `<BattleNameField>` imports this rather than re-typing
