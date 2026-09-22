@@ -1047,3 +1047,18 @@ Modified:
 Dev Model: sonnet   # every design choice is pre-made in FD1–FD12; the dev step follows the existing action-row, three-action-dialog, proceedRef-handoff and save-failure patterns rather than choosing one.
 
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 43s | 43s | 38 | 5,552 | 14,250 | 1,117,483 | 1,137,323 |
+| Step 1 — create | opus-5 | 2 | 12m 57s | 12m 57s | 284 | 7,641 | 930,048 | 13,884,279 | 14,822,252 |
+| Step 2 — implement | sonnet-5 | 1 | 33m 44s | 33m 44s | 766 | 10,647 | 775,731 | 95,952,914 | 96,740,058 |
+| Step 3 — review + PR | opus-5 | 4 | 36m 25s | 36m 25s | 734 | 14,075 | 1,906,735 | 45,027,146 | 46,948,690 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 106 | 23,032 | 61,531 | 3,542,745 | 3,627,414 |
+| **Total (create → PR ready)** | | 7 | **1h 23m** | 1h 23m | 1,822 | 37,915 | 3,626,764 | 155,981,822 | **159,648,323** |
+
+Run started 2026-09-22 19:52 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
