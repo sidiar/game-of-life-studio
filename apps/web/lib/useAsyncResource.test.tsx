@@ -199,4 +199,130 @@ describe('useAsyncResource', () => {
     expect(screen.getByTestId('data')).toHaveTextContent('strict');
     expect(load).toHaveBeenCalledTimes(2);
   });
+
+  // Task 5 (a): reload() re-invokes load once; status stays 'ready' and data stays the OLD value
+  // between the call and the resolution, then flips to the new value — no 'loading' flash.
+  it('reload() re-invokes load once and stays ready with the old value until it resolves', async () => {
+    const first = Promise.resolve('v1');
+    const second = deferred<string>();
+    const load = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second.promise);
+
+    function ReloadProbe() {
+      const resource = useAsyncResource<string>(load, []);
+      return (
+        <div>
+          <span data-testid="status">{resource.status}</span>
+          <span data-testid="data">{resource.data ?? '—'}</span>
+          <button type="button" onClick={resource.reload}>
+            reload
+          </button>
+        </div>
+      );
+    }
+
+    render(<ReloadProbe />);
+    await waitFor(() => expect(screen.getByTestId('data')).toHaveTextContent('v1'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'reload' }));
+
+    // Still ready, still the OLD value — no 'loading' flash.
+    expect(screen.getByTestId('status')).toHaveTextContent('ready');
+    expect(screen.getByTestId('data')).toHaveTextContent('v1');
+
+    second.resolve('v2');
+    await waitFor(() => expect(screen.getByTestId('data')).toHaveTextContent('v2'));
+    expect(screen.getByTestId('status')).toHaveTextContent('ready');
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  // Task 5 (b): reload() fired while the FIRST load is still pending — only the SECOND result
+  // lands, even though the first resolves later (the liveness flag).
+  it('drops a superseded reload the same way a deps change does', async () => {
+    const initial = deferred<string>();
+    const reloadA = deferred<string>();
+    const load = vi.fn().mockReturnValueOnce(initial.promise).mockReturnValueOnce(reloadA.promise);
+
+    function ReloadProbe() {
+      const resource = useAsyncResource<string>(load, []);
+      return (
+        <div>
+          <span data-testid="status">{resource.status}</span>
+          <span data-testid="data">{resource.data ?? '—'}</span>
+          <button type="button" onClick={resource.reload}>
+            reload
+          </button>
+        </div>
+      );
+    }
+
+    render(<ReloadProbe />);
+    initial.resolve('v1');
+    await waitFor(() => expect(screen.getByTestId('data')).toHaveTextContent('v1'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'reload' }));
+    // A second reload before the first reload settles — supersedes it.
+    const reloadB = deferred<string>();
+    load.mockReturnValueOnce(reloadB.promise);
+    await userEvent.click(screen.getByRole('button', { name: 'reload' }));
+
+    reloadB.resolve('v3');
+    await waitFor(() => expect(screen.getByTestId('data')).toHaveTextContent('v3'));
+
+    // The superseded reload answers late — must be dropped on the floor.
+    reloadA.resolve('v2 (stale)');
+    await reloadA.promise;
+    expect(screen.getByTestId('data')).toHaveTextContent('v3');
+  });
+
+  // Task 5 (c): reload identity is stable across renders (a caller may pass it to a memoised
+  // callback without invalidating it every render).
+  it('reload identity is stable across renders', async () => {
+    const identities: Array<() => void> = [];
+
+    function IdentityProbe() {
+      const resource = useAsyncResource(() => Promise.resolve('x'), []);
+      const [, forceRender] = useState(0);
+      identities.push(resource.reload);
+      return (
+        <button type="button" onClick={() => forceRender((n) => n + 1)}>
+          rerender
+        </button>
+      );
+    }
+
+    render(<IdentityProbe />);
+    await userEvent.click(screen.getByRole('button', { name: 'rerender' }));
+    await userEvent.click(screen.getByRole('button', { name: 'rerender' }));
+
+    expect(identities.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(identities).size).toBe(1);
+  });
+
+  // Task 5 (d): a reload after an 'error' status recovers to 'ready' with data.
+  it('a reload after an error status recovers to ready with data', async () => {
+    const failing = Promise.reject(new Error('storage exploded'));
+    const recovering = Promise.resolve('recovered');
+    const load = vi.fn().mockReturnValueOnce(failing).mockReturnValueOnce(recovering);
+
+    function ReloadProbe() {
+      const resource = useAsyncResource<string>(load, []);
+      return (
+        <div>
+          <span data-testid="status">{resource.status}</span>
+          <span data-testid="data">{resource.data ?? '—'}</span>
+          <button type="button" onClick={resource.reload}>
+            reload
+          </button>
+        </div>
+      );
+    }
+
+    render(<ReloadProbe />);
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('error'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'reload' }));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    expect(screen.getByTestId('data')).toHaveTextContent('recovered');
+  });
 });

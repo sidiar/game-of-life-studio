@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Organism } from '@gol/domain';
 import type {
   OrganismEditorLifecycleProps,
   OrganismEditorOrigin,
@@ -45,7 +46,21 @@ export interface UseOrganismEditorModalResult {
   modalProps: OrganismEditorLifecycleProps;
 }
 
-export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganismEditorModalResult {
+export interface UseOrganismEditorModalOptions {
+  /**
+   * Fired once the exit transition has finished AFTER a successful save (Story 4.16, FD4) — never
+   * before: `useInertBackground.ts:66-68` sweeps body children appended while the dialog is still
+   * open, so a status published at save time would be inerted, and a Library reload mid-fade would
+   * re-render the still-mounted modal with a `library` that now contains the just-saved organism,
+   * flagging its own colour in the Story 4.9 reuse warning for the fade's duration.
+   */
+  onSaved?(organism: Organism): void;
+}
+
+export function useOrganismEditorModal(
+  origin: OrganismEditorOrigin,
+  options?: UseOrganismEditorModalOptions,
+): UseOrganismEditorModalResult {
   /**
    * Two cells, not one, because the modal has three phases and not two: open, EXITING, closed.
    * `dialogOpen` drives the fade; `mounted` outlives it and is cleared only once the exit
@@ -68,6 +83,18 @@ export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganis
    * idiom `<DeleteBattleDialog>` and `useLeaveGuard` both already use.
    */
   const restoreFocusRef = useRef(false);
+
+  // Story 4.16, FD4: holds the just-saved record across the exit transition — set by
+  // `handleSaved`, consumed and cleared by `handleExited`. `null` means "closed without saving".
+  const pendingSavedRef = useRef<Organism | null>(null);
+
+  // A latest-value ref, assigned in an effect below, so a caller whose `onSaved` option changes
+  // identity between open and exit still gets the LATEST one called — and so `modalProps`' own
+  // identity (memoised below) is unaffected by a changing `onSaved` option.
+  const onSavedRef = useRef(options?.onSaved);
+  useEffect(() => {
+    onSavedRef.current = options?.onSaved;
+  }, [options?.onSaved]);
 
   // Called from the PARENT of the modal so it spans the exit transition, and so MUI's own
   // focus-trap move (a child effect) has already happened — inerting a subtree that still holds
@@ -114,9 +141,28 @@ export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganis
   // front of this callback later.
   const handleClose = useCallback(() => setDialogOpen(false), []);
 
+  // Story 4.16, FD4: the SAME close channel as `handleClose` above — a save is the opposite of a
+  // discard, so it must NOT be guarded (Story 4.23's guard has one door to stand in front of, and
+  // this is not it). Stashes `organism` for `handleExited` to hand on once the fade has finished,
+  // then starts the identical fade `handleClose` starts. `restoreFocusRef` is already armed from
+  // `requestCreate`, so a save-close restores focus exactly like a plain Close.
+  const handleSaved = useCallback((organism: Organism) => {
+    pendingSavedRef.current = organism;
+    setDialogOpen(false);
+  }, []);
+
   // Only once the fade has finished is it safe to unmount the modal, release `inert` and schedule
-  // the focus restore. Clearing `mounted` does all three.
-  const handleExited = useCallback(() => setMounted(false), []);
+  // the focus restore. Clearing `mounted` does all three — and, when the close followed a save
+  // (`pendingSavedRef` set), hands the record on to the caller's `onSaved` AFTER `mounted` clears:
+  // the Library must not reload or announce the outcome under a still-mounted, still-`inert`
+  // dialog (the `useInertBackground` sweep), and the Story 4.9 reuse warning would otherwise flag
+  // the just-saved organism's own colour for the fade's duration.
+  const handleExited = useCallback(() => {
+    setMounted(false);
+    const saved = pendingSavedRef.current;
+    pendingSavedRef.current = null;
+    if (saved !== null) onSavedRef.current?.(saved);
+  }, []);
 
   const modalProps = useMemo<OrganismEditorLifecycleProps>(
     () => ({
@@ -124,8 +170,9 @@ export function useOrganismEditorModal(origin: OrganismEditorOrigin): UseOrganis
       origin,
       onClose: handleClose,
       onExited: handleExited,
+      onSaved: handleSaved,
     }),
-    [dialogOpen, origin, handleClose, handleExited],
+    [dialogOpen, origin, handleClose, handleExited, handleSaved],
   );
 
   return { requestCreate, mounted, modalProps };

@@ -39,7 +39,8 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
   - **The canonicalization is now pinned in the file's header comment and verified reproducible** (review 2026-08-05): `sha256hex(JSON.stringify(sortKeysDeep({ conditions, payload })))`, keys sorted deeply in `Array#sort` order, array order preserved, `id` excluded. Both shipped literals reproduce exactly under that scheme.
   - **Story 1.6 extends this set**: the 8 AR-45 mock-organism rules in `packages/test-utils/src/mockWorkspace.ts` (3 for Aggressive Colonizer, 3 for Patient Defender, 2 for Chaotic Spreader) are generated with the identical scheme and pasted the same way. Unlike Conway's, these are **not** a cross-install identity baseline — they carry no identity-pinning test, and regenerating them is harmless — but they must match the scheme anyway, giving Epic 4's real hasher a set of 10 rules total (2 Conway + 8 mock) to validate against instead of just 2.
   - **Confirmed at Story 3.4 (2026-09-09): the evaluator cache CONSUMES `contentHash` and neither generates nor parses one.** `compileEvaluators.ts`'s cache key is `JSON.stringify(rules.map(r => r.contentHash))` — no hashing, no prefix-matching (`sha256:` or otherwise), no content comparison, no parsing of any kind (AR-21). So this entry is untouched by Epic 3: the literals stay hand-generated, the identity-pinning assertions stay valid, and nothing in `packages/simulation` forks rule identity. **Still Epic 4's to pick up** (rule authoring / hash generation): the real hasher must either match this scheme byte-for-byte, or the affected literals get regenerated through it — Conway's Classic's *and* `defaultWorkspace.test.ts`'s identity-pinning assertions in the same change (mandatory); the Story 1.6 mock rules only if convenient, since nothing pins their identity. A silent mismatch on Conway's forks rule identity across every already-installed workspace — the pinning test exists to force that conversation rather than let it ship.
-  - **Story 4.10 mints rule `id`s only** (`crypto.randomUUID()`, matching the persisted format's shape) **and computes no `contentHash`** — `RuleDraft` (`lib/organisms/ruleDraft.ts`) omits the field entirely, so there is nothing here for a partial hasher to fork. This entry stays open for Story 4.16, which parses the draft into a persisted `SurvivalRule` and must implement the hasher against this exact scheme.
+  - **Story 4.10 mints rule `id`s only** (`crypto.randomUUID()`, matching the persisted format's shape) **and computes no `contentHash`** — `RuleDraft` (`lib/organisms/ruleDraft.ts`) omits the field entirely, so there is nothing here for a partial hasher to fork.
+  - **✅ Closed in Story 4.16.** `apps/web/lib/organisms/ruleContentHash.ts` implements the real hasher (`ruleContentHash` / `canonicalRuleContent`) against the pinned scheme, WebCrypto (`crypto.subtle.digest`), lives in `apps/web` rather than `@gol/domain` (FD1 — the undeclared `@types/node` reach and the DOM-free, synchronous character of the domain package). Its test reproduces all ten pinned literals (Conway's two, the eight AR-45 mocks) byte-for-byte — a red result there means the hasher is wrong, never that a literal should be regenerated.
 
 - **`useWorkspaceSeed`'s error path discards the error object** — **still open.** The *user-facing surface* landed in Story 1.10 (2026-08-07) and that half is done, but the defect this entry is named for is not: `useWorkspaceSeed.ts` still throws the underlying `QuotaExceededError`/`CorruptDataError` away, so a quota failure terminates with zero diagnostic anywhere. Struck through and marked closed on 2026-08-07, which removed a live defect from every scan of open debt — reopened in the 2026-08-08 review. What shipped: `BattleGallery` now renders `<p role="alert">Something went wrong loading your battles.</p>` for both `seedStatus === 'error'` and a rejecting `list()` — the "somewhere meaningful to surface it" this entry was waiting for. Scope stayed deliberately narrow: no retry, no reset-offer, no storage diagnostics, and `useWorkspaceSeed.ts` itself still discards the underlying `QuotaExceededError`/`CorruptDataError` object rather than logging it (the e2e asserts zero console errors on the happy path, so any such logging would have to sit on the failure branch only). Story 5.11 owns the richer corruption/storage-failure UX and the diagnostic itself.
 
@@ -2285,3 +2286,36 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   (it would pull `@gol/simulation`), so the literals stay until an e2e-side constants module
   exists. A grid-size change silently mis-targets every drawn cell — the 4.14/4.15 blocks would
   fail loudly (Clear stays disabled), which is the current guard.
+
+## Deferred from: Story 4-16-create-save-organism (2026-09-22)
+
+- **Two live-region idioms now ship side by side, deliberately.** The Library's save outcome
+  (`<OrganismLibrary>`'s `[data-save-status]`) is an always-mounted `role="status"` region whose
+  child mounts with the sentence (the `ColorPickerField.tsx:380-390` idiom); the in-modal write
+  failure (`OrganismEditorModal`'s `[data-save-error]`) is a conditionally-mounted `role="alert"`
+  line (the Story 2.13 idiom). Both are per the owner's 2026-09-21 decision, not a drift between
+  the two — an outcome is announced, a failure interrupts.
+- **No auto-dismiss on the Library's outcome line** — the sentence stays until the next editor
+  open. Open flag: a 5-8s timed dismissal is a `setTimeout` plus fake-timer tests, deferred until
+  the 4.17/4.22 flows show whether the persistent line reads as clutter.
+- **The organism name is persisted RAW/untrimmed** (FD3) — trailing/leading whitespace round-trips
+  exactly as typed, matching the battle save path. Open flag: if a trimmed name is wanted later,
+  it is a one-line change in `projectOrganismForSave`, but then the gate's counter and the stored
+  length would disagree by the whitespace.
+- **`fakeRepositories.ts:38-39`'s "no `@types/node`" comment is stale.** Measured 2026-09-22: a
+  probe file with `crypto.subtle.digest` + `TextEncoder` DOES typecheck inside `packages/domain`
+  today, because `apps/web`'s `@types/node` devDependency is hoisted to the root
+  `node_modules/@types` and TypeScript auto-includes it — an undeclared dependency the comment
+  doesn't name. `ruleContentHash.ts` deliberately does not rely on this (FD1: it lives in
+  `apps/web`, not `@gol/domain`). A package-side comment fix is not this story's; recorded here
+  with the measurement for whoever next touches that file.
+- **`useAsyncResource.reload()` now exists** (Story 4.16, FD6, additive). `<BattleGallery>`'s own
+  `reloadToken` reducer predates it and is a candidate to migrate onto the hook's `reload()` in a
+  later touch — not done here, since `<BattleGallery>` is untouched by this story on purpose.
+- **Escape/Close/Back during an in-flight organism save is allowed** (FD4/FD9) — the write still
+  lands and still reports, after the close. The alternative (disable Close/Back/Escape while
+  saving) would lock the dialog for a sub-millisecond window; not built.
+- **Story 4.17 needs `projectOrganismForSave` to take the record's existing `id` and decide a
+  `schemaVersion` restamp policy** for an EDIT save (this story only ever mints a fresh id and
+  stamps the current constant) — flagged, not decided, here.
+

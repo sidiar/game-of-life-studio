@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { useEffect } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useEffect, useState } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { Organism } from '@gol/domain';
+import { createFakeRepositories } from '@gol/test-utils';
 import OrganismEditorModal from '@/components/organisms/editor/OrganismEditorModal';
 import {
   useOrganismEditorModal,
@@ -61,11 +63,15 @@ function hook(): UseOrganismEditorModalResult {
  * and the REAL modal is mounted on `mounted` — the caller's conditional mount, and the reason the
  * hook exposes `mounted` at all.
  */
-function Probe() {
-  const result = useOrganismEditorModal('library');
+function Probe({ onSaved }: { onSaved?: (organism: Organism) => void } = {}) {
+  const result = useOrganismEditorModal('library', { onSaved });
   useEffect(() => {
     latest = result;
   });
+  // A FRESH fake per Probe instance — a shared repository across renders would leak a saved
+  // record from one test's assertions into another's. The lazy-initialiser form runs once per
+  // mount (`useRef(...).current` reads a ref during render, which `react-hooks/refs` now flags).
+  const [organisms] = useState(() => createFakeRepositories().organisms);
 
   return (
     <>
@@ -77,7 +83,9 @@ function Probe() {
       </button>
       {/* The hook's test is about lifecycle; an empty library is a legal, honest input here
           (Story 4.8) — this file does not exercise the colour seed. */}
-      {result.mounted && <OrganismEditorModal {...result.modalProps} library={[]} />}
+      {result.mounted && (
+        <OrganismEditorModal {...result.modalProps} library={[]} organisms={organisms} />
+      )}
     </>
   );
 }
@@ -231,5 +239,108 @@ describe('useOrganismEditorModal', () => {
     rerender(<Probe />);
 
     expect(hook().modalProps).toBe(first);
+  });
+
+  // Story 4.16, FD4: the save-close is the SAME two-phase shape as a plain Close, and the
+  // caller's `onSaved` is deferred to `onExited`.
+  describe('a save-close (modalProps.onSaved)', () => {
+    const record: Organism = {
+      schemaVersion: 1,
+      id: 'saved-1',
+      name: 'Glider',
+      colorToken: 'sky-blue',
+      dominance: 5,
+      agingEnabled: false,
+      survivalRules: [],
+    };
+
+    it("closes the dialog (open false, mounted true) and does NOT yet call the caller's onSaved", async () => {
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      render(<Probe onSaved={onSaved} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onSaved(record));
+
+      expect(hook().modalProps.open).toBe(false);
+      expect(hook().mounted).toBe(true);
+      expect(onSaved).not.toHaveBeenCalled();
+    });
+
+    it("after onExited, mounted is false and the caller's onSaved was called once with the record", async () => {
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      render(<Probe onSaved={onSaved} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onSaved(record));
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(hook().mounted).toBe(false);
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(onSaved).toHaveBeenCalledWith(record);
+    });
+
+    it('a plain onClose never calls onSaved on its own onExited', async () => {
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      render(<Probe onSaved={onSaved} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(onSaved).not.toHaveBeenCalled();
+    });
+
+    it('restores focus to the create button after a save-close, exactly like a plain Close', async () => {
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      render(<Probe onSaved={onSaved} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onSaved(record));
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(document.activeElement).toBe(createButton());
+    });
+
+    it('a caller whose onSaved changes identity between open and exit gets the LATEST one called', async () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      const user = userEvent.setup();
+      const { rerender } = render(<Probe onSaved={first} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onSaved(record));
+      // The option identity changes AFTER the save-close, before the exit transition finishes.
+      rerender(<Probe onSaved={second} />);
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(second).toHaveBeenCalledWith(record);
+    });
+
+    // Appends to the existing stability test above: a changing `onSaved` option must not bust the
+    // memoised `modalProps` identity either.
+    it('modalProps identity is unchanged by a changing onSaved option', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(<Probe onSaved={vi.fn()} />);
+      await user.click(createButton());
+      const first = hook().modalProps;
+
+      rerender(<Probe onSaved={vi.fn()} />);
+
+      expect(hook().modalProps).toBe(first);
+    });
   });
 });

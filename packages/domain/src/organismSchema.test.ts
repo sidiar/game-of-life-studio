@@ -5,8 +5,10 @@ import {
   MAX_ORGANISM_NAME_LENGTH,
   MIN_DOMINANCE,
   NEW_ORGANISM_DOMINANCE,
+  ORGANISM_SCHEMA_VERSION,
   OrganismSchema,
 } from './organismSchema';
+import { CONWAYS_CLASSIC } from './defaultWorkspace';
 
 // A user-authored organism: UUID id, so the well-known-id test below varies from the fixture
 // instead of restating it.
@@ -157,6 +159,21 @@ describe('OrganismSchema', () => {
   it('accepts an organism with no survival rules yet (Epic 4 authoring state)', () => {
     const result = OrganismSchema.safeParse({ ...validOrganism, survivalRules: [] });
     expect(result.success).toBe(true);
+  });
+
+  // Story 4.16 Task 1: the save-time stamp must itself satisfy the schema it stamps.
+  it('accepts schemaVersion: ORGANISM_SCHEMA_VERSION', () => {
+    const result = OrganismSchema.safeParse({
+      ...validOrganism,
+      schemaVersion: ORGANISM_SCHEMA_VERSION,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  // FD2: the seed's literal `1` and the constant a new save stamps with must agree by
+  // construction — a future bump to one without the other silently forks the two axes.
+  it('CONWAYS_CLASSIC.schemaVersion equals ORGANISM_SCHEMA_VERSION', () => {
+    expect(CONWAYS_CLASSIC.schemaVersion).toBe(ORGANISM_SCHEMA_VERSION);
   });
 });
 
