@@ -584,5 +584,68 @@ describe('useOrganismEditorModal', () => {
       expect(hook().modalProps).toBe(modalBefore);
       expect(hook().gateProps).toBe(gateBefore);
     });
+
+    // Review 2026-09-22: the gate stays clickable through its exit fade and its `onClose` is
+    // unguarded, so a Cancel landing AFTER Edit Anyway must be honoured — the stashed organism
+    // must not open the editor the user just declined.
+    it('(j) Cancel during the fade after Edit Anyway wins: the gate unmounts and the editor never opens', async () => {
+      const user = userEvent.setup();
+      render(<Probe />);
+      await user.click(editButton(used));
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+
+      await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+      expect(hook().gateProps.open).toBe(false);
+      expect(hook().gateMounted).toBe(true);
+      // Still in the DOM, fading — the Cancel button is reachable.
+      await user.click(within(gate).getByRole('button', { name: 'Cancel' }));
+
+      await act(async () => {
+        hook().gateProps.onExited?.();
+      });
+
+      expect(hook().gateMounted).toBe(false);
+      expect(hook().mounted).toBe(false);
+      expect(editorDialog()).toBeNull();
+      expect(document.activeElement).toBe(editButton(used));
+    });
+
+    // Review 2026-09-22: the modal reads `organism` once at mount, so a second request while a
+    // window is still mounted (open or fading) must be ignored rather than re-open the fading
+    // instance under a different record. Reachable only programmatically — the inert background
+    // blocks the click for a user — which is exactly why the state machine guards it itself.
+    it('(k) requestEdit and requestCreate are no-ops while the editor or the gate is still mounted', async () => {
+      const user = userEvent.setup();
+      render(<Probe />);
+      await user.click(editButton(unused));
+      expect(hook().modalProps.organism).toBe(unused);
+
+      // Editor open: an edit request for ANOTHER organism and a create request both bounce.
+      act(() => hook().requestEdit(used, 0));
+      expect(hook().modalProps.organism).toBe(unused);
+      expect(hook().gateMounted).toBe(false);
+      act(() => hook().requestCreate());
+      expect(hook().modalProps.organism).toBe(unused);
+      expect(hook().modalProps.open).toBe(true);
+
+      // Editor closed but still fading: the same.
+      act(() => hook().modalProps.onClose());
+      expect(hook().modalProps.open).toBe(false);
+      act(() => hook().requestEdit(used, 2));
+      expect(hook().gateMounted).toBe(false);
+      expect(hook().modalProps.open).toBe(false);
+      expect(hook().modalProps.organism).toBe(unused);
+
+      // Fully exited: the request goes through (positive control), and the gate window guards too.
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+      act(() => hook().requestEdit(used, 2));
+      expect(hook().gateMounted).toBe(true);
+      act(() => hook().requestEdit(unused, 0));
+      expect(hook().mounted).toBe(false);
+      expect(hook().modalProps.organism).toBeNull();
+      expect(hook().gateProps.usedInBattles).toBe(2);
+    });
   });
 });

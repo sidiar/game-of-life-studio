@@ -4,7 +4,7 @@ baseline_commit: aa8ff8e
 
 # Story 4.17: Edit Organism from Library
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -478,6 +478,95 @@ warns the organism about its own colour) are settled there.
   - [x] `sprint-status.yaml`: `4-17-edit-organism-from-library: in-progress` at start, `review` at
         the end; Dev Agent Record with every command and its actual exit code.
 
+### Review Findings
+
+Reviewed 2026-09-22 on **Fable 5.1** against the Opus implementation (`3ebe903`), via three
+parallel layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 1 decision-needed, 9
+patches (all applied), 4 defers, 17 dismissed. Decisions are the owner's, after the PR.
+
+- [ ] [Review][Decision] **The in-use dialog asks "Clone this organism first to create a
+  Battle-specific variant?" while no Clone action exists until Story 4.18** — AC2 mandates the
+  PRD sentence verbatim (`prd.md:125`) and FD5 defers the Clone & Edit button, so the shipped
+  dialog poses a question the user cannot answer "yes" to: the dead affordance FD5 kept off the
+  button row has moved into the copy. Options: **(1)** keep the verbatim copy as shipped (AC2 as
+  written; 4.18 adds the button and the sentence becomes true — the window is one story);
+  **(2)** drop the last sentence from `organismInUseMessage` until 4.18 restores it with the
+  button (a one-line change plus the copy pin in `OrganismInUseDialog.test.tsx` (a)); **(3)**
+  pull Clone & Edit into this story (the FD5 open flag — about a day of 4.18's scope). Left
+  unresolved; no code changed for it.
+- [x] [Review][Patch] Cancel/Escape during the gate's exit fade after Edit Anyway was ignored —
+  `proceedRef` survived and `handleGateExited` opened the editor the user had just declined; the
+  dialog stays clickable through the fade and its `onClose` is unguarded
+  [`apps/web/lib/organisms/useOrganismEditorModal.ts` `handleGateCancel`] — `proceedRef.current
+  = null` on Cancel (last action before the fade ends wins, in both orders); hook test (j).
+- [x] [Review][Patch] `requestEdit`/`requestCreate` had no re-entrancy guard: the modal reads
+  `organism` once at mount, so a request landing while a window is still mounted (fading) would
+  re-open A's draft and `saveStamp` under B's record — unreachable for a user (inert background),
+  reachable for a programmatic caller (Story 4.24's entry, a test)
+  [`useOrganismEditorModal.ts` `requestCreate`/`requestEdit`] — both are no-ops while
+  `anyMounted`; hook test (k); the modal's `organism` docblock no longer claims "read ONCE" (the
+  seed and `saveStamp` are; `others` reads it per render, coherent only because of the guard)
+  [`OrganismEditorModal.tsx:65-73`].
+- [x] [Review][Patch] AC10's edit-session no-write pin was not in the diff — no test opened the
+  editor on a record and closed it without Save while asserting `organisms.save` never called
+  [`apps/web/components/organisms/OrganismLibrary.test.tsx` 4.17 block] — test (a2): Glider →
+  editor → dirty draft → Back → `organisms.save`/`battles.save` never called, both lists read
+  exactly once, focus on Glider's Edit; positive control is test (e) in the same block.
+- [x] [Review][Patch] `OrganismInUseDialog.test.tsx` (e) "an immediate Enter changes nothing"
+  never pressed Enter [`OrganismInUseDialog.test.tsx:441-445`] — presses it, asserts `onCancel`
+  once and `onEditAnyway` never.
+- [x] [Review][Patch] Library test (b) "nothing is written" spied `organisms.save` only
+  [`OrganismLibrary.test.tsx` (b)] — `battles.save` spied and asserted too.
+- [x] [Review][Patch] e2e test 3 pinned `schemaVersion` as the literal `1` while the unit tests use
+  the constant [`apps/web/e2e/organisms.spec.ts`] — `ORGANISM_SCHEMA_VERSION` imported from
+  `@gol/domain`.
+- [x] [Review][Patch] The `usage` memo comment claimed `summaries` is stable "between loads" —
+  the `[[], []]` fallback is a fresh tuple per render while loading/error, so the memo recomputes
+  (an empty map, unread) in those states [`OrganismLibrary.tsx` `usage`] — comment corrected.
+- [x] [Review][Patch] Two docblock lines over 100 columns after the Task 2 present-tensing
+  [`apps/web/lib/organisms/organismDraft.ts:17, :44`] — rewrapped.
+- [x] [Review][Patch] `deferred-work.md` entry (7) said the 4.9 duplicate-name entry "now reads …"
+  but that entry was untouched and its bold "Pick this up with Story 4.17" stood un-annotated
+  [`deferred-work.md:1455-1465`, the 4.17 section] — the 4.9 entry is annotated in place (4.17
+  passed on it; the Edit buttons are one more consumer), entry (7) reworded.
+- [x] [Review][Defer] A rejected `import()` of the in-use dialog chunk leaves the page inert with
+  no dialog and no Cancel (`gate` set synchronously; only the never-mounted dialog's `onExited`
+  clears it) [`OrganismLibrary.tsx` `dynamic()`; `useOrganismEditorModal.ts`] — deferred,
+  pre-existing: the editor's own lazy boundary has had the same shape since Story 4.3; same owner
+  as the Run-chunk entry (`deferred-work.md:970`).
+- [x] [Review][Defer] Renaming an organism out of the active search filter drops focus to
+  `<body>` after Back: the restore lands on the card while `reload()` is in flight, then the
+  reload settles, `visible` drops the card and the focused button unmounts
+  [`OrganismLibrary.tsx` `visible`/`onSaved`] — deferred, narrow (search AND rename out of the
+  match); options recorded in `deferred-work.md`; pick up with 4.20/4.23.
+- [x] [Review][Defer] The editor's numeric bounds (`age ≤ 999`, `neighborCount ≤ 8`, strict
+  `min < max`) are tighter than the schema's (`0..65534`, `min <= max`), and an edit session now
+  reads persisted records through them — a schema-legal record outside those bounds (hand-edited
+  or Story 5.x-imported only; the editor never writes one) is refused at Save until changed
+  [`apps/web/lib/organisms/conditionDraft.ts` `numericBoundsFor`/`parseConditionDraft`] —
+  deferred, pre-existing: recorded by 4.11 (`deferred-work.md:1623`) for the next RFC touch;
+  4.17 makes it reachable; the refusal is visible and names the fix.
+- [x] [Review][Defer] Two organisms sharing a display name produce identical `Edit <name>`
+  accessible names [`OrganismCard.tsx` `aria-label`] — deferred, pre-existing naming model (the
+  4.9 entry, `deferred-work.md:1455-1465`); one more consumer of it.
+
+Dismissed (17): a corrupt `gol:battles` blanking the Library (FD2 — already the story's open flag
+and a deferred entry); "inert before the chunk resolves drops focus" (false — the sweep inerts only
+`aria-hidden` siblings, which exist only once the Modal mounts); the WebKit branch of e2e test 5
+(the standing 4.3/4.16 idiom); the two `waitForTimeout(300)` sleeps in e2e test 7 (the
+`deleteBattle.spec.ts` MUI-Button-transition measurement, precedented); `battles.list()` re-read on
+every save (FD2 — one resource by design); `onExited?` optional (the editor's and
+`<UnsavedChangesDialog>`'s shape); module-level `TITLE_ID`/`BODY_ID` (the house dialog idiom, one
+instance per page); the disabled `Organism Type` option being a one-way door (Task 5 as spec'd —
+with `others` empty there is nothing valid to switch back to); a battle record skipped by
+`battles.list()` undercounting usage (repository behaviour FD2 names; Story 5.11 owns corruption
+UX); cross-tab staleness (no cross-tab sync exists anywhere in the MVP); the naming nit
+(`onRequestEdit` callback vs prop), the fifth seed-helper copy (recorded), the double hover lift
+(mockup `.action-btn`), the shared "Organism Editor" accessible name for both modes (AC3/FD as
+spec'd — `organism-editor-design.md:118`); test 42 switching into `organismType` rather than
+seeding it (43 covers the seeded case), hook test (i) being its own test, and the `5 Organisms`
+badge (the story's fixture prose was self-inconsistent; the rig is the right reading).
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -940,6 +1029,10 @@ Modified:
   Battles" gate, the editor's edit mode (seeded from the record, in-place upsert, self-excluded
   library views), `buildUsageIndex` in `@gol/domain`, `<OrganismInUseDialog>`, the card's tab-stop
   policy resolved, e2e block, deferred-work bookkeeping. Status → review.
+- 2026-09-22 — Code review (Fable 5.1): 9 patches applied (gate Cancel-after-Edit-Anyway honoured,
+  re-entrancy guard on `requestCreate`/`requestEdit`, AC10 edit-session no-write pin, four test
+  strengthenings, two comment/format fixes, deferred-work bookkeeping), 4 defers recorded, 1
+  decision left for the owner (the in-use dialog's Clone sentence). Status → in-progress.
 
 ---
 

@@ -8,6 +8,7 @@ import {
   MAX_ORGANISM_NAME_LENGTH,
   MIN_DOMINANCE,
   NEW_ORGANISM_DOMINANCE,
+  ORGANISM_SCHEMA_VERSION,
 } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 
@@ -3266,7 +3267,7 @@ test.describe('edit organism from library (Story 4.17)', () => {
     expect(matches).toHaveLength(1);
     expect(matches[0].name).toBe('Aggressive Colonizer v2');
     expect(matches[0].colorToken).toBe('amber');
-    expect(matches[0].schemaVersion).toBe(1);
+    expect(matches[0].schemaVersion).toBe(ORGANISM_SCHEMA_VERSION);
     expect(await storage(page, 'gol:battles')).toBe(battlesBefore);
 
     // M4: thumbnails render on demand, so the Gallery tile shows the NEW name with no battle write.

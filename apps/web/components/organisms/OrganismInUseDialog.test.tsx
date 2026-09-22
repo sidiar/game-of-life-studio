@@ -94,9 +94,15 @@ describe('OrganismInUseDialog (Story 4.17, AC2 — FR-1.3)', () => {
   });
 
   it('(e) Cancel is focused on open — an immediate Enter changes nothing', async () => {
-    renderDialog();
+    const user = userEvent.setup();
+    const { onCancel, onEditAnyway } = renderDialog();
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus());
+    // The claim in the title, exercised: Enter on the focused button is Cancel, never Edit Anyway.
+    await user.keyboard('{Enter}');
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onEditAnyway).not.toHaveBeenCalled();
   });
 
   it('open={false} renders no dialog at all', () => {

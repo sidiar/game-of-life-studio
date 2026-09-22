@@ -249,8 +249,10 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     [organisms, battles, seedStatus],
   );
   const [loadedOrganisms, summaries] = resource.data ?? [[], []];
-  // `summaries` is referentially stable between loads (`resource.data` is one object per settle),
-  // so this memo hits on every search keystroke and misses only on a (re)load.
+  // Once settled, `summaries` is referentially stable between loads (`resource.data` is one object
+  // per settle), so this memo hits on every search keystroke and misses only on a (re)load. While
+  // loading or in error the `[[], []]` fallback is a fresh tuple per render and the memo recomputes
+  // an empty map each time — no cards render in those states, so nothing reads it.
   const usage = useMemo(() => buildUsageIndex(summaries), [summaries]);
 
   // Ephemeral UI state only (RFC-005 Decision 1) — never persisted, never in a ref: this is not

@@ -66,8 +66,10 @@ export interface OrganismEditorLifecycleProps {
    * `null` is a create; a record is an edit session on THAT organism (Story 4.17). Held by
    * `useOrganismEditorModal` for the whole mount — through the exit fade, the `<DeleteBattleDialog>`
    * `confirming` lesson: the `mounted` gate keeps this modal alive ~195 ms after close, and a
-   * record emptied at close would re-seed nothing — and read ONCE here, at mount, for the seed
-   * and the `saveStamp`. The whole mode switch: no title change, no `mode` prop.
+   * record emptied at close would re-seed nothing. Read at mount for the seed and the
+   * `saveStamp`, and on every render for `others` (the library minus self) — which is only
+   * coherent because the hook never changes it while this modal is mounted (`requestEdit` is a
+   * no-op during that window). The whole mode switch: no title change, no `mode` prop.
    */
   organism: Organism | null;
   /** Close ✕, the back label and Escape all route here. Story 4.23 guards it. */

@@ -1465,9 +1465,11 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   collide. The live-region corollary: picking token A then token B, each used by one organism
   with the same display name, leaves the `role="status"` text unchanged, so nothing is announced
   the second time. Pre-existing naming model, not this story's; disambiguating (an id suffix, a
-  count, a `key` on the region) is a product call. **Pick this up with Story 4.17** (edit flow —
-  the first place a user sees their own duplicate names beside each other) or whichever story
-  next touches the sentence.
+  count, a `key` on the region) is a product call. ~~**Pick this up with Story 4.17** (edit flow —
+  the first place a user sees their own duplicate names beside each other)~~ or whichever story
+  next touches the sentence. **Story 4.17 passed on it (review 2026-09-22):** the story touches
+  neither `colorReuseWarning` nor the sentence, and its Edit buttons (`aria-label="Edit <name>"`)
+  are one more consumer of the same naming model — see the 4.17 review section below.
 
 ## Deferred from: Story 3-17-run-battle-from-gallery (2026-09-17)
 
@@ -2429,8 +2431,42 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   with the M7 live-grid union and the Decision E.5 rule-reference index; its story file should say
   so, and its scope shrinks accordingly.
 - **The 4.9-review duplicate-name sentence (`:1455-1465`) was NOT picked up** — this story does not
-  touch `colorReuseWarning` or the sentence; the entry's "pick this up with Story 4.17" now reads
-  "or whichever story next touches the sentence".
+  touch `colorReuseWarning` or the sentence; that entry is annotated in place (review 2026-09-22)
+  so its "pick this up with Story 4.17" no longer reads as pending on 4.17.
+
+## Deferred from: code review of 4-17-edit-organism-from-library (2026-09-22)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+
+- **A rejected `import()` of the in-use dialog chunk leaves the page inert with no dialog and no
+  Cancel.** `requestEdit` sets `gate` synchronously, `useInertBackground(mounted || gate !== null)`
+  arms, and only the never-mounted dialog's `onExited` can clear `gate` — so offline, or a deploy
+  that rotated chunk hashes under an open tab, strands the Library behind an inert background.
+  The editor's own `dynamic()` boundary has had the same shape since Story 4.3; this story adds a
+  second lazy consumer on the more common "used organism" path. Same owner as the Run-chunk entry
+  above (`:970`) and the 4-1 `error.tsx` entry — a `dynamic()` rejection boundary, settled once for
+  every lazy dialog, not per call site.
+- **Renaming an organism out of the active search filter drops focus to `<body>` after Back.**
+  The hook restores focus to `[data-edit-organism-id]` at `onExited`, while the Library's
+  `reload()` is still in flight (stale-while-revalidate, so the card is still there); when the
+  reload settles the renamed card no longer matches `searchText`, `visible` drops it, and the
+  focused button unmounts — the tab order restarts at the top. Narrow (a search AND a rename that
+  leaves the match), and the create flow has no equivalent (its target is the always-present
+  create button). Options when picked up: clear `searchText` in `onSaved`, or a post-settle
+  "focus is loose → create button" sweep. **Pick this up with Story 4.20** (the next Library
+  touch) or 4.23.
+- **The editor's numeric bounds are tighter than the schema's, and an edit session now reads
+  persisted records through them.** `age ≤ 999` / `neighborCount ≤ 8` / strict `min < max` in the
+  editor (`conditionDraft.ts`) versus `0..65534` / `min <= max` in `SurvivalRuleSchema`: a record
+  legal on disk but outside the editor's bounds (only by hand-editing `gol:organisms` or by Story
+  5.x import — the editor itself never writes one) opens and is REFUSED at Save until the value is
+  changed, with the bounds error naming the fix. The 4.11 entry above (`:1623`) already records the
+  mismatch "for the next RFC touch"; 4.17 is the story that makes it reachable. No change here —
+  the refusal is visible and fixable, and widening the editor is the design doc's call (`:399`).
+- **Two organisms sharing a display name produce identical `Edit <name>` accessible names** — the
+  card's `aria-label` interpolates the display name, so a screen reader's button list cannot tell
+  the two Edit buttons apart (nor two "Unnamed organism" cards). The 4.9 entry above
+  (`:1455-1465`) owns the naming model; this is one more consumer of it.
 
 ## Deferred from: code review of 4-16-create-save-organism (2026-09-22)
 

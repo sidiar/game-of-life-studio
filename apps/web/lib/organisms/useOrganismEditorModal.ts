@@ -190,28 +190,47 @@ export function useOrganismEditorModal(
     (trigger ?? document.querySelector<HTMLElement>('[data-create-organism]'))?.focus();
   }, [anyMounted]);
 
+  // Both entry points are no-ops while EITHER window is still mounted (open or fading). The
+  // modal reads `organism` once, at mount, for its seed and `saveStamp`: a `requestEdit(B)` that
+  // landed while A's editor was still fading would re-open A's draft under B's record, and a Save
+  // would then write A's fields under A's id while the user believes B is open. The inert
+  // background already makes that click impossible for a user; this guard makes it impossible for
+  // a programmatic caller (Story 4.24's battle-origin entry, a test) too. (Review 2026-09-22.)
   const requestCreate = useCallback(() => {
+    if (anyMounted) return;
     restoreFocusRef.current = { kind: 'create' };
     setMounted(true);
     setDialogOpen(true);
-  }, []);
+  }, [anyMounted]);
 
   // Story 4.17, AC1: the FR-1.3 gate. `usedInBattles === 0` opens the editor directly on the
   // record; otherwise the warning opens FIRST and the editor follows only through
   // `handleGateEditAnyway` → `handleGateExited`.
-  const requestEdit = useCallback((organism: Organism, usedInBattles: number) => {
-    restoreFocusRef.current = { kind: 'edit', organismId: organism.id };
-    if (usedInBattles === 0) {
-      setEditing(organism);
-      setMounted(true);
-      setDialogOpen(true);
-      return;
-    }
-    setGate({ organism, usedInBattles });
-    setGateOpen(true);
-  }, []);
+  const requestEdit = useCallback(
+    (organism: Organism, usedInBattles: number) => {
+      if (anyMounted) return;
+      restoreFocusRef.current = { kind: 'edit', organismId: organism.id };
+      if (usedInBattles === 0) {
+        setEditing(organism);
+        setMounted(true);
+        setDialogOpen(true);
+        return;
+      }
+      setGate({ organism, usedInBattles });
+      setGateOpen(true);
+    },
+    [anyMounted],
+  );
 
-  const handleGateCancel = useCallback(() => setGateOpen(false), []);
+  // Clears `proceedRef` as well as closing: the dialog stays clickable through its ~195 ms exit
+  // fade and its `onClose` is unguarded, so a Cancel (or Escape) landing AFTER Edit Anyway must
+  // win — otherwise `handleGateExited` would still find the stashed organism and open the editor
+  // the user just declined. The last action before the fade ends is the one honoured, in both
+  // orders. (Review 2026-09-22.)
+  const handleGateCancel = useCallback(() => {
+    proceedRef.current = null;
+    setGateOpen(false);
+  }, []);
 
   const handleGateEditAnyway = useCallback(() => {
     proceedRef.current = gate?.organism ?? null;

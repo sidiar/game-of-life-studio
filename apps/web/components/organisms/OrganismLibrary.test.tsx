@@ -804,10 +804,39 @@ describe('OrganismLibrary — edit organism from library (Story 4.17)', () => {
     expect(inUseDialog()).toBeNull();
   });
 
+  // AC10's edit-session no-write pin (review 2026-09-22): an edit opened and closed without Save
+  // writes nothing and re-lists nothing. Positive control: test (e) below, same rig, same spies —
+  // a Save in an edit session DOES reach `organisms.save` and DOES re-list once.
+  it('(a2) an edit session closed by Back without Save writes nothing and reads each list exactly once', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    const list = vi.spyOn(organisms, 'list');
+    const battleList = vi.spyOn(battles, 'list');
+    const save = vi.spyOn(organisms, 'save');
+    const battleSave = vi.spyOn(battles, 'save');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton('Glider'));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+    await user.type(name, ' II'); // a dirty draft, abandoned
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    expect(save).not.toHaveBeenCalled();
+    expect(battleSave).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(battleList).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { level: 2, name: 'Glider' })).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(editButton('Glider')));
+  });
+
   it("(b) a used organism's Edit opens the 'Used in 2 Battles' dialog — title and sentence — and NOT the editor; nothing is written", async () => {
     const user = userEvent.setup();
     const { organisms, battles } = rig();
     const save = vi.spyOn(organisms, 'save');
+    const battleSave = vi.spyOn(battles, 'save');
     render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await ready();
 
@@ -818,7 +847,9 @@ describe('OrganismLibrary — edit organism from library (Story 4.17)', () => {
       'This organism is used in 2 Battles. Editing it will affect all Battles that use it. Clone this organism first to create a Battle-specific variant?',
     );
     expect(editorDialog()).toBeNull();
+    // Both repositories: the title says nothing is written, so both writers are watched.
     expect(save).not.toHaveBeenCalled();
+    expect(battleSave).not.toHaveBeenCalled();
   });
 
   it("(c) Cancel dismisses the warning, focus returns to that card's Edit button, and the editor never mounted", async () => {

@@ -14,8 +14,9 @@ import { validateOrganismName } from './organismName';
  * `<OrganismEditorModal>` holds it in `useState`, never `useOrganismEditorModal`, which owns
  * lifecycle only and sits in the first-load chunk). One typed object from the first field, not one
  * `useState` per field: Story 4.17 seeds the whole draft from a loaded `Organism` in one
- * assignment (`organismDraftFrom`, below), Story 4.23 diffs one object against one seed for the editor's own dirty scope
- * (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one field per story — 4.6
+ * assignment (`organismDraftFrom`, below), Story 4.23 diffs one object against one seed for the
+ * editor's own dirty scope (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one
+ * field per story — 4.6
  * `dominance`, 4.7 `agingEnabled`/`colorToken`, 4.8's M6 colour seed and 4.10's `survivalRules` are
  * done, and Story 4.13's validator (`validateOrganismDraft`, below) reads all of them. It will
  * never be `Omit<Organism, 'id' | 'schemaVersion'>`: the rules are `RuleDraft`s, not
@@ -43,9 +44,10 @@ export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled'
  * is the M6 default for the library the editor opened over (Story 4.8, FR-2.3): `usedColorTokens`
  * is one token per organism, taken from the caller's loaded library — Story 4.25's battle-origin
  * editor passes the same list; an edit session (Story 4.17) never calls this factory, it seeds
- * from the record through `organismDraftFrom`. `survivalRules` seeds to a FRESH empty array per call (Story 4.10) — never a shared
- * module-level `[]` — for the same reason as the rest of the draft: it is diffed against its seed,
- * and a shared array would move with every edit made through this call's own reference.
+ * from the record through `organismDraftFrom`. `survivalRules` seeds to a FRESH empty array per
+ * call (Story 4.10) — never a shared module-level `[]` — for the same reason as the rest of the
+ * draft: it is diffed against its seed, and a shared array would move with every edit made through
+ * this call's own reference.
  */
 export function createNewOrganismDraft(usedColorTokens: readonly string[]): OrganismDraft {
   return {
