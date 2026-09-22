@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
 import { buildUsageIndex, CONWAYS_CLASSIC_ID, type Organism } from '@gol/domain';
@@ -290,6 +290,29 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   const [cloning, setCloning] = useState<string | null>(null);
   const [cloneError, setCloneError] = useState<string | null>(null);
 
+  // Story 4.18, review 2026-09-22. Disabling a button that HOLDS focus blurs it: every browser
+  // drops focus to `<body>` and none of them puts it back when the attribute clears. Measured in
+  // Chromium against the built export — Enter on a card's Clone left `document.activeElement` as
+  // `BODY`, so a keyboard user's next Tab restarted from the top of the document. The story's own
+  // `deferred-work.md` entry asserts focus "stays on the Clone button"; this ref is what makes
+  // that sentence true. Holds the id only when the button was focused when the write started (a
+  // pointer click on WebKit does not focus it — then there is nothing to restore and we leave the
+  // user's focus alone).
+  const refocusCloneRef = useRef<string | null>(null);
+
+  // Runs on the commit that clears `cloning` — i.e. the one that re-enables the button — so the
+  // `.focus()` lands on an element that is no longer `disabled`. An effect, not a call inside the
+  // writer's `finally`: there the button is still disabled and `.focus()` is a silent no-op.
+  useEffect(() => {
+    if (cloning !== null) return;
+    const id = refocusCloneRef.current;
+    if (id === null) return;
+    refocusCloneRef.current = null;
+    // `CSS.escape` for the same reason `useOrganismEditorModal`'s restore does: ids are arbitrary
+    // non-empty strings, not uuids ('conways-classic' is the seeded one).
+    document.querySelector<HTMLElement>(`[data-clone-organism-id="${CSS.escape(id)}"]`)?.focus();
+  }, [cloning]);
+
   // Story 4.18, FD3: ONE writer for both entry points — the card's Clone and the gate's Clone &
   // Edit differ only in what happens AFTER the write. Mints both ids at the call site (as
   // `saveOrganism` mints the editor's — the repository mints none), projects through the pure,
@@ -302,6 +325,12 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     async (source: Organism): Promise<Organism | null> => {
       if (cloningRef.current !== null) return null;
       cloningRef.current = source.id;
+      // Captured BEFORE the `disabled` commit blurs it (review 2026-09-22; see `refocusCloneRef`).
+      const active = document.activeElement;
+      refocusCloneRef.current =
+        active instanceof HTMLElement && active.dataset.cloneOrganismId === source.id
+          ? source.id
+          : null;
       setCloning(source.id);
       setCloneError(null);
       try {

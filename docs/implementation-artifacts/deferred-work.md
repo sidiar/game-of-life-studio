@@ -2697,9 +2697,13 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
 - **`X (Copy) (Copy)` rather than a `(Copy 2)` allocator** (FD2) — `Organism.name` has no
   uniqueness constraint anywhere, so repeated cloning stacks the literal suffix rather than
   counting; the 50-character cap truncates the HEAD, never the suffix, so the marker survives.
-- **Focus after a card Clone stays on the Clone button** — the click never moves focus (no
-  `restoreFocusRef` write from the card's entry point, unlike Clone & Edit's gate handoff); the new
-  card is not focused and is not announced beyond the count badge's own text change.
+- **Focus after a card Clone returns to the Clone button; the NEW card is never focused** — the
+  entry point writes no `restoreFocusRef`, unlike Clone & Edit's gate handoff, so the clone is not
+  focused and is not announced beyond the count badge's own text change. ⚠️ Corrected by the
+  2026-09-22 review: as first written this entry claimed "the click never moves focus", which was
+  false — the button's own `disabled` blurred it and focus fell to `<body>` (measured in Chromium).
+  `<OrganismLibrary>`'s `refocusCloneRef` now restores it, and the claim above is pinned by
+  `OrganismLibrary.test.tsx` (j) and e2e test 7.
 - **For Story 4.19/4.21: a clone creates no reference TO the source, but its copied rules DO add a
   second `organismType` reference to every organism the source's rules target** — cloning an
   organism whose rules target organism X doubles X's rule-reference count without X itself being
@@ -2710,6 +2714,28 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `await organisms.save(clone)` can resolve after the Library has unmounted (browser Back, address
   bar), and a rejection in that window is lost silently. Sub-millisecond against localStorage;
   RFC-001's API repository story owns the general fix.
+- **Grapheme clusters still split when a long name is truncated** — the 2026-09-22 review made
+  `cloneOrganismName` code-point safe (a lone surrogate no longer reaches the record), but a ZWJ
+  sequence such as 👨‍👩‍👧‍👦 still breaks into its component emoji at the cut. Snapping to cluster
+  boundaries needs `Intl.Segmenter` and a rule for a cluster longer than the whole budget.
+- **A stale clone alert survives every state change except the next clone attempt** —
+  `setCloneError(null)` runs only at the top of `cloneOrganism`, so a failure message stays on
+  screen through searching, filtering, and an editor save, above a grid whose contents have since
+  changed. No dismiss affordance. "When does an error clear" is a product choice, not a mechanical
+  one — flagged rather than guessed.
+- **Truncation can push a clone out of the ACTIVE search filter, so it is created invisibly** —
+  search for a substring occurring after character 43 of a long name, then Clone the one visible
+  card: the clone's name no longer contains the query, so no card appears and only the badge's
+  `N of M` moves. Needs a decision about whether a create clears the filter.
+- **Two page-level `role="alert"` nodes can coexist** — a failed clone's alert plus the resource's
+  own load-error alert (reachable via `CorruptDataError`). The same unscoped-query exposure FD10
+  reasons about for `role="status"` now exists for `getByRole('alert')`; no e2e uses an unscoped
+  alert query today.
+- **`gatePending` has no timeout** — an injected `onCloneAndEdit` that never settles leaves all
+  three gate buttons disabled with `onClose` guarded and the background `inert`, i.e. an
+  undismissable modal. Not reachable against localStorage (sub-millisecond, and a rejection is
+  caught); it becomes reachable behind the AR-2 seam when RFC-001's API repository lands, which is
+  the story that owns the general fix.
 - **No `origin`/`cloneable` prop on `<OrganismInUseDialog>` yet** — Story 4.24's battle-origin
   warning must NOT show Clone & Edit (M5, PRD `:127`); the dialog's head comment flags where that
   prop lands, and this entry is the paper trail for it.

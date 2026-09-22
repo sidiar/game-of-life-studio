@@ -8,6 +8,23 @@ import {
 import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
 import { CLONE_NAME_SUFFIX, cloneOrganismName, cloneOrganismRecord } from './organismClone';
 
+/** True when any UTF-16 code unit is a surrogate without its partner — what a cut landing inside
+ * a surrogate pair leaves behind. Spelled out because `String#toWellFormed` is ES2024 and
+ * `tsconfig.base.json` is `lib: ["ES2022"]`. */
+function hasLoneSurrogate(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (Number.isNaN(next) || next < 0xdc00 || next > 0xdfff) return true;
+      i += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Deterministic id counter, never `crypto` — the `organismRecord.test.ts` idiom.
 function counter(prefix: string) {
   let n = 0;
@@ -62,6 +79,41 @@ describe('cloneOrganismName', () => {
 
   it('respects an injected maxLength', () => {
     expect(cloneOrganismName('Glider', 10)).toBe('Gli (Copy)');
+  });
+
+  // Review 2026-09-22. `maxLength - CLONE_NAME_SUFFIX.length` went negative and `String#slice`
+  // reads a negative end as an offset from the END of the string, so a SMALLER cap produced a
+  // LONGER name. Unreachable from the two shipped call sites, which take the default, but the
+  // parameter is exported and the docblock advertises it as part of the contract.
+  it.each([0, 1, 5, CLONE_NAME_SUFFIX.length])(
+    'a maxLength below the suffix length (%i) yields the bare suffix, never a longer name',
+    (maxLength) => {
+      expect(cloneOrganismName('HelloWorld', maxLength)).toBe('(Copy)');
+    },
+  );
+
+  // Review 2026-09-22. `slice` counts UTF-16 code units, so the cut could land BETWEEN a surrogate
+  // pair and persist a lone surrogate — U+FFFD on every card and in both `aria-label`s, an
+  // organism unsearchable by its own visible text, and a `name` that is not well-formed UTF-8 for
+  // the Epic 5 export envelope. Zod's `.max()` counts code units too and does not catch it.
+  it('never splits a surrogate pair: a 25-emoji name (50 code units) truncates to whole emoji', () => {
+    const result = cloneOrganismName('👾'.repeat(25));
+    expect(result.endsWith(CLONE_NAME_SUFFIX)).toBe(true);
+    expect(result.length).toBeLessThanOrEqual(MAX_ORGANISM_NAME_LENGTH);
+    // No unpaired surrogate anywhere. (`String#toWellFormed` is ES2024; this repo's lib is
+    // ES2022, so the check is spelled out.)
+    expect(hasLoneSurrogate(result)).toBe(false);
+    expect([...result].every((c) => c === '👾' || ' (Copy)'.includes(c))).toBe(true);
+  });
+
+  it('a name whose cut lands mid-pair loses the whole code point, not half of it', () => {
+    // 43 'x' + an emoji: the cut at 43 is already a boundary, so the emoji is simply dropped.
+    const result = cloneOrganismName('x'.repeat(43) + '👾');
+    expect(result).toBe('x'.repeat(43) + CLONE_NAME_SUFFIX);
+    // 42 'x' + emoji + filler: the cut at 43 falls INSIDE the pair and must back off to 42.
+    const midPair = cloneOrganismName('x'.repeat(42) + '👾' + 'y'.repeat(10));
+    expect(midPair).toBe('x'.repeat(42) + CLONE_NAME_SUFFIX);
+    expect(hasLoneSurrogate(midPair)).toBe(false);
   });
 });
 
@@ -159,6 +211,12 @@ describe('cloneOrganismRecord', () => {
         expect(rule.id).not.toBe(src.id);
       });
       expect(calls).toBe(source.survivalRules.length);
+      // AC4's second half, which only the CONWAYS_CLASSIC case pinned (review 2026-09-22): the
+      // clone's rule ids are disjoint from the source's AND hold no internal duplicate.
+      const cloneIds = clone.survivalRules.map((r) => r.id);
+      const sourceIds = source.survivalRules.map((r) => r.id);
+      expect(new Set(cloneIds).size).toBe(cloneIds.length);
+      expect(cloneIds.filter((id) => sourceIds.includes(id))).toEqual([]);
     }
   });
 });

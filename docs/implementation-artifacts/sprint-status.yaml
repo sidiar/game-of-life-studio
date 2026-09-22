@@ -133,7 +133,7 @@ development_status:
   4-15-preview-simulation: done
   4-16-create-save-organism: done
   4-17-edit-organism-from-library: done
-  4-18-clone-organism: review
+  4-18-clone-organism: in-progress
   4-19-usage-rule-reference-derivations: backlog
   4-20-usage-visibility-ui: backlog
   4-21-delete-integrity-blocks: backlog

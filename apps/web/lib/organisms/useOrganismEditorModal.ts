@@ -165,9 +165,13 @@ export function useOrganismEditorModal(
     onCloneAndEditRef.current = options?.onCloneAndEdit;
   }, [options?.onCloneAndEdit]);
 
-  // The clone's write window (Story 4.18, FD6/FD7): true from the moment Clone & Edit is clicked
-  // until the injected writer resolves. Disables all three gate buttons and guards its `onClose`,
-  // so Escape/backdrop cannot dismiss the gate mid-write.
+  // The clone's handoff window (Story 4.18, FD6/FD7): true from the moment Clone & Edit is
+  // clicked until the gate has fully EXITED (review 2026-09-22 — see `handleGateCloneAndEdit`).
+  // Disables all three gate buttons and guards its `onClose`, so Escape/backdrop can dismiss the
+  // gate neither mid-write nor during the exit fade that follows it. The ref is the re-entrancy
+  // authority (set synchronously, before any await); the state is only what `pending` renders
+  // from — the `cloningRef`/`cloning` split `<OrganismLibrary>` uses for the same reason.
+  const gatePendingRef = useRef(false);
   const [gatePending, setGatePending] = useState(false);
 
   // Called from the PARENT of the modal so it spans the exit transition, and so MUI's own
@@ -254,29 +258,55 @@ export function useOrganismEditorModal(
   // win — otherwise `handleGateExited` would still find the stashed organism and open the editor
   // the user just declined. The last action before the fade ends is the one honoured, in both
   // orders. (Review 2026-09-22.)
+  // Story 4.18, review 2026-09-22: both close paths bail while a Clone & Edit handoff is running.
+  // The dialog's `disabled={pending}` and its guarded `onClose` already stop every USER route in,
+  // so this is the same "hold the invariant in the hook, not only in the markup" guard the 4.17
+  // review added to `requestEdit`/`requestCreate` — it covers a programmatic caller (Story 4.24's
+  // entry, a test) for which the disabled attribute means nothing. Without it a Cancel could set
+  // `proceedRef` to null AFTER a clone had already been written to localStorage and drawn on the
+  // grid: the record exists, the user performed a Cancel, and no editor ever opens.
   const handleGateCancel = useCallback(() => {
+    if (gatePendingRef.current) return;
     proceedRef.current = null;
     setGateOpen(false);
   }, []);
 
   const handleGateEditAnyway = useCallback(() => {
+    if (gatePendingRef.current) return;
     proceedRef.current = gate?.organism ?? null;
     setGateOpen(false);
   }, [gate]);
 
   // Story 4.18, AC9/AC11, FD7: a SYNCHRONOUS callback that `void`s an inner async run — never an
   // `async` function handed straight to a `(): void` prop (React 19 / project-context). Bails if
-  // there is no gate organism or a write is already in flight (the re-entrancy guard also covers a
+  // there is no gate organism or a handoff is already running (the re-entrancy guard also covers a
   // programmatic caller). The write's resolution can land after this hook's owner has unmounted
   // (a route change) — no new guard needed: nothing renders from a discarded `setState`, and the
   // identical residual is already accepted for the editor's own save.
+  //
+  // ⚠️ Review 2026-09-22, two bugs this shape closes — the handoff's window ends at the gate's
+  // EXIT, not at the promise's resolution:
+  //   1. `gatePendingRef`, not the `gatePending` render value, is the authority. The state read
+  //      here is a render-time closure, so two calls landing in ONE tick both saw `false` and both
+  //      wrote. The ref is set synchronously, before any await — the same "ref is the authority,
+  //      the disabled attribute is the affordance" split `<OrganismLibrary>`'s `cloningRef`
+  //      documents.
+  //   2. `pending` is NOT cleared when the writer resolves. `setGateOpen(false)` only STARTS the
+  //      ~195 ms exit fade, and Story 4.17's own comment above records that the dialog stays
+  //      clickable throughout it. Clearing `pending` there re-enabled all three buttons and
+  //      un-guarded `onClose` for that whole window, in which (a) a second Clone & Edit passed the
+  //      guard and wrote a SECOND, orphaned clone — `gate` is cleared only in `handleGateExited` —
+  //      and (b) a Cancel or Escape set `proceedRef` to null and discarded a clone that was
+  //      already in localStorage and already on the grid. The 4.17 "last action before the fade
+  //      ends wins" rule is safe for Edit Anyway, which writes nothing, and is not safe here.
+  //      `handleGateExited` clears both, so the guard spans write AND fade.
   const handleGateCloneAndEdit = useCallback(() => {
     const source = gate?.organism;
-    if (source === undefined || gatePending) return;
+    if (source === undefined || gatePendingRef.current) return;
+    gatePendingRef.current = true;
+    setGatePending(true);
     void (async () => {
-      setGatePending(true);
       const clone = (await onCloneAndEditRef.current?.(source)) ?? null;
-      setGatePending(false);
       proceedRef.current = clone;
       if (clone !== null) {
         // Focus lands on what the user just made (FD11) — the DOM lookup's create-button fallback
@@ -285,7 +315,7 @@ export function useOrganismEditorModal(
       }
       setGateOpen(false);
     })();
-  }, [gate, gatePending]);
+  }, [gate]);
 
   // The handoff. All four `setState`s in ONE handler — React batches them into one commit, so
   // `anyMounted` goes gate → editor without a `false` in between (the inert window never
@@ -294,6 +324,11 @@ export function useOrganismEditorModal(
   const handleGateExited = useCallback(() => {
     const next = proceedRef.current;
     proceedRef.current = null;
+    // Story 4.18, review 2026-09-22: the Clone & Edit guard is released HERE, not when the writer
+    // resolved — this is the first moment the gate can no longer take a click. Unconditional: the
+    // Cancel and Edit Anyway paths never set it, and clearing an already-false latch is a no-op.
+    gatePendingRef.current = false;
+    setGatePending(false);
     setGate(null);
     if (next !== null) {
       setEditing(next);

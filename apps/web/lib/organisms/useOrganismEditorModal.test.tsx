@@ -687,13 +687,17 @@ describe('useOrganismEditorModal', () => {
       await act(async () => {
         resolveClone(clone);
       });
-      await waitFor(() => expect(hook().gateProps.pending).toBe(false));
+      // Review 2026-09-22: `pending` no longer clears when the writer resolves — it spans the exit
+      // fade and is released in `handleGateExited`, so "closing, but not yet exited" is a `pending`
+      // state now. (e2) below is the regression that made it one.
       expect(hook().gateProps.open).toBe(false);
+      expect(hook().gateProps.pending).toBe(true);
       expect(hook().mounted).toBe(false);
 
       await act(async () => {
         hook().gateProps.onExited?.();
       });
+      expect(hook().gateProps.pending).toBe(false);
 
       expect(hook().mounted).toBe(true);
       expect(hook().modalProps.open).toBe(true);
@@ -829,7 +833,18 @@ describe('useOrganismEditorModal', () => {
       await user.click(editButton(used));
       const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
 
-      await user.click(within(gate).getByRole('button', { name: 'Clone & Edit' }));
+      // BOTH calls in ONE tick, with no re-render between them (review 2026-09-22). The original
+      // shape awaited `pending === true` first, which is a re-render — so the guard under test was
+      // read from a FRESH closure and the stale-closure path it exists to cover was never
+      // exercised. `gatePending` used to be React state read from the render closure: two calls
+      // landing in one tick both saw `false` and both called the writer. The ref latch is what
+      // makes this assertion real.
+      act(() => {
+        hook().gateProps.onCloneAndEdit();
+        hook().gateProps.onCloneAndEdit();
+      });
+
+      expect(cloneResult).toHaveBeenCalledTimes(1);
       await waitFor(() => expect(hook().gateProps.pending).toBe(true));
 
       // The gate's own `disabled={pending}` is the user-facing affordance; the hook's guard is
@@ -842,6 +857,57 @@ describe('useOrganismEditorModal', () => {
       await act(async () => {
         resolveClone(clone);
       });
+    });
+
+    it('(e2) the write window spans the EXIT FADE: a second Clone & Edit after the writer resolves, but before the gate has exited, writes nothing more', async () => {
+      const user = userEvent.setup();
+      const cloneResult = vi.fn(() => Promise.resolve<Organism | null>(clone));
+      render(<Probe cloneResult={cloneResult} />);
+      await user.click(editButton(used));
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+
+      await user.click(within(gate).getByRole('button', { name: 'Clone & Edit' }));
+      // The writer has resolved and the gate is closing — but `onExited` has NOT fired, so the
+      // dialog is still mounted and still clickable through its ~195 ms fade.
+      await waitFor(() => expect(hook().gateProps.open).toBe(false));
+      expect(hook().gateMounted).toBe(true);
+
+      // Review 2026-09-22: `pending` used to clear when the writer resolved, which re-enabled all
+      // three buttons for that whole window. A second Clone & Edit then passed the guard (`gate`
+      // is cleared only in `handleGateExited`) and wrote a SECOND, orphaned clone.
+      expect(hook().gateProps.pending).toBe(true);
+      act(() => hook().gateProps.onCloneAndEdit());
+      expect(cloneResult).toHaveBeenCalledTimes(1);
+
+      // ...and a Cancel in that same window must not discard the clone that is already written.
+      act(() => hook().gateProps.onCancel());
+      await act(async () => {
+        hook().gateProps.onExited?.();
+      });
+      expect(hook().mounted).toBe(true);
+      expect(hook().modalProps.organism).toEqual(clone);
+      // The guard is released once the gate is actually gone.
+      expect(hook().gateProps.pending).toBe(false);
+    });
+
+    it('(g) onCloneAndEdit is held in a latest-value ref: gateProps identity does not track it, and the LATEST option is the one called', async () => {
+      const user = userEvent.setup();
+      const first = vi.fn(() => Promise.resolve<Organism | null>(clone));
+      const second = vi.fn(() => Promise.resolve<Organism | null>(clone));
+      const { rerender } = render(<Probe cloneResult={first} />);
+      await user.click(editButton(used));
+
+      const before = hook().gateProps;
+      rerender(<Probe cloneResult={second} />);
+      // Identity is unchanged by a changed option — the reason the ref exists (the `onSaved`
+      // test above makes the same claim for the save callback).
+      expect(hook().gateProps).toBe(before);
+
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+      await user.click(within(gate).getByRole('button', { name: 'Clone & Edit' }));
+
+      await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
+      expect(first).not.toHaveBeenCalled();
     });
 
     it('(f) no onCloneAndEdit option supplied: Clone & Edit resolves to null and behaves like (b), without throwing', async () => {

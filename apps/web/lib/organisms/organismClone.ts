@@ -29,8 +29,35 @@ export function cloneOrganismName(
   name: string,
   maxLength: number = MAX_ORGANISM_NAME_LENGTH,
 ): string {
-  const head = name.slice(0, maxLength - CLONE_NAME_SUFFIX.length).trimEnd();
+  // `Math.max(0, …)` (review 2026-09-22): a `maxLength` below the suffix's own 7 characters made
+  // the second argument NEGATIVE, and `String#slice` reinterprets a negative end as an offset from
+  // the END — so a SMALLER cap produced a LONGER name (`cloneOrganismName('HelloWorld', 0)` gave
+  // `'Hel (Copy)'`, 10 characters for a cap of 0). Unreachable from both shipped call sites, which
+  // take the default, but the parameter is exported and the docblock advertises it.
+  const cut = cutAtCodePoint(name, Math.max(0, maxLength - CLONE_NAME_SUFFIX.length));
+  const head = cut.trimEnd();
   return head === '' ? CLONE_NAME_SUFFIX.trimStart() : head + CLONE_NAME_SUFFIX;
+}
+
+/**
+ * `name.slice(0, end)`, backed off by one when `end` would land BETWEEN a surrogate pair (review
+ * 2026-09-22). `slice` counts UTF-16 code units, so a 25-emoji name (50 units, exactly the cap)
+ * used to truncate to `'👾'×21 + '\ud83d'` — a lone high surrogate, which renders as U+FFFD on
+ * the card and in both `aria-label`s, is unsearchable by its own visible text, and is not
+ * well-formed UTF-8 for the Epic 5 export envelope. Zod's `.max()` counts code units too and does
+ * not catch it.
+ *
+ * Code POINTS only, deliberately not grapheme clusters: a ZWJ sequence (👨‍👩‍👧‍👦) still splits into
+ * its component emoji, which renders as valid characters rather than as a replacement glyph.
+ * Snapping to cluster boundaries needs `Intl.Segmenter` and a rule for what to do when one
+ * cluster is longer than the whole budget — `deferred-work.md` records it.
+ */
+function cutAtCodePoint(name: string, end: number): string {
+  if (end <= 0 || end >= name.length) return name.slice(0, Math.max(0, end));
+  const last = name.charCodeAt(end - 1);
+  const next = name.charCodeAt(end);
+  const splitsPair = last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+  return name.slice(0, splitsPair ? end - 1 : end);
 }
 
 /**

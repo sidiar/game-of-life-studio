@@ -1061,10 +1061,9 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
 
     await user.click(cloneButton("Conway's Classic"));
 
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 2, name: "Conway's Classic (Copy)" })),
-    );
-    const clonedHeading = screen.getByRole('heading', {
+    // `expect(x)` with no matcher asserts NOTHING (review 2026-09-22) — the wait only worked
+    // incidentally, because `getByRole` throws when it finds nothing.
+    const clonedHeading = await screen.findByRole('heading', {
       level: 2,
       name: "Conway's Classic (Copy)",
     });
@@ -1112,10 +1111,22 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
     await ready();
 
     const clone = cloneButton('Glider');
-    fireEvent.click(clone);
-    fireEvent.click(clone);
+    // Review 2026-09-22: BOTH clicks must be dispatched inside ONE `act`, with no commit between
+    // them. Two bare `fireEvent.click`s each flush React synchronously, so the second one landed
+    // on a button that was ALREADY `disabled` and never reached `onClick` at all — the assertion
+    // below was satisfied by the disabled attribute, and deleting `cloningRef`'s guard left the
+    // test green. Dispatched this way the second click reaches the handler and only the ref latch
+    // can stop the second write.
+    act(() => {
+      clone.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      clone.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(save).toHaveBeenCalledTimes(1);
 
     await waitFor(() => expect(cloneButton('Glider')).toBeDisabled());
+    // FD5 is an id, not a boolean: only the CLICKED card's Clone disables. Another card's stays
+    // live — the distinguishing claim the id-over-boolean choice was made for.
+    expect(cloneButton("Conway's Classic")).toBeEnabled();
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
 
     await act(async () => {
@@ -1202,7 +1213,12 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
   it('(g) Clone & Edit from the gate on a used organism writes once, opens the editor on the CLONE (name field reads "<source> (Copy)") once the warning is gone, and leaves the SOURCE byte-identical', async () => {
     const user = userEvent.setup();
     const { organisms, battles, workspace } = rig();
-    const used = workspace.organisms[0];
+    // By NAME, not `workspace.organisms[0]` (review 2026-09-22): the index happens to be the used
+    // organism today, but nothing pins the fixture's order, so a reordering would silently turn
+    // this into "an untouched bystander is unchanged" — green even if the clone had overwritten
+    // the real source.
+    const used = workspace.organisms.find((o) => o.name === USED_NAME);
+    expect(used).toBeDefined();
     const save = vi.spyOn(organisms, 'save');
     render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await ready();
@@ -1221,7 +1237,7 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
       `${USED_NAME} (Copy)`,
     );
 
-    const sourceAfter = (await organisms.list()).find((o) => o.id === used.id);
+    const sourceAfter = (await organisms.list()).find((o) => o.id === used?.id);
     expect(sourceAfter).toEqual(used);
   });
 
@@ -1257,5 +1273,81 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
     const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
     await waitFor(() => expect(within(gate).getByRole('button', { name: 'Cancel' })).toHaveFocus());
     expect((await axe(document.body)).violations).toEqual([]);
+  });
+
+  // Review 2026-09-22. Disabling a focused button blurs it and no browser restores focus when the
+  // attribute clears; measured in Chromium, Enter on a card's Clone left `document.activeElement`
+  // as `BODY`. `deferred-work.md` asserts focus "stays on the Clone button" — this is that
+  // sentence, pinned.
+  it('(j) focus stays on the Clone button across the write, although the button is disabled mid-flight', async () => {
+    const { organisms, battles } = rig();
+    let resolveSave!: () => void;
+    vi.spyOn(organisms, 'save').mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    const clone = cloneButton('Glider');
+    clone.focus();
+    expect(document.activeElement).toBe(clone);
+    fireEvent.click(clone);
+
+    await waitFor(() => expect(cloneButton('Glider')).toBeDisabled());
+    await act(async () => {
+      resolveSave();
+    });
+
+    await waitFor(() => expect(cloneButton('Glider')).toBeEnabled());
+    await waitFor(() => expect(document.activeElement).toBe(cloneButton('Glider')));
+  });
+
+  // AC6's reverse direction, which only the forward one was pinned for (review 2026-09-22).
+  it('(k) editing the SOURCE after cloning leaves the clone byte-identical', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(cloneButton('Glider'));
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(6));
+    const cloneBefore = (await organisms.list()).find((o) => o.name === 'Glider (Copy)');
+    expect(cloneBefore).toBeDefined();
+
+    // Edit the SOURCE through the repository the component holds — the editor modal's own save
+    // path is pinned by the 4.16/4.17 blocks; what AC6 claims here is record isolation.
+    const source = (await organisms.list()).find((o) => o.id === UNUSED.id);
+    await organisms.save({ ...(source as Organism), name: 'Glider Mk II', dominance: 42 });
+
+    const cloneAfter = (await organisms.list()).find((o) => o.id === cloneBefore?.id);
+    expect(cloneAfter).toEqual(cloneBefore);
+  });
+
+  // AC9's last clause, unpinned in both paths (review 2026-09-22): a Save inside the Clone & Edit
+  // session must UPSERT the clone, not mint a seventh record.
+  it('(l) a Save in the Clone & Edit editor session upserts the CLONE id and leaves list() length unchanged', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    const save = vi.spyOn(organisms, 'save');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton(USED_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await user.click(within(gate).getByRole('button', { name: 'Clone & Edit' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const clone = save.mock.calls[0]?.[0] as Organism;
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    const lengthAfterClone = (await organisms.list()).length;
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect((save.mock.calls[1]?.[0] as Organism).id).toBe(clone.id);
+    expect(await organisms.list()).toHaveLength(lengthAfterClone);
   });
 });

@@ -133,6 +133,24 @@ describe('OrganismInUseDialog (Story 4.17 AC2 / Story 4.18 AC8 — FR-1.3)', () 
     expect(onCancel).not.toHaveBeenCalled();
     expect(onCloneAndEdit).not.toHaveBeenCalled();
     expect(onEditAnyway).not.toHaveBeenCalled();
+
+    // The backdrop half, which the title claimed and the body never performed (review
+    // 2026-09-22). MUI routes a backdrop click through the same `onClose` as Escape, so this is
+    // the second reason the `if (pending) return;` guard has to live there.
+    await user.click(document.querySelector('.MuiBackdrop-root') as HTMLElement);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  // The positive control for both halves of (c): with `pending` false the SAME two gestures do
+  // reach `onCancel`. Without it, (c) would pass against a dialog that ignores Escape and the
+  // backdrop unconditionally.
+  it('(c2) positive control: with pending false, a backdrop click IS Cancel', async () => {
+    const user = userEvent.setup();
+    const { onCancel } = renderDialog({ pending: false });
+
+    await user.click(document.querySelector('.MuiBackdrop-root') as HTMLElement);
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('open={false} renders no dialog at all', () => {

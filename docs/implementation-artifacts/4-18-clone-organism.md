@@ -4,7 +4,7 @@ baseline_commit: 28c5c64
 
 # Story 4.18: Clone Organism
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -420,6 +420,145 @@ settled there.
         ±0.5 KB beyond that, say why.
   - [x] `sprint-status.yaml`: `4-18-clone-organism: in-progress` at start, `review` at the end; Dev
         Agent Record with every command and its actual exit code.
+
+### Review Findings
+
+Reviewed 2026-09-22 on **Opus 5** against the Sonnet implementation (`e2ed44f`), via three parallel
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 2 decision-needed, 17 patches (all
+applied), 6 defers, 4 dismissed. Decisions are the owner's, after the PR. The branch was also
+synced with `main` (epic 5's #71 had landed; the only conflict was both lanes appending to
+`deferred-work.md`, resolved by keeping both sections).
+
+Two real bugs were found and fixed, both in the Clone & Edit handoff and both invisible to the
+story's own tests; one accessibility regression was reproduced in a real browser before being
+fixed. The acceptance audit found no FD unimplemented and no task ticked that the diff does not
+deliver — every remaining finding is a missing pin or an edge case.
+
+- [ ] [Review][Decision] **A Clone & Edit that fails is never announced, and on success the count
+  badge's announcement is suppressed too — the Library's alert and badge both live in the
+  `inert`/`aria-hidden` background while the gate is still mounted.** `setCloneError(...)` and
+  `setGateOpen(false)` land in one commit, so the `role="alert"` node is INSERTED into a subtree
+  `useInertBackground` has already marked `inert` (MUI defers its own `aria-hidden` removal to the
+  end of the transition). A live region inserted inside a hidden subtree is dropped by assistive
+  tech, and once the gate exits the node already exists, so nothing re-announces it. The same
+  mechanism suppresses the successful path's `role="status"` badge change, so FD10's "the new card
+  plus the badge's own count change is the announcement" does not hold for this entry point. A
+  sighted user does see both; a screen-reader user gets silence from Clone & Edit either way. Note
+  the hook already solves exactly this for the editor's own save — `handleExited` defers `onSaved`
+  until after `mounted` clears, for this stated reason — and the clone path does not get that
+  treatment. Options: **(1)** accept it — the failure is visible on screen, and the window closes
+  in ~195 ms; **(2)** defer the error the same way `onSaved` is deferred, reporting it after the
+  gate has exited (a hook→Library channel, ~15 lines, mirrors an idiom already in this file);
+  **(3)** keep the gate OPEN on failure and render the message inside the dialog, which also
+  removes the "the write landed nowhere visible" window entirely.
+- [ ] [Review][Decision] **A Clone click that loses the `cloningRef` latch is dropped in total
+  silence — no clone, no message, no disabled state.** `cloneOrganism` opens with
+  `if (cloningRef.current !== null) return null;`, which returns BEFORE `setCloneError` is ever
+  touched, while `useOrganismEditorModal`'s option contract documents `null` as "the write was
+  refused AND already reported by its owner". Two reachable paths: clicking a SECOND card's Clone
+  while the first is in flight (FD5 disables only the clicked card, so the other button is live and
+  clickable), and a Clone & Edit while a card clone is in flight — the case AC11 claims "the latch
+  covers both entry points", which it does only in the sense that it silently discards one. The
+  user's only signal is a count badge that does not move. AC10 says a refused write is reported.
+  This is a contradiction inside the spec (Task 5 prescribes exactly this code), not a dev
+  deviation, which is why it is here rather than patched. Options: **(1)** accept the silent drop —
+  the window is sub-millisecond against localStorage; **(2)** disable EVERY card's Clone while any
+  write is in flight, which makes the dropped click impossible but reverses FD5's flicker argument;
+  **(3)** report a distinct "a clone is already in progress" line, which needs copy no spec
+  supplies. Note the window widens from sub-millisecond to arbitrary behind the AR-2 seam when
+  RFC-001's API repository lands.
+- [x] [Review][Patch] **A second Clone & Edit during the gate's ~195 ms exit fade wrote a SECOND,
+  orphaned clone** [`apps/web/lib/organisms/useOrganismEditorModal.ts` `handleGateCloneAndEdit`] —
+  `setGatePending(false)` ran when the writer resolved, but `setGateOpen(false)` only STARTS the
+  fade, and Story 4.17's own comment in this file records that the dialog stays clickable
+  throughout it. All three buttons re-enabled and `gate` is cleared only in `handleGateExited`, so
+  a second click passed the guard and wrote again; `proceedRef` holds only the second, leaving the
+  first orphaned in the library with no editor and no mention. `pending` now spans write AND fade,
+  released in `handleGateExited`; hook test (e2).
+- [x] [Review][Patch] **Cancel or Escape during that same fade discarded a clone that was already
+  written** [`useOrganismEditorModal.ts` `handleGateCancel`] — `proceedRef.current = null` with the
+  record already in localStorage and already drawn on the grid: the user performed a Cancel, a
+  record exists, and no editor ever opens. The 4.17 "last action before the fade ends wins" rule is
+  safe for Edit Anyway, which writes nothing, and is not safe here. `handleGateCancel` and
+  `handleGateEditAnyway` now bail while the handoff is pending — the hook-level guard, matching
+  what the 4.17 review added to `requestEdit`/`requestCreate`, since the dialog's `disabled` means
+  nothing to a programmatic caller; hook test (e2).
+- [x] [Review][Patch] **Focus was lost to `<body>` after every card Clone** [`OrganismLibrary.tsx`]
+  — disabling a button that HOLDS focus blurs it, and no browser restores focus when the attribute
+  clears. Reproduced in Chromium against the built export: after Enter on a card's Clone,
+  `document.activeElement` was `BODY`, so a keyboard user's next Tab restarted from the top of the
+  document. `deferred-work.md` asserted the opposite ("the click never moves focus"). Added
+  `refocusCloneRef` + a `[cloning]` effect that restores focus on the commit that re-enables the
+  button, and corrected the deferred-work entry; unit test (j) and an assertion in e2e test 7.
+- [x] [Review][Patch] **The hook's re-entrancy guard was a render-closure value, not the
+  authority** [`useOrganismEditorModal.ts`] — `gatePending` was React state read from the render
+  closure, so two calls landing in ONE tick both saw `false` and both ran the writer. Now a
+  `gatePendingRef` set synchronously before any await, with the state kept only as what `pending`
+  renders from — the same split `<OrganismLibrary>`'s `cloningRef` documents.
+- [x] [Review][Patch] **`cloneOrganismName` returned a LONGER name for a SMALLER cap**
+  [`organismClone.ts`] — `maxLength - CLONE_NAME_SUFFIX.length` went negative and `String#slice`
+  reads a negative end as an offset from the END, so `cloneOrganismName('HelloWorld', 0)` gave
+  `'Hel (Copy)'`, 10 characters for a cap of 0. `Math.max(0, …)`; table test over 0/1/5/7.
+- [x] [Review][Patch] **`cloneOrganismName` split surrogate pairs, persisting a lone surrogate**
+  [`organismClone.ts`] — `'👾'.repeat(25)` (50 code units, exactly the cap) truncated to
+  `'👾'×21 + '\ud83d'`. That renders as U+FFFD on the card and in both `aria-label`s, makes the
+  organism unsearchable by its own visible text, and is not well-formed UTF-8 for the Epic 5 export
+  envelope; Zod's `.max()` counts code units too and does not catch it. Added `cutAtCodePoint`;
+  two tests. Grapheme clusters (ZWJ sequences) remain deferred.
+- [x] [Review][Patch] **The `cloningRef` latch was never exercised by the test that names it**
+  [`OrganismLibrary.test.tsx` (d)] — two bare `fireEvent.click`s each flush React synchronously, so
+  the second landed on an already-`disabled` button and never reached `onClick`; deleting the latch
+  left the test green. Both clicks now dispatch inside one `act`, with no commit between them.
+- [x] [Review][Patch] **The hook's latch test waited for a re-render before the second call**
+  [`useOrganismEditorModal.test.tsx` (e)] — which is exactly the stale-closure path it exists to
+  cover, so the guard under test was read from a fresh closure. Both calls now land in one tick.
+- [x] [Review][Patch] **A test title claimed a backdrop click it never performed**
+  [`OrganismInUseDialog.test.tsx` (c)] — the body pressed only Escape, although AC8 and Task 3 both
+  name the backdrop. Added the backdrop click plus (c2), a positive control proving the same
+  gesture DOES reach `onCancel` when `pending` is false.
+- [x] [Review][Patch] **AC6's reverse direction was pinned by no test** — nothing edited the SOURCE
+  after cloning and compared the clone's record. Library test (k).
+- [x] [Review][Patch] **AC9's "a Save in that session upserts the CLONE's id and `list()` length is
+  unchanged" was pinned by no test** — the one place a clone's editor is saved is the card-Clone
+  path, and it asserts only that the source is unchanged. Library test (l).
+- [x] [Review][Patch] **FD5's distinguishing claim was untested** — the id-not-boolean choice exists
+  so other cards stay enabled, and no test asserted another card's Clone is live mid-flight. Added
+  to (d).
+- [x] [Review][Patch] **AC12's fourth required axe state — the editor open ON A CLONE — was scanned
+  nowhere** — added to e2e test 2, which already opens it.
+- [x] [Review][Patch] **Task 4 subtask (g) was ticked with no artifact** — no test covered
+  `onCloneAndEdit` as a latest-value ref (the analogous `onSaved` case has one). Hook test (g).
+- [x] [Review][Patch] **AC4's "no two rules in the clone share an id" was asserted only for
+  `CONWAYS_CLASSIC`** — added to the `createMockOrganisms()` table test.
+- [x] [Review][Patch] **An `expect(...)` with no matcher inside `waitFor`**
+  [`OrganismLibrary.test.tsx` (b)] — asserts nothing; the wait worked only because `getByRole`
+  throws. Replaced with `findByRole`.
+- [x] [Review][Patch] **A test asserted against `workspace.organisms[0]` rather than the record it
+  names** [`OrganismLibrary.test.tsx` (g)] — the index is the used organism today, but nothing pins
+  the fixture's order, so a reordering would silently turn it into "an untouched bystander is
+  unchanged". Resolved by name.
+- [x] [Review][Defer] Grapheme clusters (ZWJ sequences) still split on truncation — deferred,
+  needs `Intl.Segmenter` and a rule for a cluster longer than the budget.
+- [x] [Review][Defer] A stale clone alert survives every state change except the next clone
+  attempt — deferred, "when does an error clear" is a product choice.
+- [x] [Review][Defer] Truncation can push a clone out of the active search filter, so it is created
+  invisibly — deferred, needs a decision on whether a create clears the filter.
+- [x] [Review][Defer] Two page-level `role="alert"` nodes can coexist (clone failure + resource load
+  error) — deferred, no unscoped alert query exists in e2e today.
+- [x] [Review][Defer] `gatePending` has no timeout: an injected writer that never settles leaves an
+  undismissable modal — deferred, unreachable against localStorage, owned by RFC-001's API
+  repository story.
+- [x] [Review][Defer] `onCloneAndEdit` is optional while the button always renders, so a consumer
+  that omits it gets a dead affordance — deferred, pre-existing; Story 4.24's `origin`/`cloneable`
+  prop already has its own entry.
+
+**Dismissed (4):** `reload()` blanking the grid on every clone (it is stale-while-revalidate —
+`status` never returns to `'loading'`, verified in `useAsyncResource`); condition objects carrying
+their own ids and so reproducing the rule-id aliasing one level down (the schema gives conditions
+no id); `data-clone-organism-id` as dead code (AC1 mandates it, and the focus patch above now reads
+it); the `battleSave` negative lacking a positive control (`battleList`'s call count on the same
+spied object is in the same block).
+
 
 ## Dev Notes
 

@@ -3459,6 +3459,9 @@ test.describe('clone organism (Story 4.18)', () => {
     await editButton(page, 'Glider (Copy)').click();
     const dialog = await settled(page, editorDialog(page));
     await expect(inUseDialog(page)).toHaveCount(0); // 0 battles place the clone — no gate.
+    // AC12's fourth required axe state — the editor open ON A CLONE — which no scan covered
+    // (review 2026-09-22). The other three are in test 8 and `page.test.tsx`.
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider Variant');
     const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
     await basicInfo.getByRole('button', { name: 'Change Color' }).click();
@@ -3625,6 +3628,11 @@ test.describe('clone organism (Story 4.18)', () => {
     await expect(
       page.getByRole('heading', { level: 2, name: "Conway's Classic (Copy)" }),
     ).toBeVisible();
+
+    // Review 2026-09-22: the Clone button is `disabled` while its write is in flight, and
+    // disabling a FOCUSED button blurs it — this assertion used to report `BODY`, i.e. a keyboard
+    // user's next Tab restarted from the top of the document. The Library restores it.
+    await expect(clone).toBeFocused();
   });
 
   test('8. axe: no violations with the alert visible, and with the three-action dialog settled', async ({
