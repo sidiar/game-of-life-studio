@@ -1,3 +1,12 @@
+import {
+  BattleSchema,
+  CURRENT_FORMAT_VERSION,
+  fromBattleExport,
+  pruneAndRemapBattleGrid,
+  toBattleExport,
+  WorkspaceExportSchema,
+  type EditableGridPreset,
+} from '@gol/domain';
 import { emptyGrid, gridFromPattern, placePattern } from '@gol/test-utils';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
@@ -309,8 +318,10 @@ describe('cloneGrid (Story 3.10 Task 1, AR-31)', () => {
 });
 
 describe('grid properties (fast-check)', () => {
-  // AR-41's round-trip identity. FD7: the dense<->typed half only — the sparse `cells[]` wire form
-  // does not exist until Story 5.3's WorkspaceSerializer builds it.
+  // AR-41's round-trip identity. Story 3.3's FD7 covered the dense<->typed half only, because the
+  // sparse `cells[]` wire form did not exist yet; Story 5.3 built it (`@gol/domain`'s
+  // `workspaceExportProjection.ts`) and the last test in this block now closes the other half by
+  // COMPOSING the two conversions rather than writing a third one.
   const arbDense = fc
     .tuple(fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 12 }))
     .chain(([width, height]) =>
@@ -426,5 +437,83 @@ describe('grid properties (fast-check)', () => {
         },
       ),
     );
+  });
+
+  // ⚠️ THE SPARSE<->TYPED HALF OF AR-41 (Story 5.3, closing Story 3.3's deferred handshake).
+  //
+  // Nothing here is a third converter: the identity under test is the COMPOSITION
+  // `gridToDense . fromBattleExport . toBattleExport . gridFromDense`, four functions that already
+  // ship, two in this package and two in `@gol/domain`. It lives here rather than in `@gol/domain`
+  // because domain must not depend on `@gol/simulation` (the edge runs the other way), and beside
+  // `arbDense` because it is the generator it extends.
+  //
+  // ⚠️ `age` is NOT part of this identity. `gridToDense` drops it by design and neither the at-rest
+  // nor the wire shape carries an age at all (A-2: only `initialGrid` is persisted). The claim is
+  // about `occupant`, `width` and `height`.
+  describe('sparse <-> typed round trip (AR-41, AR-44)', () => {
+    const PRESETS = [
+      { cols: 50, rows: 30 },
+      { cols: 100, rows: 60 },
+    ] as const satisfies readonly EditableGridPreset[];
+
+    // Dense grids at the REAL editable presets (Decision A — both, never one), canonicalized
+    // through `pruneAndRemapBattleGrid` so every generated battle is schema-valid and the property
+    // is about the conversion rather than about BattleSchema rejecting random input.
+    const arbPresetBattle = fc
+      .tuple(fc.constantFrom(...PRESETS), fc.integer({ min: 0, max: 5 }))
+      .chain(([preset, rosterSize]) =>
+        fc.record({
+          preset: fc.constant(preset),
+          rosterSize: fc.constant(rosterSize),
+          dense: fc.array(
+            fc.array(fc.integer({ min: 0, max: rosterSize }), {
+              minLength: preset.cols,
+              maxLength: preset.cols,
+            }),
+            { minLength: preset.rows, maxLength: preset.rows },
+          ),
+        }),
+      )
+      .map(({ preset, rosterSize, dense }) => {
+        const pruned = pruneAndRemapBattleGrid(
+          dense,
+          Array.from({ length: rosterSize }, (_, i) => `organism-${i}`),
+        );
+        return BattleSchema.parse({
+          id: '6f3c2f5c-2f4a-4a2f-8f5d-7b1e9c3a1d20',
+          name: 'Generated',
+          organismIds: pruned.organismIds,
+          gridSize: preset,
+          gridState: pruned.gridState,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        });
+      });
+
+    it('gridToDense . fromBattleExport . toBattleExport . gridFromDense is the identity on occupant', () => {
+      fc.assert(
+        fc.property(arbPresetBattle, (battle) => {
+          const typed = gridFromDense(battle.gridState);
+
+          // Round the typed grid back out through the wire form, parsing on the way so the shape
+          // really is one `WorkspaceExportSchema` accepts rather than only one the types allow.
+          const wire = toBattleExport({ ...battle, gridState: gridToDense(typed) });
+          const parsed = WorkspaceExportSchema.parse({
+            formatVersion: CURRENT_FORMAT_VERSION,
+            appVersion: 'test',
+            exportedAt: '2026-01-01T00:00:00.000Z',
+            kind: 'workspace',
+            organisms: [],
+            battles: [wire],
+          }).battles[0];
+
+          const back = gridFromDense(fromBattleExport(parsed).gridState);
+
+          expect(Array.from(back.occupant)).toEqual(Array.from(typed.occupant));
+          expect(back.width).toBe(typed.width);
+          expect(back.height).toBe(typed.height);
+        }),
+      );
+    });
   });
 });

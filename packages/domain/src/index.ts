@@ -41,3 +41,30 @@ export { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID, DEFAULT_WORKSPACE } from './defaul
 // Story 5.8's atomic import needs the identical projection).
 export { pruneAndRemapBattleGrid } from './battleProjection';
 export type { PrunedBattleGrid } from './battleProjection';
+
+// The RFC-006 export envelope (Story 5.3) — the schema of record for every file this app writes,
+// and the dense-at-rest <-> sparse-on-the-wire conversion around it (AR-9 / AR-10). `IsoTimestamp`
+// stays out of the barrel: it is shared between two files in THIS package and no other package
+// parses a bare timestamp.
+export {
+  BattleExportSchema,
+  EXPORT_KINDS,
+  PlacedCellSchema,
+  WorkspaceExportSchema,
+} from './workspaceExportSchema';
+export type {
+  BattleExport,
+  BattleExportWire,
+  ExportKind,
+  PlacedCell,
+  WorkspaceExport,
+  WorkspaceExportWire,
+} from './workspaceExportSchema';
+
+export {
+  fromBattleExport,
+  fromEnvelope,
+  toBattleExport,
+  toEnvelope,
+} from './workspaceExportProjection';
+export type { ExportMeta } from './workspaceExportProjection';
