@@ -2328,25 +2328,45 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   - **Review 2026-09-22 (superseded by the above):** "still reports" was only true when the write
     resolved BEFORE the exit fade finished — a later resolution was stashed and replayed on the
     next unrelated close; patched (`useOrganismEditorModal.ts`, `handleSaved` hands a late record
-    on at once). That patch and its dedicated test are now dead code under the close-lock (a write
-    can never resolve after an exit any more) and were removed along with the `mountedRef` branch
-    that produced them.
-- **`saveStamp` is the seam Story 4.17 seeds from the opened organism** (Task 11) — replaces this
-  entry's earlier "flagged, not decided" for the `id` half of `projectOrganismForSave`: an edit
-  session just needs to seed `saveStamp` with the record's existing id at mount, and every Save in
-  that session already upserts it. The `schemaVersion` restamp-or-keep policy for an EDIT save is
-  still open and is Story 4.17's to decide.
+    on at once). That patch and its dedicated test are now dead code under the close-lock and
+    were removed along with the `mountedRef` branch that produced them.
+  - **Resume review 2026-09-22:** the lock covers a close DURING a write; the other order — a
+    Save clicked during the ~195 ms exit fade after a CLEAN close (the dialog is still mounted
+    and interactive with `open={false}`) — was not covered and could start a write that resolves
+    after `onExited`, exactly the replay the removed branch guarded. Patched: `saveOrganism`
+    refuses while `!open` (modal test (36)). "No write resolves after the exit" now holds for
+    every USER path by construction. **One residual, recorded not fixed:** a route-level unmount
+    of the whole Library mid-write (browser Back, address bar) still lands the write and reports
+    nothing — a rejection is lost silently and a re-entered `/organisms` may `list()` before the
+    write commits. Sub-millisecond against localStorage; RFC-001's API repository story owns it.
+- ~~**Story 4.17 needs `projectOrganismForSave` to take the record's existing `id` and decide a
+  `schemaVersion` restamp policy** for an EDIT save (this story only ever mints a fresh id and
+  stamps the current constant) — flagged, not decided, here.~~ **✅ Half-closed in Story 4.16
+  (Task 11):** `saveStamp` is the seam Story 4.17 seeds from the opened organism — an edit session
+  just needs to seed `saveStamp` with the record's existing id at mount, and every Save in that
+  session already upserts it (`saveStamp?.id ?? crypto.randomUUID()`; set on the first success
+  only). The `schemaVersion` restamp-or-keep policy for an EDIT save is still open and is Story
+  4.17's to decide.
 
 ## Deferred from: code review of 4-16-create-save-organism (2026-09-22)
 
-- **Disabling the focused Save on a FAILED organism write drops keyboard focus to `<body>`** —
+- ~~**Disabling the focused Save on a FAILED organism write drops keyboard focus to `<body>`** —
   the HTML focus-fixup rule blurs an element that becomes `disabled`; the button re-enables after
   the rejection but nothing refocuses it, so a keyboard user hears the `role="alert"` and is then
   at the document root (`OrganismEditorModal.tsx`, `disabled={isSaving}`). The same
   `disabled`-while-saving idiom `<EditorStatusBar>`'s SAVE / `<BattlePage>` ship, and no story
   specifies a refocus after a failed write; whichever story next touches the failure line should
   decide between refocusing Save, focusing the alert, or `aria-disabled` — deferred, pre-existing
-  idiom.
+  idiom.~~ **✅ Closed in Story 4.16 (Task 11, 2026-09-22)** for this editor: a settle effect
+  refocuses Save after every outcome, success or failure — only when focus is loose (`<body>`,
+  the dialog container, or `null`), never over a field the user moved into during the write
+  (resume review). `<EditorStatusBar>`'s SAVE and `<BattlePage>` still carry the original idiom.
+- **The battle-origin flows still specify "Save & Close"** — `epics.md` Stories 4.24/4.25 and
+  `prd.md`'s organism-editor line were written against the design doc's "Save & Close" exit,
+  which Story 4.16 Task 11 replaced with "Save keeps the editor open; Back returns". Those
+  planning lines were not amended here (out of the story's scope); Stories 4.24/4.25 need to read
+  them as "Save, then Back to Battle" and say so in their own ACs — deferred, resume review
+  2026-09-22.
 - **The WebKit branch of the save-close focus e2e is satisfied by NO element being focused** —
   `expect(page.locator(':focus').locator('xpath=ancestor-or-self::*[@role="dialog"]')).toHaveCount(0)`
   passes trivially when `:focus` matches nothing, which is exactly the "focus dropped to body"

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { NEW_ORGANISM_DOMINANCE } from '@gol/domain';
@@ -186,11 +186,7 @@ describe('OrganismLibrary', () => {
       expect(screen.getAllByRole('listitem')).toHaveLength(1);
     });
     expect(screen.getByRole('heading', { level: 2, name: 'Patient Defender' })).toBeInTheDocument();
-    // Two `role="status"` regions exist now (Story 4.16's save-outcome line, always mounted) — the
-    // count badge is the one whose text mentions "Organisms".
-    const countBadge = () =>
-      screen.getAllByRole('status').find((el) => /Organisms?$/.test(el.textContent ?? ''));
-    expect(countBadge()).toHaveTextContent('1 of 4 Organisms');
+    expect(screen.getByRole('status')).toHaveTextContent('1 of 4 Organisms');
 
     await user.clear(search);
 
@@ -198,7 +194,7 @@ describe('OrganismLibrary', () => {
       expect(screen.getAllByRole('listitem')).toHaveLength(4);
     });
     // Exact, not substring: the pre-clear text '1 of 4 Organisms' also contains '4 Organisms'.
-    expect(countBadge()).toHaveTextContent(/^4 Organisms$/);
+    expect(screen.getByRole('status')).toHaveTextContent(/^4 Organisms$/);
   });
 
   it('shows a message, not an empty control, when the search matches nothing — the input stays and keeps focus', async () => {
@@ -569,8 +565,15 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
         new RegExp(`^${ORGANISM_SAVED.replace(/[.]/g, '\\.')}$`),
       );
     });
-    // AC3, amended 2026-09-22: Save no longer closes the editor.
+    // AC3, amended 2026-09-22: Save no longer closes the editor. Asserted AFTER MUI's exit
+    // duration has elapsed (review 2026-09-22): under the superseded save-closes design the
+    // dialog stayed in the DOM for the ~195 ms fade, so an immediate `getByRole('dialog')` was
+    // satisfiable by the old behaviour. The hook test pins `open === true`; this pins the wire.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Back to Library' })).toBeEnabled();
   });
 
   it('(b) Back after a save shows the new card in sortLibrary position, the SAME count-badge node reads the new total (no "loading" reset, list() called exactly twice), and focus returns to the create button', async () => {
@@ -632,6 +635,7 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
   it('(d) a second Save in the same session clears then re-fills the outcome line; Back adds exactly ONE card, with the LATEST name', async () => {
     const user = userEvent.setup();
     const { organisms } = createFakeRepositories({ organisms: createMockOrganisms() });
+    const save = vi.spyOn(organisms, 'save');
 
     render(<OrganismLibrary organisms={organisms} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
@@ -646,6 +650,9 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
 
     await user.type(name, ' Mk II');
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    // The SECOND write is what this test is about — waited for by the spy count (review
+    // 2026-09-22), not by a sentence the first save had already left in the region.
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     await waitFor(() => {
       expect(saveStatusRegion(dialog)).toHaveTextContent(
         new RegExp(`^${ORGANISM_SAVED.replace(/[.]/g, '\\.')}$`),

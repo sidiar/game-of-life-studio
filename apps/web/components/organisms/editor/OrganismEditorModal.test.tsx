@@ -1354,10 +1354,15 @@ describe('OrganismEditorModal', () => {
     });
 
     // Story 4.16, Task 11: the region clears at the START of the NEXT attempt (never both lines
-    // mounted at once) and re-fills once that attempt settles.
-    it('(32) the outcome line clears at the start of the next attempt and a failure never shows both lines', async () => {
+    // mounted at once) and re-fills once that attempt settles. Ordered success FIRST (review
+    // 2026-09-22): a failure-then-success run finds the region empty after the failure only
+    // because nothing had ever filled it — the sequence that guards the clear is a SUCCESS, then a
+    // second attempt whose write is still pending (the region must already be empty) and then
+    // REJECTS (the alert alone, no stale success line beneath it).
+    it('(32) after a success, the next attempt empties the outcome line while its write is pending, and a rejection leaves the alert alone', async () => {
       const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
-      vi.spyOn(organisms, 'save').mockRejectedValueOnce(new QuotaExceededError('gol:organisms'));
+      let rejectSecond!: () => void;
+      const saveSpy = vi.spyOn(organisms, 'save');
       const onSaved = vi.fn();
       const user = userEvent.setup();
       mountModal({ organisms, onSaved });
@@ -1366,16 +1371,115 @@ describe('OrganismEditorModal', () => {
       await fillValidDraft(user, dialog);
       const save = within(dialog).getByRole('button', { name: 'Save' });
       await user.click(save);
-
-      await within(dialog).findByRole('alert');
-      expect(dialog.querySelector('[data-save-outcome]')).toBeNull();
-
-      await user.click(save);
       await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-      expect(dialog.querySelector('[data-save-error]')).toBeNull();
       expect(dialog.querySelector('[data-save-outcome]')).toHaveTextContent(
         'Organism saved successfully.',
       );
+
+      saveSpy.mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectSecond = () => reject(new QuotaExceededError('gol:organisms'));
+          }),
+      );
+      await user.click(save);
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
+      // The clear is the handler's first `setState`, before any `await` — the line is gone while
+      // the second write is still in flight, not merely replaced once it settles.
+      expect(dialog.querySelector('[data-save-outcome]')).toBeNull();
+      expect(dialog.querySelector('[data-save-error]')).toBeNull();
+
+      await act(async () => {
+        rejectSecond();
+      });
+      await within(dialog).findByRole('alert');
+      expect(dialog.querySelector('[data-save-outcome]')).toBeNull();
+      expect(onSaved).toHaveBeenCalledTimes(1);
+    });
+
+    // Review 2026-09-22: the settle-focus effect must not STEAL focus. Back is locked during the
+    // write but every field is live, and against an API repository the write is a round-trip —
+    // a user who moved into the name field keeps the caret (the `<BattlePage>` "only when focus
+    // is loose" rule).
+    it('(35) focus is NOT moved to Save when the user has placed it in a field during the write', async () => {
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      let resolveSave!: () => void;
+      const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave = resolve;
+          }),
+      );
+      const user = userEvent.setup();
+      mountModal({ organisms });
+
+      const dialog = screen.getByRole('dialog');
+      await fillValidDraft(user, dialog);
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      await user.click(save);
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+
+      const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+      await user.click(name);
+      expect(name).toHaveFocus();
+
+      await act(async () => {
+        resolveSave();
+      });
+      await waitFor(() => expect(save).toBeEnabled());
+      expect(name).toHaveFocus();
+      expect(save).not.toHaveFocus();
+    });
+
+    // Review 2026-09-22: the close-lock (Task 12) covers a close DURING a write; this is the
+    // other order — a Save during the ~195 ms exit fade after a clean close. The dialog is still
+    // mounted and interactive with `open={false}`; a write started there could resolve after
+    // `onExited`, when the hook has nothing ahead to hand the record on to. Refused outright.
+    it('(36) Save during the exit fade after a clean close writes nothing', async () => {
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      const saveSpy = vi.spyOn(organisms, 'save');
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <OrganismEditorModal
+          open
+          origin="library"
+          onClose={onClose}
+          library={LIBRARY}
+          organisms={organisms}
+          onSaved={onSaved}
+        />,
+      );
+
+      const dialog = screen.getByRole('dialog');
+      await fillValidDraft(user, dialog);
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+
+      await user.keyboard('{Escape}');
+      expect(onClose).toHaveBeenCalledTimes(1);
+      rerender(
+        <OrganismEditorModal
+          open={false}
+          origin="library"
+          onClose={onClose}
+          library={LIBRARY}
+          organisms={organisms}
+          onSaved={onSaved}
+        />,
+      );
+      // Still in the DOM: MUI keeps the paper mounted through the exit transition.
+      expect(save).toBeInTheDocument();
+      expect(save).toBeEnabled();
+
+      fireEvent.click(save);
+      save.focus();
+      await user.keyboard('{Enter}');
+      await act(async () => {});
+
+      expect(saveSpy).not.toHaveBeenCalled();
+      expect(onSaved).not.toHaveBeenCalled();
+      expect((await organisms.list()).length).toBe(LIBRARY.length);
     });
 
     // Story 4.16, Task 11: focus returns to Save once the write settles — while `isSaving` the
@@ -1383,7 +1487,7 @@ describe('OrganismEditorModal', () => {
     it('(33) focus returns to Save once a successful write settles', async () => {
       const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
       let resolveSave!: () => void;
-      vi.spyOn(organisms, 'save').mockImplementationOnce(
+      const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
         () =>
           new Promise<void>((resolve) => {
             resolveSave = resolve;
@@ -1405,6 +1509,9 @@ describe('OrganismEditorModal', () => {
       save.blur();
       expect(save).not.toHaveFocus();
 
+      // The write sits behind an awaited digest — wait for it to be REACHED before resolving
+      // (review 2026-09-22): `resolveSave` is unassigned until `organisms.save` runs.
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
       await act(async () => {
         resolveSave();
       });
@@ -1414,7 +1521,7 @@ describe('OrganismEditorModal', () => {
     it('(34) focus returns to Save once a rejected write settles', async () => {
       const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
       let resolveSave!: () => void;
-      vi.spyOn(organisms, 'save').mockImplementationOnce(
+      const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
         () =>
           new Promise<void>((_resolve, reject) => {
             resolveSave = () => reject(new QuotaExceededError('gol:organisms'));
@@ -1432,6 +1539,9 @@ describe('OrganismEditorModal', () => {
       save.blur();
       expect(save).not.toHaveFocus();
 
+      // The write sits behind an awaited digest — wait for it to be REACHED before resolving
+      // (review 2026-09-22): `resolveSave` is unassigned until `organisms.save` runs.
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
       await act(async () => {
         resolveSave();
       });
@@ -1445,7 +1555,7 @@ describe('OrganismEditorModal', () => {
       it('Escape does not close the dialog while a write is in flight, and closes once it settles', async () => {
         const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
         let resolveSave!: () => void;
-        vi.spyOn(organisms, 'save').mockImplementationOnce(
+        const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
           () =>
             new Promise<void>((resolve) => {
               resolveSave = resolve;
@@ -1457,18 +1567,30 @@ describe('OrganismEditorModal', () => {
 
         const dialog = screen.getByRole('dialog');
         await fillValidDraft(user, dialog);
+        const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
         await user.click(within(dialog).getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
 
+        // Like-for-like with the positive control below (review 2026-09-22): both Escapes are
+        // pressed with focus on a LIVE control inside the dialog. Pressed while the (jsdom-
+        // unfixed) disabled Save still held focus, the negative would pass whether or not MUI's
+        // root `onKeyDown` ever saw the key.
+        name.focus();
+        expect(name).toHaveFocus();
         await user.keyboard('{Escape}');
         expect(onClose).not.toHaveBeenCalled();
         expect(screen.getByRole('dialog')).toBeInTheDocument();
 
+        // The write sits behind an awaited digest — wait for it to be REACHED before resolving
+        // (review 2026-09-22): `resolveSave` is unassigned until `organisms.save` runs.
+        await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
         await act(async () => {
           resolveSave();
         });
         await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
 
+        name.focus();
+        expect(name).toHaveFocus();
         await user.keyboard('{Escape}');
         expect(onClose).toHaveBeenCalledTimes(1);
       });
@@ -1476,7 +1598,7 @@ describe('OrganismEditorModal', () => {
       it('a Back click does not close the dialog while a write is in flight, and Back is disabled meanwhile', async () => {
         const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
         let resolveSave!: () => void;
-        vi.spyOn(organisms, 'save').mockImplementationOnce(
+        const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
           () =>
             new Promise<void>((resolve) => {
               resolveSave = resolve;
@@ -1497,6 +1619,9 @@ describe('OrganismEditorModal', () => {
         fireEvent.click(back);
         expect(onClose).not.toHaveBeenCalled();
 
+        // The write sits behind an awaited digest — wait for it to be REACHED before resolving
+        // (review 2026-09-22): `resolveSave` is unassigned until `organisms.save` runs.
+        await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
         await act(async () => {
           resolveSave();
         });
@@ -1509,7 +1634,7 @@ describe('OrganismEditorModal', () => {
       it('the ✕ button does not close the dialog while a write is in flight', async () => {
         const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
         let resolveSave!: () => void;
-        vi.spyOn(organisms, 'save').mockImplementationOnce(
+        const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
           () =>
             new Promise<void>((resolve) => {
               resolveSave = resolve;
@@ -1527,6 +1652,9 @@ describe('OrganismEditorModal', () => {
         await user.click(within(dialog).getByRole('button', { name: 'Close' }));
         expect(onClose).not.toHaveBeenCalled();
 
+        // The write sits behind an awaited digest — wait for it to be REACHED before resolving
+        // (review 2026-09-22): `resolveSave` is unassigned until `organisms.save` runs.
+        await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
         await act(async () => {
           resolveSave();
         });

@@ -138,18 +138,23 @@ export function useOrganismEditorModal(
     setDialogOpen(true);
   }, []);
 
-  // Close ✕, Back and Escape all land here — routed through the modal's own guarded handler
-  // (Task 12) so none of them can fire while a write is in flight. Nothing else moves — no
-  // repository call, no state beyond the modal's own lifecycle; the unsaved-changes guard
-  // (Story 4.23) inserts itself in front of this callback later.
+  // Close ✕, Back and Escape all land here. This callback is NOT itself guarded against an
+  // in-flight write — the Task 12 lock lives in the modal (Escape and ✕ route through its
+  // `handleRequestClose`; Back is `disabled={isSaving}`), so it holds for the three user close
+  // paths and for nothing else that may one day reach `modalProps.onClose` directly (review
+  // 2026-09-22). Nothing else moves — no repository call, no state beyond the modal's own
+  // lifecycle; the unsaved-changes guard (Story 4.23) inserts itself in front of this callback
+  // later, and inherits the lock only through those three controls.
   const handleClose = useCallback(() => setDialogOpen(false), []);
 
   // Story 4.16, FD4. Amended 2026-09-22 (Task 11, AC3): the editor stays open through a save, so
   // this is no longer a close channel — it only STASHES the latest record (overwriting; the last
   // save in the session wins) for `handleExited` to hand on once the user actually closes and the
-  // fade has finished. With Task 12's close-lock in place, a write can never resolve after the
-  // dialog has exited, so the earlier "report at once if already unmounted" branch is dead code
-  // and has been removed along with its test.
+  // fade has finished. With Task 12's close-lock and the modal's own "no Save during the exit
+  // fade" guard in place, no USER action can leave a write resolving after the dialog has exited,
+  // so the earlier "report at once if already unmounted" branch is dead code and has been removed
+  // along with its test. The one remaining path — the whole Library unmounting mid-write (a route
+  // change) — lands the write and reports nothing; `deferred-work.md` records it.
   const handleSaved = useCallback((organism: Organism) => {
     pendingSavedRef.current = organism;
   }, []);

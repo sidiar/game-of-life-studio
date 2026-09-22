@@ -147,13 +147,22 @@ const BackButton = styled('button')({
   letterSpacing: '0.5px',
   cursor: 'pointer',
   fontFamily: 'inherit',
-  '&:hover': {
+  '&:hover:not(:disabled)': {
     background: 'var(--gol-bg-hover)',
     borderColor: 'var(--gol-text-secondary)',
   },
   '&:focus-visible': {
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '2px',
+  },
+  // Task 12 locks this button while a write is in flight; the pre-validated disabled trio every
+  // Back control on the battle route wears (`<SidebarFooter>`), so the lock is visible rather
+  // than a live-looking button that ignores the click (review 2026-09-22).
+  '&:disabled': {
+    background: 'var(--gol-action-disabled-bg)',
+    borderColor: 'var(--gol-border)',
+    color: 'var(--gol-action-disabled)',
+    cursor: 'not-allowed',
   },
 });
 
@@ -314,7 +323,8 @@ export default function OrganismEditorModal({
   const savingRef = useRef(false);
   // Story 4.16, AC3 (Task 11): the id a later Save in THIS session reuses, so a second write
   // upserts the same organism instead of minting a sibling — `organisms.save()` upserts by id.
-  // Set once, on the first success; read back (never overwritten with a fresh uuid) forever after.
+  // Set once, on the first success (`saveOrganism` guards the set on `null`); read back — never
+  // overwritten with a fresh uuid — for the rest of the mount.
   const [saveStamp, setSaveStamp] = useState<{ id: string } | null>(null);
   // The success half of the in-flow outcome pair; `saveError` is the failure half. `null` is
   // "nothing to report" — the same idiom as `saveError`. Never both set at once (Task 11).
@@ -415,7 +425,12 @@ export default function OrganismEditorModal({
   // — `handleSave` below stays the fire-and-forget entry point the Save `<Button>` has always
   // called.
   const saveOrganism = useCallback(async (): Promise<void> => {
-    if (savingRef.current) return;
+    // `!open` (review 2026-09-22): the dialog stays mounted and interactive through the ~195 ms
+    // exit fade after a CLEAN close (Back/Escape/✕ with nothing in flight), and a Save landing in
+    // that window would start a write the close-lock (Task 12) cannot see — one that could resolve
+    // after `onExited`, when the hook has nothing ahead to hand the record on to. Refusing here
+    // is what makes "no write resolves after the exit" true by construction, not by timing.
+    if (savingRef.current || !open) return;
     const first = errors[0];
     // Cleared at the START of every attempt, success or refusal — an identical message
     // re-rendered in place would not re-announce through `role="alert"`/`role="status"` (the
@@ -439,6 +454,13 @@ export default function OrganismEditorModal({
       const id = saveStamp?.id ?? crypto.randomUUID();
       record = await projectOrganismForSave(draft, id);
       await organisms.save(record);
+      // The stamp and the outcome are set BEFORE `finally` releases `savingRef` (review
+      // 2026-09-22): the release must never precede the stamp, or a closure still holding
+      // `saveStamp === null` would be re-entrant for one tick — React batches all of these into
+      // the one commit today, but the ordering should hold by construction, not by batching.
+      // The stamp is set on the FIRST success only; every later pass already carries it.
+      if (saveStamp === null) setSaveStamp({ id: record.id });
+      setSaveOutcome(saveOutcomeMessage(record));
     } catch (error) {
       setSaveError(saveFailureMessage(error, 'organism'));
       record = null;
@@ -453,14 +475,14 @@ export default function OrganismEditorModal({
     }
     // OUTSIDE the `try`/`catch`: once `organisms.save()` has resolved the record IS in storage,
     // and a throw from `onSaved`'s own handling must not be reported as "this organism could not
-    // be saved". Back/Escape/✕ are locked while a write is in flight (Task 12), so there is no
-    // longer a "closed before this resolves" case to reason about.
+    // be saved". No USER close path can run while a write is in flight (Task 12) and no Save can
+    // start during an exit fade (the `!open` guard above), so a write never resolves after the
+    // dialog has exited; a route-level unmount of the whole Library mid-write is the one residual
+    // (the write still lands; nothing reports it — `deferred-work.md`).
     if (record !== null) {
-      setSaveStamp({ id: record.id });
-      setSaveOutcome(saveOutcomeMessage(record));
       onSaved(record);
     }
-  }, [errors, draft, organisms, onSaved, saveStamp]);
+  }, [errors, draft, organisms, onSaved, saveStamp, open]);
 
   const handleSave = useCallback(() => {
     void saveOrganism();
@@ -469,8 +491,11 @@ export default function OrganismEditorModal({
   // Story 4.16, AC3, Task 12 (owner's review decision, 2026-09-22, option (b)): Escape and the
   // backdrop (unreachable under `fullScreen`, kept for documentation) both route through the
   // dialog's `onClose`; the ✕ button calls it directly. One guarded handler for both, rather than
-  // checking `savingRef.current` twice — the Back button below gets `disabled={isSaving}` instead,
-  // since it is a visible control the user can see go inert, unlike Escape or a backdrop click.
+  // checking `savingRef.current` twice — the Back button below gets `disabled={isSaving}` instead
+  // (the `<SidebarFooter>` idiom, with its disabled trio so the lock is visible). The lock lives
+  // HERE, not in the hook: `onClose` itself stays unguarded, so a caller who reaches it by another
+  // route (Story 4.23's guard will sit in front of it) inherits this lock only through these two
+  // controls and Escape.
   const handleRequestClose = useCallback(() => {
     if (savingRef.current) return;
     onClose();
@@ -478,9 +503,15 @@ export default function OrganismEditorModal({
 
   // Story 4.16, AC3: focus returns to Save once the write settles, success or failure — while
   // `isSaving` the button is `disabled`, which drops focus to `<body>` (the HTML focus-fixup
-  // rule), and the editor is still the user's place.
+  // rule), and the editor is still the user's place. Only when focus is LOOSE (review
+  // 2026-09-22, the `<BattlePage>` fullscreen-exit rule): a user who moved into a field during
+  // the write — a round-trip against an API repository, not the few ms localStorage takes — keeps
+  // the caret. "Loose" here is anything outside the editor's own shell: `<body>`, `null`, or the
+  // dialog container MUI's focus trap parks focus on after the fixup blur.
   useEffect(() => {
     if (saveSettledSeq === 0) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body && shellRef.current?.contains(active)) return;
     saveButtonRef.current?.focus();
   }, [saveSettledSeq]);
 
@@ -528,9 +559,10 @@ export default function OrganismEditorModal({
             onClick={onClose}
             disabled={isSaving}
             // Task 12: locked while a write is in flight, the `BattlePage.tsx:1010`
-            // `backDisabled={isSaving}` idiom. This styled button carries no `transition` of its
-            // own (only the `:hover`/`:focus-visible` pseudo-classes do), so — unlike Save's MUI
-            // `Button` — there is no mid-fade axe trap to override here.
+            // `backDisabled={isSaving}` idiom, wearing `<SidebarFooter>`'s disabled trio. This
+            // styled button carries no `transition` of its own (only the `:hover`/`:focus-visible`
+            // pseudo-classes do), so — unlike Save's MUI `Button` — there is no mid-fade axe trap
+            // to override here.
           >
             {/* Decorative glyph; the accessible name must be exactly the label — "left arrow back
                 to library" is noise. The house `←`, not the AC's `◄` ASCII stand-in (FD3). */}
