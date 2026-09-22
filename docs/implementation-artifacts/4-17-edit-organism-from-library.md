@@ -4,7 +4,7 @@ baseline_commit: aa8ff8e
 
 # Story 4.17: Edit Organism from Library
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -484,16 +484,19 @@ Reviewed 2026-09-22 on **Fable 5.1** against the Opus implementation (`3ebe903`)
 parallel layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 1 decision-needed, 9
 patches (all applied), 4 defers, 17 dismissed. Decisions are the owner's, after the PR.
 
-- [ ] [Review][Decision] **The in-use dialog asks "Clone this organism first to create a
-  Battle-specific variant?" while no Clone action exists until Story 4.18** — AC2 mandates the
+- [x] [Review][Decision] **The in-use dialog asks "Clone this organism first to create a
+  Battle-specific variant?" while no Clone action exists until Story 4.18** — **→ Owner's answer
+  (2026-09-22): (1) — keep the verbatim copy as shipped. No code changed; Story 4.18 adds the
+  Clone & Edit button and the sentence becomes true, so the dead-affordance window is one
+  story.** AC2 mandates the
   PRD sentence verbatim (`prd.md:125`) and FD5 defers the Clone & Edit button, so the shipped
   dialog poses a question the user cannot answer "yes" to: the dead affordance FD5 kept off the
   button row has moved into the copy. Options: **(1)** keep the verbatim copy as shipped (AC2 as
   written; 4.18 adds the button and the sentence becomes true — the window is one story);
   **(2)** drop the last sentence from `organismInUseMessage` until 4.18 restores it with the
   button (a one-line change plus the copy pin in `OrganismInUseDialog.test.tsx` (a)); **(3)**
-  pull Clone & Edit into this story (the FD5 open flag — about a day of 4.18's scope). Left
-  unresolved; no code changed for it.
+  pull Clone & Edit into this story (the FD5 open flag — about a day of 4.18's scope). Resolved
+  by the owner as (1); no code changed for it.
 - [x] [Review][Patch] Cancel/Escape during the gate's exit fade after Edit Anyway was ignored —
   `proceedRef` survived and `handleGateExited` opened the editor the user had just declined; the
   dialog stays clickable through the fade and its `onClose` is unguarded
