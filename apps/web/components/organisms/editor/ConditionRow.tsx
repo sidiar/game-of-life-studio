@@ -256,8 +256,19 @@ export default function ConditionRow({
           }
         }}
       >
+        {/* Story 4.17 (AC6): `organisms` is the library MINUS the organism under edit, so it is
+            empty when that organism is the sole library entry (Conway's Classic in a fresh
+            workspace). A switch INTO `organismType` there would land on the `ORGANISM_REQUIRED`
+            state with nothing to pick — unfixable from this row (the Story 4.13 review's finding).
+            Disabling the OPTION, not hiding the row kind, keeps a seeded `organismType` row's
+            value cell rendering as-is (its `Unknown organism` entry stays selectable) and merely
+            stops a switch into the property. */}
         {CONDITION_PROPERTIES.map((property) => (
-          <option key={property} value={property}>
+          <option
+            key={property}
+            value={property}
+            disabled={property === 'organismType' && organisms.length === 0}
+          >
             {conditionPropertyLabel(property)}
           </option>
         ))}

@@ -1,13 +1,16 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { CONWAYS_CLASSIC } from '@gol/test-utils';
+import { CONWAYS_CLASSIC, createMockWorkspace } from '@gol/test-utils';
 import {
   CONWAYS_CLASSIC_ID,
+  CURRENT_FORMAT_VERSION,
   MAX_DOMINANCE,
   MAX_ORGANISM_NAME_LENGTH,
   MIN_DOMINANCE,
   NEW_ORGANISM_DOMINANCE,
+  ORGANISM_SCHEMA_VERSION,
 } from '@gol/domain';
+import { STORAGE_KEYS } from '@gol/persistence';
 
 const CREATE = '+ Create New Organism';
 
@@ -247,23 +250,28 @@ test.describe('organism card grid (Story 4.2)', () => {
   // Unchanged by Story 4.3: the create button sits BEFORE the search input in DOM order (mockup
   // `:405-406`), so the path from the input to the card has no new stop in it. The button's own
   // reachability is pinned in the Story 4.3 block below.
-  test('is keyboard-reachable from the search input to the card', async ({ page, browserName }) => {
+  // Story 4.17 retargets this (AC7): the card's Edit button is its one keyboard stop; the
+  // article itself is no longer focusable.
+  test("is keyboard-reachable from the search input to the card's Edit button", async ({
+    page,
+    browserName,
+  }) => {
     await page.goto('/organisms');
     await expect(page.getByText("Conway's Classic")).toBeVisible();
 
     const search = page.getByRole('textbox', { name: 'Search organisms' });
     await search.click();
 
-    // WebKit needs Alt+Tab to reach a tabIndex stop the same way it needs it for a plain link
+    // WebKit needs Alt+Tab to reach a button the same way it needs it for a plain link
     // (`:48-89` above) — Safari's default with "Press Tab to highlight each item" off leaves a
     // plain Tab from a focused text input on the input itself.
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
-    const card = page.getByRole('article', { name: "Conway's Classic" });
+    const edit = page.getByRole('button', { name: "Edit Conway's Classic" });
 
     let reached = false;
     for (let i = 0; i < 5; i += 1) {
       await page.keyboard.press(tabKey);
-      const isFocused = await card.evaluate((el) => el === document.activeElement);
+      const isFocused = await edit.evaluate((el) => el === document.activeElement);
       if (isFocused) {
         reached = true;
         break;
@@ -3076,6 +3084,300 @@ test.describe('create & save organism (Story 4.16)', () => {
     // The Save button has `transition: 'none'` (FD8) — settled the instant it re-enables.
     await expect(save(dialog)).toBeEnabled();
 
+    ({ violations } = await new AxeBuilder({ page }).analyze());
+    expect(violations).toEqual([]);
+  });
+});
+
+// Copied from e2e/deleteBattle.spec.ts (Story 1.13; itself copied from gallery.spec.ts) rather
+// than shared through a new module — the standing extraction entry (`deferred-work.md`) fires only
+// for a story touching more than one spec's seeding, and this one touches this file alone. Keep
+// the copies in sync if either changes; e2e/ is exempt from the @gol/test-utils import boundary
+// (eslint.config.mjs). Fifth copy (Story 4.17), recorded against that entry.
+function buildSeedPayload() {
+  const { battles, organisms } = createMockWorkspace();
+  const battlesRecord: Record<string, unknown> = Object.fromEntries(battles.map((b) => [b.id, b]));
+  const organismsRecord = Object.fromEntries(organisms.map((o) => [o.id, o]));
+
+  return JSON.parse(JSON.stringify({ battles: battlesRecord, organisms: organismsRecord })) as {
+    battles: unknown;
+    organisms: unknown;
+  };
+}
+
+async function seedWorkspace(page: Page) {
+  const payload = buildSeedPayload();
+
+  await page.addInitScript(
+    ([keys, formatVersion, data]) => {
+      localStorage.setItem(
+        (keys as Record<string, string>).schema,
+        JSON.stringify({ formatVersion }),
+      );
+      localStorage.setItem(
+        (keys as Record<string, string>).battles,
+        JSON.stringify((data as { battles: unknown }).battles),
+      );
+      localStorage.setItem(
+        (keys as Record<string, string>).organisms,
+        JSON.stringify((data as { organisms: unknown }).organisms),
+      );
+    },
+    [STORAGE_KEYS, CURRENT_FORMAT_VERSION, payload] as const,
+  );
+}
+
+/**
+ * Registered AFTER `seedWorkspace` (init scripts run in registration order — the
+ * `battleRoute.spec.ts` `seedConwaysClassic` precedent): merges Conway's Classic (so M9 holds on
+ * the page — it is placed in battle B) and an UNUSED Glider (placed nowhere) into the mock
+ * workspace's `gol:organisms`. Deliberately not folded into the copied helpers above.
+ */
+async function seedExtraOrganisms(page: Page) {
+  const glider = { ...CONWAYS_CLASSIC, id: 'unused-glider', name: 'Glider' };
+  await page.addInitScript(
+    ([keys, extras]) => {
+      const key = (keys as Record<string, string>).organisms;
+      const stored = localStorage.getItem(key);
+      const record = stored === null ? {} : (JSON.parse(stored) as Record<string, unknown>);
+      for (const organism of extras as Array<{ id: string }>) record[organism.id] = organism;
+      localStorage.setItem(key, JSON.stringify(record));
+    },
+    [STORAGE_KEYS, JSON.parse(JSON.stringify([CONWAYS_CLASSIC, glider])) as unknown] as const,
+  );
+}
+
+test.describe('edit organism from library (Story 4.17)', () => {
+  const USED = 'Aggressive Colonizer';
+  const editButton = (page: Page, name: string) =>
+    page.getByRole('button', { name: `Edit ${name}`, exact: true });
+  const editorDialog = (page: Page) => page.getByRole('dialog', { name: 'Organism Editor' });
+  const inUseDialog = (page: Page) => page.getByRole('dialog', { name: /^Used in \d+ Battles?$/ });
+  const back = (dialog: Locator) => dialog.getByRole('button', { name: 'Back to Library' });
+  const countBadge = (page: Page) => page.getByRole('status');
+
+  /** The settle idiom `openEditor` records, for whichever dialog follows an Edit click. */
+  async function settled(page: Page, dialog: Locator) {
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
+    return dialog;
+  }
+
+  async function gotoSeeded(page: Page) {
+    await seedWorkspace(page);
+    await seedExtraOrganisms(page);
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(countBadge(page)).toHaveText('5 Organisms');
+  }
+
+  const storage = (page: Page, key: string) => page.evaluate((k) => localStorage.getItem(k), key);
+
+  test('1. an unused organism opens the editor directly, populated, with no warning and zero console errors', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    await editButton(page, 'Glider').click();
+
+    const dialog = await settled(page, editorDialog(page));
+    await expect(dialog.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('Glider');
+    await expect(inUseDialog(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('2. a used organism is gated; Cancel (Escape) leaves everything untouched', async ({
+    page,
+  }) => {
+    await gotoSeeded(page);
+    const organismsBefore = await storage(page, 'gol:organisms');
+    const battlesBefore = await storage(page, 'gol:battles');
+
+    await editButton(page, USED).click();
+
+    const gate = await settled(page, page.getByRole('dialog', { name: 'Used in 2 Battles' }));
+    await expect(gate).toContainText('This organism is used in 2 Battles.');
+    await expect(gate).toContainText(
+      'Clone this organism first to create a Battle-specific variant?',
+    );
+    await expect(gate.getByRole('button', { name: 'Cancel' })).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(gate).not.toBeVisible();
+    await expect(editorDialog(page)).toHaveCount(0);
+    expect(await storage(page, 'gol:organisms')).toBe(organismsBefore);
+    expect(await storage(page, 'gol:battles')).toBe(battlesBefore);
+  });
+
+  test('3. Edit Anyway opens the editor populated; an edit propagates to the battle that places it, without a battle write (AC3, AC4, FR-7.15)', async ({
+    page,
+  }) => {
+    await gotoSeeded(page);
+    const battlesBefore = await storage(page, 'gol:battles');
+    const fixture = createMockWorkspace().organisms[0];
+
+    await editButton(page, USED).click();
+    const gate = await settled(page, page.getByRole('dialog', { name: 'Used in 2 Battles' }));
+    await gate.getByRole('button', { name: 'Edit Anyway' }).click();
+    await expect(gate).not.toBeVisible();
+
+    const dialog = await settled(page, editorDialog(page));
+    await expect(dialog.getByRole('textbox', { name: 'Organism Name' })).toHaveValue(USED);
+    await expect(dialog.getByRole('textbox', { name: 'Dominance value' })).toHaveValue(
+      String(fixture.dominance),
+    );
+    await expect(dialog.getByRole('switch', { name: 'Aging Degradation' })).toHaveAttribute(
+      'aria-checked',
+      String(fixture.agingEnabled),
+    );
+    const rules = dialog.getByRole('region', { name: 'Survival Rules' });
+    await expect(rules.getByRole('group', { name: /^Rule \d+$/ })).toHaveCount(
+      fixture.survivalRules.length,
+    );
+    await expect(row(cardGroup(rules, 1), 1).property).toHaveValue(
+      fixture.survivalRules[0].conditions[0].property,
+    );
+
+    // Rename and re-colour (the 4.8 pick idiom), then Save.
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Aggressive Colonizer v2');
+    const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
+    await basicInfo.getByRole('button', { name: 'Change Color' }).click();
+    await basicInfo
+      .getByRole('radiogroup', { name: 'Organism Color' })
+      .getByRole('radio', { name: 'Amber' })
+      .click();
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole('article', { name: 'Aggressive Colonizer v2' })).toBeVisible();
+    await expect(countBadge(page)).toHaveText('5 Organisms');
+
+    const stored = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const matches = Object.values(stored).filter((o) => o.id === fixture.id);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].name).toBe('Aggressive Colonizer v2');
+    expect(matches[0].colorToken).toBe('amber');
+    expect(matches[0].schemaVersion).toBe(ORGANISM_SCHEMA_VERSION);
+    expect(await storage(page, 'gol:battles')).toBe(battlesBefore);
+
+    // M4: thumbnails render on demand, so the Gallery tile shows the NEW name with no battle write.
+    // A CLIENT-SIDE navigation through the nav link, never `page.goto('/')`: the init scripts
+    // above re-run on every full document load and would re-seed the fixture's original name.
+    await page.getByRole('navigation').getByRole('link', { name: 'Battles' }).click();
+    const tile = page.locator('article', {
+      has: page.getByRole('heading', { name: 'Grand Colony War' }),
+    });
+    await expect(tile.getByRole('img', { name: 'Aggressive Colonizer v2' })).toBeVisible();
+  });
+
+  test("4. an unchanged re-save of Conway's Classic (SYSTEM, Used in 1 Battle) is byte-identical", async ({
+    page,
+  }) => {
+    await gotoSeeded(page);
+    const before = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+
+    await editButton(page, "Conway's Classic").click();
+    const gate = await settled(page, page.getByRole('dialog', { name: 'Used in 1 Battle' }));
+    await gate.getByRole('button', { name: 'Edit Anyway' }).click();
+    const dialog = await settled(page, editorDialog(page));
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+
+    const after = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(after[CONWAYS_CLASSIC_ID]).toEqual(before[CONWAYS_CLASSIC_ID]);
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+  });
+
+  test("5. focus: after Back, the edited organism's Edit button is focused", async ({
+    page,
+    browserName,
+  }) => {
+    await gotoSeeded(page);
+
+    await editButton(page, USED).click();
+    const gate = await settled(page, page.getByRole('dialog', { name: 'Used in 2 Battles' }));
+    await gate.getByRole('button', { name: 'Edit Anyway' }).click();
+    const dialog = await settled(page, editorDialog(page));
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Aggressive Colonizer v2');
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+
+    if (browserName === 'webkit') {
+      // WebKit does not focus a <button> on click (the 4.3 note) — assert only that focus is not
+      // left inside a dialog.
+      await expect(
+        page.locator(':focus').locator('xpath=ancestor-or-self::*[@role="dialog"]'),
+      ).toHaveCount(0);
+    } else {
+      await expect(editButton(page, 'Aggressive Colonizer v2')).toBeFocused();
+    }
+  });
+
+  test("6. keyboard: Tab from the search input reaches the first card's Edit button; Enter opens the gate", async ({
+    page,
+    browserName,
+  }) => {
+    await gotoSeeded(page);
+    const search = page.getByRole('textbox', { name: 'Search organisms' });
+    await search.click();
+
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    // First in `sortLibrary` order: Conway's Classic (SYSTEM) sorts first.
+    const edit = editButton(page, "Conway's Classic");
+    let reached = false;
+    for (let i = 0; i < 5; i += 1) {
+      await page.keyboard.press(tabKey);
+      if (await edit.evaluate((el) => el === document.activeElement)) {
+        reached = true;
+        break;
+      }
+    }
+    expect(reached).toBe(true);
+
+    await page.keyboard.press('Enter');
+    await settled(page, page.getByRole('dialog', { name: 'Used in 1 Battle' }));
+  });
+
+  test('7. has no axe violations with the in-use dialog settled, and with the seeded editor settled', async ({
+    page,
+  }) => {
+    await gotoSeeded(page);
+    let { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+
+    await editButton(page, USED).click();
+    const gate = await settled(page, page.getByRole('dialog', { name: 'Used in 2 Battles' }));
+    await expect(gate.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    // Button's own colour transition (250ms) is unsynchronised with the Dialog's Fade — the
+    // `deleteBattle.spec.ts` measurement.
+    await page.waitForTimeout(300);
+    ({ violations } = await new AxeBuilder({ page }).analyze());
+    expect(violations).toEqual([]);
+
+    await gate.getByRole('button', { name: 'Edit Anyway' }).click();
+    await expect(gate).not.toBeVisible();
+    await settled(page, editorDialog(page));
+    await page.waitForTimeout(300);
     ({ violations } = await new AxeBuilder({ page }).analyze());
     expect(violations).toEqual([]);
   });

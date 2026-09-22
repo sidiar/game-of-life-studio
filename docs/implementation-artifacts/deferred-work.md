@@ -750,11 +750,13 @@ Review Findings; these are the items consciously left open.
   `apps/web/lib/organisms/conditionDraft.ts`) — Story 4.11 builds only the vocabulary, not the
   summariser or the sentence on `<OrganismCard>` itself. **Pick this up in Story 4.20**, with the
   card's stat block.
-- **The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
+- ~~**The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
   `tabIndex={0}` because it has no inner control to be the keyboard stop instead (organism cards
   open a modal in `Story 4.17`, which does not exist yet). Once Edit lands inside the card, a stop
   wrapping a stop is legal but noisy. **Story 4.17 decides** whether the article stays a tab stop
-  once it has focusable children.
+  once it has focusable children.~~ **✅ Closed in Story 4.17 (2026-09-22):** the Edit button is
+  the card's ONE keyboard stop; the article drops `tabIndex`, keeps `aria-labelledby`, and
+  `:focus-within` still lifts it. The Story 4.2 keyboard tests (unit + e2e) are retargeted.
 - **`SectionHeader` stays duplicated between `<OrganismLibrary>` and `<BattleGallery>`** (FD9) —
   unchanged from Story 4.1's deferral. As of Story 3.17 the Gallery change this entry waited on is
   in (`BattleTile.tsx`'s action band; `<BattleGallery>` itself untouched), so the precondition is
@@ -1440,9 +1442,12 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   satisfied either way, and the alternative is a provenance flag Story 4.8 AC3 already forbade.
   Flagged for Sidiar as a product nuance, not a defect (also recorded in the story file's own "Open
   flags for the owner").
-- **Story 4.17 must pass the library MINUS the organism under edit** to `usersByColorToken`, and
+- ~~**Story 4.17 must pass the library MINUS the organism under edit** to `usersByColorToken`, and
   seed `seedValue` from the loaded record — otherwise every edit opens on a self-collision warning
-  (the organism warning about its own existing colour).
+  (the organism warning about its own existing colour).~~ **✅ Closed in Story 4.17 (2026-09-22):**
+  the modal derives `others = library.filter(o => o.id !== organism.id)` for BOTH library views
+  (colour warning and organism-type dropdown); `seedValue` is the record's token. Pinned by modal
+  tests 41/41b.
 - **G5 simulates the background too (FD7).** The doc's earlier manual figure (deutan ≈ 2.96) did
   not record whether `#0a0a0a` itself went through `simulateCvd` before the comparison; G5 now does
   this on both sides, always. Record which the gate does so the next re-tune compares like with
@@ -1460,9 +1465,11 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   collide. The live-region corollary: picking token A then token B, each used by one organism
   with the same display name, leaves the `role="status"` text unchanged, so nothing is announced
   the second time. Pre-existing naming model, not this story's; disambiguating (an id suffix, a
-  count, a `key` on the region) is a product call. **Pick this up with Story 4.17** (edit flow —
-  the first place a user sees their own duplicate names beside each other) or whichever story
-  next touches the sentence.
+  count, a `key` on the region) is a product call. ~~**Pick this up with Story 4.17** (edit flow —
+  the first place a user sees their own duplicate names beside each other)~~ or whichever story
+  next touches the sentence. **Story 4.17 passed on it (review 2026-09-22):** the story touches
+  neither `colorReuseWarning` nor the sentence, and its Edit buttons (`aria-label="Edit <name>"`)
+  are one more consumer of the same naming model — see the 4.17 review section below.
 
 ## Deferred from: Story 3-17-run-battle-from-gallery (2026-09-17)
 
@@ -1563,8 +1570,11 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   type is `readonly Condition[]` today because nothing here edits them.~~ — **✅ Resolved in Story
   4.11.** `RuleDraft.conditions` is `readonly ConditionDraft[]`; `ruleDraft.ts` gained
   `updateRuleConditions` and `ruleDraftFrom` as the two bridges.
-- **Story 4.17 seeds `survivalRules` by stripping `contentHash`** from the record's rules — and
-  must not re-mint ids (identity is stable across edits, RFC-004 §2.4).
+- ~~**Story 4.17 seeds `survivalRules` by stripping `contentHash`** from the record's rules — and
+  must not re-mint ids (identity is stable across edits, RFC-004 §2.4).~~ **✅ Closed in Story 4.17
+  (2026-09-22):** `organismDraftFrom` → `ruleDraftFrom` keeps rule ids, drops the hash;
+  `organismDraft.test.ts` pins `projectOrganismForSave(organismDraftFrom(o), o.id)` deep-equals `o`
+  for Conway and every mock organism.
 
 ## Deferred from: code review of 4-10-rule-cards-empty-state (2026-09-17)
 
@@ -1628,10 +1638,14 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   universe now derives in `@gol/domain` — moving it is a two-line symmetry change for the next
   `ruleDraft.ts` touch.~~ — **✅ Resolved in Story 4.12.** `RULE_ACTIONS`/`RuleAction` now live in
   `@gol/domain`'s `survivalRuleSchema.ts`; `ruleDraft.ts` re-exports them.
-- **Story 4.17 must decide whether the organism-type dropdown lists the organism under edit** —
+- ~~**Story 4.17 must decide whether the organism-type dropdown lists the organism under edit** —
   the modal doc says 4.17 passes `library` minus self (right for the colour warning); `organismType
   eq <self>` is a legal, `alive`-equivalent condition, and an existing self-reference would render
-  as `Unknown organism`.
+  as `Unknown organism`.~~ **✅ Decided in Story 4.17 (2026-09-22): the dropdown EXCLUDES self**
+  (RFC-004 §2.1.1 — `organismType` names a specific OTHER organism; the create flow never listed
+  self). A persisted self-reference renders through the existing `Unknown organism` option and
+  still passes the gate (accepted, flagged, not repaired — modal test 43). A one-line revert if
+  self-targeting should be authorable.
 - **`<OrganismNameField>`'s `Input` is not lifted** into `fieldStyles.ts` (different metrics —
   12px/14px padding, 14px type — from `controlRules`).
 - **`validateRules.ts` keeps its own condition-universe literals** (the engine's `@gol/domain` edge
@@ -2032,20 +2046,30 @@ Deferred:
   `maxLength` override** (`organismDraft.ts` calls `validateOrganismName(draft.name)`; the field's
   prop is a 4.5 test seam the modal never passes). The two views of "valid" diverge the day a caller
   passes it — either drop the prop or thread the cap through `validateOrganismDraft`.
-- **`errorTargetSelector`'s `value` target is DOM-verified only for `max`, `min`/`pair` and
+- ~~**`errorTargetSelector`'s `value` target is DOM-verified only for `max`, `min`/`pair` and
   `rule`.** A scalar numeric textbox or an organism `<select>` as the first error is string-tested
   only (`OrganismEditorModal.test.tsx`, the `errorTargetSelector` describe). Story 4.17's
-  seeded-record tests (a dangling organism id, an out-of-range age) are the natural DOM pin.
-- **`ORGANISM_REQUIRED` is unfixable when `organisms` is empty** — `defaultOrganismId` falls to `''`
+  seeded-record tests (a dangling organism id, an out-of-range age) are the natural DOM pin.~~
+  **✅ Closed in Story 4.17 (2026-09-22):** modal test 45 seeds a rule whose id is `r"1\` with an
+  `age eq 3` condition, clears the scalar value textbox, Saves, and asserts focus lands ON that
+  textbox — the `CSS.escape` path and the scalar `value` target pinned end to end.
+- ~~**`ORGANISM_REQUIRED` is unfixable when `organisms` is empty** — `defaultOrganismId` falls to `''`
   (`ConditionsEditor.tsx:90`), the row's `<select>` offers only the placeholder, and the gate focuses
   a control that cannot satisfy it. Reachable once Story 4.17 passes library-minus-self and the sole
   organism is the one under edit; that story should either hide the organism-type property when the
-  list is empty or message it.
+  list is empty or message it.~~ **✅ Closed in Story 4.17 (2026-09-22):** the property `<select>`'s
+  `Organism Type` option is `disabled` when `organisms.length === 0`, so a switch INTO the property
+  is impossible while a seeded `organismType` row keeps its value cell (`ConditionRow.tsx`; modal
+  test 44).
 - **A dangling organism id passes the gate.** `validateOrganismDraft` takes no library and
   `parseConditionDraft` checks only `pattern.length === 0`, so a row rendering the "Unknown organism"
   option (`ConditionRow.tsx:175`) is "valid" and the modal shows the "Valid organism" notice.
   Unreachable by UI today; reachable when Story 4.17 seeds from a record that references a deleted
   organism — 4.17 (or 4.16's parse) decides whether that is a gate error or a save-time repair.
+  **✅ Decided in Story 4.17 (2026-09-22): accepted, not repaired, not blocked.** The engine
+  compiles an unresolvable id to a never-matching predicate (nothing breaks), and a save-time
+  rewrite would silently change a rule; the row renders `Unknown organism` and the gate passes
+  (modal test 43). The preview's `selfId` adapter note (Story 4.14) still stands.
 
 ## Owner's decisions on the two open reviews of 4-13-editor-validation-feedback (2026-09-21)
 
@@ -2369,8 +2393,80 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   (Task 11):** `saveStamp` is the seam Story 4.17 seeds from the opened organism — an edit session
   just needs to seed `saveStamp` with the record's existing id at mount, and every Save in that
   session already upserts it (`saveStamp?.id ?? crypto.randomUUID()`; set on the first success
-  only). The `schemaVersion` restamp-or-keep policy for an EDIT save is still open and is Story
-  4.17's to decide.
+  only). ~~The `schemaVersion` restamp-or-keep policy for an EDIT save is still open and is Story
+  4.17's to decide.~~ **✅ Decided in Story 4.17 (2026-09-22): RESTAMP.** Decision I.4 defines
+  `schemaVersion` as a stamp of the shape a record was WRITTEN in; `projectOrganismForSave` ends in
+  `OrganismSchema.parse`, which proves the written record IS the current shape, so the current
+  constant is the only honest stamp. "Keep" would preserve a stale stamp once a future
+  `formatVersion` step has migrated the field set. Both are `1` today; Story 5.7's registry should
+  read this. `projectOrganismForSave` is untouched.
+
+## Deferred from: Story 4-17-edit-organism-from-library (2026-09-22)
+
+- **Clone & Edit is not rendered on the in-use dialog** (FD5) — `<OrganismInUseDialog>` ships
+  Cancel / Edit Anyway, the FR-3.12 battle-variant shape. The AC's third action routes through
+  Story 4.18's clone path (the "(Copy)" name, the colour reuse, the repository write), which is not
+  on `main`; a button that does nothing is a dead affordance (NFR-4.1). **Story 4.18 adds it**, with
+  a `pending` guard on the dialog's `onClose` for the clone's write, and stashes the clone in the
+  hook's `proceedRef` instead of the original.
+- **The `[N]` in "Used in N Battles" is plain text** — no battle names, no click-through. FR-1.7's
+  popover / footer is **Story 4.20's**, which will need `battles` on the modal too (it is
+  deliberately NOT passed there today — an unread prop is a lie).
+- **A corrupt `gol:battles` now blanks the Library with the organism-worded error copy** (FD2) —
+  `battles.list()` is uncaught inside the one `Promise.all`, so whole-key corruption of the battle
+  collection lands in the existing `'error'` state ("Something went wrong loading your
+  organisms."). The graceful alternative — `battles.list().catch(() => null)` and the Edit buttons
+  withheld with an explanation — needs copy nobody has written and a test for a state
+  **Story 5.11** (load-time corruption UX) will redesign anyway; that story owns the copy.
+- **`e2e/organisms.spec.ts` carries the FIFTH hand-synced copy of `buildSeedPayload`/`seedWorkspace`**
+  (after `gallery.spec.ts`, `battleRoute.spec.ts`, `deleteBattle.spec.ts`, `createBattle.spec.ts`),
+  plus a layered `seedExtraOrganisms` init script (the `battleRoute.spec.ts` precedent). The
+  standing extraction entry (`:199, :231`) fires for a story touching more than one spec's seeding;
+  this one touched one. **The entry stands, one copy heavier.**
+- **A persisted self-reference (`organismType eq <self>`) renders as `Unknown organism` in the
+  editor** — accepted, not repaired (FD8; the 4.13 dangling-id decision above). The preview's
+  `selfId` adapter note (Story 4.14) still stands: the preview compiles it as never-matching.
+- **`buildUsageIndex` is Story 4.19's AC1, landed here** (FD1) — `packages/domain/src/usageIndex.ts`
+  builds `organismId → battleId[]` from summaries, 100% covered. **Story 4.19 extends THIS module**
+  with the M7 live-grid union and the Decision E.5 rule-reference index; its story file should say
+  so, and its scope shrinks accordingly.
+- **The 4.9-review duplicate-name sentence (`:1455-1465`) was NOT picked up** — this story does not
+  touch `colorReuseWarning` or the sentence; that entry is annotated in place (review 2026-09-22)
+  so its "pick this up with Story 4.17" no longer reads as pending on 4.17.
+
+## Deferred from: code review of 4-17-edit-organism-from-library (2026-09-22)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+
+- **A rejected `import()` of the in-use dialog chunk leaves the page inert with no dialog and no
+  Cancel.** `requestEdit` sets `gate` synchronously, `useInertBackground(mounted || gate !== null)`
+  arms, and only the never-mounted dialog's `onExited` can clear `gate` — so offline, or a deploy
+  that rotated chunk hashes under an open tab, strands the Library behind an inert background.
+  The editor's own `dynamic()` boundary has had the same shape since Story 4.3; this story adds a
+  second lazy consumer on the more common "used organism" path. Same owner as the Run-chunk entry
+  above (`:970`) and the 4-1 `error.tsx` entry — a `dynamic()` rejection boundary, settled once for
+  every lazy dialog, not per call site.
+- **Renaming an organism out of the active search filter drops focus to `<body>` after Back.**
+  The hook restores focus to `[data-edit-organism-id]` at `onExited`, while the Library's
+  `reload()` is still in flight (stale-while-revalidate, so the card is still there); when the
+  reload settles the renamed card no longer matches `searchText`, `visible` drops it, and the
+  focused button unmounts — the tab order restarts at the top. Narrow (a search AND a rename that
+  leaves the match), and the create flow has no equivalent (its target is the always-present
+  create button). Options when picked up: clear `searchText` in `onSaved`, or a post-settle
+  "focus is loose → create button" sweep. **Pick this up with Story 4.20** (the next Library
+  touch) or 4.23.
+- **The editor's numeric bounds are tighter than the schema's, and an edit session now reads
+  persisted records through them.** `age ≤ 999` / `neighborCount ≤ 8` / strict `min < max` in the
+  editor (`conditionDraft.ts`) versus `0..65534` / `min <= max` in `SurvivalRuleSchema`: a record
+  legal on disk but outside the editor's bounds (only by hand-editing `gol:organisms` or by Story
+  5.x import — the editor itself never writes one) opens and is REFUSED at Save until the value is
+  changed, with the bounds error naming the fix. The 4.11 entry above (`:1623`) already records the
+  mismatch "for the next RFC touch"; 4.17 is the story that makes it reachable. No change here —
+  the refusal is visible and fixable, and widening the editor is the design doc's call (`:399`).
+- **Two organisms sharing a display name produce identical `Edit <name>` accessible names** — the
+  card's `aria-label` interpolates the display name, so a screen reader's button list cannot tell
+  the two Edit buttons apart (nor two "Unnamed organism" cards). The 4.9 entry above
+  (`:1455-1465`) owns the naming model; this is one more consumer of it.
 
 ## Deferred from: code review of 4-16-create-save-organism (2026-09-22)
 

@@ -23,6 +23,9 @@ describe('OrganismsPage', () => {
     await waitFor(() => {
       expect(screen.getByText("Conway's Classic")).toBeInTheDocument();
     });
+    // Story 4.17: the Edit buttons render only once BOTH lists are in hand — the wiring proof
+    // that `battles` reached the Library from this boundary.
+    expect(screen.getByRole('button', { name: "Edit Conway's Classic" })).toBeInTheDocument();
   });
 
   it('has no axe accessibility violations once ready', async () => {

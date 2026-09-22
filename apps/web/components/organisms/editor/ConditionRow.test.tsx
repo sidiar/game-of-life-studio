@@ -295,6 +295,36 @@ describe('ConditionRow', () => {
     expect(value).toHaveValue('');
   });
 
+  // Story 4.17 (AC6): with no OTHER organism to target — the organism under edit is the sole
+  // library entry — the property option is disabled so the unfixable `ORGANISM_REQUIRED` state is
+  // unreachable through the UI; a row already ON the property keeps rendering its value cell.
+  it('disables the Organism Type property option when the organism list is empty, and only then (Story 4.17)', () => {
+    const { rerenderRow, unmount } = renderRow(createNewConditionDraft('c1'), {
+      organisms: [],
+      defaultOrganismId: '',
+    });
+
+    const property = () => screen.getByRole('combobox', { name: 'Condition 1 property' });
+    const organismTypeOption = () =>
+      within(property()).getByRole('option', { name: conditionPropertyLabel('organismType') });
+    expect(organismTypeOption()).toBeDisabled();
+    for (const other of CONDITION_PROPERTIES.filter((p) => p !== 'organismType')) {
+      expect(
+        within(property()).getByRole('option', { name: conditionPropertyLabel(other) }),
+      ).toBeEnabled();
+    }
+
+    rerenderRow({ id: 'c1', property: 'organismType', operator: 'eq', pattern: 'ghost' });
+    expect(organismTypeOption()).toBeDisabled();
+    const value = screen.getByRole('combobox', { name: 'Condition 1 value' });
+    expect(value).toHaveValue('ghost');
+    expect(optionTexts(value)).toEqual(['Unknown organism']);
+
+    unmount();
+    renderRow(createNewConditionDraft('c1'), { organisms: [ORGANISMS[0]] });
+    expect(organismTypeOption()).toBeEnabled();
+  });
+
   // (k)
   it('delete calls onDelete with the row id, once', async () => {
     const user = userEvent.setup();

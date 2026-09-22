@@ -41,3 +41,8 @@ export { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID, DEFAULT_WORKSPACE } from './defaul
 // Story 5.8's atomic import needs the identical projection).
 export { pruneAndRemapBattleGrid } from './battleProjection';
 export type { PrunedBattleGrid } from './battleProjection';
+
+// The AR-15 organism-usage index, derived from `battles.list()` summaries (Decision H.4). Landed in
+// Story 4.17 for the FR-1.3 edit gate; Story 4.19 extends the same module.
+export { buildUsageIndex } from './usageIndex';
+export type { UsageIndex } from './usageIndex';
