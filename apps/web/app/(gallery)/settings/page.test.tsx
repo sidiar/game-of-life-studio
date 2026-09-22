@@ -3,14 +3,25 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
-import { STORAGE_KEYS } from '@gol/persistence';
+import { measureStorageUsage, STORAGE_KEYS } from '@gol/persistence';
 import { MOCK_BATTLE_IDS, MOCK_ORGANISM_IDS } from '@gol/test-utils';
+import { formatStorageSize } from '@/lib/settings/formatStorageSize';
 import SettingsRoute from './page';
+
+// Parses a rendered "1.5 KB" / "1.00 MB" tile value back to KB, so the production-vs-development
+// comparison below asserts a RELATION (development strictly larger) rather than hardcoding either
+// figure — hardcoding either would move every time a fixture or Conway's Classic changes.
+function kbOf(text: string): number {
+  const match = /^([\d,]+\.\d+)\s(KB|MB)$/.exec(text);
+  if (!match) throw new Error(`Not a storage size: "${text}"`);
+  const value = Number(match[1].replace(/,/g, ''));
+  return match[2] === 'MB' ? value * 1024 : value;
+}
 
 // `<dd>` maps to the ARIA "definition" role, which is name-from-author-PROHIBITED (unlike `<dt>`'s
 // "term" role) — so `getByRole('definition', { name })` cannot resolve a specific tile. Terms and
 // definitions are read as parallel lists instead and paired by index, exactly the order
-// <WorkspaceStatistics> renders them in (Saved Battles, then Organisms).
+// <WorkspaceStatistics> renders them in (Saved Battles, Organisms, Storage Used).
 function readStats() {
   const terms = screen.getAllByRole('term').map((el) => el.textContent);
   const definitions = screen.getAllByRole('definition').map((el) => el.textContent);
@@ -41,17 +52,21 @@ describe('SettingsRoute', () => {
 
     // The production seed writes Conway's Classic only — no battles.
     await waitFor(() => {
-      expect(screen.getAllByRole('term')).toHaveLength(2);
+      expect(screen.getAllByRole('term')).toHaveLength(3);
     });
     const stats = readStats();
     expect(stats['Saved Battles']).toBe('0');
     expect(stats.Organisms).toBe('1');
+    // Measured AFTER ready — the seed has written gol:organisms (+ the stamp) by then (M9: Conway's
+    // Classic is always there), so this is never the empty-store figure.
+    expect(stats['Storage Used']).toBe(formatStorageSize(measureStorageUsage().bytes));
+    expect(stats['Storage Used']).not.toBe('0.0 KB');
   });
 
   it('has no axe accessibility violations once ready', async () => {
     const { container } = render(<SettingsRoute />);
     await waitFor(() => {
-      expect(screen.getAllByRole('term')).toHaveLength(2);
+      expect(screen.getAllByRole('term')).toHaveLength(3);
     });
 
     const results = await axe(container);
@@ -91,6 +106,29 @@ describe('SettingsRoute', () => {
       expect(readStats().Organisms).toBe(String(expectedOrganismCount));
     });
     expect(readStats()['Saved Battles']).toBe(String(expectedBattleCount));
+  });
+
+  it('development Storage Used is strictly larger than the production figure (AR-45 fixtures)', async () => {
+    const production = render(<SettingsRoute />);
+    await waitFor(() => {
+      expect(readStats().Organisms).toBe('1');
+    });
+    const productionKb = kbOf(readStats()['Storage Used'] ?? '');
+    // Unmount and clear so the second render's isFreshWorkspace() reads true again — the dev
+    // fixture branch only seeds when the workspace was fresh AT THE EFFECT'S START.
+    production.unmount();
+    localStorage.clear();
+
+    vi.stubEnv('NODE_ENV', 'development');
+    render(<SettingsRoute />);
+
+    const expectedOrganismCount = Object.keys(MOCK_ORGANISM_IDS).length + 1; // + Conway's Classic
+    await waitFor(() => {
+      expect(readStats().Organisms).toBe(String(expectedOrganismCount));
+    });
+    const developmentKb = kbOf(readStats()['Storage Used'] ?? '');
+
+    expect(developmentKb).toBeGreaterThan(productionKb);
   });
 
   it('never writes gol:settings — the shell reads it, never writes it (AC5)', async () => {

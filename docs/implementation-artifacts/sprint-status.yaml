@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-09-21
+# last_updated: 2026-09-22
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-09-21
+last_updated: 2026-09-22
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -147,7 +147,7 @@ development_status:
   # Epic 5: Sharing, Backup & Workspace Management
   epic-5: in-progress
   5-1-settings-page-shell: done
-  5-2-workspace-statistics: backlog
+  5-2-workspace-statistics: done
   5-3-export-envelope-serializer: backlog
   5-4-rule-aware-organism-closure: backlog
   5-5-export-workspace: backlog

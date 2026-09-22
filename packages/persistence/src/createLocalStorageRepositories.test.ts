@@ -104,6 +104,30 @@ describe('clearAll (AC5)', () => {
   });
 });
 
+describe('storageUsage (AR-14, Story 5.2)', () => {
+  it('grows after battles.save() and shrinks after clearAll(), but not to zero', async () => {
+    const repos = createLocalStorageRepositories();
+    // A cleared store holds no gol:* key at all — not even the stamp, which only the first data
+    // write lays down — so the baseline is exactly 0, not "small".
+    const empty = (await repos.storageUsage()).bytes;
+    expect(empty).toBe(0);
+
+    await repos.settings.save({ ...DEFAULT_SETTINGS, theme: 'biotech-terminal' });
+    await repos.battles.save(battle());
+    const afterSave = (await repos.storageUsage()).bytes;
+    expect(afterSave).toBeGreaterThan(empty);
+
+    await repos.clearAll();
+    const afterClear = (await repos.storageUsage()).bytes;
+    // clearAll() removes battles/organisms but the gol:schema stamp and gol:settings remain
+    // (AC5 / Decision F) — the same two-key survival the clearAll (AC5) describe block above
+    // already pins, now visible through the meter.
+    expect(afterClear).toBeLessThan(afterSave);
+    expect(afterClear).toBeGreaterThan(0);
+    expect(localStorage.getItem(STORAGE_KEYS.settings)).not.toBeNull();
+  });
+});
+
 describe('isFreshWorkspace (Story 1.5 AC1)', () => {
   it('is true with no gol:schema record', async () => {
     const repos = createLocalStorageRepositories();

@@ -1,5 +1,6 @@
 import { CURRENT_FORMAT_VERSION } from '@gol/domain';
 import { CorruptDataError } from './errors';
+import type { StorageUsage } from './repositories';
 
 // The flat, prefixed key namespace (RFC-006 Decision 7 / AR-9). Centralised so no repository
 // carries a bare string literal — a typo'd key silently reads an empty store rather than failing.
@@ -138,4 +139,43 @@ export function writeSettingsKey(key: StorageKey, value: unknown): void {
 /** Clears workspace data only. Settings and the format stamp are unreachable from here (AC5). */
 export function removeDataKeys(): void {
   for (const key of DATA_KEYS) localStorage.removeItem(key);
+}
+
+// Every engine stores a localStorage string as UTF-16 internally, and Chromium meters its
+// per-origin quota (10 MiB) in exactly those code units × 2 — which is why the folk "5 MB limit"
+// actually measures as ~5 M *characters*. `String.prototype.length` already counts code units, so
+// this is the engine's own accounting, not an estimate (AR-14 / FD2).
+const BYTES_PER_UTF16_CODE_UNIT = 2;
+
+/**
+ * Sums `key.length + value.length` (UTF-16 code units) × 2 over every entry — the AR-14 usage
+ * meter's arithmetic, extracted so `@gol/test-utils`' fake can share the exact same formula rather
+ * than re-stating it (FD8 — a fake that re-derives a formula is free to drift from it).
+ */
+export function storageBytesOf(entries: Iterable<readonly [string, string]>): number {
+  let bytes = 0;
+  for (const [key, value] of entries) {
+    bytes += (key.length + value.length) * BYTES_PER_UTF16_CODE_UNIT;
+  }
+  return bytes;
+}
+
+/**
+ * The AR-14 usage meter (RFC-006 Decision 7) over the `gol:*` namespace, and only that namespace.
+ * `navigator.storage.estimate()` is deliberately NOT used — a recorded conflict with
+ * `RFC-006:268`, not a silent pick (FD4): Chromium's `estimate().usage` excludes localStorage
+ * entirely (it meters IndexedDB / Cache Storage / OPFS), Firefox's includes it — so the same
+ * workspace would read differently per browser on a page whose job is a truthful number — and it
+ * is origin-wide, so it cannot be scoped to `gol:*` at all. Enumerating `STORAGE_KEYS` rather than
+ * prefix-scanning `localStorage` is the same call `removeDataKeys` makes for the opposite reason:
+ * `writeKey` only ever takes a `StorageKey`, so the enumerated set IS the namespace by
+ * construction, and nothing outside the app's own writes can inflate the figure.
+ */
+export function measureStorageUsage(): StorageUsage {
+  const entries: Array<readonly [string, string]> = [];
+  for (const key of Object.values(STORAGE_KEYS)) {
+    const value = localStorage.getItem(key);
+    if (value !== null) entries.push([key, value]);
+  }
+  return { bytes: storageBytesOf(entries) };
 }

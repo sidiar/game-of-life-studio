@@ -3,11 +3,13 @@ import { CURRENT_FORMAT_VERSION } from '@gol/domain';
 import { CorruptDataError } from './errors';
 import {
   hasSchemaStamp,
+  measureStorageUsage,
   QuotaExceededError,
   readCollection,
   readStoredValue,
   removeDataKeys,
   STORAGE_KEYS,
+  storageBytesOf,
   writeDataKey,
   writeSettingsKey,
 } from './localStorageAccess';
@@ -209,5 +211,56 @@ describe('removeDataKeys (AC5)', () => {
     expect(localStorage.getItem(STORAGE_KEYS.settings)).toBe(settingsBefore);
     // The stamp describes the format of the store, which Clear All does not change.
     expect(localStorage.getItem(STORAGE_KEYS.schema)).not.toBeNull();
+  });
+});
+
+describe('storage usage (AR-14, Story 5.2)', () => {
+  it('storageBytesOf([]) is 0', () => {
+    expect(storageBytesOf([])).toBe(0);
+  });
+
+  it('storageBytesOf pins the UTF-16 × 2 constant', () => {
+    // 'k' + 'v' = 2 code units × 2 bytes = 4.
+    expect(storageBytesOf([['k', 'v']])).toBe(4);
+  });
+
+  it('counts a non-BMP character as two UTF-16 code units, not one code point', () => {
+    // '😀' is a surrogate pair — .length is 2, so this pins UTF-16 code-unit accounting, not
+    // Array.from()'s code-point count (which would report 1 and half the byte figure).
+    expect(storageBytesOf([['', '😀']])).toBe(4);
+  });
+
+  it('measureStorageUsage() is { bytes: 0 } on an empty store', () => {
+    expect(measureStorageUsage()).toEqual({ bytes: 0 });
+  });
+
+  it('does not count a key outside STORAGE_KEYS', () => {
+    localStorage.setItem('unrelated', 'x'.repeat(1000));
+
+    expect(measureStorageUsage()).toEqual({ bytes: 0 });
+  });
+
+  it('counts all four STORAGE_KEYS, including gol:settings and gol:schema', () => {
+    writeDataKey(STORAGE_KEYS.battles, { 'battle-1': {} });
+    writeDataKey(STORAGE_KEYS.organisms, { 'organism-1': {} });
+    writeSettingsKey(STORAGE_KEYS.settings, { theme: 'clinical-lab' });
+
+    const stored: Array<readonly [string, string]> = [
+      STORAGE_KEYS.schema,
+      STORAGE_KEYS.battles,
+      STORAGE_KEYS.organisms,
+      STORAGE_KEYS.settings,
+    ].map((key) => [key, localStorage.getItem(key) as string]);
+
+    expect(measureStorageUsage()).toEqual({ bytes: storageBytesOf(stored) });
+  });
+
+  it('counts a non-JSON gol:battles record and does not throw (FD3)', () => {
+    localStorage.setItem(STORAGE_KEYS.battles, '{not json');
+    // readCollection throws on the same store — the meter must not.
+    expect(() => readCollection(STORAGE_KEYS.battles)).toThrow(CorruptDataError);
+
+    expect(() => measureStorageUsage()).not.toThrow();
+    expect(measureStorageUsage().bytes).toBeGreaterThan(0);
   });
 });
