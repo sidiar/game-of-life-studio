@@ -49,23 +49,37 @@ across every installed workspace; a "saved" toast over a write that failed) are 
    duration of the write (`isSaving`, plus a `savingRef` so a second click while a promise is in
    flight is a no-op — `organisms.save()` is a whole-collection read-modify-write over one key,
    Story 2.13 AC4's reason), and carries `transition: 'none'` in its `sx` (FD8 — the MUI `Button`
-   cross-fade trap `deferred-work.md:795-801` handed to this story). It is never disabled at rest.
+   cross-fade trap `deferred-work.md:795-801` handed to this story). It is never disabled at rest,
+   and it is released after a SUCCESSFUL write as well as after a failed one (AC3: the editor
+   stays open, so "released when the dialog unmounts" no longer applies; a second Save after
+   success is an update of the same id, not a second organism).
 
-3. **On success the editor closes, focus returns, the Library refreshes, and the Library announces
-   the outcome.** In order: the modal reports `onSaved(record)` (a new lifecycle prop, FD4) → the
-   parent hook closes the dialog through its ONE close channel → once the exit transition has
-   finished (`onExited`), the hook hands `record` to the caller's `onSaved` → `<OrganismLibrary>`
-   (a) calls `resource.reload()` (FD6 — the list refetches with the previous cards STILL ON SCREEN,
-   no "Loading organisms…" flash, no grid unmount), so the new card appears in `sortLibrary` order
-   and the count badge reads the new total, and (b) publishes the outcome into an **always-mounted**
-   `<div role="status" data-save-status>` (FD5 — the owner's 2026-09-21 idiom decision): the
-   sentence `Organism saved successfully.` when the organism has ≥ 1 rule, and
-   `Organism saved successfully. No rules defined. Organism will have no living cells.` when it has
-   zero (the epic's 4.13 AC3/AC4, re-homed here; design doc `:559, :764-765`). Focus lands on the
-   `[data-create-organism]` button exactly as after Escape/Close/Back (the hook's existing restore).
-   The status text is cleared at the START of the next open, so a second identical outcome
-   re-announces (the Story 2.13 clear-then-set). Nothing is published while the dialog is open
-   (`useInertBackground.ts:66-68` sweeps body children appended under a dialog).
+3. **On success the editor STAYS OPEN and reports in place; the Library refreshes when the editor
+   is eventually closed.** (Owner's call, 2026-09-22 — supersedes the design doc's "Save & Close"
+   `organism-editor-design.md:43, :558-559` and the first cut of this AC; the editor was redesigned
+   to "match the Battle Editor pattern" (`ORGANISM-EDITOR-UPDATES.md`), and the Battle Editor stays
+   open after SAVE.) In order: the write resolves → the modal keeps a `saveStamp` (`{ id }`, the
+   `BattlePage.tsx:748` idiom) so that every LATER Save in this editor session writes the SAME id
+   (`organisms.save()` upserts by id — one organism, updated in place, never a duplicate) → the modal
+   publishes the outcome into an **always-mounted** `<div role="status" data-save-status>` inside
+   the dialog, between the header and the body, beside the `SaveErrorLine` alert (FD5's in-flow
+   idiom, relocated from the Library): the sentence `Organism saved successfully.` when the organism
+   has ≥ 1 rule, `Organism saved successfully. No rules defined. Organism will have no living cells.`
+   when it has zero (the epic's 4.13 AC3/AC4). The outcome text is cleared at the START of every
+   attempt (clear-then-set, so an identical second outcome re-announces) and a failure clears it
+   too (never both lines at once). Save is re-enabled after success (AC2) and **focus returns to
+   the Save button** after the write resolves, success or failure — `disabled` drops focus to
+   `<body>` (the HTML focus-fixup rule) and the editor is still the user's place. The modal still
+   reports `onSaved(record)` (FD4); the hook stashes the LATEST record and does NOT close. When the
+   user closes (Back / Escape / ✕ — a clean close, no dialog: Story 4.23 owns the dirty scope), the
+   hook's ONE close channel runs as today, and once the exit transition has finished (`onExited`)
+   it hands the last saved record to the caller's `onSaved` → `<OrganismLibrary>` calls
+   `resource.reload()` (FD6 — stale-while-revalidate, no "Loading organisms…" flash, no grid
+   unmount), so the new card appears in `sortLibrary` order and the count badge reads the new
+   total. Focus lands on the `[data-create-organism]` button exactly as after any close. The
+   Library publishes NOTHING (its `role="status"` region from the first cut is removed — it has no
+   publisher left; the Story 4.1/4.2 count-badge tests return to their original single-region
+   selectors). A close without any save in the session hands nothing on and triggers no reload.
 
 4. **The saved organism is in the battle add-dropdown (FR-7.15) without any change to the battle
    page.** `<BattlePage>` reads `repositories.organisms.list()` at mount
@@ -429,13 +443,77 @@ across every installed workspace; a "saved" toast over a write that failed) are 
   - [x] `sprint-status.yaml`: `4-16-create-save-organism: in-progress` at start, `review` at the
         end; Dev Agent Record with every command and its actual exit code.
 
+- [ ] **Task 11 — Save keeps the editor open (AC2, AC3 as amended 2026-09-22)** — owner's scope
+  change after review; mirror the Battle Editor, do not invent a second idiom
+  - [ ] Modal (`OrganismEditorModal.tsx`): `const [saveStamp, setSaveStamp] = useState<{ id: string }
+        | null>(null)`; `saveOrganism` uses `saveStamp?.id ?? crypto.randomUUID()` (still minted
+        inside the `try`), sets the stamp on success. Release `isSaving`/`savingRef` in `finally`
+        on BOTH outcomes again (the review's "hold after success" patch is superseded: the dialog
+        no longer unmounts; interleaving is still refused by `savingRef`, and a second click after
+        success is an upsert of the same id — pin that with a test: two Saves → `save` called
+        twice with the SAME `id`, the fake repository's `list()` grew by ONE). Add
+        `const [saveOutcome, setSaveOutcome] = useState<string | null>(null)`; clear it AND
+        `saveError` at the start of every attempt; on success `setSaveOutcome(saveOutcomeMessage(record))`.
+        Render an always-mounted `<div role="status" data-save-status>` between the header and the
+        body (next to `SaveErrorLine`, which stays conditionally mounted and `role="alert"`), whose
+        child `{saveOutcome !== null && <SaveOutcomeLine data-save-outcome>{saveOutcome}</SaveOutcomeLine>}`
+        mounts with the text — move `SaveOutcomeLine` (the `styled('p')` from Task 8) here
+        verbatim. `saveOutcomeMessage` (Task 4) is now imported by the modal, not the Library.
+        A `saveButtonRef`; after the write settles (success or failure), `saveButtonRef.current?.focus()`
+        — test: focus is on the Save button after a successful save and after a rejected one
+        (`document.activeElement`), which closes the review's first `[Defer]` for this editor.
+        Update the header comment (`:247-248`, `:474-475`) and the `onSaved` docblock (`:72-76`):
+        the parent no longer closes on save.
+  - [ ] Hook (`useOrganismEditorModal.ts`): `handleSaved` only stashes into `pendingSavedRef`
+        (overwriting — the LAST record wins) and no longer calls `setDialogOpen(false)`;
+        `handleExited` is unchanged (hands the stashed record on after `mounted` clears, then
+        clears it). With Task 12 in place a write cannot resolve after the exit any more, so the
+        `mountedRef` late-save branch and its test are dead — remove both and say so in the
+        docblock. Tests: (a) `onSaved` from the modal does NOT close the dialog; (b) Back after a
+        save → the caller's `onSaved` fires once, after exit, with the last record; (c) two saves
+        then Back → fires once with the second record; (d) close without a save → never fires.
+  - [ ] Library (`OrganismLibrary.tsx`): `onSaved` is `reload()` only; remove `saveOutcome`,
+        `SaveOutcomeLine`, the `data-save-status` region and the `openEditor` clear; the
+        `saveOutcomeMessage` import goes. Restore the Story 4.1/4.2 count-badge tests
+        (`OrganismLibrary.test.tsx`, `organisms.spec.ts`) to their pre-4.16 single-`role="status"`
+        selectors — the `/Organisms?$/` rescoping is no longer needed and AC9's review note is
+        resolved, not just disclosed. Rewrite Task 8's tests (a)/(c)/(d)/(e)/(f)/(g) against the
+        new flow: after Save the dialog is STILL open and `[data-save-outcome]` inside it reads the
+        sentence; Back → the dialog leaves → the new card and `4 Organisms` (same badge node, no
+        `'loading'` reset, `list` called exactly twice), focus on the create button; a rejected
+        save → dialog open, no outcome line, alert present, `list` once.
+  - [ ] e2e (`organisms.spec.ts`): retarget the seven Story 4.16 tests — happy path asserts the
+        in-dialog outcome line, then Back, then the card and the badge; zero-rules likewise; the
+        focus test asserts the Save button after save and the create button after Back; add one
+        test: Save, rename, Save again, Back → exactly one new card, with the second name.
+  - [ ] Docs: `organism-editor-design.md:43` ("Save & Close") → "**Save**: saves the organism and
+        keeps the editor open with the outcome line; a later Save updates the same organism";
+        `:558-559` → "4. Outcome line inside the editor: \"Organism saved successfully\" 5. Back
+        returns to the Organism Library, refreshed"; `ux-design-complete.md:688` likewise. Add to
+        the Story 4-16 section of `deferred-work.md`: the `saveStamp` is the seam Story 4.17 seeds
+        from the opened organism (replaces item (7)'s "flagged, not decided" for the id half; the
+        `schemaVersion` restamp-or-keep half stays open). Re-run `build:standalone` +
+        `bundle:check`; `/organisms` first load should shrink (region + helper leave), the editor
+        chunk grow by roughly the same; record the figures.
+
+- [ ] **Task 12 — lock the close while a write is in flight (review decision, owner chose (b))**
+  - [ ] Modal: the Back button gets `disabled={isSaving}` (the `BattlePage.tsx:1010`
+        `backDisabled={isSaving}` idiom, same `transition: 'none'` reason as Save); the dialog's
+        `onClose` (Escape / backdrop / ✕) becomes a no-op while `savingRef.current` — one guarded
+        handler, not three. Tests: Escape and a Back click during an in-flight write do not close
+        (dialog still present after the write resolves); Escape after it resolves closes as before.
+  - [ ] `deferred-work.md`: strike the "Escape during an in-flight organism save is allowed" entry
+        as `✅ Closed in Story 4.16 (review decision (b))`; update the Open flags bullet below.
+  - [ ] The review's `[Review][Decision]` item under Review Findings: tick it once this task is
+        done and note "(b), implemented in Task 12".
+
 ### Review Findings
 
 Code review 2026-09-22 (opus, second pair of eyes on a sonnet implementation): Blind Hunter (diff
 only), Edge Case Hunter (diff + project), Acceptance Auditor (diff + story + project-context). 1
 `decision-needed`, 16 `patch`, 2 `defer`, 10 dismissed as noise.
 
-- [ ] [Review][Decision] **Escape/Close/Back during an in-flight write — keep it allowed, or lock the close while saving?** — The story's open flag chose "allowed" on the premise that the write is sub-millisecond. The write is `projectOrganismForSave` (one `crypto.subtle.digest` per rule, thread-pool) + `organisms.save()`; against localStorage it is a few ms, against a Connected-mode API repository it is a round-trip. Three residuals exist only when the write outlasts the ~195 ms exit fade, and none has a fix that does not need the owner's intent: (1) a write that REJECTS after the dialog has exited is reported nowhere — the `role="alert"` lives in the unmounted modal, and "nothing was lost" is then untrue from the user's side; (2) a write that resolves after the user has already reopened a fresh editor calls `handleSaved`, which closes the NEW editor (discarding its draft) and announces the OLD record; (3) fields stay editable while a write is in flight, so keystrokes typed in that window are silently not in the saved record. (The fourth residual — a write that resolves after the exit but before any reopen was dropped, then replayed on the next unrelated close — was a plain bug and is patched below.) Options: **(a) keep allowed**, accept (1)–(3) as Connected-mode residuals and record them in `deferred-work.md` for RFC-001's API repository story; **(b) lock the close while saving** — `onClose` (✕ / Back / Escape) is a no-op while `isSaving`, the `<UnsavedChangesDialog>` `pending` idiom; removes all three at the cost of a lock on a few-ms window today, and Story 4.23's guard then has a second condition to respect; **(c) keep allowed but session-bind the late outcome** — the hook stamps a session id per `requestCreate`, a late `handleSaved` from a stale session neither closes nor stashes but queues its report for after the current session exits; fixes (2), leaves (1) and (3). Files: `apps/web/components/organisms/editor/OrganismEditorModal.tsx` (`saveOrganism`), `apps/web/lib/organisms/useOrganismEditorModal.ts` (`handleSaved`/`handleClose`), `deferred-work.md` (the "Escape during an in-flight organism save is allowed" entry, which currently asserts a "still reports" that the patched code now honours only for the no-reopen case).
+- [ ] [Review][Decision] **Escape/Close/Back during an in-flight write — keep it allowed, or lock the close while saving?** **→ Owner's answer (2026-09-22): (b) — lock the close while saving; see Task 12. The owner also changed scope at the same time: Save keeps the editor open (AC3 amended, Task 11) — (b) rules out (1) — no exit can happen while a write is in flight; the editor staying open rules out (2) — a resolved save closes nothing; (3) shrinks to a visible state — the typed text is still on screen in the open editor and the next Save writes it as an update of the same id.** — The story's open flag chose "allowed" on the premise that the write is sub-millisecond. The write is `projectOrganismForSave` (one `crypto.subtle.digest` per rule, thread-pool) + `organisms.save()`; against localStorage it is a few ms, against a Connected-mode API repository it is a round-trip. Three residuals exist only when the write outlasts the ~195 ms exit fade, and none has a fix that does not need the owner's intent: (1) a write that REJECTS after the dialog has exited is reported nowhere — the `role="alert"` lives in the unmounted modal, and "nothing was lost" is then untrue from the user's side; (2) a write that resolves after the user has already reopened a fresh editor calls `handleSaved`, which closes the NEW editor (discarding its draft) and announces the OLD record; (3) fields stay editable while a write is in flight, so keystrokes typed in that window are silently not in the saved record. (The fourth residual — a write that resolves after the exit but before any reopen was dropped, then replayed on the next unrelated close — was a plain bug and is patched below.) Options: **(a) keep allowed**, accept (1)–(3) as Connected-mode residuals and record them in `deferred-work.md` for RFC-001's API repository story; **(b) lock the close while saving** — `onClose` (✕ / Back / Escape) is a no-op while `isSaving`, the `<UnsavedChangesDialog>` `pending` idiom; removes all three at the cost of a lock on a few-ms window today, and Story 4.23's guard then has a second condition to respect; **(c) keep allowed but session-bind the late outcome** — the hook stamps a session id per `requestCreate`, a late `handleSaved` from a stale session neither closes nor stashes but queues its report for after the current session exits; fixes (2), leaves (1) and (3). Files: `apps/web/components/organisms/editor/OrganismEditorModal.tsx` (`saveOrganism`), `apps/web/lib/organisms/useOrganismEditorModal.ts` (`handleSaved`/`handleClose`), `deferred-work.md` (the "Escape during an in-flight organism save is allowed" entry, which currently asserts a "still reports" that the patched code now honours only for the no-reopen case).
 - [x] [Review][Patch] A second Save during the exit fade after a SUCCESSFUL write writes a second organism — `finally` re-enables the button while the dialog is still mounted and interactive for ~195 ms; a double-click or a second Enter lands as a second `organisms.save()` with a fresh id. Hold `isSaving`/`savingRef` on success (the modal is unmounting; the parent's close is the release), release only on failure; move `onSaved(record)` out of the `try` so a throw from the parent is not reported as a failed save that actually succeeded [apps/web/components/organisms/editor/OrganismEditorModal.tsx:373-409]
 - [x] [Review][Patch] A save that resolves AFTER an Escape-close's exit transition is dropped, then replayed on the next unrelated close — `handleSaved` only stashes into `pendingSavedRef` and `handleExited` has already fired; reproduced with a probe (caller's `onSaved` 0 calls after the late resolution, 1 call after the next plain Close). Hand the record on immediately when the dialog is no longer mounted [apps/web/lib/organisms/useOrganismEditorModal.ts:149-167]
 - [x] [Review][Patch] `SAVE_SX` comment says "the write itself is sub-millisecond (a localStorage `setItem`)" — the disabled window is the digest(s) + the write, and the claim underpins the Escape decision above; reword [apps/web/components/organisms/editor/OrganismEditorModal.tsx:46-51]
@@ -788,8 +866,9 @@ This story's files: `components/organisms/{OrganismLibrary,editor/OrganismEditor
   undeclared `@types/node` reach and the package's DOM-free, synchronous character. If the owner
   would rather see rule identity under the ≥ 90% gate, the move is mechanical once `@types/node` is
   declared in `packages/domain/package.json` — and Task 2's ten-literal test moves with it.
-- **Escape during an in-flight write** is allowed; the write lands and reports after the close.
-  The alternative (disable Close/Back/Escape while saving) is a lock on a sub-millisecond window.
+- ~~**Escape during an in-flight write** is allowed; the write lands and reports after the close.~~
+  Decided 2026-09-22 after review: the close is locked while saving (Task 12), and Save no longer
+  closes the editor at all (Task 11).
 - **`saveFailureMessage`'s quota advice** still says "delete a battle from the Gallery" for both
   subjects — Export (Story 5.5) is not on `main`; revisit the copy when it is.
 
