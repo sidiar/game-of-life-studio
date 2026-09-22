@@ -35,5 +35,10 @@ rule = "Minor Spec Resolutions are numbered sequentially (M1, M2, …): if both 
 check = "npm run spec:check"
 
 [[sync.rules]]
+file = "packages/domain/src/index.ts"
+rule = "The barrel is append-only: both lanes add `export` blocks at the end and collide textually, never semantically. Keep BOTH sides' blocks in full — main's first, ours after it — and keep any file-header comment block from either side. Never drop, merge or reorder an export. If the two sides export the SAME name, that is a real collision: abort, it is not this rule."
+check = "npm run typecheck"
+
+[[sync.rules]]
 file = "docs/project-context.md"
 rule = "Keep both additions; if the same rule was added twice, keep main's wording."
