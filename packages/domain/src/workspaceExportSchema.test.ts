@@ -92,6 +92,50 @@ describe('WorkspaceExportSchema (AC1)', () => {
   });
 });
 
+describe('collection ids are unique (Review Decision 3)', () => {
+  const OTHER_BATTLE_ID = '0c1b7a64-9a4e-4d1b-9f2c-3a5d6e7f8091';
+
+  it('rejects two battles sharing an id, at the battles path', () => {
+    const result = WorkspaceExportSchema.safeParse(
+      envelope({ battles: [battleExport(), battleExport({ name: 'Same id, other name' })] }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.path.join('.') === 'battles')).toBe(true);
+  });
+
+  it('rejects two organisms sharing an id, at the organisms path', () => {
+    const result = WorkspaceExportSchema.safeParse(
+      envelope({ organisms: [CONWAYS_CLASSIC, { ...CONWAYS_CLASSIC, name: 'Impostor' }] }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.path.join('.') === 'organisms')).toBe(true);
+  });
+
+  it('accepts distinct ids in both collections', () => {
+    const result = WorkspaceExportSchema.safeParse(
+      envelope({ battles: [battleExport(), battleExport({ id: OTHER_BATTLE_ID })] }),
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it('does NOT constrain how many battles a kind carries — cardinality is Story 5.4’s, once it mints exportBattle', () => {
+    expect(
+      WorkspaceExportSchema.safeParse(
+        envelope({
+          kind: 'battle',
+          battles: [battleExport(), battleExport({ id: OTHER_BATTLE_ID })],
+        }),
+      ).success,
+    ).toBe(true);
+    expect(WorkspaceExportSchema.safeParse(envelope({ kind: 'battle', battles: [] })).success).toBe(
+      true,
+    );
+  });
+});
+
 describe('settings never travel (AC5, AR-12 / Decision F.1)', () => {
   it('has no settings key on the schema, so an envelope carrying one parses with the field STRIPPED', () => {
     const withSettings = {

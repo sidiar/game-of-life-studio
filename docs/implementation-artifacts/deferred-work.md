@@ -2434,7 +2434,14 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   (b) `@gol/simulation`, `@gol/persistence` and `@gol/test-utils` still carry no `sideEffects` flag
   and are all equally pure. **Whichever story next finds a route near its ceiling should take the
   other three**, rather than raising a budget; it is the same mechanism-not-threshold move the
-  bundle-baseline entry above already accepted in principle.
+  bundle-baseline entry above already accepted in principle. **Owner's decision (Sidiar,
+  2026-09-22): accepted as an amendment to AC7, with the flag kept on `@gol/domain` alone.** The
+  other three packages are taken ONE AT A TIME by the story that needs the headroom, not all four
+  now — the invariant is unguarded (nothing fails if a domain module starts registering something
+  at import time; the module is simply dropped from production while every unit test stays green),
+  and widening an unguarded invariant beyond the package a story touches is the wrong trade. The
+  guard that does exist is a note in `packages/domain/src/index.ts`'s header, since JSON takes no
+  comment. AC7 and Task 6 in the story file are reworded to match.
 
 - **Where `appVersion` comes from is NOT decided here — Story 5.5 owns it.** `createWorkspaceSerializer`
   takes `appVersion` as an injected string (FD5) because every `package.json` in this workspace is
@@ -2509,29 +2516,52 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   so its `z.infer` `WorkspaceExport` carries STRINGS and Decision 4's `exportWorkspace()` returns
   `Promise<WorkspaceExport>`; the shipped schema reuses `IsoTimestamp` (a `.transform` to `Date`),
   which splits the type into `WorkspaceExport` (hydrated, `Date`s) and `WorkspaceExportWire`
-  (strings), and `exportWorkspace()` returns `Promise<WorkspaceExportWire>` (FD4). None of these is
-  a defect in the RFC — they are an eighteen-month-old design doc meeting a shipped toolchain — but
-  they are the lines a future reader would otherwise "correct" back.
+  (strings), and `exportWorkspace()` returns `Promise<WorkspaceExportWire>` (FD4). (6) Decision 2
+  states no collection-level constraint at all; `WorkspaceExportSchema` now carries a `superRefine`
+  rejecting a duplicate `battles[].id` (path `['battles']`) and a duplicate `organisms[].id` (path
+  `['organisms']`) — **owner's decision (Sidiar, 2026-09-22)**. A duplicate id is structural
+  corruption and the schema of record takes the same corrupt-never-last-wins stance `BattleSchema`
+  already takes for a duplicate roster id: both collections are keyed by id at rest, so Story 5.8's
+  `replaceAll` would otherwise collapse a duplicate pair silently — two records in, one out, no
+  error. None of these is a defect in the RFC — they are an eighteen-month-old design doc meeting a
+  shipped toolchain — but they are the lines a future reader would otherwise "correct" back.
+
+- **The other half of that decision: `kind === 'battle' ⇒ battles.length === 1` is STORY 5.4's, not
+  this schema's.** The same review asked for both refinements; the owner took the duplicate-id half
+  only (2026-09-22). Cardinality has meaning only once `kind: 'battle'` has a producer, and Story
+  5.3 deliberately forbade that code path — so the rule belongs with `exportBattle` and the
+  rule-aware organism closure that give it meaning. **Story 5.4 should add it** (a `superRefine`
+  issue at path `['battles']`, beside the duplicate-id one) and say so in its AC; until then a
+  `kind: 'battle'` envelope carrying zero or fifty battles parses, and
+  `workspaceExportSchema.test.ts` pins that as the current, deliberate behaviour rather than an
+  oversight.
 
 - **`packages/persistence/src/workspaceSerializer.test.ts` imports `@gol/test-utils` without a
-  `package.json` edge.** The project's testing rules forbid hand-rolling a fake repository, so the
-  test uses `createFakeRepositories()` — but `@gol/test-utils` DEPENDS on `@gol/persistence`, and
-  declaring the reverse edge makes Turbo print `WARNING Circular package dependency detected:
-  @gol/persistence, @gol/test-utils` on every task in the repo (measured, 2026-09-22 — turbo 2.10.5
-  warns rather than failing). The import resolves through the workspace symlink and needs no task
-  ordering, because these packages export TS source and have no emit step (`build` is
-  `tsc --noEmit`). ⚠️ It is still an UNDECLARED dependency and nothing in the lint config catches
-  one — and (5.3 code review) the cost is not only hygiene: **Turbo hashes a task from the package's
-  own inputs plus its DECLARED workspace dependencies**, `test:coverage` is cached
-  (`turbo.json`: `outputs: ["coverage/**"]`) and CI restores `.turbo`, so a later change to
+  `package.json` edge — and ⚠️ DECLARING THAT EDGE IS NOT CURRENTLY POSSIBLE.** The project's
+  testing rules forbid hand-rolling a fake repository, so the test uses `createFakeRepositories()` —
+  but `@gol/test-utils` DEPENDS on `@gol/persistence`, so the reverse edge closes a package cycle.
+  The 5.3 code review recorded that as a cosmetic cost ("turbo 2.10.5 warns rather than failing")
+  and the owner decided on that basis (2026-09-22) to declare the `devDependency` and accept the
+  warning. **Implementing it showed the measurement was incomplete and the decision is not
+  implementable as worded** (re-measured 2026-09-22, turbo 2.10.5): Turbo only WARNS on tasks with
+  no `^` dependency — `typecheck`, `test`, `test:coverage`, which `turbo.json` deliberately gives
+  none — while `build` and `build:standalone` both carry `dependsOn: ["^build"]`, and there the
+  cycle is a HARD ERROR that exits 1 before running anything:
+  `x Cyclic dependency detected: @gol/test-utils#build, @gol/persistence#build`. `build:standalone`
+  is step 7 of `npm run ci` and `npm run ci:dev`, so the edge reds every gate chain, locally and on
+  the PR. The edge was therefore reverted and the decision item reopened on the story.
+  ⚠️ The cache gap the decision meant to close is real and remains open: **Turbo hashes a task from
+  the package's own inputs plus its DECLARED workspace dependencies**, `test:coverage` is cached
+  (`turbo.json`: `outputs: ["coverage/**"]`) and CI restores `.turbo`, so a change to
   `packages/test-utils/src/fakeRepositories.ts` that breaks this test leaves
-  `@gol/persistence#test:coverage`'s hash unchanged and replays the previous green run. The
-  trade-off actually taken was Turbo's circular-dependency WARNING on every task vs. a cache that
-  cannot invalidate this one test; `@gol/simulation` takes the same edge as a DECLARED
-  `devDependency` without a cycle because `@gol/test-utils` does not depend on it. The clean fix is
-  to split the in-memory fakes out of `@gol/test-utils` into a package that depends on nothing but
-  `@gol/domain`, which is more than one story's worth of churn for one test file. Left as an open
-  `[Review][Decision]` on the story rather than revisited at a count.
+  `@gol/persistence#test:coverage`'s hash unchanged and replays the previous green run.
+  (`@gol/simulation` takes the same edge as a DECLARED `devDependency` without a cycle, because
+  `@gol/test-utils` does not depend on it.) **The clean fix — splitting the in-memory fakes out of
+  `@gol/test-utils` into a package that depends on nothing but `@gol/domain` — is now the only fix
+  that does not touch the repo-wide task graph**, and it removes cycle, warning and cache gap
+  together. The two alternatives both change a shared build contract and are the owner's call, not a
+  story's: dropping `^build` from `turbo.json`'s `build` task, or dropping the `build` script (a
+  duplicate `tsc --noEmit`) from `@gol/test-utils`.
 
 ## Deferred from: code review of 5-3-export-envelope-serializer (2026-09-22)
 

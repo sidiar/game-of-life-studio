@@ -1,3 +1,12 @@
+/**
+ * ⚠️ `package.json` declares `"sideEffects": false` for this package, which is only true while no
+ * module under `src/` registers anything at import time (Story 5.3, owner's decision 2026-09-22).
+ * Module-level work today is limited to defining and freezing values; add an import-time
+ * registration, polyfill or side effect anything relies on, and the bundler will drop it from any
+ * route that does not import it by name — silently, with every unit test still green. JSON takes no
+ * comment, so the invariant lives here, at the barrel every consumer goes through.
+ */
+
 export {
   CELL_STATES,
   CONDITION_PROPERTIES,

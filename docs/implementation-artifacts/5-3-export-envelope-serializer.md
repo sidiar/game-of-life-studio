@@ -4,7 +4,7 @@ baseline_commit: aa8ff8e1a79e607ed8b707a757ff00f042fa1047
 
 # Story 5.3: Export Envelope & Serializer
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -72,9 +72,15 @@ a reviewer can check independently. AC6–AC9 are repo-derived: obligations the 
 
 7. **This story adds no `apps/web` file and no `apps/web` import.** The serializer is wired to the
    UI by Story 5.5; nothing under `apps/web` references it yet. Consequence, and an AC because it
-   is checkable: **all five `check-bundle-size.mjs` routes are byte-identical to the 5.2 figures**
-   (333.9 / 309.4 / 309.2 / 295.7 / 291.7 KB), and no `budgetGzipKb` moves. `/battle` has 0.6 KB of
-   headroom and a raise is what Sidiar refuses (`deferred-work.md:397`).
+   is checkable: **no `budgetGzipKb` moves, and every one of the five `check-bundle-size.mjs`
+   routes is within the tool's precision of a FRESH `main` build** (amended 2026-09-22 by the
+   owner's decision on FD10 — the original "byte-identical to the 5.2 figures" wording assumed
+   staying out of `apps/web` kept the bundle still, which is false: `apps/web` imports the
+   `@gol/domain` barrel, so a new module enters its graph the moment `index.ts` re-exports it.
+   The mechanism that keeps the routes flat is `"sideEffects": false` on `@gol/domain`, not a
+   budget move; at the tool's one decimal, two builds of the same source already differ by
+   ±0.1 KB, so strict byte-identity is not achievable by any change including no change at all).
+   `/battle` has 0.6 KB of headroom and a raise is what Sidiar refuses (`deferred-work.md:397`).
 
 8. **The two standing forward-references to "Story 5.3" that this story can discharge, are
    discharged in writing.** (a) `PALETTE_VERSION` is **not** stamped into the envelope
@@ -241,8 +247,12 @@ a reviewer can check independently. AC6–AC9 are repo-derived: obligations the 
         ≥90%, so every new file must carry its own coverage — a well-covered projection cannot
         rescue a thin schema file.
   - [x] `node scripts/check-bundle-size.mjs` before and after; report all five routes. AC7 expects
-        **no movement at all**. If any route moves, something under `apps/web` imported this
-        story's code — that is the bug, not the budget.
+        **no `budgetGzipKb` move, and every route within the tool's precision of a FRESH `main`
+        build** (amended 2026-09-22 with AC7 — "no movement at all" rested on the same false
+        premise). Compare against a fresh `main` build in this worktree, never against a stale
+        `.next`. If a route moves beyond that precision, find the mechanism that makes the new
+        modules droppable — `"sideEffects": false` on the package that grew is the one FD10 used;
+        moving a budget is never the answer.
 
 ### Review Findings
 
@@ -254,7 +264,7 @@ Decision 5's `assertReferentialClosure` at import, not the schema's; unparsed-`B
 schema-valid set because `BattleSchema` already rejects unplaced and duplicate roster ids; the three
 `path: ['cells']` issues are what AC2/Task 1 prescribe; `H-9` is RFC-006's own tag).
 
-- [ ] [Review][Decision] **AC7 is not met as written, and the remedy — `"sideEffects": false` on
+- [x] [Review][Decision] **AC7 is not met as written, and the remedy — `"sideEffects": false` on
       `packages/domain/package.json` (FD10) — is a shared-package build-config change no AC or task
       named.** AC7 says all five routes are byte-identical to the 5.2 figures; the branch measures
       333.8 / 309.5 / 309.3 / 295.8 / 291.7 (four of five differ, two of them +0.1 KB over a fresh
@@ -275,6 +285,15 @@ schema-valid set because `BattleSchema` already rejects unplaced and duplicate r
       flag and accept +0.3 KB on every route as the honest cost of two barrel modules (within
       budget; AC7 reworded to "no `budgetGzipKb` moves"); **(d)** reject — find a mechanism that is
       not a package-level flag (e.g. a second entry point for the export modules).
+      **Owner's decision (Sidiar, 2026-09-22): (a) — accept FD10 as the amendment.** Keep
+      `"sideEffects": false` on `@gol/domain`; reword AC7 and Task 6's third box to "no
+      `budgetGzipKb` moves and every route is within the tool's precision of a fresh `main`
+      build"; add the one-line invariant note to `packages/domain/src/index.ts`'s header (the
+      flag is only true while no domain module registers anything at import time). The next
+      story that needs headroom may take `@gol/simulation`/`@gol/persistence`/`@gol/test-utils`
+      the same way, one at a time. Rationale: this changes the gate's *mechanism* rather than
+      relaxing its threshold, which is the standing preference; extending to all four packages
+      now (b) would widen an unguarded invariant beyond the package this story touches.
 - [ ] [Review][Decision] **`packages/persistence/src/workspaceSerializer.test.ts` imports
       `@gol/test-utils` with no `package.json` edge, and the undeclared edge blinds Turbo's cache.**
       The Dev Record framed it as "circular-dependency warning vs. an undeclared import that resolves
@@ -294,7 +313,41 @@ schema-valid set because `BattleSchema` already rejects unplaced and duplicate r
       story); **(d)** move this test's fake to a minimal in-file stub of the two `list` methods it
       uses, breaking the project's "never hand-roll a fake repository" rule once, in the open. The
       `deferred-work.md` entry was updated to carry the cache consequence either way.
-- [ ] [Review][Decision] **`WorkspaceExportSchema` refines nothing across its collections: a
+      **Owner's decision (Sidiar, 2026-09-22): (a) — declare the devDependency.** Add
+      `@gol/test-utils` as a `devDependency` of `@gol/persistence` so Turbo hashes
+      `test:coverage` from the real edge, and accept `WARNING Circular package dependency
+      detected` on every task (turbo 2.10.5 warns, never fails — measured). Rationale: the
+      cycle exists already, through the workspace symlink; declaring it does not create one,
+      it stops hiding it from the tooling, and a cache that replays a stale green run is the
+      larger harm. (c), splitting the fakes into a `@gol/domain`-only package, stays the clean
+      fix and remains recorded in `deferred-work.md` as the eventual resolution — with this
+      decision as its trigger. `workspaceExportProjection.test.ts` keeps its hand-rolled
+      `denseGrid`: it is a fixture, not a repository fake, so no rule pulls it either way.
+      ⚠️ **BLOCKED — the decision's premise was measured wrong, and (a) cannot be implemented as
+      worded (dev, 2026-09-22).** The edge was added, `npm install` run, and `npm run ci:dev`
+      failed at step 7 of 11. Turbo 2.10.5 WARNS about the cycle only on tasks with no `^`
+      dependency — `typecheck`, `test`, `test:coverage`, which `turbo.json` deliberately gives none
+      — but `build` and `build:standalone` both carry `dependsOn: ["^build"]`, and there the cycle
+      is a hard error that exits 1 before running anything:
+      `x Cyclic dependency detected: @gol/test-utils#build, @gol/persistence#build`
+      (reproducible with `npx turbo run build --dry=json`, exit 1, while `npx turbo run typecheck
+      --dry=json` exits 0 with only the warning). `build:standalone` is step 7 of both `npm run ci`
+      and `npm run ci:dev`, so the edge reds every gate chain, locally and on PR #71. The edge and
+      its lockfile line were therefore **reverted**; everything else in this resume is unaffected.
+      The remaining options, none of which a story may take on its own authority:
+      **(a′)** drop `dependsOn: ["^build"]` from `turbo.json`'s `build` task — the cycle becomes a
+      warning everywhere, but it changes the repo-wide task graph and `build:standalone`'s own
+      `^build` would still need the same treatment;
+      **(b′)** drop the `build` script from `@gol/test-utils` (it is a duplicate `tsc --noEmit`;
+      `typecheck` already covers it) — narrower, but still an edit to a shared package's script set
+      that every future `^build` consumer inherits;
+      **(c)** as before — split the in-memory fakes into a package depending only on `@gol/domain`,
+      its own story; this is now the only fix that leaves the task graph alone, and it closes the
+      cache gap too;
+      **(b)** as before — keep the undeclared import and the recorded cache gap. This is the state
+      the tree is in now, so it is also the do-nothing option.
+      `deferred-work.md`'s entry carries the full measurement either way.
+- [x] [Review][Decision] **`WorkspaceExportSchema` refines nothing across its collections: a
       `kind: 'battle'` envelope may carry zero or fifty battles, and two battles (or two organisms)
       may share an `id`.** RFC-006 Decision 2 defines the battle export as "the same schema, filtered
       to ONE battle plus the organisms it references", and the schema header restates it in prose
@@ -312,6 +365,31 @@ schema-valid set because `BattleSchema` already rejects unplaced and duplicate r
       schema — 5.8's `assertReferentialClosure` step grows a duplicate-id check and 5.4 adds the
       cardinality refinement when it mints `exportBattle`; **(d)** cardinality now, duplicates to
       5.8. Whichever is picked, it should be recorded in the RFC-006 variances entry.
+      **Owner's decision (Sidiar, 2026-09-22): (b) — duplicate-id refinements now, cardinality
+      to 5.4.** Add a `superRefine` on `WorkspaceExportSchema` rejecting duplicate `battles[].id`
+      (path `['battles']`) and duplicate `organisms[].id` (path `['organisms']`), with a negative
+      test for each. Do NOT add the `kind === 'battle' ⇒ battles.length === 1` refinement here.
+      Rationale: the two are different kinds of rule. A duplicate id is structural corruption, and
+      the schema of record should take the same corrupt-never-last-wins stance `BattleSchema`
+      already takes for a duplicate roster id — leaving it to 5.8 would let `replaceAll` collapse
+      two records silently. Cardinality only has meaning once `kind: 'battle'` has a producer, and
+      this story deliberately forbade that code path, so 5.4 specifies it when it mints
+      `exportBattle`. Record both halves in the RFC-006 variances entry in `deferred-work.md`.
+- [x] [Review][Decision] **CI on PR #71 is RED: the round-trip identity property timed out.**
+      `@gol/domain#test:coverage` failed on run 35726671334 —
+      `workspaceExportProjection.test.ts:194` "fromBattleExport(toBattleExport(b)) is the identity
+      on every schema-valid battle" hit `Test timed out in 5000ms` after 6310ms. **Not a
+      counterexample**: the invariant held, no shrunk input was reported, and `npm run ci:dev` was
+      green on the dev machine — the GitHub runner is simply slower than the 5s Vitest default.
+      `packages/simulation/src/grid/grid.test.ts`'s composition property took 4627ms in the same
+      run and is next in line to fail. The generator's own comment (lines 174-176) defends the real
+      preset sizes against a smaller cap, so shrinking it is argued against in-code.
+      **Owner's decision (Sidiar, 2026-09-22): explicit per-test timeout.** Pass an explicit
+      timeout (30_000) as the third argument of BOTH `it(...)` calls — this property and
+      `grid.test.ts`'s `gridToDense . fromBattleExport . toBattleExport . gridFromDense` identity —
+      with a one-line comment at each saying why (a 100-run property over real preset grids
+      legitimately exceeds a default meant as a hang-guard). Do NOT lower `numRuns`, do NOT set
+      `testTimeout` package-wide, and do NOT shrink the generator. Re-run CI and confirm green.
 - [x] [Review][Patch] `toBattleExport` aliased `battle.gridSize` into the wire object while `fromBattleExport` spreads the other way — now spread on both sides, asserted [packages/domain/src/workspaceExportProjection.ts:87]
 - [x] [Review][Patch] Header claimed `pruneAndRemapBattleGrid` must not be reached for while the tests call it in the generator — the comment now draws the input-canonicalization vs. expectation line [packages/domain/src/workspaceExportProjection.ts:23-26]
 - [x] [Review][Patch] "One pass plus one concatenation" described a cell-by-cell push loop — now `buckets.flat()`, which is the promised concatenation [packages/domain/src/workspaceExportProjection.ts:54,79-82]
@@ -591,6 +669,16 @@ Claude Opus 5 (1M context) — `bmad-dev-story`, lane `--epic 5`.
   → 333.9 / 309.4 / 309.2 / 295.7 / 291.7; a **fresh** `origin/main` build in this worktree →
   333.8 / 309.5 / 309.3 / 295.7 / 291.6; this branch → **333.8 / 309.5 / 309.3 / 295.8 / 291.7**.
   No `budgetGzipKb` moved.
+**Review-decision resume (2026-09-22).** `npm run ci:dev` → **exit 0** (log:
+`/tmp/ci-5-3-resume2.log`). Coverage unchanged at its tiers: `@gol/domain` **100 / 100 / 100 / 100**
+(144 tests, +4), `@gol/persistence` **99.28 / 96.22 / 100 / 100**, `@gol/simulation` **100** across,
+`@gol/test-utils` 94.67 / 90.82 / 100 / 97.2. Bundle **333.8 / 309.5 / 309.3 / 295.8 / 291.7** —
+identical to the pre-review figures, and no `budgetGzipKb` moved (the duplicate-id `superRefine` is
+inside `@gol/domain`, which `"sideEffects": false` keeps droppable). The two property tests now
+carry an explicit 30s timeout; measured locally **351ms** and **329ms** uninstrumented, against the
+**6310ms** and **4627ms** the GitHub runner took under coverage instrumentation on run 35726671334 —
+so the headroom is roughly 5x the observed CI worst case, not a hair's breadth over it.
+
 - Coverage: `@gol/domain` **100 / 100 / 100 / 100** (140 tests, per-file ≥90 gate);
   `@gol/simulation` **100 / 100 / 100 / 100** (408 tests); `@gol/persistence` **99.28 stmts /
   96.22 branches / 100 funcs / 100 lines** (96 tests, ~80 aggregate gate); `@gol/test-utils`
@@ -598,7 +686,40 @@ Claude Opus 5 (1M context) — `bmad-dev-story`, lane `--epic 5`.
 
 ### Completion Notes List
 
-All nine ACs are met. Three things a reviewer should look at first, because they are decisions this
+**Resume after the owner's decisions (2026-09-22) — three of four implemented, one blocked on a
+premise that measurement disproved.**
+
+- ✅ **Decision 1 (AC7 / `"sideEffects": false`) — option (a).** The flag stays on `@gol/domain`
+  alone; AC7 and Task 6's third box are reworded to "no `budgetGzipKb` moves, and every route within
+  the tool's precision of a fresh `main` build", each carrying why the original wording was
+  unachievable. The unguarded invariant now has the only guard JSON permits: a header note on
+  `packages/domain/src/index.ts`, the barrel every consumer goes through, saying the flag is true
+  only while no domain module registers anything at import time.
+- ❌ **Decision 2 (`@gol/test-utils` edge) — option (a) is NOT IMPLEMENTABLE; reverted, item
+  reopened.** The devDependency was added and `npm install` run; `npm run ci:dev` then failed at
+  step 7 of 11. The decision rested on "turbo 2.10.5 warns, never fails — measured", and that
+  measurement covered only tasks with no `^` dependency. `turbo.json` gives `typecheck`, `test` and
+  `test:coverage` none, so they warn — but `build` and `build:standalone` both carry
+  `dependsOn: ["^build"]`, where the cycle is a hard error that exits 1 before running anything
+  (`x Cyclic dependency detected: @gol/test-utils#build, @gol/persistence#build`; reproducible with
+  `npx turbo run build --dry=json`, exit 1, while `npx turbo run typecheck --dry=json` exits 0).
+  `build:standalone` is step 7 of both `npm run ci` and `npm run ci:dev`, so the edge reds every
+  gate chain including PR #71's. The edge and its lockfile line were reverted, the import comment
+  now records why declaring it is not merely unpleasant but impossible today, and the decision item
+  carries the measurement plus two new options — neither of which a story may take on its own
+  authority, since both edit a shared build contract (`^build` on `turbo.json`'s `build` task, or
+  `@gol/test-utils`'s duplicate `build` script).
+- ✅ **Decision 3 (schema refinements) — option (b).** `WorkspaceExportSchema` gains a `superRefine`
+  rejecting a duplicate `battles[].id` at path `['battles']` and a duplicate `organisms[].id` at
+  path `['organisms']`, with a negative test for each. The cardinality rule is deliberately absent
+  and **pinned as absent**: a test asserts that a `kind: 'battle'` envelope with two battles, and
+  one with none, both parse — so Story 5.4 inherits a stated behaviour rather than an oversight.
+  Both halves are recorded in the RFC-006 variances entry in `deferred-work.md`.
+- ✅ **Decision 4 (CI red — property timeout) — explicit per-test timeout.** `30_000` as the third
+  argument of both `it(...)` calls, each with a comment saying why. `numRuns` untouched, no
+  package-wide `testTimeout`, generator unshrunk.
+
+All nine ACs are met (AC7 as amended). Three things a reviewer should look at first, because they are decisions this
 story made that the story file did not pre-decide:
 
 - **FD10 (new) — AC7's premise was false and the fix was `"sideEffects": false` on `@gol/domain`,
@@ -686,6 +807,7 @@ bullet, as Task 5 predicted.
 | 2026-09-22 | Task 5 — `deferred-work.md`: `:392` struck, "Deferred from: Story 5.3" added (seven entries incl. the `PALETTE_VERSION` discharge and FD10). |
 | 2026-09-22 | Task 6 — `npm run ci:dev` exit 0. FD10: `"sideEffects": false` on `@gol/domain` after a pristine-`main` comparison showed the barrel re-export costing +0.3 KB on every route; no budget moved. |
 | 2026-09-22 | Code review (Fable, `review_mode: full`) — 9 patches applied (gridSize spread symmetry, `buckets.flat()`, two comment corrections, two test additions, three `deferred-work.md` corrections), 1 defer, 3 `[Review][Decision]` items left open for the owner; status → `in-progress`. |
+| 2026-09-22 | Owner's decisions implemented (resume): D1 AC7/Task 6 reworded + `index.ts` invariant note; D3 duplicate-id `superRefine` on `WorkspaceExportSchema` + 4 tests (2 negative, 2 pinning cardinality's deliberate absence); D4 explicit `30_000` timeouts on both fast-check identity properties. D2 (declare `@gol/test-utils`) reverted — the edge is a FATAL turbo cycle on `^build`, not a warning; item reopened with the measurement and two new options. `npm run ci:dev` exit 0. |
 
 Dev Model: opus   # mints the wire format, the dense↔sparse contract and the cell-ordering identity argument that Stories 5.4–5.8 all build on; there is no serializer pattern in the tree to follow
 Proposed lane gate: none

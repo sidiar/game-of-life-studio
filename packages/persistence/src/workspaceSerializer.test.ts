@@ -5,13 +5,22 @@ import {
   WorkspaceExportSchema,
   type Battle,
 } from '@gol/domain';
-// ⚠️ IMPORTED WITHOUT A `package.json` EDGE, deliberately (Story 5.3). `@gol/test-utils` depends on
-// `@gol/persistence`, so declaring the reverse edge makes Turbo report "Circular package dependency
-// detected" on every task in the repo. The import resolves through the workspace symlink and needs
-// no task ordering — these packages export TS source and have no emit step (`build` is
-// `tsc --noEmit`). The alternative the project's testing rules rule out is worse: a hand-rolled
-// fake repository here would be free to disagree with the real store's contract, which is the one
-// thing `createFakeRepositories` exists to prevent. Recorded in `deferred-work.md`.
+// ⚠️ IMPORTED WITHOUT A `package.json` EDGE, and NOT by preference — declaring it is not currently
+// possible (Story 5.3; re-measured 2026-09-22 while implementing the owner's decision to declare
+// it). `@gol/test-utils` depends on `@gol/persistence`, so the reverse edge closes a package cycle.
+// Turbo 2.10.5 only WARNS about that cycle on tasks with no `^` dependency — `typecheck`, `test`,
+// `test:coverage`, which `turbo.json` deliberately gives none — but `build` and `build:standalone`
+// both carry `dependsOn: ["^build"]`, and there it is a hard error that exits 1 before running
+// anything: `x Cyclic dependency detected: @gol/test-utils#build, @gol/persistence#build`.
+// `build:standalone` is step 7 of `npm run ci` and `npm run ci:dev`, so the edge breaks every gate
+// chain, locally and on the PR. Until the fakes are split out of `@gol/test-utils` (the clean fix,
+// in `deferred-work.md`), this import resolves through the workspace symlink and needs no task
+// ordering, because these packages export TS source and have no emit step (`build` is
+// `tsc --noEmit`). ⚠️ The known cost is a cache gap: Turbo hashes `test:coverage` from DECLARED
+// dependencies only, so a change to `fakeRepositories.ts` that breaks this test replays the previous
+// green run. The alternative the project's testing rules rule out is worse: a hand-rolled fake
+// repository here would be free to disagree with the real store's contract, which is the one thing
+// `createFakeRepositories` exists to prevent.
 import { createFakeRepositories } from '@gol/test-utils';
 import { describe, expect, it } from 'vitest';
 import { createWorkspaceSerializer } from './workspaceSerializer';

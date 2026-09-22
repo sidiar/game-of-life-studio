@@ -191,13 +191,17 @@ describe('round-trip identity (AC4, AR-41 / AR-44)', () => {
       return battle(preset, pruned.organismIds, pruned.gridState);
     });
 
+  // 30s, not Vitest's 5s default: 100 runs over real preset grids (up to 6,000 cells each, each one
+  // canonicalized, parsed and compared) legitimately takes seconds, and the default is a hang-guard
+  // rather than a budget. A slower CI runner is not a regression — lowering `numRuns` or shrinking
+  // the generator to fit the default would silently weaken the property instead.
   it('fromBattleExport(toBattleExport(b)) is the identity on every schema-valid battle', () => {
     fc.assert(
       fc.property(arbBattle, (b) => {
         expect(fromBattleExport(parseWireBattle(toBattleExport(b)))).toEqual(b);
       }),
     );
-  });
+  }, 30_000);
 
   it('survives real JSON: toEnvelope -> stringify -> parse -> schema -> fromEnvelope (FD4)', () => {
     const grid = denseGrid(100, 60);

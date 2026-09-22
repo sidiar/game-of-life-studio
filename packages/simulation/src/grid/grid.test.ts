@@ -490,6 +490,9 @@ describe('grid properties (fast-check)', () => {
         });
       });
 
+    // 30s, not Vitest's 5s default: 100 runs over real preset grids, each one converted four times
+    // and schema-parsed, legitimately takes seconds — the default is a hang-guard, not a budget.
+    // Its sibling property in `@gol/domain` carries the same timeout for the same reason.
     it('gridToDense . fromBattleExport . toBattleExport . gridFromDense is the identity on occupant', () => {
       fc.assert(
         fc.property(arbPresetBattle, (battle) => {
@@ -514,6 +517,6 @@ describe('grid properties (fast-check)', () => {
           expect(back.height).toBe(typed.height);
         }),
       );
-    });
+    }, 30_000);
   });
 });

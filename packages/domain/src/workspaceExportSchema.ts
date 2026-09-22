@@ -133,14 +133,38 @@ export const BattleExportSchema = z
  * `appVersion` is provenance only — stamped, reported, never branched on (Decision I.4), the same
  * posture `gol:schema`'s stamp takes from the at-rest side.
  */
-export const WorkspaceExportSchema = z.object({
-  formatVersion: z.literal(CURRENT_FORMAT_VERSION),
-  appVersion: z.string(),
-  exportedAt: IsoTimestamp,
-  kind: z.enum(EXPORT_KINDS),
-  organisms: z.array(OrganismSchema),
-  battles: z.array(BattleExportSchema),
-});
+export const WorkspaceExportSchema = z
+  .object({
+    formatVersion: z.literal(CURRENT_FORMAT_VERSION),
+    appVersion: z.string(),
+    exportedAt: IsoTimestamp,
+    kind: z.enum(EXPORT_KINDS),
+    organisms: z.array(OrganismSchema),
+    battles: z.array(BattleExportSchema),
+  })
+  .superRefine((envelope, ctx) => {
+    // Corrupt, never last-wins — the same stance `BattleSchema` takes for a duplicate roster id and
+    // this file takes one level down for a duplicate `(x,y)`. Both collections are keyed by id at
+    // rest (`gol:battles` / `gol:organisms` are objects keyed by id), so Story 5.8's `replaceAll`
+    // would collapse a duplicate pair silently: two records in, one record out, no error anywhere.
+    //
+    // ⚠️ CARDINALITY IS NOT HERE. `kind: 'battle'` implying exactly one battle is Story 5.4's, which
+    // mints `exportBattle` and the organism closure that gives the rule meaning; this story forbade
+    // a `kind: 'battle'` code path outright, so a refinement here would constrain a producer that
+    // does not exist yet.
+    for (const [field, ids] of [
+      ['battles', envelope.battles.map((b) => b.id)],
+      ['organisms', envelope.organisms.map((o) => o.id)],
+    ] as const) {
+      if (new Set(ids).size !== ids.length) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: `${field} must not repeat an id — a duplicate id is corrupt data`,
+        });
+      }
+    }
+  });
 
 /** Parsed shapes — timestamps are hydrated `Date`s, as everywhere else in this package. */
 export type BattleExport = z.infer<typeof BattleExportSchema>;
