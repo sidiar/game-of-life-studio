@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-09-21
+# last_updated: 2026-09-22
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-09-21
+last_updated: 2026-09-22
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -130,7 +130,7 @@ development_status:
   4-12-rule-reordering: done
   4-13-editor-validation-feedback: done
   4-14-preview-grid-drawing: done
-  4-15-preview-simulation: backlog
+  4-15-preview-simulation: done
   4-16-create-save-organism: backlog
   4-17-edit-organism-from-library: backlog
   4-18-clone-organism: backlog

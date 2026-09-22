@@ -77,7 +77,8 @@ export type { GenPerSec } from './simulationSpeed';
  *    render restarts the run every render, silently.
  * 2. `organisms` is the battle roster as domain `Organism` records in ROSTER ORDER — one per slot,
  *    `organisms[ref - 1]` (M14). It satisfies `CompilableOrganism` and `OrganismRuntime`
- *    structurally (M13) and carries the `name` / `colorToken` the population entries need.
+ *    structurally (M13) and carries the `name` / `colorToken` the population entries need. (or any
+ *    `SimulationOrganism` — Story 4.15's preview passes a draft-derived one)
  * 3. Unmount the view to leave Run mode. No live grid survives Run -> Lab (RFC-005 Decision 4);
  *    unmount stops the loop, detaches the renderer and drops the session.
  * 4. Hand the canvas's `onRendererReady(r)` straight to `attachRenderer(r)`, and its cleanup to
@@ -111,6 +112,19 @@ export type { GenPerSec } from './simulationSpeed';
 
 /** `Pick`, not the class: a test hands in a recording object and the hook never sees a canvas. */
 export type PlaybackRenderer = Pick<GridRenderer, 'drawDiff' | 'drawFull' | 'resize'>;
+
+/**
+ * What the hook reads off an organism, and nothing more (the `CompilableOrganism` /
+ * `PlaybackRenderer` `Pick` discipline): `id` + `survivalRules` for `compileSession`,
+ * `dominance` for the strategy's `OrganismRuntime`, `name` + `colorToken` for
+ * `derivePopulation`. `@gol/domain`'s `Organism` assigns in unchanged; Story 4.15's draft
+ * organism — which has no `schemaVersion` and whose `agingEnabled` is the renderer's
+ * business, not the engine's — is the second caller and the reason this is not `Organism`.
+ */
+export type SimulationOrganism = Pick<
+  Organism,
+  'id' | 'name' | 'colorToken' | 'dominance' | 'survivalRules'
+>;
 
 export type SimulationStatus = 'paused' | 'playing';
 
@@ -173,7 +187,7 @@ function mintSeed(): number {
  */
 interface SessionKey {
   readonly initialGrid: Grid;
-  readonly organisms: readonly Organism[];
+  readonly organisms: readonly SimulationOrganism[];
   readonly seed: number | undefined;
   readonly scheduler: FrameScheduler;
 }
@@ -326,7 +340,7 @@ function createSession(inputs: SessionInputs): SimulationSession {
 
 export function useSimulation(
   initialGrid: Grid,
-  organisms: readonly Organism[],
+  organisms: readonly SimulationOrganism[],
   opts: UseSimulationOptions,
 ): UseSimulationResult {
   const { seed: seedOpt, scheduler = rafScheduler } = opts;

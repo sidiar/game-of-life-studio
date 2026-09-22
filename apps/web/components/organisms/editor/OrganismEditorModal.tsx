@@ -199,7 +199,9 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * `dominance`, Story 4.7's `agingEnabled`/`colorToken`, Story 4.8's `colorToken` seed from
  * `library` and Story 4.10's `survivalRules`, Story 4.12's order) and its seed — no repository
  * call. Story 4.14's preview panel reads `colorToken`/`agingEnabled` and holds its own grid (M3);
- * the lifecycle (inert window, focus restore) stays `useOrganismEditorModal`'s, and a fresh
+ * Story 4.15's run reads `survivalRules` and compiles them for the next Play — eagerly, on every
+ * at-rest change; never mid-run (FD2). The lifecycle (inert
+ * window, focus restore) stays `useOrganismEditorModal`'s, and a fresh
  * draft per open is the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after
  * every exit, so there is no reset effect and no `key` trick). The `useState` initialiser closes
  * over the `library` prop — legitimate because it runs once per mount and the `mounted` gate
@@ -223,7 +225,7 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * row — in the synchronous commit that follows the add, FD3) and focuses the first error's control;
  * a valid draft shows the transitional `SaveNotice` (AC8, FD1) — Story 4.16 replaces that branch
  * with the repository write, the close and the toast. (Story 4.13) (UX-DR14) (UX-DR17)
- * (Story 4.14)
+ * (Story 4.14) (Story 4.15)
  */
 export default function OrganismEditorModal({
   open,
@@ -470,6 +472,7 @@ export default function OrganismEditorModal({
                 colorToken={draft.colorToken}
                 agingEnabled={draft.agingEnabled}
                 colors={colors}
+                survivalRules={draft.survivalRules}
               />
             }
           />
