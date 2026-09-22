@@ -7,6 +7,7 @@ export type {
   BattleRepository,
   OrganismRepository,
   SettingsRepository,
+  StorageUsage,
 } from './repositories';
 
 export { createLocalStorageRepositories } from './createLocalStorageRepositories';
@@ -23,6 +24,12 @@ export { LocalStorageSettingsRepository } from './localStorageSettingsRepository
 export { CorruptDataError } from './errors';
 export { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
 export type { StorageKey } from './localStorageAccess';
+
+// The AR-14 usage meter (Story 5.2). `storageBytesOf` is the pure formula @gol/test-utils' fake
+// shares so it cannot drift from the real meter; `measureStorageUsage` is the localStorage reader
+// the page-boundary test derives its expected figure from. Production code reaches the meter only
+// through `AppRepositories.storageUsage()`.
+export { measureStorageUsage, storageBytesOf } from './localStorageAccess';
 
 // Exported so @gol/test-utils' in-memory fakes can enforce the identical id guard rather than
 // re-stating it (review 2026-08-05). A fake that accepts an id LocalStorageOrganismRepository

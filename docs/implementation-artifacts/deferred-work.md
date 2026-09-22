@@ -2186,7 +2186,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   4.1's Library used). The route path sketch (`app/settings/page.tsx`) predates the `(gallery)`
   route-group split (FD1) and is illustrative, not followed. A docs-reconciliation item for the
   next RFC touch, alongside the Story 4.1 `/organisms` entry above — **not edited here** (Sidiar
-  owns RFC amendments).
+  owns RFC amendments). Story 5.2 added a fourth prop (`workspace`, a `Pick` of the aggregate), so
+  the RFC's one-repository tree line is now three props short.
 
 ## Deferred from: code review of 5-1-settings-page-shell (2026-09-21)
 
@@ -2287,6 +2288,29 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   exists. A grid-size change silently mis-targets every drawn cell — the 4.14/4.15 blocks would
   fail loudly (Clear stays disabled), which is the current guard.
 
+## Deferred from: Story 5-2-workspace-statistics implementation (2026-09-21)
+
+- **RFC-006 Decision 7's `navigator.storage.estimate()` fallback is not followed** (`RFC-006:268`)
+  — a recorded conflict, not a silent pick (FD4). Three reasons, any one sufficient: (1) Chromium's
+  `estimate().usage` does **not include localStorage** — it meters IndexedDB, Cache Storage and OPFS
+  against the origin's quota, so a fresh install with 1 KB in `gol:*` would report whatever the Next
+  chunks in Cache Storage happen to weigh, or 0; (2) Firefox's DOES include localStorage, so the
+  same workspace would read differently per browser on a page whose job is a truthful number; (3) it
+  is origin-wide and cannot be scoped to `gol:*`, which the epic AC (`epics.md:1341`) requires. The
+  meter sums `key.length + value.length` × 2 over `STORAGE_KEYS` instead
+  (`packages/persistence/src/localStorageAccess.ts`) and never calls `estimate()`. A docs-reconciliation item for the next RFC-006 touch — **not
+  edited here** (Sidiar owns RFC amendments).
+
+- **The meter's unit is UTF-16 code units × 2, while `RFC-006:268`'s "~12 KB per 100×60 battle"
+  arithmetic counts code units only** — the shipped meter will show roughly double that prose
+  figure per battle. Flagged so nobody "fixes" the `BYTES_PER_UTF16_CODE_UNIT = 2` constant to
+  match the prose instead of the other way around; the constant is the engine's own accounting
+  (every browser stores a localStorage string as UTF-16), the prose is the thing that is off by a
+  factor of two. Same reconciliation item as the `estimate()` entry above.
+
+- **RFC-005's `<SettingsPage settings={repo}>` tree line falls one prop further behind** — see the
+  sentence appended to the Story 5.1 `RFC-005:172,197` entry above.
+
 ## Deferred from: Story 4-16-create-save-organism (2026-09-22)
 
 - **Two live-region idioms ship side by side, deliberately — both now IN the modal.** Amended
@@ -2373,4 +2397,3 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   failure mode above (`e2e/organisms.spec.ts`, Story 4.16 test 4). Inherited verbatim from the
   Story 4.13 e2e's branch; a stronger WebKit assertion needs a positive claim about where focus
   IS on that engine — deferred, pre-existing idiom.
-

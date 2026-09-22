@@ -27,6 +27,10 @@ describe('createRepositories', () => {
     expect(typeof createRepositories().clearAll).toBe('function');
   });
 
+  it('exposes the AR-14 usage meter on the assembled set', () => {
+    expect(typeof createRepositories().storageUsage).toBe('function');
+  });
+
   it('constructs without touching storage, so a static build can import it safely', () => {
     const getItem = vi.spyOn(Storage.prototype, 'getItem');
     const setItem = vi.spyOn(Storage.prototype, 'setItem');

@@ -1,10 +1,12 @@
 'use client';
 
 import { styled } from '@mui/material/styles';
+import { formatStorageSize } from '@/lib/settings/formatStorageSize';
 
 export interface WorkspaceStatisticsProps {
   battleCount: number;
   organismCount: number;
+  storageBytes: number;
 }
 
 const STATS_HEADING_ID = 'workspace-statistics-heading';
@@ -85,17 +87,19 @@ const StatValue = styled('dd')({
 });
 
 /**
- * The Workspace Statistics card (Story 5.1 AC4/FD4). Ships with the two counts this story can
- * fill truthfully — Saved Battles and Organisms. Storage Used arrives with Story 5.2's AR-14 usage
- * meter; it is absent here, not a placeholder (a dead tile is exactly what AC4 forbids).
+ * The Workspace Statistics card. Three tiles — Saved Battles, Organisms, Storage Used — are the
+ * card's complete set for the MVP (FR-8.2 names exactly these); this is not a partial view growing
+ * a fourth tile later. The two counts are `toLocaleString('en-US')`-formatted integers (the house
+ * locale pin: `GridSettingsSection`, `PopulationStats`; deferred-work.md:429 — an unpinned locale
+ * renders "6 000" on fr-FR and fails a test written on en-US). Storage Used is UTF-16 bytes from
+ * the AR-14 usage meter (`packages/persistence/src/localStorageAccess.ts`), formatted by
+ * `formatStorageSize` (Story 5.2 FD2/FD5) — this component never reads storage itself.
  */
 export default function WorkspaceStatistics({
   battleCount,
   organismCount,
+  storageBytes,
 }: WorkspaceStatisticsProps) {
-  // `toLocaleString('en-US')` — the house locale pin (`GridSettingsSection`, `PopulationStats`;
-  // deferred-work.md:429): an unpinned locale renders "6 000" on fr-FR and fails a test written on
-  // en-US.
   return (
     <Card aria-labelledby={STATS_HEADING_ID}>
       <CardTitle id={STATS_HEADING_ID}>Workspace Statistics</CardTitle>
@@ -108,8 +112,11 @@ export default function WorkspaceStatistics({
           <StatLabel>Organisms</StatLabel>
           <StatValue>{organismCount.toLocaleString('en-US')}</StatValue>
         </StatItem>
+        <StatItem>
+          <StatLabel>Storage Used</StatLabel>
+          <StatValue>{formatStorageSize(storageBytes)}</StatValue>
+        </StatItem>
       </StatsGrid>
-      {/* Storage Used (Story 5.2) slots in as a third <StatItem> here. */}
     </Card>
   );
 }

@@ -6,7 +6,7 @@ import {
   type Battle,
   type Organism,
 } from '@gol/domain';
-import { CorruptDataError } from '@gol/persistence';
+import { CorruptDataError, STORAGE_KEYS, storageBytesOf } from '@gol/persistence';
 import { createFakeRepositories } from './fakeRepositories';
 
 const PRESET = { cols: 50, rows: 30 } as const;
@@ -264,6 +264,55 @@ describe('clearAll (Decision F / AR-12)', () => {
     expect(await repos.battles.list()).toEqual([]);
     expect(await repos.organisms.list()).toEqual([]);
     expect((await repos.settings.load()).theme).toBe('biotech-terminal');
+  });
+});
+
+describe('storageUsage (AR-14)', () => {
+  it('an empty fake reports 0', async () => {
+    const repos = createFakeRepositories();
+
+    expect((await repos.storageUsage()).bytes).toBe(0);
+  });
+
+  it('grows after battles.save()', async () => {
+    const repos = createFakeRepositories();
+    const before = (await repos.storageUsage()).bytes;
+
+    await repos.battles.save(makeBattle(ID_A));
+
+    expect((await repos.storageUsage()).bytes).toBeGreaterThan(before);
+  });
+
+  it('a settings-only save reports exactly the shared formula over the round-tripped record', async () => {
+    const repos = createFakeRepositories();
+
+    await repos.settings.save({ ...DEFAULT_SETTINGS, theme: 'biotech-terminal' });
+    const roundTripped = await repos.settings.load();
+
+    expect((await repos.storageUsage()).bytes).toBe(
+      storageBytesOf([[STORAGE_KEYS.settings, JSON.stringify(roundTripped)]]),
+    );
+  });
+
+  it('clearAll() leaves only the stamp', async () => {
+    const repos = createFakeRepositories();
+    await repos.battles.save(makeBattle(ID_A));
+    await repos.organisms.save(makeOrganism('mock-org'));
+    const before = (await repos.storageUsage()).bytes;
+
+    await repos.clearAll();
+    const after = (await repos.storageUsage()).bytes;
+
+    expect(after).toBeGreaterThan(0);
+    expect(after).toBeLessThan(before);
+  });
+
+  it('isFreshWorkspace() is unaffected by measuring — a read never stamps', async () => {
+    const repos = createFakeRepositories();
+
+    await repos.storageUsage();
+
+    expect(await repos.isFreshWorkspace()).toBe(true);
   });
 });
 

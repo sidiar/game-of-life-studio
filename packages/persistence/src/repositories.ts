@@ -51,6 +51,15 @@ export interface SettingsRepository {
   save(settings: Settings): Promise<void>;
 }
 
+/** Bytes the workspace occupies in the backing store (AR-14). */
+export interface StorageUsage {
+  /**
+   * UTF-16 bytes for a localStorage-backed workspace; a connected-mode repository reports
+   * whatever its server meters — the number is mode-agnostic, only its derivation is not.
+   */
+  bytes: number;
+}
+
 export interface AppRepositories {
   battles: BattleRepository;
   organisms: OrganismRepository;
@@ -70,4 +79,11 @@ export interface AppRepositories {
    * which would turn every load into an M9-forbidden self-heal.
    */
   isFreshWorkspace(): Promise<boolean>;
+  /**
+   * "How much space does this workspace take?" — the same mode-agnostic-question,
+   * storage-specific-answer shape as `isFreshWorkspace()` (AR-14 / FR-8.2 / RFC-006 Decision 7).
+   * It lives on the aggregate, not a repository, because it spans every `gol:*` namespace — the
+   * same reasoning that puts `clearAll()` here rather than on one repository.
+   */
+  storageUsage(): Promise<StorageUsage>;
 }

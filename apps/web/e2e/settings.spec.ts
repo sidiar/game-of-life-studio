@@ -32,6 +32,65 @@ test.describe('settings route (Story 5.1)', () => {
     await expect(statValue(page, 'Saved Battles')).toHaveText('0');
     await expect(page.getByRole('term').filter({ hasText: 'Organisms' })).toBeVisible();
     await expect(statValue(page, 'Organisms')).toHaveText('1');
+    await expect(page.getByRole('term').filter({ hasText: 'Storage Used' })).toBeVisible();
+    // Assert the SHAPE, not a number — the production seed is a few KB and moves with every
+    // Conway's Classic edit (Story 5.2 AC1/AC3).
+    await expect(statValue(page, 'Storage Used')).toHaveText(/^\d[\d,]*\.\d KB$/);
+
+    expect(errors).toEqual([]);
+  });
+
+  // Story 5.2 AC4: page-scoped loading — no subscription, no storage event, no polling. The
+  // prerendered body says "Loading settings…", so a stale-but-hydrated page and a fresh mount look
+  // identical unless the data actually changed in between; this is the only e2e shape that proves
+  // the resource actually re-ran rather than merely re-rendering a cached value.
+  test('refreshes on return after a save — page-scoped loading (Story 5.2 AC4)', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/settings');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('0');
+    const before = await statValue(page, 'Storage Used').textContent();
+
+    // Only client-side navigation from here on — a goto() re-runs the init script and would prove
+    // a reload, not a return.
+    const nav = page.getByRole('navigation', { name: 'Main' });
+    await nav.getByRole('link', { name: 'Battles' }).click();
+    await expect(page).toHaveURL('/');
+    await page.getByRole('link', { name: 'Create Your First Battle' }).click();
+    await expect(page).toHaveURL('/battle/new');
+
+    await page.getByRole('img', { name: /petri dish/i }).click();
+    await page.getByRole('textbox', { name: /battle name/i }).fill('Measured In Settings');
+    const save = page.getByRole('button', { name: 'Save' });
+    await save.click();
+    // The write-resolved signal (battleRoute.spec.ts:1155-1156's precedent): the dirty flag clears
+    // only once battles.save() has actually completed.
+    await expect(save).toBeDisabled();
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    // Clean draft, no unsaved-changes guard dialog.
+    await page.getByRole('button', { name: 'Back to Battles' }).click();
+    await expect(page).toHaveURL('/');
+    await nav.getByRole('link', { name: 'Settings' }).click();
+    await expect(page).toHaveURL(/\/settings$/);
+
+    await expect(statValue(page, 'Saved Battles')).toHaveText('1');
+    await expect(statValue(page, 'Organisms')).toHaveText('1');
+
+    const afterText = await statValue(page, 'Storage Used').textContent();
+    const toKb = (text: string) => {
+      const match = /^([\d,]+\.\d+)\s(KB|MB)$/.exec(text.trim());
+      if (!match) throw new Error(`Not a storage size: "${text}"`);
+      const value = Number(match[1].replace(/,/g, ''));
+      return match[2] === 'MB' ? value * 1024 : value;
+    };
+    expect(toKb(afterText ?? '')).toBeGreaterThan(toKb(before ?? ''));
 
     expect(errors).toEqual([]);
   });

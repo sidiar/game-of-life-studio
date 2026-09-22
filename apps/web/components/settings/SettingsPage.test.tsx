@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { createFakeRepositories, createMockOrganisms, createMockWorkspace } from '@gol/test-utils';
+import { formatStorageSize } from '@/lib/settings/formatStorageSize';
 import SettingsPage from './SettingsPage';
 
 // `<dd>` carries no accessible name (ARIA "definition" role is name-from-author-prohibited), so
@@ -25,6 +26,7 @@ describe('SettingsPage', () => {
     const load = vi.spyOn(repos.settings, 'load');
     const listBattles = vi.spyOn(repos.battles, 'list');
     const listOrganisms = vi.spyOn(repos.organisms, 'list');
+    const usage = vi.spyOn(repos, 'storageUsage');
 
     render(
       <SettingsPage
@@ -32,6 +34,7 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         seedStatus="seeding"
+        workspace={repos}
       />,
     );
 
@@ -45,6 +48,7 @@ describe('SettingsPage', () => {
       expect(load).toHaveResolved();
       expect(listBattles).toHaveResolved();
       expect(listOrganisms).toHaveResolved();
+      expect(usage).toHaveResolved();
     });
     expect(screen.getByText('Loading settings…')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
@@ -56,8 +60,8 @@ describe('SettingsPage', () => {
   });
 
   it('ready: renders the counts derived from the fixtures, with dt/dd pairs associated', async () => {
-    const workspace = createMockWorkspace();
-    const repos = createFakeRepositories(workspace);
+    const mockWorkspace = createMockWorkspace();
+    const repos = createFakeRepositories(mockWorkspace);
 
     render(
       <SettingsPage
@@ -65,16 +69,17 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         seedStatus="ready"
+        workspace={repos}
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('term')).toHaveLength(2);
+      expect(screen.getAllByRole('term')).toHaveLength(3);
     });
 
     const stats = readStats();
-    expect(stats['Saved Battles']).toBe(String(workspace.battles.length));
-    expect(stats.Organisms).toBe(String(workspace.organisms.length));
+    expect(stats['Saved Battles']).toBe(String(mockWorkspace.battles.length));
+    expect(stats.Organisms).toBe(String(mockWorkspace.organisms.length));
 
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     const cardTitle = screen.getByRole('heading', { level: 2, name: 'Workspace Statistics' });
@@ -82,6 +87,29 @@ describe('SettingsPage', () => {
     // aria-busy flips back off once ready — the wrapper is the card's grandparent
     // (wrapper > Container > Card > h2).
     expect(cardTitle.closest('[aria-busy]')).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('ready: Storage Used equals formatStorageSize(storageUsage().bytes) and is not the empty figure', async () => {
+    const mockWorkspace = createMockWorkspace();
+    const repos = createFakeRepositories(mockWorkspace);
+
+    render(
+      <SettingsPage
+        settings={repos.settings}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        seedStatus="ready"
+        workspace={repos}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('term')).toHaveLength(3);
+    });
+
+    const expected = formatStorageSize((await repos.storageUsage()).bytes);
+    expect(readStats()['Storage Used']).toBe(expected);
+    expect(readStats()['Storage Used']).not.toBe('0.0 KB');
   });
 
   it('a rejecting settings.load() renders an alert and no h2 (FD3 — never degrades to defaults)', async () => {
@@ -96,6 +124,7 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         seedStatus="ready"
+        workspace={repos}
       />,
     );
 
@@ -117,6 +146,28 @@ describe('SettingsPage', () => {
         battles={battles}
         organisms={repos.organisms}
         seedStatus="ready"
+        workspace={repos}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Something went wrong loading your settings.',
+      );
+    });
+  });
+
+  it('a rejecting workspace.storageUsage() renders an alert — same fold as the list rejection', async () => {
+    const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+    const workspace = { storageUsage: vi.fn().mockRejectedValue(new Error('boom')) };
+
+    render(
+      <SettingsPage
+        settings={repos.settings}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        seedStatus="ready"
+        workspace={workspace}
       />,
     );
 
@@ -136,6 +187,7 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         seedStatus="error"
+        workspace={repos}
       />,
     );
 
@@ -144,7 +196,7 @@ describe('SettingsPage', () => {
     );
   });
 
-  it('the seeding → ready flip re-runs the counts', async () => {
+  it('the seeding → ready flip re-runs the counts and the storage meter (Story 5.2 FD6)', async () => {
     const repos = createFakeRepositories({ organisms: createMockOrganisms() });
     let call = 0;
     const organisms = {
@@ -155,6 +207,7 @@ describe('SettingsPage', () => {
         return Promise.resolve(call === 1 ? [] : createMockOrganisms());
       }),
     };
+    const usageSpy = vi.spyOn(repos, 'storageUsage');
 
     const { rerender } = render(
       <SettingsPage
@@ -162,6 +215,7 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={organisms}
         seedStatus="seeding"
+        workspace={repos}
       />,
     );
 
@@ -171,6 +225,7 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={organisms}
         seedStatus="ready"
+        workspace={repos}
       />,
     );
 
@@ -178,6 +233,48 @@ describe('SettingsPage', () => {
       expect(readStats().Organisms).toBe(String(createMockOrganisms().length));
     });
     expect(organisms.list).toHaveBeenCalledTimes(2);
+    expect(usageSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('page-scoped refresh: Saved Battles and Storage Used both change after a save on remount (AC4)', async () => {
+    const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+
+    const { unmount } = render(
+      <SettingsPage
+        settings={repos.settings}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        seedStatus="ready"
+        workspace={repos}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(readStats()['Saved Battles']).toBe('0');
+    });
+    const before = readStats()['Storage Used'];
+
+    unmount();
+
+    const mockWorkspace = createMockWorkspace();
+    await repos.battles.save(mockWorkspace.battles[0]);
+
+    render(
+      <SettingsPage
+        settings={repos.settings}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        seedStatus="ready"
+        workspace={repos}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(readStats()['Saved Battles']).toBe('1');
+    });
+    const after = readStats()['Storage Used'];
+    expect(after).not.toBe(before);
+    expect(after).toBe(formatStorageSize((await repos.storageUsage()).bytes));
   });
 
   it('never calls settings.save (AC5 — the shell reads gol:settings, never writes it)', async () => {
@@ -190,11 +287,12 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         seedStatus="ready"
+        workspace={repos}
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('term')).toHaveLength(2);
+      expect(screen.getAllByRole('term')).toHaveLength(3);
     });
     expect(saveSpy).not.toHaveBeenCalled();
   });
@@ -208,11 +306,12 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         seedStatus="ready"
+        workspace={repos}
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('term')).toHaveLength(2);
+      expect(screen.getAllByRole('term')).toHaveLength(3);
     });
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
@@ -230,11 +329,12 @@ describe('SettingsPage', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         seedStatus="ready"
+        workspace={repos}
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getAllByRole('term')).toHaveLength(2);
+      expect(screen.getAllByRole('term')).toHaveLength(3);
     });
 
     const results = await axe(container);

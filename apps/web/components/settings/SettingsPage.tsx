@@ -1,7 +1,12 @@
 'use client';
 
 import { styled } from '@mui/material/styles';
-import type { BattleRepository, OrganismRepository, SettingsRepository } from '@gol/persistence';
+import type {
+  AppRepositories,
+  BattleRepository,
+  OrganismRepository,
+  SettingsRepository,
+} from '@gol/persistence';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
 import WorkspaceStatistics from './WorkspaceStatistics';
@@ -11,6 +16,13 @@ export interface SettingsPageProps {
   battles: BattleRepository;
   organisms: OrganismRepository;
   seedStatus: WorkspaceSeedStatus;
+  // A `Pick`, not the whole aggregate and not a bare function (FD7, Story 5.2). Story 4.1 refused
+  // "the unused prop that lies about what the component reads" — `repositories: AppRepositories`
+  // would hand this component `clearAll`/`isFreshWorkspace` it does not call (yet; Story 5.10
+  // widens this to `'storageUsage' | 'clearAll'` in one token). A bare
+  // `storageUsage={repositories.storageUsage}` function prop detaches the method from its object —
+  // harmless today (neither implementation uses `this`) and a `this` trap the day one does.
+  workspace: Pick<AppRepositories, 'storageUsage'>;
 }
 
 const HEADING_ID = 'settings-heading';
@@ -70,33 +82,42 @@ export default function SettingsPage({
   battles,
   organisms,
   seedStatus,
+  workspace,
 }: SettingsPageProps) {
   // Two resources, not one Promise.all (FD3): the counts must re-run on the seed flip (the first
   // list() read hits a pre-seed store — the OrganismLibrary note) but settings has no business
   // re-reading on that flip, and the settings resource is the handle Story 6.3 lifts into editable
   // state. Never .catch(() => DEFAULT_SETTINGS) on the settings load — that is BattleGallery's
   // degrade, and it is wrong on this page.
+  //
+  // The AR-14 usage meter rides the counts resource (renamed statsResource, Story 5.2 FD6) rather
+  // than a third useAsyncResource: it has the counts' EXACT deps. useWorkspaceSeed writes
+  // gol:organisms (and the stamp) at this boundary, so a figure measured mid-seed is stale by one
+  // organism until the flip re-runs it — the same reason the counts re-run. Its failure mode
+  // mirrors FD3: the meter only rejects on a storage-access failure, in which case every list() on
+  // this page has already rejected too, so folding it in loses nothing.
   const settingsResource = useAsyncResource(() => settings.load(), [settings]);
-  const countsResource = useAsyncResource(
-    () => Promise.all([battles.list(), organisms.list()]),
-    [battles, organisms, seedStatus],
+  const statsResource = useAsyncResource(
+    () => Promise.all([battles.list(), organisms.list(), workspace.storageUsage()]),
+    [battles, organisms, workspace, seedStatus],
   );
 
   const status: 'loading' | 'error' | 'ready' =
     settingsResource.status === 'error' ||
-    countsResource.status === 'error' ||
+    statsResource.status === 'error' ||
     seedStatus === 'error'
       ? 'error'
       : seedStatus === 'seeding' ||
           settingsResource.status === 'loading' ||
-          countsResource.status === 'loading'
+          statsResource.status === 'loading'
         ? 'loading'
         : 'ready';
 
   // BattleSummary[] / Organism[] — never listFull() (the summaries are the cheap projection,
   // Decision H.4).
-  const battleCount = countsResource.data?.[0].length ?? 0;
-  const organismCount = countsResource.data?.[1].length ?? 0;
+  const battleCount = statsResource.data?.[0].length ?? 0;
+  const organismCount = statsResource.data?.[1].length ?? 0;
+  const storageBytes = statsResource.data?.[2].bytes ?? 0;
 
   return (
     <section aria-labelledby={HEADING_ID}>
@@ -114,7 +135,11 @@ export default function SettingsPage({
         )}
         {status === 'ready' && (
           <Container>
-            <WorkspaceStatistics battleCount={battleCount} organismCount={organismCount} />
+            <WorkspaceStatistics
+              battleCount={battleCount}
+              organismCount={organismCount}
+              storageBytes={storageBytes}
+            />
           </Container>
         )}
       </div>
