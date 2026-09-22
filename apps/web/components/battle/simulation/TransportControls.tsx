@@ -27,6 +27,15 @@ import type { SimulationStatus } from '@/lib/battle/useSimulation';
  * members exactly and is declared HERE (once) — `<SimulationControlBar>` re-exports the type so
  * its own importers are unaffected by the lift.
  *
+ * `compact` and `disabled` (Story 4.15, its first `compact`/`disabled` caller): `compact` renders
+ * `data-compact` on the group and lets the cluster WRAP instead of shrinking — the Organism
+ * Editor's Preview & Test column is 290–340px wide (`OrganismEditorLayout`'s `PreviewColumn`) and
+ * the three full labels sum past it (measured ≈380px at 11px/600 with the 18px padding); wrapping
+ * keeps ONE implementation and ONE set of accessible names (FD8) rather than a second, shorter
+ * label set. `disabled` covers a run that may not START (Play/Pause and Next cycle only — Stop
+ * stays enabled per 3.12 FD5); the caller's own contract keeps it from ever being true while
+ * playing.
+ *
  * Three colour decisions (3.12 FD2), because the mockup has cyan / amber / red and the token layer
  * has only cyan and red:
  * - Play/Pause is the route's primary accent pair (`--gol-accent` fill) — the mockup's own value,
@@ -50,6 +59,9 @@ const Transport = styled('div')({
   gap: '10px',
   alignItems: 'center',
   flexShrink: 0,
+  // Story 4.15: the preview column's 290px cannot fit three full labels one-up (FD8) — wrap
+  // instead of shrinking text or hiding overflow, so both hosts keep the same accessible names.
+  '&[data-compact="true"]': { flexWrap: 'wrap' },
 });
 
 /**
@@ -85,6 +97,9 @@ const barButtonBase = {
     color: 'var(--gol-action-disabled)',
     cursor: 'not-allowed',
   },
+  // Story 4.15: every button shares this on the base object, so none is special-cased when the
+  // cluster wraps (`compact`).
+  '[data-compact="true"] > &': { flex: '1 1 auto', justifyContent: 'center' },
 } as const;
 
 // = `SaveButton`'s pair (`<EditorStatusBar>`) — the mockup's `.control-btn-play` is literally
@@ -161,22 +176,39 @@ export interface SimulationControlBarProps {
   onStop(): void;
 }
 
+export interface TransportControlsProps extends SimulationControlBarProps {
+  /** Story 4.15: the cluster wraps to fit a narrow column (`data-compact` on the group).
+   *  `<SimulationControlBar>` and the HUD never pass it. */
+  compact?: boolean;
+  /** Story 4.15: a run may not START — Play/Pause and Next cycle are `disabled` (real, 3.12
+   *  FD6), Stop is not (3.12 FD5). Never true while playing: the caller's own contract. */
+  disabled?: boolean;
+}
+
 export default function TransportControls({
   status,
   onPlayPause,
   onStep,
   onStop,
-}: SimulationControlBarProps) {
+  compact = false,
+  disabled = false,
+}: TransportControlsProps) {
   const playing = status === 'playing';
 
   return (
-    <Transport role="group" aria-label="Simulation controls">
+    <Transport
+      role="group"
+      aria-label="Simulation controls"
+      // `undefined`, not `false`: React stringifies a boolean `data-*`, and the two existing
+      // callers must not gain a `data-compact="false"` they never asked for (AC9).
+      data-compact={compact ? 'true' : undefined}
+    >
       {/* 3.12 FD1: ONE button, ONE DOM element across the flip — the accessible name states the
           NEXT action ("Play" while paused, "Pause" while playing), no `aria-pressed`. WAI-ARIA's
           toggle-button guidance is explicit that a button with `aria-pressed` must not also
           change its label; the two signals together would announce "Pause, pressed" for a
           running sim. */}
-      <PlayPauseButton type="button" onClick={onPlayPause}>
+      <PlayPauseButton type="button" onClick={onPlayPause} disabled={disabled}>
         {playing ? (
           <>
             <Icon aria-hidden="true">⏸</Icon>
@@ -192,11 +224,13 @@ export default function TransportControls({
       {/* 3.12 FD6: a REAL `disabled`, never CSS-only — the route's policy for every disabled control
           (3.12 trap 1: a `pointer-events: none` grey does not stop `sim.step()`'s throw from being
           reachable). `title` states why (the RUN button's precedent, Story 3.11 AC7); the
-          keyboard gap that leaves is Story 6.11's route-wide sweep, not this story's. */}
+          keyboard gap that leaves is Story 6.11's route-wide sweep, not this story's. Only the
+          PLAYING case names a reason here — Story 4.15's `disabled` case has its own hint line
+          rendered by the caller (the preview's `RunHint`), so this button carries no `title` for it. */}
       <StepButton
         type="button"
         onClick={onStep}
-        disabled={playing}
+        disabled={playing || disabled}
         title={playing ? 'Available while paused' : undefined}
       >
         <Icon aria-hidden="true">⏭</Icon>

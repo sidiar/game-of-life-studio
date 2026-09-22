@@ -10,6 +10,7 @@ import { GridRenderer } from '@/lib/canvas/gridRenderer';
 import { buildRefToFillGroup } from '@/lib/canvas/refToFillGroup';
 import { resetColourStateWarnings } from '@/lib/canvas/colourStateGroups';
 import { RecordingContext2D } from '@/test-support/recordingContext2d';
+import { installFrameDriver } from '@/test-support/frameDriver';
 import BattleSimulationView, { type BattleSimulationViewProps } from './BattleSimulationView';
 
 const COLORS = { background: '#0a0a0a', gridLine: 'rgb(51 51 51 / 0.3)' };
@@ -66,45 +67,8 @@ function root(container: HTMLElement): HTMLElement {
   return element;
 }
 
-/**
- * FD4 (Task 4): the view takes no `scheduler` prop (Story 3.11's props list was decided against
- * exactly that class of thing), so its tests drive real frames by spying on
- * `window.requestAnimationFrame` / `cancelAnimationFrame` with a manual queue — `rafScheduler`
- * looks the globals up at call time, which is the whole reason a `vi.spyOn(window, …)` is a
- * complete fake. `frame(now)` fires every callback queued BEFORE the call, as RAF does; a
- * re-request from inside a callback lands in the next frame. Mirrors
- * `useSimulation.test.ts`'s `createFakeScheduler`, installed on `window` instead of injected.
- */
-function installFrameDriver() {
-  const queue: { handle: number; callback: FrameRequestCallback }[] = [];
-  let nextHandle = 1;
-  const raf = vi
-    .spyOn(window, 'requestAnimationFrame')
-    .mockImplementation((callback: FrameRequestCallback) => {
-      const handle = nextHandle++;
-      queue.push({ handle, callback });
-      return handle;
-    });
-  const caf = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((handle: number) => {
-    const index = queue.findIndex((entry) => entry.handle === handle);
-    if (index !== -1) queue.splice(index, 1);
-  });
-  return {
-    raf,
-    caf,
-    /** Fires every callback queued before this call, inside `act` — the callbacks publish React
-     * state (`setView`), so the resulting re-render has to be flushed before the assertion. */
-    frame(now: number): void {
-      const batch = queue.splice(0);
-      act(() => {
-        for (const entry of batch) entry.callback(now);
-      });
-    },
-    pending: () => queue.length,
-    /** The handle from the most recently requested frame — what a `stop()` must cancel. */
-    lastHandle: (): number | undefined => raf.mock.results.at(-1)?.value as number | undefined,
-  };
-}
+// FD4 (Task 4): the view takes no `scheduler` prop, so these tests drive real frames through
+// `installFrameDriver` (`@/test-support/frameDriver` — lifted on its third copy, Story 4.15 review).
 
 afterEach(() => {
   vi.restoreAllMocks();
