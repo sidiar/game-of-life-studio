@@ -294,7 +294,7 @@ schema-valid set because `BattleSchema` already rejects unplaced and duplicate r
       the same way, one at a time. Rationale: this changes the gate's *mechanism* rather than
       relaxing its threshold, which is the standing preference; extending to all four packages
       now (b) would widen an unguarded invariant beyond the package this story touches.
-- [ ] [Review][Decision] **`packages/persistence/src/workspaceSerializer.test.ts` imports
+- [x] [Review][Decision] **`packages/persistence/src/workspaceSerializer.test.ts` imports
       `@gol/test-utils` with no `package.json` edge, and the undeclared edge blinds Turbo's cache.**
       The Dev Record framed it as "circular-dependency warning vs. an undeclared import that resolves
       through the symlink". The review adds the consequence: Turbo hashes `test:coverage` from the
@@ -347,6 +347,16 @@ schema-valid set because `BattleSchema` already rejects unplaced and duplicate r
       **(b)** as before — keep the undeclared import and the recorded cache gap. This is the state
       the tree is in now, so it is also the do-nothing option.
       `deferred-work.md`'s entry carries the full measurement either way.
+      **Owner's FINAL decision (Sidiar, 2026-09-22), after the measurement above: (b) — keep the
+      undeclared import and the recorded cache gap.** This is the tree's current state, so there is
+      nothing further to implement; the earlier (a) stands reverted. Rationale: (a′) and (b′) both
+      edit a shared build contract — the repo-wide task graph, or a shared package's script set
+      every future `^build` consumer inherits — to serve one test file's cache accuracy, and
+      `build:standalone`'s own `^build` would need the same treatment either way. That blast radius
+      is out of proportion to the defect, which is a stale cached green run for a single test file
+      whose fake changes rarely. (c), splitting the in-memory fakes into a `@gol/domain`-only
+      package, remains the real fix and stays recorded in `deferred-work.md` as its own story, with
+      this decision as its trigger. Item closed; no code change.
 - [x] [Review][Decision] **`WorkspaceExportSchema` refines nothing across its collections: a
       `kind: 'battle'` envelope may carry zero or fifty battles, and two battles (or two organisms)
       may share an `id`.** RFC-006 Decision 2 defines the battle export as "the same schema, filtered
