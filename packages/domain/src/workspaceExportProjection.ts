@@ -71,9 +71,10 @@ export function toBattleExport(battle: Battle): BattleExportWire {
       const ref = row[x];
       if (ref === 0) continue;
       // `organismIds[ref - 1]` types as `string` (no `noUncheckedIndexedAccess`), and it really is
-      // one: `BattleSchema.superRefine` rejects any grid holding a value above `organismIds.length`.
-      // The guarantee is the schema's, not the compiler's — a `Battle` that never went through
-      // `parse` could break it.
+      // one: `BattleSchema.superRefine` rejects any grid holding a value above `organismIds.length`,
+      // and the same schema pins every row to exactly `gridSize.cols` — which is why walking
+      // `row.length` rather than `cols` is safe. Both guarantees are the schema's, not the
+      // compiler's — a `Battle` that never went through `parse` could break either.
       buckets[ref].push({ x, y, organismId: organismIds[ref - 1] });
     }
   }
@@ -110,6 +111,11 @@ export function fromBattleExport(battleExport: BattleExport): Battle {
   const organismIds: string[] = [];
   const refById = new Map<string, number>();
 
+  // Every write below trusts `BattleExportSchema`'s refinements the way `toBattleExport` trusts
+  // `BattleSchema`'s: a cell inside `gridDimensions` (an unparsed `y >= rows` would throw here and
+  // an `x >= cols` would silently widen a row past `cols`) and at most 255 distinct ids (a 256th
+  // would mint a ref the dense encoding has no code for). The guarantee is the schema's, not the
+  // compiler's — a `BattleExport` built by assertion rather than `parse` could break it.
   for (const cell of battleExport.cells) {
     let ref = refById.get(cell.organismId);
     if (ref === undefined) {
@@ -151,6 +157,11 @@ export function toEnvelope(
     appVersion: meta.appVersion,
     exportedAt: meta.exportedAt.toISOString(),
     kind,
+    // A fresh ARRAY, so the envelope cannot be grown or reordered through the caller's collection;
+    // the `Organism` records themselves are shared, not deep-copied. That is safe where sharing
+    // `gridDimensions` was not: an organism is a parsed, at-rest record nothing in this app edits
+    // in place (`CONWAYS_CLASSIC` is deep-frozen; repository reads return fresh parse output), and
+    // the wire object exists to be `JSON.stringify`-ed, which copies it anyway.
     organisms: [...organisms],
     battles: battles.map(toBattleExport),
   };
@@ -167,6 +178,8 @@ export function fromEnvelope(envelope: WorkspaceExport): {
 } {
   return {
     battles: envelope.battles.map(fromBattleExport),
+    // Same contract as `toEnvelope`: fresh array, shared elements — and here the elements are Zod's
+    // own parse output, which no one else holds.
     organisms: [...envelope.organisms],
   };
 }

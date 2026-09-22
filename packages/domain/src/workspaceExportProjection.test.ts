@@ -173,9 +173,11 @@ describe('round-trip identity (AC4, AR-41 / AR-44)', () => {
       fc.record({
         preset: fc.constant(preset),
         rosterSize: fc.constant(rosterSize),
-        // Modelled on `packages/simulation/src/grid/grid.test.ts`'s `arbDense`, at the real preset
-        // sizes: a generator capped at 12x12 could not produce the roster-order mismatch this
-        // property exists for often enough to be meaningful.
+        // Modelled on `packages/simulation/src/grid/grid.test.ts`'s `arbDense`, but at the REAL
+        // preset sizes rather than its 12x12 cap: Decision A keeps both presets in play and the
+        // Testing standards want the bounds exercised at the size that matters. (The roster-order
+        // hazard itself shows up at any size — with a handful of refs drawn uniformly it is
+        // near-certain even at 12x12 — so size buys bounds coverage, not mismatch coverage.)
         dense: fc.array(
           fc.array(fc.integer({ min: 0, max: rosterSize }), {
             minLength: preset.cols,
@@ -245,7 +247,7 @@ describe('toEnvelope (AC1, AC5)', () => {
     expect('settings' in wire).toBe(false);
   });
 
-  it('copies the collections it is handed — the envelope never aliases the caller’s arrays', () => {
+  it('copies the collection ARRAYS it is handed and shares the records — the caller’s array cannot reach into the envelope', () => {
     const organisms: Organism[] = [CONWAYS_CLASSIC];
     const wire = toEnvelope('workspace', [], organisms, {
       appVersion: 'test-app',
@@ -254,6 +256,8 @@ describe('toEnvelope (AC1, AC5)', () => {
 
     expect(wire.organisms).not.toBe(organisms);
     expect(wire.organisms).toEqual(organisms);
+    // The stated contract, pinned rather than implied: elements are shared, not deep-copied.
+    expect(wire.organisms[0]).toBe(organisms[0]);
   });
 });
 

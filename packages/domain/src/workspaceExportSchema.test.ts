@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_BATTLE_NAME_LENGTH } from './battleSchema';
 import { CONWAYS_CLASSIC } from './defaultWorkspace';
 import { CURRENT_FORMAT_VERSION } from './settingsSchema';
 import {
@@ -58,7 +59,10 @@ describe('WorkspaceExportSchema (AC1)', () => {
   });
 
   it('rejects a formatVersion the literal does not name — a newer file is a parse failure, not a range check (Decision I)', () => {
-    const result = WorkspaceExportSchema.safeParse({ ...envelope(), formatVersion: 2 });
+    const result = WorkspaceExportSchema.safeParse({
+      ...envelope(),
+      formatVersion: CURRENT_FORMAT_VERSION + 1,
+    });
 
     expect(result.success).toBe(false);
     expect(result.error?.issues.some((i) => i.path[0] === 'formatVersion')).toBe(true);
@@ -181,6 +185,28 @@ describe('BattleExportSchema (AC2)', () => {
     expect(tooFarDown.error?.issues[0]?.path).toEqual(['cells']);
   });
 
+  it('takes the bound from the preset in the file, not a constant — at 100x60, x: 50 is inside and x: 100 / y: 60 are out (Decision A)', () => {
+    const large = { cols: 100, rows: 60 } as const;
+
+    expect(
+      BattleExportSchema.safeParse(
+        battleExport({ gridDimensions: large, cells: [{ x: 50, y: 30, organismId: 'a' }] }),
+      ).success,
+    ).toBe(true);
+
+    const tooFarRight = BattleExportSchema.safeParse(
+      battleExport({ gridDimensions: large, cells: [{ x: 100, y: 0, organismId: 'a' }] }),
+    );
+    const tooFarDown = BattleExportSchema.safeParse(
+      battleExport({ gridDimensions: large, cells: [{ x: 0, y: 60, organismId: 'a' }] }),
+    );
+
+    expect(tooFarRight.success).toBe(false);
+    expect(tooFarRight.error?.issues[0]?.path).toEqual(['cells']);
+    expect(tooFarDown.success).toBe(false);
+    expect(tooFarDown.error?.issues[0]?.path).toEqual(['cells']);
+  });
+
   it('accepts the last in-bounds cell of each preset — the bound is >=, not > (Decision A)', () => {
     expect(
       BattleExportSchema.safeParse(battleExport({ cells: [{ x: 49, y: 29, organismId: 'a' }] }))
@@ -196,8 +222,8 @@ describe('BattleExportSchema (AC2)', () => {
     ).toBe(true);
   });
 
-  it('rejects a repeated (x,y) — duplicates are corrupt, never last-wins', () => {
-    const result = BattleExportSchema.safeParse(
+  it('rejects a repeated (x,y) — duplicates are corrupt, never last-wins, even for the same organism', () => {
+    const twoOrganisms = BattleExportSchema.safeParse(
       battleExport({
         cells: [
           { x: 3, y: 4, organismId: 'a' },
@@ -205,9 +231,21 @@ describe('BattleExportSchema (AC2)', () => {
         ],
       }),
     );
+    // An identical triple is still a duplicate coordinate: a "lenient" de-duplication of equal
+    // cells would be a last-wins policy by another name.
+    const sameOrganism = BattleExportSchema.safeParse(
+      battleExport({
+        cells: [
+          { x: 3, y: 4, organismId: 'a' },
+          { x: 3, y: 4, organismId: 'a' },
+        ],
+      }),
+    );
 
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.path).toEqual(['cells']);
+    expect(twoOrganisms.success).toBe(false);
+    expect(twoOrganisms.error?.issues[0]?.path).toEqual(['cells']);
+    expect(sameOrganism.success).toBe(false);
+    expect(sameOrganism.error?.issues[0]?.path).toEqual(['cells']);
   });
 
   it('accepts the same organism at two different coordinates', () => {
@@ -265,9 +303,10 @@ describe('BattleExportSchema (AC2)', () => {
   });
 
   it('rejects a name over the shared cap and a non-uuid id', () => {
-    expect(BattleExportSchema.safeParse(battleExport({ name: 'x'.repeat(101) })).success).toBe(
-      false,
-    );
+    expect(
+      BattleExportSchema.safeParse(battleExport({ name: 'x'.repeat(MAX_BATTLE_NAME_LENGTH + 1) }))
+        .success,
+    ).toBe(false);
     expect(BattleExportSchema.safeParse(battleExport({ id: 'not-a-uuid' })).success).toBe(false);
   });
 

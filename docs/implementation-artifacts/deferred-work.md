@@ -2598,7 +2598,8 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   gracefully (default + warn, NFR-7.3). The archived Story 1.7 file is deliberately NOT edited;
   this entry is the discharge. **No residual work.**
 
-- **Four RFC-006 variances, recorded rather than silently absorbed.** (1) Decision 2's snippet is
+- **Six RFC-006 variances (four from the implementation, two from its review), recorded rather than
+  silently absorbed.** (1) Decision 2's snippet is
   written in **Zod v3** (`z.string().uuid()`, `z.string().datetime()`); this install is Zod 4.4.3,
   where those spellings do not exist — the shipped schemas beside the new file are the reference.
   (2) Decision 2 types a cell's `organismId` as a bare `z.string()`; `PlacedCellSchema` uses
@@ -2645,7 +2646,12 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   cycle is a HARD ERROR that exits 1 before running anything:
   `x Cyclic dependency detected: @gol/test-utils#build, @gol/persistence#build`. `build:standalone`
   is step 7 of `npm run ci` and `npm run ci:dev`, so the edge reds every gate chain, locally and on
-  the PR. The edge was therefore reverted and the decision item reopened on the story.
+  the PR. The edge was therefore reverted and the decision item reopened on the story — and then
+  **closed by the owner's FINAL decision (Sidiar, 2026-09-22): (b), keep the undeclared import and
+  this recorded cache gap; no code change.** The two alternatives at the end of this entry both
+  edit a shared build contract to serve one test file's cache accuracy — a blast radius out of
+  proportion to a stale cached green run for a file whose fake changes rarely; the clean fix below
+  is the real one, its own story, with that decision as its trigger.
   ⚠️ The cache gap the decision meant to close is real and remains open: **Turbo hashes a task from
   the package's own inputs plus its DECLARED workspace dependencies**, `test:coverage` is cached
   (`turbo.json`: `outputs: ["coverage/**"]`) and CI restores `.turbo`, so a change to

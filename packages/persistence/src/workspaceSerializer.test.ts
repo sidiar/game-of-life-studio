@@ -21,7 +21,7 @@ import {
 // green run. The alternative the project's testing rules rule out is worse: a hand-rolled fake
 // repository here would be free to disagree with the real store's contract, which is the one thing
 // `createFakeRepositories` exists to prevent.
-import { createFakeRepositories } from '@gol/test-utils';
+import { createFakeRepositories, emptyGrid } from '@gol/test-utils';
 import { describe, expect, it } from 'vitest';
 import { createWorkspaceSerializer } from './workspaceSerializer';
 
@@ -32,9 +32,7 @@ const EXPORTED_AT = '2026-01-01T00:00:00.000Z';
 const fixedNow = () => new Date(EXPORTED_AT);
 
 function seededBattle(): Battle {
-  const gridState = Array.from({ length: PRESET.rows }, () =>
-    Array.from({ length: PRESET.cols }, () => 0),
-  );
+  const gridState = emptyGrid(PRESET.cols, PRESET.rows);
   gridState[2][3] = 1;
   gridState[9][8] = 1;
 

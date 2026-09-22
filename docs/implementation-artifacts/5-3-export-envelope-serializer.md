@@ -4,7 +4,7 @@ baseline_commit: aa8ff8e1a79e607ed8b707a757ff00f042fa1047
 
 # Story 5.3: Export Envelope & Serializer
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -85,7 +85,8 @@ a reviewer can check independently. AC6–AC9 are repo-derived: obligations the 
 8. **The two standing forward-references to "Story 5.3" that this story can discharge, are
    discharged in writing.** (a) `PALETTE_VERSION` is **not** stamped into the envelope
    (`1-7-palette-token-registry-display-color-lut.md:271` named 5.3 as the owner of that call) —
-   FD7 records why, and 1.7's entry is marked resolved. (b) `deferred-work.md:392`'s
+   FD7 records why, and the discharge is recorded in `deferred-work.md` (the archived 1.7 file is
+   left untouched — Task 5). (b) `deferred-work.md:392`'s
    sparse↔typed round-trip lands as AC4's third bullet and its entry is struck. Neither is left as
    a silent omission.
 
@@ -258,7 +259,8 @@ a reviewer can check independently. AC6–AC9 are repo-derived: obligations the 
 
 Reviewed on **Fable** against an **Opus** implementation (2026-09-22), via three parallel layers
 (Blind Hunter, Edge Case Hunter, Acceptance Auditor), `review_mode: full`. 31 raw findings → 3
-`decision-needed`, 9 `patch`, 1 `defer`, 11 dismissed (dangling `organismId`s are RFC-006
+`decision-needed` (a fourth, the CI-red property timeout, was added in `c4f8ef5` once the PR's
+first run had reported), 9 `patch`, 1 `defer`, 11 dismissed (dangling `organismId`s are RFC-006
 Decision 5's `assertReferentialClosure` at import, not the schema's; unparsed-`Battle` guards are
 "Zod at boundaries, not everywhere"; the fast-check generator's canonicalization equals the
 schema-valid set because `BattleSchema` already rejects unplaced and duplicate roster ids; the three
@@ -411,6 +413,45 @@ schema-valid set because `BattleSchema` already rejects unplaced and duplicate r
 - [x] [Review][Patch] New `deferred-work.md` section heading had no blank line before it, alone in the file [docs/implementation-artifacts/deferred-work.md:2414]
 - [x] [Review][Defer] `exportWorkspace()` rejects with `CorruptDataError` when `gol:battles` / `gol:organisms` is not an object keyed by id [packages/persistence/src/workspaceSerializer.ts:64-68] — deferred, pre-existing `readCollection` contract; Story 5.11 owns corruption handling
 
+#### Second review round — final (2026-09-22)
+
+Reviewed on **Fable** against the **Opus** implementation as it stands after the owner's four
+decisions and the sync with `main` (#70), `review_mode: full`, three parallel layers (Blind Hunter,
+Edge Case Hunter, Acceptance Auditor). 34 raw findings → 0 `decision-needed`, 19 `patch`, 0 `defer`,
+16 dismissed (the wire `name` schema was claimed looser than `BattleSchema`'s — verified identical,
+`z.string().max(MAX_BATTLE_NAME_LENGTH)` on both; dangling `organismId`s across the two collections
+are RFC-006 Decision 5's import closure, as the first round already ruled; offset and
+sub-millisecond timestamps are the shared at-rest parser by design and the app only ever writes
+`Z`; a density knob on the fast-check generator would reopen the generator the owner just ruled on
+in Decision 4, and the sparse regime has no code path beyond `ref === 0`, which the empty-grid test
+pins; the composed identity's name is AC4's own wording; a `turbo.json` input glob for the cache
+gap is Decision 2 (b)'s territory; an invalid `Date` from the injected clock, fast-check shrink
+time, the second `cells` pass in the 255 check, Decision 3's record split across two adjacent
+entries, the "one-line" strike and the first round's 31-vs-24 arithmetic are cosmetic or not
+verifiable). Every AC (1–9, AC7 as amended) and all four owner decisions were re-audited against the
+code and hold; the residue is documentation that stopped at Decision 2's "reopened" state, plus
+test-coverage gaps the first round did not name.
+
+- [x] [Review][Patch] Completion Notes still describe Decision 2 as "three of four implemented, one blocked" / "reverted, item reopened" though the item is closed as (b) [docs/implementation-artifacts/5-3-export-envelope-serializer.md:699-721]
+- [x] [Review][Patch] Completion Notes' reviewer bullet repeats the disproven "turbo 2.10.5 warns rather than failing" measurement and names a different trigger for the clean fix than the owner's decision [docs/implementation-artifacts/5-3-export-envelope-serializer.md:750-757]
+- [x] [Review][Patch] `deferred-work.md`'s `@gol/test-utils` entry ends at "the decision item reopened on the story" and never records the final (b) decision or that it is (c)'s trigger [docs/implementation-artifacts/deferred-work.md:2648]
+- [x] [Review][Patch] Change Log has no row for the final Decision 2 outcome, and it and the File List count "seven entries" where the section holds eight [docs/implementation-artifacts/5-3-export-envelope-serializer.md:801-804,820]
+- [x] [Review][Patch] "Four RFC-006 variances" heading enumerates six; echoed as "four" in Completion Notes and File List [docs/implementation-artifacts/deferred-work.md:2601; 5-3-export-envelope-serializer.md:776,804]
+- [x] [Review][Patch] File List misstates the sprint-status transition — `ready-for-dev` never occurs; the branch's net change is `backlog → review` [docs/implementation-artifacts/5-3-export-envelope-serializer.md:805-806]
+- [x] [Review][Patch] The "Review-decision resume" paragraph is spliced into the Debug Log list without a blank line and renders inside the preceding bullet [docs/implementation-artifacts/5-3-export-envelope-serializer.md:682]
+- [x] [Review][Patch] FD10 is cited by AC7, Task 6 and the first round's Decision 1 but the Forced decisions list stops at FD9 — FD10 is defined only inside Completion Notes [docs/implementation-artifacts/5-3-export-envelope-serializer.md:504]
+- [x] [Review][Patch] AC8(a) says "1.7's entry is marked resolved" while Task 5 forbids editing the archived file and the discharge lives in `deferred-work.md` [docs/implementation-artifacts/5-3-export-envelope-serializer.md:88]
+- [x] [Review][Patch] First round's header counts "3 `decision-needed`" while four items follow — the CI-red decision was added in `c4f8ef5` after the count was written [docs/implementation-artifacts/5-3-export-envelope-serializer.md:260]
+- [x] [Review][Patch] `index.ts` header says module-level work is "limited to defining and freezing values" while `DEFAULT_SETTINGS` runs `SettingsSchema.parse({})` at import time — the header is the flag's only guard and understates what already runs [packages/domain/src/index.ts:4]
+- [x] [Review][Patch] Schema comment says this story "forbade a `kind: 'battle'` code path outright" while `toEnvelope('battle', …)` is exported and tested — what is absent is the producer (`exportBattle`), not the kind [packages/domain/src/workspaceExportSchema.ts:152-154]
+- [x] [Review][Patch] `toEnvelope` / `fromEnvelope` copy the `organisms` array but share each `Organism`, while the test title says "never aliases the caller's arrays" and the file's own `gridDimensions` rationale argues against sharing — the actual contract (array copied, elements shared, why that is safe) is stated nowhere [packages/domain/src/workspaceExportProjection.ts:154,170; packages/domain/src/workspaceExportProjection.test.ts:248]
+- [x] [Review][Patch] `fromBattleExport` relies on `BattleExportSchema`'s refinements (an unparsed `y >= rows` throws, `x >= cols` silently widens a row) but, unlike `toBattleExport`, names no guarantor; `toBattleExport`'s comment also omits its rectangularity (`row.length`) assumption [packages/domain/src/workspaceExportProjection.ts:70-77,120]
+- [x] [Review][Patch] Out-of-bounds rejection is pinned at 50×30 only; the Testing standards require the bound at 100×60 too (`x: 100` / `y: 60` rejected, `x: 50` accepted there) [packages/domain/src/workspaceExportSchema.test.ts:170]
+- [x] [Review][Patch] Duplicate-coordinate test uses two different organism ids only; an identical `{x,y,organismId}` pair de-duplicated "leniently" would pass it [packages/domain/src/workspaceExportSchema.test.ts:199]
+- [x] [Review][Patch] `formatVersion: 2` and `'x'.repeat(101)` are magic numbers beside the constants they duplicate — `CURRENT_FORMAT_VERSION + 1` and `MAX_BATTLE_NAME_LENGTH + 1` [packages/domain/src/workspaceExportSchema.test.ts:61,268]
+- [x] [Review][Patch] `workspaceSerializer.test.ts` hand-rolls a 50×30 dense grid while importing from the package that provides `emptyGrid`; the cycle justification the domain test uses does not apply here [packages/persistence/src/workspaceSerializer.test.ts:35-37]
+- [x] [Review][Patch] Generator comment justifies real preset sizes with a probability claim that does not hold (≤6 refs drawn uniformly make the roster-order mismatch near-certain even at 12×12); the real reason is Decision A and the Testing standards — both presets, the bounds at the size that matters [packages/domain/src/workspaceExportProjection.test.ts:176-178]
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -507,6 +548,14 @@ schema-valid set because `BattleSchema` already rejects unplaced and duplicate r
   "Story 5.5" / "Story 5.8" doc comments), and it keeps `/battle`'s 0.6 KB of headroom exactly
   where it is. If the dev finds themselves adding an import under `apps/web`, the story has grown
   into 5.5 — stop.
+
+- **FD10 — made by the dev, ratified by the owner's review Decision 1: `"sideEffects": false` on
+  `@gol/domain`, because AC7's premise was false.** Staying out of `apps/web` does not keep the
+  bundle still: `apps/web` imports the `@gol/domain` barrel, so every module `index.ts` re-exports
+  enters its graph (+0.3 KB per route here, measured against a fresh `main` build). The flag makes
+  unreferenced modules droppable; it is a mechanism change, not a threshold move, and it is only
+  true while no domain module registers anything at import time — the guard is `index.ts`'s header.
+  Full measurement in the Completion Notes and `deferred-work.md`.
 
 ### What exists — read these before writing a line
 
@@ -679,6 +728,7 @@ Claude Opus 5 (1M context) — `bmad-dev-story`, lane `--epic 5`.
   → 333.9 / 309.4 / 309.2 / 295.7 / 291.7; a **fresh** `origin/main` build in this worktree →
   333.8 / 309.5 / 309.3 / 295.7 / 291.6; this branch → **333.8 / 309.5 / 309.3 / 295.8 / 291.7**.
   No `budgetGzipKb` moved.
+
 **Review-decision resume (2026-09-22).** `npm run ci:dev` → **exit 0** (log:
 `/tmp/ci-5-3-resume2.log`). Coverage unchanged at its tiers: `@gol/domain` **100 / 100 / 100 / 100**
 (144 tests, +4), `@gol/persistence` **99.28 / 96.22 / 100 / 100**, `@gol/simulation` **100** across,
@@ -696,8 +746,9 @@ so the headroom is roughly 5x the observed CI worst case, not a hair's breadth o
 
 ### Completion Notes List
 
-**Resume after the owner's decisions (2026-09-22) — three of four implemented, one blocked on a
-premise that measurement disproved.**
+**Resume after the owner's decisions (2026-09-22) — three of four implemented in code; the fourth
+was blocked on a premise that measurement disproved and then closed by the owner as (b), no code
+change.**
 
 - ✅ **Decision 1 (AC7 / `"sideEffects": false`) — option (a).** The flag stays on `@gol/domain`
   alone; AC7 and Task 6's third box are reworded to "no `budgetGzipKb` moves, and every route within
@@ -705,8 +756,9 @@ premise that measurement disproved.**
   unachievable. The unguarded invariant now has the only guard JSON permits: a header note on
   `packages/domain/src/index.ts`, the barrel every consumer goes through, saying the flag is true
   only while no domain module registers anything at import time.
-- ❌ **Decision 2 (`@gol/test-utils` edge) — option (a) is NOT IMPLEMENTABLE; reverted, item
-  reopened.** The devDependency was added and `npm install` run; `npm run ci:dev` then failed at
+- ⚠️ **Decision 2 (`@gol/test-utils` edge) — option (a) was NOT IMPLEMENTABLE; reverted, item
+  reopened, then closed by the owner's FINAL decision as (b): keep the undeclared import and the
+  recorded cache gap.** The devDependency was added and `npm install` run; `npm run ci:dev` then failed at
   step 7 of 11. The decision rested on "turbo 2.10.5 warns, never fails — measured", and that
   measurement covered only tasks with no `^` dependency. `turbo.json` gives `typecheck`, `test` and
   `test:coverage` none, so they warn — but `build` and `build:standalone` both carry
@@ -718,7 +770,8 @@ premise that measurement disproved.**
   now records why declaring it is not merely unpleasant but impossible today, and the decision item
   carries the measurement plus two new options — neither of which a story may take on its own
   authority, since both edit a shared build contract (`^build` on `turbo.json`'s `build` task, or
-  `@gol/test-utils`'s duplicate `build` script).
+  `@gol/test-utils`'s duplicate `build` script). The owner declined both for exactly that reason;
+  (c), splitting the fakes into a `@gol/domain`-only package, stays the real fix as its own story.
 - ✅ **Decision 3 (schema refinements) — option (b).** `WorkspaceExportSchema` gains a `superRefine`
   rejecting a duplicate `battles[].id` at path `['battles']` and a duplicate `organisms[].id` at
   path `['organisms']`, with a negative test for each. The cardinality rule is deliberately absent
@@ -750,11 +803,13 @@ story made that the story file did not pre-decide:
 - **`workspaceSerializer.test.ts` imports `@gol/test-utils` WITHOUT a `package.json` edge.** The
   story's Task 3 requires `createFakeRepositories()` and the project's testing rules forbid a
   hand-rolled fake — but `@gol/test-utils` depends on `@gol/persistence`, and declaring the reverse
-  edge makes Turbo print `WARNING Circular package dependency detected` on **every** task in the
-  repo (measured; turbo 2.10.5 warns rather than failing). The import resolves through the workspace
-  symlink and needs no task ordering, because these packages export TS source and have no emit step.
-  The file carries the reasoning at the import; `deferred-work.md` carries the clean fix and the
-  trigger for taking it (a second persistence test needing the fakes).
+  edge closes a package cycle that is a HARD ERROR on every `^build` task (`build:standalone` is
+  step 7 of the gate chain — measured during the review resume; the first measurement, "warns
+  rather than failing", covered only the tasks with no `^` dependency). The import resolves through
+  the workspace symlink and needs no task ordering, because these packages export TS source and
+  have no emit step. The file carries the reasoning at the import; `deferred-work.md` carries the
+  clean fix — splitting the fakes into a `@gol/domain`-only package, its own story — with the
+  owner's Decision 2 (b) as its trigger.
 
 - **FD3's emission order is the load-bearing part of this story.** `toBattleExport` emits `cells`
   grouped by ascending roster ref, not row-major, and `fromBattleExport` assigns refs by first
@@ -773,8 +828,9 @@ Out of scope and deliberately absent, each with its own owning story: `exportBat
 rule-aware organism closure (5.4); the download, the filename and the `appVersion` source (5.5);
 `migrate()` (5.7); `importWorkspace()` (5.8). Nothing under `apps/web` changed.
 
-Four RFC-006 variances (Zod v3 spellings, the bare `z.string()` for `organismId`, `class` vs
-factory, and RFC-006's silence on cell ordering) are recorded in `deferred-work.md` rather than
+Six RFC-006 variances (Zod v3 spellings, the bare `z.string()` for `organismId`, `class` vs
+factory, RFC-006's silence on cell ordering, and — from the review — the `Wire`/hydrated type split
+and the duplicate-id refinement) are recorded in `deferred-work.md` rather than
 silently absorbed, following Story 5.2 FD4's precedent. `docs/project-context.md` needed no new
 bullet, as Task 5 predicted.
 
@@ -801,9 +857,11 @@ bullet, as Task 5 predicted.
 - `docs/implementation-artifacts/deferred-work.md` — the `:392` entry struck; a "Deferred from:
   Story 5.3" section (FD10's measurements, the `appVersion` source for 5.5, the
   `listFull()`-skips-corrupt export gap for 5.11, FD3's ordering contract, the `PALETTE_VERSION`
-  discharge, the four RFC-006 variances, the `@gol/test-utils` import).
+  discharge, the six RFC-006 variances, the cardinality half handed to 5.4, the `@gol/test-utils`
+  import).
 - `docs/implementation-artifacts/sprint-status.yaml` — `5-3-export-envelope-serializer`:
-  `ready-for-dev` → `in-progress` → `review`.
+  `backlog` → `review` net of the branch (the review round moved it through `in-progress` and
+  back); the final review sets `done`.
 - `docs/implementation-artifacts/5-3-export-envelope-serializer.md` — this record.
 
 ### Change Log
@@ -818,6 +876,7 @@ bullet, as Task 5 predicted.
 | 2026-09-22 | Task 6 — `npm run ci:dev` exit 0. FD10: `"sideEffects": false` on `@gol/domain` after a pristine-`main` comparison showed the barrel re-export costing +0.3 KB on every route; no budget moved. |
 | 2026-09-22 | Code review (Fable, `review_mode: full`) — 9 patches applied (gridSize spread symmetry, `buckets.flat()`, two comment corrections, two test additions, three `deferred-work.md` corrections), 1 defer, 3 `[Review][Decision]` items left open for the owner; status → `in-progress`. |
 | 2026-09-22 | Owner's decisions implemented (resume): D1 AC7/Task 6 reworded + `index.ts` invariant note; D3 duplicate-id `superRefine` on `WorkspaceExportSchema` + 4 tests (2 negative, 2 pinning cardinality's deliberate absence); D4 explicit `30_000` timeouts on both fast-check identity properties. D2 (declare `@gol/test-utils`) reverted — the edge is a FATAL turbo cycle on `^build`, not a warning; item reopened with the measurement and two new options. `npm run ci:dev` exit 0. |
+| 2026-09-22 | Owner's FINAL Decision 2: (b) — keep the undeclared `@gol/test-utils` import and the recorded cache gap; no code change (`c0c21ab`). Second review round (Fable, `review_mode: full`, after the sync with `main` #70) — 19 patches applied, 0 defers, 0 decisions: the record brought up to Decision 2's final state (Completion Notes, Change Log, File List, `deferred-work.md`), "Four" → six variances, FD10 listed under Forced decisions, AC8(a) and the first round's decision count made exact, the `index.ts` header and three code comments made true of the code (`DEFAULT_SETTINGS` parse, no `kind: 'battle'` PRODUCER, shared-elements contract, `fromBattleExport`'s guarantor), and four test additions (100×60 bounds, same-organism duplicate coordinate, constants over magic numbers, `emptyGrid`). Status → `done`. |
 
 Dev Model: opus   # mints the wire format, the dense↔sparse contract and the cell-ordering identity argument that Stories 5.4–5.8 all build on; there is no serializer pattern in the tree to follow
 Proposed lane gate: none

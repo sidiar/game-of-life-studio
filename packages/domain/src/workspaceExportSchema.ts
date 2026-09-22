@@ -149,9 +149,10 @@ export const WorkspaceExportSchema = z
     // would collapse a duplicate pair silently: two records in, one record out, no error anywhere.
     //
     // ⚠️ CARDINALITY IS NOT HERE. `kind: 'battle'` implying exactly one battle is Story 5.4's, which
-    // mints `exportBattle` and the organism closure that gives the rule meaning; this story forbade
-    // a `kind: 'battle'` code path outright, so a refinement here would constrain a producer that
-    // does not exist yet.
+    // mints `exportBattle` and the organism closure that gives the rule meaning. `toEnvelope`
+    // accepts the kind (it is the enum's), but this story ships no PRODUCER of a `kind: 'battle'`
+    // file — `exportBattle` is 5.4's — so a refinement here would constrain a producer that does
+    // not exist yet.
     for (const [field, ids] of [
       ['battles', envelope.battles.map((b) => b.id)],
       ['organisms', envelope.organisms.map((o) => o.id)],
