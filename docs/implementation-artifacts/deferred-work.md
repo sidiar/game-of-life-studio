@@ -2341,9 +2341,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - ~~**Escape/Close/Back during an in-flight organism save is allowed** (FD4/FD9) — the write still
   lands and still reports, after the close. The alternative (disable Close/Back/Escape while
   saving) would lock the dialog for a sub-millisecond window; not built.~~ **✅ Closed in Story
-  4.16 (review decision (b), Task 12, 2026-09-22):** the close (✕ / Back / Escape) is now a no-op
-  while `savingRef.current` — one guarded handler for Escape/backdrop/✕, `disabled={isSaving}` on
-  Back. Combined with Task 11 (Save no longer closes the editor), this removes all three residuals
+  4.16 (review decision (b), Task 12, 2026-09-22):** the close (✕ / Back / Escape) is now locked
+  while `savingRef.current` — one guarded handler for Escape/backdrop, `disabled={isSaving}` on
+  Back and (Task 13, the second review's decision) on ✕. Combined with Task 11 (Save no longer closes the editor), this removes all three residuals
   the review's `[Review][Decision]` raised: (1) a rejecting write can no longer resolve after an
   exit, because no exit can happen while a write is in flight; (2) the editor staying open means a
   resolved save closes nothing, so there is no "fresh editor" for a late save to close; (3) the
@@ -2397,3 +2397,17 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   failure mode above (`e2e/organisms.spec.ts`, Story 4.16 test 4). Inherited verbatim from the
   Story 4.13 e2e's branch; a stronger WebKit assertion needs a positive claim about where focus
   IS on that engine — deferred, pre-existing idiom.
+
+## Deferred from: code review (resume 2) of 4-16-create-save-organism (2026-09-22)
+
+- **A control that holds focus when it becomes `disabled` mid-write leaves the settle-focus effect
+  engine-dependent** — a user who Tab-focuses ✕ (Task 13) or Back (Task 12) and then mouse-clicks
+  Save keeps that control as `document.activeElement` on WebKit (the click does not move focus
+  there; `OrganismEditorModal.tsx`'s `disableRestoreFocus` comment records it). Engines that run
+  the HTML focus-fixup drop focus to `<body>` → the effect refocuses Save (AC3 met); an engine that
+  leaves `activeElement` on the disabled control makes `shellRef.contains(active)` true, the effect
+  returns early, and focus rests on the re-enabled ✕/Back instead of Save — indistinguishable from
+  "the user moved into a field". No unit test starts a write with ✕ or Back focused (the Task 12/13
+  tests click Save with the pointer under jsdom, which focuses on click). Same class as the WebKit
+  `:focus` branch above; a positive claim about where focus IS on WebKit would pin both — deferred,
+  pre-existing idiom (Back had the identical path before Task 13).

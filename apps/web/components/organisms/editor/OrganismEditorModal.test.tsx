@@ -1650,9 +1650,14 @@ describe('OrganismEditorModal', () => {
         const closeButton = within(dialog).getByRole('button', { name: 'Close' });
         await waitFor(() => expect(closeButton).toBeDisabled());
 
-        // A disabled control is inert to a real click; `fireEvent` bypasses that, pinning the
-        // `disabled` attribute itself (Task 13) rather than only the `handleRequestClose` guard
-        // Task 12 already covers.
+        // Task 13's literal bullet ("a click on it while saving does not close"); `fireEvent`
+        // because a disabled control is inert to `user.click`. Note what this click does NOT prove
+        // (review 2026-09-22): the ✕ handler is `handleRequestClose`, whose `savingRef` guard would
+        // swallow the call even with `disabled` removed, and React drops clicks on a disabled
+        // `<button>` even with the guard removed — `not.toHaveBeenCalled()` fails only if BOTH go.
+        // The `disabled` attribute is pinned by `toBeDisabled()` above; the guard by the Escape
+        // test in this block. (Testing standards say not to click a disabled button to prove it
+        // inert; the task's bullet asks for exactly that, so the click stays, labelled.)
         fireEvent.click(closeButton);
         expect(onClose).not.toHaveBeenCalled();
 
@@ -1668,17 +1673,17 @@ describe('OrganismEditorModal', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
       });
 
-      it('the ✕ button re-enables after a rejected write settles (Task 13)', async () => {
+      it('the ✕ button re-enables after a rejected write settles and then closes (Task 13)', async () => {
         const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
-        let resolveSave!: () => void;
+        let rejectSave!: () => void;
         const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
           () =>
             new Promise<void>((_resolve, reject) => {
-              resolveSave = () => reject(new QuotaExceededError('gol:organisms'));
+              rejectSave = () => reject(new QuotaExceededError('gol:organisms'));
             }),
         );
         const user = userEvent.setup();
-        mountModal({ organisms });
+        const { onClose } = mountModal({ organisms });
 
         const dialog = screen.getByRole('dialog');
         await fillValidDraft(user, dialog);
@@ -1686,14 +1691,19 @@ describe('OrganismEditorModal', () => {
         const closeButton = within(dialog).getByRole('button', { name: 'Close' });
         await waitFor(() => expect(closeButton).toBeDisabled());
 
-        // The write sits behind an awaited digest — wait for it to be REACHED before resolving
-        // (review 2026-09-22): `resolveSave` is unassigned until `organisms.save` runs.
+        // The write sits behind an awaited digest — wait for it to be REACHED before rejecting
+        // (review 2026-09-22): `rejectSave` is unassigned until `organisms.save` runs.
         await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
         await act(async () => {
-          resolveSave();
+          rejectSave();
         });
         await within(dialog).findByRole('alert');
         await waitFor(() => expect(closeButton).toBeEnabled());
+
+        // Re-enabled AND the guard released — a real click closes (review 2026-09-22: the success
+        // case proves this; the rejection path releases through the same `finally`, pinned here).
+        await user.click(closeButton);
+        expect(onClose).toHaveBeenCalledTimes(1);
       });
     });
   });

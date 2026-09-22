@@ -44,7 +44,7 @@ Battle Editor (Edit Mode)            ← third entry point (FR-3.12)
   updates the same organism (amended 2026-09-22, Story 4.16 Task 11 — replaces the original
   "Save & Close" exit, to match the Battle Editor pattern, which also stays open after Save).
   Back, ✕ and Escape then all return to the entry context, refreshed with the saved organism;
-  all three are locked while a write is in flight (Task 12)
+  all three are locked while a write is in flight — Back and ✕ disabled, Escape a no-op (Tasks 12–13)
 - **Cancel**: Discards changes, closes editor, returns to the entry context
 - **Delete** (edit mode only): Shows confirmation, deletes organism, closes editor
 

@@ -490,12 +490,14 @@ export default function OrganismEditorModal({
 
   // Story 4.16, AC3, Task 12 (owner's review decision, 2026-09-22, option (b)): Escape and the
   // backdrop (unreachable under `fullScreen`, kept for documentation) both route through the
-  // dialog's `onClose`; the ✕ button calls it directly. One guarded handler for both, rather than
-  // checking `savingRef.current` twice — the Back button below gets `disabled={isSaving}` instead
-  // (the `<SidebarFooter>` idiom, with its disabled trio so the lock is visible). The lock lives
-  // HERE, not in the hook: `onClose` itself stays unguarded, so a caller who reaches it by another
-  // route (Story 4.23's guard will sit in front of it) inherits this lock only through these two
-  // controls and Escape.
+  // dialog's `onClose`; the ✕ button calls it directly. One guarded handler, rather than checking
+  // `savingRef.current` twice. Back and — since Task 13 (second review's decision, option (b)) —
+  // the ✕ are ALSO `disabled={isSaving}`, so the two visible controls show the lock (Back wears
+  // `<SidebarFooter>`'s disabled trio, the ✕ MUI's disabled colour); for a click on either the
+  // `disabled` attribute is what stops it, and this guard is what remains for Escape and the
+  // backdrop, which `disabled` cannot reach. The lock lives HERE, not in the hook: `onClose` itself
+  // stays unguarded, so a caller who reaches it by another route (Story 4.23's guard will sit in
+  // front of it) inherits this lock only through these controls and Escape.
   const handleRequestClose = useCallback(() => {
     if (savingRef.current) return;
     onClose();
@@ -596,13 +598,15 @@ export default function OrganismEditorModal({
                 silently ignores the click. `disabled={isSaving}` here, plus the FD8
                 `transition: 'none'` SAVE_SX already carries: MUI's IconButton root still
                 transitions `background-color` on `duration.shortest`, and `color` swaps to the
-                pinned `action.disabled` token the instant `disabled` flips, so an axe scan
-                landing mid-fade would measure an unsettled state. MUI's own disabled `color`
-                (already pinned to `--gol-action-disabled`, `themeTokens.test.ts`'s contrast gate)
-                IS the house disabled styling here — unlike `BackButton`, this control has no
-                border or background of its own for that trio to touch.
-                `handleRequestClose`'s guard stays for Escape and the backdrop, which `disabled`
-                cannot reach. */}
+                `action.disabled` token the instant `disabled` flips, so an axe scan landing
+                mid-fade would measure an unsettled state. MUI's own disabled `color` IS the house
+                disabled styling here: `theme.ts` pins `action.disabled` to `--gol-action-disabled`
+                (`themes.css`: the text-primary channel at 0.3 alpha — visibly dimmer than the
+                `--gol-text-primary` the `sx` below sets, which MUI's two-class `&.Mui-disabled`
+                rule out-specifies; no test measures the token, and SC 1.4.3 exempts disabled
+                controls). Unlike `BackButton`, this control has no border or background of its
+                own for that trio to touch. `handleRequestClose`'s guard stays for Escape and the
+                backdrop, which `disabled` cannot reach. */}
             <IconButton
               type="button"
               aria-label="Close"

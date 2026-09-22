@@ -139,8 +139,8 @@ export function useOrganismEditorModal(
   }, []);
 
   // Close ✕, Back and Escape all land here. This callback is NOT itself guarded against an
-  // in-flight write — the Task 12 lock lives in the modal (Escape and ✕ route through its
-  // `handleRequestClose`; Back is `disabled={isSaving}`), so it holds for the three user close
+  // in-flight write — the Task 12/13 lock lives in the modal (Escape routes through its
+  // `handleRequestClose`; Back and ✕ are `disabled={isSaving}`), so it holds for the three user close
   // paths and for nothing else that may one day reach `modalProps.onClose` directly (review
   // 2026-09-22). Nothing else moves — no repository call, no state beyond the modal's own
   // lifecycle; the unsaved-changes guard (Story 4.23) inserts itself in front of this callback
