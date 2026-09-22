@@ -111,10 +111,25 @@ jobs:
 
   # E2E + a11y (Playwright, 3 browsers + tablet, axe on key screens). Runs after
   # the cheaper gates pass.
+  #
+  # One job per Playwright project, in parallel. A single job running all four
+  # projects with `workers: 2` on a 2-core runner grew with the suite until it hit
+  # `timeout-minutes` (936 tests: 11.6–13.3 min of tests plus ~2 min of setup, killed
+  # at 15:18 on the first PR merged after #66). Sharding keeps the full cross-browser
+  # gate on every PR (WebKit alone caught Story 4.14's aspect-ratio red) and gives
+  # each shard the whole budget for a quarter of the work. The threshold stays put:
+  # a shard that takes 15 minutes is a real problem, not a suite that outgrew a number.
   e2e:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox, webkit, tablet]
+    env:
+      # `tablet` is a WebKit device profile; it needs the WebKit engine installed.
+      PLAYWRIGHT_BROWSER: ${{ matrix.project == 'tablet' && 'webkit' || matrix.project }}
     steps:
       - uses: actions/checkout@v4
 
@@ -140,12 +155,14 @@ jobs:
       # Cache the browser BINARIES only. ~/.cache/ms-playwright holds the downloaded
       # browsers; it does not hold the apt system libraries WebKit links against,
       # which `--with-deps` installs into the runner OS and which no cache restores.
+      # Keyed per engine as well as per lockfile, so a shard restores only the
+      # browser it runs and the four shards never race to write one cache entry.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_BROWSER }}-${{ hashFiles('package-lock.json') }}
 
       # ⚠️ Unconditional, and NOT merged into the step below. These two steps were one
       # `npx playwright install --with-deps` gated on the cache miss, which meant a cache
@@ -156,20 +173,23 @@ jobs:
       # that needs the system libs. Observed red on Stories 1.7 and 1.8, green only on
       # 1.9 where MUI changed the lockfile and forced a miss.
       - name: Install Playwright system dependencies
-        run: npx playwright install-deps
+        run: npx playwright install-deps ${{ env.PLAYWRIGHT_BROWSER }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install
+        run: npx playwright install ${{ env.PLAYWRIGHT_BROWSER }}
 
-      - name: E2E + axe (Chromium/Firefox/WebKit/tablet)
-        run: npm run e2e
+      # Straight into the `web` workspace so `--project` reaches Playwright rather
+      # than Turborepo. The webServer still builds through `npm run build:standalone`,
+      # which is the root Turborepo task and hits the cache `quality` warmed.
+      - name: E2E + axe (${{ matrix.project }})
+        run: npm run e2e --workspace=web -- --project=${{ matrix.project }}
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: apps/web/playwright-report
           retention-days: 7
 
