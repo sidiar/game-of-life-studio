@@ -617,3 +617,18 @@ button on click, so it would NOT have caught the Safari path; the local Mac WebK
 Dev Model: opus   # first editor footer + first disclosure overlay in the app, and a prop contract 4.21/4.24 build on — pattern-setting, not pattern-following
 
 Proposed lane gate: none   # apps/web-only; no packages/* or barrel edit, and no epic 5 story touches components/organisms/** or lib/organisms/**
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 1m 26s | 1m 26s | 36 | 5,927 | 16,876 | 1,058,197 | 1,081,036 |
+| Step 1 — create | opus-5 | 1 | 9m 44s | 9m 44s | 200 | 4,089 | 460,463 | 10,139,430 | 10,604,182 |
+| Step 2 — implement | opus-5 | 1 | 22m 27s | 22m 27s | 288 | 5,016 | 428,502 | 20,491,488 | 20,925,294 |
+| Step 3 — review + PR | fable-5-1 | 4 | 21m 13s | 21m 13s | 4,306 | 17,780 | 1,280,835 | 16,527,526 | 17,830,447 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 82 | 24,928 | 56,751 | 2,697,115 | 2,778,876 |
+| **Total (create → PR ready)** | | 6 | **54m 50s** | 54m 50s | 4,830 | 32,812 | 2,186,676 | 48,216,641 | **50,440,959** |
+
+Run started 2026-09-23 10:58 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
