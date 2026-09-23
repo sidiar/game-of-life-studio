@@ -748,8 +748,11 @@ Review Findings; these are the items consciously left open.
   (Story 4.11, 2026-09-17):** the condition vocabulary now exists
   (`conditionPropertyLabel`/`operatorLabel`/`cellStateLabel` in
   `apps/web/lib/organisms/conditionDraft.ts`) — Story 4.11 builds only the vocabulary, not the
-  summariser or the sentence on `<OrganismCard>` itself. **Pick this up in Story 4.20**, with the
-  card's stat block.
+  summariser or the sentence on `<OrganismCard>` itself. **Re-pointed again (Story 4.20,
+  2026-09-23):** 4.20 is the editor FOOTER, not the card — it touches `<OrganismLibrary>` for one
+  prop and one call site and never opens `OrganismCard.tsx`. **Pick this up in the next story that
+  reshapes `<OrganismCard>`** — 4.21/4.22 add its Delete action — still together with the card's
+  stat block below.
 - ~~**The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
   `tabIndex={0}` because it has no inner control to be the keyboard stop instead (organism cards
   open a modal in `Story 4.17`, which does not exist yet). Once Edit lands inside the card, a stop
@@ -778,8 +781,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   see the entry above); the card's stat block is still unsettled. **Re-pointed again (Story 4.11,
   2026-09-17):** the condition vocabulary Story 4.11 built lives in the editor
   (`lib/organisms/conditionDraft.ts`), not on `<OrganismCard>` — this stat-cell semantics question
-  is unaffected. **Pick this up with Story 4.20 alone**, and decide the cell semantics once for
-  all three rows.
+  is unaffected. **Re-pointed again (Story 4.20, 2026-09-23):** 4.20 built the editor's footer and
+  did not reach the card at all, so the stat block is still where 4.11 left it. **Pick this up with
+  the next `<OrganismCard>` reshape** (4.21/4.22's Delete action), and decide the cell semantics
+  once for all three rows.
 
 ## Deferred from: Story 4-3-editor-modal-shell (2026-09-14)
 
@@ -793,8 +798,14 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   Escape/Close a visible control per UX-DR17) and shipped the header only — no footer, which is
   `Story 4.20`'s surface. **Not a code change, and not for a story to resolve by editing either
   spec:** the next UX touch should settle which form is canonical and update the losing document.
-  If the mockup wins, 4.20 moves Save beside the usage indicator and 4.5 puts the name in the
+  If the mockup wins, a later story moves Save beside the usage indicator and 4.5's name goes in the
   header; if the AC wins, `ORGANISM-EDITOR-UPDATES.md` is superseded.
+  **Annotated (Story 4.20, 2026-09-23):** the footer now EXISTS — a full-width `<footer>` after the
+  body holding the FR-1.7 usage indicator and nothing else. Save did **not** move into it and the
+  name did **not** move into the header: moving Save would rewrite a shipped header, three e2e tests
+  and the `SAVE_SX` mid-fade fix for a change no AC asks for (4.20 FD1). So this entry stands exactly
+  as written, minus the "no footer" clause — the reconciliation is still the next UX touch's, and it
+  is now a question about which CONTROLS the footer holds, not whether there is one.
 - **Save's disabled→enabled edge is a cross-fade trap handed to `Story 4.16`** (FD4). The header's
   Save is a MUI `<Button variant="contained" disabled>`, and MUI `Button` ships its OWN
   `background-color`/`color`/`box-shadow` transition (`duration.short`, 250ms). In this story the
@@ -2417,9 +2428,15 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   dialog ships Cancel / Clone & Edit / Edit Anyway; `handleGateCloneAndEdit` writes the clone
   through the injected `onCloneAndEdit` option, guards the gate with `gatePending`, and stashes the
   clone in `proceedRef` for `handleGateExited` to open the editor on.
-- **The `[N]` in "Used in N Battles" is plain text** — no battle names, no click-through. FR-1.7's
+- ~~**The `[N]` in "Used in N Battles" is plain text** — no battle names, no click-through. FR-1.7's
   popover / footer is **Story 4.20's**, which will need `battles` on the modal too (it is
-  deliberately NOT passed there today — an unread prop is a lie).
+  deliberately NOT passed there today — an unread prop is a lie).~~ **✅ Closed in Story 4.20
+  (2026-09-23):** the editor footer's `<UsageIndicator>` names the battles behind N and the
+  organisms behind M, each in a read-only disclosure. The modal did NOT gain `battles`: it gained
+  `battleSummaries`, the settled `Pick<BattleSummary, 'id' | 'name' | 'organismIds'>[]` that
+  `<OrganismLibrary>` already holds — DATA, so AR-2/AR-27 stays intact and the repository stays at
+  the page boundary. The dialog's own count now reads `resolveOrganismUsage(usage, id).length`, the
+  same derivation the footer uses (FD8).
 - **A corrupt `gol:battles` now blanks the Library with the organism-worded error copy** (FD2) —
   `battles.list()` is uncaught inside the one `Promise.all`, so whole-key corruption of the battle
   collection lands in the existing `'error'` state ("Something went wrong loading your
@@ -2467,8 +2484,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   focused button unmounts — the tab order restarts at the top. Narrow (a search AND a rename that
   leaves the match), and the create flow has no equivalent (its target is the always-present
   create button). Options when picked up: clear `searchText` in `onSaved`, or a post-settle
-  "focus is loose → create button" sweep. **Pick this up with Story 4.20** (the next Library
-  touch) or 4.23.
+  "focus is loose → create button" sweep. **Re-pointed (Story 4.20, 2026-09-23):** 4.20 was the next
+  Library touch and does not reach this path — it adds one prop to the editor's call site and moves
+  one count onto `resolveOrganismUsage`, neither of which is in the focus-restore path. **It stands
+  on Story 4.23** (the editor's own dirty/close guard), this entry's own alternative.
 - **The editor's numeric bounds are tighter than the schema's, and an edit session now reads
   persisted records through them.** `age ≤ 999` / `neighborCount ≤ 8` / strict `min < max` in the
   editor (`conditionDraft.ts`) versus `0..65534` / `min <= max` in `SurvivalRuleSchema`: a record
@@ -2769,3 +2788,34 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   disabled window long enough to drop a click is long enough to read as feedback — and EVERY card's
   Clone should disable while any clone is in flight. Attached to the seam, not to a date; the same
   story owns `gatePending`'s missing timeout, recorded above.
+
+## Deferred from: Story 4-20-usage-visibility-ui implementation (2026-09-23)
+
+- **`usageBattleNames`' `'Current Battle (unsaved)'` branch is unreachable until Story 4.24** (FD9).
+  It is forced by `OrganismUsageEntry.battleId: string | null` and named by RFC-005 Decision 8, but
+  `battleId` is `null` only for a never-saved OPEN battle, and nothing passes an `openBattle` to
+  `resolveOrganismUsage` yet — nothing that mounts this editor has a live grid until 4.24 opens it
+  over `<BattlePage>`. Covered by a unit test rather than by a rendered affordance, and deliberately
+  NOT wired with an `openBattle` prop every caller would pass as `undefined` (the unread prop this
+  repo already refused once, `:2420`). **Story 4.24** is where the branch becomes reachable, and it
+  should assert it through the UI then.
+- **The footer diverges from the UX doc's single-popover phrasing** (FD12).
+  `organism-editor-design.md:120` says "the popover gains a second read-only section", which reads as
+  ONE panel with two sections; the editor ships TWO independent disclosures, one per label. Written
+  as one panel, the `N = 0, M > 0` case needs a trigger that is text when one count is zero and a
+  button when the other is not, which would make AC3's "Used in 0 Battles renders without expansion"
+  depend on a count it is not about. Two labels keep that rule uniform and match the AC's own "lists
+  the battle (**or** organism) names". **Not a spec edit** — recorded for the same UX touch that owns
+  the header/footer reconciliation (`:786`).
+- **The mockup paints the COUNT in `--gol-accent`; the footer paints the caret instead.** The label
+  is one exported string (`battleCountLabel` / `ruleTargetCountLabel`, AC5's single-copy rule), so
+  there is no element around the digits to colour without splitting the helper's output at the call
+  site — which is exactly the drift the shared formatters exist to prevent. The accent lands on the
+  `▾` caret and the mockup's hover underline is kept. Revisit only if a designer asks for the digits
+  specifically; the fix then is a formatter that returns parts, not a split at the call site.
+- **The rule-reference index is rebuilt on every editor render.** `useMemo(… , [library])` at the
+  modal, where `library` is `<OrganismLibrary>`'s unmemoised `sorted` — a fresh array per render, so
+  the memo never hits. Accepted on the same measurement `others` already accepts (~0.02–0.04 ms for
+  1,000 organisms, Story 3.7's `library-filter` bench), and the honest fix is memoising `sorted` at
+  the Library, which would also fix `others` and the search filter. **Pick this up only if a render
+  profile ever shows it** — memoising the caller's list is a Library change with three beneficiaries.

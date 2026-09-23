@@ -5,7 +5,14 @@ import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { styled } from '@mui/material/styles';
-import type { Organism } from '@gol/domain';
+import {
+  buildRuleReferenceIndex,
+  buildUsageIndex,
+  referencingOrganismIds,
+  resolveOrganismUsage,
+  type BattleSummary,
+  type Organism,
+} from '@gol/domain';
 import type { OrganismRepository } from '@gol/persistence';
 // Static imports, not a second `dynamic()`: this file is already inside the lazy chunk
 // `<OrganismLibrary>` draws, so the layout, the field and the draft factory ride along with it and
@@ -20,6 +27,7 @@ import AgingToggleField from './AgingToggleField';
 import AddRuleButton from './AddRuleButton';
 import RulesEditor from './RulesEditor';
 import PreviewPanel from './PreviewPanel';
+import UsageIndicator from './UsageIndicator';
 import {
   createNewOrganismDraft,
   organismDraftFrom,
@@ -33,6 +41,7 @@ import { readGridColors } from '@/lib/canvas/themeColors';
 import { projectOrganismForSave } from '@/lib/organisms/organismRecord';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { saveOutcomeMessage } from '@/lib/organisms/saveOutcome';
+import { referencingOrganismNames, usageBattleNames } from '@/lib/organisms/usageLabels';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -100,6 +109,28 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
    * taken from whatever the caller had loaded at open time (FD9).
    */
   library: readonly Organism[];
+  /**
+   * The loaded battle summaries, for FR-1.7's "Used in [N] Battle(s)" footer (Story 4.20, AC6) —
+   * DATA, exactly as `library` is data.
+   *
+   * ❌ Not a `BattleRepository`, not `createRepositories()`, not a `battles.list()` from inside this
+   * modal (AR-2/AR-27): `organisms` below stays the editor's only injected repository and its only
+   * side effect. `<OrganismLibrary>` already holds these summaries — it builds the same usage index
+   * from them for the Story 4.17 edit warning — so passing the settled array is what makes the two
+   * surfaces' counts one derivation rather than two agreeing by coincidence (FD8). This closes
+   * `deferred-work.md`'s "Story 4.20 … will need `battles` on the modal too": it needs the battle
+   * LIST, which is not the same claim.
+   *
+   * `Pick<…>` because that is all the footer reads — the ids the index is keyed on, `organismIds`
+   * for the placed set (Decision H.1) and `name` for the panel. A full `BattleSummary[]` still
+   * assigns, and a test can pass literals.
+   *
+   * The values are the OPEN-TIME snapshot, like `library`: `<OrganismLibrary>`'s hook reloads only
+   * after this modal closes (Story 4.16, Task 11), nothing here can change a battle, and a
+   * just-saved new organism is in no battle — so there is nothing to refresh and no reload to add
+   * (FD7).
+   */
+  battleSummaries: readonly Pick<BattleSummary, 'id' | 'name' | 'organismIds'>[];
   /**
    * The modal's only side effect (Story 4.16, AR-2/AR-27): interface-typed, injected from
    * `<OrganismLibrary>`, which received it from the page boundary's one `createRepositories()`.
@@ -208,6 +239,22 @@ const EditorBody = styled('div')({
   minHeight: 0,
 });
 
+// Mockup: `.editor-footer` (`organism-editor.html:818-828`), minus its `display: flex` /
+// `justify-content: space-between` — those exist there to push the mockup's Save button to the far
+// end, and Save stays in the header (FD1). `<UsageIndicator>` owns the row inside.
+//
+// ⚠️ FD2: the mockup's comment scopes this footer to "main content area, not under sidebar" because
+// the mockup has a left SIDEBAR with its own footer holding Back. This editor has no sidebar footer
+// (Back is in the header, Story 4.3), so scoping the footer to the middle columns would put it
+// under a column boundary that means nothing here. Full width, `flexShrink: 0`, the same `Shell`
+// flex chain `EditorHeader` sits at the top of.
+const EditorFooter = styled('footer')({
+  background: 'var(--gol-bg-secondary)',
+  borderTop: '1px solid var(--gol-border)',
+  padding: '15px 30px',
+  flexShrink: 0,
+});
+
 // Story 4.16, AC5, FD7: the in-modal failure line. `BattleEditorView.tsx:376-400`'s
 // `<SaveErrorLine>` shape (`role="alert"`, conditionally mounted) with `SaveNotice`'s old
 // `padding: '10px 30px'` and `borderBottom` (it sits under the header, not above a status bar).
@@ -274,7 +321,14 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * (`ORGANISM-EDITOR-UPDATES.md:9-20`, `organism-editor.html:895-903,1222-1234`) moved the name into
  * the header, Back into the sidebar footer and Save into an editor footer; the AC is the story's
  * authority and the divergence is recorded in `deferred-work.md` for the next UX touch rather than
- * resolved here. No footer is built: it is Story 4.20's surface (FR-1.7's usage indicator).
+ * resolved here — moving Save now would rewrite a shipped header, three e2e tests and the `SAVE_SX`
+ * mid-fade fix for a change no AC asks for.
+ *
+ * Story 4.20 builds the footer that comment once said was still to come: a full-width `<footer>`
+ * after the body holding `<UsageIndicator>` and nothing else — FR-1.7's "Used in [N] Battle(s)" /
+ * "Targeted by [M] organism rule(s)", each a read-only disclosure of the names behind its count
+ * (UX-DR6: persistent, in both create and edit sessions). Save did NOT move into it and the name did
+ * NOT move into the header, so the divergence above stands as recorded, for the next UX touch.
  *
  * The `'battle'` origin (M5 — the editor opens as a modal over the mounted battle, never a route)
  * changes only the back label; Story 4.24 is its first caller. Reached from the Library via the
@@ -309,6 +363,7 @@ export default function OrganismEditorModal({
   onExited,
   onSaved,
   library,
+  battleSummaries,
   organisms,
 }: OrganismEditorModalProps) {
   // The lazy-initialiser form, so the factory runs once per mount, not once per render — reading
@@ -382,6 +437,41 @@ export default function OrganismEditorModal({
   // the scan is 0.02–0.04 ms at 1,000 organisms (Story 3.7's `library-filter` bench).
   const others = organism === null ? library : library.filter((entry) => entry.id !== organism.id);
   const usersByToken = usersByColorToken(others);
+  // Story 4.20 — FR-1.7's footer, derived HERE and handed to `<UsageIndicator>` as resolved names
+  // and one number (FD11: the derivations are the modal's, the presentation is the component's).
+  //
+  // The subject is the organism the footer is ABOUT: the record in an edit session, or — after the
+  // first successful Save of a create — the id that write stamped, so the footer starts answering
+  // for the organism that now exists. `null` until then, and a `null` subject is `0`/`0` with no
+  // special case (AC8, FD7).
+  const subjectId = organism?.id ?? saveStamp?.id ?? null;
+  // Memoised at the CALL SITE, never inside `@gol/domain` — that package memoizes nothing,
+  // deliberately (RFC-005 Decision 8: a cache there would be module-level state under a
+  // `"sideEffects": false` contract). `battleSummaries` is the caller's settled array and is
+  // referentially stable between loads, so this memo really does hit; the rule index is keyed on
+  // `library`, which is the caller's unmemoised `sorted`, so it re-runs per render — the same scan
+  // `others` above already accepts on the same measurement (Story 3.7's `library-filter` bench).
+  const usageIndex = useMemo(() => buildUsageIndex(battleSummaries), [battleSummaries]);
+  const ruleIndex = useMemo(() => buildRuleReferenceIndex(library), [library]);
+  // ⚠️ `resolveOrganismUsage(...).length`, never `usageIndex.get(id)?.length` (AC5, FD8). The two
+  // return the same number for exactly as long as no caller passes an `openBattle`; Story 4.24 will
+  // pass one, and whichever surface was left on the raw map read starts disagreeing with the others
+  // at that moment. No `openBattle` argument here: nothing that mounts this editor has a live grid
+  // until 4.24 opens it over `<BattlePage>`, and a prop every caller passes as `undefined` is the
+  // unread prop this repo already refused once (FD9).
+  const usageEntries = subjectId === null ? [] : resolveOrganismUsage(usageIndex, subjectId);
+  // ⚠️ M counts RULES (the index's value array is per rule) while the panel below lists ORGANISMS
+  // (`referencingOrganismIds` de-duplicates). One organism targeting this one from two rules is
+  // M = 2 with ONE name — the two numbers `ruleReferenceIndex.ts`'s head comment separates (FD13).
+  const ruleCount = subjectId === null ? 0 : (ruleIndex.get(subjectId)?.length ?? 0);
+  // ⚠️ `library`, not `others`: `others` exists to keep an organism from warning about its own
+  // colour and from targeting itself in the dropdown, and passing it here would DROP a legitimate
+  // name whenever the referencing organism is the one being resolved. Self-references are already
+  // excluded inside `buildRuleReferenceIndex` (Decision E.5), so nothing is filtered twice (FD14).
+  const referencingNames =
+    subjectId === null
+      ? []
+      : referencingOrganismNames(referencingOrganismIds(ruleIndex, subjectId), library);
   // Story 4.14: resolved ONCE here (`getComputedStyle` forces a style recalculation) and passed
   // down to `<PreviewPanel>` — the `<BattlePage>` form (`BattlePage.tsx:420-427`). `document` is
   // guarded for the prerender even though this file is `ssr: false` (the house form, costs
@@ -724,6 +814,18 @@ export default function OrganismEditorModal({
             }
           />
         </EditorBody>
+        {/* Story 4.20, AC1: the editor's first footer, on every open, in both create and edit
+            sessions (UX-DR6 — "persistent"). It holds the usage indicator and nothing else: Save
+            stays in the header and the name stays out of it (FD1). The names are resolved through
+            the display helpers (`usageBattleNames` / `referencingOrganismNames`), never raw — an
+            `''` name parses for both schemas and would render as an empty `<li>` (FD10). */}
+        <EditorFooter>
+          <UsageIndicator
+            battleNames={usageBattleNames(usageEntries, battleSummaries)}
+            ruleCount={ruleCount}
+            referencingNames={referencingNames}
+          />
+        </EditorFooter>
       </Shell>
     </Dialog>
   );

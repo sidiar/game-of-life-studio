@@ -114,7 +114,14 @@ function Probe({
       </button>
       {result.gateMounted && <OrganismInUseDialog {...result.gateProps} />}
       {result.mounted && (
-        <OrganismEditorModal {...result.modalProps} library={LIBRARY} organisms={organisms} />
+        <OrganismEditorModal
+          {...result.modalProps}
+          library={LIBRARY}
+          // Story 4.20: this harness exercises the hook's lifecycle, not the footer — no battle
+          // places anything, so the footer reads "Used in 0 Battles" and expands nothing.
+          battleSummaries={[]}
+          organisms={organisms}
+        />
       )}
     </>
   );

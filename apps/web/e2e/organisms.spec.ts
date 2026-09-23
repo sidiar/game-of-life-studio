@@ -3667,3 +3667,134 @@ test.describe('clone organism (Story 4.18)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+/**
+ * Story 4.20: FR-1.7's usage footer, in a real browser. Reuses the module-scope seeding the 4.17
+ * and 4.18 blocks share — `createMockWorkspace()` places Aggressive Colonizer in BOTH battles and
+ * the merged Glider in neither — so no sixth `buildSeedPayload` copy is added here.
+ *
+ * ⚠️ The Escape case is why this block exists (FD4). MUI's `Modal` listens for Escape on the modal
+ * root, so a panel-closing key press that does not stop propagating closes the whole EDITOR and
+ * takes an unsaved draft with it. jsdom proves the handler; only this proves it against MUI's real
+ * listener ordering in three engines.
+ */
+test.describe('usage visibility footer (Story 4.20)', () => {
+  const USED = 'Aggressive Colonizer';
+
+  async function gotoSeeded(page: Page) {
+    await seedWorkspace(page);
+    await seedExtraOrganisms(page);
+    await page.goto('/organisms');
+    await expect(countBadge(page)).toHaveText('5 Organisms');
+  }
+
+  const usageFooter = (dialog: Locator) => dialog.getByRole('contentinfo');
+  const battlesPanel = (page: Page) => page.locator('[data-usage-battles-panel]');
+
+  /** The editor on the USED organism — through the in-use gate, which is what an edit on a placed
+   * organism always opens first (Story 4.17). */
+  async function openEditorOnUsed(page: Page) {
+    await editButton(page, USED).click();
+    const gate = await settled(page, inUseDialog(page));
+    await gate.getByRole('button', { name: 'Edit Anyway' }).click();
+    return settled(page, editorDialog(page));
+  }
+
+  test('1. the footer renders with the editor, and an unused organism’s label is not a button', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    await editButton(page, 'Glider').click();
+    const dialog = await settled(page, editorDialog(page));
+
+    const footer = usageFooter(dialog);
+    await expect(footer).toBeVisible();
+    await expect(footer.getByText('Used in 0 Battles')).toBeVisible();
+    // AC3: no affordance at all for a zero count — not a disabled one, not one that opens nothing.
+    await expect(footer.getByRole('button')).toHaveCount(0);
+    await expect(footer.getByText(/Targeted by/)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('2. a placed organism’s label opens a read-only panel naming the seeded battles', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    const dialog = await openEditorOnUsed(page);
+    const trigger = usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' });
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await trigger.click();
+
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(battlesPanel(page).getByRole('listitem')).toHaveText([
+      'Three-Way Skirmish',
+      'Grand Colony War',
+    ]);
+    // Nothing in the panel navigates (FR-1.7, M7) — the editor may be a modal over an in-progress
+    // battle, so a link here would abandon unsaved grid work.
+    await expect(battlesPanel(page).locator('a, button')).toHaveCount(0);
+    // The trigger never gives focus away, so the first Escape below is aimed at it.
+    await expect(trigger).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+
+  test('3. Escape closes the panel and leaves the editor open; a second Escape closes the editor', async ({
+    page,
+  }) => {
+    await gotoSeeded(page);
+
+    const dialog = await openEditorOnUsed(page);
+    const trigger = usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' });
+    await trigger.click();
+    await expect(battlesPanel(page)).toBeVisible();
+
+    await page.keyboard.press('Escape');
+
+    await expect(battlesPanel(page)).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await expect(trigger).toBeFocused();
+
+    await page.keyboard.press('Escape');
+
+    await expect(editorDialog(page)).toHaveCount(0);
+  });
+
+  test('4. a click outside the footer closes the open panel', async ({ page }) => {
+    await gotoSeeded(page);
+
+    const dialog = await openEditorOnUsed(page);
+    await usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' }).click();
+    await expect(battlesPanel(page)).toBeVisible();
+
+    await dialog.getByRole('heading', { level: 2, name: 'Organism Editor' }).click();
+
+    await expect(battlesPanel(page)).toHaveCount(0);
+  });
+
+  test('5. axe: no violations with a panel open and settled', async ({ page }) => {
+    await gotoSeeded(page);
+
+    const dialog = await openEditorOnUsed(page);
+    await usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' }).click();
+    await expect(battlesPanel(page)).toBeVisible();
+    // The Button colour transition (250ms) is unsynchronised with the Dialog's Fade — the
+    // measurement the 4.3 block's axe test records.
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

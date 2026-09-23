@@ -7,6 +7,7 @@ import {
   NEW_ORGANISM_DOMINANCE,
   ORGANISM_SCHEMA_VERSION,
   OrganismSchema,
+  type BattleSummary,
   type Organism,
 } from '@gol/domain';
 import { CONWAYS_CLASSIC, createFakeRepositories, createMockOrganisms } from '@gol/test-utils';
@@ -41,6 +42,12 @@ import OrganismEditorModal, { backLabelFor, errorTargetSelector } from './Organi
 // (`colorToken: DEFAULT_COLOR_TOKEN`, deleted in 4.8) could never have produced (FD8).
 const LIBRARY = [CONWAYS_CLASSIC, ...createMockOrganisms()];
 
+/** Story 4.20: the footer's battle list. `[]` is what every pre-4.20 case here means — no battle
+ * places the subject, so the footer reads "Used in 0 Battles" with no expansion. The cases that
+ * DO exercise the footer pass their own summaries through `mountModal`. */
+type BattleSummaries = readonly Pick<BattleSummary, 'id' | 'name' | 'organismIds'>[];
+const NO_BATTLES: BattleSummaries = [];
+
 /**
  * Story 4.16 Task 6: a per-test rig. Builds `createFakeRepositories({ organisms: library })`
  * FRESH per call (a shared fake leaks saved records across tests) and passes `onSaved: vi.fn()` —
@@ -58,6 +65,9 @@ function mountModal(
     /** Story 4.17: a record makes this an edit session; the default `null` keeps every earlier
      * call a create, unchanged. */
     organism?: Organism | null;
+    /** Story 4.20: the battle summaries behind the footer's "Used in N Battles". The default `[]`
+     * is "no battle places anything", which is what every earlier case here assumed. */
+    battleSummaries?: readonly BattleSummaries[number][];
   } = {},
 ) {
   const library = overrides.library ?? LIBRARY;
@@ -74,6 +84,7 @@ function mountModal(
       organism={organism}
       onClose={onClose}
       library={library}
+      battleSummaries={overrides.battleSummaries ?? NO_BATTLES}
       organisms={organisms}
       onSaved={onSaved}
     />,
@@ -454,6 +465,7 @@ describe('OrganismEditorModal', () => {
         organism={null}
         onClose={vi.fn()}
         library={LIBRARY}
+        battleSummaries={NO_BATTLES}
         organisms={createFakeRepositories({ organisms: LIBRARY }).organisms}
         onSaved={vi.fn()}
       />,
@@ -1454,6 +1466,7 @@ describe('OrganismEditorModal', () => {
           organism={null}
           onClose={onClose}
           library={LIBRARY}
+          battleSummaries={NO_BATTLES}
           organisms={organisms}
           onSaved={onSaved}
         />,
@@ -1472,6 +1485,7 @@ describe('OrganismEditorModal', () => {
           organism={null}
           onClose={onClose}
           library={LIBRARY}
+          battleSummaries={NO_BATTLES}
           organisms={organisms}
           onSaved={onSaved}
         />,
@@ -1914,6 +1928,7 @@ describe('OrganismEditorModal', () => {
           organism={null}
           onClose={onClose}
           library={LIBRARY}
+          battleSummaries={NO_BATTLES}
           organisms={organisms}
           onSaved={vi.fn()}
         />,
@@ -1934,6 +1949,7 @@ describe('OrganismEditorModal', () => {
           organism={null}
           onClose={onClose}
           library={LIBRARY}
+          battleSummaries={NO_BATTLES}
           organisms={organisms}
           onSaved={vi.fn()}
         />,
@@ -2269,6 +2285,132 @@ describe('OrganismEditorModal', () => {
       mountEdit();
 
       expect((await axe(document.body)).violations).toEqual([]);
+    });
+
+    /**
+     * Story 4.20 — the footer (FR-1.7). The derivations are asserted THROUGH the modal because the
+     * modal is what owns them (FD11): `<UsageIndicator>`'s own test pins the presentation against
+     * literals, and these pin that the right numbers and names reach it.
+     */
+    describe('the usage footer (Story 4.20)', () => {
+      // EDITED is placed by two battles, one of them with an unusable name (FD10) — so the panel
+      // proves `battleDisplayName` is on the path, not just that two names render.
+      const PLACED: BattleSummaries = [
+        { id: 'b1', name: 'Glider Wars', organismIds: [EDITED.id] },
+        { id: 'b2', name: '', organismIds: [CONWAYS_CLASSIC.id, EDITED.id] },
+      ];
+
+      /** `source`, rewritten so each of `ruleIds` is one rule targeting `targetId` — the Decision E
+       * shape: an `organismType` condition whose `pattern` is the target's stable library id. */
+      function targeting(source: Organism, targetId: string, ruleIds: readonly string[]): Organism {
+        return {
+          ...source,
+          survivalRules: ruleIds.map((id) => ({
+            ...source.survivalRules[0],
+            id,
+            conditions: [
+              { property: 'cellState', operator: 'eq', pattern: 'occupied' },
+              { property: 'organismType', operator: 'eq', pattern: targetId },
+            ],
+          })),
+        };
+      }
+
+      const usageFooter = () => screen.getByRole('contentinfo');
+
+      it('(47) create mode: "Used in 0 Battles" as plain text, and no rules label (AC8)', () => {
+        // A `null` subject is 0/0 with no special case — and the battle list is not even empty
+        // here, so the zero is the derivation's answer rather than an absent input.
+        mountModal({ battleSummaries: PLACED });
+
+        const footer = usageFooter();
+        expect(within(footer).getByText('Used in 0 Battles')).toBeInTheDocument();
+        expect(within(footer).queryByRole('button')).toBeNull();
+        expect(within(footer).queryByText(/Targeted by/)).toBeNull();
+      });
+
+      it('(48) an edit session on a placed organism counts and names its battles (AC5, AC7)', async () => {
+        const user = userEvent.setup();
+        mountEdit({ battleSummaries: PLACED });
+
+        const trigger = within(usageFooter()).getByRole('button', { name: 'Used in 2 Battles' });
+        await user.click(trigger);
+
+        const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
+        expect(
+          within(panel)
+            .getAllByRole('listitem')
+            .map((li) => li.textContent),
+        ).toEqual(['Glider Wars', 'Untitled Battle']);
+      });
+
+      it('(49) M === 0 renders neither the rules label nor a panel (AC2)', () => {
+        // EDIT_LIBRARY's rules name no organism at all, so nothing targets EDITED.
+        mountEdit({ battleSummaries: PLACED });
+
+        expect(within(usageFooter()).queryByText(/Targeted by/)).toBeNull();
+        expect(document.querySelector('[data-usage-rules]')).toBeNull();
+      });
+
+      it('(50) M counts RULES while the panel lists ORGANISMS (AC5, FD13)', async () => {
+        // ONE organism, TWO rules, both targeting EDITED: M = 2 with a single name.
+        const referencing = targeting(createMockOrganisms()[0], EDITED.id, ['rule-a', 'rule-b']);
+        const user = userEvent.setup();
+        mountEdit({
+          library: [EDITED, CONWAYS_CLASSIC, referencing],
+          battleSummaries: PLACED,
+        });
+
+        const trigger = within(usageFooter()).getByRole('button', {
+          name: 'Targeted by 2 organism rules',
+        });
+        await user.click(trigger);
+
+        const panel = document.querySelector('[data-usage-rules-panel]') as HTMLElement;
+        expect(
+          within(panel)
+            .getAllByRole('listitem')
+            .map((li) => li.textContent),
+        ).toEqual([referencing.name]);
+      });
+
+      it('(51) a self-reference is not listed and does not count (FD14)', () => {
+        const selfRef = targeting(EDITED, EDITED.id, ['rule-self']);
+        mountEdit({ organism: selfRef, library: [selfRef, ...OTHERS], battleSummaries: PLACED });
+
+        expect(within(usageFooter()).queryByText(/Targeted by/)).toBeNull();
+      });
+
+      it('(52) ⚠️ Escape closes the panel and leaves the EDITOR open; a second Escape closes it (AC4, FD4)', async () => {
+        const user = userEvent.setup();
+        const { onClose } = mountEdit({ battleSummaries: PLACED });
+
+        await user.click(within(usageFooter()).getByRole('button', { name: 'Used in 2 Battles' }));
+        await user.keyboard('{Escape}');
+
+        // The panel is gone and the editor is untouched — without `stopPropagation` the keydown
+        // reaches MUI's Modal root and takes the whole draft with it.
+        expect(document.querySelector('[data-usage-battles-panel]')).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        await user.keyboard('{Escape}');
+
+        expect(onClose).toHaveBeenCalledTimes(1);
+      });
+
+      it('(53) has no axe violations with a panel open', async () => {
+        const referencing = targeting(createMockOrganisms()[0], EDITED.id, ['rule-a']);
+        const user = userEvent.setup();
+        mountEdit({
+          library: [EDITED, CONWAYS_CLASSIC, referencing],
+          battleSummaries: PLACED,
+        });
+
+        await user.click(within(usageFooter()).getByRole('button', { name: 'Used in 2 Battles' }));
+
+        expect((await axe(document.body)).violations).toEqual([]);
+      });
     });
   });
 });

@@ -135,7 +135,7 @@ development_status:
   4-17-edit-organism-from-library: done
   4-18-clone-organism: done
   4-19-usage-rule-reference-derivations: done
-  4-20-usage-visibility-ui: backlog
+  4-20-usage-visibility-ui: review
   4-21-delete-integrity-blocks: backlog
   4-22-safe-delete-protected-default: backlog
   4-23-editor-unsaved-changes-scope: backlog

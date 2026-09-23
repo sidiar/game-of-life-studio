@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import OrganismInUseDialog, {
-  battleCountLabel,
-  organismInUseMessage,
-  type OrganismInUseDialogProps,
-} from './OrganismInUseDialog';
+// Story 4.20, FD6: the two formatters now live in `lib/organisms/usageLabels.ts` (the editor
+// footer renders the same copy). The assertions below are unchanged by the move — that is what
+// makes it a move.
+import { battleCountLabel, organismInUseMessage } from '@/lib/organisms/usageLabels';
+import OrganismInUseDialog, { type OrganismInUseDialogProps } from './OrganismInUseDialog';
 
 // MUI's Dialog PORTALS to document.body — render()'s own `container` never contains it. Every
 // query here goes through `screen` and every axe run is scoped to `document.body`; scoping either
