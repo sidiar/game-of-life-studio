@@ -2739,3 +2739,19 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
 - **No `origin`/`cloneable` prop on `<OrganismInUseDialog>` yet** — Story 4.24's battle-origin
   warning must NOT show Clone & Edit (M5, PRD `:127`); the dialog's head comment flags where that
   prop lands, and this entry is the paper trail for it.
+- **The Library's live regions live INSIDE the subtree `useInertBackground` hides, so every dialog
+  can swallow an announcement** — the root cause behind the 2026-09-23 owner decision on Story
+  4.18's Clone & Edit failure. That decision fixes the clone alert by queueing it until no dialog
+  window is mounted, which is correct but local: any future surface that reports into the Library
+  while a modal is up has the same hazard, and the count badge's own `role="status"` change is still
+  suppressed whenever a dialog is open (accepted for Clone & Edit, since the editor taking focus is
+  itself the announcement). The class fix is a shared live-region host portalled OUTSIDE the inert
+  root, which every page's alerts and statuses write into. Out of scope for one story in Epic 4.
+- **A Clone click dropped by the `cloningRef` latch must become reported behind the AR-2 seam** —
+  AC10's 2026-09-23 amendment accepts the silent drop only while the write is synchronous-fast
+  (well under a millisecond against localStorage, so no human click lands inside the latch). When
+  RFC-001's API repository lands, the latch spans an arbitrary round-trip and the dropped click
+  becomes reachable by ordinary use. At that point FD5's flicker argument no longer holds — a
+  disabled window long enough to drop a click is long enough to read as feedback — and EVERY card's
+  Clone should disable while any clone is in flight. Attached to the seam, not to a date; the same
+  story owns `gatePending`'s missing timeout, recorded above.

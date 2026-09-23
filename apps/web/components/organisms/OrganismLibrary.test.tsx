@@ -1350,4 +1350,40 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
     expect((save.mock.calls[1]?.[0] as Organism).id).toBe(clone.id);
     expect(await organisms.list()).toHaveLength(lengthAfterClone);
   });
+
+  // Owner decision 2026-09-23 (review decision 1, option 2). The guard these two pin is a TIMING
+  // one, so they assert the ORDER of two DOM facts rather than either fact alone: at the first
+  // moment the alert exists, the gate must already be gone. Published from the writer's `catch`
+  // instead — the shape before the fix — the alert is inserted during the gate's exit fade, into a
+  // subtree `useInertBackground` has marked `inert`, where assistive tech drops it; both tests then
+  // fail on the `inUseDialog()` line rather than on the alert's absence.
+  it('(m) a Clone & Edit failure alert is inserted only AFTER the gate has exited, never into the inert background', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    vi.spyOn(organisms, 'save').mockRejectedValueOnce(new Error('boom'));
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton(USED_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await user.click(within(gate).getByRole('button', { name: 'Clone & Edit' }));
+
+    await waitFor(() => expect(cloneAlert()).not.toBeNull());
+    expect(inUseDialog()).toBeNull();
+    expect(editorDialog()).toBeNull();
+  });
+
+  it("(n) the card's own Clone failure still reports, the queue notwithstanding", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    vi.spyOn(organisms, 'save').mockRejectedValueOnce(new Error('boom'));
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(cloneButton('Glider'));
+
+    await waitFor(() => expect(cloneAlert()).not.toBeNull());
+    expect(inUseDialog()).toBeNull();
+    expect(editorDialog()).toBeNull();
+  });
 });

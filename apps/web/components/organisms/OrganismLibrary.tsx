@@ -288,7 +288,37 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // `cloning` is only the affordance the disabled attribute reads.
   const cloningRef = useRef<string | null>(null);
   const [cloning, setCloning] = useState<string | null>(null);
+  // Story 4.18, owner decision 2026-09-23 (review decision 1, option 2). The writer QUEUES its
+  // failure into a ref and a CALL SITE publishes it, once that call site's window is gone.
+  // Publishing from the writer's `catch` — the shape before this decision — inserts the
+  // `role="alert"` node into a subtree `useInertBackground` has already marked `inert` (and MUI
+  // holds its own `aria-hidden` until the transition ends). A live region inserted into a hidden
+  // subtree is dropped by assistive tech, and it stays hidden for the gate's whole ~195 ms fade —
+  // many screen-reader observation cycles — so by the time the background is live the node is no
+  // longer new and nothing announces it. Clone & Edit's failure was therefore never spoken.
+  // The same defer-until-exited rule the hook already applies to `onSaved`
+  // (`useOrganismEditorModal`'s `handleExited`, for this stated reason); the clone path simply had
+  // not been given it.
+  // A ref and not a state cell: nothing renders from the queue, only from `cloneError`, and the
+  // publish happens in event callbacks where a render-time closure would be stale anyway.
+  const queuedCloneErrorRef = useRef<string | null>(null);
   const [cloneError, setCloneError] = useState<string | null>(null);
+
+  // Rejected shapes, both of which lint or behaviour rules out:
+  //   - an effect keyed on the mount flags — `react-hooks/set-state-in-effect` forbids it, rightly:
+  //     it is a cascading render, and the transition is an EVENT (the exit finishing), not a
+  //     synchronisation with an external system.
+  //   - the derivation `editorMounted || gateMounted ? null : queued` — lint-clean and shorter, but
+  //     it makes the alert vanish whenever ANY dialog opens and be re-INSERTED, hence re-announced,
+  //     every time one closes. A stale clone failure would then nag once per dialog for the rest of
+  //     the session (`deferred-work.md` already records that this alert clears only on the next
+  //     attempt). Publishing once, from the call site, keeps the node's lifetime unchanged.
+  const publishQueuedCloneError = useCallback(() => {
+    const message = queuedCloneErrorRef.current;
+    if (message === null) return;
+    queuedCloneErrorRef.current = null;
+    setCloneError(message);
+  }, []);
 
   // Story 4.18, review 2026-09-22. Disabling a button that HOLDS focus blurs it: every browser
   // drops focus to `<body>` and none of them puts it back when the attribute clears. Measured in
@@ -321,6 +351,9 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // would be missing until the next page load, and reloading here also means the editor's `library`
   // already holds the clone by the time it mounts. A rejection is REPORTED (this component owns the
   // alert) and returned as `null` — never rethrown into the hook, which owns no error surface.
+  // "Reported" means QUEUED as of 2026-09-23: the message is published by the effect below the hook
+  // call, not from the `catch`, so it is never inserted into an inert background. The `null` return
+  // is unchanged, and so is the option contract it satisfies.
   const cloneOrganism = useCallback(
     async (source: Organism): Promise<Organism | null> => {
       if (cloningRef.current !== null) return null;
@@ -332,6 +365,7 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
           ? source.id
           : null;
       setCloning(source.id);
+      queuedCloneErrorRef.current = null;
       setCloneError(null);
       try {
         const clone = cloneOrganismRecord(source, crypto.randomUUID(), () => crypto.randomUUID());
@@ -339,7 +373,11 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
         reload();
         return clone;
       } catch (error) {
-        setCloneError(saveFailureMessage(error, 'organism'));
+        // Queued, never published here: the CALL SITE owns the timing, because only it knows which
+        // window (if any) has to exit first. The writer cannot decide — `editorMounted`/
+        // `gateMounted` come from the hook this very callback is an option to, so reading one here
+        // would be the render-time-closure trap `gatePendingRef` documents.
+        queuedCloneErrorRef.current = saveFailureMessage(error, 'organism');
         return null;
       } finally {
         cloningRef.current = null;
@@ -361,6 +399,19 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     gateMounted,
     gateProps,
   } = useOrganismEditorModal('library', { onSaved, onCloneAndEdit: cloneOrganism });
+
+  // The gate's call site. `handleGateExited` FIRST — it is what unmounts the gate and releases
+  // `inert` — then the publish, in the same event handler so React batches both into one commit:
+  // the alert node is created in the very commit that makes this subtree live again, never before
+  // it. (One commit, not two: assistive tech reads the accessibility tree after the task, so an
+  // insert-and-reveal in a single flush is observed as a new live region in a visible tree. What
+  // broke announcement was the node existing across the whole fade, through many such cycles.)
+  // `onExited` is optional on the dialog's props, so this composes defensively — the hook does
+  // supply it, and a build in which it stopped doing so must still publish the failure.
+  const onGateExited = useCallback(() => {
+    gateProps.onExited?.();
+    publishQueuedCloneError();
+  }, [gateProps, publishQueuedCloneError]);
 
   // Story 4.17, AC1: the count is the number of DISTINCT saved battles whose placed set holds the
   // id (Decision H: "used" = placed) — read from the SAME settled list the page holds.
@@ -440,7 +491,13 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
           `e2e/organisms.spec.ts`'s `countBadge = page.getByRole('status')` is unscoped, so a second
           one would turn every 4.16/4.17 badge assertion into a strict-mode failure. Success gets no
           sentence of its own — the new card and the badge's own count change are already the
-          announcement. */}
+          announcement.
+          Owner decision 2026-09-23: FD10's success clause is accepted as written for Clone & Edit
+          too, even though the same inert background suppresses the badge's count change there. That
+          path is not silent — the editor opens with focus inside it and the name field holding
+          `<name> (Copy)`, and a dialog taking focus is a context change assistive tech announces.
+          Inventing success copy with no spec behind it is what FD10 refuses. `cloneError` is the
+          PUBLISHED cell, not the queued one — see `queuedCloneError`. */}
       {cloneError !== null && (
         <StatusText role="alert" data-clone-error>
           {cloneError}
@@ -467,8 +524,11 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
                     system={organism.id === CONWAYS_CLASSIC_ID}
                     onRequestEdit={() => onRequestEdit(organism)}
                     cloning={cloning === organism.id}
+                    // The card's call site: no window has to exit first, so the queued failure is
+                    // published as soon as the write settles. Same rule as the gate's `onExited`
+                    // below — "publish once your window is gone" — and this entry point has none.
                     onRequestClone={() => {
-                      void cloneOrganism(organism);
+                      void cloneOrganism(organism).then(publishQueuedCloneError);
                     }}
                   />
                 </li>
@@ -488,7 +548,7 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
       )}
       {/* Story 4.17: the in-use gate, mounted on ITS window (the hook's `gateMounted`), for the
           same fetch-on-first-open / fade-before-unmount reasons as the editor above. */}
-      {gateMounted && <OrganismInUseDialog {...gateProps} />}
+      {gateMounted && <OrganismInUseDialog {...gateProps} onExited={onGateExited} />}
     </section>
   );
 }

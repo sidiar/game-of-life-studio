@@ -4,7 +4,7 @@ baseline_commit: 28c5c64
 
 # Story 4.18: Clone Organism
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -125,10 +125,26 @@ settled there.
     page's only status node and `e2e/organisms.spec.ts`'s `countBadge = page.getByRole('status')` is
     unscoped, so a second one turns every 4.16/4.17 badge assertion into a strict-mode failure (FD10).
     Success gets no new sentence: the new card plus the badge's own count change is the announcement.
+    **Amended by the owner 2026-09-23 — "a refused write" means a write the repository REFUSED.** A
+    click the `cloningRef` latch drops never reaches the repository and is deliberately NOT reported:
+    at localStorage speed the latch is held for well under a millisecond, so the refusal is
+    unobservable and a message for it would be copy no user can read. This is the one unreported
+    refusal, stated here so AC10 and FD5 stop contradicting each other (the review raised it as a
+    spec-internal contradiction, not a dev deviation — Task 5 prescribes the early `return null`).
+    ⚠️ **This exception is conditional on the write being synchronous-fast.** Behind the AR-2 seam,
+    once RFC-001's API repository lands, the latch is held for an arbitrary round-trip and a dropped
+    click becomes reachable by ordinary use — at which point FD5's flicker argument no longer holds
+    (a disabled window long enough to drop a click is long enough to read as feedback) and every
+    card's Clone should disable for the duration. Recorded in `deferred-work.md` against the seam,
+    not against a date.
+    The failure message is also **queued and published after any dialog window has exited**, rather
+    than set from the writer's `catch` — see the owner decision under Review Follow-ups.
 
 11. **One click, one clone; nothing else is started.** A double-click on Clone writes ONCE — a
     `cloningRef` latch is the authority and the button's `disabled` is the affordance (FD5); the
-    latch covers both entry points, so a Clone & Edit cannot start while a card clone is in flight.
+    latch covers both entry points, so a Clone & Edit cannot start while a card clone is in flight —
+    "cannot start" meaning the second call is dropped, silently and by design (see AC10's 2026-09-23
+    amendment); it does not mean the second entry point is unreachable.
     Cancel on the gate still writes nothing. No editor opens from the card's Clone. Story 4.19's
     derivations, 4.20's footer/popover, 4.21/4.22's Delete, 4.23's dirty scope and 4.24/4.25's
     battle-origin entries are NOT started. No rename prompt, no "clone into a battle", no `?id=` on
@@ -434,7 +450,7 @@ story's own tests; one accessibility regression was reproduced in a real browser
 fixed. The acceptance audit found no FD unimplemented and no task ticked that the diff does not
 deliver — every remaining finding is a missing pin or an edge case.
 
-- [ ] [Review][Decision] **A Clone & Edit that fails is never announced, and on success the count
+- [x] [Review][Decision] **A Clone & Edit that fails is never announced, and on success the count
   badge's announcement is suppressed too — the Library's alert and badge both live in the
   `inert`/`aria-hidden` background while the gate is still mounted.** `setCloneError(...)` and
   `setGateOpen(false)` land in one commit, so the `role="alert"` node is INSERTED into a subtree
@@ -451,7 +467,40 @@ deliver — every remaining finding is a missing pin or an edge case.
   gate has exited (a hook→Library channel, ~15 lines, mirrors an idiom already in this file);
   **(3)** keep the gate OPEN on failure and render the message inside the dialog, which also
   removes the "the write landed nowhere visible" window entirely.
-- [ ] [Review][Decision] **A Clone click that loses the `cloningRef` latch is dropped in total
+  **OWNER DECISION 2026-09-23 — option 2, with the success half accepted as FD10 wrote it.**
+  Implemented wholly in `<OrganismLibrary>` — no new option on the hook, so the seam is untouched.
+  The writer's `catch` no longer publishes; it QUEUES into `queuedCloneErrorRef` and the CALL SITE
+  publishes, once that call site's window is gone. Two call sites, one rule: the card's
+  `onRequestClone` publishes as soon as the write settles (it has no window), and the gate's
+  `onExited` is composed — `gateProps.onExited?.()` first, since that is what unmounts the gate and
+  releases `inert`, then the publish, both in one event handler so React batches them into a single
+  commit. The alert node is therefore created in the very commit that makes the subtree live again,
+  never before it. A ref and not a state cell: nothing renders from the queue.
+  Two shapes were tried and rejected on the way, both recorded in the file's comments:
+  an **effect** keyed on `[editorMounted, gateMounted, queuedCloneError]` — `react-hooks/
+  set-state-in-effect` rejects it as an error, rightly, since it is a cascading render and the
+  trigger is an event (the exit finishing) rather than synchronisation with an external system;
+  and the **derivation** `editorMounted || gateMounted ? null : queued`, which lints clean and is
+  shorter but makes the alert vanish whenever any dialog opens and be re-INSERTED, hence
+  re-announced, each time one closes — a stale clone failure would nag once per dialog for the rest
+  of the session.
+  One commit, not two, is enough: assistive tech reads the accessibility tree after the task, so an
+  insert-and-reveal within a single flush is observed as a new live region in a visible tree. What
+  actually broke announcement was the node existing across the gate's whole ~195 ms fade, through
+  many observation cycles, so that by the time `inert` cleared the node was no longer new.
+  Option 3 was rejected: `<OrganismInUseDialog>` exists to ask "this organism is in use, what
+  next", and keeping it open as an error surface leaves all three actions live — including Edit
+  Anyway, which after a failed clone offers something the user did not ask for — and splits one
+  message across two surfaces, since a card's Clone failure still reports in the Library.
+  The SUCCESS half is accepted, not fixed: Clone & Edit's success is not in fact silent. The editor
+  opens, focus moves inside it, and the name field holds `<name> (Copy)` — a dialog taking focus is
+  a context change assistive tech announces, so the user learns the clone exists by editing it.
+  FD10's refusal to invent success copy stands.
+  ⚠️ The ROOT cause is wider than this story: the Library's only live regions sit inside the
+  subtree `useInertBackground` marks inert, so every dialog in the app carries this hazard, not
+  just clone. A shared live-region host portalled OUTSIDE the inert root is the class fix and is
+  out of scope here — recorded in `deferred-work.md`.
+- [x] [Review][Decision] **A Clone click that loses the `cloningRef` latch is dropped in total
   silence — no clone, no message, no disabled state.** `cloneOrganism` opens with
   `if (cloningRef.current !== null) return null;`, which returns BEFORE `setCloneError` is ever
   touched, while `useOrganismEditorModal`'s option contract documents `null` as "the write was
@@ -467,6 +516,21 @@ deliver — every remaining finding is a missing pin or an edge case.
   **(3)** report a distinct "a clone is already in progress" line, which needs copy no spec
   supplies. Note the window widens from sub-millisecond to arbitrary behind the AR-2 seam when
   RFC-001's API repository lands.
+  **OWNER DECISION 2026-09-23 — option 1, and AC10 is AMENDED so the contradiction is gone.**
+  Accepting the drop silently is right while the write is synchronous-fast: the latch is held for
+  well under a millisecond against localStorage, so no human click can land inside it, and a message
+  for it would be copy nobody can read. Option 2 was rejected because FD5 already weighed it — a
+  whole-grid flicker on EVERY clone to guard a click that is unreachable today. Option 3 was
+  rejected for needing copy no spec supplies, for a line that would never render.
+  What is NOT accepted is the spec contradicting itself, which is the part fixed here: AC10 now says
+  "a refused write" means a write the REPOSITORY refused, names the latch drop as the one unreported
+  refusal, and says why. AC11's "cannot start" is likewise narrowed to "the second call is dropped,
+  by design" rather than implying the entry point is unreachable. No code changed for this decision.
+  ⚠️ The exception is conditional on the write staying fast, and the condition is attached to the
+  AR-2 seam, not to a date: once RFC-001's API repository lands, the latch spans an arbitrary
+  round-trip, a dropped click becomes reachable by ordinary use, and option 2 becomes correct —
+  a disabled window long enough to drop a click is long enough to read as feedback, which is exactly
+  when FD5's flicker argument stops holding. Recorded in `deferred-work.md` against the seam.
 - [x] [Review][Patch] **A second Clone & Edit during the gate's ~195 ms exit fade wrote a SECOND,
   orphaned clone** [`apps/web/lib/organisms/useOrganismEditorModal.ts` `handleGateCloneAndEdit`] —
   `setGatePending(false)` ran when the writer resolved, but `setGateOpen(false)` only STARTS the
