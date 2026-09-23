@@ -494,3 +494,18 @@ claude-sonnet-5
 Dev Model: sonnet   # follows existing patterns (4.19's forward edge, 5.3's factory + toEnvelope); the one new surface (exportBattle's signature) is pre-decided in FD1, so nothing is left to architect.
 
 Proposed lane gate: none   # the governing row (5-4 requires 4-19) is satisfied on main; 5.4 only consumes ruleTargetIds and appends to the barrel, and no open Epic 4 story (4-20..4-26) is expected to reshape ruleTargetIds or the export path.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 18s | 18s | 12 | 2,066 | 8,606 | 337,478 | 348,162 |
+| Step 1 — create | opus-5-5 | 1 | 4m 33s | 4m 33s | 90 | 2,526 | 269,706 | 4,406,762 | 4,679,084 |
+| Step 2 — implement | sonnet-5 | 1 | 13m 17s | 13m 17s | 266 | 5,092 | 466,288 | 16,056,260 | 16,527,906 |
+| Step 3 — review + PR | opus-5-5 | 4 | 8m 49s | 8m 49s | 244 | 16,680 | 481,673 | 7,937,403 | 8,436,000 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 46 | 16,439 | 34,874 | 1,464,428 | 1,515,787 |
+| **Total (create → PR ready)** | | 6 | **26m 56s** | 26m 56s | 612 | 26,364 | 1,226,273 | 28,737,903 | **29,991,152** |
+
+Run started 2026-09-23 11:54 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
