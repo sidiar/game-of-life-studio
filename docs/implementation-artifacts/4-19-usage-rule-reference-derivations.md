@@ -645,3 +645,18 @@ reports **0 errors**, which is what the gate enforces.
 Dev Model: opus   # this story fixes the module surface that Stories 4.20, 4.21, 4.22 and the gated 5.4 all build on, and settles the rules-vs-organisms semantic the 4.18 review left open — it picks the pattern rather than following one.
 
 Proposed lane gate: none — the governing row already exists and needs no change: `- story: 5-4-rule-aware-organism-closure / requires: 4-19-usage-rule-reference-derivations` (`lane-gates.yaml:45-49`, approved by Sidiar 2026-09-21). This story adds no dependency in the other direction; its only shared surface with Epic 5 is `packages/domain/src/index.ts`, which the sync rule already resolves.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 43s | 43s | 26 | 3,225 | 12,013 | 778,036 | 793,300 |
+| Step 1 — create | opus-5 | 2 | 9m 30s | 9m 30s | 600 | 22,836 | 655,291 | 24,482,421 | 25,161,148 |
+| Step 2 — implement | opus-5 | 1 | 9m 46s | 9m 46s | 662 | 29,366 | 480,339 | 40,323,197 | 40,833,564 |
+| Step 3 — review + PR | fable-5-1 | 4 | 11m 16s | 11m 16s | 3,710 | 52,805 | 1,348,926 | 79,137,884 | 80,543,325 |
+| _of which the orchestrator_ | opus-5 | — | — | — | 1,518 | 96,092 | 377,035 | 113,272,270 | 113,746,915 |
+| **Total (create → PR ready)** | | 7 | **31m 15s** | 31m 15s | 4,998 | 108,232 | 2,496,569 | 144,721,538 | **147,331,337** |
+
+Run started 2026-09-23 09:45 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
