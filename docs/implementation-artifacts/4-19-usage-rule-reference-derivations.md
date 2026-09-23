@@ -4,7 +4,7 @@ baseline_commit: 30aaff9
 
 # Story 4.19: Usage & Rule-Reference Derivations
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -194,6 +194,59 @@ settled there.
   - [x] Confirm `spec:check` passes — every `AR-*`, `FR-*`, `NFR-*`, `M*`, `Decision *`, `RFC-00*`
         and `Story N.M` token you wrote into a comment must resolve under `docs/`.
   - [x] Record every command and its real output summary in the Dev Agent Record.
+
+### Review Findings
+
+Reviewed on **Fable** against an **Opus** implementation (`f865752`), via three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 29 raw findings → 1 decision-needed,
+7 patch, 0 defer, 13 dismissed (empty-string ids are schema-impossible at the boundary —
+`z.string().min(1)` / `z.uuid()`; `Object.freeze` would break the existing `ReadonlyMap`-over-`Map`
+idiom; the optional-and-nullable `openBattle`, the `apps/web` names in `OpenBattleUsage`'s comment
+and the three-site module-split rationale are each what the story's Task 2 / FD4 / Task 7 ask for).
+
+- [ ] [Review][Decision] **`OrganismUsageEntry.isOpenBattle` packs two facts into one boolean** —
+  "this entry IS the battle open in this session" and "the live grid places this organism". The two
+  diverge in exactly the AC2 erase-window case: the saved entry for the open battle comes back
+  `{ battleId: 'battle-1', isOpenBattle: false }`, so a consumer that labels `isOpenBattle` entries
+  from live state (RFC-005 Decision 8 — the open battle may have been renamed in-session) will label
+  this one from the stale saved summary unless it also compares `battleId` to the `openBattle.id` it
+  passed in. The flat shape also admits the unreachable `{ battleId: null, isOpenBattle: false }`.
+  The code is exactly what FD3 / AC2 pin, so this is the owner's call, cheapest before Story 4.20
+  builds on the shape. Options: **(a)** keep the shape as pinned and add a one-line rule to Story
+  4.20's notes — "label an entry from live state when `isOpenBattle || battleId === openBattle.id`";
+  **(b)** split the fact: `{ battleId, isOpenBattle, placedOnLiveGrid }` (or a discriminated union
+  `{ battleId: string; isOpenBattle: boolean } | { battleId: null; isOpenBattle: true }`), which
+  removes the impossible state at the cost of amending AC2's pinned bullets and their tests;
+  **(c)** dismiss — the caller already holds `openBattle.id`, so the comparison is a one-liner and
+  the flat shape stays. [`packages/domain/src/usageIndex.ts:71-74, :91-114`]
+- [x] [Review][Patch] Two aliasing assertions are vacuous — they compare a `RuleReference[]` against
+  a `SurvivalRule[]` and a `{ organismId, ruleId }` literal against a `SurvivalRule`, objects of
+  different types that can never be `toBe`-identical, so the test named "aliases nothing in the
+  input" cannot fail on aliasing. Replaced with what CAN alias: two builds over the same input return
+  distinct arrays (FD10, a fresh derivation on every read). [`packages/domain/src/ruleReferenceIndex.test.ts:134-143`]
+- [x] [Review][Patch] No test fans ONE rule into TWO index keys, and the `ruleTargetIds` test titled
+  "in condition order" has one target per rule, so it can only observe rule order. Added a fixture
+  where one rule names `['b', 'a']` and the next `['a', 'c']`: `ruleTargetIds` → `['b', 'a', 'c']`
+  and the index carries the same `ruleId` under both `'a'` and `'b'`. [`packages/domain/src/ruleReferenceIndex.test.ts:41-46, :73-88`]
+- [x] [Review][Patch] The `referencingOrganismIds` first-reference-order test passes a library with
+  two entries sharing the id `'rival'` — an input the library cannot contain (ids key the
+  repository). With valid input, first-reference order IS organism input order, so the test now
+  uses one `rival` with two rules ahead of `hunter`. [`packages/domain/src/ruleReferenceIndex.test.ts:173-181`]
+- [x] [Review][Patch] `SurvivalRulesSchema` is a plain `z.array` with no uniqueness refine on
+  `rule.id`, so two rules of one organism can share an id and yield two indistinguishable
+  `RuleReference`s. The count stays right (FD9 — M counts rules), but `ruleId` is not a stable key
+  for a rendered list; documented on `RuleReference` so Story 4.20 does not key the popover on it.
+  [`packages/domain/src/ruleReferenceIndex.ts:37-41`]
+- [x] [Review][Patch] Redundant assertion: `toBeUndefined()` followed by `?.length ?? 0` → `0` on
+  the same value — the second cannot fail once the first passes, and the second is the one the
+  test's title is about. Dropped the first. [`packages/domain/src/ruleReferenceIndex.test.ts:123-128`]
+- [x] [Review][Patch] Dev Agent Record attributes the per-file lcov counters to the wrong files —
+  the `usageIndex.ts` and `ruleReferenceIndex.ts` rows are swapped (fresh run: `ruleReferenceIndex.ts`
+  LF 24 / BRF 8 / FNF 5, `usageIndex.ts` LF 16 / BRF 10 / FNF 4). Both are 100% either way; the
+  evidence line is corrected. [`docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` Debug Log]
+- [x] [Review][Patch] File List says `sprint-status.yaml` moved `ready-for-dev → in-progress →
+  review`; the committed diff is `backlog → review` (the story was created and implemented in one
+  commit, so no intermediate state reached git). Corrected. [`docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` File List]
 
 ## Dev Notes
 
@@ -490,7 +543,7 @@ Every command run from the worktree root unless noted, none piped:
 | `npx vitest run src/usageIndex.test.ts` (GREEN) | 14 passed (1 file) |
 | `npx vitest run src/ruleReferenceIndex.test.ts` (RED) | 1 file failed, "no tests" — module did not exist |
 | `npx vitest run --coverage` (in `packages/domain`) | exit **0**; 10 files / **179 tests passed**; 100% statements (182/182), branches (63/63), functions (37/37), lines (163/163) |
-| per-file check via `coverage/lcov.info` | `usageIndex.ts` LF/LH 24/24, BRF/BRH 8/8, FNF/FNH 5/5 · `ruleReferenceIndex.ts` 16/16, 10/10, 4/4 — both 100% on all four, which `perFile: true` requires |
+| per-file check via `coverage/lcov.info` | `ruleReferenceIndex.ts` LF/LH 24/24, BRF/BRH 8/8, FNF/FNH 5/5 · `usageIndex.ts` 16/16, 10/10, 4/4 — both 100% on all four, which `perFile: true` requires (the two rows were swapped in the original record; corrected in review against a fresh run) |
 | `npx prettier --write` on the seven touched files | reformatted `usageIndex.test.ts` (import block) and `ruleReferenceIndex.ts`; the rest already clean |
 | `npm run ci:dev` (worktree root, redirected to a file, **not piped**) | **`CI_DEV_EXIT=0`** — green |
 
@@ -554,7 +607,8 @@ reports **0 errors**, which is what the gate enforces.
 - `packages/domain/src/ruleReferenceIndex.ts` — **new.** `ruleTargetIds`, `RuleReference`,
   `RuleReferenceIndex`, `buildRuleReferenceIndex`, `referencingOrganismIds`, plus the private
   `ruleTargets` helper both public functions fold over.
-- `packages/domain/src/ruleReferenceIndex.test.ts` — **new.** 19 tests across the three `describe`s;
+- `packages/domain/src/ruleReferenceIndex.test.ts` — **new.** 20 tests across the three `describe`s
+  (19 at implementation; review added the one-rule-two-keys test and tightened three fixtures);
   local literal fixtures, one `OrganismSchema.parse` fixture, no `@gol/test-utils`.
 - `packages/domain/src/usageIndex.ts` — **modified.** Head comment corrected (Task 7);
   `OpenBattleUsage`, `OrganismUsageEntry`, `resolveOrganismUsage` appended. `buildUsageIndex`
@@ -567,8 +621,10 @@ reports **0 errors**, which is what the gate enforces.
   point).
 - `docs/implementation-artifacts/deferred-work.md` — **modified.** Two entries annotated in place
   (`:2437`, `:2707`).
-- `docs/implementation-artifacts/sprint-status.yaml` — **modified.** `4-19-…: ready-for-dev →
-  in-progress → review`.
+- `docs/implementation-artifacts/sprint-status.yaml` — **modified.** `4-19-…: backlog → review` in
+  the implementation commit (the story was created and implemented in one commit, so no intermediate
+  `ready-for-dev` / `in-progress` state reached git); `review → in-progress` in the review commit,
+  which left one `[Review][Decision]` open for the owner.
 - `docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` — **modified.** Tasks
   checked, this record, Change Log, Status.
 
@@ -579,6 +635,12 @@ reports **0 errors**, which is what the gate enforces.
   (`ruleReferenceIndex.ts`, a declared amendment of Story 4.18's note — FD2). Barrel extended;
   the three stale notes pointing at this story corrected in place. No `apps/web` change.
   Status → review.
+- 2026-09-23 — Code review (Fable, three adversarial layers). Seven patches applied: the aliasing
+  test now asserts something that can fail, one rule fanning into two keys is tested, the
+  `referencingOrganismIds` fixture is a valid library, `RuleReference.ruleId`'s non-uniqueness is
+  documented, one redundant assertion dropped, two Dev Agent Record bookkeeping errors corrected.
+  One `[Review][Decision]` left for the owner (the `isOpenBattle` shape in the erase-window case).
+  Status → in-progress.
 
 Dev Model: opus   # this story fixes the module surface that Stories 4.20, 4.21, 4.22 and the gated 5.4 all build on, and settles the rules-vs-organisms semantic the 4.18 review left open — it picks the pattern rather than following one.
 

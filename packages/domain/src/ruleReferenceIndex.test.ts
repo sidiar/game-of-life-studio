@@ -38,11 +38,10 @@ function organism(
 }
 
 describe('ruleTargetIds', () => {
-  it('returns every organism this organism’s rules target, in condition order (the forward edge Story 5.4 walks)', () => {
-    expect(ruleTargetIds(organism('hunter', rule('r1', 'prey'), rule('r2', 'rival')))).toEqual([
-      'prey',
-      'rival',
-    ]);
+  it('returns every organism this organism’s rules target, in rule order then condition order within a rule (the forward edge Story 5.4 walks)', () => {
+    expect(
+      ruleTargetIds(organism('hunter', rule('r1', 'rival', 'prey'), rule('r2', 'prey', 'third'))),
+    ).toEqual(['rival', 'prey', 'third']);
   });
 
   it('returns a target named by two rules once (the forward edge is a set of organisms, not a rule count)', () => {
@@ -88,6 +87,13 @@ describe('buildRuleReferenceIndex', () => {
     ]);
   });
 
+  it('files ONE rule naming two targets under both keys, with the same ruleId (the inversion of the forward edge)', () => {
+    const index = buildRuleReferenceIndex([organism('hunter', rule('r1', 'prey', 'rival'))]);
+
+    expect(index.get('prey')).toEqual([{ organismId: 'hunter', ruleId: 'r1' }]);
+    expect(index.get('rival')).toEqual([{ organismId: 'hunter', ruleId: 'r1' }]);
+  });
+
   it('counts two organismType conditions in ONE rule naming the same target as one reference (a rule references a target once)', () => {
     const index = buildRuleReferenceIndex([organism('hunter', rule('r1', 'prey', 'prey'))]);
 
@@ -123,7 +129,6 @@ describe('buildRuleReferenceIndex', () => {
   it('has no entry for an organism nothing targets (the caller reads `?.length ?? 0`)', () => {
     const index = buildRuleReferenceIndex([organism('hunter', rule('r1', 'prey'))]);
 
-    expect(index.get('hunter')).toBeUndefined();
     expect(index.get('hunter')?.length ?? 0).toBe(0);
   });
 
@@ -131,15 +136,17 @@ describe('buildRuleReferenceIndex', () => {
     expect(buildRuleReferenceIndex([]).size).toBe(0);
   });
 
-  it('mutates no input organism and returns references that alias nothing in the input (the index is a fresh derivation, never stored)', () => {
+  it('mutates no input organism and allocates a fresh index on every build (a derivation, never stored or shared — FD10)', () => {
     const hunter = organism('hunter', rule('r1', 'prey'));
     const before = structuredClone(hunter);
 
-    const index = buildRuleReferenceIndex([hunter]);
+    const first = buildRuleReferenceIndex([hunter]);
+    const second = buildRuleReferenceIndex([hunter]);
 
     expect(hunter).toEqual(before);
-    expect(index.get('prey')).not.toBe(hunter.survivalRules);
-    expect(index.get('prey')?.[0]).not.toBe(hunter.survivalRules[0]);
+    expect(second).not.toBe(first);
+    expect(second.get('prey')).not.toBe(first.get('prey'));
+    expect(ruleTargetIds(hunter)).not.toBe(ruleTargetIds(hunter));
   });
 
   it('accepts a full Organism parsed by OrganismSchema without narrowing (no fixture here can be invalid unnoticed)', () => {
@@ -170,13 +177,13 @@ describe('referencingOrganismIds', () => {
     expect(referencingOrganismIds(index, 'prey')).toEqual(['hunter']);
   });
 
-  it('lists distinct referencing organisms in first-reference order (what Story 4.20’s popover and Story 4.21’s block name)', () => {
+  it('lists distinct referencing organisms in first-reference order, which for a valid library is input order (what Story 4.20’s popover and Story 4.21’s block name)', () => {
     const index = buildRuleReferenceIndex([
-      organism('rival', rule('v1', 'prey')),
+      organism('rival', rule('v1', 'prey'), rule('v2', 'prey')),
       organism('hunter', rule('h1', 'prey')),
-      organism('rival', rule('v2', 'prey')),
     ]);
 
+    expect(index.get('prey')?.length).toBe(3);
     expect(referencingOrganismIds(index, 'prey')).toEqual(['rival', 'hunter']);
   });
 

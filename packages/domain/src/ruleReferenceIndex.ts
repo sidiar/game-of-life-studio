@@ -34,7 +34,15 @@
 import type { Organism } from './organismSchema';
 import type { SurvivalRule } from './survivalRuleSchema';
 
-/** One rule of one organism naming one target. */
+/**
+ * One rule of one organism naming one target.
+ *
+ * ⚠️ `ruleId` is not a stable key for a rendered list: `SurvivalRulesSchema` is a plain array with
+ * no uniqueness refine on `id`, so a hand-edited or imported organism can carry two rules with one
+ * id, and they arrive here as two indistinguishable entries. The COUNT stays right — M is a count
+ * of rules, and there really are two — but a consumer that keys on `ruleId` alone collides; key on
+ * the entry's position or on `organismId` + index instead.
+ */
 export interface RuleReference {
   readonly organismId: string;
   readonly ruleId: string;
