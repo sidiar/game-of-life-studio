@@ -54,9 +54,23 @@ export { pruneAndRemapBattleGrid } from './battleProjection';
 export type { PrunedBattleGrid } from './battleProjection';
 
 // The AR-15 organism-usage index, derived from `battles.list()` summaries (Decision H.4). Landed in
-// Story 4.17 for the FR-1.3 edit gate; Story 4.19 extends the same module.
-export { buildUsageIndex } from './usageIndex';
-export type { UsageIndex } from './usageIndex';
+// Story 4.17 for the FR-1.3 edit gate; Story 4.19 added `resolveOrganismUsage`, the M7 union with
+// the battle open in this session — that, not the raw index, is what a usage count or a delete
+// block reads, because an unsaved open battle is usage too.
+export { buildUsageIndex, resolveOrganismUsage } from './usageIndex';
+export type { OpenBattleUsage, OrganismUsageEntry, UsageIndex } from './usageIndex';
+
+// The Decision E.5 rule-reference index (Story 4.19) — the OTHER referential-integrity axis:
+// "referenced by another organism's rule", keyed off the library, against `usageIndex`'s "placed on
+// a battle". All three functions are exported because its consumers need different cuts of one
+// scan: Story 4.20's rule count and popover, Story 4.21's delete block, and Story 5.4's export
+// closure, which walks `ruleTargetIds` rather than defining a second notion of "a rule targets X".
+export {
+  buildRuleReferenceIndex,
+  referencingOrganismIds,
+  ruleTargetIds,
+} from './ruleReferenceIndex';
+export type { RuleReference, RuleReferenceIndex } from './ruleReferenceIndex';
 
 // The RFC-006 export envelope (Story 5.3) — the schema of record for every file this app writes,
 // and the dense-at-rest <-> sparse-on-the-wire conversion around it (AR-9 / AR-10). `IsoTimestamp`
