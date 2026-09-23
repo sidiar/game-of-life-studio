@@ -4,7 +4,7 @@ baseline_commit: 30aaff9
 
 # Story 4.19: Usage & Rule-Reference Derivations
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -36,16 +36,16 @@ settled there.
 
 2. **The open battle unions with the saved index, deduped by battle id.** New in `usageIndex.ts`:
    `resolveOrganismUsage(index, organismId, openBattle?)` → `readonly OrganismUsageEntry[]`, where
-   `OrganismUsageEntry = { battleId: string | null; isOpenBattle: boolean }` (FD3). Pinned:
-   - a saved-only organism yields its index entries in index order, every one `isOpenBattle: false`;
+   `OrganismUsageEntry = { battleId: string | null; placedOnLiveGrid: boolean }` (FD3). Pinned:
+   - a saved-only organism yields its index entries in index order, every one `placedOnLiveGrid: false`;
    - an organism placed on the open battle's live grid but on no saved battle yields exactly ONE
-     entry, `isOpenBattle: true`, with the open battle's `id` — or `battleId: null` when the open
+     entry, `placedOnLiveGrid: true`, with the open battle's `id` — or `battleId: null` when the open
      battle has never been saved (the caller labels that one **"Current Battle (unsaved)"**, RFC-005
      Decision 8; domain resolves no names);
    - an organism placed on an open battle that IS in the saved index yields **one** entry for that
-     battle, not two, carrying its saved `battleId` **and** `isOpenBattle: true`;
+     battle, not two, carrying its saved `battleId` **and** `placedOnLiveGrid: true`;
    - ⚠️ **an organism the saved index lists for the open battle but whose cells have been erased in
-     the live, unsaved session still yields that entry** (`isOpenBattle: false` — the live grid does
+     the live, unsaved session still yields that entry** (`placedOnLiveGrid: false` — the live grid does
      not place it) — Decision H.3: a saved reference counts until the erase is saved, and FR-1.4's
      remedy is "erase its cells **and save**". A union implemented as "live grid wins for the open
      battle" passes every other bullet here and breaks this one silently;
@@ -129,10 +129,10 @@ settled there.
         with the FD4 comment: `organismIds` is exactly the set with ≥1 cell on the live `initialGrid`
         (Decision H), computed by the caller — `packages/domain` never sees a grid, let alone
         `RenderableGrid` (an `apps/web` type; `packages/*` has no `dom` lib).
-  - [x] Add `export interface OrganismUsageEntry { readonly battleId: string | null; readonly isOpenBattle: boolean }`.
+  - [x] Add `export interface OrganismUsageEntry { readonly battleId: string | null; readonly placedOnLiveGrid: boolean }`.
   - [x] Implement `export function resolveOrganismUsage(index: UsageIndex, organismId: string, openBattle?: OpenBattleUsage | null): readonly OrganismUsageEntry[]`
-        per FD3: start from `index.get(organismId) ?? []` mapped to `{ battleId, isOpenBattle: false }`;
-        if `openBattle` places `organismId`, either flip the matching saved entry's `isOpenBattle` to
+        per FD3: start from `index.get(organismId) ?? []` mapped to `{ battleId, placedOnLiveGrid: false }`;
+        if `openBattle` places `organismId`, either flip the matching saved entry's `placedOnLiveGrid` to
         `true` (same `battleId`) or append one entry when its id is absent or `null`.
   - [x] Comment the Decision H.3 hazard **in the code**, not only here: the saved entry survives an
         unsaved erase.
@@ -204,21 +204,25 @@ layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 29 raw findings →
 idiom; the optional-and-nullable `openBattle`, the `apps/web` names in `OpenBattleUsage`'s comment
 and the three-site module-split rationale are each what the story's Task 2 / FD4 / Task 7 ask for).
 
-- [ ] [Review][Decision] **`OrganismUsageEntry.isOpenBattle` packs two facts into one boolean** —
-  "this entry IS the battle open in this session" and "the live grid places this organism". The two
-  diverge in exactly the AC2 erase-window case: the saved entry for the open battle comes back
-  `{ battleId: 'battle-1', isOpenBattle: false }`, so a consumer that labels `isOpenBattle` entries
-  from live state (RFC-005 Decision 8 — the open battle may have been renamed in-session) will label
-  this one from the stale saved summary unless it also compares `battleId` to the `openBattle.id` it
-  passed in. The flat shape also admits the unreachable `{ battleId: null, isOpenBattle: false }`.
-  The code is exactly what FD3 / AC2 pin, so this is the owner's call, cheapest before Story 4.20
-  builds on the shape. Options: **(a)** keep the shape as pinned and add a one-line rule to Story
-  4.20's notes — "label an entry from live state when `isOpenBattle || battleId === openBattle.id`";
-  **(b)** split the fact: `{ battleId, isOpenBattle, placedOnLiveGrid }` (or a discriminated union
-  `{ battleId: string; isOpenBattle: boolean } | { battleId: null; isOpenBattle: true }`), which
-  removes the impossible state at the cost of amending AC2's pinned bullets and their tests;
-  **(c)** dismiss — the caller already holds `openBattle.id`, so the comparison is a one-liner and
-  the flat shape stays. [`packages/domain/src/usageIndex.ts:71-74, :91-114`]
+- [x] [Review][Decision] **The entry's boolean was named `isOpenBattle` but does not answer "is this
+  the open battle"** — it says the LIVE grid places this organism, and the two diverge in exactly the
+  AC2 erase-window case: the saved entry for the open battle comes back
+  `{ battleId: 'battle-1', isOpenBattle: false }`, so a Story 4.20 consumer labelling `isOpenBattle`
+  entries from live state (RFC-005 Decision 8 — the open battle may have been renamed in-session)
+  would label that one from the stale saved summary. **Resolved by Sidiar 2026-09-23: rename the
+  field to `placedOnLiveGrid`** — option (b) in its minimal form, one field rather than the two the
+  review sketched. Two facts decided it: the open-battle question is derivable by every caller that
+  can ask it (`entry.battleId === openBattle.id`, which covers the never-saved battle for free since
+  `null === null`, and the caller always holds `openBattle` because it passed it in), so a second
+  field would be redundant rather than clarifying; and the field had **no consumers** — only the
+  barrel export — so the rename cost test lines today instead of an `apps/web` sweep after Stories
+  4.20–4.22 build on the name. AC2's bullets keep their semantics exactly: same entries, same
+  counts, same dedupe, same erase-window behaviour, flag renamed. Option (a) was declined because it
+  buys a permanent footnote to protect a misleading name; (c) is dominated by (a). The
+  representable-but-unreachable `{ battleId: null, placedOnLiveGrid: false }` is deliberately left —
+  a discriminated union would force every consumer to narrow before reading `battleId` to close a
+  state no code path produces, and with the honest name it no longer reads as a contradiction.
+  [`packages/domain/src/usageIndex.ts:74-92`]
 - [x] [Review][Patch] Two aliasing assertions are vacuous — they compare a `RuleReference[]` against
   a `SurvivalRule[]` and a `{ organismId, ruleId }` literal against a `SurvivalRule`, objects of
   different types that can never be `toBe`-identical, so the test named "aliases nothing in the
@@ -270,7 +274,7 @@ prior story's note, not an oversight** — Task 7 corrects the note rather than 
 to discover the divergence.
 
 **FD3 — The union returns entries, not a count and not a battle-id list.** Shape:
-`{ battleId: string | null; isOpenBattle: boolean }[]`. Three requirements force it:
+`{ battleId: string | null; placedOnLiveGrid: boolean }[]`. Three requirements force it:
 Story 4.20 needs a **count** (`entries.length`), Story 4.20's popover needs a **name per entry**, and
 the open battle's name comes from live state (or is "Current Battle (unsaved)") rather than from a
 saved summary — so an entry must be able to say "this one is the open battle" and to carry a `null`
@@ -641,6 +645,13 @@ reports **0 errors**, which is what the gate enforces.
   documented, one redundant assertion dropped, two Dev Agent Record bookkeeping errors corrected.
   One `[Review][Decision]` left for the owner (the `isOpenBattle` shape in the erase-window case).
   Status → in-progress.
+- 2026-09-23 — Review decision resolved by Sidiar: `OrganismUsageEntry.isOpenBattle` renamed to
+  `placedOnLiveGrid`, because the old name promised an open-battle comparison it never performed and
+  the field had no consumers yet. Semantics unchanged throughout — AC2's bullets, the dedupe, the
+  erase-window behaviour and every count are exactly as pinned; `resolveOrganismUsage`'s body is
+  untouched but for the field name. Callers asking "is this the open battle" compare
+  `entry.battleId === openBattle.id`, recorded on `OrganismUsageEntry` so Story 4.20 does not
+  rediscover the trap. Status → done.
 
 Dev Model: opus   # this story fixes the module surface that Stories 4.20, 4.21, 4.22 and the gated 5.4 all build on, and settles the rules-vs-organisms semantic the 4.18 review left open — it picks the pattern rather than following one.
 

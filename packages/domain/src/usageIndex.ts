@@ -73,14 +73,22 @@ export interface OpenBattleUsage {
 }
 
 /**
- * One battle an organism is used by. `battleId` is `null` only for a never-saved open battle;
- * `isOpenBattle` marks the entry whose name comes from live state rather than a saved summary.
+ * One battle an organism is used by. `battleId` is `null` only for a never-saved open battle.
  * Story 4.20 renders `entries.length` and Story 4.21 blocks on `entries.length > 0` — no caller
  * does arithmetic over two structures, which is what this shape exists to prevent.
+ *
+ * ⚠️ `placedOnLiveGrid` is NOT "this entry is the battle open in the editor". It says the LIVE grid
+ * places this organism, and the two diverge in exactly the erase-window case below: a saved entry
+ * for the open battle whose cells were erased in this unsaved session comes back
+ * `{ battleId: openBattle.id, placedOnLiveGrid: false }`. To ask "is this the open battle" — the
+ * question RFC-005 Decision 8 answers by labelling from live, possibly-renamed state — compare
+ * `entry.battleId === openBattle.id`, which the caller can always do because it passed `openBattle`
+ * in, and which covers the never-saved battle for free (`null === null`). This field was called
+ * `isOpenBattle` until that name was found to promise the comparison it does not perform.
  */
 export interface OrganismUsageEntry {
   readonly battleId: string | null;
-  readonly isOpenBattle: boolean;
+  readonly placedOnLiveGrid: boolean;
 }
 
 /**
@@ -90,7 +98,7 @@ export interface OrganismUsageEntry {
  *
  * ⚠️ The open battle ADDS usage; it never removes it. An organism the saved index lists for the
  * open battle whose cells were erased in this unsaved session still yields its saved entry (with
- * `isOpenBattle: false` — the live grid does not place it), because a saved reference counts until
+ * `placedOnLiveGrid: false` — the live grid does not place it), because a saved reference counts until
  * the erase is saved: FR-1.4's remedy is "erase its cells AND save". The intuitive "live grid wins
  * for the open battle" satisfies every other case here and breaks this one silently, unblocking a
  * delete that would corrupt a battle still on disk.
@@ -105,7 +113,7 @@ export function resolveOrganismUsage(
 ): readonly OrganismUsageEntry[] {
   const entries: OrganismUsageEntry[] = (index.get(organismId) ?? []).map((battleId) => ({
     battleId,
-    isOpenBattle: false,
+    placedOnLiveGrid: false,
   }));
 
   if (openBattle == null || !openBattle.organismIds.includes(organismId)) {
@@ -116,9 +124,9 @@ export function resolveOrganismUsage(
   // no separate branch needed, and no sentinel id invented to make one.
   const saved = entries.findIndex((entry) => entry.battleId === openBattle.id);
   if (saved === -1) {
-    entries.push({ battleId: openBattle.id, isOpenBattle: true });
+    entries.push({ battleId: openBattle.id, placedOnLiveGrid: true });
   } else {
-    entries[saved] = { battleId: openBattle.id, isOpenBattle: true };
+    entries[saved] = { battleId: openBattle.id, placedOnLiveGrid: true };
   }
   return entries;
 }

@@ -64,8 +64,8 @@ describe('resolveOrganismUsage', () => {
     ]);
 
     expect(resolveOrganismUsage(index, 'shared')).toEqual([
-      { battleId: 'battle-1', isOpenBattle: false },
-      { battleId: 'battle-2', isOpenBattle: false },
+      { battleId: 'battle-1', placedOnLiveGrid: false },
+      { battleId: 'battle-2', placedOnLiveGrid: false },
     ]);
   });
 
@@ -89,7 +89,7 @@ describe('resolveOrganismUsage', () => {
     const index = buildUsageIndex([summary('battle-1', ['shared'])]);
 
     expect(resolveOrganismUsage(index, 'shared', openBattle('battle-9', ['other']))).toEqual([
-      { battleId: 'battle-1', isOpenBattle: false },
+      { battleId: 'battle-1', placedOnLiveGrid: false },
     ]);
   });
 
@@ -97,7 +97,7 @@ describe('resolveOrganismUsage', () => {
     const index = buildUsageIndex([summary('battle-1', ['other'])]);
 
     expect(resolveOrganismUsage(index, 'fresh', openBattle('battle-9', ['fresh']))).toEqual([
-      { battleId: 'battle-9', isOpenBattle: true },
+      { battleId: 'battle-9', placedOnLiveGrid: true },
     ]);
   });
 
@@ -105,7 +105,7 @@ describe('resolveOrganismUsage', () => {
     const index = buildUsageIndex([]);
 
     expect(resolveOrganismUsage(index, 'fresh', openBattle(null, ['fresh']))).toEqual([
-      { battleId: null, isOpenBattle: true },
+      { battleId: null, placedOnLiveGrid: true },
     ]);
   });
 
@@ -116,8 +116,8 @@ describe('resolveOrganismUsage', () => {
     ]);
 
     expect(resolveOrganismUsage(index, 'shared', openBattle('battle-2', ['shared']))).toEqual([
-      { battleId: 'battle-1', isOpenBattle: false },
-      { battleId: 'battle-2', isOpenBattle: true },
+      { battleId: 'battle-1', placedOnLiveGrid: false },
+      { battleId: 'battle-2', placedOnLiveGrid: true },
     ]);
   });
 
@@ -125,7 +125,7 @@ describe('resolveOrganismUsage', () => {
     const index = buildUsageIndex([summary('battle-1', ['shared'])]);
 
     expect(resolveOrganismUsage(index, 'shared', openBattle('battle-1', []))).toEqual([
-      { battleId: 'battle-1', isOpenBattle: false },
+      { battleId: 'battle-1', placedOnLiveGrid: false },
     ]);
   });
 
