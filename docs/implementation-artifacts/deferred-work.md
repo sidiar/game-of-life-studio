@@ -2437,7 +2437,13 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **`buildUsageIndex` is Story 4.19's AC1, landed here** (FD1) — `packages/domain/src/usageIndex.ts`
   builds `organismId → battleId[]` from summaries, 100% covered. **Story 4.19 extends THIS module**
   with the M7 live-grid union and the Decision E.5 rule-reference index; its story file should say
-  so, and its scope shrinks accordingly.
+  so, and its scope shrinks accordingly. ✅ **Closed by Story 4.19, with one correction to the
+  sentence above:** the M7 union did land in `usageIndex.ts` (`resolveOrganismUsage`), but the
+  rule-reference index went to its own module, `packages/domain/src/ruleReferenceIndex.ts`. Its
+  input is the organism library rather than battle summaries, "used" (placed, Decision H) and
+  "referenced" (rules, Decision E.5) are separate axes in every spec that names both, and its only
+  cross-epic consumer (Story 5.4's export closure) imports it alone — one file holding both would
+  put that dependency behind a module named for battles.
 - **The 4.9-review duplicate-name sentence (`:1455-1465`) was NOT picked up** — this story does not
   touch `colorReuseWarning` or the sentence; that entry is annotated in place (review 2026-09-22)
   so its "pick this up with Story 4.17" no longer reads as pending on 4.17.
@@ -2708,7 +2714,15 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   second `organismType` reference to every organism the source's rules target** — cloning an
   organism whose rules target organism X doubles X's rule-reference count without X itself being
   touched. Decision E.5's rule-reference index (Story 4.19) must count RULES, not organisms, if
-  that is the intended semantic; flagged here before that story's design is fixed.
+  that is the intended semantic; flagged here before that story's design is fixed. ✅ **Answered by
+  Story 4.19 — both, from one scan, neither chosen over the other.** `buildRuleReferenceIndex`'s
+  value is `RuleReference[]` (`{ organismId, ruleId }`), so `index.get(X)?.length ?? 0` is the RULE
+  count FR-1.7 renders ("Targeted by [M] organism rule(s)") while `referencingOrganismIds(index, X)`
+  is the de-duplicated ORGANISM list RFC-005 Decision 8 and the epic describe. The clone case above
+  is therefore reported as two rules across two organisms — the truth on both axes, with no caller
+  re-deriving either. 4.18's re-minting of rule ids on a clone stays correct and is NOT reopened:
+  `RuleReference.ruleId` identifies a rule within its own organism and makes no cross-organism claim
+  about rule identity.
 - **A route-level unmount mid-clone lands the write and reports nothing** — the same residual the
   4.16 Task-12 entry already records for the editor's own save (`:2385-2388` above): the writer's
   `await organisms.save(clone)` can resolve after the Library has unmounted (browser Back, address
