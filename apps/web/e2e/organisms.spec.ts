@@ -3147,21 +3147,29 @@ async function seedExtraOrganisms(page: Page) {
   );
 }
 
+// Hoisted to module scope (Story 4.18): both the 4.17 block and the 4.18 block below reuse these
+// rather than each forking its own copy — lifting is allowed, forking is not (the standing
+// extraction entry's trigger is still not met; only this one spec touches them).
+const editButton = (page: Page, name: string) =>
+  page.getByRole('button', { name: `Edit ${name}`, exact: true });
+const cloneButton = (page: Page, name: string) =>
+  page.getByRole('button', { name: `Clone ${name}`, exact: true });
+const editorDialog = (page: Page) => page.getByRole('dialog', { name: 'Organism Editor' });
+const inUseDialog = (page: Page) => page.getByRole('dialog', { name: /^Used in \d+ Battles?$/ });
+const back = (dialog: Locator) => dialog.getByRole('button', { name: 'Back to Library' });
+const countBadge = (page: Page) => page.getByRole('status');
+
+/** The settle idiom `openEditor` records, for whichever dialog follows an Edit click. */
+async function settled(page: Page, dialog: Locator) {
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
+  return dialog;
+}
+
+const storage = (page: Page, key: string) => page.evaluate((k) => localStorage.getItem(k), key);
+
 test.describe('edit organism from library (Story 4.17)', () => {
   const USED = 'Aggressive Colonizer';
-  const editButton = (page: Page, name: string) =>
-    page.getByRole('button', { name: `Edit ${name}`, exact: true });
-  const editorDialog = (page: Page) => page.getByRole('dialog', { name: 'Organism Editor' });
-  const inUseDialog = (page: Page) => page.getByRole('dialog', { name: /^Used in \d+ Battles?$/ });
-  const back = (dialog: Locator) => dialog.getByRole('button', { name: 'Back to Library' });
-  const countBadge = (page: Page) => page.getByRole('status');
-
-  /** The settle idiom `openEditor` records, for whichever dialog follows an Edit click. */
-  async function settled(page: Page, dialog: Locator) {
-    await expect(dialog).toBeVisible();
-    await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
-    return dialog;
-  }
 
   async function gotoSeeded(page: Page) {
     await seedWorkspace(page);
@@ -3170,8 +3178,6 @@ test.describe('edit organism from library (Story 4.17)', () => {
     await expect(page.getByText("Conway's Classic")).toBeVisible();
     await expect(countBadge(page)).toHaveText('5 Organisms');
   }
-
-  const storage = (page: Page, key: string) => page.evaluate((k) => localStorage.getItem(k), key);
 
   test('1. an unused organism opens the editor directly, populated, with no warning and zero console errors', async ({
     page,
@@ -3377,6 +3383,285 @@ test.describe('edit organism from library (Story 4.17)', () => {
     await gate.getByRole('button', { name: 'Edit Anyway' }).click();
     await expect(gate).not.toBeVisible();
     await settled(page, editorDialog(page));
+    await page.waitForTimeout(300);
+    ({ violations } = await new AxeBuilder({ page }).analyze());
+    expect(violations).toEqual([]);
+  });
+});
+
+test.describe('clone organism (Story 4.18)', () => {
+  const USED = 'Aggressive Colonizer';
+  const cloneErrorAlert = (page: Page) => page.locator('[data-clone-error]');
+
+  async function gotoSeeded(page: Page) {
+    await seedWorkspace(page);
+    await seedExtraOrganisms(page);
+    await page.goto('/organisms');
+    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(countBadge(page)).toHaveText('5 Organisms');
+  }
+
+  test('1. card Clone: one new card, persisted, no editor', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+    const battlesBefore = await storage(page, 'gol:battles');
+
+    await cloneButton(page, 'Glider').click();
+
+    await expect(countBadge(page)).toHaveText('6 Organisms');
+    await expect(page.getByRole('heading', { level: 2, name: 'Glider (Copy)' })).toBeVisible();
+    await expect(editorDialog(page)).toHaveCount(0);
+    await expect(inUseDialog(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
+
+    const organisms = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(Object.keys(organisms)).toHaveLength(6);
+    const glider = Object.values(organisms).find((o) => o.name === 'Glider');
+    const clone = Object.values(organisms).find((o) => o.name === 'Glider (Copy)');
+    expect(glider).toBeDefined();
+    expect(clone).toBeDefined();
+    expect(clone?.colorToken).toBe(glider?.colorToken);
+    expect(clone?.dominance).toBe(glider?.dominance);
+    expect(clone?.agingEnabled).toBe(glider?.agingEnabled);
+    const gliderRules = glider?.survivalRules as Array<Record<string, unknown>>;
+    const cloneRules = clone?.survivalRules as Array<Record<string, unknown>>;
+    expect(cloneRules.map((r) => r.contentHash)).toEqual(gliderRules.map((r) => r.contentHash));
+    expect(cloneRules.map((r) => r.id)).not.toEqual(gliderRules.map((r) => r.id));
+    expect(await storage(page, 'gol:battles')).toBe(battlesBefore);
+
+    // "Reload the page and the card is still there" (AC2), proven with a CLIENT-SIDE round trip
+    // rather than `page.reload()`: the init scripts above re-register on every full document load
+    // and would re-seed the fixture's ORIGINAL five organisms, wiping the clone this test just
+    // made (the same trap Story 4.17's test 3 records for the identical reason).
+    await page.getByRole('navigation').getByRole('link', { name: 'Battles' }).click();
+    await page.getByRole('navigation').getByRole('link', { name: 'Organisms' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Glider (Copy)' })).toBeVisible();
+  });
+
+  test('2. the clone is independent: editing it never touches the source', async ({ page }) => {
+    await gotoSeeded(page);
+    const gliderBefore = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const gliderRecordBefore = Object.values(gliderBefore).find((o) => o.name === 'Glider');
+
+    await cloneButton(page, 'Glider').click();
+    await expect(countBadge(page)).toHaveText('6 Organisms');
+
+    await editButton(page, 'Glider (Copy)').click();
+    const dialog = await settled(page, editorDialog(page));
+    await expect(inUseDialog(page)).toHaveCount(0); // 0 battles place the clone — no gate.
+    // AC12's fourth required axe state — the editor open ON A CLONE — which no scan covered
+    // (review 2026-09-22). The other three are in test 8 and `page.test.tsx`.
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider Variant');
+    const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
+    await basicInfo.getByRole('button', { name: 'Change Color' }).click();
+    await basicInfo
+      .getByRole('radiogroup', { name: 'Organism Color' })
+      .getByRole('radio', { name: 'Amber' })
+      .click();
+    await save(dialog).click();
+    await expect(dialog.locator('[data-save-outcome]')).toBeVisible();
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+
+    await expect(
+      page.getByRole('heading', { level: 2, name: 'Glider', exact: true }),
+    ).toBeVisible();
+    const after = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const gliderAfter = Object.values(after).find((o) => o.id === gliderRecordBefore?.id);
+    expect(gliderAfter).toEqual(gliderRecordBefore);
+  });
+
+  test("3. Conway's Classic clones", async ({ page }) => {
+    await gotoSeeded(page);
+    const before = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+
+    await cloneButton(page, "Conway's Classic").click();
+
+    await expect(countBadge(page)).toHaveText('6 Organisms');
+    const clonedHeading = page.getByRole('heading', { level: 2, name: "Conway's Classic (Copy)" });
+    await expect(clonedHeading).toBeVisible();
+    const clonedArticle = page.locator('article', { has: clonedHeading });
+    await expect(clonedArticle).not.toHaveAttribute('data-system');
+
+    const after = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(after[CONWAYS_CLASSIC_ID]).toEqual(before[CONWAYS_CLASSIC_ID]);
+  });
+
+  test('4. Clone & Edit from the in-use warning: the warning goes, THEN the editor appears', async ({
+    page,
+  }) => {
+    await gotoSeeded(page);
+    const battlesBefore = await storage(page, 'gol:battles');
+
+    await editButton(page, USED).click();
+    const gate = await settled(page, page.getByRole('dialog', { name: 'Used in 2 Battles' }));
+
+    await gate.getByRole('button', { name: 'Clone & Edit' }).click();
+    // Sequential, not stacked: the editor is absent while the warning is still on screen (the
+    // clone's write window), and only appears once the warning has gone.
+    await expect(editorDialog(page)).toHaveCount(0);
+    await expect(gate).not.toBeVisible();
+
+    const dialog = await settled(page, editorDialog(page));
+    await expect(dialog.getByRole('textbox', { name: 'Organism Name' })).toHaveValue(
+      `${USED} (Copy)`,
+    );
+
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+
+    await expect(countBadge(page)).toHaveText('6 Organisms');
+    await expect(page.getByRole('heading', { level: 2, name: USED, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: `${USED} (Copy)` })).toBeVisible();
+    expect(await storage(page, 'gol:battles')).toBe(battlesBefore);
+    const organisms = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const source = Object.values(organisms).find((o) => o.name === USED);
+    expect(source).toBeDefined();
+  });
+
+  test("5. focus: after 4's Back, the clone's Edit button is focused", async ({
+    page,
+    browserName,
+  }) => {
+    await gotoSeeded(page);
+
+    await editButton(page, USED).click();
+    const gate = await settled(page, page.getByRole('dialog', { name: 'Used in 2 Battles' }));
+    await gate.getByRole('button', { name: 'Clone & Edit' }).click();
+    const dialog = await settled(page, editorDialog(page));
+    await back(dialog).click();
+    await expect(dialog).not.toBeVisible();
+
+    if (browserName === 'webkit') {
+      // WebKit does not focus a <button> on click (the 4.3 note) — assert only that focus is not
+      // left inside a dialog.
+      await expect(
+        page.locator(':focus').locator('xpath=ancestor-or-self::*[@role="dialog"]'),
+      ).toHaveCount(0);
+    } else {
+      await expect(editButton(page, `${USED} (Copy)`)).toBeFocused();
+    }
+  });
+
+  test('6. quota, in a real browser', async ({ page }) => {
+    await gotoSeeded(page);
+    const before = await storage(page, 'gol:organisms');
+
+    await page.evaluate(() => {
+      const proto = Storage.prototype;
+      (window as unknown as { __setItem: typeof proto.setItem }).__setItem = proto.setItem;
+      proto.setItem = function () {
+        throw new DOMException('full', 'QuotaExceededError');
+      };
+    });
+
+    await cloneButton(page, 'Glider').click();
+
+    await expect(cloneErrorAlert(page)).toHaveText(
+      /Storage is full, so this organism was not saved\./,
+    );
+    await expect(countBadge(page)).toHaveText('5 Organisms');
+    const after = await storage(page, 'gol:organisms');
+    expect(after).toBe(before);
+
+    await page.evaluate(() => {
+      Storage.prototype.setItem = (
+        window as unknown as { __setItem: typeof Storage.prototype.setItem }
+      ).__setItem;
+    });
+
+    await cloneButton(page, 'Glider').click();
+    await expect(countBadge(page)).toHaveText('6 Organisms');
+    await expect(cloneErrorAlert(page)).toHaveCount(0);
+  });
+
+  test("7. keyboard: Tab from the search input reaches the first card's Edit then its Clone; Enter on Clone creates the copy", async ({
+    page,
+    browserName,
+  }) => {
+    await gotoSeeded(page);
+    const search = page.getByRole('textbox', { name: 'Search organisms' });
+    await search.click();
+
+    const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    // First in `sortLibrary` order: Conway's Classic (SYSTEM) sorts first.
+    const edit = editButton(page, "Conway's Classic");
+    let reachedEdit = false;
+    for (let i = 0; i < 5; i += 1) {
+      await page.keyboard.press(tabKey);
+      if (await edit.evaluate((el) => el === document.activeElement)) {
+        reachedEdit = true;
+        break;
+      }
+    }
+    expect(reachedEdit).toBe(true);
+
+    await page.keyboard.press(tabKey);
+    const clone = cloneButton(page, "Conway's Classic");
+    await expect(clone).toBeFocused();
+
+    await page.keyboard.press('Enter');
+    await expect(countBadge(page)).toHaveText('6 Organisms');
+    await expect(
+      page.getByRole('heading', { level: 2, name: "Conway's Classic (Copy)" }),
+    ).toBeVisible();
+
+    // Review 2026-09-22: the Clone button is `disabled` while its write is in flight, and
+    // disabling a FOCUSED button blurs it — this assertion used to report `BODY`, i.e. a keyboard
+    // user's next Tab restarted from the top of the document. The Library restores it.
+    await expect(clone).toBeFocused();
+  });
+
+  test('8. axe: no violations with the alert visible, and with the three-action dialog settled', async ({
+    page,
+  }) => {
+    await gotoSeeded(page);
+
+    await page.evaluate(() => {
+      const proto = Storage.prototype;
+      (window as unknown as { __setItem: typeof proto.setItem }).__setItem = proto.setItem;
+      proto.setItem = function () {
+        throw new DOMException('full', 'QuotaExceededError');
+      };
+    });
+    await cloneButton(page, 'Glider').click();
+    await expect(cloneErrorAlert(page)).toBeVisible();
+
+    let { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+
+    await page.evaluate(() => {
+      Storage.prototype.setItem = (
+        window as unknown as { __setItem: typeof Storage.prototype.setItem }
+      ).__setItem;
+    });
+
+    await editButton(page, USED).click();
+    const gate = await settled(page, page.getByRole('dialog', { name: 'Used in 2 Battles' }));
+    await expect(gate.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await page.waitForTimeout(300);
     ({ violations } = await new AxeBuilder({ page }).analyze());
     expect(violations).toEqual([]);

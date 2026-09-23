@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import OrganismInUseDialog, {
@@ -14,20 +14,23 @@ import OrganismInUseDialog, {
 
 function renderDialog(overrides: Partial<OrganismInUseDialogProps> = {}) {
   const onCancel = vi.fn();
+  const onCloneAndEdit = vi.fn();
   const onEditAnyway = vi.fn();
   const result = render(
     <OrganismInUseDialog
       open
       usedInBattles={2}
+      pending={false}
       onCancel={onCancel}
+      onCloneAndEdit={onCloneAndEdit}
       onEditAnyway={onEditAnyway}
       {...overrides}
     />,
   );
-  return { ...result, onCancel, onEditAnyway };
+  return { ...result, onCancel, onCloneAndEdit, onEditAnyway };
 }
 
-describe('OrganismInUseDialog (Story 4.17, AC2 — FR-1.3)', () => {
+describe('OrganismInUseDialog (Story 4.17 AC2 / Story 4.18 AC8 — FR-1.3)', () => {
   it('(a) pluralises the title and the PRD sentence for one battle', () => {
     renderDialog({ usedInBattles: 1 });
 
@@ -39,7 +42,7 @@ describe('OrganismInUseDialog (Story 4.17, AC2 — FR-1.3)', () => {
     ).toBeInTheDocument();
   });
 
-  it('(a) pluralises the title and the PRD sentence for two battles, and offers exactly two actions', () => {
+  it('(a) three buttons, in DOM order, with their accessible names', () => {
     renderDialog({ usedInBattles: 2 });
 
     expect(screen.getByRole('dialog', { name: 'Used in 2 Battles' })).toBeInTheDocument();
@@ -48,10 +51,9 @@ describe('OrganismInUseDialog (Story 4.17, AC2 — FR-1.3)', () => {
         'This organism is used in 2 Battles. Editing it will affect all Battles that use it. Clone this organism first to create a Battle-specific variant?',
       ),
     ).toBeInTheDocument();
-    // A COUNT, not two presence checks: Clone & Edit is Story 4.18's, and a button that does
-    // nothing must not appear here.
     expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
       'Cancel',
+      'Clone & Edit',
       'Edit Anyway',
     ]);
   });
@@ -65,22 +67,35 @@ describe('OrganismInUseDialog (Story 4.17, AC2 — FR-1.3)', () => {
 
   it('(b) Cancel fires onCancel only', async () => {
     const user = userEvent.setup();
-    const { onCancel, onEditAnyway } = renderDialog();
+    const { onCancel, onCloneAndEdit, onEditAnyway } = renderDialog();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onCloneAndEdit).not.toHaveBeenCalled();
+    expect(onEditAnyway).not.toHaveBeenCalled();
+  });
+
+  it('(b) Clone & Edit fires onCloneAndEdit only', async () => {
+    const user = userEvent.setup();
+    const { onCancel, onCloneAndEdit, onEditAnyway } = renderDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Clone & Edit' }));
+
+    expect(onCloneAndEdit).toHaveBeenCalledTimes(1);
+    expect(onCancel).not.toHaveBeenCalled();
     expect(onEditAnyway).not.toHaveBeenCalled();
   });
 
   it('(c) Edit Anyway fires onEditAnyway only', async () => {
     const user = userEvent.setup();
-    const { onCancel, onEditAnyway } = renderDialog();
+    const { onCancel, onCloneAndEdit, onEditAnyway } = renderDialog();
 
     await user.click(screen.getByRole('button', { name: 'Edit Anyway' }));
 
     expect(onEditAnyway).toHaveBeenCalledTimes(1);
     expect(onCancel).not.toHaveBeenCalled();
+    expect(onCloneAndEdit).not.toHaveBeenCalled();
   });
 
   it('(d) Escape is Cancel', async () => {
@@ -105,15 +120,54 @@ describe('OrganismInUseDialog (Story 4.17, AC2 — FR-1.3)', () => {
     expect(onEditAnyway).not.toHaveBeenCalled();
   });
 
+  it('(c) pending disables all three buttons; Escape and a backdrop click call nothing', async () => {
+    const user = userEvent.setup();
+    const { onCancel, onCloneAndEdit, onEditAnyway } = renderDialog({ pending: true });
+
+    const dialog = screen.getByRole('dialog');
+    within(dialog)
+      .getAllByRole('button')
+      .forEach((button) => expect(button).toBeDisabled());
+
+    await user.keyboard('{Escape}');
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(onCloneAndEdit).not.toHaveBeenCalled();
+    expect(onEditAnyway).not.toHaveBeenCalled();
+
+    // The backdrop half, which the title claimed and the body never performed (review
+    // 2026-09-22). MUI routes a backdrop click through the same `onClose` as Escape, so this is
+    // the second reason the `if (pending) return;` guard has to live there.
+    await user.click(document.querySelector('.MuiBackdrop-root') as HTMLElement);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  // The positive control for both halves of (c): with `pending` false the SAME two gestures do
+  // reach `onCancel`. Without it, (c) would pass against a dialog that ignores Escape and the
+  // backdrop unconditionally.
+  it('(c2) positive control: with pending false, a backdrop click IS Cancel', async () => {
+    const user = userEvent.setup();
+    const { onCancel } = renderDialog({ pending: false });
+
+    await user.click(document.querySelector('.MuiBackdrop-root') as HTMLElement);
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it('open={false} renders no dialog at all', () => {
     renderDialog({ open: false });
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('(f) has no axe violations', async () => {
+  it('(e) axe with pending=false', async () => {
     renderDialog();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus());
+
+    expect((await axe(document.body)).violations).toEqual([]);
+  });
+
+  it('(e) axe with pending=true', async () => {
+    renderDialog({ pending: true });
 
     expect((await axe(document.body)).violations).toEqual([]);
   });

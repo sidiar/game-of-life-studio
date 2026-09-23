@@ -24,7 +24,10 @@ import type { SurvivalRule } from '@gol/domain';
  * package's surface for one async function. A hand-rolled synchronous SHA-256 was the other
  * alternative — ~80 lines of bit arithmetic nobody reviews, reinventing a platform primitive. Every
  * known consumer of this function is already in `apps/web` (this story's save, Story 4.17's
- * re-save, Story 4.18's clone; Epic 5 only CONSUMES hashes, never computes one). `apps/web` carries
+ * re-save; Epic 5 only CONSUMES hashes, never computes one). **Story 4.18's clone is NOT a
+ * consumer**: it copies a source rule's `contentHash` verbatim rather than calling this function —
+ * `id` is excluded from the hash input, so a copied rule's hash is already its own, correct value,
+ * and re-hashing it here would reproduce digits the clone already has. `apps/web` carries
  * the `dom` lib, where `crypto.subtle` and `TextEncoder` are first-class types, and Vitest's jsdom
  * test environment keeps Node's own `crypto` global (measured 2026-09-22: a `crypto.subtle.digest`
  * call inside `apps/web`'s jsdom run returns a real 64-hex digest — jsdom's own `Crypto` has no
