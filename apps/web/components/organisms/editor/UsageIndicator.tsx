@@ -168,27 +168,47 @@ export default function UsageIndicator({
   // flags apart.
   const [openPanel, setOpenPanel] = useState<PanelKey | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The trigger that opened the current panel — where Escape returns focus (AC4).
+  const openerRef = useRef<HTMLButtonElement | null>(null);
   const idPrefix = useId();
 
-  const toggle = useCallback(
-    (key: PanelKey) => setOpenPanel((current) => (current === key ? null : key)),
-    [],
-  );
+  // `trigger.focus()` on every open, not only where the engine already did it: on Safari (WebKit's
+  // Mac port) a mouse click does NOT focus a `<button>` — form controls are not mouse-focusable
+  // there — so without this, focus stays on the Dialog paper and "focus is on the trigger while
+  // the panel is open" (AC4) is a Chromium fact rather than a browser guarantee. CI's WebKit is
+  // the GTK port, which does focus on click, so the e2e matrix cannot see the difference.
+  const toggle = useCallback((key: PanelKey, trigger: HTMLButtonElement) => {
+    trigger.focus();
+    openerRef.current = trigger;
+    setOpenPanel((current) => (current === key ? null : key));
+  }, []);
 
-  // ⚠️ FD4 — the whole reason this handler exists. MUI's `Modal` attaches its Escape handler to the
-  // modal ROOT, which is an ancestor of this footer, so an unstopped `keydown` closes the EDITOR
-  // and takes the user's unsaved draft with it — for a key press whose only visible effect should
-  // be closing a list of names. `stopPropagation` keeps the first Escape here; the second, with no
-  // panel open, falls through to the editor as it always has. Nothing else catches this: it
-  // typechecks, the panel does close, and only an assertion that the editor is STILL OPEN sees it.
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (openPanel === null || event.key !== 'Escape') return;
-      setOpenPanel(null);
+  // ⚠️ FD4 — the whole reason this listener exists. MUI's `Modal` handles Escape in a React
+  // `onKeyDown` on the modal ROOT, an ancestor of this footer, so an unstopped `keydown` closes the
+  // EDITOR and takes the user's unsaved draft with it — for a key press whose only visible effect
+  // should be closing a list of names.
+  //
+  // A `document` CAPTURE listener, armed only while a panel is open (the `pointerdown` shape
+  // below), rather than an `onKeyDown` on the footer: a React handler here sees only a keydown
+  // whose TARGET is inside the footer, and two reachable paths put focus elsewhere with a panel
+  // open — a click inside the panel (nothing in it is focusable, so focus lands on the Dialog
+  // paper's `tabIndex=-1`), and a Safari click on the trigger (see `toggle`). Capture on
+  // `document` runs before React's root listener on every path, so `stopPropagation` here is what
+  // keeps the first Escape from MUI; the second, with no panel open, has no listener and falls
+  // through to the editor as it always has. Nothing else catches this: it typechecks, the panel
+  // does close, and only an assertion that the editor is STILL OPEN sees it (review, 2026-09-23 —
+  // reproduced on the local WebKit project before the listener moved).
+  useEffect(() => {
+    if (openPanel === null) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
       event.stopPropagation();
-    },
-    [openPanel],
-  );
+      setOpenPanel(null);
+      openerRef.current?.focus();
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [openPanel]);
 
   // Outside dismissal, armed ONLY while a panel is open (FD5): the mockup keeps a permanent
   // `click` listener, which is one more thing to unbind correctly on every close path. Events
@@ -205,9 +225,11 @@ export default function UsageIndicator({
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [openPanel]);
 
-  // No `autoFocus` into a panel and no focus move at all: nothing in a panel is focusable, so
-  // focus stays where the user put it — on the trigger — for the whole open/close cycle, which is
-  // also what makes Escape and an outside dismissal return to it for free.
+  // No `autoFocus` into a panel: nothing in one is focusable, so opening moves focus nowhere but
+  // the trigger (`toggle`), and Escape brings it back there (`openerRef`). An outside `pointerdown`
+  // does NOT: focus follows the press — the field the user clicked, or the paper — because a
+  // restore here would either be overridden by the click's own `mousedown` focus or steal focus
+  // from a field the user chose. Recorded as an open review decision in the story file.
   const disclosure = (
     key: PanelKey,
     label: string,
@@ -220,11 +242,12 @@ export default function UsageIndicator({
       <Note>
         <Trigger
           type="button"
-          onClick={() => toggle(key)}
+          onClick={(event) => toggle(key, event.currentTarget)}
           aria-expanded={isOpen}
-          // Only while the panel is in the document: `aria-controls` naming an id that is not
-          // there is what an axe scan flags on the collapsed state.
-          aria-controls={isOpen ? panelId : undefined}
+          // Unconditional (AC3): axe-core's `aria-valid-attr-value` skips the id-exists check for
+          // `aria-controls` while `aria-expanded="false"`, so a collapsed disclosure naming its
+          // not-yet-rendered panel is clean — and AT announces the relationship either way.
+          aria-controls={panelId}
           {...{ [`data-usage-${key}`]: '' }}
         >
           {label}
@@ -249,7 +272,7 @@ export default function UsageIndicator({
   };
 
   return (
-    <Row ref={rootRef} onKeyDown={handleKeyDown}>
+    <Row ref={rootRef}>
       {battleNames.length === 0 ? (
         // AC3: a zero count is plain text — no button, no `aria-expanded`, no panel (UX-DR6's
         // "without expansion"; NFR-4.1 — no affordance that does nothing).

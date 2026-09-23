@@ -4,7 +4,7 @@ baseline_commit: e06da2e
 
 # Story 4.20: Usage Visibility UI
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -213,9 +213,10 @@ empty list item) are settled there.
         the seeded battle; Escape closes the panel and the editor is STILL open; a second Escape
         closes the editor; an unused organism's label is not a button; zero console errors.
   - [x] One axe scan with a panel open and settled, following the block's existing
-        `disableRules`/settle convention (`:453-473`).
+        settle convention (`:452-470` — a 300 ms wait, then `new AxeBuilder({ page }).analyze()`; there is no
+        `disableRules` in this spec).
 
-- [x] **Task 7 — Re-point the four `deferred-work.md` entries that name this story (AC: 9).**
+- [x] **Task 7 — Re-point the five `deferred-work.md` entries that name this story (AC: 9).**
   - [x] `:2420-2422` (battles on the modal) — mark **closed by this story** with the prop's name.
   - [x] `:743-752` (the card's rules-preview sentence) and `:772-782` (the card's stat-cell
         semantics) — annotate in place: Story 4.20 is the editor FOOTER, not the card; re-point at
@@ -237,6 +238,108 @@ empty list item) are settled there.
   - [x] Report the `/organisms` gzip figure the bundle stage prints against the 305 KB entry. Do not
         edit `scripts/check-bundle-size.mjs`.
   - [x] Record every command and its real output summary in the Dev Agent Record.
+
+### Review Findings
+
+Reviewed on **Fable** against an **Opus** implementation (2026-09-23), via three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus a local WebKit run of the new e2e
+block. 6 `patch`, 2 `decision-needed`, 0 `defer`, 10 dismissed.
+
+- [ ] [Review][Decision] **Focus after an outside dismissal, and a panel left open by Tab** — AC4
+      pins "focus stays on / returns to the trigger that opened it" and Task 3 says "after Escape
+      or an outside dismissal, focus is on the trigger". Escape now returns focus to the opener on
+      every path (patched below), but an outside `pointerdown` only closes the panel: focus follows
+      the click (the field the user pressed, or the Dialog paper via its `tabIndex=-1`), and the
+      component's own comment ("return[s] to it for free") was wrong about that. Forcing focus back
+      to the trigger on `pointerdown` would be overridden by the click's own `mousedown` focus and,
+      where it won, would steal focus from a field the user deliberately clicked. Sibling case:
+      Tab/Shift+Tab away from an open panel leaves it open over the body (no `focusout` close);
+      Escape from there now closes the panel, not the editor. Options: **(a)** keep pointer
+      semantics — focus follows the click — and amend the Task 3 bullet to "after Escape"; **(b)**
+      restore focus to the trigger on outside dismissal only when the press landed on nothing
+      focusable (the paper), via a `click`-phase restore; **(c)** additionally close the panel on
+      `focusout` leaving the footer (`relatedTarget` outside `rootRef`). (a) is what ships today.
+- [ ] [Review][Decision] **A long name list opens past the top of the viewport** — `Panel` is
+      `position: absolute; bottom: 150%` with no `maxHeight`/`overflow`. An organism placed in
+      more battles than fit between the footer and the viewport top (~25–30 rows at 12px + 4px
+      padding on a 720px-tall window) has its first names clipped and unreachable — nothing in the
+      panel is focusable or scrollable, and neither `toBeVisible` nor axe sees clipping. Options:
+      **(a)** `maxHeight: min(60vh, 400px); overflowY: auto` and make the panel a focusable
+      scroll region (`tabIndex={0}` + accessible name) — axe's `scrollable-region-focusable`
+      requires it, which contradicts AC3's "nothing inside either panel is focusable"; **(b)** cap
+      the list at N rows and render "… and K more" as the last item, keeping the panel static;
+      **(c)** accept — the workspace library is uncapped but a single organism in 30+ battles is
+      outside the MVP's expected scale; record it. `[apps/web/components/organisms/editor/UsageIndicator.tsx:Panel]`
+- [x] [Review][Patch] **Escape closes the EDITOR whenever focus is outside the footer — the FD4
+      failure on two reachable paths** [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown]
+      — the Escape handler was a React `onKeyDown` on the footer `Row`, so it only saw a `keydown`
+      whose target was inside the footer. (1) **Safari/WebKit (Mac port): a mouse click does not
+      focus a `<button>`** (`HTMLFormControlElement::isMouseFocusable` is `false` off GTK/WPE), so
+      focus stays on the Dialog paper and the first Escape closes the editor with the panel still
+      open. **Reproduced locally**: `npx playwright test --project=webkit -g "usage visibility
+      footer"` → tests 2 and 3 fail (`toBeFocused` "inactive"; dialog gone after the first
+      Escape). CI's WebKit is the GTK port, which DOES focus buttons on click, so the matrix would
+      have stayed green while real Safari users lost drafts. (2) **Any engine**: a click inside the
+      open panel (allowed, keeps it open) lands focus on the Dialog paper (`tabIndex=-1`); the next
+      Escape targets the paper, bypasses the Row and hits `useModal`'s root handler →
+      `handleRequestClose` → draft gone (no dirty guard until Story 4.23). Fix: the Escape listener
+      is a `document` **capture-phase** `keydown`, armed only while a panel is open (the same shape
+      as the `pointerdown` dismissal), which `stopPropagation`s before the event reaches React's
+      root and therefore before MUI's Modal handler; it also returns focus to the trigger that
+      opened the panel. Opening a panel now `focus()`es its trigger explicitly so "focus is on the
+      trigger while open" is an engine-independent fact. Pinned by two new `UsageIndicator` tests
+      (`fireEvent.click` — no focus side effect, the Safari shape; and focus moved to a
+      `tabIndex=-1` ancestor, the paper shape), modal test 54 (panel click → Escape → editor still
+      open, `onClose` not called, focus back on the trigger) and e2e test 3, which now clicks
+      inside the panel before the first Escape.
+- [x] [Review][Patch] **e2e test 3 could pass with `stopPropagation` deleted** [apps/web/e2e/organisms.spec.ts:test 3]
+      — after the first Escape it asserted `toBeVisible()` immediately; a closing MUI Dialog is
+      still in the DOM for its ~195 ms fade (opacity does not affect Playwright visibility), so a
+      regression that closed both panel and editor passed the "editor still open" check. The
+      assertion now waits out the fade window (the block's 300 ms settle convention) before
+      asserting the dialog is still there.
+- [x] [Review][Patch] **`aria-controls` dropped on the collapsed state on a false premise**
+      [apps/web/components/organisms/editor/UsageIndicator.tsx:disclosure] — AC3 and Task 3 say the
+      trigger carries `aria-expanded` AND `aria-controls`; the code set `aria-controls` only while
+      open, justified (in the comment, the unit test and the Dev Agent Record) by "a reference to an
+      absent id is what axe flags on the collapsed state". axe-core 4.12.1's `aria-valid-attr-value`
+      pre-check for `aria-controls` explicitly returns early when `aria-expanded="false"`
+      (`axe.js:27133-27139`). `aria-controls` is now unconditional; a new axe assertion on the
+      collapsed state pins the corrected claim.
+- [x] [Review][Patch] **Console-error capture missing on the Escape/unmount and listener-removal
+      paths** [apps/web/e2e/organisms.spec.ts:tests 3–4] — Task 6 lists "zero console errors", but
+      only tests 1–2 collected `console.error`/`pageerror`; test 3 (Escape → close → unmount) and
+      test 4 (document listener removal during a click) asserted nothing. Both now collect and
+      assert `[]`, the block's inline convention.
+- [x] [Review][Patch] **AC4's "footer is reachable by Tab after the three columns" pinned but never
+      asserted** [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx] — modal test 55
+      focuses the last focusable control in `EditorBody` and tabs once, expecting the battles
+      trigger.
+- [x] [Review][Patch] **Claims the diff contradicts** — (1) modal comment and the new
+      `deferred-work.md` entry say the rule-index memo "never hits" / "re-runs per render": the
+      editor's own re-renders (every keystroke) keep the same `library` reference, so the memo
+      hits; it re-runs only when `<OrganismLibrary>` re-renders (open/save/close) — reworded in
+      both places [apps/web/components/organisms/editor/OrganismEditorModal.tsx, docs/implementation-artifacts/deferred-work.md].
+      (2) The `deferred-work.md` closure note says "the dialog's own count now reads
+      `resolveOrganismUsage`" — the dialog reads a number prop; `<OrganismLibrary>`'s
+      `onRequestEdit` is what changed. (3) Dev Agent Record: "the only thing this story added to
+      the eager graph is nothing at all" — `OrganismLibrary.tsx` (eager) newly imports
+      `resolveOrganismUsage`; the module was already in the graph, the 297.5 KB figure stands.
+      (4) Task 6 cites a `disableRules` convention at `:453-473` that does not exist in the spec
+      (the convention is the 300 ms settle); Task 7 says "four" entries and lists five. (5)
+      `usageLabels.test.ts` "resolves ids … in id order" passed one id — now two.
+
+Dismissed (10): `<footer>`→`contentinfo` inside the dialog (AC1 names the element and
+`EditorHeader` is already `styled('header')`, the Story 4.3 precedent); 24×24 target size (no
+WCAG 2.2 / 2.5.8 requirement in the specs; the mockup's own 11px label); `<OrganismCard>` "left on
+the raw map read" (the card derives no usage at all — its contract says so); rules panel overflow
+at phone width (no project below 1024, NFR-3.1); dangling battle id → "Untitled Battle" (the
+index and the name map are built from the SAME array in one render — unreachable by construction,
+not by data); `pointerdown` on a disabled control not closing the panel (the next press anywhere
+does); `ruleCount > 0` with empty names (impossible from the modal's one derivation); duplicate
+summary ids (Story 5.11's corruption story); IME `isComposing` on Escape (nothing in the footer
+accepts input); per-render `Map`/resolve cost (measured trivial, same class as `others`).
+
 
 ## Dev Notes
 
@@ -408,8 +511,9 @@ e2e Chromium **260 passed (1.8m)**.
 **Bundle, AC10 (reported, not gated up):** `/organisms` first-load JS **297.5 KB gzip against its
 305 KB budget — 7.5 KB headroom**, ✓ within budget. `scripts/check-bundle-size.mjs` was NOT edited.
 The footer rides inside the `next/dynamic` editor chunk, which is why the first load barely moves;
-the only thing this story added to the eager graph is nothing at all — `usageLabels.ts` is imported
-by the two lazy chunks only. (Other routes, unchanged by this story: home 333.8/340, battle
+the only thing this story added to the eager graph is one more named import from a module already
+in it (`resolveOrganismUsage`, beside `buildUsageIndex`, in `OrganismLibrary.tsx`) — `usageLabels.ts`
+is imported by the two lazy chunks only. (Other routes, unchanged by this story: home 333.8/340, battle
 309.5/310, battle/new 309.2/310, settings 291.6/305.)
 
 ### Completion Notes List
@@ -423,8 +527,10 @@ by the two lazy chunks only. (Other routes, unchanged by this story: home 333.8/
   a second resolver is what must not be written (Story 2.9), and it already owns both the
   `Unnamed organism` and `Unknown organism` fallbacks.
 - **Task 3 — `<UsageIndicator>`.** Two independent disclosures (FD12), each a real `<button>` with
-  `aria-expanded` plus `aria-controls` **only while the panel exists** (a reference to an absent id is
-  what axe flags on the collapsed state). Zero → `<span>`, no button, no panel. `openPanel` is ONE
+  `aria-expanded` plus `aria-controls` (unconditional — review 2026-09-23: the first cut dropped it
+  while collapsed on the claim that axe flags a reference to an absent id; axe's
+  `aria-valid-attr-value` skips that check while `aria-expanded="false"`). Zero → `<span>`, no button,
+  no panel. `openPanel` is ONE
   `'battles' | 'rules' | null` cell, so "at most one open" is the type's doing rather than two flags
   kept apart. Escape `stopPropagation` (FD4) and a `pointerdown` listener armed only while open (FD5).
   No `@gol/domain` import (FD11).
@@ -478,12 +584,35 @@ Modified:
 - `docs/implementation-artifacts/sprint-status.yaml`
 - `docs/implementation-artifacts/4-20-usage-visibility-ui.md` (this file)
 
+### Review Record (2026-09-23)
+
+Reviewer: Claude Fable 5.1 (`claude-fable-5-1`), a different model from the implementation, via
+`bmad-code-review` in `full` mode. Commands run from the worktree root, none piped:
+
+| Command | Result |
+|---|---|
+| `npx playwright test --project=webkit -g "usage visibility footer"` (before patching) | **2 failed / 3 passed** — test 2 `toBeFocused` "inactive", test 3 editor gone after the first Escape (the FD4 failure on Safari) |
+| `npx vitest run` on the four touched suites (after patching) | 183 passed (4 new: UsageIndicator ×2, modal 54–55) |
+| the same four new tests against the UNPATCHED component | **4 failed**, then restored — the tests see the bug |
+| `npx playwright test --project=chromium --project=webkit --project=firefox -g "usage visibility footer"` | **15 passed** (28.8s) |
+| `npm run ci:dev` | **exit 0** — typecheck 5/5 · lint 0 errors (the pre-existing `BattleGallery.tsx` warning) · format/spec/boundary clean · coverage green (`web` 122 files) · `/organisms` **297.5 KB / 305 KB** (unchanged) · bench 8.215 ms / 16.667 ms · e2e Chromium **260 passed** (1.7m) |
+
+CI has no run for this branch yet — the workflow triggers on `pull_request` only; the four-engine
+matrix runs once the PR is opened. Note for that run: CI's WebKit is the GTK port, which focuses a
+button on click, so it would NOT have caught the Safari path; the local Mac WebKit did.
+
 ### Change Log
 
 - 2026-09-23 — Story 4.20 implemented: the editor's first footer (`<UsageIndicator>`), the shared
   `usageLabels.ts` copy/name module, `battleSummaries` on the modal, the 4.17 count moved onto
   `resolveOrganismUsage`, 5 new e2e cases, and five `deferred-work.md` entries re-pointed or closed.
   `npm run ci:dev` exit 0. Status → review.
+- 2026-09-23 — Code review (Fable): Escape handling moved to a `document` capture listener with
+  focus return to the opener, triggers `focus()` themselves on open (Safari), `aria-controls`
+  unconditional, e2e test 3 hardened (panel click + post-fade assertion) and error capture added to
+  tests 3–4, modal tests 54–55, doc/comment accuracy fixes. Two `[Review][Decision]` items left for
+  the owner (focus after outside dismissal; long-list panel height). `npm run ci:dev` exit 0.
+  Status → in-progress.
 
 Dev Model: opus   # first editor footer + first disclosure overlay in the app, and a prop contract 4.21/4.24 build on — pattern-setting, not pattern-following
 

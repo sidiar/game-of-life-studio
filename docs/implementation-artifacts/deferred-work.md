@@ -2435,8 +2435,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   organisms behind M, each in a read-only disclosure. The modal did NOT gain `battles`: it gained
   `battleSummaries`, the settled `Pick<BattleSummary, 'id' | 'name' | 'organismIds'>[]` that
   `<OrganismLibrary>` already holds — DATA, so AR-2/AR-27 stays intact and the repository stays at
-  the page boundary. The dialog's own count now reads `resolveOrganismUsage(usage, id).length`, the
-  same derivation the footer uses (FD8).
+  the page boundary. `<OrganismLibrary>`'s `onRequestEdit` — the count the dialog is handed — now
+  reads `resolveOrganismUsage(usage, id).length`, the same derivation the footer uses (FD8).
 - **A corrupt `gol:battles` now blanks the Library with the organism-worded error copy** (FD2) —
   `battles.list()` is uncaught inside the one `Promise.all`, so whole-key corruption of the battle
   collection lands in the existing `'error'` state ("Something went wrong loading your
@@ -2813,9 +2813,12 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   site — which is exactly the drift the shared formatters exist to prevent. The accent lands on the
   `▾` caret and the mockup's hover underline is kept. Revisit only if a designer asks for the digits
   specifically; the fix then is a formatter that returns parts, not a split at the call site.
-- **The rule-reference index is rebuilt on every editor render.** `useMemo(… , [library])` at the
-  modal, where `library` is `<OrganismLibrary>`'s unmemoised `sorted` — a fresh array per render, so
-  the memo never hits. Accepted on the same measurement `others` already accepts (~0.02–0.04 ms for
-  1,000 organisms, Story 3.7's `library-filter` bench), and the honest fix is memoising `sorted` at
-  the Library, which would also fix `others` and the search filter. **Pick this up only if a render
-  profile ever shows it** — memoising the caller's list is a Library change with three beneficiaries.
+- **The rule-reference index is rebuilt whenever `<OrganismLibrary>` re-renders.** `useMemo(… ,
+  [library])` at the modal, where `library` is the Library's unmemoised `sorted` — a fresh array per
+  LIBRARY render (open, save, close), though not per editor render: a keystroke re-renders the modal
+  alone and keeps the reference, so the memo does hit there (review, 2026-09-23 — the first cut of
+  this entry said "never hits"). Accepted on the same measurement `others` already accepts
+  (~0.02–0.04 ms for 1,000 organisms, Story 3.7's `library-filter` bench), and the honest fix is
+  memoising `sorted` at the Library, which would also fix `others` and the search filter. **Pick this
+  up only if a render profile ever shows it** — memoising the caller's list is a Library change with
+  three beneficiaries.

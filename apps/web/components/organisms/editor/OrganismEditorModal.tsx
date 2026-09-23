@@ -448,9 +448,11 @@ export default function OrganismEditorModal({
   // Memoised at the CALL SITE, never inside `@gol/domain` — that package memoizes nothing,
   // deliberately (RFC-005 Decision 8: a cache there would be module-level state under a
   // `"sideEffects": false` contract). `battleSummaries` is the caller's settled array and is
-  // referentially stable between loads, so this memo really does hit; the rule index is keyed on
-  // `library`, which is the caller's unmemoised `sorted`, so it re-runs per render — the same scan
-  // `others` above already accepts on the same measurement (Story 3.7's `library-filter` bench).
+  // referentially stable between loads, so this memo really does hit. The rule index is keyed on
+  // `library`, the caller's unmemoised `sorted`: it hits across this editor's OWN re-renders (a
+  // keystroke re-renders the modal, not `<OrganismLibrary>`, so the reference is unchanged) and
+  // re-runs only when the Library re-renders (open, save, close) — the same scan `others` above
+  // already accepts on the same measurement (Story 3.7's `library-filter` bench).
   const usageIndex = useMemo(() => buildUsageIndex(battleSummaries), [battleSummaries]);
   const ruleIndex = useMemo(() => buildRuleReferenceIndex(library), [library]);
   // ⚠️ `resolveOrganismUsage(...).length`, never `usageIndex.get(id)?.length` (AC5, FD8). The two

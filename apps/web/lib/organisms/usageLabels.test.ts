@@ -94,7 +94,12 @@ describe('referencingOrganismNames (AC7)', () => {
   const library = [CONWAYS_CLASSIC, ...createMockOrganisms(), named('')];
 
   it('resolves ids against the library in id order', () => {
-    expect(referencingOrganismNames([CONWAYS_CLASSIC.id], library)).toEqual([CONWAYS_CLASSIC.name]);
+    const [first, second] = createMockOrganisms();
+    expect(referencingOrganismNames([second.id, CONWAYS_CLASSIC.id, first.id], library)).toEqual([
+      second.name,
+      CONWAYS_CLASSIC.name,
+      first.name,
+    ]);
   });
 
   it('renders an empty name through the Unnamed organism fallback', () => {

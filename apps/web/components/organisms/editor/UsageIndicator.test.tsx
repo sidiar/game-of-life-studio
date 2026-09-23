@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import UsageIndicator, { type UsageIndicatorProps } from './UsageIndicator';
@@ -19,8 +19,10 @@ const NAMES = ['Glider Wars', 'Corner Standoff'];
 function mount(overrides: Partial<UsageIndicatorProps> = {}) {
   const onAncestorKeyDown = vi.fn();
   const result = render(
-    // The ancestor handler stands in for the MUI `Modal` root's own Escape listener.
-    <div onKeyDown={onAncestorKeyDown}>
+    // The ancestor handler stands in for the MUI `Modal` root's own Escape listener, and its
+    // `tabIndex={-1}` for the Dialog paper — where focus lands after a click on anything that is
+    // not itself focusable, such as a name inside a panel.
+    <div onKeyDown={onAncestorKeyDown} tabIndex={-1} data-testid="ancestor">
       <p>outside</p>
       <UsageIndicator battleNames={NAMES} ruleCount={0} referencingNames={[]} {...overrides} />
     </div>,
@@ -48,13 +50,18 @@ describe('UsageIndicator — the battles label (AC2, AC3)', () => {
     expect(screen.getByRole('button', { name: 'Used in 1 Battle' })).toBeInTheDocument();
   });
 
-  it('renders a non-zero count as a collapsed disclosure', () => {
-    mount();
+  it('renders a non-zero count as a collapsed disclosure carrying aria-expanded AND aria-controls (AC3)', async () => {
+    const { container } = mount();
 
     const trigger = battlesTrigger();
     expect(trigger).toHaveAccessibleName('Used in 2 Battles');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-controls');
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    // Review (2026-09-23): the attribute was once dropped while collapsed on the claim that axe
+    // flags a reference to an absent id — axe's `aria-valid-attr-value` skips that check while
+    // `aria-expanded="false"`, which this scan of the COLLAPSED state pins.
+    expect((await axe(container)).violations).toEqual([]);
   });
 
   it('opens a read-only panel of battle names and closes it on a second click', async () => {
@@ -67,8 +74,6 @@ describe('UsageIndicator — the battles label (AC2, AC3)', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     const panel = document.querySelector('[data-usage-battles-panel]');
     expect(panel).not.toBeNull();
-    // `aria-controls` names the panel only while it exists — a reference to an id that is not in
-    // the document is what axe flags on the collapsed state.
     expect(trigger.getAttribute('aria-controls')).toBe(panel?.getAttribute('id'));
     expect(
       within(panel as HTMLElement)
@@ -101,6 +106,18 @@ describe('UsageIndicator — the battles label (AC2, AC3)', () => {
     await user.click(battlesTrigger());
 
     expect(battlesTrigger()).toHaveFocus();
+  });
+
+  // Review (2026-09-23): on Safari a mouse click does not focus a `<button>`, so the component
+  // focuses its trigger itself. `fireEvent.click` has no focus side effect — the Safari shape —
+  // where `user.click` always focuses and would pass without the fix.
+  it('focuses the trigger on open even where the engine does not (WebKit)', () => {
+    mount();
+
+    fireEvent.click(battlesTrigger());
+
+    expect(battlesTrigger()).toHaveFocus();
+    expect(document.querySelector('[data-usage-battles-panel]')).not.toBeNull();
   });
 });
 
@@ -159,6 +176,24 @@ describe('UsageIndicator — dismissal (AC3, AC4)', () => {
     expect(document.querySelector('[data-usage-battles-panel]')).toBeNull();
     expect(onAncestorKeyDown).not.toHaveBeenCalled();
     // Focus is back on (never left) the trigger, so a second Escape is the editor's.
+    expect(battlesTrigger()).toHaveFocus();
+  });
+
+  // Review (2026-09-23), FD4's second reachable path: a click inside the panel (allowed, keeps it
+  // open) lands focus on the Dialog paper, so the keydown never passes through the footer. A
+  // footer-scoped handler missed it and the editor closed; the document-capture listener does not.
+  it('Escape closes the panel, returns focus to the trigger and reaches no ancestor when focus has left the footer', async () => {
+    const user = userEvent.setup();
+    const { onAncestorKeyDown } = mount();
+
+    await user.click(battlesTrigger());
+    screen.getByTestId('ancestor').focus();
+    expect(battlesTrigger()).not.toHaveFocus();
+
+    await user.keyboard('{Escape}');
+
+    expect(document.querySelector('[data-usage-battles-panel]')).toBeNull();
+    expect(onAncestorKeyDown).not.toHaveBeenCalled();
     expect(battlesTrigger()).toHaveFocus();
   });
 

@@ -2411,6 +2411,48 @@ describe('OrganismEditorModal', () => {
 
         expect((await axe(document.body)).violations).toEqual([]);
       });
+
+      // Review (2026-09-23): FD4's second reachable path, against MUI's REAL root handler. A click
+      // inside the panel is allowed and keeps it open, but nothing in it is focusable, so focus
+      // lands on the Dialog paper (`tabIndex=-1`) — the next Escape then never passes through the
+      // footer. With a footer-scoped handler this closed the editor; the document-capture listener
+      // keeps it open and puts focus back on the trigger.
+      it('(54) ⚠️ Escape after a click INSIDE the panel still closes the panel, not the editor, and refocuses the trigger (AC4, FD4)', async () => {
+        const user = userEvent.setup();
+        const { onClose } = mountEdit({ battleSummaries: PLACED });
+
+        const trigger = within(usageFooter()).getByRole('button', { name: 'Used in 2 Battles' });
+        await user.click(trigger);
+        await user.click(screen.getByText('Glider Wars'));
+        expect(trigger).not.toHaveFocus();
+        expect(document.querySelector('[data-usage-battles-panel]')).not.toBeNull();
+
+        await user.keyboard('{Escape}');
+
+        expect(document.querySelector('[data-usage-battles-panel]')).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(trigger).toHaveFocus();
+      });
+
+      it('(55) the footer is reachable by Tab after the three columns (AC4)', async () => {
+        const user = userEvent.setup();
+        mountEdit({ battleSummaries: PLACED });
+
+        const footer = usageFooter();
+        const body = footer.previousElementSibling as HTMLElement;
+        const focusable = Array.from(
+          body.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((el) => !el.hasAttribute('disabled'));
+        expect(focusable.length).toBeGreaterThan(0);
+
+        focusable[focusable.length - 1].focus();
+        await user.tab();
+
+        expect(within(footer).getByRole('button', { name: 'Used in 2 Battles' })).toHaveFocus();
+      });
     });
   });
 });

@@ -3754,25 +3754,45 @@ test.describe('usage visibility footer (Story 4.20)', () => {
   test('3. Escape closes the panel and leaves the editor open; a second Escape closes the editor', async ({
     page,
   }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
     await gotoSeeded(page);
 
     const dialog = await openEditorOnUsed(page);
     const trigger = usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' });
     await trigger.click();
     await expect(battlesPanel(page)).toBeVisible();
+    // Review (2026-09-23): a click INSIDE the panel is allowed and keeps it open, and it moves
+    // focus off the trigger onto the Dialog paper in every engine — the path on which a
+    // footer-scoped Escape handler let MUI's root handler close the whole editor.
+    await battlesPanel(page).getByRole('listitem').first().click();
+    await expect(battlesPanel(page)).toBeVisible();
 
     await page.keyboard.press('Escape');
 
     await expect(battlesPanel(page)).toHaveCount(0);
+    // Past the Dialog's ~195 ms exit fade before asserting: a CLOSING dialog is still in the DOM
+    // and counts as visible to Playwright, so an immediate `toBeVisible` passed even when the
+    // first Escape had closed both the panel and the editor. The 300 ms settle is the block's own.
+    await page.waitForTimeout(300);
     await expect(dialog).toBeVisible();
     await expect(trigger).toBeFocused();
 
     await page.keyboard.press('Escape');
 
     await expect(editorDialog(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
   });
 
   test('4. a click outside the footer closes the open panel', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
     await gotoSeeded(page);
 
     const dialog = await openEditorOnUsed(page);
@@ -3782,6 +3802,7 @@ test.describe('usage visibility footer (Story 4.20)', () => {
     await dialog.getByRole('heading', { level: 2, name: 'Organism Editor' }).click();
 
     await expect(battlesPanel(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
   });
 
   test('5. axe: no violations with a panel open and settled', async ({ page }) => {
