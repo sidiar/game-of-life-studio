@@ -418,6 +418,25 @@ Following instinct here produces code that compiles, passes tests, and violates 
   `GridRendererColors` strings instead of reading the theme itself (Story 1.8), and it recurs
   everywhere a canvas is added — Epic 2's edit-mode canvas and Epic 3's playback canvas both need
   the same substitution step.
+- ⚠️ **A live region inserted while a dialog is open is never announced.** `useInertBackground`
+  marks the page behind a modal `inert`, and MUI holds its own `aria-hidden` on the background
+  until the exit transition ends (~195 ms). A `role="alert"` or `role="status"` node **created**
+  inside that subtree is dropped by assistive tech, and once the background goes live the node is
+  no longer new, so nothing re-announces it: the message is silent for a screen-reader user while
+  being perfectly visible on screen. So **never publish an outcome from an async writer's
+  `catch`/`then` while a dialog may be mounted.** Queue it, and publish from the **call site**,
+  once that call site's own window has exited — `<OrganismLibrary>`'s `queuedCloneErrorRef` plus
+  its composed `gateProps.onExited` is the reference implementation (Story 4.18). Two shapes that
+  look right and are not: a `useEffect` keyed on the mount flags is a **lint error**
+  (`react-hooks/set-state-in-effect` — it is a cascading render, and the trigger is an event, not
+  synchronisation with an external system); and the derivation `mounted ? null : queued` makes the
+  message vanish whenever any dialog opens and be re-*inserted*, hence re-announced, every time one
+  closes. Nothing catches this for you: it compiles, axe passes, jsdom tests pass, and e2e passes —
+  unless a test asserts the **ordering**, i.e. that at the first moment the alert exists the dialog
+  is already gone. This is not specific to clone. Every live region in `apps/web` sits inside the
+  subtree `useInertBackground` hides, so any surface that reports into a page while a modal is up
+  reproduces it (`deferred-work.md` carries the class fix: one live-region host portalled outside
+  the inert root).
 - ⚠️ **`navigator.storage.estimate()` is not the localStorage meter.** Chromium's `usage` excludes
   localStorage entirely (it meters IndexedDB / Cache Storage / OPFS against the origin quota),
   Firefox's includes it, and neither can be scoped to `gol:*`. The AR-14 meter sums `key.length +
