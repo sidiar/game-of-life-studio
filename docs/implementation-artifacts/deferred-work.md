@@ -2612,8 +2612,8 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   gracefully (default + warn, NFR-7.3). The archived Story 1.7 file is deliberately NOT edited;
   this entry is the discharge. **No residual work.**
 
-- **Six RFC-006 variances (four from the implementation, two from its review), recorded rather than
-  silently absorbed.** (1) Decision 2's snippet is
+- **Seven RFC-006 variances (four from the implementation, two from its review, one from Story
+  5.4), recorded rather than silently absorbed.** (1) Decision 2's snippet is
   written in **Zod v3** (`z.string().uuid()`, `z.string().datetime()`); this install is Zod 4.4.3,
   where those spellings do not exist — the shipped schemas beside the new file are the reference.
   (2) Decision 2 types a cell's `organismId` as a bare `z.string()`; `PlacedCellSchema` uses
@@ -2634,8 +2634,14 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   corruption and the schema of record takes the same corrupt-never-last-wins stance `BattleSchema`
   already takes for a duplicate roster id: both collections are keyed by id at rest, so Story 5.8's
   `replaceAll` would otherwise collapse a duplicate pair silently — two records in, one out, no
-  error. None of these is a defect in the RFC — they are an eighteen-month-old design doc meeting a
-  shipped toolchain — but they are the lines a future reader would otherwise "correct" back.
+  error. (7) Decision 4's snippet is `exportBattle(id)` — `repos.battles.load(id)` — this schema
+  ships `exportBattle(battle: Battle)` instead (Story 5.4, FD1): an id-based export would return the
+  SAVED copy, which is wrong for FR-6.1 / A-2 / AR-31's "export the editor's current battle" — the
+  grid may be dirty, or the battle may never have been saved at all, and an id has nothing to load
+  in that case. Taking the value serves every case; a caller that does want the saved copy is one
+  `battles.load(id)` away. None of these is a defect in the RFC — they are an eighteen-month-old
+  design doc meeting a shipped toolchain — but they are the lines a future reader would otherwise
+  "correct" back.
 
 - **The other half of that decision: `kind === 'battle' ⇒ battles.length === 1` is STORY 5.4's, not
   this schema's.** The same review asked for both refinements; the owner took the duplicate-id half
@@ -2646,6 +2652,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `kind: 'battle'` envelope carrying zero or fifty battles parses, and
   `workspaceExportSchema.test.ts` pins that as the current, deliberate behaviour rather than an
   oversight.
+  **CLOSED by Story 5.4.** `WorkspaceExportSchema`'s `superRefine` now adds a `custom` issue at path
+  `['battles']` when `kind === 'battle' && battles.length !== 1`, alongside the duplicate-id checks.
+  `workspaceExportSchema.test.ts`'s "does NOT constrain" test was replaced with the AC4 cases
+  (zero/one/two battles under `'battle'`; `'workspace'` stays uncapped). **No residual work.**
 
 - **`packages/persistence/src/workspaceSerializer.test.ts` imports `@gol/test-utils` without a
   `package.json` edge — and ⚠️ DECLARING THAT EDGE IS NOT CURRENTLY POSSIBLE.** The project's

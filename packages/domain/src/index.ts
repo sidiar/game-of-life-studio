@@ -98,3 +98,8 @@ export {
   toEnvelope,
 } from './workspaceExportProjection';
 export type { ExportMeta } from './workspaceExportProjection';
+
+// Story 5.4, Decision E.5(b): the rule-aware organism closure over `ruleReferenceIndex.ts`'s forward
+// edge — battle export's organism set (placed ∪ rule targets, transitively). Consumed by
+// `exportBattle` in `@gol/persistence`.
+export { organismClosure } from './organismClosure';

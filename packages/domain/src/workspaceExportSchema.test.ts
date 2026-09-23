@@ -124,19 +124,59 @@ describe('collection ids are unique (Review Decision 3)', () => {
 
     expect(result.success).toBe(true);
   });
+});
 
-  it('does NOT constrain how many battles a kind carries — cardinality is Story 5.4’s, once it mints exportBattle', () => {
+describe('kind: "battle" carries exactly one battle (AC4, Story 5.4)', () => {
+  const OTHER_BATTLE_ID = '0c1b7a64-9a4e-4d1b-9f2c-3a5d6e7f8091';
+
+  it('rejects a "battle" envelope with zero battles, at the battles path', () => {
+    const result = WorkspaceExportSchema.safeParse(envelope({ kind: 'battle', battles: [] }));
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.path.join('.') === 'battles')).toBe(true);
+  });
+
+  it('rejects a "battle" envelope with two battles, at the battles path', () => {
+    const result = WorkspaceExportSchema.safeParse(
+      envelope({
+        kind: 'battle',
+        battles: [battleExport(), battleExport({ id: OTHER_BATTLE_ID })],
+      }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.path.join('.') === 'battles')).toBe(true);
+  });
+
+  it('accepts a "battle" envelope with exactly one battle', () => {
+    expect(WorkspaceExportSchema.safeParse(envelope({ kind: 'battle' })).success).toBe(true);
+  });
+
+  it('does not constrain "workspace" cardinality — zero, one and several battles all parse', () => {
+    expect(
+      WorkspaceExportSchema.safeParse(envelope({ kind: 'workspace', battles: [] })).success,
+    ).toBe(true);
+    expect(WorkspaceExportSchema.safeParse(envelope({ kind: 'workspace' })).success).toBe(true);
     expect(
       WorkspaceExportSchema.safeParse(
         envelope({
-          kind: 'battle',
+          kind: 'workspace',
           battles: [battleExport(), battleExport({ id: OTHER_BATTLE_ID })],
         }),
       ).success,
     ).toBe(true);
-    expect(WorkspaceExportSchema.safeParse(envelope({ kind: 'battle', battles: [] })).success).toBe(
-      true,
+  });
+
+  it('still fires the duplicate-organism-id refinement independently, at the organisms path, for a valid single-battle envelope', () => {
+    const result = WorkspaceExportSchema.safeParse(
+      envelope({
+        kind: 'battle',
+        organisms: [CONWAYS_CLASSIC, { ...CONWAYS_CLASSIC, name: 'Impostor' }],
+      }),
     );
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.path.join('.') === 'organisms')).toBe(true);
   });
 });
 

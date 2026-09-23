@@ -148,11 +148,10 @@ export const WorkspaceExportSchema = z
     // rest (`gol:battles` / `gol:organisms` are objects keyed by id), so Story 5.8's `replaceAll`
     // would collapse a duplicate pair silently: two records in, one record out, no error anywhere.
     //
-    // ⚠️ CARDINALITY IS NOT HERE. `kind: 'battle'` implying exactly one battle is Story 5.4's, which
-    // mints `exportBattle` and the organism closure that gives the rule meaning. `toEnvelope`
-    // accepts the kind (it is the enum's), but this story ships no PRODUCER of a `kind: 'battle'`
-    // file — `exportBattle` is 5.4's — so a refinement here would constrain a producer that does
-    // not exist yet.
+    // ⚠️ CARDINALITY IS HERE, as of Story 5.4. `kind: 'battle'` now has a producer —
+    // `exportBattle` — and the rule is structural: a single-battle file carries exactly one
+    // battle, no more and no fewer, so an importer never has to guess which one a `'battle'` kind
+    // means. `kind: 'workspace'` carries no such constraint (zero, one or many battles all parse).
     for (const [field, ids] of [
       ['battles', envelope.battles.map((b) => b.id)],
       ['organisms', envelope.organisms.map((o) => o.id)],
@@ -164,6 +163,13 @@ export const WorkspaceExportSchema = z
           message: `${field} must not repeat an id — a duplicate id is corrupt data`,
         });
       }
+    }
+    if (envelope.kind === 'battle' && envelope.battles.length !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['battles'],
+        message: `kind: 'battle' must carry exactly one battle (Story 5.4)`,
+      });
     }
   });
 

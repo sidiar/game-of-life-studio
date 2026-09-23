@@ -1,4 +1,4 @@
-import { toEnvelope, type WorkspaceExportWire } from '@gol/domain';
+import { organismClosure, toEnvelope, type Battle, type WorkspaceExportWire } from '@gol/domain';
 import type { AppRepositories } from './repositories';
 
 /**
@@ -34,6 +34,29 @@ export interface WorkspaceSerializer {
    * type may appear in this package's export path.
    */
   exportWorkspace(): Promise<WorkspaceExportWire>;
+
+  /**
+   * A single-battle export, `kind: 'battle'`, carrying the battle plus its rule-aware organism
+   * closure (Story 5.4, Decision E.5(b) / RFC-006 Decision 4).
+   *
+   * ⚠️ Takes the `Battle` VALUE, not an id (a declared RFC-006 Decision 4 variance — FD1). The
+   * caller passes the battle **as it would be saved** — pruned and remapped
+   * (`pruneAndRemapBattleGrid`, Decision H.1) so `organismIds` ≡ the placed set, which is exactly
+   * what seeds the closure. An id-based export (`repos.battles.load(id)`) would return the SAVED
+   * copy, which is wrong for FR-6.1 / A-2 / AR-31's "export the editor's current battle": the grid
+   * may be dirty, or the battle may never have been saved at all, and an id has nothing to load in
+   * that case. The grid this function reads is Edit-mode initial state only — a persisted `Battle`
+   * has no live Run-mode field by construction, so there is nothing else it could be.
+   *
+   * The organisms are still read through the repository (`organisms.list()`), so "export reads
+   * through the repository interfaces" holds for the part that is library-wide. A seed or rule
+   * target absent from the library (reachable only through a corrupt, skipped organism record —
+   * the same fault-isolation `organisms.list()` already applies) is silently omitted from the
+   * closure rather than raised here, exactly as `exportWorkspace`'s `listFull()` note above; the
+   * resulting file is rejected cleanly at import by Story 5.8's `assertReferentialClosure`, and
+   * telling the user about the corruption itself is Story 5.11's.
+   */
+  exportBattle(battle: Battle): Promise<WorkspaceExportWire>;
 }
 
 /**
@@ -44,8 +67,9 @@ export interface WorkspaceSerializer {
  * collections. `WorkspaceSerializer` survives as the interface name, so the RFC's vocabulary is
  * intact. Recorded as a variance in `deferred-work.md` rather than silently absorbed.
  *
- * `exportBattle(id)` is deliberately absent: a single-battle file needs the rule-aware organism
- * closure, which is Story 5.4's. `parse` / `migrate` / `importWorkspace` are Stories 5.7 and 5.8.
+ * `exportBattle` reads only `repos.organisms.list()` — no `battles.load`, no `battles.listFull` —
+ * because the battle itself comes from the caller (see the interface JSDoc above). `parse` /
+ * `migrate` / `importWorkspace` are still absent, and are Stories 5.7 and 5.8.
  */
 export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): WorkspaceSerializer {
   const { repos, appVersion, now } = deps;
@@ -71,6 +95,12 @@ export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): Worksp
       ]);
 
       return toEnvelope('workspace', battles, organisms, { appVersion, exportedAt: now() });
+    },
+
+    async exportBattle(battle: Battle): Promise<WorkspaceExportWire> {
+      const library = await repos.organisms.list();
+      const closure = organismClosure(battle.organismIds, library);
+      return toEnvelope('battle', [battle], closure, { appVersion, exportedAt: now() });
     },
   };
 }

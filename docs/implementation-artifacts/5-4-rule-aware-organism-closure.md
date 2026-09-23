@@ -1,0 +1,470 @@
+---
+baseline_commit: e06da2e898ed63243f705ea07ea32a4b27ae4c78
+---
+
+# Story 5.4: Rule-Aware Organism Closure
+
+Status: review
+
+<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+
+## Story
+
+As a developer,
+I want battle exports to carry every organism they truly depend on,
+so that an imported battle never has dangling references.
+
+## Acceptance Criteria
+
+From `epics.md#Story 5.4: Rule-Aware Organism Closure` (`:1357-1367`), decomposed into what a reviewer
+can check independently, plus the two obligations earlier stories handed forward to this one: Story
+5.3 left `exportBattle` and the `kind: 'battle'` cardinality refinement here (`workspaceSerializer.ts:47-48`,
+`workspaceExportSchema.ts:151-155`, `deferred-work.md:2640-2647`), and Story 4.19 built the forward edge
+this story walks (`ruleReferenceIndex.ts` → `ruleTargetIds`, `lane-gates.yaml:45-49`). **Read FD1–FD10
+before touching a file.**
+
+1. **The closure is a pure `@gol/domain` derivation.** New module `packages/domain/src/organismClosure.ts`:
+   `organismClosure(seedIds, library)` where `seedIds: readonly string[]` and
+   `library: readonly T[]` with `T extends Pick<Organism, 'id' | 'survivalRules'>`, returning
+   `readonly T[]` — the library's own records (same references, FD4), **in library input order**,
+   restricted to the transitive closure. Pinned:
+   - every seed id present in the library is included, even one with no rules;
+   - an included organism whose rules target another (an `organismType` condition's `pattern`,
+     Decision E) pulls that one in, and so on transitively (Decision E.5(b), RFC-006 Decision 4);
+   - **chained**: A targets B, B targets C, seeds `[A]` ⇒ `{A, B, C}`;
+   - **cycles terminate**: A↔B, and A→B→C→A, each return the three/two organisms exactly once and
+     the call returns (no stack overflow, no infinite loop);
+   - an organism targeted only by an organism OUTSIDE the closure is **not** included (the walk is
+     forward from the seeds, never the reverse index — FD2);
+   - an organism nobody reaches is not included, even if it targets a closure member;
+   - a seed or rule target absent from the library (dangling) is skipped without throwing, and the
+     walk continues past it for everything else (FD5);
+   - a repeated seed id, or two paths to one organism, still yield it once;
+   - empty seeds ⇒ `[]`; empty library ⇒ `[]`;
+   - the input array and its records are not mutated, and the returned array is fresh (never the
+     `library` array itself, even when every organism is in the closure).
+
+2. **The closure reuses Story 4.19's forward edge — no duplicate logic.** The only way the module
+   learns what an organism targets is `ruleTargetIds(organism)` imported from `./ruleReferenceIndex`.
+   ⚠️ A diff that reads `survivalRules`, `conditions`, `property === 'organismType'` or `pattern`
+   anywhere in `organismClosure.ts` fails this AC — that is the second definition of "a rule targets
+   X" `lane-gates.yaml` gated this story to prevent. Nor does it call `buildRuleReferenceIndex`
+   (the reverse index answers "who targets X", the wrong question for a forward walk — FD2).
+   `ruleReferenceIndex.ts` itself is **not modified** (its body, signature and tests stay
+   byte-identical); only the one head-comment sentence that says the closure "is Story 5.4's" may be
+   updated to name the new module (Task 6).
+
+3. **`WorkspaceSerializer` gains `exportBattle(battle)`.** In
+   `packages/persistence/src/workspaceSerializer.ts`:
+   `exportBattle(battle: Battle): Promise<WorkspaceExportWire>` — reads `repos.organisms.list()`,
+   computes `organismClosure(battle.organismIds, library)`, and returns
+   `toEnvelope('battle', [battle], closure, { appVersion, exportedAt: now() })`. Pinned by tests in
+   `workspaceSerializer.test.ts` (using `createFakeRepositories`, per the file's existing header):
+   - the envelope is `kind: 'battle'`, carries exactly the one battle, and passes
+     `WorkspaceExportSchema.parse`;
+   - its `organisms` are exactly the rule-aware closure: a battle placing only Chaotic Spreader
+     (whose rule targets Aggressive Colonizer, `mockWorkspace.ts:113-127`) exports both, and does
+     **not** export an unplaced, unreferenced library organism;
+   - a chained case through the repository (A placed, A→B→C) exports A, B and C;
+   - the battle's cells are the battle passed in — **not** whatever `repos.battles` holds under the
+     same id (FD1: the editor's in-memory battle is the source, never the saved copy);
+   - `appVersion` and `exportedAt` come from the injected deps, exactly as `exportWorkspace`'s do;
+   - `settings` is absent from the envelope (AR-12).
+   `exportWorkspace` is unchanged, and so is its `listFull()` read.
+
+4. **`kind: 'battle'` means exactly one battle — in the schema of record.** `WorkspaceExportSchema`'s
+   existing `superRefine` gains: `kind === 'battle' && battles.length !== 1` ⇒ a `custom` issue at
+   path `['battles']`, with a message naming the rule. This is the half of the Story 5.3 review
+   decision the owner handed to this story (`deferred-work.md:2640-2647`). Pinned:
+   - the Story 5.3 test "does NOT constrain how many battles a kind carries" is **replaced**, not
+     deleted-and-forgotten: `kind: 'battle'` with zero battles and with two battles each fail with an
+     issue at `['battles']`; with one battle it parses;
+   - `kind: 'workspace'` with zero, one and several battles still parses (cardinality is the battle
+     kind's rule only);
+   - the duplicate-id refinement is untouched and still fires independently (a `kind: 'battle'`
+     envelope with one battle and two organisms sharing an id still fails at `['organisms']`);
+   - the `⚠️ CARDINALITY IS NOT HERE` comment is rewritten to say what is now here and why, not left
+     contradicting the code.
+   The schema does **not** check the organism closure (that is Story 5.8's `assertReferentialClosure`,
+   RFC-006 Decision 5 — FD7).
+
+5. **Everything pure lands under the ≥90% per-file gate (AR-39, NFR-5.1).** `organismClosure.ts` is
+   at **100% on all four metrics** (`perFile: true`; `include: ['src/**/*.ts']` measures it whether or
+   not a test imports it). No `zod` import, no DOM type, no repository, no memoization or module-level
+   state (`"sideEffects": false`), no new dependency in any `package.json`. `@gol/persistence` stays at
+   its ~80% aggregate tier. The closure's logic is tested in `packages/domain`, never only through the
+   serializer (project-context: "If you are testing that logic through a repository, it is in the
+   wrong package").
+
+6. **Barrel and scope.** `organismClosure` is exported from `packages/domain/src/index.ts` in a **new
+   block appended at the end of the file** (FD8 — the two-lane barrel rule). No file under `apps/web`
+   is modified: the "EXPORT BATTLE" button, the "Battle only / Entire Workspace" dialog, the filename
+   and the download are Story 5.6's. `npm run ci:dev` is green, including `spec:check` on every ID the
+   new comments cite and `bundle:check` unchanged.
+
+7. **The stale notes that point at this story are corrected in place.** `workspaceSerializer.ts`'s
+   factory JSDoc ("`exportBattle(id)` is deliberately absent … Story 5.4's"), the
+   `workspaceExportSchema.ts` cardinality comment, the `ruleReferenceIndex.ts` head-comment sentence
+   naming Story 5.4's closure, and `deferred-work.md:2640-2647` (annotate closed — the repo's
+   annotate-don't-delete convention). `deferred-work.md` also gains the RFC-006 variance this story
+   makes (FD1: `exportBattle(battle)` not `exportBattle(id)`), appended to the existing six-variance
+   entry as a seventh, so the next reader does not "correct" it back to the RFC snippet.
+
+## Tasks / Subtasks
+
+- [x] **Task 1 — Read before writing (AC: all).**
+  - [x] `packages/domain/src/ruleReferenceIndex.ts` end to end — `ruleTargetIds` is the only edge you
+        walk; it already de-dupes, excludes self and keeps dangling targets (its JSDoc says why).
+  - [x] `packages/domain/src/workspaceExportProjection.ts` (`toEnvelope`) and
+        `workspaceExportSchema.ts` (the `superRefine` you extend).
+  - [x] `packages/persistence/src/workspaceSerializer.ts` + `.test.ts` — the factory, its injected
+        deps, the `createFakeRepositories` import and why it has no `package.json` edge.
+  - [x] `packages/test-utils/src/mockWorkspace.ts:113-127` — the canonical Chaotic Spreader →
+        Aggressive Colonizer rule reference (and `MOCK_ORGANISM_IDS`).
+  - [x] Re-read FD1–FD10.
+
+- [x] **Task 2 — `organismClosure.ts` (AC: 1, 2, 5).**
+  - [x] File-level JSDoc in the house style (hazard paragraphs with ⚠️ above the imports): cites
+        Decision E.5(b), RFC-006 Decision 4, Decision H.1 (seed = placed set); states that the edge is
+        `ruleTargetIds` and nothing else (FD3); that the walk is forward (FD2); that dangling ids are
+        skipped and why that is not this function's error to raise (FD5); consumers
+        (`exportBattle` here, Story 5.6 through it).
+  - [x] `export function organismClosure<T extends Pick<Organism, 'id' | 'survivalRules'>>(seedIds: readonly string[], library: readonly T[]): readonly T[]`
+        — build `Map<id, T>` over `library`; iterative worklist (array stack/queue, **not** recursion
+        — FD6) with a `visited: Set<string>`; for each popped id present in the map, push
+        `ruleTargetIds(organism)`; finally `library.filter((o) => visited.has(o.id) && byId.has(o.id))`
+        or equivalent so the output is library-ordered and fresh.
+  - [x] Do not export the worklist or any helper; one public function.
+
+- [x] **Task 3 — `organismClosure.test.ts` (AC: 1, 2, 5).**
+  - [x] Local literal factories only (`organism(id, targets[][])` building one rule per target list,
+        conditions `{ property: 'organismType', operator: 'eq', pattern }` plus a `cellState` one if
+        you want realism). ⚠️ **No `@gol/test-utils` import** — it depends on `@gol/domain` (package
+        cycle; `ruleReferenceIndex.test.ts` and `workspaceExportProjection.test.ts` carry the note).
+  - [x] At least one fixture through `OrganismSchema.parse` (house convention — no invalid fixture
+        goes unnoticed).
+  - [x] Cover every bullet of AC1: seeds only; one hop; **chained A→B→C**; **2-cycle A↔B**;
+        **3-cycle A→B→C→A**; reverse-only reference not pulled (X targets A, X excluded); unreached
+        organism excluded; dangling seed; dangling mid-chain target (A→missing, A→B still included);
+        duplicate seeds; two paths to one node; empty seeds; empty library; library order preserved
+        when seeds/targets are given in a different order; records are the same references as the
+        input (`toBe`) while the returned array is not the input array; input not mutated.
+  - [x] Optional, not required: one fast-check property (closure is closed — every `ruleTargetIds`
+        of every member that is in the library is itself a member; idempotent —
+        `closure(ids(closure(s)))` equals `closure(s)`). Only if it guards something the examples
+        don't; never to raise a number. — **Skipped**: every AC1 bullet above is already pinned by a
+        named example, and per-file coverage is 100/100/100/100 without it; adding one would not
+        guard anything the examples don't.
+
+- [x] **Task 4 — `exportBattle` (AC: 3).**
+  - [x] Add `exportBattle(battle: Battle): Promise<WorkspaceExportWire>` to the `WorkspaceSerializer`
+        interface with a JSDoc stating: the caller passes the battle **as it would be saved** —
+        pruned and remapped (`pruneAndRemapBattleGrid`, Decision H.1) so `organismIds` ≡ the placed
+        set, which is what seeds the closure; the grid is Edit-mode initial state only, never live
+        Run-mode state (FR-6.1 / A-2 / AR-31); and why it takes a `Battle` rather than an id (FD1).
+  - [x] Implement in `createWorkspaceSerializer` per AC3. `repos.organisms.list()` only — no
+        `battles.load`, no `battles.listFull`.
+  - [x] Replace the factory JSDoc's "`exportBattle(id)` is deliberately absent" paragraph with what
+        now exists and what is still absent (`parse`/`migrate`/`importWorkspace` → 5.7/5.8).
+  - [x] Tests in `workspaceSerializer.test.ts` covering every bullet of AC3, in a new
+        `describe('exportBattle …')`. Use `CONWAYS_CLASSIC` / `mockWorkspace` organisms or
+        `OrganismSchema.parse`d literals for the chained case; `emptyGrid` + `BattleSchema.parse` for
+        battles (the file's `seededBattle()` pattern). Assert `WorkspaceExportSchema.parse(envelope)`
+        succeeds.
+
+- [x] **Task 5 — Cardinality refinement (AC: 4).**
+  - [x] Extend the existing `superRefine` in `workspaceExportSchema.ts` (do not add a second
+        `.superRefine` chain); issue `{ code: 'custom', path: ['battles'], message: … }`.
+  - [x] Rewrite the `⚠️ CARDINALITY IS NOT HERE` comment block, and the `EXPORT_KINDS` JSDoc if it
+        still reads as future tense.
+  - [x] Replace the Story 5.3 "does NOT constrain how many battles" test in
+        `workspaceExportSchema.test.ts` with the AC4 cases; assert the issue path, not the message
+        text.
+  - [x] `workspaceExportProjection.test.ts:234`'s `toEnvelope('battle', [], [] …)` test never parses
+        its output and stays valid — leave it (it pins `toEnvelope`'s stamping, not a valid file).
+
+- [x] **Task 6 — Barrel and notes (AC: 6, 7).**
+  - [x] Append a new block at the **end** of `packages/domain/src/index.ts`: a 2–3 line banner (Story
+        5.4, Decision E.5(b), consumed by `exportBattle`) + `export { organismClosure } from './organismClosure';`.
+        Never insert mid-file, reorder or reflow (FD8).
+  - [x] Update the one sentence in `ruleReferenceIndex.ts`'s head comment ("No transitive closure …
+        those are Story 5.4's") to point at `organismClosure.ts`. Nothing else in that file.
+  - [x] `deferred-work.md`: annotate `:2640-2647` as closed by this story; append variance (7) to the
+        six-variance entry (`:2615-2638`) — `exportBattle(battle: Battle)` vs RFC-006 Decision 4's
+        `exportBattle(id)`, with FD1's reason.
+
+- [x] **Task 7 — Gate (AC: 5, 6).**
+  - [x] `npm run test:coverage -w @gol/domain` — `organismClosure.ts` at 100/100/100/100 per file.
+  - [x] `npm run ci:dev` from the worktree root, redirected to a file, **not piped**; record the real
+        exit code. Never `npm run ci` (four-browser matrix is CI's job).
+  - [x] `spec:check` passes — every `AR-*`, `FR-*`, `NFR-*`, `M*`, `Decision *`, `RFC-00*`, `Story N.M`
+        you wrote resolves under `docs/`.
+  - [x] Record every command and its real result in the Dev Agent Record.
+
+## Dev Notes
+
+### Forced decisions (made here so the dev agent does not have to)
+
+**FD1 — `exportBattle` takes a `Battle`, not an id (a declared RFC-006 Decision 4 variance).** The RFC
+snippet is `exportBattle(id)` → `repos.battles.load(id)`. That exports the **saved** copy, and FR-6.1
+exports "the current Battle" from inside the editor (Story 5.6 — the button lives in the editor's
+Tools section), where the grid may be dirty or the battle never saved at all. An id-based export
+would silently ship stale cells for a dirty battle and could not export an unsaved one. Taking the
+battle value serves every case, and a caller that does want the saved copy is one `battles.load(id)`
+away. The organisms are still read through the repository (`organisms.list()`), so "export reads
+through the repository interfaces" holds for the part that is library-wide. Recorded as variance (7)
+in `deferred-work.md` (Task 6). **What 5.6 still owns:** producing the pruned `Battle` from editor
+state (the same `pruneAndRemapBattleGrid` projection save uses), and whatever an unsaved battle's
+`id` must be (`BattleExportSchema.id` is `z.uuid()`) — not decided here.
+
+**FD2 — The walk is FORWARD, from the seeds, over `ruleTargetIds`.** The closure is "everything the
+seeds depend on". The reverse index (`buildRuleReferenceIndex`) answers "who depends on X" — using it
+here either requires inverting it back (a second algorithm over the same data) or produces the wrong
+set (pulling in organisms that *target* a placed one, which the battle does not need). Pinned by the
+"reverse-only reference not pulled" test.
+
+**FD3 — `ruleTargetIds` is the ONLY edge definition.** It already (a) narrows `organismType`
+conditions, (b) de-dupes, (c) excludes self (so a self-reference is never an edge — no special case
+here), and (d) keeps dangling targets. `organismClosure.ts` must not touch `survivalRules` directly
+(AC2). If you find you need a different notion of "targets", stop — that is a change to 4.19's
+module and an owner decision, not a local helper.
+
+**FD4 — Signature: generic over `Pick<Organism, 'id' | 'survivalRules'>`, returns the library's
+records.** Generic `T` so tests pass minimal literals (FD11 of 4.19 — why `packages/domain` tests
+never need `@gol/test-utils`) while `exportBattle` gets back full `Organism[]` without a cast or a
+second lookup. Returns records (not ids) because the only consumer needs records and filtering the
+library a second time at the call site is a second pass for nothing. Library input order, because
+`organisms.list()` order is what `exportWorkspace` emits and a closure-ordered output would make the
+two exports disagree on order for no reason.
+
+**FD5 — Dangling ids are skipped, not thrown.** A seed or rule target missing from the library is
+"unreachable through normal use" (M7 + Decision E.5(a)), so it only arises from corruption:
+`organisms.list()` **skips** a corrupt record (fault isolation, `fakeRepositories.ts:202-208` and the
+real repository), leaving its id dangling. `exportWorkspace` already takes the same stance and records
+the gap against Story 5.11 (`workspaceSerializer.ts:74-86`). The resulting file would be rejected at
+import by Story 5.8's `assertReferentialClosure` (RFC-006 Decision 5) — rejected cleanly, never
+half-imported. Throwing here would make export fail on exactly the corruption 5.11 exists to report,
+with no UI to tell the user. Say so in `exportBattle`'s JSDoc beside the existing `listFull` note, and
+list it as an open flag below. Do not return the missing ids as a second output — nothing consumes it
+(no dead surface).
+
+**FD6 — Iterative worklist + `visited` set, not recursion.** The closure is bounded by library size
+(uncapped — M6, Decision G.3's 255 is per-battle placement, not library), and a recursive DFS over a
+long chain is a stack-depth bet. A worklist with `visited` checked **on push or on pop** (either is
+correct; be consistent) terminates on every cycle by construction — this is the cycle guard the AC
+asks tests for. Order of traversal does not leak into the output (FD4 filters in library order).
+
+**FD7 — The schema checks cardinality; it does not check closure.** `kind: 'battle' ⇒ battles.length
+=== 1` is structural and cheap, and the owner placed it in the schema (`deferred-work.md:2640`).
+"Every cell's and rule target's organism is in `organisms[]`" is RFC-006 Decision 5's separate
+`assertReferentialClosure` step at import — Story 5.8's. Adding it to `WorkspaceExportSchema` now
+would pre-empt 5.8's design and change what a `workspace` file must satisfy on parse. Not here.
+
+**FD8 — Append the barrel block at the END of `index.ts`.** `implement-next-story.toml`'s `[[sync.rules]]`
+for `packages/domain/src/index.ts` resolves two-lane collisions only because both lanes append blocks
+at the end. Epic 4's open stories (4.21's delete guard especially) may add domain exports too. A
+block inserted beside `ruleReferenceIndex` "because it's related" would turn a mechanical sync into a
+real conflict.
+
+**FD9 — No closure for `exportWorkspace`.** A workspace export carries every organism already; the
+closure is a battle-export concern only (RFC-006 Decision 4). Do not route `exportWorkspace` through
+`organismClosure`.
+
+**FD10 — No 255 check on the closure.** The envelope's `organisms[]` is uncapped (M6); the 255
+ceiling is on distinct organisms **placed** in one battle's cells (Decision G.3), already enforced by
+`BattleExportSchema`. A closure may legitimately exceed 255 through rule references.
+
+### What exists — read these before writing a line
+
+| File | Why it matters here |
+|---|---|
+| `packages/domain/src/ruleReferenceIndex.ts` (+ `.test.ts`) | **The edge.** `ruleTargetIds(organism)` — de-duped, condition order, self excluded, dangling kept. Only its head-comment sentence about Story 5.4 changes (Task 6). |
+| `packages/domain/src/workspaceExportSchema.ts` (+ `.test.ts:128-140`) | **Modified.** The envelope `superRefine` (duplicate ids, `:141-164`) gains the cardinality issue; the 5.3 test pinning its absence is replaced. |
+| `packages/domain/src/workspaceExportProjection.ts` | `toEnvelope(kind, battles, organisms, meta)` — pure, fresh arrays, shared records, `CURRENT_FORMAT_VERSION` stamped. `exportBattle` calls it; do not edit it. |
+| `packages/domain/src/battleProjection.ts` | `pruneAndRemapBattleGrid` — the projection that makes `organismIds` ≡ the placed set. The *caller's* precondition for `exportBattle` (FD1), not called by this story. |
+| `packages/domain/src/index.ts` | Barrel; append at the end (FD8). |
+| `packages/domain/vitest.config.ts` | `include: ['src/**/*.ts']`, `perFile: true`, 90/90/90/90. A new file at <90% fails the package. |
+| `packages/persistence/src/workspaceSerializer.ts` (+ `.test.ts`) | **Modified.** The factory over `{ repos, appVersion, now }`; `exportWorkspace`'s `listFull` corruption note (the stance FD5 matches); the JSDoc that says `exportBattle` is 5.4's. The test file's header explains the undeclared `@gol/test-utils` import — follow it, do not "fix" it (owner decision, `deferred-work.md` 5.3 entry). |
+| `packages/persistence/src/repositories.ts` | `OrganismRepository.list()` returns parsed `Organism[]`, corrupt records skipped. |
+| `packages/test-utils/src/mockWorkspace.ts:113-127` | Chaotic Spreader's rule targets Aggressive Colonizer by `MOCK_ORGANISM_IDS.aggressiveColonizer` — the ready-made one-hop fixture for the serializer test. |
+| `packages/test-utils/src/fakeRepositories.ts` | `createFakeRepositories({ battles, organisms })`; `organisms.list()` iterates insertion order and skips invalid records. |
+| `docs/implementation-artifacts/deferred-work.md:2615-2647` | The six RFC-006 variances (append a seventh) and the cardinality hand-off (annotate closed). |
+| `docs/implementation-artifacts/lane-gates.yaml:45-49` | The gate that made this story wait for 4.19 — "5.4 must consume 4.19's module, not define it". Satisfied on `main` (4.19 merged, #74). |
+
+### Architecture compliance
+
+- **Decision E / E.5(b) / RFC-006 Decision 4 / AR-10** — battle export's organism set = placed ∪ rule
+  targets, transitively; rule targets are stable library ids in `organismType` `pattern`s, never refs.
+- **Decision H / H.1** — `organismIds` ≡ placed set, so it is the closure seed with no grid scan.
+- **AR-12 / Decision F.1** — no settings in any envelope (`toEnvelope` already guarantees it; assert it).
+- **FR-6.1 / A-2 / AR-31** — initial Edit-mode state only; `exportBattle` receives a persisted-shape
+  `Battle`, which has no live-grid field by construction.
+- **AR-39 / NFR-5.1** — the closure's pure logic lives in `packages/domain` at ≥90% per file.
+- **AR-2 / AR-27** — `exportBattle` reads `repos` injected into the factory; no concrete repository.
+- **No DOM types in `packages/*`**; **Zod at boundaries only** (no `z.` in `organismClosure.ts`);
+  **`isolatedModules`** (`export type` for types); strict TS — no `any`, `!`, `@ts-ignore`.
+- **Naming** — camelCase, never dotted: `organismClosure.ts`.
+- **Spec-id hygiene** — write IDs exactly (`Decision E.5`, `RFC-006`, `AR-10`, `AR-12`, `AR-39`,
+  `NFR-5.1`, `FR-6.1`, `M6`, `M7`, `Story 4.19`, `Story 5.4`, `Story 5.6`, `Story 5.8`,
+  `Story 5.11`); `spec:check` fails on anything that resolves to nothing.
+
+### Library / framework notes
+
+Installed versions, nothing new: TypeScript 5.9.3 strict, Zod 4.4.3 (schema file only — `ctx.addIssue({ code: 'custom', path, message })`, v4 spelling as the file already uses), Vitest 4 (`environment: 'node'`), fast-check available in `packages/domain` (optional here). No dependency changes.
+
+### Testing standards
+
+- Every test guards a named failure: a closure that stops after one hop; one that loops on a cycle;
+  one that walks the reverse index; one that drops a seed with no rules; one that throws on a dangling
+  id; an export that uses the saved copy instead of the passed battle; a `kind: 'battle'` file with
+  0 or 2 battles that parses.
+- Name each `it` as a full sentence stating the invariant, reason in parentheses (house convention).
+- No coverage-padding tests. Fixtures in `packages/domain` are local literals.
+- `npm run ci:dev` is the gate; report its real exit code, never piped.
+
+### Previous story intelligence
+
+- **Story 5.3** (previous in this epic): minted the envelope, `toEnvelope`, the factory serializer,
+  the injected `appVersion`/`now` (FD5 there), and handed this story `exportBattle` + cardinality. Its
+  review lessons: comments that describe a future state go stale in the next story (Task 5/6 here
+  rewrite three of them); fast-check properties over grids need an explicit per-test timeout on the
+  CI runner (`30_000`, `workspaceExportProjection.test.ts`) — if you add a property, keep it cheap or
+  give it the same timeout; `"sideEffects": false` on `@gol/domain` is what keeps new domain modules
+  out of routes that don't import them (5.3 FD10) — no import-time work in `organismClosure.ts`.
+- **Story 4.19** (the gate): built `ruleTargetIds` specifically for this walk and excluded
+  self-references at the source "to keep Story 5.4's closure off a self-edge". Its review found
+  vacuous aliasing assertions — assert aliasing on things that can actually alias (the returned
+  array vs the input array; records `toBe` the input records).
+
+### Git intelligence
+
+`main` at `e06da2e` (merge of #74, Story 4.19). 4.19 touched `packages/domain/src/{usageIndex,ruleReferenceIndex}.*`
+and the barrel; 5.3 (#71) touched `workspaceExport{Schema,Projection}.*`, the barrel and
+`packages/persistence/src/workspaceSerializer.*`. This story's files overlap both. Epic 4's lane is
+still open (4.20–4.26): 4.20/4.21 consume `ruleReferenceIndex` but are not expected to reshape
+`ruleTargetIds`; the barrel is the shared collision point (FD8).
+
+### Project Structure Notes
+
+- New: `packages/domain/src/organismClosure.ts` (+ `.test.ts`).
+- Modified: `packages/domain/src/workspaceExportSchema.ts` (+ `.test.ts`), `packages/domain/src/index.ts`,
+  `packages/domain/src/ruleReferenceIndex.ts` (one comment sentence),
+  `packages/persistence/src/workspaceSerializer.ts` (+ `.test.ts`),
+  `docs/implementation-artifacts/deferred-work.md`, `docs/implementation-artifacts/sprint-status.yaml`.
+- Untouched on purpose: all of `apps/web`, `packages/simulation`, `packages/test-utils`,
+  `workspaceExportProjection.ts`, `battleProjection.ts`, `usageIndex.ts`, any `package.json`,
+  `lane-gates.yaml`, `docs/project-context.md`.
+- Variance: `exportBattle(battle)` vs RFC-006's `exportBattle(id)` (FD1), recorded in `deferred-work.md`.
+
+### What NOT to build
+
+- ❌ No UI — no button, dialog, filename, `Blob`/download (Story 5.6 / 5.5).
+- ❌ No `assertReferentialClosure`, no import path, no `migrate()` (Stories 5.7 / 5.8).
+- ❌ No second "a rule targets X" definition; no edit to `ruleTargetIds` or `buildRuleReferenceIndex`.
+- ❌ No recursion-based walk; no memo/cache/module state.
+- ❌ No closure in `exportWorkspace` (FD9); no 255 cap on the closure (FD10).
+- ❌ No `ExportError` class or not-found path — `exportBattle` takes the battle, there is nothing to not find (FD1).
+- ❌ No `package.json` edge for `@gol/test-utils` in `@gol/persistence` (owner decision; cycle breaks `build`).
+
+### Open flags for the owner (not blockers — the story proceeds on the FDs)
+
+- **FD1 changes the RFC's `exportBattle(id)` to `exportBattle(battle)`** so the editor's current,
+  possibly unsaved battle is what gets exported. If the owner prefers the RFC shape (export only the
+  saved copy, Story 5.6 forcing a save first), it is a one-function change before 5.6 builds on it.
+- **FD5: a dangling id (only reachable via a corrupt, skipped organism record) produces a battle file
+  that Story 5.8's import will reject.** Same stance as `exportWorkspace`, same owner (Story 5.11) for
+  telling the user. If the owner would rather export fail loudly here, it needs an error type and a UI
+  message, which is 5.6/5.11 surface.
+
+### References
+
+- `docs/planning-artifacts/epics.md:1357-1367` (Story 5.4), `:1381-1392` (5.6, the consumer), `:169` (AR-10).
+- `docs/planning-artifacts/architecture.md:234` (Decision E.5 (a)–(c)), `:263-274` (Decision H), `:353` (M7).
+- `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md` Decision 4 (`:185-215` — closure, rule-aware and transitive), Decision 5 (`:217-244` — import assertion, 5.8's), Decision 6 (settings never travel), Risks (`:297`).
+- `docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md` FR-6.1 (`:390-394`), A-2 (`:778-779`).
+- `docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` FD6, FD7 (the forward edge built for this story).
+- `docs/implementation-artifacts/5-3-export-envelope-serializer.md` (review decision on refinements, `:366-389`; out-of-scope list, `:827-829`).
+- `docs/implementation-artifacts/deferred-work.md:2615-2647`; `docs/implementation-artifacts/lane-gates.yaml:45-49`.
+- `docs/project-context.md` — strict TS, no DOM in `packages/*`, Zod at boundaries, ≥90% per-file core gate, referential-integrity logic is core, no coverage padding, camelCase files, `spec:check`, `npm run ci:dev` never piped, commit gate.
+
+## Dev Agent Record
+
+### Agent Model Used
+
+claude-sonnet-5
+
+### Debug Log References
+
+- `npm run test:coverage -w @gol/domain` — 201 tests passed, 11 files; `organismClosure.ts` at
+  100/100/100/100 per file (first run flagged one dead branch on an `Array.prototype.pop()` result
+  check that could never be `undefined`; rewrote the walk as a forward-cursor worklist over a
+  never-shrinking array, which removed the unreachable branch without recursion or a non-null
+  assertion).
+- `npm run test:coverage -w @gol/persistence` — 102 tests passed, 8 files (existing `exportWorkspace`
+  suite plus the new `exportBattle` `describe` block).
+- `npm run ci:dev` from the worktree root, redirected to a file (not piped) — **exit code 0**.
+  Sequence run: `typecheck` (5 packages, all pass) → `lint` (0 errors, 1 pre-existing unrelated
+  warning in `apps/web/components/gallery/BattleGallery.tsx`) → `format:check` (failed once on the
+  two new/edited test files; fixed with `prettier --write`, then passed) → `spec:check` (373 source
+  files scanned, 273 cited spec ids, all resolve) → `boundary:check` (pass) → `test:coverage` (all
+  packages green, core packages at 100% per file) → `build:standalone` (pass) →
+  `bundle:check` (home 333.8 KB / 340 KB budget, battle within budget — unchanged by this story) →
+  `bench` / `bench:check` (pass) → `e2e:chromium` (255 passed, 1 skipped).
+
+### Completion Notes List
+
+- Added `packages/domain/src/organismClosure.ts`: `organismClosure(seedIds, library)`, the Decision
+  E.5(b) / RFC-006 Decision 4 transitive rule-reference closure. Walks `ruleTargetIds` only (no
+  second "a rule targets X" definition), forward from the seeds (never the reverse index), with an
+  iterative forward-cursor worklist + `visited` set (no recursion, cycle-safe by construction).
+  Returns the library's own records, library-ordered, in a fresh array. 100/100/100/100 coverage.
+- `WorkspaceSerializer.exportBattle(battle: Battle)` added to the interface and factory in
+  `packages/persistence/src/workspaceSerializer.ts`: reads `repos.organisms.list()`, computes
+  `organismClosure(battle.organismIds, library)`, returns `toEnvelope('battle', [battle], closure, …)`.
+  Takes the `Battle` value rather than an id (FD1, a declared RFC-006 Decision 4 variance) so the
+  editor's current — possibly dirty or unsaved — battle is what exports, never the saved copy under
+  the same id. `exportWorkspace` is unchanged.
+- `WorkspaceExportSchema`'s `superRefine` gained the cardinality issue: `kind === 'battle' &&
+  battles.length !== 1` ⇒ a `custom` issue at `['battles']`. The Story 5.3 test pinning the absence
+  of that constraint was replaced with the AC4 cases (0/1/2 battles under `'battle'`;
+  `'workspace'` stays uncapped); the duplicate-id refinement fires independently, unchanged.
+  `WorkspaceExportSchema.test.ts`'s "does NOT constrain" test is gone — the assertion it made is now
+  false by design.
+- Barrel: `organismClosure` appended at the end of `packages/domain/src/index.ts` (FD8 — the
+  two-lane sync rule). `ruleReferenceIndex.ts`'s one head-comment sentence naming "Story 5.4's"
+  closure now names `organismClosure.ts`; nothing else in that file touched, confirmed by diff.
+- `deferred-work.md`: the cardinality hand-off entry (`:2640-2647`) is annotated CLOSED by this
+  story; the six-variance entry is now seven, with variance (7) recording
+  `exportBattle(battle: Battle)` vs RFC-006 Decision 4's `exportBattle(id)` and FD1's reason.
+- No file under `apps/web` touched. No new dependency in any `package.json`. `ruleReferenceIndex.ts`
+  body/signature/tests are byte-identical apart from the one sentence named above.
+
+### File List
+
+- `packages/domain/src/organismClosure.ts` (new)
+- `packages/domain/src/organismClosure.test.ts` (new)
+- `packages/domain/src/index.ts` (modified — barrel export appended at end, FD8)
+- `packages/domain/src/ruleReferenceIndex.ts` (modified — one head-comment sentence)
+- `packages/domain/src/workspaceExportSchema.ts` (modified — cardinality `superRefine` issue,
+  comment rewrite)
+- `packages/domain/src/workspaceExportSchema.test.ts` (modified — AC4 cardinality tests replace the
+  Story 5.3 "does NOT constrain" test)
+- `packages/persistence/src/workspaceSerializer.ts` (modified — `exportBattle` interface + impl,
+  factory JSDoc rewrite)
+- `packages/persistence/src/workspaceSerializer.test.ts` (modified — new `exportBattle` describe
+  block, AC3)
+- `docs/implementation-artifacts/deferred-work.md` (modified — cardinality hand-off closed, seventh
+  RFC-006 variance appended)
+- `docs/implementation-artifacts/sprint-status.yaml` (modified — story status)
+- `docs/implementation-artifacts/5-4-rule-aware-organism-closure.md` (this file — tasks, Dev Agent
+  Record, Status)
+
+## Change Log
+
+- 2026-09-23 — Implemented Story 5.4: `organismClosure` (new `@gol/domain` module, 100% per-file
+  coverage), `WorkspaceSerializer.exportBattle`, and the `kind: 'battle'` cardinality refinement.
+  `npm run ci:dev` green (exit 0). Status → review.
+
+Dev Model: sonnet   # follows existing patterns (4.19's forward edge, 5.3's factory + toEnvelope); the one new surface (exportBattle's signature) is pre-decided in FD1, so nothing is left to architect.
+
+Proposed lane gate: none   # the governing row (5-4 requires 4-19) is satisfied on main; 5.4 only consumes ruleTargetIds and appends to the barrel, and no open Epic 4 story (4-20..4-26) is expected to reshape ruleTargetIds or the export path.
