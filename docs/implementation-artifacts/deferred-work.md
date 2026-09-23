@@ -2634,14 +2634,18 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   corruption and the schema of record takes the same corrupt-never-last-wins stance `BattleSchema`
   already takes for a duplicate roster id: both collections are keyed by id at rest, so Story 5.8's
   `replaceAll` would otherwise collapse a duplicate pair silently — two records in, one out, no
-  error. (7) Decision 4's snippet is `exportBattle(id)` — `repos.battles.load(id)` — this schema
+  error. (7) Decision 4's snippet is `exportBattle(id)` — `repos.battles.load(id)` — the serializer
   ships `exportBattle(battle: Battle)` instead (Story 5.4, FD1): an id-based export would return the
   SAVED copy, which is wrong for FR-6.1 / A-2 / AR-31's "export the editor's current battle" — the
   grid may be dirty, or the battle may never have been saved at all, and an id has nothing to load
   in that case. Taking the value serves every case; a caller that does want the saved copy is one
-  `battles.load(id)` away. None of these is a defect in the RFC — they are an eighteen-month-old
-  design doc meeting a shipped toolchain — but they are the lines a future reader would otherwise
-  "correct" back.
+  `battles.load(id)` away. Variances (1)–(6) are not defects in the RFC — they are an
+  eighteen-month-old design doc meeting a shipped toolchain — but they are the lines a future
+  reader would otherwise "correct" back. **(7) is different in kind:** a design disagreement between
+  RFC-006 Decision 4 (normative at `:187`, "`exportBattle(id)` … read through the repository
+  interfaces") and PRD FR-6.1 / FR-7.13, not toolchain drift. It is **awaiting the owner's ruling**
+  (Story 5.4 Review Findings, `[Review][Decision]`); until then RFC-006 is unannotated and still
+  reads as authoritative.
 
 - **The other half of that decision: `kind === 'battle' ⇒ battles.length === 1` is STORY 5.4's, not
   this schema's.** The same review asked for both refinements; the owner took the duplicate-id half
@@ -2779,3 +2783,23 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   disabled window long enough to drop a click is long enough to read as feedback — and EVERY card's
   Clone should disable while any clone is in flight. Attached to the seam, not to a date; the same
   story owns `gatePending`'s missing timeout, recorded above.
+
+## Deferred from: code review of 5-4-rule-aware-organism-closure (2026-09-23)
+
+- **`exportBattle` never validates its `Battle` argument.** The value comes from editor state, not
+  a parsed read, so `BattleSchema`'s guarantees (rows exactly `gridSize.cols` wide, a uuid `id`)
+  are not proven on the way in, and nothing parses the envelope before returning it. The review
+  made the function prune and remap internally (which removes the unplaced-roster leak and the
+  out-of-range-ref `organismId: undefined` case), but a full `BattleSchema.parse` — or
+  `WorkspaceExportSchema.parse` on the output — would reject an unsaved battle whose id is not yet
+  a uuid, and what that id is belongs to **Story 5.6** (FD1: "not decided here"). Decide the parse
+  point together with the unsaved-battle id.
+- **`toEnvelope('battle', …)` accepts zero or many battles at the producer.** Cardinality is now
+  enforced by `WorkspaceExportSchema` at parse time only; `toEnvelope` (Story 5.3's API, exported
+  from the barrel) will still build a `kind: 'battle'` envelope the schema rejects. `exportBattle`
+  passes exactly `[battle]`, so no shipped producer is affected. Narrowing the signature (e.g. a
+  `readonly [Battle]` overload for `'battle'`) is the fix if a second producer ever appears.
+- **A dangling seed or rule target is silently omitted, and export reports success on a file
+  import will reject** (Story 5.4 FD5, already an owner open flag in that story). Only reachable
+  through a corrupt, skipped organism record; same stance as `exportWorkspace`. Telling the user is
+  **Story 5.11**'s; a loud failure at export would need an error type and UI copy (5.6/5.11).

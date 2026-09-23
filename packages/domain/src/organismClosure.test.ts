@@ -69,6 +69,11 @@ describe('organismClosure (AC1, AC2)', () => {
     expect(organismClosure(['a'], [a, b, c]).map((o) => o.id)).toEqual(['a', 'b', 'c']);
   });
 
+  it('terminates on a self-targeting organism A→A, returning it exactly once', () => {
+    const a = organism('a', [['a']]);
+    expect(organismClosure(['a'], [a]).map((o) => o.id)).toEqual(['a']);
+  });
+
   it('does NOT include an organism reached only through the reverse index — X targets A does not pull in X', () => {
     const x = organism('x', [['a']]);
     const a = organism('a');
@@ -136,10 +141,20 @@ describe('organismClosure (AC1, AC2)', () => {
   it('does not mutate the input array or its records', () => {
     const a = organism('a', [['b']]);
     const b = organism('b');
-    const library = Object.freeze([a, b]);
+    const library = [a, b];
+    // Compared against an independent deep copy — comparing the records to themselves could never
+    // fail — and deep-frozen, so an in-place write throws in strict mode rather than passing quietly.
+    const snapshot = structuredClone(library);
+    const deepFreeze = (value: unknown): void => {
+      if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+        Object.freeze(value);
+        for (const child of Object.values(value)) deepFreeze(child);
+      }
+    };
+    deepFreeze(library);
 
     expect(() => organismClosure(['a'], library)).not.toThrow();
-    expect(library).toEqual([a, b]);
+    expect(library).toEqual(snapshot);
   });
 
   it('accepts a fixture that has been through OrganismSchema.parse — the constraint is structural, not literal-only', () => {

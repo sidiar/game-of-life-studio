@@ -4,6 +4,7 @@ import {
   CURRENT_FORMAT_VERSION,
   OrganismSchema,
   ORGANISM_SCHEMA_VERSION,
+  ruleTargetIds,
   WorkspaceExportSchema,
   type Battle,
   type Organism,
@@ -212,6 +213,7 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
 
     expect(envelope.kind).toBe('battle');
     expect(envelope.battles).toHaveLength(1);
+    expect(envelope.battles[0].id).toBe(battle.id);
     expect(() => WorkspaceExportSchema.parse(envelope)).not.toThrow();
   });
 
@@ -220,8 +222,17 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
       '22222222-2222-4222-8222-222222222222',
       MOCK_ORGANISM_IDS.chaoticSpreader,
     );
+    const library = createMockOrganisms();
+    // The fixture relationship this test rests on, stated rather than assumed: Chaotic Spreader
+    // targets exactly Aggressive Colonizer, and Aggressive Colonizer targets nothing further.
+    const byId = new Map(library.map((o) => [o.id, o]));
+    expect(ruleTargetIds(byId.get(MOCK_ORGANISM_IDS.chaoticSpreader)!)).toEqual([
+      MOCK_ORGANISM_IDS.aggressiveColonizer,
+    ]);
+    expect(ruleTargetIds(byId.get(MOCK_ORGANISM_IDS.aggressiveColonizer)!)).toEqual([]);
+    expect(byId.has(MOCK_ORGANISM_IDS.patientDefender)).toBe(true);
     const serializer = createWorkspaceSerializer({
-      repos: createFakeRepositories({ organisms: createMockOrganisms() }),
+      repos: createFakeRepositories({ organisms: library }),
       appVersion: '1.2.3',
       now: fixedNow,
     });
@@ -253,15 +264,18 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
   it('exports the battle passed in, never whatever repos.battles holds under the same id (FD1)', async () => {
     const battleId = '44444444-4444-4444-8444-444444444444';
     const savedCopy = battlePlacingOnly(battleId, MOCK_ORGANISM_IDS.chaoticSpreader);
-    const currentEditorBattle: Battle = {
+    const currentEditorBattle: Battle = BattleSchema.parse({
       ...savedCopy,
+      // `BattleSchema` reads ISO strings; the parsed copy's timestamps are hydrated `Date`s.
+      createdAt: savedCopy.createdAt.toISOString(),
+      updatedAt: savedCopy.updatedAt.toISOString(),
       organismIds: [MOCK_ORGANISM_IDS.aggressiveColonizer],
       gridState: (() => {
         const g = emptyGrid(PRESET.cols, PRESET.rows);
         g[1][1] = 1;
         return g;
       })(),
-    };
+    });
     const serializer = createWorkspaceSerializer({
       repos: createFakeRepositories({
         battles: [savedCopy],
@@ -277,6 +291,38 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
       { x: 1, y: 1, organismId: MOCK_ORGANISM_IDS.aggressiveColonizer },
     ]);
     expect(envelope.organisms.map((o) => o.id)).toEqual([MOCK_ORGANISM_IDS.aggressiveColonizer]);
+  });
+
+  it('seeds the closure from the PLACED set, not the roster as given — an unpruned editor roster leaks nothing (FR-7.13)', async () => {
+    // Raw editor state: Patient Defender sits on the roster (slot 1) with no cell on the grid, and
+    // Chaotic Spreader (slot 2) is the only organism placed. Built by hand, not `BattleSchema.parse`
+    // — the schema would reject the unplaced roster entry, which is exactly the shape a caller that
+    // forgot to prune would hand in.
+    const gridState = emptyGrid(PRESET.cols, PRESET.rows);
+    gridState[2][3] = 2;
+    const unpruned: Battle = {
+      ...battlePlacingOnly(
+        '77777777-7777-4777-8777-777777777777',
+        MOCK_ORGANISM_IDS.chaoticSpreader,
+      ),
+      organismIds: [MOCK_ORGANISM_IDS.patientDefender, MOCK_ORGANISM_IDS.chaoticSpreader],
+      gridState,
+    };
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({ organisms: createMockOrganisms() }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    const envelope = await serializer.exportBattle(unpruned);
+
+    expect(envelope.organisms.map((o) => o.id).sort()).toEqual(
+      [MOCK_ORGANISM_IDS.chaoticSpreader, MOCK_ORGANISM_IDS.aggressiveColonizer].sort(),
+    );
+    expect(envelope.battles[0].cells).toEqual([
+      { x: 3, y: 2, organismId: MOCK_ORGANISM_IDS.chaoticSpreader },
+    ]);
+    expect(() => WorkspaceExportSchema.parse(envelope)).not.toThrow();
   });
 
   it('takes appVersion and the clock from its injected deps, exactly as exportWorkspace does', async () => {

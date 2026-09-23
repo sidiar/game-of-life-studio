@@ -4,7 +4,7 @@ baseline_commit: e06da2e898ed63243f705ea07ea32a4b27ae4c78
 
 # Story 5.4: Rule-Aware Organism Closure
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -200,6 +200,28 @@ before touching a file.**
   - [x] `spec:check` passes — every `AR-*`, `FR-*`, `NFR-*`, `M*`, `Decision *`, `RFC-00*`, `Story N.M`
         you wrote resolves under `docs/`.
   - [x] Record every command and its real result in the Dev Agent Record.
+
+### Review Findings
+
+Code review 2026-09-23 (Opus, against the Sonnet implementation; Blind Hunter + Edge Case Hunter +
+Acceptance Auditor). 1 decision-needed, 9 patch, 3 defer, 6 dismissed.
+
+- [ ] [Review][Decision] `exportBattle(battle: Battle)` vs RFC-006 Decision 4's `exportBattle(id)` — owner ruling needed before Story 5.6 builds on it — FD1 made this call inside the story and shipped it; it is surfaced (story "Open flags for the owner", `deferred-work.md` variance (7), the JSDoc) but not ruled on, and it is not toolchain drift: it is a cross-document conflict. RFC-006 Decision 4 is normative, not just a snippet — `:187` "exposes `exportWorkspace()` and `exportBattle(id)`. **Both read through the repository interfaces**", plus `:65` (component diagram), `:200` (`repos.battles.load(id)`, `ExportError('not-found')`), `:297` (Risks), `:359` (prototype step) and the Rationale ("read-and-assemble … only uses `list`/`load`"). The other side is PRD FR-6.1 ("export the **current** Battle") / FR-7.13 and RFC-005's dirty working copy. Architecture E.5(b) fixes no signature. Under the authority order RFC-006 still wins for persistence and is unannotated; `project-context.md`'s override list is untouched, so a later agent would reasonably "correct" the code back. Note FD1's strongest argument ("an id-based export could not export an unsaved one") leans on an open 5.6 question — an unsaved battle has no id yet (`BattlePage.tsx` mints `crypto.randomUUID()` at save), and `BattleExportSchema.id` is `z.uuid()`. Options:
+  - **(a) Accept the variance and propagate it** — annotate RFC-006 Decision 4 at `:65`, `:187`, `:200`, `:297`, `:359` (and the Rationale) with `exportBattle(battle)` and the FR-6.1 reason; add it to `project-context.md`'s deliberate-override list; Story 5.6 still decides the unsaved battle's id.
+  - **(b) Revert to the RFC shape** — `exportBattle(id)` reads `repos.battles.load(id)` (with the RFC's not-found error); Story 5.6 forces a save (or blocks export on a dirty/unsaved battle) before exporting. The review's pruning patch then becomes redundant with the schema's H.1 check on load.
+  - **(c) Both** — keep the value form as the primitive and add `exportBattle(id)` as the RFC-conformant wrapper (`load` then delegate); annotate RFC-006 that the value form exists for the dirty-editor path.
+- [x] [Review][Patch] Closure seeded from `battle.organismIds` trusted a JSDoc-only "caller passes it pruned" precondition — an unpruned roster leaked unplaced organisms (and everything their rules target) into the file, against FR-7.13 "organisms placed on its grid"; an out-of-range ref emitted `organismId: undefined`. `exportBattle` now runs `pruneAndRemapBattleGrid` itself and exports/seeds from the pruned battle (a no-op for an already-pruned one); new test pins it [packages/persistence/src/workspaceSerializer.ts:100]
+- [x] [Review][Patch] "does not mutate the input array or its records" test could not fail — only the array was frozen and records were compared to themselves; now deep-freezes records and compares against a `structuredClone` snapshot [packages/domain/src/organismClosure.test.ts:136]
+- [x] [Review][Patch] No test for a self-targeting organism (A→A, the smallest cycle) [packages/domain/src/organismClosure.test.ts]
+- [x] [Review][Patch] The Chaotic Spreader → Aggressive Colonizer serializer test relied on a fixture relationship it never stated; now asserts the precondition via `ruleTargetIds` [packages/persistence/src/workspaceSerializer.test.ts:218]
+- [x] [Review][Patch] First AC3 test checked only `battles.length === 1`, not that it is the battle passed in; now asserts the id [packages/persistence/src/workspaceSerializer.test.ts:200]
+- [x] [Review][Patch] FD1 test's `currentEditorBattle` built by spread and never parsed, unlike every other fixture; now through `BattleSchema.parse` [packages/persistence/src/workspaceSerializer.test.ts:255]
+- [x] [Review][Patch] Runtime schema message cited "(Story 5.4)" — a project-management reference in a string import can surface to users (5.11); siblings cite Decisions or nothing. Dropped [packages/domain/src/workspaceExportSchema.ts:171]
+- [x] [Review][Patch] `ruleReferenceIndex.ts` head-comment edit left a ~118-column line; re-wrapped to the file's width (comment only) [packages/domain/src/ruleReferenceIndex.ts:26]
+- [x] [Review][Patch] `deferred-work.md` variance (7) said "this **schema** ships `exportBattle`" (it is the serializer), and the entry's closing "none of these is a defect in the RFC … a shipped toolchain" now misdescribed (7), a design variance awaiting an owner ruling; both corrected [docs/implementation-artifacts/deferred-work.md:2637]
+- [x] [Review][Defer] `exportBattle` never validates its `Battle` argument (`BattleSchema.parse` / `WorkspaceExportSchema.parse` on output) — the value comes from editor state, not a parsed read, and an unsaved battle's `id` is not yet a uuid; parsing here would pre-empt Story 5.6's open id question [packages/persistence/src/workspaceSerializer.ts:100] — deferred to Story 5.6
+- [x] [Review][Defer] `toEnvelope('battle', …)` still accepts zero or many battles at the producer; only the schema enforces cardinality, at parse time [packages/domain/src/workspaceExportProjection.ts:149] — deferred, pre-existing (Story 5.3 API)
+- [x] [Review][Defer] A dangling seed/target (reachable only via a corrupt, skipped organism record) is silently omitted, so export reports success on a file import will reject (FD5; already an owner open flag) [packages/domain/src/organismClosure.ts:56] — deferred to Story 5.11 / the FD5 owner flag
 
 ## Dev Notes
 
@@ -464,6 +486,10 @@ claude-sonnet-5
 - 2026-09-23 — Implemented Story 5.4: `organismClosure` (new `@gol/domain` module, 100% per-file
   coverage), `WorkspaceSerializer.exportBattle`, and the `kind: 'battle'` cardinality refinement.
   `npm run ci:dev` green (exit 0). Status → review.
+- 2026-09-23 — Code review (Opus): 9 patches applied (notably `exportBattle` now prunes/remaps
+  internally so the closure seeds from the placed set), 3 deferred to `deferred-work.md`, 1
+  decision left for the owner (`exportBattle(battle)` vs RFC-006's `exportBattle(id)`).
+  `npm run ci:dev` green after patches (exit 0). Status → in-progress pending that decision.
 
 Dev Model: sonnet   # follows existing patterns (4.19's forward edge, 5.3's factory + toEnvelope); the one new surface (exportBattle's signature) is pre-decided in FD1, so nothing is left to architect.
 

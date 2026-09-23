@@ -1,4 +1,10 @@
-import { organismClosure, toEnvelope, type Battle, type WorkspaceExportWire } from '@gol/domain';
+import {
+  organismClosure,
+  pruneAndRemapBattleGrid,
+  toEnvelope,
+  type Battle,
+  type WorkspaceExportWire,
+} from '@gol/domain';
 import type { AppRepositories } from './repositories';
 
 /**
@@ -40,9 +46,11 @@ export interface WorkspaceSerializer {
    * closure (Story 5.4, Decision E.5(b) / RFC-006 Decision 4).
    *
    * ⚠️ Takes the `Battle` VALUE, not an id (a declared RFC-006 Decision 4 variance — FD1). The
-   * caller passes the battle **as it would be saved** — pruned and remapped
-   * (`pruneAndRemapBattleGrid`, Decision H.1) so `organismIds` ≡ the placed set, which is exactly
-   * what seeds the closure. An id-based export (`repos.battles.load(id)`) would return the SAVED
+   * battle is pruned and remapped HERE (`pruneAndRemapBattleGrid`, Decision H.1) before anything
+   * reads it, so the closure's seeds are exactly the placed set — never a roster entry with no cell
+   * on the grid — whatever the caller passed. For an already-pruned battle (every saved one) that
+   * is a no-op; for a raw editor roster it keeps unplaced organisms, and everything their rules
+   * target, out of the file (FR-7.13 "organisms placed on its grid"). An id-based export (`repos.battles.load(id)`) would return the SAVED
    * copy, which is wrong for FR-6.1 / A-2 / AR-31's "export the editor's current battle": the grid
    * may be dirty, or the battle may never have been saved at all, and an id has nothing to load in
    * that case. The grid this function reads is Edit-mode initial state only — a persisted `Battle`
@@ -98,9 +106,15 @@ export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): Worksp
     },
 
     async exportBattle(battle: Battle): Promise<WorkspaceExportWire> {
+      // Seeds from the PLACED set, not the roster as given: the caller's value comes from editor
+      // state, not a parsed read, so `organismIds` ≡ placed is not guaranteed on the way in.
+      const pruned: Battle = {
+        ...battle,
+        ...pruneAndRemapBattleGrid(battle.gridState, battle.organismIds),
+      };
       const library = await repos.organisms.list();
-      const closure = organismClosure(battle.organismIds, library);
-      return toEnvelope('battle', [battle], closure, { appVersion, exportedAt: now() });
+      const closure = organismClosure(pruned.organismIds, library);
+      return toEnvelope('battle', [pruned], closure, { appVersion, exportedAt: now() });
     },
   };
 }

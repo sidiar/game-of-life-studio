@@ -168,7 +168,7 @@ export const WorkspaceExportSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['battles'],
-        message: `kind: 'battle' must carry exactly one battle (Story 5.4)`,
+        message: `kind: 'battle' must carry exactly one battle`,
       });
     }
   });

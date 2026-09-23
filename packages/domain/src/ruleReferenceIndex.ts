@@ -21,11 +21,11 @@
  * copies its rules, so it really does add a second reference to everything the source targets:
  * two rules, across two organisms, and both axes report the truth.
  *
- * ⚠️ **No transitive closure, no visited set, no cycle guard here** — those are `organismClosure.ts`'s
- * (Story 5.4), which consumes `ruleTargetIds` rather than re-deriving "a rule targets X" over the
- * same conditions (`lane-gates.yaml`). Nothing here recurses, and nothing memoizes: memoization lives at the call
- * site (RFC-005 Decision 8), because a cache in this package would be module-level state under a
- * `"sideEffects": false` contract.
+ * ⚠️ **No transitive closure, no visited set, no cycle guard here** — those are
+ * `organismClosure.ts`'s (Story 5.4), which consumes `ruleTargetIds` rather than re-deriving "a rule
+ * targets X" over the same conditions (`lane-gates.yaml`). Nothing here recurses, and nothing
+ * memoizes: memoization lives at the call site (RFC-005 Decision 8), because a cache in this package
+ * would be module-level state under a `"sideEffects": false` contract.
  *
  * Consumers: Story 4.20's "Targeted by [M] organism rule(s)" footer and popover, Story 4.21's
  * delete block, Story 5.4's transitive export closure.
