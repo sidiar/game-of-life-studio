@@ -2612,8 +2612,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   gracefully (default + warn, NFR-7.3). The archived Story 1.7 file is deliberately NOT edited;
   this entry is the discharge. **No residual work.**
 
-- **Six RFC-006 variances (four from the implementation, two from its review), recorded rather than
-  silently absorbed.** (1) Decision 2's snippet is
+- ~~**Seven RFC-006 variances (four from the implementation, two from its review, one from Story
+  5.4), recorded rather than silently absorbed.**~~ **Six RFC-006 variances (four from the
+  implementation, two from its review), recorded rather than silently absorbed — a seventh, from
+  Story 5.4, was tried and WITHDRAWN by owner ruling (see (7) below).** (1) Decision 2's snippet is
   written in **Zod v3** (`z.string().uuid()`, `z.string().datetime()`); this install is Zod 4.4.3,
   where those spellings do not exist — the shipped schemas beside the new file are the reference.
   (2) Decision 2 types a cell's `organismId` as a bare `z.string()`; `PlacedCellSchema` uses
@@ -2634,8 +2636,31 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   corruption and the schema of record takes the same corrupt-never-last-wins stance `BattleSchema`
   already takes for a duplicate roster id: both collections are keyed by id at rest, so Story 5.8's
   `replaceAll` would otherwise collapse a duplicate pair silently — two records in, one out, no
-  error. None of these is a defect in the RFC — they are an eighteen-month-old design doc meeting a
-  shipped toolchain — but they are the lines a future reader would otherwise "correct" back.
+  error. ~~(7) Decision 4's snippet is `exportBattle(id)` — `repos.battles.load(id)` — the serializer
+  ships `exportBattle(battle: Battle)` instead (Story 5.4, FD1): an id-based export would return the
+  SAVED copy, which is wrong for FR-6.1 / A-2 / AR-31's "export the editor's current battle" — the
+  grid may be dirty, or the battle may never have been saved at all, and an id has nothing to load
+  in that case. Taking the value serves every case; a caller that does want the saved copy is one
+  `battles.load(id)` away. Variances (1)–(6) are not defects in the RFC — they are an
+  eighteen-month-old design doc meeting a shipped toolchain — but they are the lines a future
+  reader would otherwise "correct" back. **(7) is different in kind:** a design disagreement between
+  RFC-006 Decision 4 (normative at `:187`, "`exportBattle(id)` … read through the repository
+  interfaces") and PRD FR-6.1 / FR-7.13, not toolchain drift. It is **awaiting the owner's ruling**
+  (Story 5.4 Review Findings, `[Review][Decision]`); until then RFC-006 is unannotated and still
+  reads as authoritative.~~
+  **(7) WITHDRAWN by owner ruling (Sidiar, 2026-09-24, option (b)):** `exportBattle` reverts to the
+  RFC-006 Decision 4 shape — `exportBattle(id)` reads `repos.battles.load(id)` and rejects with
+  `ExportError('not-found')` when it returns `null`, exactly as the RFC snippet has it. RFC-006
+  Decision 4 needed no annotation after all — it stays normative, unamended, and (7) is struck from
+  the live variance count: this entry is now **six** RFC-006 variances, (7) kept above (struck) only as the
+  record of the option that was tried and reverted. Story 5.6 forces a save, or blocks export, on a
+  dirty/unsaved battle before calling `exportBattle(id)` (its own hand-off entry below). The struck
+  text of (7) also carries a clause that belongs to (1)–(6), not to (7): "Variances (1)–(6) are not
+  defects in the RFC — they are an eighteen-month-old design doc meeting a shipped toolchain — but
+  they are the lines a future reader would otherwise 'correct' back." That statement still stands.
+  One small extension of the RFC snippet remains, and it is not a variance in behaviour:
+  `ExportError` takes `(code, id)` rather than the snippet's one-argument `ExportError('not-found')`,
+  so the message can name the id; `code` is still the `'not-found'` discriminant the RFC throws.
 
 - **The other half of that decision: `kind === 'battle' ⇒ battles.length === 1` is STORY 5.4's, not
   this schema's.** The same review asked for both refinements; the owner took the duplicate-id half
@@ -2646,6 +2671,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `kind: 'battle'` envelope carrying zero or fifty battles parses, and
   `workspaceExportSchema.test.ts` pins that as the current, deliberate behaviour rather than an
   oversight.
+  **CLOSED by Story 5.4.** `WorkspaceExportSchema`'s `superRefine` now adds a `custom` issue at path
+  `['battles']` when `kind === 'battle' && battles.length !== 1`, alongside the duplicate-id checks.
+  `workspaceExportSchema.test.ts`'s "does NOT constrain" test was replaced with the AC4 cases
+  (zero/one/two battles under `'battle'`; `'workspace'` stays uncapped). **No residual work.**
 
 - **`packages/persistence/src/workspaceSerializer.test.ts` imports `@gol/test-utils` without a
   `package.json` edge — and ⚠️ DECLARING THAT EDGE IS NOT CURRENTLY POSSIBLE.** The project's
@@ -2769,3 +2798,56 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   disabled window long enough to drop a click is long enough to read as feedback — and EVERY card's
   Clone should disable while any clone is in flight. Attached to the seam, not to a date; the same
   story owns `gatePending`'s missing timeout, recorded above.
+
+## Deferred from: code review of 5-4-rule-aware-organism-closure (2026-09-23)
+
+- ~~**`exportBattle` never validates its `Battle` argument.** The value comes from editor state, not
+  a parsed read, so `BattleSchema`'s guarantees (rows exactly `gridSize.cols` wide, a uuid `id`)
+  are not proven on the way in, and nothing parses the envelope before returning it. The review
+  made the function prune and remap internally (which removes the unplaced-roster leak and the
+  out-of-range-ref `organismId: undefined` case), but a full `BattleSchema.parse` — or
+  `WorkspaceExportSchema.parse` on the output — would reject an unsaved battle whose id is not yet
+  a uuid, and what that id is belongs to **Story 5.6** (FD1: "not decided here"). Decide the parse
+  point together with the unsaved-battle id.~~ — **✅ Resolved by the owner's
+  2026-09-24 ruling (option (b)), by the premise dissolving rather than by adding a parse call.**
+  This entry assumed FD1's value-typed `exportBattle(battle: Battle)`, where the argument "comes
+  from editor state, not a parsed read" and an unsaved battle's id is "not yet a uuid" (FD1). That
+  premise is gone: `exportBattle` now takes `id: string` and reads `repos.battles.load(id)`, and
+  `load()` never returns an unparsed value — it returns a `BattleSchema`-valid `Battle` or throws
+  `CorruptDataError`, and a missing id now throws `ExportError('not-found')` instead of reaching an
+  unvalidated code path. There is no longer an unsaved battle to worry about here at all: an
+  unsaved battle has no `id` to pass to `exportBattle` in the first place, which is exactly why
+  Story 5.6 must save (or block export on) a dirty/unsaved battle before calling it — see that
+  hand-off below. The one part of this entry that outlives the ruling — nothing parses
+  `WorkspaceExportSchema` on the OUTPUT before returning it — is not a gap this decision opened:
+  `exportWorkspace()` has never self-validated its output either, and every test in
+  `workspaceSerializer.test.ts` asserts the envelope's shape by parsing the RETURNED value, matching
+  that existing convention. No residual work.
+- **Hand-off to Story 5.6: the export entry point must save, or block export on, a dirty/unsaved
+  battle before calling `exportBattle(id)`.** `exportBattle` (Story 5.4, reverted to
+  `exportBattle(id)` by the 2026-09-24 owner ruling) reads the battle through
+  `repos.battles.load(id)`, so it can only export what is already persisted; a battle that was
+  never saved has no `id` to pass, and a battle edited since its last save would export the STALE
+  saved copy, not FR-6.1's "current Battle". The "Export Battle" action (the editor's Tools
+  section) is Story 5.6's to build — it owns deciding what "force a save first" means for the
+  editor's dirty-state tracking (RFC-005) and wiring it in before the `exportBattle(id)` call, or
+  disabling/blocking the action while the battle is dirty or unsaved. Not decided here.
+- **`toEnvelope('battle', …)` accepts zero or many battles at the producer.** Cardinality is now
+  enforced by `WorkspaceExportSchema` at parse time only; `toEnvelope` (Story 5.3's API, exported
+  from the barrel) will still build a `kind: 'battle'` envelope the schema rejects. `exportBattle`
+  passes exactly `[battle]`, so no shipped producer is affected. Narrowing the signature (e.g. a
+  `readonly [Battle]` overload for `'battle'`) is the fix if a second producer ever appears.
+- **A dangling seed or rule target is silently omitted, and export reports success on a file
+  import will reject** (Story 5.4 FD5, already an owner open flag in that story). Only reachable
+  through a corrupt, skipped organism record; same stance as `exportWorkspace`. Telling the user is
+  **Story 5.11**'s; a loud failure at export would need an error type and UI copy (5.6/5.11).
+
+## Deferred from: code review of 5-4-rule-aware-organism-closure, round 2 (2026-09-24)
+
+- **`LocalStorageBattleRepository.load(id)` resolves inherited keys.** `readCollection()` returns a
+  plain `JSON.parse` object (or `{}`), so `load('constructor')` / `load('__proto__')` finds an
+  inherited value rather than `undefined`, fails `BattleSchema.safeParse` and throws
+  `CorruptDataError`, even on an empty store. The fake uses a `Map` and returns `null`, so
+  `exportBattle(id)` throws `ExportError('not-found')` in tests but `CorruptDataError` in production
+  for such an id. Pre-existing in `load()` (not introduced by the `exportBattle(id)` revert); real ids
+  are uuids. Fix is `Object.hasOwn(collection, id)` in `load` (and siblings reading by key).

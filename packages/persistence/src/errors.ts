@@ -10,6 +10,24 @@ export class CorruptDataError extends Error {
   }
 }
 
+/**
+ * `WorkspaceSerializer.exportBattle(id)` found no battle under that id (RFC-006 Decision 4's
+ * `ExportError('not-found')`, restored by owner ruling — Story 5.4 review, 2026-09-24). `code` is
+ * the RFC snippet's `'not-found'` discriminant, so callers branch on it rather than parse
+ * `message`. The constructor EXTENDS the snippet's one-argument `new ExportError('not-found')` with
+ * the missing `id`, for a useful message — recorded in `deferred-work.md` beside the withdrawn
+ * variance (7). Widening `code` means widening the message too; it names "No battle" today.
+ */
+export class ExportError extends Error {
+  constructor(
+    readonly code: 'not-found',
+    readonly id: string,
+  ) {
+    super(`No battle found for id "${id}"`);
+    this.name = 'ExportError';
+  }
+}
+
 /** Flattens Zod issues into one line for a CorruptDataError message. */
 export function describeIssues(
   issues: readonly { path: PropertyKey[]; message: string }[],
