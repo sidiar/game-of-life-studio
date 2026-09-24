@@ -1522,7 +1522,15 @@ describe('BattlePage — battle name & dirty tracking (Story 2.11)', () => {
       render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
       await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
-      expect(document.title).toBe('Three-Way Skirmish · Game of Life Studio');
+      // ⚠️ Poll, do not sample. The heading commits with the loaded battle, but the tab title is
+      // written by `useDocumentTitle`'s PASSIVE effect, and `findByRole` resolves off a DOM
+      // mutation — so the `waitFor` observer behind it can fire between React's commit and the
+      // effect flush. Sampling `document.title` at that instant reads the pre-mount value and
+      // reddens CI intermittently (seen on a commit that changed only a markdown file; the
+      // coverage-instrumented run is slow enough to lose the race). The hook's contract is that
+      // the title CONVERGES — it even re-asserts through a `MutationObserver` — so the assertion
+      // has to be a convergence, not a snapshot. A real failure still fails: `waitFor` times out.
+      await waitFor(() => expect(document.title).toBe('Three-Way Skirmish · Game of Life Studio'));
     });
 
     it('tracks typing, live', async () => {
@@ -1555,8 +1563,11 @@ describe('BattlePage — battle name & dirty tracking (Story 2.11)', () => {
 
       const { unmount } = render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
       await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
-      expect(document.title).toBe('Three-Way Skirmish · Game of Life Studio');
+      // Same race as the first case in this block — poll the pre-unmount title, see the note there.
+      await waitFor(() => expect(document.title).toBe('Three-Way Skirmish · Game of Life Studio'));
 
+      // The post-unmount assertion below stays a plain `expect`: `unmount()` runs the effect
+      // cleanup synchronously inside `act`, so the restore has already happened when it returns.
       unmount();
 
       expect(document.title).toBe('Battle Gallery · Game of Life Studio');
