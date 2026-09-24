@@ -2428,15 +2428,28 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   dialog ships Cancel / Clone & Edit / Edit Anyway; `handleGateCloneAndEdit` writes the clone
   through the injected `onCloneAndEdit` option, guards the gate with `gatePending`, and stashes the
   clone in `proceedRef` for `handleGateExited` to open the editor on.
-- ~~**The `[N]` in "Used in N Battles" is plain text** — no battle names, no click-through. FR-1.7's
-  popover / footer is **Story 4.20's**, which will need `battles` on the modal too (it is
-  deliberately NOT passed there today — an unread prop is a lie).~~ **✅ Closed in Story 4.20
-  (2026-09-23):** the editor footer's `<UsageIndicator>` names the battles behind N and the
+- **The `[N]` in "Used in N Battles" is plain text ON THE FR-1.3 EDIT WARNING** — no battle names,
+  no click-through. FR-1.7's popover / footer was **Story 4.20's**, and the **FOOTER half closed
+  there (2026-09-23):** the editor footer's `<UsageIndicator>` names the battles behind N and the
   organisms behind M, each in a read-only disclosure. The modal did NOT gain `battles`: it gained
   `battleSummaries`, the settled `Pick<BattleSummary, 'id' | 'name' | 'organismIds'>[]` that
   `<OrganismLibrary>` already holds — DATA, so AR-2/AR-27 stays intact and the repository stays at
   the page boundary. `<OrganismLibrary>`'s `onRequestEdit` — the count the dialog is handed — now
   reads `resolveOrganismUsage(usage, id).length`, the same derivation the footer uses (FD8).
+  ⚠️ **The DIALOG's half is still open** (re-pointed 2026-09-24, owner's decision on review item
+  D3 — this entry was briefly struck through as closed, which it is not): `<OrganismInUseDialog>`
+  renders `battleCountLabel(...)` as a plain `DialogTitle` — no names, no "Targeted by [M]", no
+  expansion — and Story 4.20 deliberately left its render alone (AC9, "nothing else moves").
+  The requirement is PRD FR-1.3's own AC
+  (`docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md:125` — the "[N] Battle(s)" count
+  "is expandable to reveal which Battles per FR-1.7"), restated by **FR-1.7** (`prd.md:155-159`:
+  read-only, names only, at the edit warning, the delete error and the footer alike) and by
+  **Architecture M7**, which names the same three surfaces. **It stands on Story 4.24**
+  (`4-24-edit-organism-from-battle`) — the remaining epic-4 story that touches this dialog, and it
+  already owns its `Current Battle (unsaved)` case; `<UsageIndicator>` + `usageLabels.ts` make the
+  click-through cheap there (the dialog takes the resolved names, or `battleSummaries`, and M as
+  props). Until then the PRD requirement is **unmet, deliberately and visibly** rather than behind a
+  false tick.
 - **A corrupt `gol:battles` now blanks the Library with the organism-worded error copy** (FD2) —
   `battles.list()` is uncaught inside the one `Promise.all`, so whole-key corruption of the battle
   collection lands in the existing `'error'` state ("Something went wrong loading your
@@ -2849,6 +2862,21 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   hover/focus tooltip the house already owns (`--gol-shadow-tooltip`'s organism-dot tooltip) applied
   only to rows that are actually clipped — **not this story's**, and not worth a tooltip layer for
   the MVP's expected name lengths.
+
+- **Escape from a control OUTSIDE the footer moves the caret off that control.** With a panel open,
+  the `document` capture listener closes the panel and returns focus to the trigger on every
+  KEYBOARD path — including a keydown whose target is the Organism Name field, a rule `<select>`, or
+  a native select popup opened with Alt+Down (Firefox and WebKit dispatch its Escape at the
+  document) — so a user who tabbed away and pressed Escape loses their place; the capture-phase
+  `stopPropagation` also hides that keydown from any other document-level Escape consumer while a
+  panel is open. **Accepted by the owner** with decision D4 (2026-09-24): the asymmetry with the
+  pointer path (D1 — focus follows the press) is the conventional one, a pointer user having chosen
+  the spot focus lands on while a keyboard user has chosen nothing and needs the one defined landing
+  place AC4 names. The rationale is recorded next to the handler in `UsageIndicator.tsx` so a later
+  reader does not "fix" the asymmetry back into a contradiction. The named revisit, if it ever
+  bites: restore focus to the trigger only when the keydown's target is inside `rootRef`, the Dialog
+  paper or `body` (option (b) in the review), still closing the panel and still stopping
+  propagation.
 
 ## Deferred from: code review of 4-20-usage-visibility-ui (2026-09-24, second pass)
 

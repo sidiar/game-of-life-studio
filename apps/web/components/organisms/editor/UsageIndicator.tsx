@@ -213,6 +213,42 @@ export default function UsageIndicator({
     setOpenPanel((current) => (current === key ? null : key));
   }, []);
 
+  // ⚠️ One press closes ONE layer (owner's decision on review item D5, 2026-09-24). A HELD Escape
+  // used to close the panel and then the EDITOR: the effect below closes the panel on the first
+  // keydown, React flushes and the effect's cleanup removes the listener long before the key's
+  // auto-repeat arrives (a 250–500 ms OS delay, then a ~30 ms period), so the next repeated keydown
+  // reached MUI's root handler — and with no dirty guard until Story 4.23, that takes the draft.
+  // MUI's `useModal` does not check `event.repeat` either, so the guard lives here: once Escape has
+  // closed a panel, every Escape keydown with `repeat` set is stopped until the matching keyup ends
+  // the hold. A deliberate second press has `repeat === false`, so it still closes the editor.
+  //
+  // The armed listeners ARE the flag — the ref holds their disarm — and they are added imperatively
+  // rather than from an effect on purpose: the effect below is armed on `openPanel`, so its cleanup
+  // runs at the very moment the guard has to start. A keyup that never arrives (the window loses
+  // focus mid-hold) leaves the guard armed, which is harmless: it only ever stops keydowns that
+  // carry `repeat`, and those exist only inside a hold.
+  const disarmRepeatGuardRef = useRef<(() => void) | null>(null);
+  const swallowRepeatsUntilKeyUp = useCallback(() => {
+    disarmRepeatGuardRef.current?.();
+    function onRepeatedKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && event.repeat) event.stopPropagation();
+    }
+    function onKeyUp(event: KeyboardEvent) {
+      if (event.key === 'Escape') disarm();
+    }
+    function disarm() {
+      document.removeEventListener('keydown', onRepeatedKeyDown, true);
+      document.removeEventListener('keyup', onKeyUp, true);
+      disarmRepeatGuardRef.current = null;
+    }
+    document.addEventListener('keydown', onRepeatedKeyDown, true);
+    document.addEventListener('keyup', onKeyUp, true);
+    disarmRepeatGuardRef.current = disarm;
+  }, []);
+
+  // The guard outlives the panel by design, so unmount is the one close path that must disarm it.
+  useEffect(() => () => disarmRepeatGuardRef.current?.(), []);
+
   // ⚠️ FD4 — the whole reason this listener exists. MUI's `Modal` handles Escape in a React
   // `onKeyDown` on the modal ROOT, an ancestor of this footer, so an unstopped `keydown` closes the
   // EDITOR and takes the user's unsaved draft with it — for a key press whose only visible effect
@@ -225,12 +261,23 @@ export default function UsageIndicator({
   // click on the trigger (see `toggle`). A click inside the panel is NOT one of them since D2: it
   // lands focus on the name list's `tabIndex={0}` scroll region, still inside the footer — before
   // that it landed on the Dialog paper's `tabIndex=-1`, and was the path that first exposed this.
-  // Capture on
-  // `document` runs before React's root listener on every path, so `stopPropagation` here is what
-  // keeps the first Escape from MUI; the second, with no panel open, has no listener and falls
-  // through to the editor as it always has. Nothing else catches this: it typechecks, the panel
-  // does close, and only an assertion that the editor is STILL OPEN sees it (review, 2026-09-23 —
-  // reproduced on the local WebKit project before the listener moved).
+  // Capture on `document` runs before React's root listener on every path, so `stopPropagation`
+  // here is what keeps the first Escape from MUI; a second, DELIBERATE press — no panel open, and
+  // `repeat` false so the auto-repeat guard above ignores it — falls through to the editor as it
+  // always has. Nothing else catches this: it typechecks, the panel does close, and only an
+  // assertion that the editor is STILL OPEN sees it (review, 2026-09-23 — reproduced on the local
+  // WebKit project before the listener moved).
+  //
+  // ⚠️ Focus returns to the OPENER on every KEYBOARD path, including a keydown whose target is a
+  // control the user chose — the name field, a rule `<select>`, or a native select popup opened
+  // with Alt+Down, which dispatches its Escape at the document on Firefox and WebKit. That is
+  // deliberately NOT what an outside POINTERDOWN does (decision D1: focus follows the press), and
+  // the asymmetry is the conventional one, kept by the owner's decision on review item D4
+  // (2026-09-24): a pointer user has chosen the spot focus lands on, a keyboard user has chosen
+  // nothing and needs one defined landing place, which AC4 names as the trigger. Do NOT reconcile
+  // the two dismissals into a single rule — they differ on purpose. The accepted cost is recorded
+  // in `deferred-work.md` (Escape from a control outside the footer moves the caret off it), with
+  // "restore only when the target is inside `rootRef`, the paper or `body`" as the named revisit.
   useEffect(() => {
     if (openPanel === null) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -238,10 +285,11 @@ export default function UsageIndicator({
       event.stopPropagation();
       setOpenPanel(null);
       openerRef.current?.focus();
+      swallowRepeatsUntilKeyUp();
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [openPanel]);
+  }, [openPanel, swallowRepeatsUntilKeyUp]);
 
   // Outside dismissal, armed ONLY while a panel is open (FD5): the mockup keeps a permanent
   // `click` listener, which is one more thing to unbind correctly on every close path. Events

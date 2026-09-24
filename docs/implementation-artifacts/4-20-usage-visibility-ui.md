@@ -4,7 +4,7 @@ baseline_commit: e06da2e
 
 # Story 4.20: Usage Visibility UI
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -93,8 +93,12 @@ empty list item) are settled there.
    `OrganismEditorModalProps`, passed from `<OrganismLibrary>`'s already-settled `summaries`
    (`OrganismLibrary.tsx:258`). ❌ No `BattleRepository` on the modal, no `createRepositories()`,
    no `battles.list()` from inside the editor (AR-2/AR-27) — `organisms` stays the modal's only
-   injected repository, and it is still only used for Save. Closes `deferred-work.md:2420-2422`
-   ("Story 4.20 … will need `battles` on the modal too").
+   injected repository, and it is still only used for Save. ⚠️ **Amended 2026-09-24** (owner's
+   decision on review item D3): what this closes is the **footer half** of
+   `deferred-work.md:2431` — that entry's `battles`-on-the-modal question ("Story 4.20 … will need
+   `battles` on the modal too"), answered with DATA. It does **not** close the entry: FR-1.3's
+   expandable "[N] Battle(s)" on `<OrganismInUseDialog>` (`prd.md:125`, FR-1.7, M7) is untouched
+   here (AC9) and is re-pointed at Story 4.24.
 
 7. **Names are resolved through the existing display helpers, never raw.** Battle names through
    `battleDisplayName` (`apps/web/lib/battleDisplayName.ts` — `''`, whitespace and invisible-only
@@ -244,7 +248,11 @@ empty list item) are settled there.
         `disableRules` in this spec).
 
 - [x] **Task 7 — Re-point the five `deferred-work.md` entries that name this story (AC: 9).**
-  - [x] `:2420-2422` (battles on the modal) — mark **closed by this story** with the prop's name.
+  - [x] `:2431` (the `[N]` is plain text; "will need `battles` on the modal too") — record the
+        **footer half as closed by this story**, with the prop's name. ⚠️ **Corrected 2026-09-24**
+        (decision D3): the entry is NOT struck through as done — FR-1.3's expandable count on
+        `<OrganismInUseDialog>` (`prd.md:125`, FR-1.7, M7) is still open and now stands on
+        Story 4.24.
   - [x] `:743-752` (the card's rules-preview sentence) and `:772-782` (the card's stat-cell
         semantics) — annotate in place: Story 4.20 is the editor FOOTER, not the card; re-point at
         the next story that reshapes `<OrganismCard>` (4.21/4.22 add its Delete action).
@@ -403,7 +411,7 @@ was `BattlePage.test.tsx` "is restored to the pre-mount title on unmount" — a 
 branch's: that commit changed one markdown file, and no BattlePage import reaches anything this
 branch touched (verified against the run log and the import graph).
 
-- [ ] [Review][Decision] **FR-1.3's edit-warning `[N]` is still plain text, and the deferred entry
+- [x] [Review][Decision] **FR-1.3's edit-warning `[N]` is still plain text, and the deferred entry
       that tracked it now reads as closed** — PRD FR-1.3's AC says the warning's "[N] Battle(s)"
       count "is expandable to reveal which Battles per FR-1.7"; FR-1.7 and M7 both name the edit
       warning as one of the three surfaces with the read-only click-through, and Story 4.17
@@ -422,7 +430,22 @@ branch touched (verified against the run log and the import graph).
       own), and correct AC6's "Closes" claim and Task 7's first bullet; **(c)** accept the story's
       reading and amend PRD FR-1.3 / FR-1.7 / M7 to drop the edit-warning surface — a spec change
       outside this story. [apps/web/components/organisms/OrganismInUseDialog.tsx, docs/implementation-artifacts/deferred-work.md:2431]
-- [ ] [Review][Decision] **Escape from a control outside the footer pulls focus onto the trigger
+      **Owner's decision (2026-09-24): (b), re-point and correct the claim.** The dialog's
+      click-through is NOT implemented here — AC9's "nothing else moves" stands, and the diff stays
+      honest. Do all four of these:
+      1. **Un-strike `deferred-work.md:2431-2438`** and reword its closure so it says what actually
+         happened: the FOOTER half closed in Story 4.20; the FR-1.3 edit-warning dialog's
+         click-through is still open. The entry must not read as done.
+      2. **Re-point it at Story 4.24** (`4-24-edit-organism-from-battle`), which already owns this
+         dialog's `Current Battle (unsaved)` case and is the remaining epic-4 story that touches
+         this surface. Name the PRD citation (`prd.md:125`, FR-1.7, M7) in the re-pointed entry so
+         4.24 inherits the requirement rather than the rumour of it.
+      3. **Correct AC6's "Closes `deferred-work.md:2420-2422`" claim** and Task 7's first bullet to
+         claim only the footer disclosure.
+      4. Leave `<OrganismInUseDialog>`'s render as it is. No new props, no `<UsageIndicator>`.
+      The PRD requirement stays unmet — deliberately, and now visibly so rather than hidden behind
+      a false tick.
+- [x] [Review][Decision] **Escape from a control outside the footer pulls focus onto the trigger
       and swallows the key** — D1 accepted that Tab / Shift+Tab leaves the panel open and that
       Escape from there closes the panel, not the editor; it did not lay out where focus GOES. As
       written the capture listener runs `openerRef.current?.focus()` unconditionally, so a keyboard
@@ -436,7 +459,17 @@ branch touched (verified against the run log and the import graph).
       the Dialog paper / `body` (i.e. not a control the user chose) — still close the panel and still
       stop propagation; **(c)** close the panel on `focusout` leaving `rootRef` (the first review's
       option (c)), which makes the path unreachable. [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown]
-- [ ] [Review][Decision] **A held Escape closes the panel and then the editor** — the first
+      **Owner's decision (2026-09-24): (a), keep.** Escape closes the panel and returns focus to
+      the trigger on every path, as AC4 (amended) already says. This is **not** in tension with
+      D1: the two dismissals are deliberately different, and the reason is the conventional one —
+      a POINTER dismissal leaves focus where the user pointed, because they chose that spot;
+      a KEYBOARD dismissal returns focus to the trigger, because a keyboard user needs a defined
+      landing place and has not chosen one. Record that rationale next to the handler, so a later
+      reader does not "fix" the asymmetry back into a contradiction. Add a `deferred-work.md` entry
+      for the accepted cost: Escape from a control outside the footer moves the caret off that
+      control, and option (b) (restore only when the target is inside `rootRef`, the paper or
+      `body`) is the named revisit if it ever bites. No code change.
+- [x] [Review][Decision] **A held Escape closes the panel and then the editor** — the first
       `keydown` closes the panel; React flushes and the effect cleanup removes the capture listener
       long before the key's auto-repeat (250–500 ms delay, then ~30 ms period), so the next repeated
       `keydown` "has no listener and falls through to the editor as it always has" (the comment's
@@ -446,6 +479,17 @@ branch touched (verified against the run log and the import graph).
       and 4.23's guard is the real protection for the draft; **(b)** after closing a panel, keep
       swallowing `event.repeat` keydowns until the matching `keyup` (a ref flag plus a one-shot
       `keyup` listener), so one press closes one layer. [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown]
+      **Owner's decision (2026-09-24): (b), swallow repeats until keyup.** After a panel closes,
+      keep swallowing `keydown` events whose `event.repeat` is true until the matching `keyup`
+      arrives — a ref flag plus a one-shot `keyup` listener. One press closes one layer: a held
+      Escape closes the panel and stops there, and a second deliberate press closes the editor as
+      it does today. The draft is the reason: there is no dirty guard until Story 4.23, so this
+      path is destructive today and merely untidy after 4.23.
+      Note the testability limit the review found: neither `user.keyboard` nor `page.keyboard.press`
+      sets `repeat`, so no ordinary test can drive it. Pin it by **dispatching a synthetic
+      `KeyboardEvent('keydown', { key: 'Escape', repeat: true })`** at the document and asserting
+      the editor stays mounted — and say in a comment that the synthetic event is standing in for a
+      real auto-repeat, so the test is not mistaken for a user-path test.
 - [x] [Review][Patch] **D2 made a click inside the panel land focus INSIDE the footer, so the two
       tests that pin FD4's out-of-footer path against MUI's real root handler no longer do — and
       three comments plus two story passages still describe the old shape**
@@ -694,6 +738,27 @@ Classic, `Used in 1 Battle`) and at **40 rows** (e2e test 6 — 2 mock battles +
 all three local engines, plus the jsdom scans (`UsageIndicator`, modal test 53) which cover the
 collapsed and 2-row states. No `disableRules`, no exceptions.
 
+#### Review decisions D3/D4/D5 (2026-09-24)
+
+Every command run from the worktree root (`.claude/worktrees/lane-epic-4`), none piped — `ci:dev` was
+redirected to a file and its status read from `$?`, which is the real code, not a pipe's:
+
+| Command | Result |
+|---|---|
+| `npx vitest run components/organisms/editor/OrganismEditorModal.test.tsx -t "held Escape"` (in `apps/web`) | **1 passed** — the new D5 case |
+| the same case against the component with the `swallowRepeatsUntilKeyUp()` call deleted (mutation check) | **1 failed** — `onClose` called once by the synthetic repeat — then restored: the test sees the bug |
+| `npx vitest run components/organisms/editor/UsageIndicator.test.tsx components/organisms/editor/OrganismEditorModal.test.tsx` | **117 passed** (116 + modal case 56) |
+| `npx prettier --check` on the four touched files | clean before `ci:dev`, so no repeat of the first pass's `format:check` failure |
+| `npm run ci:dev` | **exit 0** |
+| `npx playwright test --project=chromium --project=webkit --project=firefox -g "usage visibility footer"` | **21 passed** (43.2s) — 7 cases x 3 engines, run because D5 touches key handling |
+
+`ci:dev` detail: typecheck 5/5 · lint **0 errors** (the same single pre-existing
+`BattleGallery.tsx:248` `exhaustive-deps` warning, untouched) · format:check clean · spec:check clean
+(**273 ids** resolve) · boundary:check clean · coverage — `web` **122 files / 2098 tests**, all
+packages green · build:standalone 5/5 · bundle:check all five routes within budget, `/organisms`
+**297.5 KB gzip / 305 KB — unchanged, 7.5 KB headroom** (`scripts/check-bundle-size.mjs` NOT edited)
+· bench **9.473 ms frame against 16.667 ms** (43.2% headroom) · e2e Chromium **262 passed** (2.3m).
+
 ### Completion Notes List
 
 - **Task 2 — `lib/organisms/usageLabels.ts`.** `battleCount` / `battleCountLabel` /
@@ -774,6 +839,56 @@ collapsed and 2-row states. No `disableRules`, no exceptions.
   (`getBoundingClientRect().top >= 0` — the clipping neither `toBeVisible` nor axe reports), that the
   region takes focus, and that a long row is clipped to one line (`scrollWidth > clientWidth`, height
   under 30px). All three engines agree.
+
+**Review decisions D3/D4/D5 (2026-09-24), the owner's answers applied:**
+
+- **D3 — FR-1.3's edit-warning click-through: option (b), re-point and correct the claim.**
+  Documentation only. `<OrganismInUseDialog>` is untouched — no new props, no `<UsageIndicator>` —
+  so AC9's "nothing else moves" stands and the diff stays honest. (1) `deferred-work.md:2431` is
+  **un-struck**: the `~~…~~` and the `✅ Closed in Story 4.20` are gone, and the entry now says what
+  happened — the FOOTER half closed in 4.20 (the `<UsageIndicator>` disclosures, and
+  `battleSummaries` as the DATA answer to the entry's "will need `battles` on the modal too"), while
+  the DIALOG's half is still open, with what that dialog renders today (a plain `DialogTitle`, no
+  names, no "Targeted by [M]") spelled out. (2) It is **re-pointed at Story 4.24**
+  (`4-24-edit-organism-from-battle`), which already owns this dialog's `Current Battle (unsaved)`
+  case, and it carries the requirement's own citations so 4.24 inherits the requirement rather than
+  the rumour of it: PRD FR-1.3's AC
+  (`docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md:125`), FR-1.7 (`prd.md:155-159`)
+  and Architecture M7. (3) AC6's "Closes `deferred-work.md:2420-2422`" and Task 7's first bullet now
+  claim the **footer half only**, and carry the entry's real line number (`:2431`). **The PRD
+  requirement stays unmet — deliberately, and now visibly rather than behind a false tick.**
+- **D4 — Escape from a control outside the footer: option (a), keep.** No code change. The rationale
+  is recorded next to the handler in `UsageIndicator.tsx`: a POINTER dismissal leaves focus where the
+  press landed because the user chose that spot (D1); a KEYBOARD dismissal returns focus to the
+  trigger because a keyboard user has chosen nothing and needs the one defined landing place AC4
+  names. The two dismissals differ on purpose, and the comment says so, so a later reader does not
+  "fix" the asymmetry back into a contradiction. The accepted cost — Escape from the name field, a
+  rule `<select>` or a native select popup moves the caret off that control, and the capture-phase
+  `stopPropagation` hides that keydown from any other document-level Escape consumer while a panel is
+  open — is a new `deferred-work.md` entry naming option (b) (restore only when the target is inside
+  `rootRef`, the Dialog paper or `body`) as the revisit.
+- **D5 — a held Escape: option (b), swallow `event.repeat` until keyup.** The only code change of the
+  three. When Escape closes a panel, `swallowRepeatsUntilKeyUp()` arms a `document` capture `keydown`
+  listener that `stopPropagation`s every Escape keydown carrying `repeat`, plus a capture `keyup`
+  that disarms both on the first Escape release; the ref holding that disarm IS the flag, and an
+  unmount effect is the one close path that must always run it. They are armed imperatively rather
+  than from an effect because the panel-open effect's cleanup fires at the exact moment the guard has
+  to start. One press now closes one layer: a held Escape closes the panel and stops there, and a
+  deliberate second press (`repeat === false`) closes the editor as it always did. A keyup lost to a
+  focus change mid-hold leaves the guard armed harmlessly — it only ever stops keydowns that carry
+  `repeat`, and those exist only inside a hold. The draft is the reason it is worth a guard at all:
+  there is no dirty check until Story 4.23, so this path is destructive today.
+- **How D5 is pinned, and the testability limit the review named.** Neither `user.keyboard` nor
+  `page.keyboard.press` ever sets `repeat`, so no ordinary test can drive a real auto-repeat. Modal
+  test **(56)** holds Escape (`{Escape>}` — keydown with no keyup), dispatches a **synthetic**
+  `keydown` with `repeat: true`, asserts the dialog is still mounted and `onClose` was not called,
+  then releases (`{/Escape}`) and presses Escape deliberately for the editor's own close. Its comment
+  says the synthetic event stands in for the OS's second keydown ~250-500 ms into the hold, so the
+  case is not mistaken for a user-path test. **One deviation from the decision's letter, with its
+  reason in the comment:** the event is dispatched on the focused trigger, not on `document` — React
+  19 delegates to the root CONTAINER, so an event dispatched at `document` never reaches MUI's
+  `onKeyDown` at all and the assertion would pass with the guard deleted. Mutation-checked: with the
+  `swallowRepeatsUntilKeyUp()` call removed the case fails on `onClose` having been called once.
 
 ### File List
 
@@ -860,6 +975,19 @@ the worktree root, none piped:
   3 `[Review][Decision]` items left for the owner (the edit-warning click-through PRD FR-1.3 asks
   for and the closed deferred entry; Escape-from-a-field focus steal; held-Escape auto-repeat);
   2 deferred to 4.24. Status → in-progress.
+
+- 2026-09-24 — Owner's second-pass review decisions resolved (D3/D4/D5). **D3 (b), docs only:** the
+  `deferred-work.md` entry for FR-1.3's expandable `[N]` is un-struck, reworded to "the footer half
+  closed in 4.20", and re-pointed at **Story 4.24** with its PRD FR-1.3 / FR-1.7 / M7 citations;
+  AC6 and Task 7's first bullet now claim the footer disclosure only. `<OrganismInUseDialog>`'s
+  render is unchanged, so the PRD requirement reads as open rather than falsely ticked.
+  **D4 (a), keep:** the pointer-vs-keyboard focus asymmetry's rationale is recorded next to the
+  handler, and its accepted cost (Escape from a control outside the footer moves the caret) is a new
+  `deferred-work.md` entry naming option (b) as the revisit. **D5 (b):** a held Escape now closes ONE
+  layer — `swallowRepeatsUntilKeyUp()` swallows Escape keydowns carrying `repeat` until the matching
+  keyup — pinned by modal test (56) with a synthetic repeat event and mutation-checked.
+  `npm run ci:dev` **exit 0**; the footer e2e block **21 passed** on chromium / webkit / firefox;
+  `/organisms` 297.5 KB / 305 KB, unchanged. Status → review.
 
 Dev Model: opus   # first editor footer + first disclosure overlay in the app, and a prop contract 4.21/4.24 build on — pattern-setting, not pattern-following
 

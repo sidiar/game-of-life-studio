@@ -2444,6 +2444,42 @@ describe('OrganismEditorModal', () => {
         expect(trigger).toHaveFocus();
       });
 
+      // Owner's decision on review item D5 (2026-09-24): one press closes ONE layer. A held Escape
+      // used to close the panel and then the editor, because the panel's capture listener is gone
+      // by the time the OS auto-repeat arrives — destructive today, since the editor has no dirty
+      // guard until Story 4.23.
+      //
+      // ⚠️ The middle event is SYNTHETIC, standing in for a real auto-repeat: neither
+      // `user.keyboard` nor Playwright's `page.keyboard.press` ever sets `repeat`, so no ordinary
+      // test can drive the OS's second keydown ~250–500 ms into a hold. This is therefore NOT a
+      // user-path assertion — it pins exactly one thing, that a keydown carrying `repeat` does not
+      // reach MUI's root handler. It is dispatched on the focused trigger rather than on
+      // `document`, because React 19 delegates to the root CONTAINER: an event dispatched at
+      // `document` never reaches MUI's `onKeyDown` at all, so the test would pass with the guard
+      // deleted. `{Escape>}` presses and holds (no keyup); `{/Escape}` releases.
+      it('(56) ⚠️ a held Escape closes the panel and stops there; a deliberate second press closes the editor (D5)', async () => {
+        const user = userEvent.setup();
+        const { onClose } = mountEdit({ battleSummaries: PLACED });
+
+        const trigger = within(usageFooter()).getByRole('button', { name: 'Used in 2 Battles' });
+        await user.click(trigger);
+        await user.keyboard('{Escape>}');
+
+        expect(document.querySelector('[data-usage-battles-panel]')).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+        expect(trigger).toHaveFocus();
+
+        fireEvent.keyDown(trigger, { key: 'Escape', repeat: true });
+
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        await user.keyboard('{/Escape}');
+        await user.keyboard('{Escape}');
+
+        expect(onClose).toHaveBeenCalledTimes(1);
+      });
+
       it('(55) the footer is reachable by Tab after the three columns (AC4)', async () => {
         const user = userEvent.setup();
         mountEdit({ battleSummaries: PLACED });
