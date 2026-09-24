@@ -2883,6 +2883,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `exportBattle(id)` throws `ExportError('not-found')` in tests but `CorruptDataError` in production
   for such an id. Pre-existing in `load()` (not introduced by the `exportBattle(id)` revert); real ids
   are uuids. Fix is `Object.hasOwn(collection, id)` in `load` (and siblings reading by key).
+
 ## Deferred from: Story 4-20-usage-visibility-ui implementation (2026-09-23)
 
 - **`usageBattleNames`' `'Current Battle (unsaved)'` branch is unreachable until Story 4.24** (FD9).
@@ -2891,7 +2892,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `resolveOrganismUsage` yet — nothing that mounts this editor has a live grid until 4.24 opens it
   over `<BattlePage>`. Covered by a unit test rather than by a rendered affordance, and deliberately
   NOT wired with an `openBattle` prop every caller would pass as `undefined` (the unread prop this
-  repo already refused once, `:2420`). **Story 4.24** is where the branch becomes reachable, and it
+  repo already refused once, `:2431`). **Story 4.24** is where the branch becomes reachable, and it
   should assert it through the UI then.
 - **The footer diverges from the UX doc's single-popover phrasing** (FD12).
   `organism-editor-design.md:120` says "the popover gains a second read-only section", which reads as
@@ -2900,7 +2901,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   button when the other is not, which would make AC3's "Used in 0 Battles renders without expansion"
   depend on a count it is not about. Two labels keep that rule uniform and match the AC's own "lists
   the battle (**or** organism) names". **Not a spec edit** — recorded for the same UX touch that owns
-  the header/footer reconciliation (`:786`).
+  the header/footer reconciliation (`:791`).
 - **The mockup paints the COUNT in `--gol-accent`; the footer paints the caret instead.** The label
   is one exported string (`battleCountLabel` / `ruleTargetCountLabel`, AC5's single-copy rule), so
   there is no element around the digits to colour without splitting the helper's output at the call
@@ -2958,6 +2959,23 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   bites: restore focus to the trigger only when the keydown's target is inside `rootRef`, the Dialog
   paper or `body` (option (b) in the review), still closing the panel and still stopping
   propagation.
+
+## Deferred from: code review of 4-20-usage-visibility-ui (2026-09-24, third pass)
+
+- **A second modal opened over the editor WITHOUT a pointerdown, while a usage panel is open, has
+  its Escape eaten by the panel's capture listener** (`UsageIndicator.tsx`, `handleKeyDown`).
+  Unreachable today: every path that opens something over the editor is a click (✕, Back — the
+  `pointerdown` closes the panel first) or the editor's own Escape (which only reaches MUI once no
+  panel is open), and the editor contains no keyboard-opened MUI overlay — its controls are native
+  `<select>`/`<input>`, and a native select popup handles Escape itself (the D4 entry above records
+  that class). **Story 4.23**'s unsaved-changes confirm is the first surface that could mount over
+  the editor from the keyboard or programmatically (`handleRequestClose` invoked with
+  `openPanel !== null`): Escape would then close the hidden panel, `stopPropagation` would keep it
+  from the confirm, and `openerRef.current.focus()` would pull focus out of the top modal to the
+  footer trigger behind it. Guard for 4.23: close the panel from `handleRequestClose` (or on the
+  confirm's `open` transition) before the second modal mounts — an effect that resets `openPanel`
+  on a prop is the `react-hooks/set-state-in-effect` lint error `project-context.md` records, so
+  it wants an imperative close on the event, not a derived one.
 
 ## Deferred from: code review of 4-20-usage-visibility-ui (2026-09-24, second pass)
 

@@ -4,7 +4,7 @@ baseline_commit: e06da2e
 
 # Story 4.20: Usage Visibility UI
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -31,7 +31,7 @@ empty list item) are settled there.
    `.editor-footer` (`clinical-lab-theme/organism-editor.html:818-828, :1222-1235`). It renders on
    every open, in both create and edit sessions (UX-DR6: "persistent"). ⚠️ **Save does NOT move
    into it** and the organism name does NOT move into the header: that is the three-way spec
-   divergence Story 4.3 recorded (`deferred-work.md:786-800`, FD1) and it stays recorded, not
+   divergence Story 4.3 recorded (`deferred-work.md:791-808`, FD1) and it stays recorded, not
    resolved by this story. The header keeps Back / centred title / Save + ✕ exactly as shipped.
 
 2. **"Used in [N] Battle(s)" is always rendered; "Targeted by [M] organism rule(s)" only when M > 0.**
@@ -74,6 +74,10 @@ empty list item) are settled there.
    press landed (a restore there is either overridden by the click's own `mousedown` focus or steals
    focus from a field the user chose), and tabbing away leaves the panel open, from where Escape
    still closes the panel rather than the editor.
+   ⚠️ **Amended 2026-09-24** (owner's decision on review item D5): **a HELD Escape closes one layer.**
+   Once Escape has closed a panel, keydowns carrying `repeat` are swallowed until the matching
+   keyup, so the auto-repeat does not go on to close the editor; a deliberate second press does. A
+   panel opened during the hold is likewise not closed by the repeat (third review, 2026-09-24).
 
 5. **One derivation and one label, across all three surfaces (the AC's "counts are consistent").**
    - the VALUE is `resolveOrganismUsage(index, organismId).length` — never `index.get(id)?.length`.
@@ -174,7 +178,9 @@ empty list item) are settled there.
         styling: `.footer-usage-note` (11px, uppercase, `--gol-text-secondary`, the count in
         `--gol-accent`), `.usage-popover` (absolute, `bottom: 150%`, `min-width: 200px`,
         `--gol-bg-hover` background, `--gol-border`). Tokens only — the AR-46 no-raw-hex rule is
-        active on `apps/web`.
+        active on `apps/web`. **Deviation, recorded (Completion Notes, `deferred-work.md`):** the
+        accent lands on the `▾` caret, not the digits — the label is one exported string (AC5), so
+        there is no element around the count to colour.
   - [x] Zero count → plain text, no `<button>`, no `aria-expanded`, no panel (AC3).
   - [x] Opening one panel closes the other.
   - [x] ⚠️ **Escape handling (FD4).** ~~An `onKeyDown` on the footer root~~ **A `document`
@@ -190,6 +196,13 @@ empty list item) are settled there.
   - [x] Focus stays on the trigger (no `autoFocus` into the panel — nothing in it is interactive);
         after Escape, focus is on the trigger. ⚠️ **Amended 2026-09-24** (decision D1): an outside
         dismissal is NOT a focus-restoring path — focus follows the press.
+  - [x] **(2026-09-24, decision D5)** A held Escape closes ONE layer: `swallowRepeatsUntilKeyUp()`
+        arms a `document` capture `keydown` that stops every Escape carrying `repeat`, plus a
+        one-shot capture `keyup` that disarms both; unmount is the other disarm path. The panel
+        listener itself ignores a `repeat` keydown (third review). Pinned by modal test 56 with a
+        SYNTHETIC repeat event — dispatched on the focused trigger, not `document` as the decision's
+        letter said, because an event whose target is `document` never reaches React's root
+        container in the jsdom harness and the assertion would be vacuous; mutation-checked.
   - [x] **(2026-09-24, decision D2)** The name list — not `Panel` — is the scroll region:
         `maxHeight: min(60vh, 400px)`, `overflowY: auto`, `tabIndex={0}` and
         `aria-labelledby` → `PanelTitle` for its accessible name (axe's
@@ -253,13 +266,13 @@ empty list item) are settled there.
         (decision D3): the entry is NOT struck through as done — FR-1.3's expandable count on
         `<OrganismInUseDialog>` (`prd.md:125`, FR-1.7, M7) is still open and now stands on
         Story 4.24.
-  - [x] `:743-752` (the card's rules-preview sentence) and `:772-782` (the card's stat-cell
+  - [x] `:743-755` (the card's rules-preview sentence) and `:775-788` (the card's stat-cell
         semantics) — annotate in place: Story 4.20 is the editor FOOTER, not the card; re-point at
         the next story that reshapes `<OrganismCard>` (4.21/4.22 add its Delete action).
-  - [x] `:2463-2471` (focus lost after renaming an organism out of the active search filter) —
+  - [x] `:2493-2503` (focus lost after renaming an organism out of the active search filter) —
         annotate: 4.20 touches the Library for one prop and one call site and does not reach the
         focus-restore path; it stands on **Story 4.23**, the entry's own alternative.
-  - [x] `:786-800` (the header/footer three-way divergence) — annotate with what this story
+  - [x] `:791-808` (the header/footer three-way divergence) — annotate with what this story
         actually built: the footer exists and holds the usage indicator only; Save and the name did
         not move; the UX reconciliation is still the next UX touch's.
   - [x] Add this story's own deferrals, including the unreachable-until-4.24
@@ -537,6 +550,103 @@ reveal (already this story's own deferral in `deferred-work.md`, D2's follow-thr
 "exactly one `[tabindex]`" assertion running on the battles panel only (both panels come from the
 one `disclosure()` helper, so it is a test of the helper).
 
+### Review Findings — third pass (2026-09-24)
+
+Reviewed on **Fable** against an **Opus** implementation, after the owner's D3/D4/D5 decisions landed
+in `6d8615a` and the branch was synced with `main` in `45b2ce0` (#76, #77), via the same three
+parallel layers. 0 `decision-needed`, 9 `patch`, 1 `defer`, 5 dismissed. CI on `45b2ce0`: **green** —
+quality and all four e2e projects (run 36003099174). The sync's keep-both resolution of
+`deferred-work.md` was diffed line-by-line against both parents: nothing from either side is missing
+except ONE blank line (patched below), no conflict marker remains, and `main`'s only change under
+`packages/domain` that this story reads is a comment-only edit to `ruleReferenceIndex.ts` — 5-4's
+`organismClosure` is a new module beside it, so `resolveOrganismUsage` / `buildRuleReferenceIndex`
+return exactly what they did. D5's mutation check was re-run here: with the
+`swallowRepeatsUntilKeyUp()` call deleted, modal test 56 fails on `onClose` — the synthetic repeat
+event is a real assertion, and its "dispatched on the trigger, not `document`" deviation is correct
+(in the jsdom harness React's root container is RTL's `<div>` and, for the portal, `document.body`;
+an event whose target is `document` reaches neither).
+
+- [x] [Review][Patch] **A panel opened MID-HOLD is closed by the auto-repeat — one hold, two layers**
+      [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown] — the repeat guard
+      protects the EDITOR, but the panel-close listener itself acted on any Escape keydown: hold
+      Escape (panel A closes, guard armed), open panel B with Enter/Space during the hold, and the
+      next repeat closes B too — the guard's `stopPropagation` does not suppress a sibling listener
+      on the same node. `handleKeyDown` now stops propagation and then IGNORES a keydown carrying
+      `repeat` (the panel stays, the editor stays; a deliberate press after release closes it), so
+      D5's "one press closes one layer" holds for a panel opened during the hold as well. Pinned by
+      a new `UsageIndicator` test (mutation-checked).
+- [x] [Review][Patch] **Escape that cancels an IME composition closed the panel and moved focus
+      mid-composition** [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown] —
+      the first review dismissed IME on the grounds that nothing in the footer accepts input, but D1
+      accepted Tab-away with the panel open, so focus CAN be in the Organism Name field while a panel
+      is up. Firefox and WebKit deliver the composition-cancelling Escape as `key: 'Escape'` with
+      `isComposing` / `keyCode 229`; MUI's own root handler skips `which === 229`, this listener did
+      not. It now mirrors MUI: a composing keydown is not ours and passes through untouched (MUI
+      skips it too). Pinned by a new `UsageIndicator` test.
+- [x] [Review][Patch] **The FD4 comment's ordering reason is a test-harness fact, not a production
+      one** [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown,
+      apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:test 56] — "capture on
+      `document` runs before React's root listener on every path" is false in the App Router: Next
+      calls `hydrateRoot(document)` (`next/dist/client/app-index.js:32,293`), so React's delegated
+      capture AND bubble listeners live on `document`, registered before ours. What actually keeps
+      the key from MUI is that `stopPropagation` from a document-capture listener cancels the BUBBLE
+      phase, where `useModal`'s `onKeyDown` lives; an `onKeyDownCapture` consumer would still see
+      it. The behaviour is correct; both comments now state the real mechanism.
+- [x] [Review][Patch] **The guard's boundary is undocumented** [apps/web/components/organisms/editor/UsageIndicator.tsx:swallowRepeatsUntilKeyUp]
+      — the keyup disarm is hygiene with no observable effect (a stale guard only ever stops
+      `repeat` keydowns, and a fresh hold's first keydown is never one), so no test can pin it; and
+      a platform that delivers auto-repeat as keyup/keydown pairs without `repeat` (classic X11
+      without detectable auto-repeat, some remote-desktop bridges) is outside the guard entirely.
+      The comment now says both rather than implying the hold is fully covered.
+- [x] [Review][Patch] **`deferred-work.md` citations drifted off their entries — and FD9 quotes a
+      sentence D3's rewrite deleted** [docs/implementation-artifacts/4-20-usage-visibility-ui.md:FD9,
+      References, AC1, Task 7; docs/implementation-artifacts/deferred-work.md:2894,2903] — FD9 and
+      the References still cited `:2420-2422` (now the struck 4.17 Clone & Edit entry) and FD9
+      quoted "an unread prop is a lie", which the re-pointed entry no longer contains; this story's
+      own annotations shifted the header/footer entry to `:791-808`, the stat-cell entry to
+      `:775-788` and the focus-after-rename entry to `:2493-2503`, while Task 7 and AC1 kept the
+      baseline numbers; the story's FD9 deferral entry cited `:2420` and its FD12 entry `:786`. All
+      re-pointed to the current lines, and FD9's quote is marked as the entry's ORIGINAL wording.
+- [x] [Review][Patch] **The modal's prop comment still says the story "closes" the FR-1.3 entry**
+      [apps/web/components/organisms/editor/OrganismEditorModal.tsx:battleSummaries] — after D3
+      the entry is open on its dialog half; the comment now claims the `battles`-on-the-modal half
+      only and names Story 4.24 for the rest.
+- [x] [Review][Patch] **D5's shipped behaviour and the accent-on-caret deviation have no AC/Task
+      text** [docs/implementation-artifacts/4-20-usage-visibility-ui.md:AC4, Task 3] — D1 and D2
+      each got an amendment bullet; D5 (a held Escape closes one layer; the test's synthetic repeat
+      is dispatched on the trigger) lived only in the decision paragraph, the Completion Notes and
+      the Change Log, and Task 3's ticked styling bullet still said "the count in `--gol-accent`"
+      while the caret carries it. AC4 gains the held-Escape sentence; Task 3 gains a D5 bullet and
+      the accent bullet carries its deviation note.
+- [x] [Review][Patch] **`D1`–`D5` are cited as authority in production comments without naming
+      where they resolve** [apps/web/components/organisms/editor/UsageIndicator.tsx:head comment] —
+      the labels are numbered only inside this story file, which no comment named, and `spec:check`
+      cannot validate them. One sentence in the component's head comment now points at the story
+      file's Review Findings.
+- [x] [Review][Patch] **The sync dropped the blank line before this story's first `deferred-work.md`
+      section** [docs/implementation-artifacts/deferred-work.md:2886] — the keep-both resolution
+      put `main`'s "5-4 round 2" section directly against `## Deferred from: Story
+      4-20-usage-visibility-ui implementation`; `docs` is in `.prettierignore`, so no gate saw it.
+      Restored.
+- [x] [Review][Defer] **A second modal opened over the editor WITHOUT a pointerdown, with a panel
+      open, has its Escape eaten by the panel's capture listener** [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown]
+      — deferred, unreachable until Story 4.23: every overlay path today is a click (✕, Back,
+      pointerdown closes the panel first) or the editor's own Escape (which only reaches MUI once
+      no panel is open), and the editor contains no keyboard-opened MUI overlay (native
+      `<select>`s handle Escape themselves; the D4 entry records that class). 4.23's
+      unsaved-changes confirm is the first surface that could open over the editor from a keyboard
+      or programmatically while `openPanel !== null`; the Escape would then close the hidden panel
+      and pull focus out of the confirm. Guard for 4.23: close the panel from `handleRequestClose`
+      (or on the confirm's `open` transition) before the second modal mounts.
+
+Dismissed (5): a dangling battle id rendering "Untitled Battle" rather than an "unknown" label
+(already dismissed 2026-09-23 — index and name map come from the same array); stale `openPanel`
+after its disclosure unmounts (already deferred to 4.24, second pass); the 2026-09-23 Change Log
+saying "re-pointed or closed" (dated history — it was struck through that day, and the 2026-09-24
+entry records the un-strike); modal test 56 sitting before 55 in the file (numbering is the story's,
+order is cosmetic); `buildUsageIndex` run once at the Library and once at the modal per open
+(already dismissed 2026-09-23 on the same measurement as `others`).
+
 
 ## Dev Notes
 
@@ -601,8 +711,9 @@ one `disclosure()` helper, so it is a test of the helper).
 - **FD9 — No `openBattle` prop in this story.** The M7 live-grid union needs a live grid, and
   nothing that mounts this editor has one until Story 4.24 opens it over `<BattlePage>`. A prop
   that every caller passes as `undefined` is the unread prop this repo already refused once
-  (`deferred-work.md:2420-2422`: "it is deliberately NOT passed there today — an unread prop is a
-  lie"). The `battleId === null → 'Current Battle (unsaved)'` branch in `usageBattleNames` is a
+  (`deferred-work.md:2431`, in that entry's ORIGINAL 2026-09-22 wording — "it is deliberately NOT
+  passed there today — an unread prop is a lie" — since reworded by decision D3). The
+  `battleId === null → 'Current Battle (unsaved)'` branch in `usageBattleNames` is a
   different thing: it is forced by `OrganismUsageEntry`'s own type, named by RFC-005 Decision 8, and
   lives in a unit-tested pure function rather than in a rendered affordance. Record it as
   unreachable-until-4.24 in `deferred-work.md`.
@@ -673,8 +784,9 @@ one `disclosure()` helper, so it is a test of the helper).
   `referencingOrganismIds`, and the rules-vs-organisms note
 - [Source: docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md#Acceptance Criteria]
   — AC2/AC3/AC4 pin the shapes this story renders
-- [Source: docs/implementation-artifacts/deferred-work.md] (`:743-752`, `:772-782`, `:786-800`,
-  `:2420-2422`, `:2463-2471`)
+- [Source: docs/implementation-artifacts/deferred-work.md] (`:743-755`, `:775-788`, `:791-808`,
+  `:2431-2452`, `:2493-2503` — current lines as of the 2026-09-24 third review; this story's own
+  annotations moved the baseline's `:772`/`:786`/`:2420`/`:2463` starts)
 - [Source: docs/project-context.md] — repositories injected not imported; one immutable theme +
   `--gol-*`; the live-region/`inert` trap; `npm run ci:dev` is the dev gate; the commit gate
 
@@ -945,6 +1057,23 @@ the worktree root, none piped:
 | `npx playwright test --project=webkit --project=firefox -g "usage visibility footer"` | 14 passed |
 | `npx tsc --noEmit`, `npx eslint` on the four touched files, `npm run spec:check` | exit 0 / 0 errors / 273 ids resolve |
 
+### Review Record — third pass (2026-09-24)
+
+Reviewer: Claude Fable 5.1 again, after the owner's D3/D4/D5 decisions (`6d8615a`) and the `main`
+sync (`45b2ce0`). Commands run from the worktree root, none piped:
+
+| Command | Result |
+|---|---|
+| `gh run view 36003099174` (CI on `45b2ce0`, PR #75) | **success** — quality + e2e chromium / firefox / webkit / tablet |
+| `git diff` of `deferred-work.md` against BOTH merge parents, `+`/`-` lines compared as sets | main's hunks and ours all present; exactly one blank line missing (patched); no marker |
+| `git diff 6d8615a 45b2ce0 -- packages/domain/src/ruleReferenceIndex.ts` | comment-only; `usageIndex.ts` untouched — the derivations this story reads are unchanged by 5-4 |
+| modal test 56 against the component with `swallowRepeatsUntilKeyUp()` deleted (D5 mutation check, re-run) | **1 failed** on `onClose` called once, then restored |
+| `npx vitest run` on the six touched suites (before patching) | 234 passed |
+| the two new `UsageIndicator` tests against the component with their guard line deleted (mutation checks) | **1 failed each** (`repeat`; `isComposing`/229), then restored |
+| `npx vitest run` on `UsageIndicator.test.tsx` + `OrganismEditorModal.test.tsx` (after patching) | 119 passed (2 new) |
+| `npx tsc --noEmit`, `npx eslint`, `npx prettier --check` on the four touched code files, `npm run spec:check` | exit 0 / 0 errors / clean / 273 ids resolve |
+| `npx playwright test --project=chromium -g "usage visibility footer"` | 7 passed |
+
 ### Change Log
 
 - 2026-09-23 — Story 4.20 implemented: the editor's first footer (`<UsageIndicator>`), the shared
@@ -988,6 +1117,18 @@ the worktree root, none piped:
   keyup — pinned by modal test (56) with a synthetic repeat event and mutation-checked.
   `npm run ci:dev` **exit 0**; the footer e2e block **21 passed** on chromium / webkit / firefox;
   `/organisms` 297.5 KB / 305 KB, unchanged. Status → review.
+- 2026-09-24 — Third code review (Fable), after D3/D4/D5 and the `main` sync. CI on `45b2ce0`
+  green on all four engines; the keep-both merge verified line-by-line; D5's mutation check
+  re-run. 9 patches applied: the panel listener now ignores a `repeat` Escape (a panel opened
+  mid-hold no longer closes with the hold) and passes a composing Escape through like MUI does,
+  each with a mutation-checked unit test; the FD4 comment and test 56's comment state the real
+  mechanism (bubble-phase cancellation, not listener order — React's root is `document` in the App
+  Router); the guard's boundary is documented; drifted `deferred-work.md` citations re-pointed and
+  FD9's quote marked as the entry's original wording; the modal's prop comment no longer "closes"
+  the FR-1.3 entry; AC4 and Task 3 carry D5 and the accent-on-caret deviation; `D1`–`D5` are
+  resolvable from the component; the sync's dropped blank line restored. 1 deferred to Story 4.23
+  (a second modal opened without a pointerdown while a panel is open). 0 decisions left.
+  Status → done.
 
 Dev Model: opus   # first editor footer + first disclosure overlay in the app, and a prop contract 4.21/4.24 build on — pattern-setting, not pattern-following
 

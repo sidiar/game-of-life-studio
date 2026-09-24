@@ -2454,9 +2454,12 @@ describe('OrganismEditorModal', () => {
       // test can drive the OS's second keydown ~250–500 ms into a hold. This is therefore NOT a
       // user-path assertion — it pins exactly one thing, that a keydown carrying `repeat` does not
       // reach MUI's root handler. It is dispatched on the focused trigger rather than on
-      // `document`, because React 19 delegates to the root CONTAINER: an event dispatched at
-      // `document` never reaches MUI's `onKeyDown` at all, so the test would pass with the guard
-      // deleted. `{Escape>}` presses and holds (no keyup); `{/Escape}` releases.
+      // `document`, because React delegates to its root CONTAINER — in this harness RTL's `<div>`
+      // and, for the Dialog's portal, `document.body` — so an event whose target is `document`
+      // never reaches MUI's `onKeyDown` at all, and the test would pass with the guard deleted.
+      // (In the app the container IS `document`, `hydrateRoot(document)`; the guard works there
+      // because `stopPropagation` from document-capture cancels the bubble phase MUI listens in.)
+      // `{Escape>}` presses and holds (no keyup); `{/Escape}` releases.
       it('(56) ⚠️ a held Escape closes the panel and stops there; a deliberate second press closes the editor (D5)', async () => {
         const user = userEvent.setup();
         const { onClose } = mountEdit({ battleSummaries: PLACED });

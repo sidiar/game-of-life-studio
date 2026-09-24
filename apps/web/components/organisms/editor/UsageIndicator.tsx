@@ -28,6 +28,10 @@ import { battleCountLabel, ruleTargetCountLabel } from '@/lib/organisms/usageLab
  * case needs a trigger that is text when one count is zero and a button when the other is not —
  * making AC3's "zero renders without expansion" depend on a count it is not about. Recorded as a
  * deliberate divergence for the next UX touch.
+ *
+ * `D1`–`D5` below are the owner's review decisions on this story, recorded in
+ * `docs/implementation-artifacts/4-20-usage-visibility-ui.md` (Review Findings) — that file is
+ * where each label resolves; `spec:check` does not know them.
  */
 
 type PanelKey = 'battles' | 'rules';
@@ -226,7 +230,11 @@ export default function UsageIndicator({
   // rather than from an effect on purpose: the effect below is armed on `openPanel`, so its cleanup
   // runs at the very moment the guard has to start. A keyup that never arrives (the window loses
   // focus mid-hold) leaves the guard armed, which is harmless: it only ever stops keydowns that
-  // carry `repeat`, and those exist only inside a hold.
+  // carry `repeat`, and those exist only inside a hold — which also means the keyup disarm is
+  // hygiene with no observable effect (a fresh hold's first keydown never carries `repeat`), so
+  // no test pins it. The guard's boundary is the flag itself: a platform that delivers
+  // auto-repeat as keyup/keydown pairs without `repeat` (X11 without detectable auto-repeat, some
+  // remote-desktop bridges) is outside it, and there a held Escape still closes both layers.
   const disarmRepeatGuardRef = useRef<(() => void) | null>(null);
   const swallowRepeatsUntilKeyUp = useCallback(() => {
     disarmRepeatGuardRef.current?.();
@@ -261,12 +269,16 @@ export default function UsageIndicator({
   // click on the trigger (see `toggle`). A click inside the panel is NOT one of them since D2: it
   // lands focus on the name list's `tabIndex={0}` scroll region, still inside the footer — before
   // that it landed on the Dialog paper's `tabIndex=-1`, and was the path that first exposed this.
-  // Capture on `document` runs before React's root listener on every path, so `stopPropagation`
-  // here is what keeps the first Escape from MUI; a second, DELIBERATE press — no panel open, and
-  // `repeat` false so the auto-repeat guard above ignores it — falls through to the editor as it
-  // always has. Nothing else catches this: it typechecks, the panel does close, and only an
-  // assertion that the editor is STILL OPEN sees it (review, 2026-09-23 — reproduced on the local
-  // WebKit project before the listener moved).
+  // `stopPropagation` from a `document` CAPTURE listener cancels the BUBBLE phase, and MUI's
+  // `useModal` handles Escape in a bubble-phase `onKeyDown` — that is what keeps the first Escape
+  // from MUI. It is NOT that this listener runs before React's: in the App Router Next calls
+  // `hydrateRoot(document)`, so React's delegated capture and bubble listeners sit on `document`
+  // too, registered before ours, and an `onKeyDownCapture` anywhere in the tree would still see
+  // the key. A second, DELIBERATE press — no panel open, and `repeat` false so the auto-repeat
+  // guard above ignores it — falls through to the editor as it always has. Nothing else catches
+  // this: it typechecks, the panel does close, and only an assertion that the editor is STILL
+  // OPEN sees it (review, 2026-09-23 — reproduced on the local WebKit project before the listener
+  // moved).
   //
   // ⚠️ Focus returns to the OPENER on every KEYBOARD path, including a keydown whose target is a
   // control the user chose — the name field, a rule `<select>`, or a native select popup opened
@@ -282,7 +294,17 @@ export default function UsageIndicator({
     if (openPanel === null) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // An Escape that cancels an IME composition is the IME's, not ours: Firefox and WebKit
+      // deliver it as `key: 'Escape'` with `isComposing` / `keyCode` 229 (D1 leaves a panel open
+      // while focus is in the name field, so this is reachable). Mirror MUI's own root handler,
+      // which skips `which === 229` — pass it through untouched, and MUI ignores it too.
+      if (event.isComposing || event.keyCode === 229) return;
       event.stopPropagation();
+      // A keydown carrying `repeat` is a HOLD that began before this panel opened (a panel opened
+      // with Enter/Space mid-hold, while the guard below was already armed). Swallowing it keeps
+      // the editor; NOT closing on it keeps D5's "one press closes one layer" — otherwise the
+      // guard's `stopPropagation` leaves this sibling listener running and one hold takes two.
+      if (event.repeat) return;
       setOpenPanel(null);
       openerRef.current?.focus();
       swallowRepeatsUntilKeyUp();

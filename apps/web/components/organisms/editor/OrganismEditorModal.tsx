@@ -117,9 +117,11 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
    * modal (AR-2/AR-27): `organisms` below stays the editor's only injected repository and its only
    * side effect. `<OrganismLibrary>` already holds these summaries — it builds the same usage index
    * from them for the Story 4.17 edit warning — so passing the settled array is what makes the two
-   * surfaces' counts one derivation rather than two agreeing by coincidence (FD8). This closes
-   * `deferred-work.md`'s "Story 4.20 … will need `battles` on the modal too": it needs the battle
-   * LIST, which is not the same claim.
+   * surfaces' counts one derivation rather than two agreeing by coincidence (FD8). This answers
+   * the `battles`-on-the-modal half of `deferred-work.md`'s FR-1.3 entry (its original wording:
+   * "Story 4.20 … will need `battles` on the modal too") — the modal needs the battle LIST, which
+   * is not the same claim. The entry's other half, the edit-warning dialog's own click-through, is
+   * still open and stands on Story 4.24.
    *
    * `Pick<…>` because that is all the footer reads — the ids the index is keyed on, `organismIds`
    * for the placed set (Decision H.1) and `name` for the panel. A full `BattleSummary[]` still

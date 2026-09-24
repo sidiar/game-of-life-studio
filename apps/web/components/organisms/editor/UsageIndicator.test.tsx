@@ -221,6 +221,42 @@ describe('UsageIndicator — dismissal (AC3, AC4)', () => {
     expect(onAncestorKeyDown).toHaveBeenCalledTimes(1);
   });
 
+  // Review (2026-09-24, third pass), the other half of D5: a panel opened MID-HOLD. The auto-repeat
+  // guard protects the editor, but a sibling listener on the same node still runs after its
+  // `stopPropagation`, so the panel-close listener must itself ignore a keydown carrying `repeat` —
+  // or one hold closes the panel opened during it. The event is synthetic for the same reason as
+  // the modal's held-Escape case: no test driver ever sets `repeat`.
+  it('ignores an Escape keydown carrying `repeat` — the panel stays open and the ancestor is not reached (D5)', () => {
+    const { onAncestorKeyDown } = mount();
+
+    fireEvent.click(battlesTrigger());
+    fireEvent.keyDown(battlesTrigger(), { key: 'Escape', repeat: true });
+
+    expect(document.querySelector('[data-usage-battles-panel]')).not.toBeNull();
+    expect(onAncestorKeyDown).not.toHaveBeenCalled();
+  });
+
+  // Review (2026-09-24, third pass): an Escape that cancels an IME composition. Firefox and WebKit
+  // deliver it as `key: 'Escape'` with `isComposing` / `keyCode` 229 — reachable since D1 leaves a
+  // panel open while focus is in the name field. MUI's root handler skips `which === 229`; this
+  // listener mirrors that, so the composing keydown passes through untouched (the ancestor sees it,
+  // as MUI would — and ignores it).
+  it('leaves a composing Escape alone: the panel stays open and the keydown passes through', () => {
+    const { onAncestorKeyDown } = mount();
+
+    fireEvent.click(battlesTrigger());
+    screen.getByTestId('ancestor').focus();
+    fireEvent.keyDown(screen.getByTestId('ancestor'), {
+      key: 'Escape',
+      isComposing: true,
+      keyCode: 229,
+    });
+
+    expect(document.querySelector('[data-usage-battles-panel]')).not.toBeNull();
+    expect(onAncestorKeyDown).toHaveBeenCalledTimes(1);
+    expect(battlesTrigger()).not.toHaveFocus();
+  });
+
   // Decision D1 (2026-09-24): an outside press is NOT a focus-restoring path — focus follows the
   // press (here onto the `tabIndex=-1` ancestor, the paper's stand-in), never back to the trigger.
   it('a pointerdown outside the footer closes the open panel and leaves focus where the press landed (D1)', async () => {
