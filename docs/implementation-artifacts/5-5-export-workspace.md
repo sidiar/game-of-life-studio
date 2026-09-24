@@ -625,3 +625,18 @@ Dev Model: sonnet   # follows existing patterns (5.3's injected serializer, 5.2'
   is now the app's one version source (Story 5.3 FD5's open question, closed).
 
 Proposed lane gate: none   # touches only components/settings, app/(gallery)/settings, new lib/export + lib/appVersion, and comment lines in lane-5 serializer/projection files; no open Epic 4 story (4-20..4-26) uses or reshapes these, and no @gol/domain barrel edit.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 15s | 15s | 14 | 2,296 | 6,050 | 391,818 | 400,178 |
+| Step 1 — create | opus-5-5 | 1 | 5m 47s | 5m 47s | 112 | 17,659 | 326,713 | 5,962,676 | 6,307,160 |
+| Step 2 — implement | sonnet-5 | 1 | 19m 35s | 19m 35s | 570 | 8,729 | 1,159,651 | 52,273,700 | 53,442,650 |
+| Step 3 — review + PR | opus-5-5 | 4 | 9m 27s | 9m 27s | 254 | 11,022 | 543,507 | 9,238,538 | 9,793,321 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 46 | 12,080 | 28,663 | 1,436,035 | 1,476,824 |
+| **Total (create → PR ready)** | | 6 | **35m 04s** | 35m 04s | 950 | 39,706 | 2,035,921 | 67,866,732 | **69,943,309** |
+
+Run started 2026-09-24 14:51 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
