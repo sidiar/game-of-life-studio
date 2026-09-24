@@ -221,8 +221,11 @@ export default function UsageIndicator({
   // A `document` CAPTURE listener, armed only while a panel is open (the `pointerdown` shape
   // below), rather than an `onKeyDown` on the footer: a React handler here sees only a keydown
   // whose TARGET is inside the footer, and two reachable paths put focus elsewhere with a panel
-  // open — a click inside the panel (nothing in it is focusable, so focus lands on the Dialog
-  // paper's `tabIndex=-1`), and a Safari click on the trigger (see `toggle`). Capture on
+  // open — Tab / Shift+Tab out of the footer (the panel stays open, decision D1), and a Safari
+  // click on the trigger (see `toggle`). A click inside the panel is NOT one of them since D2: it
+  // lands focus on the name list's `tabIndex={0}` scroll region, still inside the footer — before
+  // that it landed on the Dialog paper's `tabIndex=-1`, and was the path that first exposed this.
+  // Capture on
   // `document` runs before React's root listener on every path, so `stopPropagation` here is what
   // keeps the first Escape from MUI; the second, with no panel open, has no listener and falls
   // through to the editor as it always has. Nothing else catches this: it typechecks, the panel

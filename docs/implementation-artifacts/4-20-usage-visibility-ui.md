@@ -4,7 +4,7 @@ baseline_commit: e06da2e
 
 # Story 4.20: Usage Visibility UI
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -173,9 +173,12 @@ empty list item) are settled there.
         active on `apps/web`.
   - [x] Zero count → plain text, no `<button>`, no `aria-expanded`, no panel (AC3).
   - [x] Opening one panel closes the other.
-  - [x] ⚠️ **Escape handling (FD4).** An `onKeyDown` on the footer root: when a panel is open and
-        the key is `Escape`, close it and call `event.stopPropagation()` — MUI's `Modal` listens on
-        the modal root, so without the stop the editor itself closes. Cover it in a unit test that
+  - [x] ⚠️ **Escape handling (FD4).** ~~An `onKeyDown` on the footer root~~ **A `document`
+        capture-phase `keydown` listener, armed only while a panel is open** (review 2026-09-23 —
+        a footer-scoped handler misses a keydown whose target is outside the footer: Tab-away, or
+        a Safari click on the trigger): when the key is `Escape`, close the panel, call
+        `event.stopPropagation()` and return focus to the opener — MUI's `Modal` listens on the
+        modal root, so without the stop the editor itself closes. Cover it in a unit test that
         asserts the editor `onClose` prop was NOT called.
   - [x] Outside dismissal: a `document` `pointerdown` listener, added only while a panel is open,
         that ignores events inside the footer root (`ref.current.contains(event.target)`). Removed
@@ -391,6 +394,105 @@ does); `ruleCount > 0` with empty names (impossible from the modal's one derivat
 summary ids (Story 5.11's corruption story); IME `isComposing` on Escape (nothing in the footer
 accepts input); per-render `Map`/resolve cost (measured trivial, same class as `others`).
 
+### Review Findings — second pass (2026-09-24)
+
+Reviewed on **Fable** against an **Opus** implementation, after the owner's D1/D2 decisions landed
+in `8f41abf`, via the same three parallel layers. 3 `decision-needed`, 4 `patch`, 2 `defer`,
+3 dismissed. CI on `8f41abf`: **green** — quality and all four e2e projects. The `b330cdc` failure
+was `BattlePage.test.tsx` "is restored to the pre-mount title on unmount" — a `main` race, not this
+branch's: that commit changed one markdown file, and no BattlePage import reaches anything this
+branch touched (verified against the run log and the import graph).
+
+- [ ] [Review][Decision] **FR-1.3's edit-warning `[N]` is still plain text, and the deferred entry
+      that tracked it now reads as closed** — PRD FR-1.3's AC says the warning's "[N] Battle(s)"
+      count "is expandable to reveal which Battles per FR-1.7"; FR-1.7 and M7 both name the edit
+      warning as one of the three surfaces with the read-only click-through, and Story 4.17
+      explicitly handed that click-through to 4.20 (`4-17-edit-organism-from-library.md:56-57`,
+      `:836`). This story read the epic's "counts are consistent across all surfaces" as derivation
+      + label only (AC5), and `<OrganismInUseDialog>`'s render is unchanged — `battleCountLabel(...)`
+      as a plain `DialogTitle`, no names, no "Targeted by [M]". Yet `deferred-work.md:2431-2438`
+      ("The `[N]` in 'Used in N Battles' is plain text — no battle names, no click-through") is
+      struck through as **✅ Closed in Story 4.20**, and AC6 says "Closes `deferred-work.md:2420-2422`".
+      The entry describes the DIALOG, which is exactly as it was — it must not read as done.
+      Options: **(a)** implement the click-through on `<OrganismInUseDialog>` in this story
+      (`<UsageIndicator>` + `usageLabels.ts` make it cheap; the dialog then takes the resolved
+      names, or `battleSummaries`, and M as props); **(b)** re-point: un-strike the entry, reword
+      its closure to "the FOOTER half closed in 4.20; the dialog's click-through stands on the next
+      dialog touch" (4.24 already owns `Current Battle (unsaved)` on this surface, or a story of its
+      own), and correct AC6's "Closes" claim and Task 7's first bullet; **(c)** accept the story's
+      reading and amend PRD FR-1.3 / FR-1.7 / M7 to drop the edit-warning surface — a spec change
+      outside this story. [apps/web/components/organisms/OrganismInUseDialog.tsx, docs/implementation-artifacts/deferred-work.md:2431]
+- [ ] [Review][Decision] **Escape from a control outside the footer pulls focus onto the trigger
+      and swallows the key** — D1 accepted that Tab / Shift+Tab leaves the panel open and that
+      Escape from there closes the panel, not the editor; it did not lay out where focus GOES. As
+      written the capture listener runs `openerRef.current?.focus()` unconditionally, so a keyboard
+      user who tabbed into the name field or a rule `<select>` (or opened a native `<select>` popup
+      with Alt+Down — Firefox and WebKit dispatch the Escape keydown to the document while the popup
+      is open) and pressed Escape loses their place — the objection D1 itself used to reject a
+      restore on outside dismissal. `stopPropagation` in the capture phase also hides that keydown
+      from every other document-level Escape consumer while a panel is open. Options: **(a)** keep —
+      AC4 as amended says "after Escape, focus is on the trigger", and this is that, on every path;
+      **(b)** restore focus to the trigger only when the keydown's target is inside `rootRef`, or is
+      the Dialog paper / `body` (i.e. not a control the user chose) — still close the panel and still
+      stop propagation; **(c)** close the panel on `focusout` leaving `rootRef` (the first review's
+      option (c)), which makes the path unreachable. [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown]
+- [ ] [Review][Decision] **A held Escape closes the panel and then the editor** — the first
+      `keydown` closes the panel; React flushes and the effect cleanup removes the capture listener
+      long before the key's auto-repeat (250–500 ms delay, then ~30 ms period), so the next repeated
+      `keydown` "has no listener and falls through to the editor as it always has" (the comment's
+      words) and, with no dirty guard until Story 4.23, takes the draft. MUI's `useModal` does not
+      check `event.repeat` either. Neither `user.keyboard` nor `page.keyboard.press` sets `repeat`,
+      so no test can see it. Options: **(a)** accept — a held Escape reads as "close everything",
+      and 4.23's guard is the real protection for the draft; **(b)** after closing a panel, keep
+      swallowing `event.repeat` keydowns until the matching `keyup` (a ref flag plus a one-shot
+      `keyup` listener), so one press closes one layer. [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown]
+- [x] [Review][Patch] **D2 made a click inside the panel land focus INSIDE the footer, so the two
+      tests that pin FD4's out-of-footer path against MUI's real root handler no longer do — and
+      three comments plus two story passages still describe the old shape**
+      [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown, apps/web/e2e/organisms.spec.ts:test 3, apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:test 54, apps/web/components/organisms/editor/UsageIndicator.test.tsx, docs/implementation-artifacts/4-20-usage-visibility-ui.md:FD3 + Task 3]
+      — the `<li>` click now focuses the `tabIndex={0}` list, which is inside `rootRef`, so a
+      regression to a footer-scoped `onKeyDown` would pass modal test 54 and e2e test 3 unchanged.
+      Both now also move focus onto the Organism Name field (programmatically — a `pointerdown`
+      would close the panel; this is the Tab-away path D1 accepted) before Escape; the unit
+      pointerdown test pins D1's "focus stays where the press landed"; the Escape-effect comment,
+      e2e test 3's comment, the unit test's comment, FD3 ("nothing in it is focusable") and Task 3's
+      "an `onKeyDown` on the footer root" are corrected to the shipped design.
+- [x] [Review][Patch] **e2e test 6 asserts the LIST's top is on screen while the record claims the
+      PANEL's** [apps/web/e2e/organisms.spec.ts:test 6] — `PanelTitle` (10px + 8px margin) and the
+      panel's 10px padding sit above the list; the assertion passes with the title clipped off the
+      top of the viewport, the clipping D2 was raised for. The panel's own top is now asserted too.
+- [x] [Review][Patch] **The index-in-key guard for duplicate display names is untested**
+      [apps/web/components/organisms/editor/UsageIndicator.test.tsx] — deleting `-${index}` from
+      `NameItem`'s key passes every suite: no fixture has two identical display names in one panel,
+      and the only guard is the e2e clean-console gate over unique fillers. A unit test now renders
+      two `Untitled Battle` rows with `console.error` spied.
+- [x] [Review][Patch] **`N = 0, M > 0` — the case FD12 was written for — is rendered by no test**
+      [apps/web/components/organisms/editor/UsageIndicator.test.tsx] — every rules-label case keeps
+      `battleNames = NAMES`. A unit test now mounts `battleNames: []` with `ruleCount: 1`: plain
+      text beside a working rules disclosure, Escape included.
+- [x] [Review][Defer] **`openPanel` is never reconciled when the disclosure it names stops
+      rendering** [apps/web/components/organisms/editor/UsageIndicator.tsx:openPanel] — deferred,
+      unreachable until Story 4.24: `battleSummaries` and `library` are open-time snapshots, so no
+      count changes while a panel is open today. With a live `openBattle` a count can drop to 0
+      with its panel open: the panel unmounts but the capture Escape listener stays armed, and the
+      next Escape is swallowed (no panel, editor stays open, `openerRef` points at a detached
+      button) with no console error for the e2e gate to see. Not patched here: the obvious derived
+      fix (void `openPanel` when its count is 0) reopens the panel spontaneously when the count
+      returns, and an effect-based reset is the `react-hooks/set-state-in-effect` lint error
+      `project-context.md` records — 4.24 owns the shape, with a live count to test it against.
+- [x] [Review][Defer] **A saved-but-renamed open battle would list its stored name, not the one on
+      screen** [apps/web/lib/organisms/usageLabels.ts:usageBattleNames] — deferred, unreachable
+      until Story 4.24: the `battleId: null` path is handled (`UNSAVED_BATTLE_LABEL`), but a
+      `battleId !== null` entry with `placedOnLiveGrid: true` resolves through `summaries` only,
+      while RFC-005 Decision 8 labels the open battle from the live name. The signature grows an
+      input in 4.24; the unit test pins only `entry(null, true)`.
+
+Dismissed (3): `<footer>`→`contentinfo` inside the dialog (already dismissed 2026-09-23 on AC1 and
+the `styled('header')` precedent; axe is clean with a panel open); truncated names with no sighted
+reveal (already this story's own deferral in `deferred-work.md`, D2's follow-through); the
+"exactly one `[tabindex]`" assertion running on the battles panel only (both panels come from the
+one `disclosure()` helper, so it is a test of the helper).
+
 
 ## Dev Notes
 
@@ -414,7 +516,8 @@ accepts input); per-render `Map`/resolve cost (measured trivial, same class as `
 - **FD3 — Plain disclosure, not MUI `Popover`.** Three reasons, in order of weight: (a) a MUI
   `Popover` is a `Modal`, so it nests a second focus trap and a second `aria-hidden` layer inside
   the fullScreen editor `Dialog` — the exact interaction class `project-context.md`'s live-region /
-  `inert` rule records, and the panel needs neither (nothing in it is focusable); (b) `apps/web` has
+  `inert` rule records, and the panel needs neither (nothing in it is interactive — its one
+  focusable node is the name list's scroll region, decision D2); (b) `apps/web` has
   no MUI overlay precedent outside `Dialog` and one `Tooltip`, and the editor's own controls are
   native `<select>`/`<input>` in `styled()` (RFC-003 Decision 3 puts static chrome in `styled()`);
   (c) it adds the MUI overlay stack to a chunk that does not carry it. The mockup's own
@@ -712,6 +815,21 @@ CI has no run for this branch yet — the workflow triggers on `pull_request` on
 matrix runs once the PR is opened. Note for that run: CI's WebKit is the GTK port, which focuses a
 button on click, so it would NOT have caught the Safari path; the local Mac WebKit did.
 
+### Review Record — second pass (2026-09-24)
+
+Reviewer: Claude Fable 5.1 again, after the owner's D1/D2 decisions (`8f41abf`). Commands run from
+the worktree root, none piped:
+
+| Command | Result |
+|---|---|
+| `gh run view 35980974636` (CI on `8f41abf`, PR #75) | **success** — quality + e2e chromium / firefox / webkit / tablet |
+| `gh run view 35845610726 --log-failed` (CI on `b330cdc`) | 1 failed / 2094 passed: `BattlePage.test.tsx` "is restored to the pre-mount title on unmount" — `b330cdc` touched one markdown file and `BattlePage.tsx` imports nothing this branch changed, so it is a `main` race, not this story's; **left alone here** |
+| `npx vitest run` on `UsageIndicator.test.tsx` + `OrganismEditorModal.test.tsx` (after patching) | 116 passed (3 new: D1 pointer-focus, FD12 `N = 0, M > 0`, duplicate display names) |
+| the duplicate-names test against `key={name}` (mutation check) | **1 failed**, then restored — the test sees the guard |
+| `npx playwright test --project=chromium -g "usage visibility footer"` | 7 passed |
+| `npx playwright test --project=webkit --project=firefox -g "usage visibility footer"` | 14 passed |
+| `npx tsc --noEmit`, `npx eslint` on the four touched files, `npm run spec:check` | exit 0 / 0 errors / 273 ids resolve |
+
 ### Change Log
 
 - 2026-09-23 — Story 4.20 implemented: the editor's first footer (`<UsageIndicator>`), the shared
@@ -733,6 +851,15 @@ button on click, so it would NOT have caught the Safari path; the local Mac WebK
   `[tabindex]`". Two new e2e cases pin the cap, the scroll, the truncation and axe at 40 rows and at
   1 row on chromium / webkit / firefox. `npm run ci:dev` **exit 0**; `/organisms` 297.5 KB / 305 KB,
   unchanged. Status → review.
+- 2026-09-24 — Second code review (Fable), after D1/D2. CI on `8f41abf` green on all four engines.
+  4 patches applied: modal test 54 and e2e test 3 move focus OUT of the footer (onto the name
+  field) before Escape, since D2's `tabIndex={0}` list made a panel click land inside it; the
+  Escape-effect comment, e2e/unit test comments, FD3 and Task 3 corrected to the shipped design;
+  e2e test 6 asserts the panel's top on screen, not only the list's; unit tests for D1's
+  pointer-focus residue, FD12's `N = 0, M > 0`, and duplicate display names (mutation-checked).
+  3 `[Review][Decision]` items left for the owner (the edit-warning click-through PRD FR-1.3 asks
+  for and the closed deferred entry; Escape-from-a-field focus steal; held-Escape auto-repeat);
+  2 deferred to 4.24. Status → in-progress.
 
 Dev Model: opus   # first editor footer + first disclosure overlay in the app, and a prop contract 4.21/4.24 build on — pattern-setting, not pattern-following
 

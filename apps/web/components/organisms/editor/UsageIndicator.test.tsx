@@ -191,9 +191,11 @@ describe('UsageIndicator — dismissal (AC3, AC4)', () => {
     expect(battlesTrigger()).toHaveFocus();
   });
 
-  // Review (2026-09-23), FD4's second reachable path: a click inside the panel (allowed, keeps it
-  // open) lands focus on the Dialog paper, so the keydown never passes through the footer. A
-  // footer-scoped handler missed it and the editor closed; the document-capture listener does not.
+  // Review (2026-09-23), FD4's second reachable path: focus leaves the footer with the panel open
+  // — Tab-away (accepted by decision D1), or a Safari click on the trigger — so the keydown never
+  // passes through the footer. A footer-scoped handler missed it and the editor closed; the
+  // document-capture listener does not. (A click inside the panel used to be this path too; since
+  // D2 it lands on the list's scroll region, inside the footer — see "a pointerdown inside".)
   it('Escape closes the panel, returns focus to the trigger and reaches no ancestor when focus has left the footer', async () => {
     const user = userEvent.setup();
     const { onAncestorKeyDown } = mount();
@@ -219,7 +221,9 @@ describe('UsageIndicator — dismissal (AC3, AC4)', () => {
     expect(onAncestorKeyDown).toHaveBeenCalledTimes(1);
   });
 
-  it('a pointerdown outside the footer closes the open panel', async () => {
+  // Decision D1 (2026-09-24): an outside press is NOT a focus-restoring path — focus follows the
+  // press (here onto the `tabIndex=-1` ancestor, the paper's stand-in), never back to the trigger.
+  it('a pointerdown outside the footer closes the open panel and leaves focus where the press landed (D1)', async () => {
     const user = userEvent.setup();
     mount();
 
@@ -227,16 +231,73 @@ describe('UsageIndicator — dismissal (AC3, AC4)', () => {
     await user.click(screen.getByText('outside'));
 
     expect(document.querySelector('[data-usage-battles-panel]')).toBeNull();
+    expect(screen.getByTestId('ancestor')).toHaveFocus();
+    expect(battlesTrigger()).not.toHaveFocus();
   });
 
-  it('a pointerdown inside the panel leaves it open', async () => {
+  // Since decision D2 the list is the panel's one focusable node, so a press on a name lands
+  // focus there — inside the footer, where a footer-scoped handler would still see the keydown.
+  it('a pointerdown inside the panel leaves it open and focuses the list', async () => {
     const user = userEvent.setup();
     mount();
 
     await user.click(battlesTrigger());
     await user.click(screen.getByText(NAMES[0]));
 
-    expect(document.querySelector('[data-usage-battles-panel]')).not.toBeNull();
+    const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(within(panel).getByRole('list')).toHaveFocus();
+  });
+
+  // FD12's reason for two independent disclosures: with N = 0 the battles half is plain text and
+  // the rules half is still a working disclosure — the shape one shared panel could not render
+  // without a trigger that is text for one count and a button for the other.
+  it('renders N = 0 as plain text beside a working rules disclosure (FD12)', async () => {
+    const user = userEvent.setup();
+    const { onAncestorKeyDown } = mount({
+      battleNames: [],
+      ruleCount: 1,
+      referencingNames: ['Aggressive Colonizer'],
+    });
+
+    expect(screen.getByText('Used in 0 Battles')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Used in/ })).not.toBeInTheDocument();
+    const trigger = screen.getByRole('button', { name: 'Targeted by 1 organism rule' });
+
+    await user.click(trigger);
+    const panel = document.querySelector('[data-usage-rules-panel]') as HTMLElement;
+    expect(
+      within(panel)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Aggressive Colonizer']);
+
+    await user.keyboard('{Escape}');
+    expect(document.querySelector('[data-usage-rules-panel]')).toBeNull();
+    expect(onAncestorKeyDown).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
+  });
+
+  // Two battles can resolve to the SAME display name (`Untitled Battle`); the index in the key is
+  // what keeps React from warning — and a name-only key passes every other test here.
+  it('renders duplicate display names as separate rows without a React key warning', async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mount({ battleNames: ['Untitled Battle', 'Untitled Battle'] });
+
+      await user.click(battlesTrigger());
+
+      const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
+      expect(
+        within(panel)
+          .getAllByRole('listitem')
+          .map((li) => li.textContent),
+      ).toEqual(['Untitled Battle', 'Untitled Battle']);
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('has no axe violations with a panel open', async () => {

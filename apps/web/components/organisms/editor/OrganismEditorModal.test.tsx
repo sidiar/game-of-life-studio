@@ -2413,12 +2413,14 @@ describe('OrganismEditorModal', () => {
       });
 
       // Review (2026-09-23): FD4's second reachable path, against MUI's REAL root handler. A click
-      // inside the panel is allowed and keeps it open, and it takes focus off the trigger — onto
-      // the name list's scroll region (`tabIndex={0}`, decision D2) or, before that existed, onto
-      // the Dialog paper's `tabIndex=-1`; either way the next Escape never passes through the
-      // footer. With a footer-scoped handler this closed the editor; the document-capture listener
-      // keeps it open and puts focus back on the trigger.
-      it('(54) ⚠️ Escape after a click INSIDE the panel still closes the panel, not the editor, and refocuses the trigger (AC4, FD4)', async () => {
+      // inside the panel is allowed and keeps it open, and it takes focus off the trigger — since
+      // decision D2 onto the name list's scroll region (`tabIndex={0}`), which is still INSIDE the
+      // footer, so that click alone no longer proves anything a footer-scoped handler would miss.
+      // The path that does is focus LEAVING the footer with the panel open (Tab-away, accepted by
+      // D1): moved programmatically here, because a pointerdown on the field would close the
+      // panel. With a footer-scoped handler the Escape closed the editor; the document-capture
+      // listener keeps it open and puts focus back on the trigger.
+      it('(54) ⚠️ Escape with the panel open and focus outside the footer still closes the panel, not the editor, and refocuses the trigger (AC4, FD4)', async () => {
         const user = userEvent.setup();
         const { onClose } = mountEdit({ battleSummaries: PLACED });
 
@@ -2426,6 +2428,12 @@ describe('OrganismEditorModal', () => {
         await user.click(trigger);
         await user.click(screen.getByText('Glider Wars'));
         expect(trigger).not.toHaveFocus();
+        const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
+        expect(within(panel).getByRole('list')).toHaveFocus();
+
+        const nameField = screen.getByRole('textbox', { name: 'Organism Name' });
+        nameField.focus();
+        expect(nameField).toHaveFocus();
         expect(document.querySelector('[data-usage-battles-panel]')).not.toBeNull();
 
         await user.keyboard('{Escape}');

@@ -3822,9 +3822,17 @@ test.describe('usage visibility footer (Story 4.20)', () => {
     await trigger.click();
     await expect(battlesPanel(page)).toBeVisible();
     // Review (2026-09-23): a click INSIDE the panel is allowed and keeps it open, and it moves
-    // focus off the trigger onto the Dialog paper in every engine — the path on which a
-    // footer-scoped Escape handler let MUI's root handler close the whole editor.
+    // focus off the trigger. Since D2 it lands on the name list's scroll region — still INSIDE
+    // the footer — so on its own it no longer reaches the path on which a footer-scoped Escape
+    // handler let MUI's root handler close the whole editor. That path is focus LEAVING the footer
+    // with the panel open (Tab-away, accepted by D1): move it onto the name field programmatically
+    // — a pointerdown there would close the panel — before the Escape.
     await battlesPanel(page).getByRole('listitem').first().click();
+    await expect(battlesPanel(page)).toBeVisible();
+    await expect(trigger).not.toBeFocused();
+    const nameField = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await nameField.focus();
+    await expect(nameField).toBeFocused();
     await expect(battlesPanel(page)).toBeVisible();
 
     await page.keyboard.press('Escape');
@@ -3910,6 +3918,10 @@ test.describe('usage visibility footer (Story 4.20)', () => {
     }));
     expect(region.scrolls).toBe(true);
     expect(region.top).toBeGreaterThanOrEqual(0);
+    // The PANEL's top as well: its title and padding sit above the list, and a list on screen
+    // under a title clipped off the top is exactly the clipping D2 was raised for.
+    const panelTop = await panel.evaluate((el) => el.getBoundingClientRect().top);
+    expect(panelTop).toBeGreaterThanOrEqual(0);
     // …and it is reachable, which is what axe's `scrollable-region-focusable` is about.
     await list.focus();
     await expect(list).toBeFocused();

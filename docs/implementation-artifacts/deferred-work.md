@@ -2849,3 +2849,20 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   hover/focus tooltip the house already owns (`--gol-shadow-tooltip`'s organism-dot tooltip) applied
   only to rows that are actually clipped — **not this story's**, and not worth a tooltip layer for
   the MVP's expected name lengths.
+
+## Deferred from: code review of 4-20-usage-visibility-ui (2026-09-24, second pass)
+
+- **`openPanel` is never reconciled when the disclosure it names stops rendering**
+  (`UsageIndicator.tsx`). `battleSummaries` and `library` are open-time snapshots, so no count
+  changes while a panel is open today; with a live `openBattle` (**Story 4.24**) a count can drop
+  to 0 with its panel open — the panel unmounts, the capture Escape listener stays armed, and the
+  next Escape is swallowed (no panel, editor stays open, `openerRef` points at a detached button)
+  with no console error for the e2e gate to see. The obvious derived fix (void `openPanel` when its
+  count is 0) reopens the panel spontaneously when the count returns, and an effect-based reset is
+  the `react-hooks/set-state-in-effect` lint error — 4.24 owns the shape, with a live count to test
+  it against.
+- **A saved-but-renamed open battle would list its stored name, not the one on screen**
+  (`usageLabels.ts:usageBattleNames`). The `battleId: null` path is handled (`UNSAVED_BATTLE_LABEL`),
+  but a `battleId !== null` entry with `placedOnLiveGrid: true` resolves through `summaries` only,
+  while RFC-005 Decision 8 labels the open battle from the live name. **Story 4.24** grows the
+  signature an input for it; the unit test pins only `entry(null, true)`.
