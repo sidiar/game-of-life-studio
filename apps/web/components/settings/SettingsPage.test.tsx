@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { createFakeRepositories, createMockOrganisms, createMockWorkspace } from '@gol/test-utils';
 import { formatStorageSize } from '@/lib/settings/formatStorageSize';
@@ -353,6 +353,29 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('term')).toHaveLength(3);
     });
+
+    const results = await axe(container);
+    expect(results.violations).toEqual([]);
+  });
+
+  // AC9: axe on the WHOLE page with the export alert showing — heading order, the aria-busy
+  // wrapper and the second card's landmark are only checked together here, not by
+  // DataManagement.test.tsx's card-alone scan.
+  it('has no axe accessibility violations in the export error state, with the alert showing', async () => {
+    const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { container } = render(
+      <SettingsPage
+        settings={repos.settings}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        seedStatus="ready"
+        workspace={repos}
+        serializer={{ exportWorkspace: vi.fn().mockRejectedValue(new Error('unreadable')) }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /export workspace/i }));
+    await screen.findByRole('alert');
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);

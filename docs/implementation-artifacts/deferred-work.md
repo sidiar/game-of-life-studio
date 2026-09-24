@@ -2566,9 +2566,9 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   boundary where the answer is readable. The value is provenance only (Decision I.4) — nothing
   branches on it — so a wrong choice is cheap to change, which is itself an argument for deciding it
   where it is first needed rather than two stories early.~~ — **✅ CLOSED by Story 5.5.** Chose
-  option (a)'s shape without its drift: a JSON import of `apps/web/package.json` itself (not a
-  `packages/*` copy) — `apps/web/lib/appVersion.ts` exports `APP_VERSION`, resolved at build time,
-  no env var, no duplication. Still `"0.0.0"` today; still provenance only (Decision I.4).
+  none of (a)–(c) (FD2): a JSON import of `apps/web/package.json` itself, where the version already
+  lives — `apps/web/lib/appVersion.ts` exports `APP_VERSION`, resolved at build time, no env var,
+  no duplication. Still `"0.0.0"` today; still provenance only (Decision I.4).
 
 - **An export of a partly-corrupt store silently omits the unreadable battles** —
   `exportWorkspace()` reads `battles.listFull()`, which SKIPS a record that fails
@@ -2866,3 +2866,12 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   the file is shared with the Epic 4 lane's organism editor (Stories 4.16/4.23), so a lane-5 edit
   there would buy merge risk for no user gain. Recorded here so the comment's trigger is discharged
   without touching the file — nothing to do.
+
+## Deferred from: code review of 5-5-export-workspace (2026-09-24)
+
+- **`URL.revokeObjectURL` runs after `setTimeout(…, 0)` — possibly early for real Safari / older
+  Firefox** (`apps/web/lib/export/downloadJsonFile.ts`). FD3 pinned a next-task revoke to dodge the
+  same-task WebKit cancel, and Playwright's WebKit project is green, but Playwright's WebKit is not
+  Safari; FileSaver.js waits ~40 s for this reason. A longer delay costs nothing but a briefly-held
+  blob. Not changed in review because FD3 chose 0 ms explicitly; revisit on the first real-Safari
+  report of a cancelled or empty download (Story 5.6 reuses this seam).

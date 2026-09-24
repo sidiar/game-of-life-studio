@@ -4,7 +4,7 @@ baseline_commit: 024b9ed00c5ae0f94d43c630a66431a0afe3f3a5
 
 # Story 5.5: Export Workspace
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -262,6 +262,28 @@ file.**
   - [x] `spec:check` resolves every ID you wrote (`AR-2`, `AR-12`, `AR-27`, `AR-44`, `FR-8.3`,
         `FR-6.3`, `Decision F.1`, `Decision I.4`, `Story 5.x` …).
   - [x] Record every command and its real result in the Dev Agent Record.
+
+### Review Findings
+
+Reviewed on **Opus** against a **Sonnet** implementation (three parallel layers: Blind Hunter, Edge
+Case Hunter, Acceptance Auditor) — 0 decision-needed, 13 patch, 1 defer, 6 dismissed.
+
+- [x] [Review][Patch] `mountedRef` never re-armed under StrictMode — setup → cleanup → setup left it `false`, so the AC8 alert never rendered in `next dev`; now reset in the effect body, pinned by a StrictMode test that fails without it [apps/web/components/settings/DataManagement.tsx:114]
+- [x] [Review][Patch] e2e "no `settings` key" asserted on Zod's parse output, which strips unknown keys — vacuous; now asserted on the raw `JSON.parse` of the downloaded file (AC2/AC4) [apps/web/e2e/settings.spec.ts]
+- [x] [Review][Patch] AC4 unit round trip re-stringified the value itself instead of capturing the exact bytes the seam writes; now runs the real `downloadJsonFile` and reads the Blob text, and also asserts no raw `settings` key [apps/web/lib/export/exportWorkspaceToFile.test.ts]
+- [x] [Review][Patch] Round trip compared organisms by id only; now each organism `toEqual` its stored record too [apps/web/lib/export/exportWorkspaceToFile.test.ts]
+- [x] [Review][Patch] AC10 rewrite still said "there is no app-version constant in this workspace yet", contradicting its next sentence [packages/domain/src/workspaceExportProjection.ts:44]
+- [x] [Review][Patch] `downloadJsonFile` had no try/finally — a throwing `appendChild`/`click` left a stray `<a>` and a leaked blob URL; now removed and revoked in `finally`, with a test [apps/web/lib/export/downloadJsonFile.ts:21]
+- [x] [Review][Patch] Filename expectation hard-coded `2026-01-05` for a `12:00Z` stamp — fails on a UTC+12..+14 runner; now derived via `workspaceExportFilename` [apps/web/components/settings/DataManagement.test.tsx]
+- [x] [Review][Patch] "LOCAL, not UTC" filename test could not catch a switch to `getUTC*` on a UTC runner; added a `TZ=Pacific/Kiritimati` case whose local day differs from UTC (verified it fails against a `getUTC*` mutant) [apps/web/lib/export/workspaceExportFilename.test.ts]
+- [x] [Review][Patch] AC9 axe ran on `<DataManagement>` alone in the error state; added a `SettingsPage`-level axe scan with the export alert showing [apps/web/components/settings/SettingsPage.test.tsx]
+- [x] [Review][Patch] AC9 keyboard operation (Tab reaches Export; Enter and Space trigger it; focus stays) was untested; added a user-event test [apps/web/components/settings/DataManagement.test.tsx]
+- [x] [Review][Patch] Page-level `downloadJsonFile` mock never cleared (no `clearMocks` in config) — stale calls for any later Export click; cleared in `afterEach` [apps/web/app/(gallery)/settings/page.test.tsx]
+- [x] [Review][Patch] Row missed the mockup's `.settings-item` `padding: 15px 0` and `.settings-item-control` `flex-shrink: 0`; added, and the wrong mockup line citations corrected [apps/web/components/settings/DataManagement.tsx:19-67]
+- [x] [Review][Patch] Doc accuracy: `deferred-work.md`'s `appVersion` closure said "option (a)'s shape", contradicting FD2 ("none of those"); and the Dev Agent Record's `/settings` "before" figure (291.5 KB, 5.1's) was not the pre-story baseline (291.7 KB after 5.2) — both corrected [docs/implementation-artifacts/deferred-work.md, this file]
+- [x] [Review][Defer] `URL.revokeObjectURL` after `setTimeout(…, 0)` may still be early for real Safari / older Firefox (FileSaver.js waits ~40 s); FD3 pinned 0 ms and Playwright WebKit is green [apps/web/lib/export/downloadJsonFile.ts] — deferred, spec-pinned choice; revisit on a real-Safari report
+
+Dismissed (6): whole `package.json` in the bundle (FD2 accepts the cost; `bundle:check` gates the route); export gated on `ready` (FD6, already an owner flag); no success feedback / busy state (spec forbids both — FD8, "What NOT to build"); download firing after navigating away mid-export (the user asked for it); `NaN` filename on an invalid `exportedAt` (the serializer always stamps ISO via `toISOString`, which throws first); unmount-then-reject test (the guard is covered by the StrictMode test).
 
 ## Dev Notes
 
@@ -545,9 +567,10 @@ Claude Sonnet 5 (claude-sonnet-5)
   - `test:coverage`: pass — `@gol/simulation` 408, `@gol/persistence` 103, `@gol/domain` 202,
     `apps/web` 2075 (all packages' coverage thresholds held; `apps/web` has none, per project rule).
   - `build:standalone`: pass.
-  - `bundle:check`: pass, all 5 routes within budget. **`/settings`: 291.5 KB gzip before this
-    story (Story 5.1's measurement) → 293.7 KB gzip after (budget 305 KB, 11.3 KB headroom)** —
-    +2.2 KB for the Data Management card, the export seam, and `APP_VERSION`. No budget raised.
+  - `bundle:check`: pass, all 5 routes within budget. **`/settings`: ~~291.5 KB gzip before this
+    story (Story 5.1's measurement)~~ 291.7 KB gzip before this story (the post-5.2 figure; review
+    correction) → 293.7 KB gzip after (budget 305 KB, 11.3 KB headroom)** — ~~+2.2 KB~~ +2.0 KB
+    for the Data Management card, the export seam, and `APP_VERSION`. No budget raised.
   - `bench` / `bench:check`: pass — the NFR-1.1 `step()` + repaint-decision benchmark is
     unaffected by this story (no engine-path code touched); 9.302 ms headroom against the
     16.667 ms budget (55.8% of the frame).

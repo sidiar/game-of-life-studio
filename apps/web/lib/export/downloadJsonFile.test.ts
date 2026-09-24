@@ -41,19 +41,34 @@ describe('downloadJsonFile', () => {
   it('sets the anchor download attribute to the given filename, clicks it once, and removes it from the document', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const appendSpy = vi.spyOn(document.body, 'appendChild');
-    const removeSpy = vi.spyOn(document.body, 'removeChild');
 
     downloadJsonFile('game-of-life-workspace-2026-01-05.json', { ok: true });
 
     expect(clickSpy).toHaveBeenCalledTimes(1);
     const appendedAnchor = appendSpy.mock.results[0]?.value as HTMLAnchorElement;
     expect(appendedAnchor.download).toBe('game-of-life-workspace-2026-01-05.json');
-    expect(removeSpy).toHaveBeenCalledWith(appendedAnchor);
     expect(document.body.contains(appendedAnchor)).toBe(false);
 
     clickSpy.mockRestore();
     appendSpy.mockRestore();
-    removeSpy.mockRestore();
+  });
+
+  it('still removes the anchor and revokes the object URL when click() throws (no stray <a>, no leaked blob URL)', () => {
+    const failure = new Error('click refused');
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      throw failure;
+    });
+    const appendSpy = vi.spyOn(document.body, 'appendChild');
+
+    expect(() => downloadJsonFile('workspace.json', { ok: true })).toThrow(failure);
+
+    const appendedAnchor = appendSpy.mock.results[0]?.value as HTMLAnchorElement;
+    expect(document.body.contains(appendedAnchor)).toBe(false);
+    vi.runAllTimers();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
+
+    clickSpy.mockRestore();
+    appendSpy.mockRestore();
   });
 
   it('revokes the object URL after the deferred tick, not synchronously', () => {

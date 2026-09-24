@@ -39,7 +39,7 @@ describe('exportWorkspaceToFile', () => {
     expect(download).not.toHaveBeenCalled();
   });
 
-  it('AC4 round trip: the string handed to download parses through WorkspaceExportSchema, and fromEnvelope reproduces the store', async () => {
+  it('AC4 round trip: the exact bytes the real download seam writes parse through WorkspaceExportSchema, and fromEnvelope reproduces the store', async () => {
     const mockWorkspace = createMockWorkspace();
     const repos = createFakeRepositories(mockWorkspace);
     const serializer = createWorkspaceSerializer({
@@ -48,14 +48,34 @@ describe('exportWorkspaceToFile', () => {
       now: () => new Date('2026-01-05T12:00:00.000Z'),
     });
 
-    let captured = '';
-    const download = (_filename: string, value: unknown) => {
-      captured = JSON.stringify(value);
+    // The REAL `downloadJsonFile` runs (default seam), so what is captured is the exact Blob text
+    // the user's file would hold — not a re-stringify of the value in the test. jsdom lacks the
+    // Blob URL API: stubbed here and removed in `finally` (never left installed across files).
+    let capturedBlob: Blob | undefined;
+    URL.createObjectURL = (blob: Blob) => {
+      capturedBlob = blob;
+      return 'blob:fake-url';
     };
+    URL.revokeObjectURL = () => {};
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
-    await exportWorkspaceToFile(serializer, download);
+    try {
+      await exportWorkspaceToFile(serializer);
+    } finally {
+      clickSpy.mockRestore();
+      // @ts-expect-error restoring jsdom to its un-stubbed state.
+      delete URL.createObjectURL;
+      // @ts-expect-error restoring jsdom to its un-stubbed state.
+      delete URL.revokeObjectURL;
+    }
 
-    const parsed = WorkspaceExportSchema.parse(JSON.parse(captured) as unknown);
+    expect(capturedBlob).toBeDefined();
+    const captured = await (capturedBlob as Blob).text();
+    const raw = JSON.parse(captured) as Record<string, unknown>;
+    // Asserted on the RAW file, not the parse output: Zod strips unknown keys, so a `settings` key
+    // would vanish from `parsed` and the check could never fail (AR-12 / Decision F.1).
+    expect('settings' in raw).toBe(false);
+    const parsed = WorkspaceExportSchema.parse(raw);
     const { battles, organisms } = fromEnvelope(parsed);
 
     expect(battles.map((b) => b.id).sort()).toEqual(mockWorkspace.battles.map((b) => b.id).sort());
@@ -63,8 +83,10 @@ describe('exportWorkspaceToFile', () => {
       mockWorkspace.organisms.map((o) => o.id).sort(),
     );
     for (const battle of mockWorkspace.battles) {
-      const roundTripped = battles.find((b) => b.id === battle.id);
-      expect(roundTripped).toEqual(battle);
+      expect(battles.find((b) => b.id === battle.id)).toEqual(battle);
+    }
+    for (const organism of mockWorkspace.organisms) {
+      expect(organisms.find((o) => o.id === organism.id)).toEqual(organism);
     }
   });
 });

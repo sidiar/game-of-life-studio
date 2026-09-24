@@ -23,11 +23,16 @@ export function downloadJsonFile(filename: string, value: unknown): void {
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 0);
+  // try/finally: if appending or clicking throws, the anchor is still removed and the object URL
+  // still revoked — the caller's "nothing was changed" alert must not leave a stray `<a>` or a
+  // leaked blob URL behind it.
+  try {
+    document.body.appendChild(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
 }

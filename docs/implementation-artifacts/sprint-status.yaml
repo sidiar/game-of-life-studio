@@ -150,7 +150,7 @@ development_status:
   5-2-workspace-statistics: done
   5-3-export-envelope-serializer: done
   5-4-rule-aware-organism-closure: done
-  5-5-export-workspace: review
+  5-5-export-workspace: done
   5-6-battle-export-dialog: backlog
   5-7-migration-registry: backlog
   5-8-atomic-import-pipeline: backlog

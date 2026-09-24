@@ -1,7 +1,10 @@
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { downloadJsonFile } from '@/lib/export/downloadJsonFile';
+import { workspaceExportFilename } from '@/lib/export/workspaceExportFilename';
 import DataManagement from './DataManagement';
 
 // The download seam is mocked at the module `exportWorkspaceToFile` (and therefore
@@ -54,8 +57,10 @@ describe('DataManagement', () => {
       expect(downloadJsonFile).toHaveBeenCalledTimes(1);
     });
     expect(serializer.exportWorkspace).toHaveBeenCalledTimes(1);
+    // Derived, not hard-coded: the filename is the LOCAL date of `exportedAt`, so a literal
+    // '2026-01-05' would fail on a UTC+12..+14 runner.
     expect(downloadJsonFile).toHaveBeenCalledWith(
-      'game-of-life-workspace-2026-01-05.json',
+      workspaceExportFilename(new Date(ENVELOPE.exportedAt)),
       ENVELOPE,
     );
   });
@@ -109,6 +114,53 @@ describe('DataManagement', () => {
     await waitFor(() => {
       expect(downloadJsonFile).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('under StrictMode, a failure shows the alert, a retry clears it, and a second failure shows it again (the dev double-effect must not disarm the mounted guard)', async () => {
+    const serializer = {
+      exportWorkspace: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockRejectedValueOnce(new Error('boom again')),
+    };
+    render(
+      <StrictMode>
+        <DataManagement serializer={serializer} />
+      </StrictMode>,
+    );
+
+    const button = screen.getByRole('button', { name: /export workspace/i });
+    fireEvent.click(button);
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(serializer.exportWorkspace).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(downloadJsonFile).not.toHaveBeenCalled();
+  });
+
+  it('Enter and Space on the focused Export button each trigger an export (a native <button>, AC9)', async () => {
+    const user = userEvent.setup();
+    const serializer = { exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE) };
+    render(<DataManagement serializer={serializer} />);
+
+    const button = screen.getByRole('button', { name: /export workspace/i });
+    await user.tab();
+    expect(button).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => {
+      expect(downloadJsonFile).toHaveBeenCalledTimes(1);
+    });
+
+    await user.keyboard(' ');
+    await waitFor(() => {
+      expect(downloadJsonFile).toHaveBeenCalledTimes(2);
+    });
+    expect(serializer.exportWorkspace).toHaveBeenCalledTimes(2);
+    expect(button).toHaveFocus();
   });
 
   it('adds no term/definition roles to the page (the readStats() index-pairing guard, AC9)', () => {

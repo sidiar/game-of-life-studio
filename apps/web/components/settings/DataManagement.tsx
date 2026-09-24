@@ -16,7 +16,7 @@ export interface DataManagementProps {
 
 const DATA_MANAGEMENT_HEADING_ID = 'data-management-heading';
 
-// Mockup: .settings-group / .settings-item (settings.html:139-158, 392-403). One row today —
+// Mockup: .settings-group / .settings-item (settings.html:139-157, 392-403). One row today —
 // Export only; Import/Auto-Save/Clear All arrive in 5.9/6.10/5.10 (FD7 — no dead affordance, and
 // no card-level description paragraph promising them either).
 const Row = styled('div')({
@@ -24,13 +24,14 @@ const Row = styled('div')({
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: '20px',
+  padding: '15px 0',
 });
 
 const RowInfo = styled('div')({
   flex: 1,
 });
 
-// Mockup: .settings-item-label (:169-174).
+// Mockup: .settings-item-label (:162-167).
 const RowLabel = styled('h3')({
   fontSize: '14px',
   color: 'var(--gol-text-primary)',
@@ -38,7 +39,7 @@ const RowLabel = styled('h3')({
   fontWeight: 500,
 });
 
-// Mockup: .settings-item-description (:176-180).
+// Mockup: .settings-item-description (:169-174).
 const RowDescription = styled('p')({
   fontSize: '13px',
   color: 'var(--gol-text-secondary)',
@@ -46,8 +47,9 @@ const RowDescription = styled('p')({
   lineHeight: 1.5,
 });
 
-// Mockup: .btn (settings.html:169-181) — the house primary-button idiom `OrganismLibrary.tsx`'s
-// `CreateButton` carries, COPIED here rather than imported (FD10: that file is the Epic 4 lane's
+// Mockup: .btn (settings.html:181-198), plus .settings-item-control's `flex-shrink: 0` (:176-178)
+// so the button never shrinks at narrow widths — the house primary-button idiom
+// `OrganismLibrary.tsx`'s `CreateButton` carries, COPIED here rather than imported (FD10: that file is the Epic 4 lane's
 // live file, and 5.1 FD6 already refused to touch it for the same lane-boundary reason). No
 // `transition: all` (the mid-fade axe trap every hover-button component in this codebase avoids)
 // and no `disabled` — FD8: this button never self-disables, so keyboard focus never drops to
@@ -63,6 +65,7 @@ const ExportButton = styled('button')({
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
   cursor: 'pointer',
+  flexShrink: 0,
   transition: 'background-color 0.2s',
   '&:hover': {
     background: 'var(--gol-accent-hover)',
@@ -110,6 +113,11 @@ export default function DataManagement({ serializer }: DataManagementProps) {
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    // Re-armed on every setup, not only initialised by `useRef(true)`: StrictMode (the dev
+    // default) runs setup → cleanup → setup, and a cleanup-only effect would leave the ref false
+    // for the component's whole life — silently suppressing the AC8 alert in `next dev`. The same
+    // reset `useWorkspaceSeed.ts` carries for the same reason.
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };

@@ -274,10 +274,13 @@ test.describe('export workspace (Story 5.5)', () => {
     const downloadPath = await download.path();
     expect(downloadPath).not.toBeNull();
     const raw = await readFile(downloadPath as string, 'utf-8');
-    const parsed = WorkspaceExportSchema.parse(JSON.parse(raw) as unknown);
+    const file = JSON.parse(raw) as Record<string, unknown>;
+    // On the RAW file, never the parse output: Zod strips unknown keys, so `settings` would vanish
+    // from `parsed` and this could never fail (AR-12 / Decision F.1).
+    expect('settings' in file).toBe(false);
+    const parsed = WorkspaceExportSchema.parse(file);
 
     expect(parsed.kind).toBe('workspace');
-    expect('settings' in parsed).toBe(false);
     expect(new Set(parsed.battles.map((b) => b.id))).toEqual(new Set(battles.map((b) => b.id)));
     expect(new Set(parsed.organisms.map((o) => o.id))).toEqual(new Set(organisms.map((o) => o.id)));
   });

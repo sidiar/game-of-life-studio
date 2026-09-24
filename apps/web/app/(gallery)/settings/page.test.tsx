@@ -52,6 +52,9 @@ describe('SettingsRoute', () => {
     expect(localStorage.getItem(STORAGE_KEYS.settings)).toBeNull();
     localStorage.clear();
     vi.unstubAllEnvs();
+    // The module-level download mock keeps its call history otherwise (the vitest config sets
+    // neither clearMocks nor restoreMocks), so a later Export click would read a stale call.
+    vi.mocked(downloadJsonFile).mockClear();
   });
 
   it('renders the Settings heading at once, and the counts once ready (production seed)', async () => {
