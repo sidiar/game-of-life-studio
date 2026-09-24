@@ -1,9 +1,11 @@
 'use client';
 
 import { useMemo } from 'react';
+import { createWorkspaceSerializer } from '@gol/persistence';
 import SettingsPage from '@/components/settings/SettingsPage';
 import { createRepositories } from '@/lib/repositoryFactory';
 import { useWorkspaceSeed } from '@/lib/gallery/useWorkspaceSeed';
+import { APP_VERSION } from '@/lib/appVersion';
 
 // The page boundary for the third static route (Decision K.5 — a static path, no dynamic
 // segment, nothing to enumerate at build time). Mirrors app/(gallery)/organisms/page.tsx line for
@@ -23,6 +25,20 @@ import { useWorkspaceSeed } from '@/lib/gallery/useWorkspaceSeed';
 export default function SettingsRoute() {
   const repositories = useMemo(() => createRepositories(), []);
   const { status } = useWorkspaceSeed(repositories);
+  // AC7 (Story 5.5): built once here, at the page boundary, exactly like `repositories` above —
+  // never inside <SettingsPage> or <DataManagement>, and never imported by either (AR-2/27). A
+  // second useMemo keyed on `repositories` rather than folding into the one above: the two are
+  // independent constructions over the same dependency, and splitting them keeps each memo's
+  // purpose legible from its own line.
+  const serializer = useMemo(
+    () =>
+      createWorkspaceSerializer({
+        repos: repositories,
+        appVersion: APP_VERSION,
+        now: () => new Date(),
+      }),
+    [repositories],
+  );
 
   // No <main> here — AppShell owns the single <main> landmark for the (gallery) branch. No
   // useDocumentTitle either (FD5, Story 5.1): Battles and Organisms claim no document.title, and Settings
@@ -34,6 +50,7 @@ export default function SettingsRoute() {
       organisms={repositories.organisms}
       seedStatus={status}
       workspace={repositories}
+      serializer={serializer}
     />
   );
 }

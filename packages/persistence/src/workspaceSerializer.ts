@@ -31,8 +31,9 @@ export interface WorkspaceSerializer {
    * The whole workspace on the wire — battles + organisms, never settings (AR-12 / Decision F.1).
    *
    * Returns the WIRE shape (ISO timestamps), ready for `JSON.stringify`. The download itself —
-   * `Blob`, `URL.createObjectURL`, the filename — is Story 5.5's and belongs in `apps/web`; no DOM
-   * type may appear in this package's export path.
+   * `Blob`, `URL.createObjectURL`, the filename — lives in `apps/web/lib/export/`
+   * (`downloadJsonFile.ts`, `workspaceExportFilename.ts`, `exportWorkspaceToFile.ts`, Story 5.5);
+   * no DOM type may appear in this package's export path.
    */
   exportWorkspace(): Promise<WorkspaceExportWire>;
 

@@ -42,9 +42,9 @@ import type {
 
 /**
  * Everything the envelope stamps that is not data. Both values are INJECTED (Story 5.3 FD5): there
- * is no app-version constant in this workspace yet and picking one here would mint something
- * nothing reads until Story 5.5, and a hidden clock would force `exportedAt` to be asserted with a
- * regex instead of exactly.
+ * is no app-version constant in this workspace yet, and a hidden clock would force `exportedAt` to
+ * be asserted with a regex instead of exactly. `appVersion` is supplied by
+ * `apps/web/lib/appVersion.ts` (Story 5.5), read from `apps/web/package.json`'s `version`.
  */
 export interface ExportMeta {
   /** Provenance only, never branched on (Decision I.4). */

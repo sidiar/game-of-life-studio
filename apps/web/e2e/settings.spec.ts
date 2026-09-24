@@ -1,5 +1,9 @@
+import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { CURRENT_FORMAT_VERSION, WorkspaceExportSchema } from '@gol/domain';
+import { STORAGE_KEYS } from '@gol/persistence';
+import { createMockWorkspace } from '@gol/test-utils';
 
 // A stat tile's value, scoped to the tile whose term matches — never `definition.nth(i)`: terms are
 // matched by text, so reading the value by POSITION silently reads a different tile's number the
@@ -208,6 +212,80 @@ test.describe('settings route (Story 5.1)', () => {
   test('has no axe accessibility violations', async ({ page }) => {
     await page.goto('/settings');
     await expect(statValue(page, 'Organisms')).toHaveText('1');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});
+
+// AC4's e2e level: the round trip proven against the REAL downloaded file, on the served
+// production static export — jsdom cannot give this, only a real browser download can.
+test.describe('export workspace (Story 5.5)', () => {
+  // Copied from e2e/createBattle.spec.ts's `seedWorkspace`, not shared through a new module — the
+  // story's file list scopes this story to this one spec file. e2e/ is exempt from the
+  // @gol/test-utils import boundary (eslint.config.mjs).
+  async function seedWorkspace(page: Page) {
+    const { battles, organisms } = createMockWorkspace();
+    const battlesRecord = Object.fromEntries(battles.map((b) => [b.id, b]));
+    const organismsRecord = Object.fromEntries(organisms.map((o) => [o.id, o]));
+    const payload = JSON.parse(
+      JSON.stringify({ battles: battlesRecord, organisms: organismsRecord }),
+    ) as { battles: unknown; organisms: unknown };
+
+    await page.addInitScript(
+      ([keys, formatVersion, data]) => {
+        // Stamps gol:schema so isFreshWorkspace() is false and the default seed does not append
+        // Conway's Classic to the roster mid-test.
+        localStorage.setItem(
+          (keys as Record<string, string>).schema,
+          JSON.stringify({ formatVersion }),
+        );
+        localStorage.setItem(
+          (keys as Record<string, string>).battles,
+          JSON.stringify((data as { battles: unknown }).battles),
+        );
+        localStorage.setItem(
+          (keys as Record<string, string>).organisms,
+          JSON.stringify((data as { organisms: unknown }).organisms),
+        );
+      },
+      [STORAGE_KEYS, CURRENT_FORMAT_VERSION, payload] as const,
+    );
+
+    return { battles, organisms };
+  }
+
+  test('clicking Export downloads a WorkspaceExportSchema-valid file named by AC3, holding exactly the seeded battles and organisms', async ({
+    page,
+  }) => {
+    const { battles, organisms } = await seedWorkspace(page);
+    await page.goto('/settings');
+    await expect(statValue(page, 'Organisms')).toHaveText(String(organisms.length));
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Export workspace' }).click(),
+    ]);
+
+    expect(download.suggestedFilename()).toMatch(
+      /^game-of-life-workspace-\d{4}-\d{2}-\d{2}\.json$/,
+    );
+
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const raw = await readFile(downloadPath as string, 'utf-8');
+    const parsed = WorkspaceExportSchema.parse(JSON.parse(raw) as unknown);
+
+    expect(parsed.kind).toBe('workspace');
+    expect('settings' in parsed).toBe(false);
+    expect(new Set(parsed.battles.map((b) => b.id))).toEqual(new Set(battles.map((b) => b.id)));
+    expect(new Set(parsed.organisms.map((o) => o.id))).toEqual(new Set(organisms.map((o) => o.id)));
+  });
+
+  test('the Data Management card has no axe accessibility violations', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { level: 2, name: 'Data Management' })).toBeVisible();
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);

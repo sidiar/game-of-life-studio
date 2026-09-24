@@ -19,7 +19,8 @@ export interface BattleRepository {
   load(id: string): Promise<Battle | null>;
   /** Lightweight summaries for the Gallery and the AR-15 usage index (Decision H.4). */
   list(): Promise<BattleSummary[]>;
-  /** Fully parsed battles — the WorkspaceSerializer export path (Story 5.5). */
+  /** Fully parsed battles — read by the WorkspaceSerializer export path (`workspaceSerializer.ts`,
+   * called from `apps/web`'s `/settings` page boundary, Story 5.5). */
   listFull(): Promise<Battle[]>;
   delete(id: string): Promise<void>;
   /** Presence only — a present-but-corrupt record still reports `true` even though `load()` throws. */

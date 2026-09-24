@@ -38,8 +38,9 @@ export { measureStorageUsage, storageBytesOf } from './localStorageAccess';
 export { assertSafeCollectionId } from './errors';
 
 // The RFC-006 export path's repository half (Story 5.3). The envelope schema and the dense<->sparse
-// conversion are @gol/domain's; this is only the factory that reads AppRepositories. Story 5.5
-// calls it from the page boundary, which is also where `appVersion` and the clock come from.
+// conversion are @gol/domain's; this is only the factory that reads AppRepositories. Called from
+// the `/settings` page boundary (`app/(gallery)/settings/page.tsx`, Story 5.5), which is also
+// where `appVersion` (`apps/web/lib/appVersion.ts`) and the clock (`() => new Date()`) come from.
 export { createWorkspaceSerializer } from './workspaceSerializer';
 export type { WorkspaceSerializer, WorkspaceSerializerDeps } from './workspaceSerializer';
 
