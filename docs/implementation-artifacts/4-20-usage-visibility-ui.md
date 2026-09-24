@@ -4,7 +4,7 @@ baseline_commit: e06da2e
 
 # Story 4.20: Usage Visibility UI
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -47,9 +47,19 @@ empty list item) are settled there.
    as text with **no button, no `aria-expanded`, no panel** (UX-DR6: "without expansion").
    - the battles panel lists **battle names**, the rules panel lists the **names of the organisms
      whose rules target this one** — names only;
-   - nothing inside either panel is focusable, nothing is a link, nothing navigates and nothing
-     writes (FR-1.7, M7: the editor may be a modal over an in-progress battle, so navigation would
-     abandon unsaved grid work);
+   - **the panel's scroll region is focusable (`tabIndex={0}` plus an accessible name); nothing
+     inside it is interactive — no link, nothing navigates, nothing writes** (FR-1.7, M7: the editor
+     may be a modal over an in-progress battle, so navigation would abandon unsaved grid work — and
+     a scroll container cannot navigate, so the amendment keeps the constraint that mattered).
+     ⚠️ **Amended 2026-09-24** from "nothing inside either panel is focusable" by the owner's
+     decision on review item D2; axe's `scrollable-region-focusable` requires exactly this of the
+     capped list below;
+   - **the name list is capped at `min(60vh, 400px)` with `overflowY: auto`, and each name is
+     truncated to ONE line** (`whiteSpace: nowrap` + `textOverflow: ellipsis`, the full text kept in
+     the DOM so a screen reader still reads it; `Panel` carries a `maxWidth` so a 100-character
+     battle name cannot set the width instead). Without the cap a panel opening upward from the
+     footer pushes its FIRST names past the top of the viewport, unreachable — nothing scrolls, and
+     neither `toBeVisible` nor axe sees clipping (**added 2026-09-24**, the same decision);
    - at most one panel is open at a time.
 
 4. **Escape closes the panel, not the editor.** ⚠️ With a panel open, Escape must close the panel
@@ -59,6 +69,11 @@ empty list item) are settled there.
    other bullet here and loses the user's draft (FD4). Also pinned: an outside pointerdown closes
    the open panel; focus stays on / returns to the trigger that opened it; the footer is reachable
    by Tab after the three columns; axe reports zero violations with a panel open.
+   ⚠️ **Amended 2026-09-24** (owner's decision on review item D1): the focus clause is "**after
+   Escape**, focus is on the trigger" — an outside `pointerdown` deliberately leaves focus where the
+   press landed (a restore there is either overridden by the click's own `mousedown` focus or steals
+   focus from a field the user chose), and tabbing away leaves the panel open, from where Escape
+   still closes the panel rather than the editor.
 
 5. **One derivation and one label, across all three surfaces (the AC's "counts are consistent").**
    - the VALUE is `resolveOrganismUsage(index, organismId).length` — never `index.get(id)?.length`.
@@ -165,8 +180,17 @@ empty list item) are settled there.
   - [x] Outside dismissal: a `document` `pointerdown` listener, added only while a panel is open,
         that ignores events inside the footer root (`ref.current.contains(event.target)`). Removed
         in the effect's cleanup.
-  - [x] Focus stays on the trigger (no `autoFocus` into the panel — nothing in it is focusable);
-        after Escape or an outside dismissal, focus is on the trigger.
+  - [x] Focus stays on the trigger (no `autoFocus` into the panel — nothing in it is interactive);
+        after Escape, focus is on the trigger. ⚠️ **Amended 2026-09-24** (decision D1): an outside
+        dismissal is NOT a focus-restoring path — focus follows the press.
+  - [x] **(2026-09-24, decision D2)** The name list — not `Panel` — is the scroll region:
+        `maxHeight: min(60vh, 400px)`, `overflowY: auto`, `tabIndex={0}` and
+        `aria-labelledby` → `PanelTitle` for its accessible name (axe's
+        `scrollable-region-focusable`). Capping the list rather than the panel keeps the section
+        title pinned above it.
+  - [x] **(2026-09-24, decision D2)** `NameItem` truncates to one line (`whiteSpace: nowrap`,
+        `overflow: hidden`, `textOverflow: ellipsis`) and `Panel` gains a `maxWidth` — a wrapped
+        name would inflate the very height the cap bounds. The DOM keeps the full text.
   - [x] `data-usage-battles` / `data-usage-rules` hooks on the two triggers and
         `data-usage-battles-panel` / `data-usage-rules-panel` on the panels, the house `data-*`
         convention the e2e and unit tests query by.
@@ -245,7 +269,7 @@ Reviewed on **Fable** against an **Opus** implementation (2026-09-23), via three
 layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus a local WebKit run of the new e2e
 block. 6 `patch`, 2 `decision-needed`, 0 `defer`, 10 dismissed.
 
-- [ ] [Review][Decision] **Focus after an outside dismissal, and a panel left open by Tab** — AC4
+- [x] [Review][Decision] **Focus after an outside dismissal, and a panel left open by Tab** — AC4
       pins "focus stays on / returns to the trigger that opened it" and Task 3 says "after Escape
       or an outside dismissal, focus is on the trigger". Escape now returns focus to the opener on
       every path (patched below), but an outside `pointerdown` only closes the panel: focus follows
@@ -259,7 +283,13 @@ block. 6 `patch`, 2 `decision-needed`, 0 `defer`, 10 dismissed.
       restore focus to the trigger on outside dismissal only when the press landed on nothing
       focusable (the paper), via a `click`-phase restore; **(c)** additionally close the panel on
       `focusout` leaving the footer (`relatedTarget` outside `rootRef`). (a) is what ships today.
-- [ ] [Review][Decision] **A long name list opens past the top of the viewport** — `Panel` is
+      **Owner's decision (2026-09-24): (a).** Keep pointer semantics — focus follows the click.
+      No code change is needed for the behaviour itself; the spec moves instead. Amend the Task 3
+      bullet and AC4's focus clause to read "after Escape, focus is on the trigger", and delete the
+      component comment's claim that an outside dismissal returns focus to it "for free". The
+      Tab-away sibling case is accepted as it stands: the panel stays open, and Escape from there
+      closes the panel, not the editor.
+- [x] [Review][Decision] **A long name list opens past the top of the viewport** — `Panel` is
       `position: absolute; bottom: 150%` with no `maxHeight`/`overflow`. An organism placed in
       more battles than fit between the footer and the viewport top (~25–30 rows at 12px + 4px
       padding on a 720px-tall window) has its first names clipped and unreachable — nothing in the
@@ -270,6 +300,27 @@ block. 6 `patch`, 2 `decision-needed`, 0 `defer`, 10 dismissed.
       the list at N rows and render "… and K more" as the last item, keeping the panel static;
       **(c)** accept — the workspace library is uncapped but a single organism in 30+ battles is
       outside the MVP's expected scale; record it. `[apps/web/components/organisms/editor/UsageIndicator.tsx:Panel]`
+      **Owner's decision (2026-09-24): (a), plus per-row truncation.** Two changes, one on each
+      axis — the row count and the row width:
+      1. **Cap and scroll (the vertical fix).** `maxHeight: min(60vh, 400px); overflowY: auto` on
+         the scrolling element, made a focusable scroll region (`tabIndex={0}` plus an accessible
+         name), because axe's `scrollable-region-focusable` requires exactly that. **AC3 is
+         amended**: its "nothing inside either panel is focusable" bullet becomes "the panel's
+         scroll region is focusable (`tabIndex={0}`, accessible name); nothing inside it is
+         interactive — no link, nothing navigates, nothing writes". The FR-1.7 / M7 reason for the
+         original bullet was *navigation away from an unsaved battle*, which a scroll container
+         cannot do, so the amendment keeps the constraint that actually mattered and drops only the
+         part that blocked reaching the names.
+      2. **Truncate each name to one line (the horizontal fix).** Replace `NameItem`'s
+         `overflowWrap: 'anywhere'` with `whiteSpace: nowrap; overflow: hidden; textOverflow:
+         ellipsis` and give `Panel` a `maxWidth`, so one long battle name no longer wraps across
+         two or three rows and inflate the height the cap above is bounding. The DOM keeps the full
+         text, so a screen reader still reads the whole name — the truncation is visual only. Note
+         the CSS renders a single-character `…` rather than two periods; that is the browser's
+         ellipsis and the house behaviour, not a deviation worth a literal `..`.
+      Both parts need the existing "nothing focusable" assertions updated (the unit tests and the
+      Chromium axe scan), and axe must come back clean with a panel open at 1 row and at 40 rows.
+      The capture-phase Escape handler already covers a keydown raised inside the scroll region.
 - [x] [Review][Patch] **Escape closes the EDITOR whenever focus is outside the footer — the FD4
       failure on two reachable paths** [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown]
       — the Escape handler was a React `onKeyDown` on the footer `Row`, so it only saw a `keydown`
@@ -516,6 +567,30 @@ in it (`resolveOrganismUsage`, beside `buildUsageIndex`, in `OrganismLibrary.tsx
 is imported by the two lazy chunks only. (Other routes, unchanged by this story: home 333.8/340, battle
 309.5/310, battle/new 309.2/310, settings 291.6/305.)
 
+#### Review decisions D1/D2 (2026-09-24)
+
+Every command run from the worktree root (`.claude/worktrees/lane-epic-4`), none piped:
+
+| Command | Result |
+|---|---|
+| `npx vitest run components/organisms/editor/UsageIndicator.test.tsx components/organisms/editor/OrganismEditorModal.test.tsx` (in `apps/web`) | 114 passed (the amended "one focusable thing" assertion included) |
+| `npx playwright test --project=chromium -g "usage visibility footer"` | **7 passed** (16.8s) — the 5 existing cases + the two new axe/cap cases |
+| `npx playwright test --project=webkit --project=firefox -g "usage visibility footer"` | **14 passed** (35.3s) |
+| `npm run ci:dev` | **exit 0** (echoed from `$?`, not a pipe) |
+
+`ci:dev` detail: typecheck 5/5 · lint **0 errors** (the same single pre-existing
+`BattleGallery.tsx:248` `exhaustive-deps` warning, untouched) · format:check clean · spec:check clean
+· boundary:check clean · coverage — `web` **122 files / 2095 tests**, all packages green ·
+build:standalone 5/5 · bundle:check all five routes within budget, `/organisms` **297.5 KB gzip /
+305 KB — unchanged, 7.5 KB headroom** (`scripts/check-bundle-size.mjs` NOT edited) · bench
+**8.982 ms frame against 16.667 ms** (46.1% headroom) · e2e Chromium **262 passed** (2.2m — 260 plus
+the two new cases).
+
+**axe, the decision's own gate:** clean with a panel open at **1 row** (e2e test 7 — Conway's
+Classic, `Used in 1 Battle`) and at **40 rows** (e2e test 6 — 2 mock battles + 38 seeded fillers), on
+all three local engines, plus the jsdom scans (`UsageIndicator`, modal test 53) which cover the
+collapsed and 2-row states. No `disableRules`, no exceptions.
+
 ### Completion Notes List
 
 - **Task 2 — `lib/organisms/usageLabels.ts`.** `battleCount` / `battleCountLabel` /
@@ -560,6 +635,42 @@ is imported by the two lazy chunks only. (Other routes, unchanged by this story:
   are `inert`/`aria-hidden` behind the modal, so there is no duplicate-landmark finding.
 - **No file under `packages/*` was touched** (AC9), hence no `@gol/domain` barrel edit and no two-lane
   collision with epic 5. `spec:check` passes on every ID written into a comment.
+
+**Review decisions D1/D2 (2026-09-24), the owner's answers applied:**
+
+- **D1 — focus after an outside dismissal: option (a), spec-only.** Pointer semantics are kept, so no
+  behaviour changed. AC4's focus clause and the Task 3 bullet now read "after Escape, focus is on the
+  trigger", each carrying an amendment note, and the component's own comment says the same instead of
+  claiming an outside press restores focus. The Tab-away sibling case (the panel stays open; Escape
+  from outside the footer still closes the panel, not the editor) is accepted and recorded in
+  `deferred-work.md` together with the pointer-focus choice — the alternative, a `focusout` close, is
+  a third dismissal path to keep correct on every close, for a panel that does nothing while open.
+- **D2 — the long list: option (a) plus per-row truncation, both axes.** The **name list**, not
+  `Panel`, is the scroll region: `maxHeight: min(60vh, 400px)`, `overflowY: auto`, `tabIndex={0}` and
+  `aria-labelledby` → `PanelTitle`, so its accessible name is the section title already on screen
+  rather than a second string to keep in sync. Capping the list rather than the whole panel keeps that
+  title pinned above the scrolling names. `NameItem` lost `overflowWrap: 'anywhere'` for
+  `whiteSpace: nowrap` + `overflow: hidden` + `textOverflow: ellipsis`, and `Panel` gained
+  `maxWidth: 320px` — without a cap on the width a 100-character battle name
+  (`MAX_BATTLE_NAME_LENGTH`) simply widens the panel and nothing truncates. The DOM keeps the full
+  text, asserted in e2e test 6 (`textContent` equals the full name while `scrollWidth > clientWidth`),
+  so the truncation is visual only.
+- **AC3 is amended, not quietly reinterpreted:** "nothing inside either panel is focusable" became
+  "the panel's scroll region is focusable (`tabIndex={0}`, accessible name); nothing inside it is
+  interactive", with the reason stated in both the AC and the component — FR-1.7 / M7 is about
+  NAVIGATING away from an unsaved battle, which a scroll container cannot do. The unit assertion moved
+  with it: the panel holds no `a`/`button`/`input`/`select`/`textarea` and exactly ONE `[tabindex]`,
+  which is the named list.
+- **The 40-row fixture is built in the page, not cloned.** `seedFillerBattlesFor` (e2e) writes 38
+  battles at the smallest editable preset with a single placed cell (~3 KB each) rather than copying a
+  mock battle's 100x60 grid 38 times; the ids are deterministic UUIDs so a failure reproduces. The
+  records satisfy the full `BattleSchema`, not only the `BattleSummarySchema` that `/organisms` reads
+  — `organismIds` is exactly the placed set (Decision H.1).
+- **What the new e2e cases measure that jsdom cannot:** that the region actually scrolls
+  (`scrollHeight > clientHeight`), that the panel's top is still on screen
+  (`getBoundingClientRect().top >= 0` — the clipping neither `toBeVisible` nor axe reports), that the
+  region takes focus, and that a long row is clipped to one line (`scrollWidth > clientWidth`, height
+  under 30px). All three engines agree.
 
 ### File List
 
@@ -613,6 +724,15 @@ button on click, so it would NOT have caught the Safari path; the local Mac WebK
   tests 3–4, modal tests 54–55, doc/comment accuracy fixes. Two `[Review][Decision]` items left for
   the owner (focus after outside dismissal; long-list panel height). `npm run ci:dev` exit 0.
   Status → in-progress.
+- 2026-09-24 — Owner's review decisions resolved. **D1 (a), spec-only:** pointer semantics kept; AC4
+  and the Task 3 bullet amended to "after Escape, focus is on the trigger"; the component comment
+  corrected; the Tab-away and pointer-focus residue recorded in `deferred-work.md`. **D2 (a) plus
+  per-row truncation:** the panel's name list is now a capped (`min(60vh, 400px)`), scrollable,
+  focusable-and-named scroll region and each name truncates to one line, with **AC3 amended**
+  accordingly and its "nothing focusable" assertion rewritten as "nothing interactive, exactly one
+  `[tabindex]`". Two new e2e cases pin the cap, the scroll, the truncation and axe at 40 rows and at
+  1 row on chromium / webkit / firefox. `npm run ci:dev` **exit 0**; `/organisms` 297.5 KB / 305 KB,
+  unchanged. Status → review.
 
 Dev Model: opus   # first editor footer + first disclosure overlay in the app, and a prop contract 4.21/4.24 build on — pattern-setting, not pattern-following
 

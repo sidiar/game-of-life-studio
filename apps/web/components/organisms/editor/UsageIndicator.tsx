@@ -18,10 +18,10 @@ import { battleCountLabel, ruleTargetCountLabel } from '@/lib/organisms/usageLab
  *
  * ⚠️ NOT a MUI `Popover` (FD3). A `Popover` IS a `Modal`, so it would nest a second focus trap and
  * a second `aria-hidden` layer inside the fullScreen editor `Dialog` — the interaction class
- * `project-context.md`'s live-region/`inert` rule records — for a panel that needs neither: nothing
- * inside it is focusable (FR-1.7, M7 — names only, no link, no navigation, the editor may be a
- * modal over an in-progress battle). A plain absolutely-positioned panel is also what the mockup
- * itself implements.
+ * `project-context.md`'s live-region/`inert` rule records — for a panel that needs neither: the
+ * only focusable thing in one is its own scroll region, and nothing in it is INTERACTIVE (FR-1.7,
+ * M7 — names only, no link, no navigation, the editor may be a modal over an in-progress battle).
+ * A plain absolutely-positioned panel is also what the mockup itself implements.
  *
  * Two independent disclosures, not one shared panel (FD12): `organism-editor-design.md:120` reads
  * as one ("the popover gains a second read-only section"), but written that way the `N = 0, M > 0`
@@ -119,11 +119,16 @@ const Caret = styled('span')({
 // content" black shadow (the organism-dot tooltip's). The mockup's own `text-transform: none` /
 // `letter-spacing: normal` resets are kept — the panel sits inside an uppercased, letter-spaced
 // label and its names are prose.
+//
+// `maxWidth` pairs with `NameItem`'s single-line truncation below: without it a 100-character
+// battle name (`MAX_BATTLE_NAME_LENGTH`) sets the panel's width instead, and nothing would be
+// truncated (owner's decision on review item D2, 2026-09-24).
 const Panel = styled('div')({
   position: 'absolute',
   bottom: '150%',
   left: 0,
   minWidth: '200px',
+  maxWidth: '320px',
   background: 'var(--gol-bg-hover)',
   border: '1px solid var(--gol-border)',
   padding: '10px 12px',
@@ -145,17 +150,42 @@ const PanelTitle = styled('p')({
 // Mockup: `.usage-popover ul` / `li`, minus the `li::before` `⚔` glyph — a generated-content glyph
 // is read by some screen readers as part of the name, and this list is the accessible answer to
 // "which battles", not decoration.
+// ⚠️ The list, not the `Panel`, is the scroll region (owner's decision on review item D2,
+// 2026-09-24): the panel opens UPWARD from the last row of the editor, so an organism placed in
+// more battles than fit between the footer and the viewport top had its FIRST names clipped off
+// the top of the window and unreachable — nothing scrolled, and neither `toBeVisible` nor axe sees
+// clipping. Capping the list rather than the whole panel keeps `PanelTitle` pinned above it.
+//
+// `tabIndex={0}` + an accessible name (`aria-labelledby` → `PanelTitle`, so the name is the title
+// already on screen rather than a second string to keep in sync) is what axe's
+// `scrollable-region-focusable` requires of a scrollable container with no focusable content — and
+// it is why AC3's original "nothing inside either panel is focusable" is amended to "nothing
+// inside it is interactive": the FR-1.7 / M7 constraint is about NAVIGATING away from an unsaved
+// battle, which a scroll container cannot do.
 const NameList = styled('ul')({
   listStyle: 'none',
   margin: 0,
   padding: 0,
+  maxHeight: 'min(60vh, 400px)',
+  overflowY: 'auto',
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
 });
 
+// One line per name (owner's decision on review item D2, 2026-09-24), where this used to be
+// `overflowWrap: 'anywhere'`: a long name wrapping over two or three rows inflates the very height
+// `NameList`'s cap is bounding, and makes the row count unpredictable. The DOM keeps the FULL text,
+// so a screen reader still reads the whole name — the truncation is visual only. The `…` is the
+// browser's single-character ellipsis, which is the house rendering, not a deviation.
 const NameItem = styled('li')({
   fontSize: '12px',
   color: 'var(--gol-text-primary)',
   padding: '4px 0',
-  overflowWrap: 'anywhere',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
 });
 
 export default function UsageIndicator({
@@ -225,11 +255,14 @@ export default function UsageIndicator({
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [openPanel]);
 
-  // No `autoFocus` into a panel: nothing in one is focusable, so opening moves focus nowhere but
+  // No `autoFocus` into a panel: nothing in one is interactive, so opening moves focus nowhere but
   // the trigger (`toggle`), and Escape brings it back there (`openerRef`). An outside `pointerdown`
-  // does NOT: focus follows the press — the field the user clicked, or the paper — because a
-  // restore here would either be overridden by the click's own `mousedown` focus or steal focus
-  // from a field the user chose. Recorded as an open review decision in the story file.
+  // does NOT: focus follows the press — the field the user clicked, the list they scrolled, or the
+  // paper — because a restore here would either be overridden by the click's own `mousedown` focus
+  // or steal focus from a field the user chose. That is the owner's decision on review item D1
+  // (2026-09-24), and it is why AC4 and Task 3 read "after Escape, focus is on the trigger": an
+  // outside press is deliberately NOT a focus-restoring path. Tabbing away leaves the panel open,
+  // also accepted there — Escape from outside the footer still closes the panel, not the editor.
   const disclosure = (
     key: PanelKey,
     label: string,
@@ -238,6 +271,7 @@ export default function UsageIndicator({
   ) => {
     const isOpen = openPanel === key;
     const panelId = `${idPrefix}-${key}-panel`;
+    const titleId = `${idPrefix}-${key}-title`;
     return (
       <Note>
         <Trigger
@@ -255,8 +289,10 @@ export default function UsageIndicator({
         </Trigger>
         {isOpen && (
           <Panel id={panelId} {...{ [`data-usage-${key}-panel`]: '' }}>
-            <PanelTitle>{panelTitle}</PanelTitle>
-            <NameList>
+            <PanelTitle id={titleId}>{panelTitle}</PanelTitle>
+            {/* The scroll region: focusable with an accessible name, so a capped list is
+                reachable by keyboard and clean under axe's `scrollable-region-focusable`. */}
+            <NameList tabIndex={0} aria-labelledby={titleId}>
               {names.map((name, index) => (
                 // The index is part of the key on purpose: two battles, or two organisms, may
                 // legitimately resolve to the SAME display name (`Untitled Battle`,

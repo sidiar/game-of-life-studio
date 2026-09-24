@@ -2413,8 +2413,9 @@ describe('OrganismEditorModal', () => {
       });
 
       // Review (2026-09-23): FD4's second reachable path, against MUI's REAL root handler. A click
-      // inside the panel is allowed and keeps it open, but nothing in it is focusable, so focus
-      // lands on the Dialog paper (`tabIndex=-1`) — the next Escape then never passes through the
+      // inside the panel is allowed and keeps it open, and it takes focus off the trigger — onto
+      // the name list's scroll region (`tabIndex={0}`, decision D2) or, before that existed, onto
+      // the Dialog paper's `tabIndex=-1`; either way the next Escape never passes through the
       // footer. With a footer-scoped handler this closed the editor; the document-capture listener
       // keeps it open and puts focus back on the trigger.
       it('(54) ⚠️ Escape after a click INSIDE the panel still closes the panel, not the editor, and refocuses the trigger (AC4, FD4)', async () => {

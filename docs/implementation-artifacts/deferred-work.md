@@ -2822,3 +2822,30 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   memoising `sorted` at the Library, which would also fix `others` and the search filter. **Pick this
   up only if a render profile ever shows it** — memoising the caller's list is a Library change with
   three beneficiaries.
+
+## Deferred from: Story 4-20-usage-visibility-ui review decisions (2026-09-24)
+
+- **Tabbing away from an open usage panel leaves it open.** There is no `focusout` close: the panel
+  is dismissed by a second click on its trigger, by Escape, or by a pointerdown outside the footer,
+  and Tab / Shift+Tab out of the footer is none of those. **Accepted by the owner** with decision D1
+  (`4-20-usage-visibility-ui.md`, Review Findings): the panel is read-only, it is not a focus trap,
+  and Escape from outside the footer still closes the panel rather than the editor (the handler is a
+  `document` capture listener, not a footer-scoped one). The alternative — closing on a `focusout`
+  whose `relatedTarget` is outside `rootRef` — is a third dismissal path to keep correct on every
+  close, for a panel that does nothing while open. Revisit only if a UX pass asks for it.
+- **An outside pointerdown does not restore focus to the trigger.** Focus follows the press — the
+  field the user clicked, the name list they scrolled, or the Dialog paper. **Owner's decision D1
+  (2026-09-24), and AC4 now says so**: the focus clause is "after Escape, focus is on the trigger".
+  Restoring focus on a pointer dismissal is either overridden by the click's own `mousedown` focus
+  or steals focus from a control the user deliberately chose. A `click`-phase restore limited to
+  presses that landed on nothing focusable (option (b) in the review) remains the only version worth
+  reconsidering, and only if a keyboard user reports losing their place.
+- **The usage panel's name rows are truncated, so a long battle name is only fully readable to a
+  screen reader.** `NameItem` is `whiteSpace: nowrap` + `textOverflow: ellipsis` inside a
+  `maxWidth: 320px` panel (owner's decision D2, 2026-09-24) — the full text stays in the DOM, but a
+  sighted user sees `…` on names past ~40 characters and the panel is read-only, so there is nowhere
+  to go for the rest. No `title` tooltip was added: a native tooltip on a list of 40 rows is its own
+  hazard (it also duplicates the accessible name for AT). The honest fix, if it matters, is the
+  hover/focus tooltip the house already owns (`--gol-shadow-tooltip`'s organism-dot tooltip) applied
+  only to rows that are actually clipped — **not this story's**, and not worth a tooltip layer for
+  the MVP's expected name lengths.

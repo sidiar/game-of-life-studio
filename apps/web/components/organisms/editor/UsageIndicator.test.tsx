@@ -87,7 +87,12 @@ describe('UsageIndicator — the battles label (AC2, AC3)', () => {
     expect(document.querySelector('[data-usage-battles-panel]')).toBeNull();
   });
 
-  it('nothing inside the panel is focusable, a link, or navigable (FR-1.7, M7)', async () => {
+  // AC3 as amended by the owner's decision on review item D2 (2026-09-24): the name list is a
+  // CAPPED scroll region, and axe's `scrollable-region-focusable` requires a scrollable container
+  // with no focusable content to be focusable itself. So the list carries `tabIndex={0}` and an
+  // accessible name, and the constraint that actually mattered — FR-1.7 / M7, nothing that
+  // NAVIGATES away from an unsaved battle — is asserted as "nothing interactive" instead.
+  it('the name list is the ONE focusable thing in the panel: a named scroll region, nothing interactive (FR-1.7, M7)', async () => {
     const user = userEvent.setup();
     mount();
 
@@ -96,7 +101,14 @@ describe('UsageIndicator — the battles label (AC2, AC3)', () => {
     const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
     expect(within(panel).queryByRole('link')).not.toBeInTheDocument();
     expect(within(panel).queryByRole('button')).not.toBeInTheDocument();
-    expect(panel.querySelectorAll('a, button, input, [tabindex]')).toHaveLength(0);
+    expect(panel.querySelectorAll('a, button, input, select, textarea')).toHaveLength(0);
+
+    const region = within(panel).getByRole('list');
+    expect(region).toHaveAttribute('tabindex', '0');
+    // Named by the title already on screen, not a second copy of the string.
+    expect(region).toHaveAccessibleName('Used in these Battles');
+    // …and it is the only focusable node in the panel, scroll region included.
+    expect(panel.querySelectorAll('[tabindex]')).toHaveLength(1);
   });
 
   it('keeps focus on the trigger while the panel is open', async () => {
