@@ -4,17 +4,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
 import {
+  buildRuleReferenceIndex,
   buildUsageIndex,
   CONWAYS_CLASSIC_ID,
+  organismDeleteVerdict,
   resolveOrganismUsage,
   type Organism,
+  type OrganismUsageEntry,
 } from '@gol/domain';
 import type { BattleRepository, OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { cloneOrganismRecord } from '@/lib/organisms/organismClone';
 import { normalizeOrganismSearch, organismNameMatches } from '@/lib/organisms/organismNameMatches';
+import { referencingOrganismNames, usageBattleNames } from '@/lib/organisms/usageLabels';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
+import { useInertBackground } from '@/lib/useInertBackground';
 import { useOrganismEditorModal } from '@/lib/organisms/useOrganismEditorModal';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
@@ -42,6 +47,15 @@ const OrganismEditorModal = dynamic(() => import('./editor/OrganismEditorModal')
 // exists (a Cancel never fetches the editor chunk at all). Modules shared with the editor chunk
 // (the Dialog stack) are hoisted into a common async chunk at bundle time.
 const OrganismInUseDialog = dynamic(() => import('./OrganismInUseDialog'), { ssr: false });
+
+// Story 4.21: the hard-block dialog, a third `dynamic()` boundary beside the two above, for the
+// identical reason — the MUI Dialog stack (and, transitively, `deleteBlockCopy.ts`'s strings)
+// stay out of `/organisms`'s first load. It never opens the editor and is never driven by
+// `useOrganismEditorModal` (FD8): local state here, plus `useInertBackground`, is the
+// `useDeleteBattleDialog` shape at smaller size.
+const OrganismDeleteBlockedDialog = dynamic(() => import('./OrganismDeleteBlockedDialog'), {
+  ssr: false,
+});
 
 export interface OrganismLibraryProps {
   organisms: OrganismRepository;
@@ -266,6 +280,10 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // loading or in error the `[[], []]` fallback is a fresh tuple per render and the memo recomputes
   // an empty map each time — no cards render in those states, so nothing reads it.
   const usage = useMemo(() => buildUsageIndex(summaries), [summaries]);
+  // Story 4.21: the Decision E.5 axis, memoized on the settled roster the same way `usage` is
+  // memoized on `summaries` — both inputs come from the ONE resource above, so both memos hit and
+  // miss together (open, save, close).
+  const ruleIndex = useMemo(() => buildRuleReferenceIndex(loadedOrganisms), [loadedOrganisms]);
 
   // Ephemeral UI state only (RFC-005 Decision 1) — never persisted, never in a ref: this is not
   // hot simulation state.
@@ -418,6 +436,77 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     publishQueuedCloneError();
   }, [gateProps, publishQueuedCloneError]);
 
+  // Story 4.21, FD8: the hard-block dialog's own lifecycle, local to this component rather than
+  // threaded through `useOrganismEditorModal` — that hook owns the editor/gate handoff, and the
+  // delete block never opens the editor, so it has no use for a third window. The
+  // `useDeleteBattleDialog` shape at smaller size: `blocked` is the data, held through the ~195ms
+  // exit fade (the `confirming` / `battleName` precedent — the dialog must not flash empty on the
+  // way out), `deleteDialogOpen` drives the fade alone.
+  const [blocked, setBlocked] = useState<{
+    organismId: string;
+    organismName: string;
+    battleNames: readonly string[];
+    referencingNames: readonly string[];
+  } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // Called here, the modal's PARENT, for the same ordering reason `useDeleteBattleDialog` and
+  // `useOrganismEditorModal` record at their own call sites: MUI's focus-trap move (a child
+  // effect) must already have happened before a subtree is marked inert. A SEPARATE call from the
+  // hook's own `useInertBackground(anyMounted)` — never folded into one union — because the two
+  // windows never overlap: `requestDeleteOrganism` below bails while the editor or gate is
+  // mounted, and the reverse direction needs no matching guard because THIS dialog's own inert
+  // background already makes every other control, including Create and every card's Edit, physically
+  // unreachable while it is up.
+  useInertBackground(blocked !== null);
+
+  // Where focus is owed once the delete dialog's exit transition has finished — the DOM lookup
+  // idiom every other close path in this file uses (FD9), never a captured element (WebKit does
+  // not focus a `<button>` on click).
+  const deleteRestoreIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (blocked !== null) return;
+    const id = deleteRestoreIdRef.current;
+    if (id === null) return;
+    deleteRestoreIdRef.current = null;
+    document.querySelector<HTMLElement>(`[data-delete-organism-id="${CSS.escape(id)}"]`)?.focus();
+  }, [blocked]);
+
+  // A card's Delete click (Story 4.21, FD7). `battles`/`referencing` are the SAME `blocked`
+  // verdict's lists the card map below reads to decide whether to render the button at all —
+  // never re-derived here (FD3) — and the names are resolved from `summaries`/`loadedOrganisms`,
+  // the same settled data the verdict came from, never the search-filtered `visible` (FD7).
+  //
+  // Guarded against the editor or gate being mounted (review precedent: `requestCreate`/
+  // `requestEdit`'s own `anyMounted` guard) — reachable only by a programmatic caller, since the
+  // editor/gate's own inert background already makes every card's Delete button unreachable by a
+  // real click while either is open.
+  const requestDeleteOrganism = useCallback(
+    (
+      organism: Organism,
+      battles: readonly OrganismUsageEntry[],
+      referencing: readonly string[],
+    ) => {
+      if (editorMounted || gateMounted) return;
+      deleteRestoreIdRef.current = organism.id;
+      setBlocked({
+        organismId: organism.id,
+        organismName: toDisplayOrganism(organism).name,
+        battleNames: usageBattleNames(battles, summaries),
+        referencingNames: referencingOrganismNames(referencing, loadedOrganisms),
+      });
+      setDeleteDialogOpen(true);
+    },
+    [editorMounted, gateMounted, summaries, loadedOrganisms],
+  );
+
+  // Escape, backdrop and OK all route here (the dialog's ONE action, AC5) — nothing else moves,
+  // nothing is written. `blocked` itself is cleared only once the exit transition has finished, so
+  // the dialog's content stays populated through the fade.
+  const handleDeleteClose = useCallback(() => setDeleteDialogOpen(false), []);
+  const handleDeleteExited = useCallback(() => setBlocked(null), []);
+
   // Story 4.17, AC1: the count is the number of DISTINCT saved battles whose placed set holds the
   // id (Decision H: "used" = placed) — read from the SAME settled list the page holds.
   //
@@ -529,22 +618,38 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
             // `visible.length === 0 && query === ''` cannot happen — the library is never empty
             // (M9, Conway's Classic is always present) — so no branch exists for it.
             <CardGrid role="list" aria-label="Organisms">
-              {visible.map((organism) => (
-                <li key={organism.id}>
-                  <OrganismCard
-                    organism={organism}
-                    system={organism.id === CONWAYS_CLASSIC_ID}
-                    onRequestEdit={() => onRequestEdit(organism)}
-                    cloning={cloning === organism.id}
-                    // The card's call site: no window has to exit first, so the queued failure is
-                    // published as soon as the write settles. Same rule as the gate's `onExited`
-                    // below — "publish once your window is gone" — and this entry point has none.
-                    onRequestClone={() => {
-                      void cloneOrganism(organism).then(publishQueuedCloneError);
-                    }}
-                  />
-                </li>
-              ))}
+              {visible.map((organism) => {
+                // Story 4.21: two map reads per card, the same class as the unmemoised filter scan
+                // above (FD6's Dev Notes) — no per-card memo. `protected`/`allowed` render no
+                // Delete at all in this story (FD2); only `blocked` does.
+                const verdict = organismDeleteVerdict(organism.id, usage, ruleIndex);
+                return (
+                  <li key={organism.id}>
+                    <OrganismCard
+                      organism={organism}
+                      system={organism.id === CONWAYS_CLASSIC_ID}
+                      onRequestEdit={() => onRequestEdit(organism)}
+                      cloning={cloning === organism.id}
+                      // The card's call site: no window has to exit first, so the queued failure is
+                      // published as soon as the write settles. Same rule as the gate's `onExited`
+                      // below — "publish once your window is gone" — and this entry point has none.
+                      onRequestClone={() => {
+                        void cloneOrganism(organism).then(publishQueuedCloneError);
+                      }}
+                      onRequestDelete={
+                        verdict.kind === 'blocked'
+                          ? () =>
+                              requestDeleteOrganism(
+                                organism,
+                                verdict.battles,
+                                verdict.referencingOrganismIds,
+                              )
+                          : undefined
+                      }
+                    />
+                  </li>
+                );
+              })}
             </CardGrid>
           ))}
       </div>
@@ -569,6 +674,18 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
       {/* Story 4.17: the in-use gate, mounted on ITS window (the hook's `gateMounted`), for the
           same fetch-on-first-open / fade-before-unmount reasons as the editor above. */}
       {gateMounted && <OrganismInUseDialog {...gateProps} onExited={onGateExited} />}
+      {/* Story 4.21: the hard-block dialog, mounted on `blocked !== null` — the same
+          fetch-on-first-open / fade-before-unmount shape, on its own window. */}
+      {blocked !== null && (
+        <OrganismDeleteBlockedDialog
+          open={deleteDialogOpen}
+          organismName={blocked.organismName}
+          battleNames={blocked.battleNames}
+          referencingNames={blocked.referencingNames}
+          onClose={handleDeleteClose}
+          onExited={handleDeleteExited}
+        />
+      )}
     </section>
   );
 }

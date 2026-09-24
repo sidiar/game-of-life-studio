@@ -14,9 +14,16 @@ import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
  * both import is the seam (`battleDisplayName.ts` left `<BattleTile>` for the same reason).
  */
 
-/** `N Battle` / `N Battles` — real pluralisation, never the spec's "Battle(s)" shorthand (the
- * count badge's `Organism`/`Organisms` precedent). */
-function battleCount(n: number): string {
+/**
+ * `N Battle` / `N Battles` — real pluralisation, never the spec's "Battle(s)" shorthand (the
+ * count badge's `Organism`/`Organisms` precedent).
+ *
+ * Exported (Story 4.21, FD5) so `deleteBlockCopy.ts`'s `battleBlockSentence` reuses the SAME
+ * pluraliser rather than a second one — the dialog's "N Battles" is then the identical string the
+ * footer and the 4.17 warning print. Still only imported by `deleteBlockCopy.ts`, which only the
+ * lazy dialog chunk imports, so this eager module gains no new string.
+ */
+export function battleCount(n: number): string {
   return `${n} ${n === 1 ? 'Battle' : 'Battles'}`;
 }
 

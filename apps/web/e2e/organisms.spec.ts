@@ -3964,3 +3964,212 @@ test.describe('usage visibility footer (Story 4.20)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+/**
+ * Registered AFTER `seedWorkspace`/`seedExtraOrganisms` (init scripts run in registration order):
+ * adds ONE extra battle placing the merged Glider (so it has a genuinely SEEDED battle-only block,
+ * distinct from the two mock battles every other organism is already placed by) and TWO extra
+ * organisms — `Vector Hunter`, whose rule targets `Silent Vector` — so `Silent Vector` gets a
+ * rule-only block with no battle placement at all. Story 4.21's own e2e block below is the only
+ * consumer, so this is deliberately NOT folded into `seedExtraOrganisms`.
+ */
+async function seedDeleteBlockExtras(page: Page) {
+  const silentVector = {
+    ...CONWAYS_CLASSIC,
+    id: 'silent-vector',
+    name: 'Silent Vector',
+    survivalRules: [],
+  };
+  const vectorHunter = {
+    ...CONWAYS_CLASSIC,
+    id: 'vector-hunter',
+    name: 'Vector Hunter',
+    survivalRules: [
+      {
+        id: 'vector-hunter-rule',
+        contentHash: 'vector-hunter-rule-hash',
+        conditions: [{ property: 'organismType', operator: 'eq', pattern: 'silent-vector' }],
+        payload: { summary: 'targets Silent Vector', action: 'survive' },
+      },
+    ],
+  };
+  const gliderGauntlet = {
+    id: '9f1c0000-0000-4000-8000-000000000001',
+    name: 'Glider Gauntlet',
+    organismId: 'unused-glider',
+  };
+
+  await page.addInitScript(
+    ([keys, extraOrganisms, battle]) => {
+      const storageKeys = keys as Record<string, string>;
+
+      const organismsKey = storageKeys.organisms;
+      const storedOrganisms = localStorage.getItem(organismsKey);
+      const organisms =
+        storedOrganisms === null ? {} : (JSON.parse(storedOrganisms) as Record<string, unknown>);
+      for (const organism of extraOrganisms as Array<{ id: string }>) {
+        organisms[organism.id] = organism;
+      }
+      localStorage.setItem(organismsKey, JSON.stringify(organisms));
+
+      const battlesKey = storageKeys.battles;
+      const storedBattles = localStorage.getItem(battlesKey);
+      const battles =
+        storedBattles === null ? {} : (JSON.parse(storedBattles) as Record<string, unknown>);
+      const { id, name, organismId } = battle as { id: string; name: string; organismId: string };
+      const rows = 30;
+      const cols = 50;
+      const gridState = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+      gridState[0][0] = 1;
+      battles[id] = {
+        id,
+        name,
+        organismIds: [organismId],
+        gridSize: { cols, rows },
+        gridState,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      };
+      localStorage.setItem(battlesKey, JSON.stringify(battles));
+    },
+    [
+      STORAGE_KEYS,
+      JSON.parse(JSON.stringify([silentVector, vectorHunter])) as unknown,
+      gliderGauntlet,
+    ] as const,
+  );
+}
+
+/**
+ * Story 4.21: the hard-block dialog, in a real browser. Reuses the 4.17/4.18/4.20 blocks' module
+ * seeding plus `seedDeleteBlockExtras` above. `Glider` (the merged extra organism) is placed by
+ * the new `Glider Gauntlet` battle only — the battle variant. `Silent Vector` is targeted by
+ * `Vector Hunter`'s rule and placed nowhere — the rule variant. `Aggressive Colonizer` stays both
+ * (the mock workspace's own rule reference), and `Vector Hunter` itself and `Conway's Classic`
+ * cover, respectively, the `allowed` and `protected` no-Delete cases.
+ */
+test.describe('delete integrity blocks (Story 4.21)', () => {
+  const BOTH = 'Aggressive Colonizer';
+  const BATTLE_ONLY = 'Glider';
+  const RULE_ONLY = 'Silent Vector';
+
+  async function gotoSeeded(page: Page) {
+    await seedWorkspace(page);
+    await seedExtraOrganisms(page);
+    await seedDeleteBlockExtras(page);
+    await page.goto('/organisms');
+    await expect(countBadge(page)).toHaveText('7 Organisms');
+  }
+
+  const deleteButton = (page: Page, name: string) =>
+    page.getByRole('button', { name: `Delete ${name}`, exact: true });
+  const blockDialog = (page: Page, name: string) =>
+    page.getByRole('dialog', { name: `Cannot delete ${name}` });
+
+  test('1. Delete is present only on the blocked cards', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    await expect(deleteButton(page, BOTH)).toBeVisible();
+    await expect(deleteButton(page, BATTLE_ONLY)).toBeVisible();
+    await expect(deleteButton(page, RULE_ONLY)).toBeVisible();
+    await expect(deleteButton(page, "Conway's Classic")).toHaveCount(0);
+    await expect(deleteButton(page, 'Vector Hunter')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('2. the battle variant names the seeded battle; OK closes it; nothing is written; focus returns; survives a reload', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+    const organismsBefore = await storage(page, 'gol:organisms');
+    const battlesBefore = await storage(page, 'gol:battles');
+
+    await deleteButton(page, BATTLE_ONLY).click();
+    const dialog = await settled(page, blockDialog(page, BATTLE_ONLY));
+    await expect(dialog).toContainText('It is used in 1 Battle:');
+    await expect(dialog).toContainText('Glider Gauntlet');
+    await expect(dialog.getByText(/targeted by rules/i)).toHaveCount(0);
+
+    await dialog.getByRole('button', { name: 'OK' }).click();
+    await page.waitForTimeout(300);
+    await expect(dialog).not.toBeVisible();
+    await expect(deleteButton(page, BATTLE_ONLY)).toBeFocused();
+
+    expect(await storage(page, 'gol:organisms')).toBe(organismsBefore);
+    expect(await storage(page, 'gol:battles')).toBe(battlesBefore);
+    await expect(countBadge(page)).toHaveText('7 Organisms');
+
+    await page.reload();
+    await expect(countBadge(page)).toHaveText('7 Organisms');
+    await expect(deleteButton(page, BATTLE_ONLY)).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('3. the rule variant names the referencing organism; Escape closes it; focus returns', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    await deleteButton(page, RULE_ONLY).click();
+    const dialog = await settled(page, blockDialog(page, RULE_ONLY));
+    await expect(dialog).toContainText('It is targeted by rules of 1 organism:');
+    await expect(dialog).toContainText('Vector Hunter');
+    await expect(dialog.getByText(/used in/i)).toHaveCount(0);
+
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await expect(dialog).not.toBeVisible();
+    await expect(deleteButton(page, RULE_ONLY)).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+
+  test('4. axe: no violations with the battle variant settled', async ({ page }) => {
+    await gotoSeeded(page);
+
+    await deleteButton(page, BATTLE_ONLY).click();
+    await settled(page, blockDialog(page, BATTLE_ONLY));
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('5. axe: no violations with the rule variant settled', async ({ page }) => {
+    await gotoSeeded(page);
+
+    await deleteButton(page, RULE_ONLY).click();
+    await settled(page, blockDialog(page, RULE_ONLY));
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  test('6. axe: no violations with the "both" variant settled', async ({ page }) => {
+    await gotoSeeded(page);
+
+    await deleteButton(page, BOTH).click();
+    const dialog = await settled(page, blockDialog(page, BOTH));
+    await expect(dialog).toContainText('It is used in 2 Battles:');
+    await expect(dialog).toContainText('It is targeted by rules of 1 organism:');
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

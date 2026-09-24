@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Organism, OrganismUsageEntry } from '@gol/domain';
 import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
 import {
+  battleCount,
   battleCountLabel,
   organismInUseMessage,
   referencingOrganismNames,
@@ -37,6 +38,16 @@ describe('battleCountLabel / organismInUseMessage (moved verbatim, Story 4.20 FD
       'This organism is used in 1 Battle. Editing it will affect all Battles that use it. Clone this organism first to create a Battle-specific variant?',
     );
     expect(organismInUseMessage(3)).toContain('used in 3 Battles.');
+  });
+});
+
+// Story 4.21, FD5: `battleCount` is exported so `deleteBlockCopy.ts`'s `battleBlockSentence` reuses
+// this exact pluraliser rather than a second one.
+describe('battleCount (exported, Story 4.21 FD5)', () => {
+  it('pluralises at the boundary of 1', () => {
+    expect(battleCount(0)).toBe('0 Battles');
+    expect(battleCount(1)).toBe('1 Battle');
+    expect(battleCount(2)).toBe('2 Battles');
   });
 });
 

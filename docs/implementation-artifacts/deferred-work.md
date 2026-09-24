@@ -750,9 +750,10 @@ Review Findings; these are the items consciously left open.
   `apps/web/lib/organisms/conditionDraft.ts`) — Story 4.11 builds only the vocabulary, not the
   summariser or the sentence on `<OrganismCard>` itself. **Re-pointed again (Story 4.20,
   2026-09-23):** 4.20 is the editor FOOTER, not the card — it touches `<OrganismLibrary>` for one
-  prop and one call site and never opens `OrganismCard.tsx`. **Pick this up in the next story that
-  reshapes `<OrganismCard>`** — 4.21/4.22 add its Delete action — still together with the card's
-  stat block below.
+  prop and one call site and never opens `OrganismCard.tsx`. **Re-pointed again (Story 4.21,
+  2026-09-24):** 4.21 added the Delete button ONLY — no reshape of the stat block or the rules
+  line. **Pick this up in Story 4.22**, which renders Delete on every card and is the next story to
+  touch `<OrganismCard>`'s content — still together with the card's stat block below.
 - ~~**The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
   `tabIndex={0}` because it has no inner control to be the keyboard stop instead (organism cards
   open a modal in `Story 4.17`, which does not exist yet). Once Edit lands inside the card, a stop
@@ -782,9 +783,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   2026-09-17):** the condition vocabulary Story 4.11 built lives in the editor
   (`lib/organisms/conditionDraft.ts`), not on `<OrganismCard>` — this stat-cell semantics question
   is unaffected. **Re-pointed again (Story 4.20, 2026-09-23):** 4.20 built the editor's footer and
-  did not reach the card at all, so the stat block is still where 4.11 left it. **Pick this up with
-  the next `<OrganismCard>` reshape** (4.21/4.22's Delete action), and decide the cell semantics
-  once for all three rows.
+  did not reach the card at all, so the stat block is still where 4.11 left it. **Re-pointed again
+  (Story 4.21, 2026-09-24):** 4.21 added the Delete button only, and left the stat cells' markup
+  untouched. **Pick this up in Story 4.22**, and decide the cell semantics once for all three rows.
 
 ## Deferred from: Story 4-3-editor-modal-shell (2026-09-14)
 
@@ -3017,3 +3018,48 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   Safari; FileSaver.js waits ~40 s for this reason. A longer delay costs nothing but a briefly-held
   blob. Not changed in review because FD3 chose 0 ms explicitly; revisit on the first real-Safari
   report of a cancelled or empty download (Story 5.6 reuses this seam).
+
+## Deferred from: Story 4-21-delete-integrity-blocks implementation (2026-09-24)
+
+- **The editor's Column-1 "Delete Organism" button is not built; the divergence is recorded, not
+  resolved (FD1).** The shipped mockups put Delete only on the Library card
+  (`organism-library.html:442, :469`, the hard-block demo at `:648-675`); the editor mockup has no
+  `.delete-organism-btn`, while `organism-editor-design.md:284-300, :573-583` describes one at the
+  bottom of Column 1. The card was chosen for this story (three reasons: the card's reserved
+  action-row slot since Story 4.2, `<OrganismLibrary>` already holding `summaries`/`usage`/the
+  library with no new prop reaching the editor, and AR-2/AR-27 staying trivially satisfied).
+  **Whether the editor also gets a Delete is the next UX touch's decision, and at the latest
+  Story 4.22's** — the owner's question on this point was left open at story completion (below).
+- **Delete renders only on `blocked` cards; `allowed` and `protected` render none, a deliberately
+  transitional state on `main` (FD2).** Story 4.22 owns the `allowed` path (confirm, delete, toast,
+  refresh) and the `protected` path (a disabled button with its message). **Story 4.22 must remove
+  this transitional rule** — its own card change turns Delete into a universal affordance, and the
+  `<OrganismCard>` head comment already says so. The owner's question on folding 4.22's
+  confirm-and-delete into this story instead was left open (below).
+- **The `openBattle` argument on `organismDeleteVerdict` is threaded but unreachable (FD11).** The
+  Library mounts no battle, so it never passes one, and FR-1.4's current-grid remedy variants
+  (`prd.md:134` — "erase it from this grid…", "save this Battle to persist the removal…") are not
+  written here: the entry type does not force them, and unreachable copy is untested guesswork.
+  **Story 4.24** is where `openBattle` becomes reachable and where those two remedy sentences
+  belong, in `deleteBlockCopy.ts` alongside the two already there.
+- **Story 4.22 must re-derive the verdict from a fresh read immediately before any delete write
+  (FD12).** This story only reads, so a stale verdict costs at most a wrong dialog message — the
+  guarantee holds because nothing here calls `organisms.delete`. Story 4.22's confirm path
+  *writes*, and must re-run `Promise.all([organisms.list(), battles.list()])` right before
+  `organisms.delete`, or a battle saved in another tab since the Library loaded could be deleted
+  out from under. Not built here — recorded for 4.22 to pick up.
+- The two card entries already annotated "4.21/4.22" (`:743-755` the rules-preview sentence,
+  `:775-788` the stat-cell semantics) are re-pointed to **Story 4.22 only**: this story adds the
+  Delete button alone and does not reshape the card's stat block or add the natural-language rules
+  sentence.
+
+### Questions for Sidiar, still open at story completion
+
+Both were surfaced in the story's Dev Notes with a stated default (the defaults above — the card
+is the surface, Delete stays transitional to blocked-only) and implemented as written; neither has
+been answered yet:
+
+1. **FD2**: is a Delete button that renders only on blocked cards acceptable as a transitional
+   state on `main`, or should 4.22's confirm-and-delete be folded into this story instead?
+2. **FD1**: should the editor's Column-1 "Delete Organism" (per the UX doc) be built in 4.22, or
+   dropped in favour of the shipped card-only mockup?

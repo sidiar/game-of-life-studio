@@ -9,6 +9,7 @@ import {
   createFakeRepositories,
   createMockOrganisms,
   createMockWorkspace,
+  MOCK_ORGANISM_IDS,
 } from '@gol/test-utils';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
@@ -1449,5 +1450,206 @@ describe('OrganismLibrary — usage footer wiring (Story 4.20)', () => {
     const footer = within(dialog).getByRole('contentinfo');
     expect(within(footer).getByText('Used in 0 Battles')).toBeInTheDocument();
     expect(within(footer).queryByRole('button')).toBeNull();
+  });
+});
+
+/**
+ * Story 4.21: the hard-block dialog through the real Library, the real verdict and the real
+ * dialog. `createMockWorkspace()` places Aggressive Colonizer in BOTH battles, and Chaotic
+ * Spreader's rule targets it — so Aggressive Colonizer alone covers the "both blocks" case (AC4).
+ * Patient Defender is placed but targeted by nothing (battle-only). Two more organisms are added
+ * for the rule-only case, which nothing in the mock workspace covers on its own: `Vector Hunter`'s
+ * rule targets `Silent Vector`, and `Silent Vector` is placed nowhere.
+ */
+describe('OrganismLibrary — delete integrity blocks (Story 4.21)', () => {
+  const UNUSED: Organism = { ...CONWAYS_CLASSIC, id: 'unused-glider', name: 'Glider' };
+  const RULE_ONLY_TARGET: Organism = {
+    ...CONWAYS_CLASSIC,
+    id: 'silent-vector',
+    name: 'Silent Vector',
+    survivalRules: [],
+  };
+  const REFERENCER: Organism = {
+    ...CONWAYS_CLASSIC,
+    id: 'vector-hunter',
+    name: 'Vector Hunter',
+    survivalRules: [
+      {
+        id: 'vector-hunter-rule',
+        contentHash: 'vector-hunter-rule-hash',
+        conditions: [{ property: 'organismType', operator: 'eq', pattern: 'silent-vector' }],
+        payload: { summary: 'targets Silent Vector', action: 'survive' },
+      },
+    ],
+  };
+  const BOTH_NAME = 'Aggressive Colonizer';
+  const BATTLE_ONLY_NAME = 'Patient Defender';
+
+  function rig() {
+    const workspace = createMockWorkspace();
+    const fakes = createFakeRepositories({
+      organisms: [CONWAYS_CLASSIC, ...workspace.organisms, UNUSED, RULE_ONLY_TARGET, REFERENCER],
+      battles: workspace.battles,
+    });
+    return { ...fakes, workspace };
+  }
+
+  const editButton = (name: string) => screen.getByRole('button', { name: `Edit ${name}` });
+  const deleteButton = (name: string) => screen.queryByRole('button', { name: `Delete ${name}` });
+  const blockDialog = (name: string) =>
+    screen.queryByRole('dialog', { name: `Cannot delete ${name}` });
+
+  async function ready() {
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(7));
+  }
+
+  it('renders Delete only on cards whose verdict is "blocked" — not on an unused organism', async () => {
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    expect(deleteButton(BOTH_NAME)).not.toBeNull();
+    expect(deleteButton(BATTLE_ONLY_NAME)).not.toBeNull();
+    expect(deleteButton('Silent Vector')).not.toBeNull();
+    expect(deleteButton('Glider')).toBeNull();
+    expect(deleteButton('Vector Hunter')).toBeNull();
+  });
+
+  it("Conway's Classic has no Delete even though it is placed in a battle (M9)", async () => {
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    expect(deleteButton("Conway's Classic")).toBeNull();
+  });
+
+  it('a click on a battle-only organism opens the dialog naming the seeded battles, with no rule section', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton(BATTLE_ONLY_NAME) as HTMLElement);
+
+    const dialog = await screen.findByRole('dialog', {
+      name: `Cannot delete ${BATTLE_ONLY_NAME}`,
+    });
+    expect(within(dialog).getByText('It is used in 2 Battles:')).toBeInTheDocument();
+    expect(within(dialog).getByText('Three-Way Skirmish')).toBeInTheDocument();
+    expect(within(dialog).getByText('Grand Colony War')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/targeted by rules/i)).not.toBeInTheDocument();
+  });
+
+  it('a click on the rule-only organism names the referencing organism, with no battle section', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton('Silent Vector') as HTMLElement);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Cannot delete Silent Vector' });
+    expect(within(dialog).getByText('It is targeted by rules of 1 organism:')).toBeInTheDocument();
+    expect(within(dialog).getByText('Vector Hunter')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/used in/i)).not.toBeInTheDocument();
+  });
+
+  it('a click on an organism that is both placed and targeted gets BOTH sections in one dialog', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton(BOTH_NAME) as HTMLElement);
+
+    const dialog = await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+    expect(within(dialog).getByText('It is used in 2 Battles:')).toBeInTheDocument();
+    expect(within(dialog).getByText('It is targeted by rules of 1 organism:')).toBeInTheDocument();
+    expect(within(dialog).getByText('Chaotic Spreader')).toBeInTheDocument();
+  });
+
+  it('OK closes the dialog; Escape closes it too; the injected organisms.delete is NEVER called', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    const del = vi.spyOn(organisms, 'delete');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton(BOTH_NAME) as HTMLElement);
+    await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+    await user.click(screen.getByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(blockDialog(BOTH_NAME)).toBeNull());
+
+    await user.click(deleteButton(BATTLE_ONLY_NAME) as HTMLElement);
+    await screen.findByRole('dialog', { name: `Cannot delete ${BATTLE_ONLY_NAME}` });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(blockDialog(BATTLE_ONLY_NAME)).toBeNull());
+
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it("focus returns to the card's Delete button once the dialog has fully closed", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    const trigger = deleteButton(BOTH_NAME) as HTMLElement;
+    await user.click(trigger);
+    const dialog = await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+    await user.click(within(dialog).getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => expect(document.activeElement).toBe(deleteButton(BOTH_NAME)));
+  });
+
+  it('the battle count in the dialog equals the count the 4.17 in-use warning shows for the same organism', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton(BOTH_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await user.click(within(gate).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(deleteButton(BOTH_NAME) as HTMLElement);
+    const dialog = await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+    expect(within(dialog).getByText('It is used in 2 Battles:')).toBeInTheDocument();
+  });
+
+  it('a Delete click while the editor is mounted is a no-op (guard against a programmatic caller)', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton('Glider'));
+    await screen.findByRole('dialog', { name: 'Organism Editor' });
+
+    // `screen.queryByRole` excludes an inert subtree, so the button is looked up by raw DOM query
+    // instead — the same lookup `useInertBackground`'s consumers use, and precisely what makes the
+    // background "physically unreachable" claim testable: `fireEvent` bypasses inert's own click
+    // suppression entirely, so ONLY the component's own `editorMounted || gateMounted` guard (not
+    // jsdom, not accessibility filtering) is what this test pins.
+    const trigger = document.querySelector<HTMLElement>(
+      `[data-delete-organism-id="${MOCK_ORGANISM_IDS.aggressiveColonizer}"]`,
+    );
+    expect(trigger).not.toBeNull();
+    fireEvent.click(trigger as HTMLElement);
+
+    expect(blockDialog(BOTH_NAME)).toBeNull();
+  });
+
+  it('has no axe violations with the block dialog open, in the "both" variant', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton(BOTH_NAME) as HTMLElement);
+    await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+
+    expect((await axe(document.body)).violations).toEqual([]);
   });
 });
