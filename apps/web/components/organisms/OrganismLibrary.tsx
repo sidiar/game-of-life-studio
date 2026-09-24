@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { styled } from '@mui/material/styles';
-import { buildUsageIndex, CONWAYS_CLASSIC_ID, type Organism } from '@gol/domain';
+import {
+  buildUsageIndex,
+  CONWAYS_CLASSIC_ID,
+  resolveOrganismUsage,
+  type Organism,
+} from '@gol/domain';
 import type { BattleRepository, OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { cloneOrganismRecord } from '@/lib/organisms/organismClone';
@@ -415,8 +420,15 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
 
   // Story 4.17, AC1: the count is the number of DISTINCT saved battles whose placed set holds the
   // id (Decision H: "used" = placed) — read from the SAME settled list the page holds.
+  //
+  // ⚠️ Through `resolveOrganismUsage`, not `usage.get(id)?.length` (Story 4.20, AC5 / FD8). The two
+  // return the same number today, for exactly as long as no caller passes an `openBattle` — so the
+  // move is free NOW and is what keeps this warning, the editor footer and (Story 4.21) the delete
+  // block on ONE derivation with ONE argument for Story 4.24 to add. Left on the raw map read, this
+  // surface would start disagreeing with the others the moment 4.24 lands, which is precisely the
+  // failure the AC's "counts are consistent across all surfaces" exists to prevent.
   const onRequestEdit = useCallback(
-    (organism: Organism) => requestEdit(organism, usage.get(organism.id)?.length ?? 0),
+    (organism: Organism) => requestEdit(organism, resolveOrganismUsage(usage, organism.id).length),
     [requestEdit, usage],
   );
 
@@ -543,8 +555,16 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
           from exactly what the user sees (Story 4.8); unmemoised because the modal reads it once
           (Story 4.9 reads it per render and that is still one prop). `organisms` is the SAME prop
           this component received (Story 4.16, AR-2/AR-27) — the modal's only side effect. */}
+      {/* `battleSummaries` is the SAME settled array `usage` above is built from (Story 4.20, AC6),
+          so the footer's count and this component's edit warning read one source — data, never the
+          `battles` repository, which stays at this boundary (AR-2/AR-27). */}
       {editorMounted && (
-        <OrganismEditorModal {...modalProps} library={sorted} organisms={organisms} />
+        <OrganismEditorModal
+          {...modalProps}
+          library={sorted}
+          battleSummaries={summaries}
+          organisms={organisms}
+        />
       )}
       {/* Story 4.17: the in-use gate, mounted on ITS window (the hook's `gateMounted`), for the
           same fetch-on-first-open / fade-before-unmount reasons as the editor above. */}

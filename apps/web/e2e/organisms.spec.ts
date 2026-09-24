@@ -3667,3 +3667,300 @@ test.describe('clone organism (Story 4.18)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+/**
+ * Owner's decision on review item D2 (2026-09-24): the usage panel now caps its height and scrolls,
+ * and the capped path needs more rows than any fixture produces. Registered AFTER `seedWorkspace`
+ * (init scripts run in registration order), this builds each filler battle IN THE PAGE from the
+ * smallest editable preset with a single placed cell — ~3 KB a battle, rather than cloning a mock
+ * battle's 100x60 grid 38 times into `localStorage`. The records satisfy the full `BattleSchema`,
+ * not just the `BattleSummarySchema` that `/organisms` actually reads: `organismIds` is exactly the
+ * placed set (Decision H.1) and the ids are valid UUIDs, deterministic so a failure is reproducible.
+ */
+const LONG_BATTLE_NAME =
+  'The Extremely Long Battle Name That Overflows The Usage Panel And Must Be Truncated To One Line';
+
+async function seedFillerBattlesFor(page: Page, organismName: string, count: number) {
+  await page.addInitScript(
+    ([keys, arg]) => {
+      const storageKeys = keys as Record<string, string>;
+      const { wanted, howMany, longName } = arg as {
+        wanted: string;
+        howMany: number;
+        longName: string;
+      };
+      const organisms = JSON.parse(localStorage.getItem(storageKeys.organisms) ?? '{}') as Record<
+        string,
+        { id: string; name: string }
+      >;
+      const subject = Object.values(organisms).find((organism) => organism.name === wanted);
+      if (subject === undefined) throw new Error(`seedFillerBattlesFor: no organism ${wanted}`);
+
+      const battles = JSON.parse(localStorage.getItem(storageKeys.battles) ?? '{}') as Record<
+        string,
+        unknown
+      >;
+      const rows = 30;
+      const cols = 50;
+      for (let i = 0; i < howMany; i += 1) {
+        const gridState = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+        gridState[0][0] = 1;
+        const id = `9f1b0000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+        battles[id] = {
+          id,
+          // The first filler carries a name wider than the panel, which is what the truncation
+          // assertion measures; the rest are short so the row count is the only variable.
+          name: i === 0 ? longName : `Filler Battle ${String(i).padStart(2, '0')}`,
+          organismIds: [subject.id],
+          gridSize: { cols, rows },
+          gridState,
+          createdAt: '2026-09-01T00:00:00.000Z',
+          updatedAt: '2026-09-01T00:00:00.000Z',
+        };
+      }
+      localStorage.setItem(storageKeys.battles, JSON.stringify(battles));
+    },
+    [STORAGE_KEYS, { wanted: organismName, howMany: count, longName: LONG_BATTLE_NAME }] as const,
+  );
+}
+
+/**
+ * Story 4.20: FR-1.7's usage footer, in a real browser. Reuses the module-scope seeding the 4.17
+ * and 4.18 blocks share — `createMockWorkspace()` places Aggressive Colonizer in BOTH battles and
+ * the merged Glider in neither — so no sixth `buildSeedPayload` copy is added here.
+ *
+ * ⚠️ The Escape case is why this block exists (FD4). MUI's `Modal` listens for Escape on the modal
+ * root, so a panel-closing key press that does not stop propagating closes the whole EDITOR and
+ * takes an unsaved draft with it. jsdom proves the handler; only this proves it against MUI's real
+ * listener ordering in three engines.
+ */
+test.describe('usage visibility footer (Story 4.20)', () => {
+  const USED = 'Aggressive Colonizer';
+
+  async function gotoSeeded(page: Page) {
+    await seedWorkspace(page);
+    await seedExtraOrganisms(page);
+    await page.goto('/organisms');
+    await expect(countBadge(page)).toHaveText('5 Organisms');
+  }
+
+  const usageFooter = (dialog: Locator) => dialog.getByRole('contentinfo');
+  const battlesPanel = (page: Page) => page.locator('[data-usage-battles-panel]');
+
+  /** The editor on the USED organism — through the in-use gate, which is what an edit on a placed
+   * organism always opens first (Story 4.17). */
+  async function openEditorOnUsed(page: Page) {
+    await editButton(page, USED).click();
+    const gate = await settled(page, inUseDialog(page));
+    await gate.getByRole('button', { name: 'Edit Anyway' }).click();
+    return settled(page, editorDialog(page));
+  }
+
+  test('1. the footer renders with the editor, and an unused organism’s label is not a button', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    await editButton(page, 'Glider').click();
+    const dialog = await settled(page, editorDialog(page));
+
+    const footer = usageFooter(dialog);
+    await expect(footer).toBeVisible();
+    await expect(footer.getByText('Used in 0 Battles')).toBeVisible();
+    // AC3: no affordance at all for a zero count — not a disabled one, not one that opens nothing.
+    await expect(footer.getByRole('button')).toHaveCount(0);
+    await expect(footer.getByText(/Targeted by/)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('2. a placed organism’s label opens a read-only panel naming the seeded battles', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    const dialog = await openEditorOnUsed(page);
+    const trigger = usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' });
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await trigger.click();
+
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(battlesPanel(page).getByRole('listitem')).toHaveText([
+      'Three-Way Skirmish',
+      'Grand Colony War',
+    ]);
+    // Nothing in the panel navigates (FR-1.7, M7) — the editor may be a modal over an in-progress
+    // battle, so a link here would abandon unsaved grid work.
+    await expect(battlesPanel(page).locator('a, button')).toHaveCount(0);
+    // The trigger never gives focus away, so the first Escape below is aimed at it.
+    await expect(trigger).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+
+  test('3. Escape closes the panel and leaves the editor open; a second Escape closes the editor', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    const dialog = await openEditorOnUsed(page);
+    const trigger = usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' });
+    await trigger.click();
+    await expect(battlesPanel(page)).toBeVisible();
+    // Review (2026-09-23): a click INSIDE the panel is allowed and keeps it open, and it moves
+    // focus off the trigger. Since D2 it lands on the name list's scroll region — still INSIDE
+    // the footer — so on its own it no longer reaches the path on which a footer-scoped Escape
+    // handler let MUI's root handler close the whole editor. That path is focus LEAVING the footer
+    // with the panel open (Tab-away, accepted by D1): move it onto the name field programmatically
+    // — a pointerdown there would close the panel — before the Escape.
+    await battlesPanel(page).getByRole('listitem').first().click();
+    await expect(battlesPanel(page)).toBeVisible();
+    await expect(trigger).not.toBeFocused();
+    const nameField = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await nameField.focus();
+    await expect(nameField).toBeFocused();
+    await expect(battlesPanel(page)).toBeVisible();
+
+    await page.keyboard.press('Escape');
+
+    await expect(battlesPanel(page)).toHaveCount(0);
+    // Past the Dialog's ~195 ms exit fade before asserting: a CLOSING dialog is still in the DOM
+    // and counts as visible to Playwright, so an immediate `toBeVisible` passed even when the
+    // first Escape had closed both the panel and the editor. The 300 ms settle is the block's own.
+    await page.waitForTimeout(300);
+    await expect(dialog).toBeVisible();
+    await expect(trigger).toBeFocused();
+
+    await page.keyboard.press('Escape');
+
+    await expect(editorDialog(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('4. a click outside the footer closes the open panel', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await gotoSeeded(page);
+
+    const dialog = await openEditorOnUsed(page);
+    await usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' }).click();
+    await expect(battlesPanel(page)).toBeVisible();
+
+    await dialog.getByRole('heading', { level: 2, name: 'Organism Editor' }).click();
+
+    await expect(battlesPanel(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('5. axe: no violations with a panel open and settled', async ({ page }) => {
+    await gotoSeeded(page);
+
+    const dialog = await openEditorOnUsed(page);
+    await usageFooter(dialog).getByRole('button', { name: 'Used in 2 Battles' }).click();
+    await expect(battlesPanel(page)).toBeVisible();
+    // The Button colour transition (250ms) is unsynchronised with the Dialog's Fade — the
+    // measurement the 4.3 block's axe test records.
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+
+  // Owner's decision on review item D2 (2026-09-24), both axes at once. Before it, `Panel` had no
+  // `maxHeight`: opening it upward from the footer with 40 rows pushed its first names off the top
+  // of the window, unreachable — nothing scrolled, and neither `toBeVisible` nor axe sees clipping.
+  // Only a real engine can see either half of this, which is why the cap, the scroll region and the
+  // per-row truncation are pinned here rather than in jsdom.
+  test('6. a 40-row panel caps its height, scrolls, truncates each name to one line, and stays axe-clean', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    await seedWorkspace(page);
+    await seedExtraOrganisms(page);
+    await seedFillerBattlesFor(page, USED, 38);
+    await page.goto('/organisms');
+    await expect(countBadge(page)).toHaveText('5 Organisms');
+
+    const dialog = await openEditorOnUsed(page);
+    // The two mock battles plus the 38 fillers, through the one derivation (AC5).
+    await usageFooter(dialog).getByRole('button', { name: 'Used in 40 Battles' }).click();
+    const panel = battlesPanel(page);
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('listitem')).toHaveCount(40);
+
+    // The vertical fix: the list scrolls instead of the panel growing past the viewport top.
+    const list = panel.getByRole('list');
+    await expect(list).toHaveCSS('overflow-y', 'auto');
+    const region = await list.evaluate((el) => ({
+      scrolls: el.scrollHeight > el.clientHeight,
+      top: el.getBoundingClientRect().top,
+    }));
+    expect(region.scrolls).toBe(true);
+    expect(region.top).toBeGreaterThanOrEqual(0);
+    // The PANEL's top as well: its title and padding sit above the list, and a list on screen
+    // under a title clipped off the top is exactly the clipping D2 was raised for.
+    const panelTop = await panel.evaluate((el) => el.getBoundingClientRect().top);
+    expect(panelTop).toBeGreaterThanOrEqual(0);
+    // …and it is reachable, which is what axe's `scrollable-region-focusable` is about.
+    await list.focus();
+    await expect(list).toBeFocused();
+
+    // The horizontal fix: one line per name, the full text still in the DOM for a screen reader.
+    const longRow = panel.locator('li', { hasText: LONG_BATTLE_NAME });
+    await expect(longRow).toHaveCSS('white-space', 'nowrap');
+    await expect(longRow).toHaveCSS('text-overflow', 'ellipsis');
+    const row = await longRow.evaluate((el) => ({
+      clipped: el.scrollWidth > el.clientWidth,
+      height: el.getBoundingClientRect().height,
+      text: el.textContent,
+    }));
+    expect(row.clipped).toBe(true);
+    expect(row.height).toBeLessThan(30);
+    expect(row.text).toBe(LONG_BATTLE_NAME);
+
+    await page.waitForTimeout(300);
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  // The other end of the same decision: a panel that does NOT overflow must be clean too — a
+  // focusable scroll region on a one-row list is the state axe would flag if the `tabIndex` were
+  // made conditional on overflow.
+  test('7. axe: no violations with a single-row panel open', async ({ page }) => {
+    await gotoSeeded(page);
+
+    await editButton(page, "Conway's Classic").click();
+    const gate = await settled(page, inUseDialog(page));
+    await gate.getByRole('button', { name: 'Edit Anyway' }).click();
+    const dialog = await settled(page, editorDialog(page));
+
+    await usageFooter(dialog).getByRole('button', { name: 'Used in 1 Battle' }).click();
+    await expect(battlesPanel(page).getByRole('listitem')).toHaveText(['Grand Colony War']);
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

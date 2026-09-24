@@ -1387,3 +1387,67 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
     expect(editorDialog()).toBeNull();
   });
 });
+
+/**
+ * Story 4.20, AC5/AC6: the summaries this component already holds reach the modal, so the footer's
+ * count is the SAME derivation over the SAME array as the in-use warning above — not a second one
+ * that agrees by coincidence (FD8). Asserted through the real workspace, where Aggressive Colonizer
+ * is placed by both battles and the Glider by neither.
+ */
+describe('OrganismLibrary — usage footer wiring (Story 4.20)', () => {
+  const UNUSED: Organism = { ...CONWAYS_CLASSIC, id: 'unused-glider', name: 'Glider' };
+  const USED_NAME = 'Aggressive Colonizer';
+
+  function rig() {
+    const workspace = createMockWorkspace();
+    const fakes = createFakeRepositories({
+      organisms: [CONWAYS_CLASSIC, ...workspace.organisms, UNUSED],
+      battles: workspace.battles,
+    });
+    return { ...fakes, workspace };
+  }
+
+  const editButton = (name: string) => screen.getByRole('button', { name: `Edit ${name}` });
+
+  async function ready() {
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(5));
+  }
+
+  it("names both battles in the editor footer for an organism the warning counted as 'Used in 2 Battles'", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton(USED_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+
+    // The gate's title and the footer's label are the same count from the same index — the label is
+    // also the same exported formatter, so the two cannot be worded differently either.
+    const footer = within(dialog).getByRole('contentinfo');
+    await user.click(within(footer).getByRole('button', { name: 'Used in 2 Battles' }));
+
+    const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
+    expect(
+      within(panel)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Three-Way Skirmish', 'Grand Colony War']);
+  });
+
+  it('reports zero, without an expansion, for an organism no battle places', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton('Glider'));
+    const dialog = await screen.findByRole('dialog', { name: 'Organism Editor' });
+
+    const footer = within(dialog).getByRole('contentinfo');
+    expect(within(footer).getByText('Used in 0 Battles')).toBeInTheDocument();
+    expect(within(footer).queryByRole('button')).toBeNull();
+  });
+});
