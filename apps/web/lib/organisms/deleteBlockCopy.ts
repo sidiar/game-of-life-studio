@@ -2,10 +2,9 @@ import { battleCount } from './usageLabels';
 
 /**
  * Story 4.21's copy for `<OrganismDeleteBlockedDialog>` — kept in a module the lazy DIALOG chunk
- * imports alone (FD5). `usageLabels.ts` is imported by the eager editor-footer path
- * (`OrganismEditorModal` is itself lazy, but every string it needs is read at first paint of the
- * footer inside it); putting these block strings there would grow that footer's chunk for a
- * dialog most sessions never open. `battleCount` is imported, not duplicated, so the dialog's
+ * imports alone (FD5). `usageLabels.ts` is EAGER on `/organisms` as of Story 4.21 —
+ * `<OrganismLibrary>` imports its name resolvers for click-time resolution (FD7) — so putting these
+ * block strings there would put them in the first load for a dialog most sessions never open. `battleCount` is imported, not duplicated, so the dialog's
  * "N Battles" is the identical string the footer and the 4.17 in-use warning print.
  */
 

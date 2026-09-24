@@ -3063,3 +3063,12 @@ been answered yet:
    state on `main`, or should 4.22's confirm-and-delete be folded into this story instead?
 2. **FD1**: should the editor's Column-1 "Delete Organism" (per the UX doc) be built in 4.22, or
    dropped in favour of the shipped card-only mockup?
+
+## Deferred from: code review of 4-21-delete-integrity-blocks (2026-09-24)
+
+- **A `next/dynamic` chunk-load failure strands the lazy dialog's window state.** If
+  `import('./OrganismDeleteBlockedDialog')` rejects (offline, or a chunk hash changed after a
+  redeploy on the static host), no Modal ever mounts, so `onExited` never fires. `blocked` stays
+  set, the Delete click gives no feedback, and focus restore never runs. This is pre-existing: the
+  editor, the in-use gate and the Gallery's lazy dialogs all have the same shape and no
+  `loading`/error fallback. Fix it once, for every `dynamic()` boundary, rather than per dialog.

@@ -20,8 +20,13 @@ import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
  *
  * Exported (Story 4.21, FD5) so `deleteBlockCopy.ts`'s `battleBlockSentence` reuses the SAME
  * pluraliser rather than a second one — the dialog's "N Battles" is then the identical string the
- * footer and the 4.17 warning print. Still only imported by `deleteBlockCopy.ts`, which only the
- * lazy dialog chunk imports, so this eager module gains no new string.
+ * footer and the 4.17 warning print.
+ *
+ * NOTE (Story 4.21 code review): this module is EAGER on `/organisms` as of 4.21 —
+ * `<OrganismLibrary>` imports `usageBattleNames` / `referencingOrganismNames` to resolve the block
+ * dialog's names at click time (FD7). Before 4.21 only lazy chunks (the editor, `UsageIndicator`,
+ * the in-use gate) imported it. Keep additions here small; dialog-only copy belongs in the lazy
+ * `deleteBlockCopy.ts`.
  */
 export function battleCount(n: number): string {
   return `${n} ${n === 1 ? 'Battle' : 'Battles'}`;

@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 4.21: Delete Integrity Blocks
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -279,6 +279,63 @@ and pass tests anyway, and all four are settled there:
         and never pipe the command (`| tail` reports tail's status).
   - [x] Report the `/organisms` gzip figure the bundle stage prints against 305 KB.
   - [x] Record every command and its real output summary in the Dev Agent Record.
+
+### Review Findings
+
+Code review 2026-09-24 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor, review mode
+`full`). 2 decision-needed, 11 patch, 1 defer, 9 dismissed as noise.
+
+- [ ] [Review][Decision] FD2: Delete renders only on blocked cards until 4.22. Is that acceptable on `main`? — The
+  Blind Hunter adds a UX/a11y angle to the story's own open question. In this build every Delete a
+  user can see is red, labelled `Delete X`, and **always refuses**. Unused organisms show no Delete
+  at all, so a screen-reader user hears a destructive action that never deletes. Options:
+  (a) accept the transitional state as built (4.22 removes it, as `deferred-work.md` records);
+  (b) fold 4.22's first AC (confirm-and-delete, plus its toast host) into this story;
+  (c) accept (a) but add `aria-haspopup="dialog"` to Delete. That stays true in 4.22 too, where
+  Delete opens either this dialog or the confirm dialog.
+- [ ] [Review][Decision] FD1: the editor Delete surface. — `organism-editor-design.md:284-300,
+  :573-583` puts a "Delete Organism" button at the bottom of editor Column 1, but the shipped
+  mockup has Delete only on the card. This story built the card only and recorded the divergence.
+  Options: (a) build the editor button in Story 4.22, on the same verdict; (b) drop it in favour of
+  the mockup and amend the UX doc; (c) leave it open for the next UX pass.
+- [x] [Review][Patch] Create/Edit are not guarded while the block dialog is pending. On the first
+  Delete of a session the lazy dialog chunk is still loading, so nothing is `aria-hidden` yet,
+  nothing is inert, and Create/Edit can open the editor. The block dialog then lands on top of it,
+  giving two stacked modals [apps/web/components/organisms/OrganismLibrary.tsx:569,631]
+- [x] [Review][Patch] A card-Clone failure is published into the inert page while the block dialog
+  is up. That is the exact failure the 2026-09-23 "publish once your window is gone" decision
+  closed. The fix defers it to `handleDeleteExited`
+  [apps/web/components/organisms/OrganismLibrary.tsx:637]
+- [x] [Review][Patch] The "Delete while the editor is mounted is a no-op" test passes vacuously. It
+  asserts synchronously, but the dialog is behind `next/dynamic`, so it could never be in the DOM on
+  that tick, guard or no guard [apps/web/components/organisms/OrganismLibrary.test.tsx]
+- [x] [Review][Patch] The barrel comment credits the `openBattle` argument to Story 5.4. It belongs
+  to Story 4.24 (FD11) [packages/domain/src/index.ts:77]
+- [x] [Review][Patch] `usageLabels.ts` became eager on `/organisms` through the Library's new
+  import. Before this story only lazy chunks imported it. The comments in `usageLabels.ts` and
+  `deleteBlockCopy.ts` claim the opposite, and the bundle note leaves it out
+  [apps/web/lib/organisms/usageLabels.ts:17, apps/web/lib/organisms/deleteBlockCopy.ts:3]
+- [x] [Review][Patch] e2e axe tests 4–6 capture no console errors. Task 7 and the Dev Notes require
+  a capture on every test in the block [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] AC8: no e2e `color-contrast` scan of the Delete button when hovered
+  [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] AC8/FD10: the 40-name axe check runs only in jsdom. With no layout there,
+  `scrollable-region-focusable` can never fire, so the check needs a real-browser run
+  [apps/web/e2e/organisms.spec.ts]. **The real-browser run found the violation:** it fired on
+  `DialogContent`. The fix is FD10's prescription, the 4.20 D2 fix: each name list is capped
+  (`min(30vh, 200px)`) and is itself the scroll region, with `tabIndex={0}` and `aria-labelledby`
+  pointing at its sentence [apps/web/components/organisms/OrganismDeleteBlockedDialog.tsx]
+- [x] [Review][Patch] Task 7: `seedDeleteBlockExtras` hand-builds a second battle payload instead
+  of reusing `seedFillerBattlesFor` [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] The dialog's head comment cites FD7 for its composition idiom. The right
+  reference is FD8 [apps/web/components/organisms/OrganismDeleteBlockedDialog.tsx:51]
+- [x] [Review][Patch] No Library-level test checks that the dialog's content stays populated
+  through the exit fade. The dialog-level test only proves MUI keeps the paper mounted
+  [apps/web/components/organisms/OrganismLibrary.test.tsx]
+- [x] [Review][Defer] A `next/dynamic` chunk-load failure leaves the window state set with no
+  feedback [apps/web/components/organisms/OrganismLibrary.tsx:679] — deferred, pre-existing.
+  Every lazy dialog on the page has the same shape (the editor, the in-use gate, and the Gallery's
+  lazy dialogs).
 
 ## Dev Notes
 
@@ -624,6 +681,19 @@ Modified:
   (verdict, dialog lifecycle, focus restore, the programmatic-caller guard), 6 new e2e cases, and a
   new `deferred-work.md` section (plus two existing entries re-pointed). `npm run ci:dev` exit 0.
   Status → review.
+- 2026-09-24 — Code review (Opus). All 11 patches applied:
+  - The Create/Edit guards and the deferred clone-error publish for the block dialog's window
+    (`deleteWindowRef`).
+  - A non-vacuous editor-mounted guard test, plus three new Library tests (the lazy-chunk window,
+    content held through the exit fade, the clone-error deferral). All four were verified to fail
+    against the pre-review Library.
+  - FD10's list scroll regions, found by the new real-browser 40-name axe scan.
+  - Two new e2e cases (hover contrast; 40 names) and console capture on every test in the block.
+  - The battle-only seed moved onto `seedFillerBattlesFor`.
+  - Comment corrections: the barrel's 4.24 pointer, `usageLabels.ts` now eager, and FD7 → FD8.
+
+  One item deferred (lazy-chunk load failure, pre-existing). FD1 and FD2 are left as open
+  `[Review][Decision]` items, so Status → in-progress.
 
 Dev Model: sonnet   # follows established patterns (4.19's domain derivations, 4.17/4.20's lazy dialog + focus-restore idiom, the card's ActionButton); the only new type is a small verdict union 4.22 consumes as-is
 Proposed lane gate: none

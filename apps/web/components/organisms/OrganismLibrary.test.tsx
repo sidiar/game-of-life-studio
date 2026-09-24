@@ -1638,7 +1638,91 @@ describe('OrganismLibrary — delete integrity blocks (Story 4.21)', () => {
     expect(trigger).not.toBeNull();
     fireEvent.click(trigger as HTMLElement);
 
-    expect(blockDialog(BOTH_NAME)).toBeNull();
+    // Awaited, not a synchronous check (code review 2026-09-24): the dialog is behind
+    // `next/dynamic`, so a same-tick `toBeNull()` held with or without the guard. Waiting past the
+    // lazy chunk's resolution is what makes the guard's absence observable.
+    await expect(
+      screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` }, { timeout: 500 }),
+    ).rejects.toThrow();
+    expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBeInTheDocument();
+  });
+
+  // Code review 2026-09-24: on the FIRST Delete of a session the lazy dialog chunk has not
+  // resolved, so no Modal has marked anything aria-hidden and nothing is inert — Create and every
+  // card's Edit are still clickable in that window. Both clicks are fired in the same tick to land
+  // inside it.
+  it('Create and Edit are no-ops while the block dialog is pending (lazy-chunk window)', async () => {
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    // Raw DOM lookups: after the Delete click the Library may already sit under an aria-hidden
+    // ancestor, which `getByRole` would filter out — what matters is that a click still lands.
+    const create = document.querySelector<HTMLElement>('[data-create-organism]');
+    const edit = editButton('Glider');
+    fireEvent.click(deleteButton(BOTH_NAME) as HTMLElement);
+    fireEvent.click(create as HTMLElement);
+    fireEvent.click(edit);
+
+    await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+    await expect(
+      screen.findByRole('dialog', { name: 'Organism Editor' }, { timeout: 500 }),
+    ).rejects.toThrow();
+  });
+
+  it("keeps the dialog's content populated after OK, until the exit transition ends", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton(BOTH_NAME) as HTMLElement);
+    const dialog = await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'OK' }));
+
+    // Mid-fade: the paper is still mounted and must still carry the title and both sections.
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveTextContent(`Cannot delete ${BOTH_NAME}`);
+    expect(dialog).toHaveTextContent('It is used in 2 Battles:');
+    expect(dialog).toHaveTextContent('Chaotic Spreader');
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+  });
+
+  // Code review 2026-09-24: the 2026-09-23 "publish once your window is gone" rule applied to the
+  // block dialog — a card Clone that fails while the dialog is up must not insert its alert into
+  // the inert background; it is published once the dialog has exited.
+  it('a card-Clone failure that settles while the block dialog is up is published only after it exits', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    let rejectSave!: (error: Error) => void;
+    vi.spyOn(organisms, 'save').mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    const cloneError = () => document.querySelector('[data-clone-error]');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clone Glider' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Clone Glider' })).toBeDisabled(),
+    );
+    await user.click(deleteButton(BOTH_NAME) as HTMLElement);
+    const dialog = await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+
+    await act(async () => {
+      rejectSave(new Error('boom'));
+    });
+    await waitFor(() =>
+      expect(document.querySelector('[data-clone-organism-id="unused-glider"]')).not.toBeDisabled(),
+    );
+    expect(cloneError()).toBeNull();
+
+    await user.click(within(dialog).getByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await waitFor(() => expect(cloneError()).not.toBeNull());
   });
 
   it('has no axe violations with the block dialog open, in the "both" variant', async () => {

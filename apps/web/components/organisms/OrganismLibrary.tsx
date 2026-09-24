@@ -455,10 +455,22 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // effect) must already have happened before a subtree is marked inert. A SEPARATE call from the
   // hook's own `useInertBackground(anyMounted)` — never folded into one union — because the two
   // windows never overlap: `requestDeleteOrganism` below bails while the editor or gate is
-  // mounted, and the reverse direction needs no matching guard because THIS dialog's own inert
-  // background already makes every other control, including Create and every card's Edit, physically
-  // unreachable while it is up.
+  // mounted, and `guardedCreate`/`onRequestEdit` bail while this window is (see
+  // `deleteWindowRef`).
+  //
+  // ORDER IS LOAD-BEARING: this call sits ABOVE the focus-restore effect below, so on the commit
+  // that clears `blocked` its cleanup (lifting `inert`) runs before that effect's `.focus()` — a
+  // `.focus()` into a still-inert subtree is a silent no-op in a real browser.
   useInertBackground(blocked !== null);
+
+  // Code review 2026-09-24: the delete window's AUTHORITY, set synchronously on the click and
+  // cleared in `handleDeleteExited`. Not derivable from `blocked`'s render-time value in an async
+  // callback (the clone `.then` below), and not from the inert background either: on the FIRST
+  // Delete of a session the lazy dialog chunk is still loading, so no Modal has marked anything
+  // `aria-hidden`, nothing is inert yet, and Create or another card's Edit is still clickable —
+  // opening the editor under a block dialog about to land on top of it. The guards below close
+  // that window.
+  const deleteWindowRef = useRef(false);
 
   // Where focus is owed once the delete dialog's exit transition has finished — the DOM lookup
   // idiom every other close path in this file uses (FD9), never a captured element (WebKit does
@@ -488,7 +500,8 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
       battles: readonly OrganismUsageEntry[],
       referencing: readonly string[],
     ) => {
-      if (editorMounted || gateMounted) return;
+      if (editorMounted || gateMounted || deleteWindowRef.current) return;
+      deleteWindowRef.current = true;
       deleteRestoreIdRef.current = organism.id;
       setBlocked({
         organismId: organism.id,
@@ -505,7 +518,20 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // nothing is written. `blocked` itself is cleared only once the exit transition has finished, so
   // the dialog's content stays populated through the fade.
   const handleDeleteClose = useCallback(() => setDeleteDialogOpen(false), []);
-  const handleDeleteExited = useCallback(() => setBlocked(null), []);
+  // `setBlocked(null)` FIRST — it releases `inert` — then the queued card-Clone failure (a Clone
+  // clicked on another card just before this Delete), in the same handler so both land in ONE
+  // commit: the `onGateExited` rule, "publish once your window is gone", applied to this window.
+  const handleDeleteExited = useCallback(() => {
+    deleteWindowRef.current = false;
+    setBlocked(null);
+    publishQueuedCloneError();
+  }, [publishQueuedCloneError]);
+
+  // Create's call site: bails while the delete window is open (see `deleteWindowRef`).
+  const guardedCreate = useCallback(() => {
+    if (deleteWindowRef.current) return;
+    requestCreate();
+  }, [requestCreate]);
 
   // Story 4.17, AC1: the count is the number of DISTINCT saved battles whose placed set holds the
   // id (Decision H: "used" = placed) — read from the SAME settled list the page holds.
@@ -516,8 +542,13 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // block on ONE derivation with ONE argument for Story 4.24 to add. Left on the raw map read, this
   // surface would start disagreeing with the others the moment 4.24 lands, which is precisely the
   // failure the AC's "counts are consistent across all surfaces" exists to prevent.
+  //
+  // Bails while the delete window is open (Story 4.21 code review; see `deleteWindowRef`).
   const onRequestEdit = useCallback(
-    (organism: Organism) => requestEdit(organism, resolveOrganismUsage(usage, organism.id).length),
+    (organism: Organism) => {
+      if (deleteWindowRef.current) return;
+      requestEdit(organism, resolveOrganismUsage(usage, organism.id).length);
+    },
     [requestEdit, usage],
   );
 
@@ -566,7 +597,7 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
               `data-create-organism` is the focus-restore anchor `useOrganismEditorModal` looks up
               by DOM query once the modal's exit transition ends (never a captured element — WebKit
               does not focus a <button> on click). */}
-          <CreateButton type="button" onClick={requestCreate} data-create-organism="">
+          <CreateButton type="button" onClick={guardedCreate} data-create-organism="">
             + Create New Organism
           </CreateButton>
           <SearchField role="search">
@@ -632,9 +663,13 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
                       cloning={cloning === organism.id}
                       // The card's call site: no window has to exit first, so the queued failure is
                       // published as soon as the write settles. Same rule as the gate's `onExited`
-                      // below — "publish once your window is gone" — and this entry point has none.
+                      // below — "publish once your window is gone" — and this entry point has none,
+                      // UNLESS a Delete on another card opened the block dialog while the write
+                      // was pending: then `handleDeleteExited` publishes it (Story 4.21 review).
                       onRequestClone={() => {
-                        void cloneOrganism(organism).then(publishQueuedCloneError);
+                        void cloneOrganism(organism).then(() => {
+                          if (!deleteWindowRef.current) publishQueuedCloneError();
+                        });
                       }}
                       onRequestDelete={
                         verdict.kind === 'blocked'
