@@ -697,3 +697,18 @@ Modified:
 
 Dev Model: sonnet   # follows established patterns (4.19's domain derivations, 4.17/4.20's lazy dialog + focus-restore idiom, the card's ActionButton); the only new type is a small verdict union 4.22 consumes as-is
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 21s | 21s | 18 | 2,577 | 7,638 | 506,992 | 517,225 |
+| Step 1 — create | opus-5-5 | 1 | 6m 23s | 6m 23s | 98 | 3,119 | 292,712 | 5,077,865 | 5,373,794 |
+| Step 2 — implement | sonnet-5 | 1 | 32m 56s | 32m 56s | 654 | 15,110 | 752,406 | 79,703,388 | 80,471,558 |
+| Step 3 — review + PR | opus-5-5 | 4 | 13m 18s | 13m 18s | 336 | 12,373 | 832,211 | 15,967,287 | 16,812,207 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 58 | 13,894 | 34,862 | 1,837,070 | 1,885,884 |
+| **Total (create → PR ready)** | | 6 | **52m 58s** | 52m 58s | 1,106 | 33,179 | 1,884,967 | 101,255,532 | **103,174,784** |
+
+Run started 2026-09-24 20:23 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
