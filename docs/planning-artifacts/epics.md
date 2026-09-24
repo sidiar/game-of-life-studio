@@ -1390,6 +1390,7 @@ So that others can import and run my creation.
 **Given** the export action, **When** invoked, **Then** a dialog offers "Battle only" vs "Entire Workspace" (FR-7.13); Battle-only exports the initial (Edit-mode) grid with the 5.4 closure organisms (FR-6.1), Entire Workspace behaves as 5.5
 **And** the default filename derives kebab-case from the battle name, e.g. `triple-threat.json` (FR-6.4); untitled battles get a sensible fallback
 **And** the export contains initial state only — never live Run-mode state (FR-6.1, AR-31)
+**Given** a battle with unsaved edits, or one never saved, **When** "Battle only" export is invoked, **Then** the battle is saved first, or export is blocked with a prompt to save, before `exportBattle(id)` is called. The file therefore always matches the persisted battle. `exportBattle(id)` reads through `repos.battles.load` (RFC-006 Decision 4, reaffirmed by the owner's 2026-09-24 ruling on Story 5.4), so it cannot see unsaved edits. Which of the two is this story's call
 
 ### Story 5.7: Migration Registry
 

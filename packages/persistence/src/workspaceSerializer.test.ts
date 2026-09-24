@@ -2,8 +2,13 @@ import {
   BattleSchema,
   CONWAYS_CLASSIC,
   CURRENT_FORMAT_VERSION,
+  OrganismSchema,
+  ORGANISM_SCHEMA_VERSION,
+  ruleTargetIds,
   WorkspaceExportSchema,
   type Battle,
+  type Organism,
+  type SurvivalRule,
 } from '@gol/domain';
 // ⚠️ IMPORTED WITHOUT A `package.json` EDGE, and NOT by preference — declaring it is not currently
 // possible (Story 5.3; re-measured 2026-09-22 while implementing the owner's decision to declare
@@ -21,9 +26,15 @@ import {
 // green run. The alternative the project's testing rules rule out is worse: a hand-rolled fake
 // repository here would be free to disagree with the real store's contract, which is the one thing
 // `createFakeRepositories` exists to prevent.
-import { createFakeRepositories, emptyGrid } from '@gol/test-utils';
+import {
+  createFakeRepositories,
+  createMockOrganisms,
+  emptyGrid,
+  MOCK_ORGANISM_IDS,
+} from '@gol/test-utils';
 import { describe, expect, it } from 'vitest';
 import { createWorkspaceSerializer } from './workspaceSerializer';
+import { CorruptDataError, ExportError } from './errors';
 
 const PRESET = { cols: 50, rows: 30 } as const;
 const EXPORTED_AT = '2026-01-01T00:00:00.000Z';
@@ -140,5 +151,198 @@ describe('createWorkspaceSerializer (AC6)', () => {
 
     expect(envelope.battles).toEqual([]);
     expect(envelope.organisms).toEqual([]);
+  });
+});
+
+/** One rule targeting `targetId` via `organismType`, or none when omitted — for the chained fixture below. */
+function chainOrganism(id: string, targetId?: string): Organism {
+  const survivalRules: SurvivalRule[] =
+    targetId === undefined
+      ? []
+      : [
+          {
+            id: `${id}-rule`,
+            contentHash: `content-${id}`,
+            conditions: [
+              { property: 'cellState', operator: 'eq', pattern: 'alive' },
+              { property: 'organismType', operator: 'eq', pattern: targetId },
+            ],
+            payload: { summary: `${id} targets ${targetId}`, action: 'survive' },
+          },
+        ];
+
+  return OrganismSchema.parse({
+    schemaVersion: ORGANISM_SCHEMA_VERSION,
+    id,
+    name: id,
+    colorToken: 'azure',
+    dominance: 50,
+    agingEnabled: false,
+    survivalRules,
+  });
+}
+
+/** A battle whose entire placed set is the one organism id — the closure seed (Decision H.1). */
+function battlePlacingOnly(id: string, organismId: string): Battle {
+  const gridState = emptyGrid(PRESET.cols, PRESET.rows);
+  gridState[0][0] = 1;
+
+  return BattleSchema.parse({
+    id,
+    name: 'exportBattle fixture',
+    organismIds: [organismId],
+    gridSize: PRESET,
+    gridState,
+    createdAt: '2025-12-01T00:00:00.000Z',
+    updatedAt: '2025-12-02T00:00:00.000Z',
+  });
+}
+
+describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
+  it('exports kind: "battle" carrying exactly the one battle, and passes WorkspaceExportSchema.parse', async () => {
+    const battle = battlePlacingOnly(
+      '11111111-1111-4111-8111-111111111111',
+      MOCK_ORGANISM_IDS.chaoticSpreader,
+    );
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    const envelope = await serializer.exportBattle(battle.id);
+
+    expect(envelope.kind).toBe('battle');
+    expect(envelope.battles).toHaveLength(1);
+    expect(envelope.battles[0].id).toBe(battle.id);
+    expect(() => WorkspaceExportSchema.parse(envelope)).not.toThrow();
+  });
+
+  it('rejects with ExportError("not-found") when no battle exists under the given id (RFC-006 Decision 4)', async () => {
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({ organisms: createMockOrganisms() }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+    const missingId = '00000000-0000-4000-8000-000000000000';
+
+    const rejection = serializer.exportBattle(missingId);
+
+    await expect(rejection).rejects.toBeInstanceOf(ExportError);
+    await expect(rejection).rejects.toMatchObject({ code: 'not-found', id: missingId });
+  });
+
+  it('rejects with CorruptDataError — never ExportError, never an envelope — when the stored battle breaks Decision H.1 (an unplaced roster entry)', async () => {
+    // The invariant `exportBattle` relies on instead of pruning: `load()` parses through
+    // `BattleSchema`, whose H.1 check rejects a roster member with no cell on the grid. Seeded via
+    // `raw` because the validated seed path would refuse this record. If `load()` ever stopped
+    // parsing, this test — not a silent leak of Patient Defender into the file — is what fails.
+    const id = '77777777-7777-4777-8777-777777777777';
+    const gridState = emptyGrid(PRESET.cols, PRESET.rows);
+    gridState[2][3] = 2; // only slot 2 (Chaotic Spreader) is placed; slot 1 is not
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({
+        organisms: createMockOrganisms(),
+        raw: {
+          battles: {
+            [id]: {
+              id,
+              name: 'unpruned roster',
+              organismIds: [MOCK_ORGANISM_IDS.patientDefender, MOCK_ORGANISM_IDS.chaoticSpreader],
+              gridSize: PRESET,
+              gridState,
+              createdAt: '2025-12-01T00:00:00.000Z',
+              updatedAt: '2025-12-02T00:00:00.000Z',
+            },
+          },
+        },
+      }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    await expect(serializer.exportBattle(id)).rejects.toBeInstanceOf(CorruptDataError);
+  });
+
+  it('exports exactly the rule-aware closure — a battle placing only Chaotic Spreader also exports Aggressive Colonizer, but not the unplaced, unreferenced Patient Defender', async () => {
+    const battle = battlePlacingOnly(
+      '22222222-2222-4222-8222-222222222222',
+      MOCK_ORGANISM_IDS.chaoticSpreader,
+    );
+    const library = createMockOrganisms();
+    // The fixture relationship this test rests on, stated rather than assumed: Chaotic Spreader
+    // targets exactly Aggressive Colonizer, and Aggressive Colonizer targets nothing further.
+    const byId = new Map(library.map((o) => [o.id, o]));
+    expect(ruleTargetIds(byId.get(MOCK_ORGANISM_IDS.chaoticSpreader)!)).toEqual([
+      MOCK_ORGANISM_IDS.aggressiveColonizer,
+    ]);
+    expect(ruleTargetIds(byId.get(MOCK_ORGANISM_IDS.aggressiveColonizer)!)).toEqual([]);
+    expect(byId.has(MOCK_ORGANISM_IDS.patientDefender)).toBe(true);
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({ battles: [battle], organisms: library }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    const envelope = await serializer.exportBattle(battle.id);
+
+    const exportedIds = envelope.organisms.map((o) => o.id).sort();
+    expect(exportedIds).toEqual(
+      [MOCK_ORGANISM_IDS.chaoticSpreader, MOCK_ORGANISM_IDS.aggressiveColonizer].sort(),
+    );
+  });
+
+  it('walks a chained reference through the repository — A placed, A→B→C exports all three', async () => {
+    const c = chainOrganism('c');
+    const b = chainOrganism('b', 'c');
+    const a = chainOrganism('a', 'b');
+    const battle = battlePlacingOnly('33333333-3333-4333-8333-333333333333', 'a');
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({ battles: [battle], organisms: [a, b, c] }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    const envelope = await serializer.exportBattle(battle.id);
+
+    expect(envelope.organisms.map((o) => o.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('takes appVersion and the clock from its injected deps, exactly as exportWorkspace does', async () => {
+    const battle = battlePlacingOnly(
+      '55555555-5555-4555-8555-555555555555',
+      MOCK_ORGANISM_IDS.chaoticSpreader,
+    );
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() }),
+      appVersion: 'provenance-string',
+      now: fixedNow,
+    });
+
+    const envelope = await serializer.exportBattle(battle.id);
+
+    expect(envelope.appVersion).toBe('provenance-string');
+    expect(envelope.exportedAt).toBe(EXPORTED_AT);
+  });
+
+  it('carries no settings, even when the store holds some (AR-12)', async () => {
+    const battle = battlePlacingOnly(
+      '66666666-6666-4666-8666-666666666666',
+      MOCK_ORGANISM_IDS.chaoticSpreader,
+    );
+    const repos = createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() });
+    await repos.settings.save({
+      theme: 'biotech-terminal',
+      gridLines: false,
+      cellAnimation: false,
+      defaultGridSize: PRESET,
+      autoSave: true,
+      defaultSpeed: 20,
+    });
+    const serializer = createWorkspaceSerializer({ repos, appVersion: '1.2.3', now: fixedNow });
+
+    const envelope = await serializer.exportBattle(battle.id);
+
+    expect('settings' in envelope).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
-import { toEnvelope, type WorkspaceExportWire } from '@gol/domain';
+import { organismClosure, toEnvelope, type WorkspaceExportWire } from '@gol/domain';
 import type { AppRepositories } from './repositories';
+import { ExportError } from './errors';
 
 /**
  * The repository-driven half of the RFC-006 export path (AR-10 / RFC-006 Decision 4).
@@ -34,6 +35,37 @@ export interface WorkspaceSerializer {
    * type may appear in this package's export path.
    */
   exportWorkspace(): Promise<WorkspaceExportWire>;
+
+  /**
+   * A single-battle export, `kind: 'battle'`, carrying the battle plus its rule-aware organism
+   * closure (Story 5.4, Decision E.5(b) / RFC-006 Decision 4).
+   *
+   * Takes the battle's `id`, reads `repos.battles.load(id)`, and rejects with
+   * `ExportError('not-found')` when no battle exists under it — RFC-006 Decision 4's shape
+   * (`:200-202`), restored by owner ruling after FD1's `exportBattle(battle)` variance was
+   * reviewed (Story 5.4 review, 2026-09-24; `deferred-work.md`'s variance (7) is withdrawn, not
+   * deleted). **What this hands to Story 5.6:** the export entry point (the editor's Tools
+   * section, FR-6.1) must force a save — or block export — on a dirty/unsaved battle before
+   * calling this with its id, because there is no other way to export a battle that was never
+   * persisted; that obligation does not live here.
+   *
+   * No prune/remap happens in this function. `BattleSchema.superRefine`'s Decision H.1 check
+   * (`organismIds` ≡ the placed set) runs on every `load()`, real or fake — a record that failed
+   * it never returns from `load()` successfully; `load()` throws `CorruptDataError` on it instead
+   * (`localStorageBattleRepository.ts`, `fakeRepositories.ts`). So any `battle` this function
+   * receives already satisfies H.1, and `battle.organismIds` is already exactly the closure's seed
+   * — pruning it again here would be a second enforcement of an invariant `load()` already
+   * guarantees, over data that has nowhere left to be unpruned.
+   *
+   * The organisms are still read through the repository (`organisms.list()`), so "export reads
+   * through the repository interfaces" now holds for both halves, matching the RFC. A seed or rule
+   * target absent from the library (reachable only through a corrupt, skipped organism record —
+   * the same fault-isolation `organisms.list()` already applies) is silently omitted from the
+   * closure rather than raised here, exactly as `exportWorkspace`'s `listFull()` note above; the
+   * resulting file is rejected cleanly at import by Story 5.8's `assertReferentialClosure`, and
+   * telling the user about the corruption itself is Story 5.11's.
+   */
+  exportBattle(id: string): Promise<WorkspaceExportWire>;
 }
 
 /**
@@ -44,8 +76,10 @@ export interface WorkspaceSerializer {
  * collections. `WorkspaceSerializer` survives as the interface name, so the RFC's vocabulary is
  * intact. Recorded as a variance in `deferred-work.md` rather than silently absorbed.
  *
- * `exportBattle(id)` is deliberately absent: a single-battle file needs the rule-aware organism
- * closure, which is Story 5.4's. `parse` / `migrate` / `importWorkspace` are Stories 5.7 and 5.8.
+ * `exportBattle` reads `repos.battles.load(id)` plus `repos.organisms.list()` — the RFC-006
+ * Decision 4 shape (see the interface JSDoc above for the owner ruling that restored it over
+ * FD1's `exportBattle(battle)` variance). `parse` / `migrate` / `importWorkspace` are still
+ * absent, and are Stories 5.7 and 5.8.
  */
 export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): WorkspaceSerializer {
   const { repos, appVersion, now } = deps;
@@ -71,6 +105,16 @@ export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): Worksp
       ]);
 
       return toEnvelope('workspace', battles, organisms, { appVersion, exportedAt: now() });
+    },
+
+    async exportBattle(id: string): Promise<WorkspaceExportWire> {
+      const battle = await repos.battles.load(id);
+      if (!battle) throw new ExportError('not-found', id);
+      // No prune/remap: `load()` only returns a battle that already passed BattleSchema's H.1
+      // check, so `battle.organismIds` is already exactly the placed set (see the interface JSDoc).
+      const library = await repos.organisms.list();
+      const closure = organismClosure(battle.organismIds, library);
+      return toEnvelope('battle', [battle], closure, { appVersion, exportedAt: now() });
     },
   };
 }

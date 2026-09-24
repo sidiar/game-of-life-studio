@@ -42,3 +42,7 @@ export { assertSafeCollectionId } from './errors';
 // calls it from the page boundary, which is also where `appVersion` and the clock come from.
 export { createWorkspaceSerializer } from './workspaceSerializer';
 export type { WorkspaceSerializer, WorkspaceSerializerDeps } from './workspaceSerializer';
+
+// `exportBattle(id)`'s not-found signal (RFC-006 Decision 4) — callers tell "no such battle" apart
+// from a thrown CorruptDataError the same way they already do for the repositories above.
+export { ExportError } from './errors';
