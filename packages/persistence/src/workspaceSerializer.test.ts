@@ -34,6 +34,7 @@ import {
 } from '@gol/test-utils';
 import { describe, expect, it } from 'vitest';
 import { createWorkspaceSerializer } from './workspaceSerializer';
+import { CorruptDataError, ExportError } from './errors';
 
 const PRESET = { cols: 50, rows: 30 } as const;
 const EXPORTED_AT = '2026-01-01T00:00:00.000Z';
@@ -204,17 +205,63 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
       MOCK_ORGANISM_IDS.chaoticSpreader,
     );
     const serializer = createWorkspaceSerializer({
-      repos: createFakeRepositories({ organisms: createMockOrganisms() }),
+      repos: createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() }),
       appVersion: '1.2.3',
       now: fixedNow,
     });
 
-    const envelope = await serializer.exportBattle(battle);
+    const envelope = await serializer.exportBattle(battle.id);
 
     expect(envelope.kind).toBe('battle');
     expect(envelope.battles).toHaveLength(1);
     expect(envelope.battles[0].id).toBe(battle.id);
     expect(() => WorkspaceExportSchema.parse(envelope)).not.toThrow();
+  });
+
+  it('rejects with ExportError("not-found") when no battle exists under the given id (RFC-006 Decision 4)', async () => {
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({ organisms: createMockOrganisms() }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+    const missingId = '00000000-0000-4000-8000-000000000000';
+
+    const rejection = serializer.exportBattle(missingId);
+
+    await expect(rejection).rejects.toBeInstanceOf(ExportError);
+    await expect(rejection).rejects.toMatchObject({ code: 'not-found', id: missingId });
+  });
+
+  it('rejects with CorruptDataError — never ExportError, never an envelope — when the stored battle breaks Decision H.1 (an unplaced roster entry)', async () => {
+    // The invariant `exportBattle` relies on instead of pruning: `load()` parses through
+    // `BattleSchema`, whose H.1 check rejects a roster member with no cell on the grid. Seeded via
+    // `raw` because the validated seed path would refuse this record. If `load()` ever stopped
+    // parsing, this test — not a silent leak of Patient Defender into the file — is what fails.
+    const id = '77777777-7777-4777-8777-777777777777';
+    const gridState = emptyGrid(PRESET.cols, PRESET.rows);
+    gridState[2][3] = 2; // only slot 2 (Chaotic Spreader) is placed; slot 1 is not
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({
+        organisms: createMockOrganisms(),
+        raw: {
+          battles: {
+            [id]: {
+              id,
+              name: 'unpruned roster',
+              organismIds: [MOCK_ORGANISM_IDS.patientDefender, MOCK_ORGANISM_IDS.chaoticSpreader],
+              gridSize: PRESET,
+              gridState,
+              createdAt: '2025-12-01T00:00:00.000Z',
+              updatedAt: '2025-12-02T00:00:00.000Z',
+            },
+          },
+        },
+      }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    await expect(serializer.exportBattle(id)).rejects.toBeInstanceOf(CorruptDataError);
   });
 
   it('exports exactly the rule-aware closure — a battle placing only Chaotic Spreader also exports Aggressive Colonizer, but not the unplaced, unreferenced Patient Defender', async () => {
@@ -232,12 +279,12 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
     expect(ruleTargetIds(byId.get(MOCK_ORGANISM_IDS.aggressiveColonizer)!)).toEqual([]);
     expect(byId.has(MOCK_ORGANISM_IDS.patientDefender)).toBe(true);
     const serializer = createWorkspaceSerializer({
-      repos: createFakeRepositories({ organisms: library }),
+      repos: createFakeRepositories({ battles: [battle], organisms: library }),
       appVersion: '1.2.3',
       now: fixedNow,
     });
 
-    const envelope = await serializer.exportBattle(battle);
+    const envelope = await serializer.exportBattle(battle.id);
 
     const exportedIds = envelope.organisms.map((o) => o.id).sort();
     expect(exportedIds).toEqual(
@@ -251,78 +298,14 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
     const a = chainOrganism('a', 'b');
     const battle = battlePlacingOnly('33333333-3333-4333-8333-333333333333', 'a');
     const serializer = createWorkspaceSerializer({
-      repos: createFakeRepositories({ organisms: [a, b, c] }),
+      repos: createFakeRepositories({ battles: [battle], organisms: [a, b, c] }),
       appVersion: '1.2.3',
       now: fixedNow,
     });
 
-    const envelope = await serializer.exportBattle(battle);
+    const envelope = await serializer.exportBattle(battle.id);
 
     expect(envelope.organisms.map((o) => o.id)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('exports the battle passed in, never whatever repos.battles holds under the same id (FD1)', async () => {
-    const battleId = '44444444-4444-4444-8444-444444444444';
-    const savedCopy = battlePlacingOnly(battleId, MOCK_ORGANISM_IDS.chaoticSpreader);
-    const currentEditorBattle: Battle = BattleSchema.parse({
-      ...savedCopy,
-      // `BattleSchema` reads ISO strings; the parsed copy's timestamps are hydrated `Date`s.
-      createdAt: savedCopy.createdAt.toISOString(),
-      updatedAt: savedCopy.updatedAt.toISOString(),
-      organismIds: [MOCK_ORGANISM_IDS.aggressiveColonizer],
-      gridState: (() => {
-        const g = emptyGrid(PRESET.cols, PRESET.rows);
-        g[1][1] = 1;
-        return g;
-      })(),
-    });
-    const serializer = createWorkspaceSerializer({
-      repos: createFakeRepositories({
-        battles: [savedCopy],
-        organisms: createMockOrganisms(),
-      }),
-      appVersion: '1.2.3',
-      now: fixedNow,
-    });
-
-    const envelope = await serializer.exportBattle(currentEditorBattle);
-
-    expect(envelope.battles[0].cells).toEqual([
-      { x: 1, y: 1, organismId: MOCK_ORGANISM_IDS.aggressiveColonizer },
-    ]);
-    expect(envelope.organisms.map((o) => o.id)).toEqual([MOCK_ORGANISM_IDS.aggressiveColonizer]);
-  });
-
-  it('seeds the closure from the PLACED set, not the roster as given — an unpruned editor roster leaks nothing (FR-7.13)', async () => {
-    // Raw editor state: Patient Defender sits on the roster (slot 1) with no cell on the grid, and
-    // Chaotic Spreader (slot 2) is the only organism placed. Built by hand, not `BattleSchema.parse`
-    // — the schema would reject the unplaced roster entry, which is exactly the shape a caller that
-    // forgot to prune would hand in.
-    const gridState = emptyGrid(PRESET.cols, PRESET.rows);
-    gridState[2][3] = 2;
-    const unpruned: Battle = {
-      ...battlePlacingOnly(
-        '77777777-7777-4777-8777-777777777777',
-        MOCK_ORGANISM_IDS.chaoticSpreader,
-      ),
-      organismIds: [MOCK_ORGANISM_IDS.patientDefender, MOCK_ORGANISM_IDS.chaoticSpreader],
-      gridState,
-    };
-    const serializer = createWorkspaceSerializer({
-      repos: createFakeRepositories({ organisms: createMockOrganisms() }),
-      appVersion: '1.2.3',
-      now: fixedNow,
-    });
-
-    const envelope = await serializer.exportBattle(unpruned);
-
-    expect(envelope.organisms.map((o) => o.id).sort()).toEqual(
-      [MOCK_ORGANISM_IDS.chaoticSpreader, MOCK_ORGANISM_IDS.aggressiveColonizer].sort(),
-    );
-    expect(envelope.battles[0].cells).toEqual([
-      { x: 3, y: 2, organismId: MOCK_ORGANISM_IDS.chaoticSpreader },
-    ]);
-    expect(() => WorkspaceExportSchema.parse(envelope)).not.toThrow();
   });
 
   it('takes appVersion and the clock from its injected deps, exactly as exportWorkspace does', async () => {
@@ -331,19 +314,23 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
       MOCK_ORGANISM_IDS.chaoticSpreader,
     );
     const serializer = createWorkspaceSerializer({
-      repos: createFakeRepositories({ organisms: createMockOrganisms() }),
+      repos: createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() }),
       appVersion: 'provenance-string',
       now: fixedNow,
     });
 
-    const envelope = await serializer.exportBattle(battle);
+    const envelope = await serializer.exportBattle(battle.id);
 
     expect(envelope.appVersion).toBe('provenance-string');
     expect(envelope.exportedAt).toBe(EXPORTED_AT);
   });
 
   it('carries no settings, even when the store holds some (AR-12)', async () => {
-    const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+    const battle = battlePlacingOnly(
+      '66666666-6666-4666-8666-666666666666',
+      MOCK_ORGANISM_IDS.chaoticSpreader,
+    );
+    const repos = createFakeRepositories({ battles: [battle], organisms: createMockOrganisms() });
     await repos.settings.save({
       theme: 'biotech-terminal',
       gridLines: false,
@@ -352,13 +339,9 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
       autoSave: true,
       defaultSpeed: 20,
     });
-    const battle = battlePlacingOnly(
-      '66666666-6666-4666-8666-666666666666',
-      MOCK_ORGANISM_IDS.chaoticSpreader,
-    );
     const serializer = createWorkspaceSerializer({ repos, appVersion: '1.2.3', now: fixedNow });
 
-    const envelope = await serializer.exportBattle(battle);
+    const envelope = await serializer.exportBattle(battle.id);
 
     expect('settings' in envelope).toBe(false);
   });
