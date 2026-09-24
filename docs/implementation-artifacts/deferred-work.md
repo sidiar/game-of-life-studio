@@ -748,8 +748,11 @@ Review Findings; these are the items consciously left open.
   (Story 4.11, 2026-09-17):** the condition vocabulary now exists
   (`conditionPropertyLabel`/`operatorLabel`/`cellStateLabel` in
   `apps/web/lib/organisms/conditionDraft.ts`) — Story 4.11 builds only the vocabulary, not the
-  summariser or the sentence on `<OrganismCard>` itself. **Pick this up in Story 4.20**, with the
-  card's stat block.
+  summariser or the sentence on `<OrganismCard>` itself. **Re-pointed again (Story 4.20,
+  2026-09-23):** 4.20 is the editor FOOTER, not the card — it touches `<OrganismLibrary>` for one
+  prop and one call site and never opens `OrganismCard.tsx`. **Pick this up in the next story that
+  reshapes `<OrganismCard>`** — 4.21/4.22 add its Delete action — still together with the card's
+  stat block below.
 - ~~**The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
   `tabIndex={0}` because it has no inner control to be the keyboard stop instead (organism cards
   open a modal in `Story 4.17`, which does not exist yet). Once Edit lands inside the card, a stop
@@ -778,8 +781,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   see the entry above); the card's stat block is still unsettled. **Re-pointed again (Story 4.11,
   2026-09-17):** the condition vocabulary Story 4.11 built lives in the editor
   (`lib/organisms/conditionDraft.ts`), not on `<OrganismCard>` — this stat-cell semantics question
-  is unaffected. **Pick this up with Story 4.20 alone**, and decide the cell semantics once for
-  all three rows.
+  is unaffected. **Re-pointed again (Story 4.20, 2026-09-23):** 4.20 built the editor's footer and
+  did not reach the card at all, so the stat block is still where 4.11 left it. **Pick this up with
+  the next `<OrganismCard>` reshape** (4.21/4.22's Delete action), and decide the cell semantics
+  once for all three rows.
 
 ## Deferred from: Story 4-3-editor-modal-shell (2026-09-14)
 
@@ -793,8 +798,14 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   Escape/Close a visible control per UX-DR17) and shipped the header only — no footer, which is
   `Story 4.20`'s surface. **Not a code change, and not for a story to resolve by editing either
   spec:** the next UX touch should settle which form is canonical and update the losing document.
-  If the mockup wins, 4.20 moves Save beside the usage indicator and 4.5 puts the name in the
+  If the mockup wins, a later story moves Save beside the usage indicator and 4.5's name goes in the
   header; if the AC wins, `ORGANISM-EDITOR-UPDATES.md` is superseded.
+  **Annotated (Story 4.20, 2026-09-23):** the footer now EXISTS — a full-width `<footer>` after the
+  body holding the FR-1.7 usage indicator and nothing else. Save did **not** move into it and the
+  name did **not** move into the header: moving Save would rewrite a shipped header, three e2e tests
+  and the `SAVE_SX` mid-fade fix for a change no AC asks for (4.20 FD1). So this entry stands exactly
+  as written, minus the "no footer" clause — the reconciliation is still the next UX touch's, and it
+  is now a question about which CONTROLS the footer holds, not whether there is one.
 - **Save's disabled→enabled edge is a cross-fade trap handed to `Story 4.16`** (FD4). The header's
   Save is a MUI `<Button variant="contained" disabled>`, and MUI `Button` ships its OWN
   `background-color`/`color`/`box-shadow` transition (`duration.short`, 250ms). In this story the
@@ -2417,9 +2428,28 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   dialog ships Cancel / Clone & Edit / Edit Anyway; `handleGateCloneAndEdit` writes the clone
   through the injected `onCloneAndEdit` option, guards the gate with `gatePending`, and stashes the
   clone in `proceedRef` for `handleGateExited` to open the editor on.
-- **The `[N]` in "Used in N Battles" is plain text** — no battle names, no click-through. FR-1.7's
-  popover / footer is **Story 4.20's**, which will need `battles` on the modal too (it is
-  deliberately NOT passed there today — an unread prop is a lie).
+- **The `[N]` in "Used in N Battles" is plain text ON THE FR-1.3 EDIT WARNING** — no battle names,
+  no click-through. FR-1.7's popover / footer was **Story 4.20's**, and the **FOOTER half closed
+  there (2026-09-23):** the editor footer's `<UsageIndicator>` names the battles behind N and the
+  organisms behind M, each in a read-only disclosure. The modal did NOT gain `battles`: it gained
+  `battleSummaries`, the settled `Pick<BattleSummary, 'id' | 'name' | 'organismIds'>[]` that
+  `<OrganismLibrary>` already holds — DATA, so AR-2/AR-27 stays intact and the repository stays at
+  the page boundary. `<OrganismLibrary>`'s `onRequestEdit` — the count the dialog is handed — now
+  reads `resolveOrganismUsage(usage, id).length`, the same derivation the footer uses (FD8).
+  ⚠️ **The DIALOG's half is still open** (re-pointed 2026-09-24, owner's decision on review item
+  D3 — this entry was briefly struck through as closed, which it is not): `<OrganismInUseDialog>`
+  renders `battleCountLabel(...)` as a plain `DialogTitle` — no names, no "Targeted by [M]", no
+  expansion — and Story 4.20 deliberately left its render alone (AC9, "nothing else moves").
+  The requirement is PRD FR-1.3's own AC
+  (`docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md:125` — the "[N] Battle(s)" count
+  "is expandable to reveal which Battles per FR-1.7"), restated by **FR-1.7** (`prd.md:155-159`:
+  read-only, names only, at the edit warning, the delete error and the footer alike) and by
+  **Architecture M7**, which names the same three surfaces. **It stands on Story 4.24**
+  (`4-24-edit-organism-from-battle`) — the remaining epic-4 story that touches this dialog, and it
+  already owns its `Current Battle (unsaved)` case; `<UsageIndicator>` + `usageLabels.ts` make the
+  click-through cheap there (the dialog takes the resolved names, or `battleSummaries`, and M as
+  props). Until then the PRD requirement is **unmet, deliberately and visibly** rather than behind a
+  false tick.
 - **A corrupt `gol:battles` now blanks the Library with the organism-worded error copy** (FD2) —
   `battles.list()` is uncaught inside the one `Promise.all`, so whole-key corruption of the battle
   collection lands in the existing `'error'` state ("Something went wrong loading your
@@ -2467,8 +2497,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   focused button unmounts — the tab order restarts at the top. Narrow (a search AND a rename that
   leaves the match), and the create flow has no equivalent (its target is the always-present
   create button). Options when picked up: clear `searchText` in `onSaved`, or a post-settle
-  "focus is loose → create button" sweep. **Pick this up with Story 4.20** (the next Library
-  touch) or 4.23.
+  "focus is loose → create button" sweep. **Re-pointed (Story 4.20, 2026-09-23):** 4.20 was the next
+  Library touch and does not reach this path — it adds one prop to the editor's call site and moves
+  one count onto `resolveOrganismUsage`, neither of which is in the focus-restore path. **It stands
+  on Story 4.23** (the editor's own dirty/close guard), this entry's own alternative.
 - **The editor's numeric bounds are tighter than the schema's, and an edit session now reads
   persisted records through them.** `age ≤ 999` / `neighborCount ≤ 8` / strict `min < max` in the
   editor (`conditionDraft.ts`) versus `0..65534` / `min <= max` in `SurvivalRuleSchema`: a record
@@ -2851,3 +2883,113 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `exportBattle(id)` throws `ExportError('not-found')` in tests but `CorruptDataError` in production
   for such an id. Pre-existing in `load()` (not introduced by the `exportBattle(id)` revert); real ids
   are uuids. Fix is `Object.hasOwn(collection, id)` in `load` (and siblings reading by key).
+
+## Deferred from: Story 4-20-usage-visibility-ui implementation (2026-09-23)
+
+- **`usageBattleNames`' `'Current Battle (unsaved)'` branch is unreachable until Story 4.24** (FD9).
+  It is forced by `OrganismUsageEntry.battleId: string | null` and named by RFC-005 Decision 8, but
+  `battleId` is `null` only for a never-saved OPEN battle, and nothing passes an `openBattle` to
+  `resolveOrganismUsage` yet — nothing that mounts this editor has a live grid until 4.24 opens it
+  over `<BattlePage>`. Covered by a unit test rather than by a rendered affordance, and deliberately
+  NOT wired with an `openBattle` prop every caller would pass as `undefined` (the unread prop this
+  repo already refused once, `:2431`). **Story 4.24** is where the branch becomes reachable, and it
+  should assert it through the UI then.
+- **The footer diverges from the UX doc's single-popover phrasing** (FD12).
+  `organism-editor-design.md:120` says "the popover gains a second read-only section", which reads as
+  ONE panel with two sections; the editor ships TWO independent disclosures, one per label. Written
+  as one panel, the `N = 0, M > 0` case needs a trigger that is text when one count is zero and a
+  button when the other is not, which would make AC3's "Used in 0 Battles renders without expansion"
+  depend on a count it is not about. Two labels keep that rule uniform and match the AC's own "lists
+  the battle (**or** organism) names". **Not a spec edit** — recorded for the same UX touch that owns
+  the header/footer reconciliation (`:791`).
+- **The mockup paints the COUNT in `--gol-accent`; the footer paints the caret instead.** The label
+  is one exported string (`battleCountLabel` / `ruleTargetCountLabel`, AC5's single-copy rule), so
+  there is no element around the digits to colour without splitting the helper's output at the call
+  site — which is exactly the drift the shared formatters exist to prevent. The accent lands on the
+  `▾` caret and the mockup's hover underline is kept. Revisit only if a designer asks for the digits
+  specifically; the fix then is a formatter that returns parts, not a split at the call site.
+- **The rule-reference index is rebuilt whenever `<OrganismLibrary>` re-renders.** `useMemo(… ,
+  [library])` at the modal, where `library` is the Library's unmemoised `sorted` — a fresh array per
+  LIBRARY render (open, save, close), though not per editor render: a keystroke re-renders the modal
+  alone and keeps the reference, so the memo does hit there (review, 2026-09-23 — the first cut of
+  this entry said "never hits"). Accepted on the same measurement `others` already accepts
+  (~0.02–0.04 ms for 1,000 organisms, Story 3.7's `library-filter` bench), and the honest fix is
+  memoising `sorted` at the Library, which would also fix `others` and the search filter. **Pick this
+  up only if a render profile ever shows it** — memoising the caller's list is a Library change with
+  three beneficiaries.
+
+## Deferred from: Story 4-20-usage-visibility-ui review decisions (2026-09-24)
+
+- **Tabbing away from an open usage panel leaves it open.** There is no `focusout` close: the panel
+  is dismissed by a second click on its trigger, by Escape, or by a pointerdown outside the footer,
+  and Tab / Shift+Tab out of the footer is none of those. **Accepted by the owner** with decision D1
+  (`4-20-usage-visibility-ui.md`, Review Findings): the panel is read-only, it is not a focus trap,
+  and Escape from outside the footer still closes the panel rather than the editor (the handler is a
+  `document` capture listener, not a footer-scoped one). The alternative — closing on a `focusout`
+  whose `relatedTarget` is outside `rootRef` — is a third dismissal path to keep correct on every
+  close, for a panel that does nothing while open. Revisit only if a UX pass asks for it.
+- **An outside pointerdown does not restore focus to the trigger.** Focus follows the press — the
+  field the user clicked, the name list they scrolled, or the Dialog paper. **Owner's decision D1
+  (2026-09-24), and AC4 now says so**: the focus clause is "after Escape, focus is on the trigger".
+  Restoring focus on a pointer dismissal is either overridden by the click's own `mousedown` focus
+  or steals focus from a control the user deliberately chose. A `click`-phase restore limited to
+  presses that landed on nothing focusable (option (b) in the review) remains the only version worth
+  reconsidering, and only if a keyboard user reports losing their place.
+- **The usage panel's name rows are truncated, so a long battle name is only fully readable to a
+  screen reader.** `NameItem` is `whiteSpace: nowrap` + `textOverflow: ellipsis` inside a
+  `maxWidth: 320px` panel (owner's decision D2, 2026-09-24) — the full text stays in the DOM, but a
+  sighted user sees `…` on names past ~40 characters and the panel is read-only, so there is nowhere
+  to go for the rest. No `title` tooltip was added: a native tooltip on a list of 40 rows is its own
+  hazard (it also duplicates the accessible name for AT). The honest fix, if it matters, is the
+  hover/focus tooltip the house already owns (`--gol-shadow-tooltip`'s organism-dot tooltip) applied
+  only to rows that are actually clipped — **not this story's**, and not worth a tooltip layer for
+  the MVP's expected name lengths.
+
+- **Escape from a control OUTSIDE the footer moves the caret off that control.** With a panel open,
+  the `document` capture listener closes the panel and returns focus to the trigger on every
+  KEYBOARD path — including a keydown whose target is the Organism Name field, a rule `<select>`, or
+  a native select popup opened with Alt+Down (Firefox and WebKit dispatch its Escape at the
+  document) — so a user who tabbed away and pressed Escape loses their place; the capture-phase
+  `stopPropagation` also hides that keydown from any other document-level Escape consumer while a
+  panel is open. **Accepted by the owner** with decision D4 (2026-09-24): the asymmetry with the
+  pointer path (D1 — focus follows the press) is the conventional one, a pointer user having chosen
+  the spot focus lands on while a keyboard user has chosen nothing and needs the one defined landing
+  place AC4 names. The rationale is recorded next to the handler in `UsageIndicator.tsx` so a later
+  reader does not "fix" the asymmetry back into a contradiction. The named revisit, if it ever
+  bites: restore focus to the trigger only when the keydown's target is inside `rootRef`, the Dialog
+  paper or `body` (option (b) in the review), still closing the panel and still stopping
+  propagation.
+
+## Deferred from: code review of 4-20-usage-visibility-ui (2026-09-24, third pass)
+
+- **A second modal opened over the editor WITHOUT a pointerdown, while a usage panel is open, has
+  its Escape eaten by the panel's capture listener** (`UsageIndicator.tsx`, `handleKeyDown`).
+  Unreachable today: every path that opens something over the editor is a click (✕, Back — the
+  `pointerdown` closes the panel first) or the editor's own Escape (which only reaches MUI once no
+  panel is open), and the editor contains no keyboard-opened MUI overlay — its controls are native
+  `<select>`/`<input>`, and a native select popup handles Escape itself (the D4 entry above records
+  that class). **Story 4.23**'s unsaved-changes confirm is the first surface that could mount over
+  the editor from the keyboard or programmatically (`handleRequestClose` invoked with
+  `openPanel !== null`): Escape would then close the hidden panel, `stopPropagation` would keep it
+  from the confirm, and `openerRef.current.focus()` would pull focus out of the top modal to the
+  footer trigger behind it. Guard for 4.23: close the panel from `handleRequestClose` (or on the
+  confirm's `open` transition) before the second modal mounts — an effect that resets `openPanel`
+  on a prop is the `react-hooks/set-state-in-effect` lint error `project-context.md` records, so
+  it wants an imperative close on the event, not a derived one.
+
+## Deferred from: code review of 4-20-usage-visibility-ui (2026-09-24, second pass)
+
+- **`openPanel` is never reconciled when the disclosure it names stops rendering**
+  (`UsageIndicator.tsx`). `battleSummaries` and `library` are open-time snapshots, so no count
+  changes while a panel is open today; with a live `openBattle` (**Story 4.24**) a count can drop
+  to 0 with its panel open — the panel unmounts, the capture Escape listener stays armed, and the
+  next Escape is swallowed (no panel, editor stays open, `openerRef` points at a detached button)
+  with no console error for the e2e gate to see. The obvious derived fix (void `openPanel` when its
+  count is 0) reopens the panel spontaneously when the count returns, and an effect-based reset is
+  the `react-hooks/set-state-in-effect` lint error — 4.24 owns the shape, with a live count to test
+  it against.
+- **A saved-but-renamed open battle would list its stored name, not the one on screen**
+  (`usageLabels.ts:usageBattleNames`). The `battleId: null` path is handled (`UNSAVED_BATTLE_LABEL`),
+  but a `battleId !== null` entry with `placedOnLiveGrid: true` resolves through `summaries` only,
+  while RFC-005 Decision 8 labels the open battle from the live name. **Story 4.24** grows the
+  signature an input for it; the unit test pins only `entry(null, true)`.

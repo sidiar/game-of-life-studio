@@ -6,6 +6,10 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
+// Story 4.20, FD6: the two copy formatters moved to `lib/organisms/usageLabels.ts` so the editor
+// footer renders the SAME "Used in [N] Battle(s)" sentence without importing this lazy chunk for a
+// string. Re-exported nowhere — both surfaces import the module, not each other.
+import { battleCountLabel, organismInUseMessage } from '@/lib/organisms/usageLabels';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -23,23 +27,6 @@ const PAPER_MAX_WIDTH = '440px';
 // Pulled out of the theme's MuiButton root override for the same reason the shipped dialogs
 // record: on `root` they apply to every size, collapsing size="small"/"large" into medium.
 const BUTTON_SX = { fontSize: '13px', padding: '12px 24px' } as const;
-
-/** `N Battle` / `N Battles` — real pluralisation, never the spec's "Battle(s)" shorthand (the
- * count badge's `Organism`/`Organisms` precedent). Exported for the tests and for the two copy
- * sites below, so the title and the sentence cannot disagree. */
-function battleCount(n: number): string {
-  return `${n} ${n === 1 ? 'Battle' : 'Battles'}`;
-}
-
-/** The AC's own name for the warning — "Used in [N] Battle(s)" — as the dialog's title. */
-export function battleCountLabel(usedInBattles: number): string {
-  return `Used in ${battleCount(usedInBattles)}`;
-}
-
-/** FR-1.3's sentence, verbatim from the PRD (`prd.md:125`), with the count interpolated. */
-export function organismInUseMessage(usedInBattles: number): string {
-  return `This organism is used in ${battleCount(usedInBattles)}. Editing it will affect all Battles that use it. Clone this organism first to create a Battle-specific variant?`;
-}
 
 export interface OrganismInUseDialogProps {
   open: boolean;
