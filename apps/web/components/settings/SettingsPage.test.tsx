@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { createFakeRepositories, createMockOrganisms, createMockWorkspace } from '@gol/test-utils';
 import { formatStorageSize } from '@/lib/settings/formatStorageSize';
@@ -35,6 +35,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="seeding"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -70,6 +71,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -100,6 +102,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -125,6 +128,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -147,6 +151,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -168,6 +173,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={workspace}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -188,6 +194,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="error"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -216,6 +223,7 @@ describe('SettingsPage', () => {
         organisms={organisms}
         seedStatus="seeding"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -226,6 +234,7 @@ describe('SettingsPage', () => {
         organisms={organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -246,6 +255,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -266,6 +276,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -288,6 +299,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -297,7 +309,7 @@ describe('SettingsPage', () => {
     expect(saveSpy).not.toHaveBeenCalled();
   });
 
-  it('renders exactly one h1, exactly one h2, and no Epic 6 section text (the no-dead-section guard)', async () => {
+  it('renders exactly one h1, exactly two h2s (Statistics + Data Management), and no Epic 6/5.9/5.10 dead-section text (the no-dead-section guard, updated by Story 5.5)', async () => {
     const repos = createFakeRepositories({ organisms: createMockOrganisms() });
 
     render(
@@ -307,6 +319,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
@@ -315,9 +328,12 @@ describe('SettingsPage', () => {
     });
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+    expect(screen.getByRole('heading', { level: 2, name: 'Data Management' })).toBeInTheDocument();
+    // "Export" is now a real, live affordance (Story 5.5) — no longer in the forbidden list.
+    // Import/Auto-Save/Clear All are still dead sections (5.9/6.10/5.10), as are Epic 6's rows.
     expect(
-      screen.queryByText(/display|simulation|theme|auto-save|export|import|clear/i),
+      screen.queryByText(/display|simulation|theme|auto-save|import|clear/i),
     ).not.toBeInTheDocument();
   });
 
@@ -330,12 +346,36 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        serializer={{ exportWorkspace: vi.fn() }}
       />,
     );
 
     await waitFor(() => {
       expect(screen.getAllByRole('term')).toHaveLength(3);
     });
+
+    const results = await axe(container);
+    expect(results.violations).toEqual([]);
+  });
+
+  // AC9: axe on the WHOLE page with the export alert showing — heading order, the aria-busy
+  // wrapper and the second card's landmark are only checked together here, not by
+  // DataManagement.test.tsx's card-alone scan.
+  it('has no axe accessibility violations in the export error state, with the alert showing', async () => {
+    const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+    const { container } = render(
+      <SettingsPage
+        settings={repos.settings}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        seedStatus="ready"
+        workspace={repos}
+        serializer={{ exportWorkspace: vi.fn().mockRejectedValue(new Error('unreadable')) }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /export workspace/i }));
+    await screen.findByRole('alert');
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);

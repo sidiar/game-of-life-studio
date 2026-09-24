@@ -6,10 +6,12 @@ import type {
   BattleRepository,
   OrganismRepository,
   SettingsRepository,
+  WorkspaceSerializer,
 } from '@gol/persistence';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
 import WorkspaceStatistics from './WorkspaceStatistics';
+import DataManagement from './DataManagement';
 
 export interface SettingsPageProps {
   settings: SettingsRepository;
@@ -23,6 +25,11 @@ export interface SettingsPageProps {
   // `storageUsage={repositories.storageUsage}` function prop detaches the method from its object —
   // harmless today (neither implementation uses `this`) and a `this` trap the day one does.
   workspace: Pick<AppRepositories, 'storageUsage'>;
+  // The same `Pick` shape as `workspace` above, for the same reason (FD7, Story 5.2): this page
+  // hands `<DataManagement>` exactly the one serializer method it calls, never the whole
+  // `WorkspaceSerializer` interface — `exportBattle` is Story 5.6's, not something this page or
+  // its children call (AC7, Story 5.5).
+  serializer: Pick<WorkspaceSerializer, 'exportWorkspace'>;
 }
 
 const HEADING_ID = 'settings-heading';
@@ -55,9 +62,9 @@ const StatusText = styled('p')({
   color: 'var(--gol-text-secondary)',
 });
 
-// Mockup: .settings-container (:106-110). Wraps the cards; ships with one child today, and
-// Story 5.5 adds the second — a `gap` on a flex column is the mockup's rule, not speculation about
-// a future sibling (the Gallery toolbar-band lesson, deferred-work.md:196).
+// Mockup: .settings-container (:106-110). Wraps the two cards — Workspace Statistics and Data
+// Management (Story 5.5) — a `gap` on a flex column is the mockup's rule, not speculation about a
+// future sibling (the Gallery toolbar-band lesson, deferred-work.md:196).
 const Container = styled('div')({
   display: 'flex',
   flexDirection: 'column',
@@ -83,6 +90,7 @@ export default function SettingsPage({
   organisms,
   seedStatus,
   workspace,
+  serializer,
 }: SettingsPageProps) {
   // Two resources, not one Promise.all (FD3): the counts must re-run on the seed flip (the first
   // list() read hits a pre-seed store — the OrganismLibrary note) but settings has no business
@@ -126,8 +134,9 @@ export default function SettingsPage({
         <SectionSubtitle>Configure workspace and preferences</SectionSubtitle>
       </SectionHeader>
       {/* aria-busy scoped to this wrapper only, never the outer <section> — the
-          deferred-work.md:192 trap Story 4.1 also avoided. Story 5.5's Data Management card will
-          live inside this same <section>, outside this wrapper, once it renders. */}
+          deferred-work.md:192 trap Story 4.1 also avoided. The Data Management card (Story 5.5)
+          lives INSIDE this wrapper, gated by the same `ready` fold as Workspace Statistics
+          (FD6) — not outside it. */}
       <div aria-busy={status === 'loading'}>
         {status === 'loading' && <StatusText>Loading settings…</StatusText>}
         {status === 'error' && (
@@ -140,6 +149,7 @@ export default function SettingsPage({
               organismCount={organismCount}
               storageBytes={storageBytes}
             />
+            <DataManagement serializer={serializer} />
           </Container>
         )}
       </div>

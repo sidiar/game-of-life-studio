@@ -2200,7 +2200,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 ## Deferred from: Story 5-1-settings-page-shell implementation (2026-09-21)
 
-- **Data Management renders for the first time in Story 5.5, not this one** (FD4) — the epic AC
+- ~~**Data Management renders for the first time in Story 5.5, not this one** (FD4) — the epic AC
   names both the Workspace Statistics and Data Management sections in the same sentence and also
   forbids dead sections. A Data Management card with no control today would be exactly that dead
   section: the mockup's description for it ("Export, import, and manage…") promises three buttons
@@ -2208,7 +2208,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   exists — two counts, one `list()` each, through repositories this page owns anyway. **Flagged
   for Sidiar**, as the one reading in this story that bends an AC's letter to honour its rule: if
   the empty Data Management frame is wanted now instead, it is a ten-line addition with no other
-  consequence.
+  consequence.~~ — **✅ CLOSED by Story 5.5.** The Data Management card now renders, with its one
+  Export Workspace row (`apps/web/components/settings/DataManagement.tsx`), inside the same
+  `ready` gate as Workspace Statistics.
 
 - **The section header is now a THIRD hand copy, not a lift** (FD6) — `BattleGallery.tsx`,
   `OrganismLibrary.tsx` and now `SettingsPage.tsx` each carry their own ~20-line
@@ -2585,7 +2587,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   guard that does exist is a note in `packages/domain/src/index.ts`'s header, since JSON takes no
   comment. AC7 and Task 6 in the story file are reworded to match.
 
-- **Where `appVersion` comes from is NOT decided here — Story 5.5 owns it.** `createWorkspaceSerializer`
+- ~~**Where `appVersion` comes from is NOT decided here — Story 5.5 owns it.** `createWorkspaceSerializer`
   takes `appVersion` as an injected string (FD5) because every `package.json` in this workspace is
   `"version": "0.0.0"` and no app-version constant exists anywhere. Three options, none of which is
   a serializer story's to pick: (a) a constant in `packages/*` duplicating the root `package.json`,
@@ -2595,7 +2597,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   component. **Pick this up in Story 5.5**, which is the first caller and sits at exactly the page
   boundary where the answer is readable. The value is provenance only (Decision I.4) — nothing
   branches on it — so a wrong choice is cheap to change, which is itself an argument for deciding it
-  where it is first needed rather than two stories early.
+  where it is first needed rather than two stories early.~~ — **✅ CLOSED by Story 5.5.** Chose
+  none of (a)–(c) (FD2): a JSON import of `apps/web/package.json` itself, where the version already
+  lives — `apps/web/lib/appVersion.ts` exports `APP_VERSION`, resolved at build time, no env var,
+  no duplication. Still `"0.0.0"` today; still provenance only (Decision I.4).
 
 - **An export of a partly-corrupt store silently omits the unreadable battles** —
   `exportWorkspace()` reads `battles.listFull()`, which SKIPS a record that fails
@@ -2993,3 +2998,22 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   but a `battleId !== null` entry with `placedOnLiveGrid: true` resolves through `summaries` only,
   while RFC-005 Decision 8 labels the open battle from the live name. **Story 4.24** grows the
   signature an input for it; the unit test pins only `entry(null, true)`.
+
+## Deferred from: Story 5-5-export-workspace implementation (2026-09-24)
+
+- **`saveFailureMessage.ts:27-31`'s "revisit when Epic 5 ships export" note was read, and the
+  answer is "no change" (FD9).** Export now exists, but it does not free storage space — deleting a
+  battle does — so the Quota message's existing advice ("delete a battle from the Gallery to free
+  space") stays the accurate action. Adding "export first" would be a second, optional step, and
+  the file is shared with the Epic 4 lane's organism editor (Stories 4.16/4.23), so a lane-5 edit
+  there would buy merge risk for no user gain. Recorded here so the comment's trigger is discharged
+  without touching the file — nothing to do.
+
+## Deferred from: code review of 5-5-export-workspace (2026-09-24)
+
+- **`URL.revokeObjectURL` runs after `setTimeout(…, 0)` — possibly early for real Safari / older
+  Firefox** (`apps/web/lib/export/downloadJsonFile.ts`). FD3 pinned a next-task revoke to dodge the
+  same-task WebKit cancel, and Playwright's WebKit project is green, but Playwright's WebKit is not
+  Safari; FileSaver.js waits ~40 s for this reason. A longer delay costs nothing but a briefly-held
+  blob. Not changed in review because FD3 chose 0 ms explicitly; revisit on the first real-Safari
+  report of a cancelled or empty download (Story 5.6 reuses this seam).

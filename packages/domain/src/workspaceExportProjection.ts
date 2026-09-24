@@ -41,10 +41,10 @@ import type {
 } from './workspaceExportSchema';
 
 /**
- * Everything the envelope stamps that is not data. Both values are INJECTED (Story 5.3 FD5): there
- * is no app-version constant in this workspace yet and picking one here would mint something
- * nothing reads until Story 5.5, and a hidden clock would force `exportedAt` to be asserted with a
- * regex instead of exactly.
+ * Everything the envelope stamps that is not data. Both values are INJECTED (Story 5.3 FD5): the
+ * app's version is an `apps/web` fact (`apps/web/lib/appVersion.ts`, read from
+ * `apps/web/package.json`'s `version`, Story 5.5) that no `packages/*` module may own, and a hidden
+ * clock would force `exportedAt` to be asserted with a regex instead of exactly.
  */
 export interface ExportMeta {
   /** Provenance only, never branched on (Decision I.4). */

@@ -1,12 +1,21 @@
 import { StrictMode } from 'react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
-import { CONWAYS_CLASSIC_ID } from '@gol/domain';
+import { CONWAYS_CLASSIC_ID, WorkspaceExportSchema } from '@gol/domain';
 import { measureStorageUsage, STORAGE_KEYS } from '@gol/persistence';
 import { MOCK_BATTLE_IDS, MOCK_ORGANISM_IDS } from '@gol/test-utils';
 import { formatStorageSize } from '@/lib/settings/formatStorageSize';
+import { downloadJsonFile } from '@/lib/export/downloadJsonFile';
+import { APP_VERSION } from '@/lib/appVersion';
 import SettingsRoute from './page';
+
+// AC7 (Story 5.5): the wiring test below clicks Export at the real page boundary and captures
+// whatever reaches the download seam — mocked here for the same reason DataManagement.test.tsx
+// mocks it, so the captured value is exactly what `exportWorkspaceToFile` handed it.
+vi.mock('@/lib/export/downloadJsonFile', () => ({
+  downloadJsonFile: vi.fn(),
+}));
 
 // Parses a rendered "1.5 KB" / "1.00 MB" tile value back to KB, so the production-vs-development
 // comparison below asserts a RELATION (development strictly larger) rather than hardcoding either
@@ -43,6 +52,9 @@ describe('SettingsRoute', () => {
     expect(localStorage.getItem(STORAGE_KEYS.settings)).toBeNull();
     localStorage.clear();
     vi.unstubAllEnvs();
+    // The module-level download mock keeps its call history otherwise (the vitest config sets
+    // neither clearMocks nor restoreMocks), so a later Export click would read a stale call.
+    vi.mocked(downloadJsonFile).mockClear();
   });
 
   it('renders the Settings heading at once, and the counts once ready (production seed)', async () => {
@@ -138,6 +150,34 @@ describe('SettingsRoute', () => {
       expect(readStats().Organisms).toBe('1');
     });
 
+    expect(localStorage.getItem(STORAGE_KEYS.settings)).toBeNull();
+  });
+
+  // AC7: the serializer is built ONCE at this boundary (createWorkspaceSerializer({ repos,
+  // appVersion: APP_VERSION, now })) and passed down as a Pick<..., 'exportWorkspace'> prop — this
+  // is the one place that wiring can be proven against the REAL localStorage repositories rather
+  // than a fake.
+  it('clicking Export at the real page boundary produces a WorkspaceExportSchema-valid file stamped with APP_VERSION (AC2, AC5, AC7)', async () => {
+    render(<SettingsRoute />);
+
+    await waitFor(() => {
+      expect(readStats().Organisms).toBe('1');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /export workspace/i }));
+
+    await waitFor(() => {
+      expect(downloadJsonFile).toHaveBeenCalledTimes(1);
+    });
+
+    const [filename, value] = vi.mocked(downloadJsonFile).mock.calls[0];
+    expect(filename).toMatch(/^game-of-life-workspace-\d{4}-\d{2}-\d{2}\.json$/);
+    const parsed = WorkspaceExportSchema.parse(value);
+    expect(parsed.appVersion).toBe(APP_VERSION);
+    expect(parsed.kind).toBe('workspace');
+    expect(parsed.organisms.map((o) => o.id)).toEqual([CONWAYS_CLASSIC_ID]);
+
+    // The AC5 guard still holds after an export: read-only, never writes gol:settings.
     expect(localStorage.getItem(STORAGE_KEYS.settings)).toBeNull();
   });
 });
