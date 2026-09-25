@@ -32,9 +32,10 @@ import {
   emptyGrid,
   MOCK_ORGANISM_IDS,
 } from '@gol/test-utils';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWorkspaceSerializer } from './workspaceSerializer';
-import { CorruptDataError, ExportError } from './errors';
+import { CorruptDataError, ExportError, ImportError } from './errors';
+import type { AppRepositories } from './repositories';
 
 const PRESET = { cols: 50, rows: 30 } as const;
 const EXPORTED_AT = '2026-01-01T00:00:00.000Z';
@@ -344,5 +345,104 @@ describe('createWorkspaceSerializer.exportBattle (AC3)', () => {
     const envelope = await serializer.exportBattle(battle.id);
 
     expect('settings' in envelope).toBe(false);
+  });
+});
+
+/**
+ * Wraps every repository method of `repos` in a `vi.fn` pass-through that logs its name into
+ * `calls` — the fake itself has no failure or call-order seam (Story 1.6), and editing it would
+ * change `@gol/test-utils` for one assertion.
+ */
+function recordingRepos(repos: AppRepositories, calls: string[]): AppRepositories {
+  const wrap = <T extends object>(target: T, prefix: string): T => {
+    const wrapped = { ...target };
+    for (const [name, method] of Object.entries(target) as [string, unknown][]) {
+      if (typeof method !== 'function') continue;
+      Object.assign(wrapped, {
+        [name]: vi.fn((...args: unknown[]) => {
+          calls.push(`${prefix}${name}`);
+          return (method as (...a: unknown[]) => unknown).apply(target, args);
+        }),
+      });
+    }
+    return wrapped;
+  };
+  return {
+    ...wrap(repos, ''),
+    battles: wrap(repos.battles, 'battles.'),
+    organisms: wrap(repos.organisms, 'organisms.'),
+    settings: wrap(repos.settings, 'settings.'),
+  };
+}
+
+describe('createWorkspaceSerializer.importWorkspace (mode-agnostic)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('runs over the AppRepositories interface alone, validating the file before any repository call', async () => {
+    const calls: string[] = [];
+    const repos = recordingRepos(
+      createFakeRepositories({ battles: [seededBattle()], organisms: [CONWAYS_CLASSIC] }),
+      calls,
+    );
+    const originalSafeParse = WorkspaceExportSchema.safeParse.bind(WorkspaceExportSchema);
+    vi.spyOn(WorkspaceExportSchema, 'safeParse').mockImplementation((input) => {
+      calls.push('validate');
+      return originalSafeParse(input);
+    });
+    const incoming = chainOrganism('solo');
+    const battle = battlePlacingOnly('44444444-4444-4444-8444-444444444444', incoming.id);
+    const source = createWorkspaceSerializer({
+      repos: createFakeRepositories({ battles: [battle], organisms: [incoming] }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+    const file = JSON.stringify(await source.exportWorkspace());
+    const serializer = createWorkspaceSerializer({ repos, appVersion: '1.2.3', now: fixedNow });
+
+    const summary = await serializer.importWorkspace(file);
+
+    expect(calls[0]).toBe('validate');
+    expect(calls).not.toContain('settings.load');
+    expect(calls).not.toContain('settings.save');
+    // The write region as an exact filtered sequence, not `indexOf` comparisons: `indexOf` is -1
+    // for an absent call and `-1 < i` passes, so a dropped `clearAll()` (or a dropped ensure)
+    // would slip through — and end-state assertions cannot catch it, because `replaceAll`
+    // overwrites whole collections either way. This is the one test guarding the ordering itself.
+    const writeRegion = calls.filter((name) =>
+      [
+        'clearAll',
+        'organisms.replaceAll',
+        'battles.replaceAll',
+        'organisms.exists',
+        'organisms.save',
+      ].includes(name),
+    );
+    expect(writeRegion).toEqual([
+      'clearAll',
+      'organisms.replaceAll',
+      'battles.replaceAll',
+      // `ensureDefaultOrganism` runs LAST, inside the guarded region: `exists`, then — Conway's
+      // Classic being absent from this file — the `save` that re-adds it.
+      'organisms.exists',
+      'organisms.save',
+    ]);
+    expect((await repos.battles.listFull()).map((b) => b.id)).toEqual([battle.id]);
+    expect((await repos.organisms.list()).map((o) => o.id)).toEqual([
+      incoming.id,
+      CONWAYS_CLASSIC.id,
+    ]);
+    expect(summary).toEqual({ kind: 'workspace', battleCount: 1, organismCount: 2 });
+  });
+
+  it('never touches a repository when the file is rejected', async () => {
+    const calls: string[] = [];
+    const repos = recordingRepos(createFakeRepositories({ organisms: [CONWAYS_CLASSIC] }), calls);
+    const serializer = createWorkspaceSerializer({ repos, appVersion: '1.2.3', now: fixedNow });
+
+    await expect(serializer.importWorkspace('not json')).rejects.toBeInstanceOf(ImportError);
+
+    expect(calls).toEqual([]);
   });
 });

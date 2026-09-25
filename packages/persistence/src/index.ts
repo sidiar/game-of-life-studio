@@ -51,3 +51,15 @@ export type { WorkspaceSerializer, WorkspaceSerializerDeps } from './workspaceSe
 // `exportBattle(id)`'s not-found signal (RFC-006 Decision 4) — callers tell "no such battle" apart
 // from a thrown CorruptDataError the same way they already do for the repositories above.
 export { ExportError } from './errors';
+
+// Import's one rejection type (RFC-006 Decision 3 / Decision 5), beside ExportError for the same
+// reason: callers branch on `code`. Six codes, and 'write-failed' (rolled back — the workspace is
+// unchanged) vs 'rollback-failed' (it may not be) is the distinction Story 5.9's copy rests on.
+export { ImportError } from './errors';
+export type { ImportErrorCode, ImportErrorDetails } from './errors';
+
+// The atomic import's pure half (steps 1-4), exported so Story 5.9 can validate a picked file
+// before showing its destructive-replace warning without holding any repository. The writing half
+// is reached only through `WorkspaceSerializer.importWorkspace`.
+export { validateImportFile } from './workspaceImport';
+export type { ImportSummary } from './workspaceImport';
