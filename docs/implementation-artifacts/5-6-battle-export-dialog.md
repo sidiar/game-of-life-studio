@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 5.6: Battle Export Dialog
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -63,15 +63,19 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
 5. **The default Battle Only filename is the battle name in kebab-case, e.g. `triple-threat.json`**
    (FR-6.4). A pure `battleExportFilename(name: string): string` in `apps/web/lib/export/` builds it
    (FD7):
-   - normalise to NFKD and strip combining marks that follow a **Latin** base character only, then
-     renormalise to NFC **→ Sidiar (2026-09-25):** superseding the original "strip every
-     combining mark" — see the dated FD7 annotation below;
+   - ~~normalise to NFKD and strip combining marks;~~ **→ Sidiar (2026-09-25):** normalise to NFKD
+     and strip combining marks that follow a **Latin** base character only, then renormalise to
+     NFC — see the dated FD7 annotation below; **second code review (2026-09-25):** then drop every
+     combining mark not attached to a letter (an emoji's variation selector, a spacing accent's
+     mark after a space), so no invisible mark survives into the filename;
    - lowercase;
-   - turn every run of characters that are not a Unicode letter, number, or (surviving, non-Latin)
-     combining mark into one `-`;
+   - ~~turn every run of characters that are not a Unicode letter or number into one `-`;~~
+     **→ Sidiar (2026-09-25):** turn every run of characters that are not a Unicode letter, number,
+     or (surviving, non-Latin) combining mark into one `-`;
    - trim leading and trailing `-`;
    - truncate to 60 code points, trim a trailing `-` the cut may leave **→ Sidiar (2026-09-25):**
-     new sub-step — see the dated FD7 annotation below;
+     new sub-step — see the dated FD7 annotation below; **second code review (2026-09-25):** a cut
+     that would split a letter + mark cluster drops the whole partial cluster;
    - append `.json`.
 
    If nothing is left (an untitled battle `''`, whitespace only, or all punctuation and emoji), the
@@ -348,6 +352,14 @@ _Code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Audi
 - [x] [Review][Patch] The e2e axe scan with the export dialog open ran on a bare `toBeVisible()`, mid-Fade, and failed `color-contrast` on blended colours in the review's `ci:dev` run; now uses the guard test's three-wait settle (`opacity: 1` + 300 ms) [apps/web/e2e/battleRoute.spec.ts:export battle axe test]
 - [x] [Review][Defer] Export failure alert can still share a commit with `exportConfirming=false` (so be inserted before `useInertBackground` releases `inert`) if a rejection arrives before React commits the exit — only reachable by a synchronous/microtask rejection; every real rejection source is an IndexedDB request or a cold chunk fetch (a macrotask), so the commit always lands first in practice [apps/web/components/battle/BattlePage.tsx:handleExportExited] — deferred, theoretical today
 
+_Second code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `9470143..d903c09`, the owner-decision commit)._
+
+- [ ] [Review][Decision] Format characters become word-breaking hyphens — ZWNJ/ZWJ (`\p{Cf}`) are not L/N/M, so the collapse turns them into `-` mid-word: Persian `'می‌خواهم'` → `می-خواهم.json`, Devanagari `'क्‍ष'` → `क्-ष.json`, and a soft hyphen `'ab­cd'` → `ab-cd.json`. ZWNJ is standard Persian/Indic spelling, so this cuts against decision 1's "non-Latin scripts survive intact". Options: (a) keep ZWNJ/ZWJ when between two letters (invisible characters in a filename) and drop soft hyphens; (b) drop every `\p{Cf}` silently (Persian words then render joined); (c) accept the hyphen as today. [apps/web/lib/export/battleExportFilename.ts:kebabCase]
+- [x] [Review][Patch] Orphan combining marks survive the `\p{M}` exemption — a mark not on a letter (VS16 U+FE0F, keycap U+20E3, a spacing accent's NFKD mark after a space, a mark after a digit/hyphen/at the start) is kept: `'❤️'` → `️.json` (invisible, skips the `untitled-battle` fallback AC5 promises for emoji), `'Battle ❤️ Royale'` → `battle-️-royale.json`, `'Rock´n´Roll'` → `rock-́n-́roll.json`, `'́'` → `́.json`; strip every mark run not attached to a letter before the collapse [apps/web/lib/export/battleExportFilename.ts:kebabCase]
+- [x] [Review][Patch] The 60-code-point cut can split a base+mark cluster — 59×`क` + `कि` keeps the 60th `क` and drops its vowel sign ि, silently changing the word (the garbling decision 1 set out to prevent); when the cut lands before a mark, drop the partial cluster (base + marks) instead [apps/web/lib/export/battleExportFilename.ts:truncateSlug]
+- [x] [Review][Patch] The "Café Duel … without an NFC precomposed form nearby" test uses precomposed U+00E9 like "Café Wars", so the decomposed-input path is never exercised; use `'Café Duel'` [apps/web/lib/export/battleExportFilename.test.ts]
+- [x] [Review][Patch] Story records: AC5's original bullets and the Debug Log's "pre-existing drift from `main`" sentence were deleted rather than struck (history is struck, never deleted); the "2225, up from 2212 … normal suite variance" explanation omits the review commit's +5 tests; Completion Notes item 4 points to the Debug Log "below" (it is above); Agent Model Used omits the Opus review sessions [docs/implementation-artifacts/5-6-battle-export-dialog.md]
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -521,7 +533,7 @@ Updated test cases (superseding the table above):
 | `'Triple Threat'` | `triple-threat.json` |
 | `'  Triple   Threat  '` | `triple-threat.json` |
 | `'Café Wars!'` | `cafe-wars.json` |
-| `'Café Duel'` | `cafe-duel.json` |
+| `'Cafe\u0301 Duel'` (decomposed é) | `cafe-duel.json` |
 | `'Battle #2: Rematch'` | `battle-2-rematch.json` |
 | `''` | `untitled-battle.json` |
 | `'   '` | `untitled-battle.json` |
@@ -535,6 +547,22 @@ Updated test cases (superseding the table above):
 | a long CJK name (70 code points, no separators) | truncated to exactly 60 code points |
 | a boundary case where the 60-code-point cut lands on a `-` | trailing `-` trimmed |
 | a surrogate-pair character exactly at the cut | kept whole, never split into a lone surrogate |
+| `'❤️'`, `'❤️❤️'` (emoji + variation selector U+FE0F) | `untitled-battle.json` |
+| `'Battle ❤️ Royale'`, `'1️⃣ round'` | `battle-royale.json`, `1-round.json` |
+| `'Rock´n´Roll'`, `'¨Wars'` (spacing accents) | `rock-n-roll.json`, `wars.json` |
+| `'\u0301\u0302'` (marks only) | `untitled-battle.json` |
+| 59 × `क` + `कि` (the cut would split `कि`) | 59 × `क` — the partial cluster is dropped |
+
+**Second code review (2026-09-25), refining the `\p{M}` exemption above:** the exemption kept
+*every* surviving mark, not just marks on a letter, so a mark with no letter base leaked into the
+filename as an invisible character — an emoji's variation selector (U+FE0F) or keycap (U+20E3)
+left behind by its dropped emoji, the mark a spacing accent (`´`, `¨`) NFKD-decomposes into after a
+space, or a mark after a digit, a hyphen, or at the start. `'❤️'` became an invisible slug that
+skipped the `untitled-battle` fallback AC5 promises for emoji. After the NFC step, every mark run
+not attached to a letter is dropped (`.replace(/(^|[^\p{L}\p{M}])\p{M}+/gu, '$1')`), so the
+exemption keeps exactly what decision 1 meant — a mark on its base letter. The 60-code-point cut
+likewise drops a letter + mark cluster it would otherwise split (its base kept, its marks cut
+off), rather than silently changing the word.
 
 **FD8: Focus lands on EXPORT BATTLE after the operation settles, not at exit.** The button wears
 `disabled={isSaving}`, the visible half of the edit lock like every other sidebar control. If focus
@@ -735,7 +763,9 @@ one Sonnet session; the 2026-09-25 completion of Task 9 (baseline refresh, `ci:d
 close-out) is a **second, separate Sonnet session** resuming the halted run from the synced branch;
 the 2026-09-25 owner review-decision close-out (filename fix, decision annotations, final `ci:dev`)
 is a **third, separate Sonnet session** resuming after the owner answered the four
-`[Review][Decision]` items.
+`[Review][Decision]` items. Both code reviews (2026-09-25: over `origin/main...HEAD`, then over the
+owner-decision commit `9470143..d903c09`) ran on **Claude Opus 5.5** (claude-opus-5-5), the
+different-model reviewer.
 
 ### Debug Log References
 
@@ -769,7 +799,8 @@ is a **third, separate Sonnet session** resuming after the owner answered the fo
 - `npm run build:standalone` — green (Turbo cache hit; no code changed since the prior build).
 - `npm run bundle:check` — **PASSES** against the growth gate: `/battle` 310.1 KB vs. baseline
   309.5 KB (**+0.6 KB**, within the 8 KB allowance); `/battle/new` 309.9 KB vs. baseline 309.3 KB
-  (**+0.6 KB**). `/` +0.1 KB, `/organisms` +0.1 KB, `/settings` +0.2 KB. **Correction (Review][Decision]
+  (**+0.6 KB**). `/` +0.1 KB, `/organisms` +0.1 KB, `/settings` +0.2 KB. ~~— all pre-existing drift
+  from `main`, not new in this story.~~ **Correction (Review][Decision]
   item 4, → Sidiar 2026-09-25): this growth is THIS story's own, not "pre-existing drift from
   `main`" as first recorded here.** Evidence: the committed baselines were measured on `main` at
   `5c338f5`; the only later `main` commit before this branch synced (#81) touched only
@@ -803,7 +834,9 @@ is a **third, separate Sonnet session** resuming after the owner answered the fo
 - `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0**. All stages green: `typecheck`, `lint`,
   `format:check`, `spec:check`, `boundary:check`, `test:coverage` (134 web test files / **2225**
   tests passed, up from the prior session's 2212 — this session's own 8 new
-  `battleExportFilename.test.ts` cases plus normal suite variance from files touched since;
+  `battleExportFilename.test.ts` cases plus the first code review's net +5 (commit `9470143`:
+  6 cases added, 1 removed), 2212 + 5 + 8 = 2225 *(corrected by the second code review; first
+  recorded as "normal suite variance")*;
   all `@gol/*` packages green, no flakes this run: `@gol/persistence` 103/103, `@gol/simulation`
   408/408, `@gol/test-utils` 95/95, `@gol/domain` 212/212), `build:standalone`, `bundle:check`
   (`+0.0 KB` all 5 routes), `bench` + `bench:check` (7.952 ms headroom, 47.7% of the frame budget),
@@ -926,7 +959,7 @@ is a **third, separate Sonnet session** resuming after the owner answered the fo
   - Re-ran `npm run build:standalone` and `npm run bundle:check`: still passes, unchanged from the
     prior session (no route touched by this session's one code change to first-load-excluded
     filename logic). No `bundle:baseline` re-run needed (no route moved).
-  - `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0** (see Debug Log below for the full
+  - `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0** (see Debug Log above for the full
     breakdown).
 
 ### File List
@@ -1009,6 +1042,15 @@ is a **third, separate Sonnet session** resuming after the owner answered the fo
   on all 5 routes (the change lives inside the lazy `battleExporter` chunk; no baseline refresh
   needed). `npm run ci:dev` exit 0, no flakes (2225/2225 web tests, 278/279 e2e — 1 pre-existing
   unrelated skip). Status → review.
+- 2026-09-25 — Second code review (Opus, over the owner-decision commit `9470143..d903c09`):
+  4 patches applied — marks not attached to a letter (emoji variation selector/keycap, spacing
+  accents, leading/digit/hyphen marks) are dropped so no invisible mark reaches the filename and
+  emoji-only names fall back again; the 60-code-point cut drops a letter + mark cluster it would
+  split; the "Café Duel" test now feeds a decomposed é; story records fixed (AC5 and Debug Log
+  originals struck not deleted, 2225 test-count arithmetic, "below" → "above", Opus reviews in
+  Agent Model Used). 5 new unit tests (22 in `battleExportFilename.test.ts`); FD7 annotated and
+  its table extended. 1 `[Review][Decision]` left open (ZWNJ/ZWJ/soft hyphen → `-`). Status →
+  in-progress.
 
 Dev Model: sonnet   # follows existing patterns (UnsavedChangesDialog idiom, useLeaveGuard lifecycle, 5.5's lib/export seam); every structural choice (lazy boundary, save-then-export, id return, act-on-exit) is pre-decided in FD1–FD9, so nothing is left to architect.
 

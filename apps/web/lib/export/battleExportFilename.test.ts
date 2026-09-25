@@ -17,7 +17,8 @@ describe('battleExportFilename', () => {
   });
 
   it('strips a Latin combining accent mid-word without an NFC precomposed form nearby', () => {
-    expect(battleExportFilename('Café Duel')).toBe('cafe-duel.json');
+    // A DECOMPOSED é (`e` + U+0301), so the Latin-base mark strip is exercised on its own.
+    expect(battleExportFilename('Cafe\u0301 Duel')).toBe('cafe-duel.json');
   });
 
   it('collapses punctuation runs to single hyphens', () => {
@@ -95,5 +96,31 @@ describe('battleExportFilename', () => {
     expect(codePoints.length).toBe(60);
     expect(codePoints[59]).toBe(astral);
     expect(() => encodeURIComponent(slug)).not.toThrow();
+  });
+
+  // Second code review (2026-09-25): a combining mark survives only ON A LETTER.
+  it('falls back to untitled-battle for an emoji carrying a variation selector (U+FE0F)', () => {
+    expect(battleExportFilename('❤️')).toBe('untitled-battle.json');
+    expect(battleExportFilename('❤️❤️')).toBe('untitled-battle.json');
+  });
+
+  it('leaves no invisible variation selector or keycap mark where an emoji was dropped', () => {
+    expect(battleExportFilename('Battle ❤️ Royale')).toBe('battle-royale.json');
+    expect(battleExportFilename('1️⃣ round')).toBe('1-round.json');
+  });
+
+  it('drops the mark a spacing accent decomposes into rather than keeping it after a hyphen', () => {
+    expect(battleExportFilename('Rock´n´Roll')).toBe('rock-n-roll.json');
+    expect(battleExportFilename('¨Wars')).toBe('wars.json');
+  });
+
+  it('falls back to untitled-battle for a name made only of combining marks', () => {
+    expect(battleExportFilename('\u0301\u0302')).toBe('untitled-battle.json');
+  });
+
+  it('drops a whole letter + mark cluster the 60-code-point cut would split', () => {
+    // 59 × क then कि: the cut keeps a 60th क whose vowel sign ि falls past it, so that क goes too.
+    const name = `${'क'.repeat(59)}कि`;
+    expect(battleExportFilename(name)).toBe(`${'क'.repeat(59)}.json`);
   });
 });
