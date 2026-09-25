@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 5.6: Battle Export Dialog
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -129,6 +129,10 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
       and `/battle/new` 309.3 KB against 310 on `main` at `bf62145`.
     - If the story cannot fit, **stop and flag it**. Do not raise the budget and do not trim
       unrelated code to make room.
+
+    *(2026-09-25: the absolute budget was retired by #81 in favour of the growth gate, with the
+    owner's approval; AC10 is met as "`bundle:check` passes and the growth is baselined in this
+    PR" — /battle +0.6 KB, /battle/new +0.6 KB.)*
 
 11. **Tests prove the file, not just the calls** (AR-44).
     - **Unit:** `battleExportFilename` covers the cases in FD7. `exportBattleToFile` uses a real
@@ -303,14 +307,14 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
         section holding FD6's workspace-from-a-dirty-battle note, FD1's in-component serializer
         construction, and anything the implementation surfaces.
 
-- [ ] **Task 9: Gate (AC: 10, 12). ⛔ HALTED — see Dev Agent Record.**
+- [x] **Task 9: Gate (AC: 10, 12).** *(2026-09-25: resolved — see Dev Agent Record resolution
+      note. Original HALT text kept below for history.)*
   - [x] Record `/battle` and `/battle/new` **before** (309.6 / 309.3 KB on `bf62145`) and after.
         After: `/battle` **310.1 KB (317556 bytes gzip), 116 bytes OVER the 310 KB / 317440-byte
         budget**; `/battle/new` 309.9 KB (0.1 KB headroom).
-  - [ ] `npm run ci:dev`, **redirected to a file, not piped**, with the real exit code recorded.
-        Never run `npm run ci`. **Not run to completion — see HALT below**; every stage through
-        `test:coverage` was run and is green (see Dev Agent Record), but `bundle:check` itself
-        fails, which is `ci:dev`'s own gate failing by construction.
+  - [x] `npm run ci:dev`, **redirected to a file, not piped**, with the real exit code recorded.
+        Never run `npm run ci`. *(2026-09-25: run to completion this session — `ci.log`, exit
+        0. See Dev Agent Record.)*
   - [x] `spec:check` resolves every ID you cite (`FR-6.1`, `FR-6.4`, `FR-7.13`, `AR-2`, `AR-12`,
         `AR-27`, `AR-31`, `AR-44`, `Decision E.5`, `Decision F.1`, `Story 5.x` …). `npm run
         spec:check` passes clean (277/277 cited ids resolve).
@@ -647,7 +651,9 @@ gate below. This story adds **no** `@gol/domain` barrel export.
 
 ### Agent Model Used
 
-Claude Sonnet 5 (claude-sonnet-5)
+Claude Sonnet 5 (claude-sonnet-5). Tasks 1–8 and the initial Task 9 attempt (through the HALT) were
+one Sonnet session; the 2026-09-25 completion of Task 9 (baseline refresh, `ci:dev`, story
+close-out) is a **second, separate Sonnet session** resuming the halted run from the synced branch.
 
 ### Debug Log References
 
@@ -662,11 +668,39 @@ Claude Sonnet 5 (claude-sonnet-5)
   untouched by this story) — confirmed CPU-contention flakes, both by re-running the coverage gate
   clean and by running those two files alone (128/128 passing in 13s).
 - `npm run build:standalone` — green.
-- `npm run bundle:check` — **FAILS**: `/battle` measures 310.1 KB gzip (317,556 bytes) against the
-  310 KB (317,440-byte) budget — **116 bytes over**. `/battle/new` measures 309.9 KB (0.1 KB
-  headroom). See "HALT" below.
-- `npm run bench` / `bench:check` / `e2e:chromium` — **not run**: the story's own stop rule (AC10,
-  FD1) says stop at the bundle gate rather than continue the chain past a failing `bundle:check`.
+- `npm run bundle:check` — **FAILED** on `main`'s absolute-budget gate: `/battle` measured 310.1 KB
+  gzip (317,556 bytes) against the 310 KB (317,440-byte) budget — **116 bytes over**. `/battle/new`
+  measured 309.9 KB (0.1 KB headroom). See "HALT" below. **Superseded 2026-09-25**: PR #81 (owner-
+  approved) replaced the absolute ceiling with the growth gate in
+  `scripts/check-bundle-size.mjs`/`scripts/bundle-baselines.json`; see the resolution note below.
+- `npm run bench` / `bench:check` / `e2e:chromium` — **not run this session**: the story's own stop
+  rule (AC10, FD1) said stop at the bundle gate rather than continue the chain past a failing
+  `bundle:check`. Completed in the 2026-09-25 resumption session below.
+
+**2026-09-25 resumption session (second Sonnet session, resuming the halt above):**
+
+- Branch synced with `main` (merge commit `c128c99`) after PR #80 (Story 4.21) and PR #81 (the
+  bundle growth-ratchet gate) both merged. `scripts/bundle-baselines.json` on `main` at that point
+  was measured **without** this story's code (baseline `/battle` 309.5 KB / 316,924 bytes,
+  `/battle/new` 309.3 KB / 316,721 bytes — same numbers as the story's own "before" measurement,
+  modulo the 0.1 KB rounding already noted in FD1).
+- `npm run build:standalone` — green (Turbo cache hit; no code changed since the prior build).
+- `npm run bundle:check` — **PASSES** against the growth gate: `/battle` 310.1 KB vs. baseline
+  309.5 KB (**+0.6 KB**, within the 8 KB allowance); `/battle/new` 309.9 KB vs. baseline 309.3 KB
+  (**+0.6 KB**). `/` +0.1 KB, `/organisms` +0.1 KB, `/settings` +0.2 KB — all pre-existing drift
+  from `main`, not new in this story.
+- `npm run bundle:baseline` — refreshed `scripts/bundle-baselines.json` (tool-written; not hand-
+  edited): `/` 341838→341942, `/battle` 316924→317553, `/battle/new` 316721→317350, `/organisms`
+  306101→306167, `/settings` 300846→301030 (bytes gzip). Re-ran `bundle:check` after: all five
+  routes read `+0.0 KB`.
+- `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0**. All stages green: `typecheck`, `lint`,
+  `format:check`, `spec:check`, `boundary:check`, `test:coverage` (134 web test files / 2212 tests
+  passed; all `@gol/*` packages green — no flakes this run), `build:standalone`, `bundle:check`
+  (all 5 routes within the 8 KB growth allowance), `bench` + `bench:check` (9.435 ms headroom,
+  56.6% of the 16.667 ms frame budget), `e2e:chromium` (278 passed, 1 pre-existing conditional
+  skip unrelated to this story — `deleteBattle.spec.ts:113` touch-pointer case — 0 failures). The
+  new `export battle (Story 5.6)` describe block in `e2e/battleRoute.spec.ts` ran all 6 cases
+  green, including the axe scan. `ci.log` kept locally as an untracked artifact, not committed.
 
 ### Completion Notes List
 
@@ -682,7 +716,8 @@ Claude Sonnet 5 (claude-sonnet-5)
   `BattlePage.export.test.tsx` (new file, 11 tests — the `BattlePage.modeToggle.test.tsx`
   file-hoisted-`vi.mock` precedent, this time mocking `@/lib/export/battleExporter`); two existing
   `BattlePage.test.tsx` button-count assertions updated (+1 for the new Export Battle button);
-  `e2e/battleRoute.spec.ts` gained `test.describe('export battle (Story 5.6)')` (7 cases) and its
+  `e2e/battleRoute.spec.ts` gained `test.describe('export battle (Story 5.6)')` (6 cases — the
+  original count here of "7" was a miscount, corrected in the 2026-09-25 resolution below) and its
   existing "Tools section" test was updated to expect both buttons. All of the above pass.
 - **⛔ HALT at Task 9 (AC10): `/battle` is 116 bytes (0.1 KB) over its 310 KB bundle budget.**
   Per the story's own stop rule ("If the story cannot fit, stop and flag it. Do not raise the
@@ -711,6 +746,28 @@ Claude Sonnet 5 (claude-sonnet-5)
     "Deferred from: Story 5-6" section (`deferred-work.md`) and here.
   - Everything up to and including `test:coverage` is green; the working tree is NOT committed.
 
+- **✅ RESOLUTION (2026-09-25, second Sonnet session).** The HALT above is kept verbatim for
+  history; it is not superseded by editing it. What changed: with the owner's explicit approval,
+  `chore/bundle-growth-ratchet` (PR #81) replaced `check-bundle-size.mjs`'s absolute per-route
+  budget with a growth gate (8 KB gzip allowance past a committed baseline in
+  `scripts/bundle-baselines.json`), landed on `main` and merged into this branch (`c128c99`). None
+  of the three code trims from the HALT were reverted — they stand as real quality improvements,
+  independent of the gate change. This session:
+  1. Re-ran `npm run build:standalone` (Turbo cache hit — no source changed since the branch sync)
+     and `npm run bundle:check`: passes. `/battle` +0.6 KB, `/battle/new` +0.6 KB over the `main`
+     baseline (309.5 / 309.3 KB) — both well inside the 8 KB allowance, and both driven entirely by
+     this story's own code, not drift.
+  2. Ran `npm run bundle:baseline` to refresh `scripts/bundle-baselines.json` to this story's
+     measured numbers (see the Debug Log entry above for the exact byte diff). The file is tool-
+     written; no number was hand-edited.
+  3. Ran `npm run ci:dev > ci.log 2>&1; echo $?` to completion: **exit 0**, no flakes, no HALT.
+  4. Appended a dated annotation under AC10 (kept the AC text unchanged) recording that the
+     absolute-budget bullets are retired in favour of the growth gate, per project-context's rule.
+  5. Cleared Task 9's HALT marker and ticked its remaining `ci:dev` subtask.
+  - The Task 8 `deferred-work.md` open item this HALT pointed at ("land the growth-ratchet gate
+    first, or accept a specific trim") is itself already marked ✅ RESOLVED at `deferred-work.md:408`
+    by PR #81 — no further edit needed there.
+
 ### File List
 
 **New:**
@@ -733,11 +790,34 @@ Claude Sonnet 5 (claude-sonnet-5)
   button-count test updated; two new imports)
 - `apps/web/lib/export/exportWorkspaceToFile.ts` (header comment only)
 - `packages/persistence/src/workspaceSerializer.ts` (JSDoc comment only)
+- `scripts/bundle-baselines.json` (refreshed via `npm run bundle:baseline`, tool-written, to this
+  story's measured first-load gzip sizes — see Change Log)
 - `docs/implementation-artifacts/deferred-work.md` (5.4 hand-off entry closed; new "Deferred from:
   Story 5-6-battle-export-dialog" section)
 - `docs/implementation-artifacts/5-6-battle-export-dialog.md` (this file: frontmatter
   `baseline_commit`, Status, Tasks/Subtasks, Dev Agent Record)
-- `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog: in-progress`)
+- `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog: in-progress` →
+  `review`)
+
+### Change Log
+
+- 2026-09-24 — Story 5.6 implemented (Tasks 1–8): the export helpers (`battleExportFilename`,
+  `exportBattleToFile`, `battleExporter`), `<ExportBattleDialog>`, the `saveBattle`/`persistBattle`
+  split, `<BattlePage>`'s export lifecycle (choose → close → act-on-exit, FD2), the Tools-section
+  Export Battle button, and the `deferred-work.md` 5.4 hand-off closure. **Halted at Task 9**:
+  `/battle` measured 116 bytes over the then-absolute 310 KB bundle budget after three rounds of
+  in-scope trimming; per the story's own stop rule, the run stopped rather than raising the budget
+  or trimming unrelated code. Not committed to Status `review`.
+- 2026-09-25 — `chore/bundle-growth-ratchet` (PR #81, owner-approved) replaced the absolute
+  per-route bundle budget with the 8 KB growth gate against a committed baseline. Landed on `main`
+  independently of this story and merged into this branch (`c128c99`).
+- 2026-09-25 — Story 5.6 Task 9 completed (second Sonnet session, resuming the halt): refreshed
+  `scripts/bundle-baselines.json` via `npm run bundle:baseline` (`/battle` +0.6 KB, `/battle/new`
+  +0.6 KB over the pre-story `main` baseline, both within the 8 KB allowance); ran `npm run ci:dev`
+  to completion, exit 0, no flakes (134 web test files / 2212 tests, all `@gol/*` packages, 278
+  e2e cases including the new 6-case `export battle (Story 5.6)` describe, `bench:check` 56.6%
+  headroom); appended a dated AC10 annotation recording the gate change; cleared Task 9's HALT
+  marker (history kept, not deleted). Status → review.
 
 Dev Model: sonnet   # follows existing patterns (UnsavedChangesDialog idiom, useLeaveGuard lifecycle, 5.5's lib/export seam); every structural choice (lazy boundary, save-then-export, id return, act-on-exit) is pre-decided in FD1–FD9, so nothing is left to architect.
 
