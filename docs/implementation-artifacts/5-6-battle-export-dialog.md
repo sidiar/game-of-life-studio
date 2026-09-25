@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 5.6: Battle Export Dialog
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -385,6 +385,15 @@ _Third code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptanc
 - [x] [Review][Patch] Story records: "the remaining 5 were not independently re-verified" — they are the second code review's 5 tests (2225 + 5 + 6 = 2236); "see Debug Log below" → above (again); the truncation test was also green before the fourth-session fix; an empty code span where literal joiners were written [this file]
 - [x] [Review][Defer] A 60-code-point cut through a virama conjunct keeps a dangling half (`…क्` + ZWJ + `ष` cut at the ZWJ leaves `क्`, and the same without a ZWJ) — the cluster-drop rule only looks at a following mark; a grapheme-cluster cut (`Intl.Segmenter`, Unicode 15.1 Indic conjunct rules) would cover both [apps/web/lib/export/battleExportFilename.ts:truncateSlug] — deferred, pre-existing
 
+### Review Findings — final narrow pass (2026-09-25, Opus)
+
+_Scope, set by the owner: `3a1283c..f2445b2` only (the Hangul-filler decision (b) commit); no re-audit of the rest of `battleExportFilename.ts`, no new Unicode categories (those belong to the deferred grapheme-cluster filename item)._
+
+No findings on the change itself: the four code points (U+115F, U+1160, U+3164, U+FFA0) are correct and byte-checked as `\u` escape text (no literal filler in either source file); they are dropped right after NFKD, before every other step, so a filler-only name reaches the `untitled-battle` fallback and no invisible character or hyphen remains; the 4 new tests assert what they claim (38 in the file, green); the records (AC5/FD7 annotation, ticked item, both ci:dev runs, 38 / 2246) are accurate. Two mechanical patches:
+
+- [x] [Review][Patch] The new JSDoc held the literal text `\u2014` where an em dash was meant; now `—` [apps/web/lib/export/battleExportFilename.ts]
+- [x] [Review][Patch] The FD7 test table's two examples held literal U+3164 / U+115F glyphs; now written as `\u3164` / `\u115F` escapes, matching the tests [this file]
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -638,8 +647,8 @@ Updated test cases (extending the tables above):
 |---|---|
 | a name made of a single Hangul filler (one case per filler: U+115F, U+1160, U+3164, U+FFA0) | `untitled-battle.json` |
 | a name made of a mix of all four Hangul fillers | `untitled-battle.json` |
-| a Hangul filler embedded inside a Hangul name, e.g. `'전ㅤ투'` | `전투.json` (filler dropped, no invisible character or stray hyphen) |
-| a Hangul filler embedded mid-word in a Latin name, e.g. `'Triᅟple Threat'` | `triple-threat.json` (filler dropped, no invisible character or stray hyphen) |
+| a Hangul filler embedded inside a Hangul name, e.g. `'전\u3164투'` | `전투.json` (filler dropped, no invisible character or stray hyphen) |
+| a Hangul filler embedded mid-word in a Latin name, e.g. `'Tri\u115Fple Threat'` | `triple-threat.json` (filler dropped, no invisible character or stray hyphen) |
 
 **FD8: Focus lands on EXPORT BATTLE after the operation settles, not at exit.** The button wears
 `disabled={isSaving}`, the visible half of the edit lock like every other sidebar control. If focus
@@ -1350,6 +1359,9 @@ answered the third code review's Hangul-filler `[Review][Decision]` item with op
   worktree (load average 19–29 on 6 cores); second run, no contention, exit 0 clean (2246/2246 web
   tests, 278/279 e2e — 1 pre-existing unrelated skip, `bench:check` 51.9% headroom). Status →
   review.
+- 2026-09-25 — Final narrow review (Opus), scoped by the owner to `3a1283c..f2445b2`: no findings
+  on the Hangul-filler change; 2 mechanical patches (a literal `\u2014` in the new JSDoc → `—`;
+  literal filler glyphs in the FD7 test table → `\u` escapes). `ci:dev` exit 0. Status → done.
 
 Dev Model: sonnet   # follows existing patterns (UnsavedChangesDialog idiom, useLeaveGuard lifecycle, 5.5's lib/export seam); every structural choice (lazy boundary, save-then-export, id return, act-on-exit) is pre-decided in FD1–FD9, so nothing is left to architect.
 

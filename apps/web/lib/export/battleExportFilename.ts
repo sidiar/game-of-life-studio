@@ -57,7 +57,7 @@ const MAX_SLUG_CODE_POINTS = 60;
  * are Unicode *letters* (`\p{L}`), not marks or format characters, so nothing else in this pipeline
  * removes them, and NFKD collapses U+3164/U+FFA0 into U+1160 without making any of them visible.
  * A filler-only name would otherwise survive as an invisible slug and skip the `untitled-battle`
- * fallback AC5 promises. Every other Unicode default-ignorable code point is accepted as is \u2014 this
+ * fallback AC5 promises. Every other Unicode default-ignorable code point is accepted as is — this
  * is a narrow, named fix, not a general default-ignorable strip. Written as `\u` escapes, never the
  * literal glyphs, matching the rest of this file's convention.
  */
