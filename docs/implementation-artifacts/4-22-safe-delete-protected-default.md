@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -686,7 +686,7 @@ test pins focus on "Back to Library", and every story section that named Save no
 with its alert, Delete is disabled after GONE, focus goes to Back. `npm run ci:dev` exit 0 (web
 136 files / 2301 tests, e2e Chromium 288). One decision, no patches, ten dismissed.
 
-- [ ] [Review][Decision] **The held-Enter chain does not end at Back**
+- [x] [Review][Decision] **The held-Enter chain does not end at Back**
   [`useOrganismDelete.ts:194-219,:302`, `OrganismEditorModal.tsx:781-792`,
   `useOrganismEditorModal.ts:214-221`, `OrganismLibrary.tsx:303-308,:470-474`] — the Back
   decision's own premise is that an Enter still held after the confirmation auto-repeats into
@@ -712,6 +712,9 @@ with its alert, Delete is disabled after GONE, focus goes to Back. `npm run ci:d
   **(c)** hold the restore itself until `keyup` when a key is down at exit time (needs a
   keydown/keyup tracker for the window's life; heavier than (b) for the same cover). Left for
   Sidiar; nothing changed here.
+  **Resolved 2026-09-25 (Sidiar): (a)**: accepted as built. Recorded for 4.23 in
+  `deferred-work.md`: the Back that follows the GONE alert must stay a plain close with no prompt.
+  No code change.
 - Dismissed (10): the Blind Hunter's "no test presses Enter after the fade" (jsdom does not
   synthesise Enter→click on a button, so the only meaningful test is of a guard, which is the
   decision above); "no hook-level test for the renamed intent" (settled by the third pass: no
@@ -1302,6 +1305,9 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   close-restore lands on Edit/Create) — with options (a) accept and note for 4.23, (b) a
   repeat-key swallow in the restore effect, (c) hold the restore until keyup. No patches, no
   code change; `npm run ci:dev` exit 0. Status → in-progress until the decision is recorded.
+- 2026-09-25: Sidiar resolved the fourth-pass decision as (a): the held-Enter chain past Back is
+  accepted as built, and 4.23 must keep the post-GONE Back a plain close with no prompt (recorded
+  in `deferred-work.md`). No code change; no review decision is open. Status → done.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none

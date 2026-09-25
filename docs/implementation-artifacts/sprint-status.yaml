@@ -137,7 +137,7 @@ development_status:
   4-19-usage-rule-reference-derivations: done
   4-20-usage-visibility-ui: done
   4-21-delete-integrity-blocks: done
-  4-22-safe-delete-protected-default: in-progress
+  4-22-safe-delete-protected-default: done
   4-23-editor-unsaved-changes-scope: backlog
   4-24-edit-organism-from-battle: backlog
   4-25-create-organism-from-battle: backlog

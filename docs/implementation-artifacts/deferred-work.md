@@ -3194,6 +3194,15 @@ been answered yet:
   Findings; whichever lands, the disabled control rides on the same cell as the sentence.
   **Resolved 2026-09-25 (Sidiar): (b)**: left to the 4.23 editor-state pass. Clearing the GONE
   alert, and with it the disabled Delete, on a successful Save is part of that item.
+- **For Story 4.23: the Back after a GONE alert must stay a plain close, with no prompt** (Story 4.22
+  fourth-pass review, resolved (a) by Sidiar, 2026-09-25). After the "no longer exists" alert,
+  focus goes to the editor's Back (`editor-back`) so that an Enter still held from the
+  confirmation cannot repeat into Save. The repeat can still travel Back, then the editor-close
+  restore onto the card's Edit or Create, and open an editor nobody asked for. That was accepted
+  because nothing in the chain writes on its own. 4.23's unsaved-changes prompt must not sit in
+  front of this Back (the same exemption `closeEditor` carries at `OrganismLibrary.tsx:470-474`),
+  or the held Enter would answer the prompt. If that stops holding, the fix on file is to swallow
+  `event.repeat` keydowns after the restore's `.focus()` until `keyup`.
 - **The `useOrganismDelete` latch and `pending` are released at the dialog's EXIT, not in the
   writer's `finally` (Task 2 wording).** The Story 4.18 gate review's finding applies unchanged:
   `setDialogOpen(false)` only starts the ~195 ms fade, and a dialog re-enabled for it would take a
