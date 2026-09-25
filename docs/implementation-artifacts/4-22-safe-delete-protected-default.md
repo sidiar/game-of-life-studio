@@ -455,7 +455,7 @@ Reviewed on **Fable** against an **Opus** implementation (2026-09-25), via three
 layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus the reviewer's own real-browser
 probe of the one path no test covered.
 
-- [ ] [Review][Decision] **Editor-origin Confirm on a record already deleted in another tab leaves
+- [x] [Review][Decision] **Editor-origin Confirm on a record already deleted in another tab leaves
   the editor open on a ghost** — AC6's "no longer exists" case says only "the write is skipped and
   the Library reloads; no toast". For `origin: 'editor'` the code does exactly that
   (`useOrganismDelete.ts`, the `freshRecord === undefined` branch): no close, no toast, no alert,
@@ -467,6 +467,13 @@ probe of the one path no test covered.
   organism no longer exists…"), which is a second unspecced copy line beside FD12's; **(c)** leave
   as built and record it as an FD11-class residual (cross-tab deletion mid-edit). Left for Sidiar;
   nothing changed here.
+  **Resolved 2026-09-25 (Sidiar): (b)**: keep the editor open and publish an in-editor alert.
+- [ ] [Review][Patch] **Build the (b) resolution above** [`apps/web/lib/organisms/useOrganismDelete.ts`]:
+  for `origin: 'editor'`, when Confirm's re-read finds the record gone, skip the write (as now),
+  reload the Library, do not close the editor, and publish an in-editor `role="alert"` through the
+  same `SaveErrorLine` surface FD12's failure uses. Copy (new, beside `ORGANISM_DELETE_FAILED` in
+  `saveOutcome.ts`): `This organism no longer exists. It may have been deleted in another tab.`
+  The card origin is unchanged. Add hook and Library tests for the editor origin of this branch.
 - [x] [Review][Patch] **The editor is handed back DEAD after Cancel/Escape/OK on a dialog stacked
   over it (first delete of a page session)** [`apps/web/lib/useInertBackground.ts`] — measured in
   Chromium: after Cancel on the editor-origin confirmation, the editor's portal (and the page under
@@ -858,6 +865,9 @@ touched `components/organisms/**`.
 2. **FD12**: the delete-failure sentence
    `This organism could not be deleted. Nothing was changed — try again.` has no spec source. Is it
    acceptable as written?
+
+**Answered 2026-09-25 (Sidiar):** FD13: the default stands; both items move to the next story
+that changes card content. FD12: the sentence is accepted as written.
 
 ## Dev Agent Record
 

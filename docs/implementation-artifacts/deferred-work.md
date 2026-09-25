@@ -756,7 +756,7 @@ Review Findings; these are the items consciously left open.
   2026-09-24):** 4.21 added the Delete button ONLY — no reshape of the stat block or the rules
   line. **Pick this up in Story 4.22**, which renders Delete on every card and is the next story to
   touch `<OrganismCard>`'s content — still together with the card's stat block below.
-  **Re-pointed again (Story 4.22, 2026-09-25, FD13 — default, owner question open):** 4.22 touches
+  **Re-pointed again (Story 4.22, 2026-09-25, FD13 — default, confirmed by Sidiar):** 4.22 touches
   the card's ACTION ROW only (Delete on every card, plus the protected note line) and no 4.22 AC
   covers the rules sentence; no later Epic 4 story touches the card (4.23–4.26 are editor- and
   battle-side). **Pick this up in the next card-content change, or the Epic 4 UX reconciliation
@@ -793,7 +793,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   did not reach the card at all, so the stat block is still where 4.11 left it. **Re-pointed again
   (Story 4.21, 2026-09-24):** 4.21 added the Delete button only, and left the stat cells' markup
   untouched. **Pick this up in Story 4.22**, and decide the cell semantics once for all three rows.
-  **Re-pointed again (Story 4.22, 2026-09-25, FD13 — default, owner question open):** 4.22 changed
+  **Re-pointed again (Story 4.22, 2026-09-25, FD13 — default, confirmed by Sidiar):** 4.22 changed
   only the action row and added the protected note; the stat cells' markup is untouched and no 4.22
   AC covers it. **Pick this up in the next card-content change, or the Epic 4 UX reconciliation
   touch**, together with the rules sentence above.
@@ -3071,7 +3071,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
 - The two card entries already annotated "4.21/4.22" (`:743-755` the rules-preview sentence,
   `:775-788` the stat-cell semantics) are re-pointed to **Story 4.22 only**: this story adds the
   Delete button alone and does not reshape the card's stat block or add the natural-language rules
-  sentence. **Re-pointed again by Story 4.22 (2026-09-25, FD13, owner question open):** 4.22
+  sentence. **Re-pointed again by Story 4.22 (2026-09-25, FD13, confirmed by Sidiar):** 4.22
   touched the action row only; both entries now point at the next card-content change or the
   Epic 4 UX reconciliation touch — see the entries themselves.
 
@@ -3149,6 +3149,9 @@ Both carry a written default, implemented as stated:
    the next card-content change or the Epic 4 UX touch. Should either be built here instead?
 2. **FD12**: the delete-failure sentence `This organism could not be deleted. Nothing was changed —
    try again.` has no spec source. Is it acceptable as written?
+
+**Answered 2026-09-25 (Sidiar):** FD13, the default stands: both entries go to the next story
+that changes card content. FD12, the sentence is accepted as written.
 
 ## Deferred from: code review of 4-22-safe-delete-protected-default (2026-09-25)
 
