@@ -2096,10 +2096,14 @@ describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () 
     await waitFor(() => expect(countBadge()).toHaveTextContent('6 Organisms'));
     // Second review decision (a): the editor's Delete is disabled while the alert shows — its only
     // outcome would be this alert again, and a Cancel would have dismissed it. A disabled button
-    // cannot hold focus, so focus goes to Save, the editor's primary action (a re-create).
+    // cannot hold focus, so focus goes to Back (Sidiar, 2026-09-25) — not Save: an Enter held on
+    // the confirmation auto-repeats into the focused control after the fade, and on Save that
+    // re-creates the record the alert just reported gone; on Back it only closes the editor.
     expect(within(editor).getByRole('button', { name: 'Delete Organism' })).toBeDisabled();
     await waitFor(() =>
-      expect(document.activeElement).toBe(within(editor).getByRole('button', { name: 'Save' })),
+      expect(document.activeElement).toBe(
+        within(editor).getByRole('button', { name: 'Back to Library' }),
+      ),
     );
   });
 

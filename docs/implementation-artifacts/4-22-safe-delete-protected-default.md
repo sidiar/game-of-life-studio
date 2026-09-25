@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -114,8 +114,10 @@ touching a file. Five failures here compile and pass tests anyway, and each is s
      and reports `ORGANISM_DELETE_GONE` in-editor through FD12's `SaveErrorLine` alert; the card
      origin stays silent, its card is simply gone after the reload. Second-pass decision (a),
      Sidiar 2026-09-25: while that alert shows, the editor's Delete is `disabled` and described by
-     the alert; a disabled button cannot hold focus, so focus lands on the editor's Save through the
-     `editor-save` restore intent.)*
+     the alert; a disabled button cannot hold focus, so focus lands on the editor's Back through the
+     `editor-back` restore intent — Back, not Save (Sidiar 2026-09-25): an Enter held on the
+     confirmation auto-repeats into the focused control after the fade, and on Save that
+     re-creates the record the alert just reported gone.)*
    - If the fresh read shows it is now `protected`, nothing is deleted. That is unreachable (ids do
      not change), but the verdict is total, so the handler must not assume otherwise.
 
@@ -217,7 +219,7 @@ touching a file. Five failures here compile and pass tests anyway, and each is s
       `confirming` precedent).
     - `pending` is the UI state; the **latch ref** is the authority.
     - The restore intent is `{ kind: 'card', organismId } | { kind: 'editor' } | { kind: 'create' }
-      | null` — plus `{ kind: 'editor-save' }` since the second-pass decision (a): the editor-origin
+      | null` — plus `{ kind: 'editor-back' }` since the second-pass decision (a): the editor-origin
       gone branch, whose Delete is disabled on the same commit and cannot take focus.
   - [x] `requestDelete(organism, origin)` works as follows:
     - It is synchronous. Set the window authority ref **first**, which is 4.21's
@@ -256,7 +258,8 @@ touching a file. Five failures here compile and pass tests anyway, and each is s
         Its targets:
     - card → `[data-delete-organism-id="…"]`;
     - editor → `[data-editor-delete-organism]`;
-    - editor-save → `[data-editor-save]` (second-pass decision (a));
+    - editor-back → `[data-editor-back]` (second-pass decision (a); Back, not Save, per Sidiar
+      2026-09-25);
     - create → `[data-create-organism]`.
 
     All four are looked up by DOM query with `CSS.escape`, never with a captured element (FD8).
@@ -637,7 +640,7 @@ not re-reviewed. One decision, three patches, three dismissed.
   Left for Sidiar; nothing changed here.
   **Resolved 2026-09-25 (Sidiar): (b)**: left to the 4.23 editor-state pass, as already deferred
   in `deferred-work.md`. No code change.
-- [ ] [Review][Patch] **Focus after the GONE alert goes to Back, not Save (Sidiar, 2026-09-25)**
+- [x] [Review][Patch] **Focus after the GONE alert goes to Back, not Save (Sidiar, 2026-09-25)**
   [`apps/web/lib/organisms/useOrganismDelete.ts`, `OrganismEditorModal.tsx`]: when the editor's
   Delete is disabled by the GONE alert, the restore target is the editor's Back button instead of
   Save. Reason: an Enter held on the confirmation auto-repeats into the focused control after the
@@ -1004,7 +1007,8 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 - **Controller** `lib/organisms/useOrganismDelete.ts`: one window cell (`confirm` | `blocked`,
   held through the fade), `dialogOpen`, `pending` + a synchronous latch ref, the window authority
   ref (4.21's `deleteWindowRef`), a restore-intent ref (`card` / `editor` / `create`, and since
-  the second-pass decision (a) `editor-save`), a queued
+  the second-pass decision (a) `editor-back` — originally `editor-save`, moved to Back by Sidiar
+  on 2026-09-25), a queued
   Confirm outcome ref, and a held-toast ref for the editor origin. `useInertBackground` is called
   above the focus effect (order load-bearing). Click-time verdict from the Library's settled data;
   Confirm re-reads both lists in one `Promise.all` (no `.catch`), rebuilds both indexes, re-runs
@@ -1120,6 +1124,14 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   unchanged (Create). Tests: editor ("is disabled while the record-gone alert shows, and only for
   that sentence", red before the change) and the Library's editor-origin gone test (Delete disabled,
   focus on Save — red before the change, it previously asserted focus on Delete).
+- ✅ Resolved review finding [Patch]: **focus after the GONE alert goes to Back, not Save**
+  (Sidiar, 2026-09-25). The `editor-save` restore intent and `data-editor-save` key are replaced by
+  `editor-back` / `data-editor-back` on the editor's `BackButton`; nothing else used the Save ones,
+  so they are gone. Reason recorded in the hook and the editor: an Enter held on the confirmation
+  auto-repeats into the focused control after the ~195 ms fade, and on Save that re-creates the
+  record the alert just reported gone; Back only closes the editor. Test: the Library's
+  editor-origin gone test now pins focus on "Back to Library" (red before the change, focus was on
+  Save). The entry above, which names Save, is kept as the history of the (a) build.
 - **Owner questions open, defaults implemented**: FD13 (the card-content deferrals re-pointed to the
   next card-content change / Epic 4 UX touch) and FD12 (the failure sentence as written). Both are
   also listed at the end of this story's `deferred-work.md` section.
@@ -1223,6 +1235,15 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 - 2026-09-25: Sidiar resolved the third-pass decision as (b): the disabled Delete under a stale
   GONE alert after a re-creating Save goes to the 4.23 editor-state pass (recorded in
   `deferred-work.md`). No code change; no review decision is open. Status → done.
+- 2026-09-25: Addressed code review findings — 1 item resolved: Sidiar's focus decision. After
+  the record-gone alert focus goes to the editor's Back (`editor-back` restore intent,
+  `data-editor-back` key), not Save (`editor-save` / `data-editor-save` removed). Library test
+  updated; story Task 2 / AC6 / Implementation Plan text updated. Status → review.
+  - `npm run ci:dev` redirected to a file, `$?` read directly: **exit 0** on the first run —
+    typecheck ✓; lint 0 errors, the 1 pre-existing `BattleGallery.tsx:248` warning; format ✓;
+    spec:check ✓ 277 ids; boundary ✓; coverage — web 136 files / 2301 tests, domain 212,
+    simulation 408, persistence 103, test-utils 95; build ✓; bundle ✓ +0.0 KB on every route, no
+    baseline refresh; bench 8.106 ms / 16.667 ms; e2e Chromium 288 passed.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none

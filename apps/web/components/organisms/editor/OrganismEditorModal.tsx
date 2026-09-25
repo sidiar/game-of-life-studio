@@ -786,6 +786,10 @@ export default function OrganismEditorModal({
             // styled button carries no `transition` of its own (only the `:hover`/`:focus-visible`
             // pseudo-classes do), so — unlike Save's MUI `Button` — there is no mid-fade axe trap
             // to override here.
+            // Story 4.22: the focus-restore key after the record-gone alert, which disables the
+            // editor's Delete (`useOrganismDelete`'s `editor-back` restore intent). Back, not Save:
+            // a held Enter auto-repeats into the focused control after the confirmation's fade.
+            data-editor-back=""
           >
             {/* Decorative glyph; the accessible name must be exactly the label — "left arrow back
                 to library" is noise. The house `←`, not the AC's `◄` ASCII stand-in (FD3). */}
@@ -810,9 +814,6 @@ export default function OrganismEditorModal({
               disabled={isSaving}
               sx={SAVE_SX}
               ref={saveButtonRef}
-              // Story 4.22: the focus-restore key after the record-gone alert, which disables the
-              // editor's Delete (`useOrganismDelete`'s `editor-save` restore intent).
-              data-editor-save=""
             >
               Save
             </Button>

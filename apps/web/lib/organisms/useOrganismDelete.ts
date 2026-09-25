@@ -63,7 +63,7 @@ interface DeleteWindow {
 type RestoreIntent =
   | { kind: 'card'; organismId: string }
   | { kind: 'editor' }
-  | { kind: 'editor-save' }
+  | { kind: 'editor-back' }
   | { kind: 'create' }
   | null;
 
@@ -212,8 +212,8 @@ export function useOrganismDelete({
           )
         : intent.kind === 'editor'
           ? document.querySelector<HTMLElement>('[data-editor-delete-organism]')
-          : intent.kind === 'editor-save'
-            ? document.querySelector<HTMLElement>('[data-editor-save]')
+          : intent.kind === 'editor-back'
+            ? document.querySelector<HTMLElement>('[data-editor-back]')
             : null;
     (target ?? document.querySelector<HTMLElement>('[data-create-organism]'))?.focus();
   }, [deleteWindow]);
@@ -295,9 +295,11 @@ export function useOrganismDelete({
           // origin keeps the editor open (review decision (b)) and is told why in-editor at the
           // exit, so its next Save is a deliberate re-create. Its Delete is disabled while that
           // alert shows (second review decision (a)) and a disabled button cannot take focus, so
-          // focus goes to the editor's Save instead.
+          // focus goes to the editor's Back (Sidiar, 2026-09-25) — not Save: an Enter held on the
+          // confirmation auto-repeats into the focused control after the fade, and on Save that
+          // re-creates the record the alert just reported gone; Back only closes the editor.
           outcome.gone = true;
-          restoreRef.current = origin === 'card' ? { kind: 'create' } : { kind: 'editor-save' };
+          restoreRef.current = origin === 'card' ? { kind: 'create' } : { kind: 'editor-back' };
         } else {
           const verdict = organismDeleteVerdict(
             organismId,
