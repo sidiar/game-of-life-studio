@@ -4,7 +4,7 @@ baseline_commit: 747727b
 
 # Story 5.7: Migration Registry
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -132,7 +132,8 @@ reviewer can check each item on its own.
     2. Parse it. If it is not JSON or not an object, throw `CorruptDataError('gol:schema', …)`.
     3. Assemble the at-rest document: `{ formatVersion, battles: <raw gol:battles collection>,
        organisms: <raw gol:organisms collection> }`. Use the raw JSON with no Zod parse; migration
-       runs before validation at this boundary too.
+       runs before validation at this boundary too. *(Implemented as memoized LAZY getters, not an
+       eager read — see the Dev Agent Record's FD6 deviation; review 2026-09-25 confirmed it.)*
     4. Call `migrator(doc, 'at-rest')`.
     5. If it returns the input by reference, return. This is the only path reachable today.
     6. Otherwise take the write-back path (3.2).
@@ -192,7 +193,8 @@ reviewer can check each item on its own.
 
 - [x] **Task 5: records** (AC: 7)
   - [x] 5.1 In `deferred-work.md`, add a "Deferred from: Story 5-7" section recording FD1–FD9
-    variances. Strike and annotate (never delete) the entries this story discharges or re-points
+    variances. Strike the entry this story discharges and annotate (never delete, never strike)
+    the ones it only re-points — a struck entry reads as resolved, and the re-pointed ones stay open
     (FD7): the strip-vs-strict entry (`:27`), the battle `schemaVersion` entry (`:25`), the
     `colorToken` `.max()` entry (`:60`), the name `.min(1)` entries (`:103`, `:1114`), the summary
     100-vs-120 entry (`:1577`), and the Story 4.17 restamp note (`:2422`).
@@ -202,6 +204,124 @@ reviewer can check each item on its own.
     (`npm run build:standalone && npm run bundle:baseline`) and never hand-edit
     `scripts/bundle-baselines.json`.
   - [x] 5.3 Fill in the Dev Agent Record, including every forced decision you deviated from.
+
+### Review Findings
+
+Reviewed 2026-09-25 on **Fable 5.1** against the **Opus** implementation, via three parallel
+adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). Decisions are the owner's
+and are left unresolved here; patches were applied in the review's own commit.
+
+- [ ] [Review][Decision] **A newer `gol:schema` stamp has no recovery path — the reset FD9 leans
+  on cannot clear it** — `clearAll()` → `removeDataKeys()` keeps `gol:schema` by design (Story 1.5:
+  "stays stamped through clearAll() on purpose"), so after the 5.11 reset the store is empty and
+  *every* read still throws `CorruptDataError(newer-version)`; even the re-seed's `save()` is
+  refused. FD9's "declining leaves the data untouched" is true; *accepting* leaves the user with
+  nothing and the same error. Options: **(a)** a newer stamp is not a "corrupt" condition at all —
+  5.11 shows only "update the app" for `cause.code === 'newer-version'` and offers no reset
+  (`FormatMigrationError` surfaces as its own error class or a `CorruptDataError` subclass so the
+  UI can tell without reaching into `cause`); **(b)** Story 5.10's `clearAll()` also rewrites the
+  stamp to `CURRENT_FORMAT_VERSION` (or removes it, which flips `isFreshWorkspace()` and re-seeds
+  through the normal path) — a change to Story 1.5's stamp-survives-clear rationale; **(c)** keep
+  FD9 as shipped and make 5.11 call a new persistence-level "reset format" alongside the reset.
+  Folds in the story's FD9 flag, which is sharper than stated: the error *class* is a footnote, the
+  recovery path is the question. [`packages/persistence/src/localStorageAccess.ts` `removeDataKeys`,
+  `createLocalStorageRepositories.ts:26-36`]
+- [ ] [Review][Decision] **FD2 — the step contract `(doc, representation)`** — no governing spec
+  fixes a step's signature: RFC-006 Decision 3's snippet is single-argument and silently assumes one
+  shape at both boundaries, which RFC-006 Decisions 2 and 7 (dense/id-keyed at rest, sparse arrays
+  on the wire) make impossible; Decision I.3 only requires one atomic function per version. The
+  review confirms the three rejected alternatives are the right ones to reject. Options: **(a)**
+  confirm as shipped (steps branch on the SHAPE inside one function; both boundaries share every
+  organism rewrite); **(b)** a canonical intermediate form (a third shape to keep in sync);
+  **(c)** two tables (the fork AR-11 forbids). Free to change only while the registry is empty.
+  [`packages/domain/src/formatMigrations.ts:37-48`]
+- [ ] [Review][Decision] **FD7, narrowed to strip-vs-`.strict()`** — re-pointing `colorToken`
+  `.max()`, `name` `.min(1)` and the summary 120→100 cap to the first `formatVersion` bump is
+  *settled* by Decision I.1 ("any change to any persisted shape bumps `formatVersion`"): each fails
+  a record valid today. Strip-vs-strict is not: nothing the app writes carries unknown keys, so
+  `.strict()` is not a persisted-shape change in I.1's sense, and the deferred entry asked for it to
+  be decided "together with 5.7/5.8" — Story 5.8's import boundary could still take it without a
+  bump. Options: **(a)** keep strip everywhere (as shipped; a hand-edited file with a comment key
+  still imports; the settings exclusion stays a strip); **(b)** `.strict()` on the *envelope* only,
+  at import (5.8), leaving at-rest schemas strip; **(c)** `.strict()` everywhere at the first bump.
+  [`docs/implementation-artifacts/deferred-work.md:27`]
+- FD5 (`z.literal(ORGANISM_SCHEMA_VERSION)`) is **settled, not open**: Decision I.4 says verbatim
+  "asserted at load (mismatch ⇒ corrupt, NFR-7.3 path)", RFC-006 Alternative 5 is normative on the
+  same point, and AC3 requires it. No decision item.
+- [x] [Review][Patch] **`replaceAll` bypasses the at-rest check, so "every write is covered" was
+  false** — both repositories' `replaceAll` build a whole collection and call `writeDataKey` without
+  `readCollection`; on an older stamp a real step would then re-run over current data, on a newer
+  stamp this build would overwrite the newer data and leave its stamp. Fix: `writeDataKey` calls
+  `ensureCurrentAtRestFormat()` before the write (one `getItem` + tiny parse; it throws before
+  anything is written), the WHY comment now says so, and tests pin it at both the access layer and
+  each repository's `replaceAll`. Story 1.4's "not rewritten by subsequent writes" fixture stamped
+  `formatVersion: 99` as "hand-edited" — that is now a newer-format store by definition, so the
+  fixture keeps the current version and proves non-rewriting through a marker key instead.
+  [`packages/persistence/src/localStorageAccess.ts` `writeDataKey`]
+- [x] [Review][Patch] **Rollback touched keys the failed write never overwrote** — a battles-write
+  failure removed and re-set organisms too; the restore `setItem` is the one call that can lose
+  data, so it now runs only over keys a commit actually replaced.
+  [`packages/persistence/src/localStorageAccess.ts` `writeBackMigrated`]
+- [x] [Review][Patch] **The write-back trusted the migrator for the version it stamped** — an
+  injected migrator could stamp `{}` or `"2"` and make every later read throw; `asFormatVersion`
+  refuses a non-integer before anything is written. [`localStorageAccess.ts` `asFormatVersion`]
+- [x] [Review][Patch] **`asCollection` accepted a `Map`/class instance** — `JSON.stringify` renders
+  either as `{}`, so a step bug would have wiped a collection and restamped it as migrated; it now
+  requires a plain (or null-prototype) object. [`localStorageAccess.ts` `asCollection`]
+- [x] [Review][Patch] **`createMigrator` spread a non-object step result silently** — `undefined`,
+  `null`, an array or a string spread to `{ formatVersion }`, an empty document for the next step.
+  A step's bug is a programming error, so it throws a plain `Error` (not a `FormatMigrationError`
+  the UI would word as "your data is corrupt"); the at-rest boundary already passes those through.
+  [`packages/domain/src/formatMigrations.ts` loop]
+- [x] [Review][Patch] **`isFormatMigrationError` did not check `foundVersion`** — the guard's own
+  comment promises the fields, not just the name. [`formatMigrations.ts` guard]
+- [x] [Review][Patch] **Registry-integrity test could not see a step at the wrong slot** — a 1→2
+  step registered under `2` passed the range loop and would fail as `missing-step` in a browser;
+  the keys are now asserted to be exactly `1..CURRENT-1`. [`formatMigrations.test.ts`]
+- [x] [Review][Patch] **`vi.restoreAllMocks()` at a test's tail** — runs only when every assertion
+  before it passed; moved to `afterEach`. [`formatMigrations.test.ts`]
+- [x] [Review][Patch] **Vacuous "no step runs" spy in the newer-version test** — the spy sat only at
+  the current slot, which no implementation would consult for a newer document; it is now also at
+  the document's own version. [`formatMigrations.test.ts`]
+- [x] [Review][Patch] **The step contract hid that at-rest `battles`/`organisms` are lazy accessors
+  that can throw `CorruptDataError`** — documented on `FormatMigration`; the header's garbled "the
+  same `migrate()` file import runs" sentence fixed; `let migrated` typed instead of evolving.
+  [`formatMigrations.ts`, `localStorageAccess.ts`]
+- [x] [Review][Patch] **Task 5.1 said "strike and annotate" all six entries; only the discharged
+  one is struck** — the right call (a strike reads as resolved), so the task text now says so; Task
+  3.1 step 3 now notes the lazy-getter deviation inline. [this file]
+- [x] [Review][Defer] **Absent stamp with data present is treated as current** [`localStorageAccess.ts`
+  `ensureCurrentAtRestFormat`] — deferred, pre-existing: Story 1.4's data-then-stamp order allows
+  "data written, stamp not", and Task 3.1 step 1 specifies absent ⇒ return. After a future bump
+  such a store skips the chain and fails the parse instead. Reachable only if a ~20-byte stamp write
+  fails right after a data write succeeded.
+- [x] [Review][Defer] **Multi-tab races around the write-back** [`localStorageAccess.ts`
+  `writeBackMigrated`] — deferred, out of scope: another tab restamping between this tab's stamp
+  read and its write-back, or writing a collection between the originals capture and a failed
+  commit. FD6 rejected a module flag for the same reason; cross-tab coordination (a `storage`-event
+  re-check or a lock key) is its own design.
+- [x] [Review][Defer] **A rollback restore `setItem` that itself throws loses the original**
+  [`localStorageAccess.ts` `writeBackMigrated`] — deferred: after the remove the originals fit by
+  construction (the store held exactly them), and a `SecurityError` would have failed the earlier
+  `getItem`; no realistic path, but the branch is unguarded and untested.
+
+Dismissed as noise (6): the import-boundary test proves the expression order the story asked for
+(5.8 owns the real pipeline); `/*#__PURE__*/` on `migrate` (every route reaches `readCollection`
+anyway); untrusted `formatVersion` strings in messages (5.11 owns copy and branches on `code`);
+`createMigrator`/`ensureCurrentAtRestFormat` exported as seams (FD3 / Task 3.4 specify it);
+`PALETTE_VERSION` named in a JSDoc sentence (a mention, not a reference); an
+`ORGANISM_SCHEMA_VERSION ≤ CURRENT_FORMAT_VERSION` pin (independent axes, Story 1.5 FD3).
+
+Verification: `npm run ci:dev` re-run after the patches (result in the Dev Agent Record). The
+first run's `bench:check` was red at 21.9 ms while three review subagents and the build shared
+the CPU; in isolation the frame is 5.9 ms (10.8 ms headroom) — contention, not the branch.
+
+Cross-epic: 5.7 touches `packages/domain/src/index.ts` (barrel, `[[sync.rules]]` resolves it),
+`organismSchema.ts`, `localStorageAccess.ts` and `scripts/bundle-baselines.json`. PR #83 (4.22)
+touches only `apps/web` plus `bundle-baselines.json`/`deferred-work.md`/`sprint-status.yaml`, and
+4.23–4.26 sit over the existing repository API — no `lane-gates.yaml` row proposed. The baseline
+JSON will collide on the sync: re-run `npm run bundle:baseline` on the merged tree rather than
+merging numbers.
 
 ## Dev Notes
 
@@ -481,6 +601,13 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   `npm run bundle:baseline` over the `build:standalone` output of that same run (tool-written).
 - One red test during development: the organisms-write quota stub also failed the rollback's
   restore `setItem` to the same key, so the test stub now fails only the first write to its key.
+- **Code review 2026-09-25 (Fable 5.1):** `npm run ci:dev` after the review patches → exit 0
+  (domain 243 / persistence 126 / web 2246 / test-utils 95 / simulation 408 passed; coverage
+  `@gol/domain` 100% every file, `@gol/persistence` 99.48% stmts / 97.59% branches; bundle:check
+  +0.1 KB gzipped per route for the new guards, baseline refreshed tool-written; bench:check
+  7.031 ms, 9.6 ms headroom; e2e:chromium 278 passed / 1 skipped). No CI run exists for the branch
+  (CI is pull_request-only). The one ESLint warning (`BattleGallery.tsx:248`) is pre-existing on
+  `main`; `apps/web` is untouched.
 
 ### Completion Notes List
 
@@ -556,3 +683,7 @@ Proposed lane gate: none — 5.7 touches only packages/domain (formatMigrations.
   the at-rest format check with write-back/rollback in `readCollection`, `schemaVersion` asserted
   as a literal, import-boundary proof, deferred-work re-pointing, bundle baseline refresh. Status →
   review.
+- 2026-09-25 — Code review (Fable 5.1): 11 patches applied in the review commit (the at-rest check
+  now also guards `writeDataKey`/`replaceAll`, committed-keys-only rollback, stamp/collection/step
+  output guards, test hardening), 3 items deferred, 3 owner decisions left open (newer-stamp
+  recovery vs `clearAll`, FD2, strip-vs-strict). Status → in-progress pending those decisions.

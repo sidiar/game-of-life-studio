@@ -3180,3 +3180,30 @@ full reasoning; the owner rules on each).
   the `FormatMigrationError` as `cause`.** A downgraded browser reads as "can't read your data"
   until Story 5.11 words it (branching on `cause.code === 'newer-version'`); nothing is written
   before the throw, so declining a reset leaves the data untouched.
+
+## Deferred from: code review of 5-7-migration-registry (2026-09-25)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+The owner decisions the review left open (newer-stamp recovery vs `clearAll`, the FD2 step contract,
+strip-vs-`.strict()`) are `[Review][Decision]` items in the story file, not here.
+
+- **An absent `gol:schema` stamp with data present is treated as current-format** — Story 1.4's
+  data-then-stamp order allows "data written, stamp not" (a ~20-byte stamp write failing right after
+  a data write succeeded), and Story 5.7 Task 3.1 step 1 specifies absent ⇒ return, so
+  `ensureCurrentAtRestFormat` skips the chain for such a store. Harmless while
+  `CURRENT_FORMAT_VERSION` is 1; after the first bump the old-format data would fail the Zod parse as
+  corrupt with a working migration unused. Pick up with the first `formatVersion` bump: either the
+  next successful `writeDataKey` must not stamp `CURRENT_FORMAT_VERSION` over unstamped data, or an
+  unstamped store with data is treated as format 1 (the only format that ever ran without a check).
+- **Multi-tab races around the at-rest write-back** — `ensureCurrentAtRestFormat` reads the stamp,
+  runs the chain, captures originals and commits in one synchronous task, but another tab can
+  restamp between this tab's stamp read and its lazy collection read (the non-idempotent step then
+  re-runs over migrated data), or write a collection between the originals capture and a failed
+  commit (the rollback restores a stale snapshot). FD6 rejected a module-level flag for the same
+  cross-tab reason; the fix is a design (a `storage`-event re-check or a lock key), not a guard.
+  Reachable only with two tabs open across an app upgrade.
+- **A rollback restore `setItem` that itself throws loses that original** — `writeBackMigrated`
+  removes an overwritten key before restoring it; if the restore throws the key is gone and the
+  thrown error is the rollback's, not the write's. By construction the originals fit (the store held
+  exactly them a moment ago) and a `SecurityError` would have failed the earlier `getItem`, so no
+  realistic path reaches it — but the branch is unguarded and untested.

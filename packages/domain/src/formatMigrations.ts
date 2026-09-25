@@ -31,7 +31,13 @@ export type MigratableDocument = Readonly<Record<string, unknown>>;
  * One version's upgrade, `from → from + 1`. Returns a NEW document and never mutates its input:
  * the caller's snapshot/rollback (Story 5.8, and the at-rest write-back) depends on the original
  * being untouched. It need not set `formatVersion` — `migrate` does that after every step, so a
- * step cannot forget it.
+ * step cannot forget it. It MUST return a plain object: anything else is a programming error the
+ * chain refuses rather than spreads into an empty document.
+ *
+ * ⚠️ At rest, `doc.battles` and `doc.organisms` are LAZY accessors over localStorage
+ * (`@gol/persistence`'s `ensureCurrentAtRestFormat`): the first read of either parses that
+ * collection and can throw the persistence layer's `CorruptDataError`. A step that never touches
+ * one never pays for it, and a spread (`{ ...doc }`) reads both.
  */
 export type FormatMigration = (
   doc: MigratableDocument,
@@ -80,7 +86,7 @@ const ERROR_CODES: ReadonlySet<unknown> = new Set<FormatMigrationErrorCode>([
 export function isFormatMigrationError(value: unknown): value is FormatMigrationError {
   if (!(value instanceof Error) || value.name !== 'FormatMigrationError') return false;
   const { code, supportedVersion } = value as { code?: unknown; supportedVersion?: unknown };
-  return ERROR_CODES.has(code) && typeof supportedVersion === 'number';
+  return ERROR_CODES.has(code) && typeof supportedVersion === 'number' && 'foundVersion' in value;
 }
 
 export interface MigratorConfig {
@@ -162,7 +168,16 @@ export function createMigrator({ migrations, currentVersion }: MigratorConfig): 
     for (let from = found; from < currentVersion; from += 1) {
       // The gap scan above proved every slot in this range is a function.
       const step = migrations[from] as FormatMigration;
-      doc = { ...step(doc, representation), formatVersion: from + 1 };
+      const upgraded: unknown = step(doc, representation);
+      // A step's bug, not a document's fault — so a plain Error, not a FormatMigrationError a
+      // caller would present as "your data is corrupt". Spreading a non-object would silently
+      // yield `{ formatVersion }` and hand the next step (or the parse) an empty document.
+      if (!isPlainObject(upgraded)) {
+        throw new Error(
+          `The migration from format ${from} to format ${from + 1} did not return a document.`,
+        );
+      }
+      doc = { ...upgraded, formatVersion: from + 1 };
     }
     // With no step run this is `raw` itself, by reference — the identity passthrough callers
     // detect ("nothing to write back") with `===`.

@@ -241,4 +241,18 @@ describe('the at-rest format check (Story 5.7)', () => {
     await expect(repo().list()).rejects.toThrow(CorruptDataError);
     await expect(repo().listFull()).rejects.toThrow(CorruptDataError);
   });
+
+  it('rejects replaceAll on a newer stamp and leaves the store byte-identical', async () => {
+    // The one write that never reads first; without its own check it would overwrite the newer
+    // build's data and leave that build's stamp behind.
+    await repo().save(makeBattle(ID_A));
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
+    );
+    const before = localStorage.getItem(STORAGE_KEYS.battles);
+
+    await expect(repo().replaceAll([makeBattle(ID_B)])).rejects.toThrow(CorruptDataError);
+    expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe(before);
+  });
 });

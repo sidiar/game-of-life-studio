@@ -1,5 +1,5 @@
 import { CURRENT_FORMAT_VERSION, isFormatMigrationError, migrate } from '@gol/domain';
-import type { Migrator } from '@gol/domain';
+import type { MigratableDocument, Migrator } from '@gol/domain';
 import { CorruptDataError } from './errors';
 import type { StorageUsage } from './repositories';
 
@@ -93,11 +93,24 @@ function readRawCollection(key: StorageKey): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+// Plain objects only: a `Map` or a class instance is an object too, and `JSON.stringify` renders
+// either as `{}` — the write-back would then wipe the collection and restamp it as migrated.
 function asCollection(key: StorageKey, value: unknown): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  const proto: unknown =
+    typeof value === 'object' && value !== null ? Object.getPrototypeOf(value) : undefined;
+  if (Array.isArray(value) || (proto !== Object.prototype && proto !== null)) {
     throw new CorruptDataError(key, 'a format migration did not produce an object keyed by id');
   }
   return value as Record<string, unknown>;
+}
+
+// `migrate` stamps `currentVersion` after every step, so this only guards an injected migrator —
+// but a stamp of `{}` or `"2"` would make every later read throw, which is worth one comparison.
+function asFormatVersion(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new CorruptDataError(STORAGE_KEYS.schema, 'a format migration did not produce a version');
+  }
+  return value;
 }
 
 function memoize<T>(read: () => T): () => T {
@@ -106,13 +119,15 @@ function memoize<T>(read: () => T): () => T {
 }
 
 /*
- * THE AT-REST FORMAT CHECK (AR-11 / Decision I.3): the same `migrate()` file import runs, at the
- * other boundary. Runs on EVERY collection read, statelessly — not once at bootstrap, because
- * `/battle?id=` deep-links read the repositories without any bootstrap hook, and not behind a
- * module-level "already migrated" flag, which would go stale the moment another tab migrates. Every
- * write is read-modify-write through `readCollection`, so writes are covered too. The cost is one
- * `getItem` and a ~20-byte `JSON.parse`. `gol:settings` is outside the chain (Decision F): it is
- * never in any envelope and self-heals through `SettingsSchema`'s defaults.
+ * THE AT-REST FORMAT CHECK (AR-11 / Decision I.3): the same `migrate()` that file import runs, at
+ * the other boundary. Runs on EVERY collection read AND every data write (`writeDataKey`),
+ * statelessly — not once at bootstrap, because `/battle?id=` deep-links read the repositories
+ * without any bootstrap hook, and not behind a module-level "already migrated" flag, which would go
+ * stale the moment another tab migrates. Writes need their own call: `replaceAll` builds a whole
+ * collection without reading first, and a write that skipped the check would land current-format
+ * data under a stale stamp — for the next read to migrate AGAIN, or to reject as newer-version.
+ * The cost is one `getItem` and a ~20-byte `JSON.parse`. `gol:settings` is outside the chain
+ * (Decision F): it is never in any envelope and self-heals through `SettingsSchema`'s defaults.
  *
  * A thrown `FormatMigrationError` — a newer build's data, or a stamp with no usable version — is
  * surfaced as `CorruptDataError` with the migration error as `cause`, so every existing
@@ -148,7 +163,7 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
     },
   };
 
-  let migrated;
+  let migrated: MigratableDocument;
   try {
     migrated = migrator(doc, 'at-rest');
   } catch (error) {
@@ -164,7 +179,7 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
   writeBackMigrated(
     asCollection(STORAGE_KEYS.battles, migrated['battles']),
     asCollection(STORAGE_KEYS.organisms, migrated['organisms']),
-    migrated['formatVersion'],
+    asFormatVersion(migrated['formatVersion']),
   );
 }
 
@@ -187,7 +202,7 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
 function writeBackMigrated(
   battles: Record<string, unknown>,
   organisms: Record<string, unknown>,
-  formatVersion: unknown,
+  formatVersion: number,
 ): void {
   const candidates = [
     [STORAGE_KEYS.battles, JSON.stringify(battles)],
@@ -198,14 +213,22 @@ function writeBackMigrated(
     [STORAGE_KEYS.battles, localStorage.getItem(STORAGE_KEYS.battles)],
     [STORAGE_KEYS.organisms, localStorage.getItem(STORAGE_KEYS.organisms)],
   ] as const;
+  // Only the keys a commit actually overwrote are rolled back: a `setItem` that threw left its key
+  // byte-identical, and touching an untouched key is the one way the rollback could lose data.
+  const committed = new Set<StorageKey>();
   try {
-    for (const [key, candidate] of candidates) commitCandidate(key, candidate);
+    for (const [key, candidate] of candidates) {
+      commitCandidate(key, candidate);
+      committed.add(key);
+    }
   } catch (error) {
-    // Remove both, THEN restore: restoring one original beside the other's migrated (possibly
-    // larger) value could itself exceed the quota, whereas the originals alone fit — the store held
-    // exactly them a moment ago. The caller gets the write's error, not a rollback artefact.
-    for (const [key] of originals) localStorage.removeItem(key);
-    for (const [key, original] of originals) {
+    // Remove the overwritten keys, THEN restore: restoring one original beside the other's migrated
+    // (possibly larger) value could itself exceed the quota, whereas the originals alone fit — the
+    // store held exactly them a moment ago. The caller gets the write's error, not a rollback
+    // artefact. The stamp is always last, so it is never in the set.
+    const overwritten = originals.filter(([key]) => committed.has(key));
+    for (const [key] of overwritten) localStorage.removeItem(key);
+    for (const [key, original] of overwritten) {
       if (original !== null) localStorage.setItem(key, original);
     }
     throw error;
@@ -246,8 +269,14 @@ export function hasSchemaStamp(): boolean {
   return localStorage.getItem(STORAGE_KEYS.schema) !== null;
 }
 
-/** The write path for workspace DATA (battles, organisms): write, then stamp (AC2). */
+/**
+ * The write path for workspace DATA (battles, organisms): check the format, write, then stamp
+ * (AC2). The check runs here and not only in `readCollection` because `replaceAll` never reads —
+ * see THE AT-REST FORMAT CHECK above. It throws before the write, so a store on a newer format is
+ * never overwritten by this build (AR-11).
+ */
 export function writeDataKey(key: StorageKey, value: unknown): void {
+  ensureCurrentAtRestFormat();
   writeKey(key, value);
   try {
     stampSchemaVersion();

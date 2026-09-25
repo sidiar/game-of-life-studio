@@ -154,10 +154,13 @@ describe('gol:schema stamp (AC2)', () => {
   it('is not rewritten by subsequent writes', () => {
     writeDataKey(STORAGE_KEYS.battles, {});
     // A hand-edited stamp would be clobbered by a re-stamp on every save; it must be written once.
-    localStorage.setItem(STORAGE_KEYS.schema, JSON.stringify({ formatVersion: 99 }));
+    // The edit keeps the CURRENT version: since Story 5.7 a foreign version is a format question
+    // (a newer one refuses the write), so the marker key is what proves the stamp was left alone.
+    const edited = JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION, marker: 'hand-edited' });
+    localStorage.setItem(STORAGE_KEYS.schema, edited);
     writeDataKey(STORAGE_KEYS.organisms, {});
 
-    expect(readStoredValue(STORAGE_KEYS.schema)).toEqual({ formatVersion: 99 });
+    expect(localStorage.getItem(STORAGE_KEYS.schema)).toBe(edited);
   });
 
   it('is NOT created when the data write it accompanies fails on quota', () => {
@@ -341,6 +344,16 @@ describe('the at-rest format check (Story 5.7, AR-11)', () => {
     expect(localStorage.getItem(STORAGE_KEYS.schema)).toBe(stamp);
   });
 
+  it('refuses a data write under a newer stamp before touching the store', () => {
+    // `replaceAll` writes without reading, so the read-side check alone would let this build
+    // overwrite a newer format's data — and leave its stamp for the next read to reject.
+    seed(JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }));
+    const before = snapshot();
+
+    expect(() => writeDataKey(STORAGE_KEYS.battles, { 'battle-9': {} })).toThrow(CorruptDataError);
+    expect(snapshot()).toEqual(before);
+  });
+
   it('propagates a non-migration error from the migrator unchanged', () => {
     seed(JSON.stringify({ formatVersion: 1 }));
     const bug = new TypeError('a bug, not a format problem');
@@ -432,15 +445,30 @@ describe('the at-rest format check (Story 5.7, AR-11)', () => {
       expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe(BATTLES);
     });
 
-    it('rejects a step whose output is not an id-keyed collection, writing nothing', () => {
+    it.each<[string, unknown]>([
+      ['an array', []],
+      ['a Map (serialises as {})', new Map([['org-1', {}]])],
+      ['absent', undefined],
+    ])('rejects a step whose organisms output is %s, writing nothing', (_label, organisms) => {
       seed(JSON.stringify({ formatVersion: 1 }));
       const before = snapshot();
       const broken = createMigrator({
-        migrations: { 1: (doc) => ({ ...doc, organisms: [] }) },
+        migrations: { 1: (doc) => ({ ...doc, organisms }) },
         currentVersion: 2,
       });
 
       expect(() => ensureCurrentAtRestFormat(broken)).toThrow(CorruptDataError);
+      expect(snapshot()).toEqual(before);
+    });
+
+    it('rejects a migrator whose result carries no usable formatVersion, writing nothing', () => {
+      // Only an injected migrator can do this (`migrate` stamps after every step); the stamp it
+      // would have written makes every later read throw, so it is refused up front.
+      seed(JSON.stringify({ formatVersion: 1 }));
+      const before = snapshot();
+      const unstamped = () => ({ battles: {}, organisms: {}, formatVersion: '2' });
+
+      expect(() => ensureCurrentAtRestFormat(unstamped)).toThrow(CorruptDataError);
       expect(snapshot()).toEqual(before);
     });
   });

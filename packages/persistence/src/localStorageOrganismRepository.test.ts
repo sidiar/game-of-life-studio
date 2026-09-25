@@ -164,4 +164,16 @@ describe('the at-rest format check (Story 5.7)', () => {
     await expect(repo().load('org-a')).rejects.toThrow(CorruptDataError);
     await expect(repo().list()).rejects.toThrow(CorruptDataError);
   });
+
+  it('rejects replaceAll on a newer stamp and leaves the store byte-identical', async () => {
+    await repo().save(makeOrganism('org-a'));
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
+    );
+    const before = localStorage.getItem(STORAGE_KEYS.organisms);
+
+    await expect(repo().replaceAll([makeOrganism('org-b')])).rejects.toThrow(CorruptDataError);
+    expect(localStorage.getItem(STORAGE_KEYS.organisms)).toBe(before);
+  });
 });

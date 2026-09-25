@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BattleSchema } from './battleSchema';
 import { CONWAYS_CLASSIC } from './defaultWorkspace';
 import {
@@ -33,6 +33,12 @@ function caught(fn: () => unknown): FormatMigrationError {
   throw new Error('expected a FormatMigrationError, but nothing was thrown');
 }
 
+// `vi.spyOn` patches shared module singletons (`WorkspaceExportSchema`); a restore at a test's
+// tail runs only when every assertion before it passed.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('migrate — identity (AC6)', () => {
   it('returns a current-version document by reference and runs no step', () => {
     const step = vi.fn<FormatMigration>((doc) => doc);
@@ -61,8 +67,10 @@ describe('migrate — newer version (AC4)', () => {
     'rejects format %i before any step runs, naming both versions',
     (version) => {
       const step = vi.fn<FormatMigration>((doc) => doc);
+      // Registered at BOTH the current slot and the document's own, so an implementation that
+      // wrongly looked up `migrations[found]` for a newer document would be caught here.
       const spyMigrate = createMigrator({
-        migrations: { [CURRENT_FORMAT_VERSION]: step },
+        migrations: { [CURRENT_FORMAT_VERSION]: step, [version]: step },
         currentVersion: CURRENT_FORMAT_VERSION,
       });
 
@@ -163,6 +171,29 @@ describe('createMigrator — chain mechanics against a synthetic registry (AC6)'
     expect(run({ formatVersion: 1 }, 'envelope')).toEqual({ formatVersion: 2 });
   });
 
+  it.each<[string, unknown]>([
+    ['undefined', undefined],
+    ['null', null],
+    ['an array', []],
+    ['a string', 'v2'],
+  ])('refuses a step that returns %s with a plain Error, not a document fault', (_label, out) => {
+    const run = createMigrator({
+      migrations: { 1: () => out as MigratableDocument },
+      currentVersion: 2,
+    });
+
+    let thrown: unknown;
+    try {
+      run({ formatVersion: 1 }, 'envelope');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(isFormatMigrationError(thrown)).toBe(false);
+    expect((thrown as Error).message).toContain('from format 1 to format 2');
+  });
+
   it('fails a gap with missing-step before running any step', () => {
     const s1 = vi.fn<FormatMigration>((doc) => doc);
     const run = createMigrator({ migrations: { 1: s1 }, currentVersion: 3 });
@@ -185,6 +216,14 @@ describe('MIGRATIONS — registry integrity (AC1)', () => {
     }
   });
 
+  it('holds nothing else — a step at the wrong slot is unreachable and would read as a gap', () => {
+    // A 1 → 2 step registered under `2` passes the loop above (it only asks about `1`) and then
+    // fails in a user's browser as 'missing-step'. Source-keyed means the keys ARE the range.
+    const expected = Array.from({ length: CURRENT_FORMAT_VERSION - 1 }, (_, i) => String(i + 1));
+
+    expect(Object.keys(MIGRATIONS)).toEqual(expected);
+  });
+
   it('is frozen, so nothing can register a step at runtime', () => {
     expect(Object.isFrozen(MIGRATIONS)).toBe(true);
   });
@@ -197,6 +236,23 @@ describe('isFormatMigrationError', () => {
     expect(isFormatMigrationError(new Error('x'))).toBe(false);
     expect(isFormatMigrationError(forged)).toBe(false);
     expect(isFormatMigrationError({ name: 'FormatMigrationError', code: 'corrupt' })).toBe(false);
+  });
+
+  it('requires every field the interface names, foundVersion included', () => {
+    const partial = Object.assign(new Error('x'), {
+      name: 'FormatMigrationError',
+      code: 'corrupt',
+      supportedVersion: 1,
+    });
+    const complete = Object.assign(new Error('x'), {
+      name: 'FormatMigrationError',
+      code: 'corrupt',
+      supportedVersion: 1,
+      foundVersion: undefined,
+    });
+
+    expect(isFormatMigrationError(partial)).toBe(false);
+    expect(isFormatMigrationError(complete)).toBe(true);
   });
 });
 
@@ -244,6 +300,5 @@ describe('the import boundary: migrate before WorkspaceExportSchema (AC2b / AC4)
     expect(error.code).toBe('newer-version');
     expect(parse).not.toHaveBeenCalled();
     expect(safeParse).not.toHaveBeenCalled();
-    vi.restoreAllMocks();
   });
 });
