@@ -756,6 +756,11 @@ Review Findings; these are the items consciously left open.
   2026-09-24):** 4.21 added the Delete button ONLY — no reshape of the stat block or the rules
   line. **Pick this up in Story 4.22**, which renders Delete on every card and is the next story to
   touch `<OrganismCard>`'s content — still together with the card's stat block below.
+  **Re-pointed again (Story 4.22, 2026-09-25, FD13 — default, owner question open):** 4.22 touches
+  the card's ACTION ROW only (Delete on every card, plus the protected note line) and no 4.22 AC
+  covers the rules sentence; no later Epic 4 story touches the card (4.23–4.26 are editor- and
+  battle-side). **Pick this up in the next card-content change, or the Epic 4 UX reconciliation
+  touch** — together with the stat-cell semantics below.
 - ~~**The card-as-tab-stop policy is provisional** (FD5) — `<OrganismCard>`'s `<article>` carries
   `tabIndex={0}` because it has no inner control to be the keyboard stop instead (organism cards
   open a modal in `Story 4.17`, which does not exist yet). Once Edit lands inside the card, a stop
@@ -788,6 +793,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   did not reach the card at all, so the stat block is still where 4.11 left it. **Re-pointed again
   (Story 4.21, 2026-09-24):** 4.21 added the Delete button only, and left the stat cells' markup
   untouched. **Pick this up in Story 4.22**, and decide the cell semantics once for all three rows.
+  **Re-pointed again (Story 4.22, 2026-09-25, FD13 — default, owner question open):** 4.22 changed
+  only the action row and added the protected note; the stat cells' markup is untouched and no 4.22
+  AC covers it. **Pick this up in the next card-content change, or the Epic 4 UX reconciliation
+  touch**, together with the rules sentence above.
 
 ## Deferred from: Story 4-3-editor-modal-shell (2026-09-14)
 
@@ -3033,7 +3042,9 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   **Whether the editor also gets a Delete is the next UX touch's decision, and at the latest
   Story 4.22's** — the owner's question on this point was left open at story completion (below).
   **Decided 2026-09-25 (Sidiar, review decision FD1 (a)): Story 4.22 builds the editor's Column-1
-  "Delete Organism" button**, on the same `organismDeleteVerdict` as the card.
+  "Delete Organism" button**, on the same `organismDeleteVerdict` as the card. **✅ Built in
+  Story 4.22 (2026-09-25):** edit sessions only, a callback prop (no repository), the Library's
+  confirmation / block dialog stacked over the editor.
 - **Delete renders only on `blocked` cards; `allowed` and `protected` render none, a deliberately
   transitional state on `main` (FD2).** Story 4.22 owns the `allowed` path (confirm, delete, toast,
   refresh) and the `protected` path (a disabled button with its message). **Story 4.22 must remove
@@ -3041,6 +3052,8 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `<OrganismCard>` head comment already says so. The owner's question on folding 4.22's
   confirm-and-delete into this story instead was left open (below). **Decided 2026-09-25 (Sidiar,
   review decision FD2 (a)): the transitional state is accepted as built; nothing is folded in.**
+  **✅ Resolved by Story 4.22 (2026-09-25):** every card renders Delete; `allowed` confirms,
+  `blocked` explains, `protected` is disabled with its message.
 - **The `openBattle` argument on `organismDeleteVerdict` is threaded but unreachable (FD11).** The
   Library mounts no battle, so it never passes one, and FR-1.4's current-grid remedy variants
   (`prd.md:134` — "erase it from this grid…", "save this Battle to persist the removal…") are not
@@ -3052,7 +3065,9 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   guarantee holds because nothing here calls `organisms.delete`. Story 4.22's confirm path
   *writes*, and must re-run `Promise.all([organisms.list(), battles.list()])` right before
   `organisms.delete`, or a battle saved in another tab since the Library loaded could be deleted
-  out from under. Not built here — recorded for 4.22 to pick up.
+  out from under. Not built here — recorded for 4.22 to pick up. **✅ Built in Story 4.22
+  (2026-09-25, FD4):** `useOrganismDelete`'s Confirm re-reads both lists, re-runs the verdict and
+  writes only on `allowed`; a stale `blocked` hands off to the block dialog with the fresh names.
 - The two card entries already annotated "4.21/4.22" (`:743-755` the rules-preview sentence,
   `:775-788` the stat-cell semantics) are re-pointed to **Story 4.22 only**: this story adds the
   Delete button alone and does not reshape the card's stat block or add the natural-language rules
@@ -3077,3 +3092,58 @@ been answered yet:
   set, the Delete click gives no feedback, and focus restore never runs. This is pre-existing: the
   editor, the in-use gate and the Gallery's lazy dialogs all have the same shape and no
   `loading`/error fallback. Fix it once, for every `dynamic()` boundary, rather than per dialog.
+
+## Deferred from: Story 4-22-safe-delete-protected-default implementation (2026-09-25)
+
+- **The editor-origin delete-close must bypass Story 4.23's unsaved-changes guard.** After a
+  successful delete from the editor's Column 1, `<OrganismLibrary>` closes the editor through
+  `modalProps.onClose` (FD9 — only once the stacked confirmation has exited). That is the channel
+  **Story 4.23**'s guard will sit in front of, and a "discard changes?" prompt there would be wrong:
+  the organism is gone, there is nothing left to save the draft into. 4.23 keeps this call site on
+  a direct, unguarded close (the call site carries a comment naming this).
+- **Story 4.24's battle-origin editor decides whether to pass `onRequestDelete`.** The editor
+  renders Delete iff the prop is passed (the card's "renders iff present" contract, FD11), so a
+  battle-origin mount that passes none shows no Delete. If 4.24 does pass it, the `openBattle`
+  verdict argument and FR-1.4's current-grid remedy copy land together — joining Story 4.21's
+  FD11 entry above (→ **Story 4.24**).
+- **FD11 residuals, recorded, not built.** (1) A create session that has saved once has a stored
+  record, but the editor's `organism` prop is still `null`, so Delete stays hidden for the rest of
+  that session — making it appear mid-session is a mode change the design doc does not describe.
+  (2) The confirmation names the record the editor was OPENED with; after an in-session
+  rename-and-save it shows the old name until the Library reloads on close. The write itself is by
+  id and correct, and the Confirm-time fresh read could supply the current name if review wants it.
+- **An editor-origin delete reloads the Library at the confirmation's exit, while the editor is
+  still fading out.** That is what removes the card before the editor hook's focus restore looks
+  up `[data-edit-organism-id]` — its Create fallback then lands (FD8) with no second focus move.
+  The reload resolves in microtasks against localStorage, well inside the editor's ~195 ms fade;
+  against a slow API repository (Connected mode) the lookup could still find the old card and
+  focus its Edit button just before it disappears. Revisit if a repository ever takes longer than
+  the fade.
+- **An editor-origin delete refusal stays on screen until the editor closes or the next delete.**
+  The `deleteError` prop is cleared at the start of the next delete request and when the editor
+  exits, not by a later Save — the editor's own save-outcome lines are separate cells. Harmless
+  (the sentence stays true), noted for the 4.23 editor-state pass.
+- **The `useOrganismDelete` latch and `pending` are released at the dialog's EXIT, not in the
+  writer's `finally` (Task 2 wording).** The Story 4.18 gate review's finding applies unchanged:
+  `setDialogOpen(false)` only starts the ~195 ms fade, and a dialog re-enabled for it would take a
+  second Confirm or a Cancel that overwrites the queued outcome.
+- **`getByText("Conway's Classic")` in `e2e/organisms.spec.ts` now needs `exact: true`** — the
+  protected note ("Conway's Classic is a built-in organism…") is a second substring match on every
+  seeded page. All 49 hydration checks were retargeted mechanically, the same kind of change as
+  FD7's count-badge retarget.
+- **The 4.22 e2e verifies the deleted record in `localStorage` directly, not through a
+  `page.reload()`.** The seeding helpers are `addInitScript`s, which re-run on every navigation
+  and would re-seed the deleted record — a reload there proves nothing.
+- The two card-content entries (the rules sentence and the stat-cell semantics, Story 4.2's
+  sections above) are re-pointed to the next card-content change or the Epic 4 UX reconciliation
+  touch (FD13 — see the question below).
+
+### Questions for Sidiar, still open at story completion
+
+Both carry a written default, implemented as stated:
+
+1. **FD13**: the two card-content deferrals (the natural-language rules sentence and the stat-cell
+   `<dl>` semantics) were pointed at 4.22, but no 4.22 AC covers them. The default re-points them to
+   the next card-content change or the Epic 4 UX touch. Should either be built here instead?
+2. **FD12**: the delete-failure sentence `This organism could not be deleted. Nothing was changed —
+   try again.` has no spec source. Is it acceptable as written?

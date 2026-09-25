@@ -6,20 +6,17 @@ import { styled } from '@mui/material/styles';
 import {
   buildRuleReferenceIndex,
   buildUsageIndex,
-  CONWAYS_CLASSIC_ID,
   organismDeleteVerdict,
   resolveOrganismUsage,
   type Organism,
-  type OrganismUsageEntry,
 } from '@gol/domain';
 import type { BattleRepository, OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { cloneOrganismRecord } from '@/lib/organisms/organismClone';
 import { normalizeOrganismSearch, organismNameMatches } from '@/lib/organisms/organismNameMatches';
-import { referencingOrganismNames, usageBattleNames } from '@/lib/organisms/usageLabels';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
-import { useInertBackground } from '@/lib/useInertBackground';
+import { useOrganismDelete } from '@/lib/organisms/useOrganismDelete';
 import { useOrganismEditorModal } from '@/lib/organisms/useOrganismEditorModal';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
@@ -51,9 +48,17 @@ const OrganismInUseDialog = dynamic(() => import('./OrganismInUseDialog'), { ssr
 // Story 4.21: the hard-block dialog, a third `dynamic()` boundary beside the two above, for the
 // identical reason — the MUI Dialog stack (and, transitively, `deleteBlockCopy.ts`'s strings)
 // stay out of `/organisms`'s first load. It never opens the editor and is never driven by
-// `useOrganismEditorModal` (FD8): local state here, plus `useInertBackground`, is the
-// `useDeleteBattleDialog` shape at smaller size.
+// `useOrganismEditorModal` (FD8); since Story 4.22 `useOrganismDelete` drives it.
 const OrganismDeleteBlockedDialog = dynamic(() => import('./OrganismDeleteBlockedDialog'), {
+  ssr: false,
+});
+
+// Story 4.22: the delete confirmation, a FOURTH `dynamic()` boundary, for the same reason — most
+// sessions never delete, so neither the Dialog stack nor its copy (`deleteBlockCopy.ts`, lazy-only
+// since Story 4.21 FD5) belongs in the first load. Not folded into the block dialog's chunk as one
+// component with two variants: the two dialogs share no content, and `useOrganismDelete` already
+// keeps ONE source of "which dialog is mounted".
+const OrganismDeleteConfirmDialog = dynamic(() => import('./OrganismDeleteConfirmDialog'), {
   ssr: false,
 });
 
@@ -201,7 +206,7 @@ const SearchIcon = styled('span')({
   pointerEvents: 'none',
 });
 
-// Mockup: .organism-count (:179-189). The one live region on the page (FD4) — SC 4.1.3 wants
+// Mockup: .organism-count (:179-189). The page's filter live region (FD4) — SC 4.1.3 wants
 // filter results announced, and the roster's zero-match message is deliberately NOT live
 // (`deferred-work.md:327` records what that cost); announcing the zero-match text as well would
 // double-announce the same result.
@@ -254,6 +259,12 @@ function organismCountLabel(shown: number, total: number, filtering: boolean): s
  * `cloneOrganism` writer (FD3) both the card's Clone and the gate's Clone & Edit call — mint,
  * project (`cloneOrganismRecord`), `organisms.save()`, `reload()` — and the ONE `[data-clone-error]`
  * alert a refused write reports into.
+ *
+ * Since Story 4.22 every card — and the editor's Column 1 — carries Delete (FR-1.4, M9):
+ * `useOrganismDelete` confirms an `allowed` organism, re-verifies against a fresh read before the
+ * write, explains a `blocked` one, and the protected default's button is disabled with its reason.
+ * The outcome is published into this component's own `[data-delete-status]` region (so the
+ * editor-era note above, "no live region of its own", no longer holds for delete).
  */
 export default function OrganismLibrary({ organisms, battles, seedStatus }: OrganismLibraryProps) {
   // Deps: `organisms`/`battles` are useMemo-stable from the page boundary; `seedStatus` is a
@@ -436,102 +447,75 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     publishQueuedCloneError();
   }, [gateProps, publishQueuedCloneError]);
 
-  // Story 4.21, FD8: the hard-block dialog's own lifecycle, local to this component rather than
-  // threaded through `useOrganismEditorModal` — that hook owns the editor/gate handoff, and the
-  // delete block never opens the editor, so it has no use for a third window. The
-  // `useDeleteBattleDialog` shape at smaller size: `blocked` is the data, held through the ~195ms
-  // exit fade (the `confirming` / `battleName` precedent — the dialog must not flash empty on the
-  // way out), `deleteDialogOpen` drives the fade alone.
-  const [blocked, setBlocked] = useState<{
-    organismId: string;
-    organismName: string;
-    battleNames: readonly string[];
-    referencingNames: readonly string[];
-  } | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-  // Called here, the modal's PARENT, for the same ordering reason `useDeleteBattleDialog` and
-  // `useOrganismEditorModal` record at their own call sites: MUI's focus-trap move (a child
-  // effect) must already have happened before a subtree is marked inert. A SEPARATE call from the
-  // hook's own `useInertBackground(anyMounted)` — never folded into one union — because the two
-  // windows never overlap: `requestDeleteOrganism` below bails while the editor or gate is
-  // mounted, and `guardedCreate`/`onRequestEdit` bail while this window is (see
-  // `deleteWindowRef`).
+  // Story 4.22: the delete controller — Story 4.21's inline block window, extracted and grown into
+  // confirm + fresh re-verify + write (`useOrganismDelete`'s head comment). Called here, the
+  // dialogs' PARENT, after the editor hook, for the placement reason both hooks record. The
+  // settled data is the SAME the cards' verdicts are computed from (Story 4.21 FD7), unfiltered by
+  // search.
   //
-  // ORDER IS LOAD-BEARING: this call sits ABOVE the focus-restore effect below, so on the commit
-  // that clears `blocked` its cleanup (lifting `inert`) runs before that effect's `.focus()` — a
-  // `.focus()` into a still-inert subtree is a silent no-op in a real browser.
-  useInertBackground(blocked !== null);
+  // `canOpen`: a CARD request is refused while the editor or gate is mounted — reachable only by a
+  // programmatic caller, since their inert background already makes every card unreachable — and
+  // an EDITOR request only while the editor is, the one case where a Library-owned dialog stacks
+  // over it (FD9).
+  const canOpenDelete = useCallback(
+    (origin: 'card' | 'editor') =>
+      origin === 'card' ? !editorMounted && !gateMounted : editorMounted && !gateMounted,
+    [editorMounted, gateMounted],
+  );
+  // ⚠️ The editor-origin close after a successful delete. `modalProps.onClose` is the channel
+  // Story 4.23's unsaved-changes guard will sit in front of — and this close must NOT prompt
+  // "discard changes?": the organism is gone, there is nothing left to save the draft into. When
+  // 4.23 lands, this call site keeps a direct, unguarded close (`deferred-work.md` records it).
+  const { onClose: closeEditor } = modalProps;
+  const {
+    requestDelete,
+    isWindowActive: isDeleteWindowActive,
+    confirmProps: deleteConfirmProps,
+    blockedProps: deleteBlockedProps,
+    toast: deleteToast,
+    deleteError,
+    editorDeleteError,
+    onEditorExited: onDeleteEditorExited,
+  } = useOrganismDelete({
+    organisms,
+    battles,
+    library: loadedOrganisms,
+    summaries,
+    usage,
+    ruleIndex,
+    reload,
+    canOpen: canOpenDelete,
+    // Story 4.21's `handleDeleteExited` rule, kept: a card Clone that failed while the delete
+    // window was up is published in the commit that releases it.
+    onWindowReleased: publishQueuedCloneError,
+    onEditorDeleted: closeEditor,
+  });
 
-  // Code review 2026-09-24: the delete window's AUTHORITY, set synchronously on the click and
-  // cleared in `handleDeleteExited`. Not derivable from `blocked`'s render-time value in an async
-  // callback (the clone `.then` below), and not from the inert background either: on the FIRST
-  // Delete of a session the lazy dialog chunk is still loading, so no Modal has marked anything
-  // `aria-hidden`, nothing is inert yet, and Create or another card's Edit is still clickable —
-  // opening the editor under a block dialog about to land on top of it. The guards below close
-  // that window.
-  const deleteWindowRef = useRef(false);
+  // The editor's call site, composed as `onGateExited` composes the gate's: the hook's own exit
+  // FIRST (it unmounts the editor and releases `inert`), then the delete toast held for an
+  // editor-origin delete, in the same handler so the status node is created in the commit that
+  // makes this subtree live again (FD7).
+  const onEditorExited = useCallback(() => {
+    modalProps.onExited?.();
+    onDeleteEditorExited();
+  }, [modalProps, onDeleteEditorExited]);
 
-  // Where focus is owed once the delete dialog's exit transition has finished — the DOM lookup
-  // idiom every other close path in this file uses (FD9), never a captured element (WebKit does
-  // not focus a `<button>` on click).
-  const deleteRestoreIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (blocked !== null) return;
-    const id = deleteRestoreIdRef.current;
-    if (id === null) return;
-    deleteRestoreIdRef.current = null;
-    document.querySelector<HTMLElement>(`[data-delete-organism-id="${CSS.escape(id)}"]`)?.focus();
-  }, [blocked]);
-
-  // A card's Delete click (Story 4.21, FD7). `battles`/`referencing` are the SAME `blocked`
-  // verdict's lists the card map below reads to decide whether to render the button at all —
-  // never re-derived here (FD3) — and the names are resolved from `summaries`/`loadedOrganisms`,
-  // the same settled data the verdict came from, never the search-filtered `visible` (FD7).
-  //
-  // Guarded against the editor or gate being mounted (review precedent: `requestCreate`/
-  // `requestEdit`'s own `anyMounted` guard) — reachable only by a programmatic caller, since the
-  // editor/gate's own inert background already makes every card's Delete button unreachable by a
-  // real click while either is open.
-  const requestDeleteOrganism = useCallback(
-    (
-      organism: Organism,
-      battles: readonly OrganismUsageEntry[],
-      referencing: readonly string[],
-    ) => {
-      if (editorMounted || gateMounted || deleteWindowRef.current) return;
-      deleteWindowRef.current = true;
-      deleteRestoreIdRef.current = organism.id;
-      setBlocked({
-        organismId: organism.id,
-        organismName: toDisplayOrganism(organism).name,
-        battleNames: usageBattleNames(battles, summaries),
-        referencingNames: referencingOrganismNames(referencing, loadedOrganisms),
-      });
-      setDeleteDialogOpen(true);
-    },
-    [editorMounted, gateMounted, summaries, loadedOrganisms],
+  // Story 4.22: the editor's Column-1 Delete, bound to the record the hook opened the editor with
+  // (FD11: after an in-session rename-and-save the dialog names the OLD name until the Library
+  // reloads on close — the write itself is by id). `undefined` for a create session.
+  const editingOrganism = modalProps.organism;
+  const onEditorRequestDelete = useMemo(
+    () => (editingOrganism === null ? undefined : () => requestDelete(editingOrganism, 'editor')),
+    [editingOrganism, requestDelete],
   );
 
-  // Escape, backdrop and OK all route here (the dialog's ONE action, AC5) — nothing else moves,
-  // nothing is written. `blocked` itself is cleared only once the exit transition has finished, so
-  // the dialog's content stays populated through the fade.
-  const handleDeleteClose = useCallback(() => setDeleteDialogOpen(false), []);
-  // `setBlocked(null)` FIRST — it releases `inert` — then the queued card-Clone failure (a Clone
-  // clicked on another card just before this Delete), in the same handler so both land in ONE
-  // commit: the `onGateExited` rule, "publish once your window is gone", applied to this window.
-  const handleDeleteExited = useCallback(() => {
-    deleteWindowRef.current = false;
-    setBlocked(null);
-    publishQueuedCloneError();
-  }, [publishQueuedCloneError]);
-
-  // Create's call site: bails while the delete window is open (see `deleteWindowRef`).
+  // Create's call site: bails while the delete window is open (Story 4.21's `deleteWindowRef`
+  // guard, now the hook's authority — on the FIRST Delete of a session the lazy dialog chunk is
+  // still loading and nothing is inert yet).
   const guardedCreate = useCallback(() => {
-    if (deleteWindowRef.current) return;
+    if (isDeleteWindowActive()) return;
     requestCreate();
-  }, [requestCreate]);
+  }, [isDeleteWindowActive, requestCreate]);
 
   // Story 4.17, AC1: the count is the number of DISTINCT saved battles whose placed set holds the
   // id (Decision H: "used" = placed) — read from the SAME settled list the page holds.
@@ -543,13 +527,13 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // surface would start disagreeing with the others the moment 4.24 lands, which is precisely the
   // failure the AC's "counts are consistent across all surfaces" exists to prevent.
   //
-  // Bails while the delete window is open (Story 4.21 code review; see `deleteWindowRef`).
+  // Bails while the delete window is open (Story 4.21 code review; the hook's authority).
   const onRequestEdit = useCallback(
     (organism: Organism) => {
-      if (deleteWindowRef.current) return;
+      if (isDeleteWindowActive()) return;
       requestEdit(organism, resolveOrganismUsage(usage, organism.id).length);
     },
-    [requestEdit, usage],
+    [isDeleteWindowActive, requestEdit, usage],
   );
 
   // Folded at render, exactly as BattleGallery folds seedStatus against its own load state
@@ -612,16 +596,16 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
           </SearchField>
         </ToolbarLeft>
         {status === 'ready' && (
-          <CountBadge role="status">
+          <CountBadge role="status" data-organism-count="">
             {organismCountLabel(visible.length, sorted.length, query !== '')}
           </CountBadge>
         )}
       </Toolbar>
       {/* Story 4.18, AC10/FD10: OUTSIDE the aria-busy wrapper, the same reason the toolbar is — a
-          refused clone must not be withheld while a reload is in flight. `role="alert"`, never a
-          second `role="status"`: the count badge above is the page's only status node, and
-          `e2e/organisms.spec.ts`'s `countBadge = page.getByRole('status')` is unscoped, so a second
-          one would turn every 4.16/4.17 badge assertion into a strict-mode failure. Success gets no
+          refused clone must not be withheld while a reload is in flight. `role="alert"`: a refused
+          clone is an error. (It was also chosen, in 4.18, to dodge a second `role="status"` while
+          the count badge was the page's only one; Story 4.22 added the delete status below and
+          retargeted every badge query to `[data-organism-count]` instead.) Success gets no
           sentence of its own — the new card and the badge's own count change are already the
           announcement.
           Owner decision 2026-09-23: FD10's success clause is accepted as written for Clone & Edit
@@ -633,6 +617,22 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
       {cloneError !== null && (
         <StatusText role="alert" data-clone-error>
           {cloneError}
+        </StatusText>
+      )}
+      {/* Story 4.22 (UX-DR14, FD7): the delete "toast" — the house's in-flow status line, not a
+          Snackbar. ALWAYS mounted, so the region exists before its content changes (Story 4.9
+          FD3); the child mounts with the sentence, published only once the last window (the
+          confirmation, or for an editor-origin delete the editor) has exited, and cleared at the
+          start of the next delete so a repeat re-announces. A second `role="status"` on the page —
+          which is why the badge queries target `[data-organism-count]`. */}
+      <div role="status" data-delete-status="">
+        {deleteToast !== null && <StatusText data-delete-toast="">{deleteToast}</StatusText>}
+      </div>
+      {/* Story 4.22, AC7/FD12: a refused card-origin delete, published once the confirmation has
+          exited (an editor-origin refusal renders inside the still-open editor instead). */}
+      {deleteError !== null && (
+        <StatusText role="alert" data-delete-error="">
+          {deleteError}
         </StatusText>
       )}
       <div aria-busy={status === 'loading'}>
@@ -651,36 +651,29 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
             <CardGrid role="list" aria-label="Organisms">
               {visible.map((organism) => {
                 // Story 4.21: two map reads per card, the same class as the unmemoised filter scan
-                // above (FD6's Dev Notes) — no per-card memo. `protected`/`allowed` render no
-                // Delete at all in this story (FD2); only `blocked` does.
+                // above (FD6's Dev Notes) — no per-card memo. Since Story 4.22 every card gets
+                // Delete (FD2 (a)); the verdict still decides what it does — the confirmation, the
+                // block dialog, or (`protected`) a disabled button with its reason — and it is
+                // also the card's `system` flag, so M9 has one source in this app (FD3).
                 const verdict = organismDeleteVerdict(organism.id, usage, ruleIndex);
                 return (
                   <li key={organism.id}>
                     <OrganismCard
                       organism={organism}
-                      system={organism.id === CONWAYS_CLASSIC_ID}
+                      system={verdict.kind === 'protected'}
                       onRequestEdit={() => onRequestEdit(organism)}
                       cloning={cloning === organism.id}
                       // The card's call site: no window has to exit first, so the queued failure is
                       // published as soon as the write settles. Same rule as the gate's `onExited`
                       // below — "publish once your window is gone" — and this entry point has none,
-                      // UNLESS a Delete on another card opened the block dialog while the write
-                      // was pending: then `handleDeleteExited` publishes it (Story 4.21 review).
+                      // UNLESS a Delete on another card opened a delete dialog while the write was
+                      // pending: then the delete window's release publishes it (Story 4.21 review).
                       onRequestClone={() => {
                         void cloneOrganism(organism).then(() => {
-                          if (!deleteWindowRef.current) publishQueuedCloneError();
+                          if (!isDeleteWindowActive()) publishQueuedCloneError();
                         });
                       }}
-                      onRequestDelete={
-                        verdict.kind === 'blocked'
-                          ? () =>
-                              requestDeleteOrganism(
-                                organism,
-                                verdict.battles,
-                                verdict.referencingOrganismIds,
-                              )
-                          : undefined
-                      }
+                      onRequestDelete={() => requestDelete(organism, 'card')}
                     />
                   </li>
                 );
@@ -698,29 +691,29 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
       {/* `battleSummaries` is the SAME settled array `usage` above is built from (Story 4.20, AC6),
           so the footer's count and this component's edit warning read one source — data, never the
           `battles` repository, which stays at this boundary (AR-2/AR-27). */}
+      {/* Story 4.22: `onRequestDelete` / `deleteError` are the Column-1 Delete's data half — a
+          callback and a published message, never a repository (the editor's only side effect is
+          still `organisms.save`). `onExited` is composed above to publish the held delete toast. */}
       {editorMounted && (
         <OrganismEditorModal
           {...modalProps}
+          onExited={onEditorExited}
           library={sorted}
           battleSummaries={summaries}
           organisms={organisms}
+          onRequestDelete={onEditorRequestDelete}
+          deleteError={editorDeleteError}
         />
       )}
       {/* Story 4.17: the in-use gate, mounted on ITS window (the hook's `gateMounted`), for the
           same fetch-on-first-open / fade-before-unmount reasons as the editor above. */}
       {gateMounted && <OrganismInUseDialog {...gateProps} onExited={onGateExited} />}
-      {/* Story 4.21: the hard-block dialog, mounted on `blocked !== null` — the same
-          fetch-on-first-open / fade-before-unmount shape, on its own window. */}
-      {blocked !== null && (
-        <OrganismDeleteBlockedDialog
-          open={deleteDialogOpen}
-          organismName={blocked.organismName}
-          battleNames={blocked.battleNames}
-          referencingNames={blocked.referencingNames}
-          onClose={handleDeleteClose}
-          onExited={handleDeleteExited}
-        />
-      )}
+      {/* Stories 4.21/4.22: the delete window — the block dialog or the confirmation, never both
+          (the hook holds one window cell). Mounted on the hook's window, the same
+          fetch-on-first-open / fade-before-unmount shape. For an editor-origin delete they portal
+          OVER the mounted editor (FD9). */}
+      {deleteBlockedProps !== null && <OrganismDeleteBlockedDialog {...deleteBlockedProps} />}
+      {deleteConfirmProps !== null && <OrganismDeleteConfirmDialog {...deleteConfirmProps} />}
     </section>
   );
 }

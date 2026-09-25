@@ -16,3 +16,10 @@ export function saveOutcomeMessage(organism: Pick<Organism, 'survivalRules'>): s
     ? `${ORGANISM_SAVED} ${NO_RULES_WARNING}`
     : ORGANISM_SAVED;
 }
+
+/**
+ * Story 4.22 (UX-DR14; `organism-editor-design.md`'s delete flow, step 5, verbatim): the Library's
+ * in-flow status after an organism is deleted. Here, beside the save outcome, rather than in the
+ * lazy `deleteBlockCopy.ts`: `useOrganismDelete` publishes it from `/organisms`'s first load.
+ */
+export const ORGANISM_DELETED = 'Organism deleted';

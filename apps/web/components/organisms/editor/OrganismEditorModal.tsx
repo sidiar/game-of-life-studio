@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -8,6 +8,7 @@ import { styled } from '@mui/material/styles';
 import {
   buildRuleReferenceIndex,
   buildUsageIndex,
+  organismDeleteVerdict,
   referencingOrganismIds,
   resolveOrganismUsage,
   type BattleSummary,
@@ -41,7 +42,11 @@ import { readGridColors } from '@/lib/canvas/themeColors';
 import { projectOrganismForSave } from '@/lib/organisms/organismRecord';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { saveOutcomeMessage } from '@/lib/organisms/saveOutcome';
-import { referencingOrganismNames, usageBattleNames } from '@/lib/organisms/usageLabels';
+import {
+  PROTECTED_DELETE_MESSAGE,
+  referencingOrganismNames,
+  usageBattleNames,
+} from '@/lib/organisms/usageLabels';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -139,6 +144,24 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
    * Never a concrete repository, never `createRepositories()` called from here.
    */
   organisms: OrganismRepository;
+  /**
+   * Story 4.22 (FD1 (a), FD11): the Column-1 "Delete Organism" click. A CALLBACK, never a
+   * repository — the Library owns the verdict, the dialogs and the write (AR-2/AR-27), and
+   * `organisms.save` stays this modal's only side effect. The button renders iff this prop is passed
+   * AND `organism !== null` (an edit session; the card's "renders iff present" contract), so a
+   * create session — even after its first Save — shows none, and so does a caller that passes none
+   * (Story 4.24's battle-origin editor decides for itself). The click decides nothing: the Library
+   * re-derives the verdict at click time and opens the confirmation or the block dialog over this
+   * editor.
+   */
+  onRequestDelete?(): void;
+  /**
+   * Story 4.22, FD12: an editor-origin delete the Library could not complete. Rendered INSIDE the
+   * editor, in the `SaveErrorLine` idiom, because the editor stays open (nothing was deleted) and a
+   * Library-side alert would sit under it, inert and unheard. Published by the Library only once
+   * the stacked dialog has exited; `null`/absent is "nothing to report".
+   */
+  deleteError?: string | null;
 }
 
 /**
@@ -275,6 +298,53 @@ const SaveErrorLine = styled('p')({
 // longer has a publisher for it. Structurally the `ColorPickerField.tsx:380-390` idiom: an
 // always-mounted `role="status"` region whose child mounts with the sentence. Not MUI `Snackbar`,
 // no floating layer, no auto-dismiss.
+// Story 4.22, FD10: `organism-editor-design.md:290-292`'s "Warning color (red), outlined style,
+// bottom of Column 1", in the card `ActionButton`'s house substitutions (there is no pixel
+// reference — the shipped editor mockup has no such button): `--gol-border-control` for the
+// control boundary (SC 1.4.11), `--gol-danger` text, a `--gol-danger` border on hover (and only the
+// border — see the hover rule), NO
+// `transition` (the mid-fade axe trap), a real `:focus-visible` ring, and the card's disabled
+// treatment with its hover reset so a disabled button gives no false affordance. Defined here, not
+// imported from `OrganismCard.tsx`: the lazy editor and the eager card must not couple through a
+// card-private component, and the duplication is one small style object.
+const DeleteOrganismButton = styled('button')({
+  display: 'block',
+  width: '100%',
+  marginTop: '30px',
+  background: 'transparent',
+  border: '1px solid var(--gol-border-control)',
+  color: 'var(--gol-danger)',
+  padding: '12px 14px',
+  fontSize: '12px',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  // Border only — no `--gol-bg-hover` fill, unlike the card: `--gol-danger` on `--gol-bg-hover`
+  // measured 4.48:1 at this 12px size (below SC 1.4.3's 4.5:1) in the e2e hover scan, while on the
+  // column's `--gol-bg-secondary` it passes (AC8).
+  '&:hover:not(:disabled)': {
+    borderColor: 'var(--gol-danger)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+  '&:disabled': {
+    opacity: 0.4,
+    cursor: 'not-allowed',
+  },
+});
+
+// The protected reason under the disabled button — visible text the button names with
+// `aria-describedby` (FD6), the card's `ProtectedNote` treatment.
+const ProtectedDeleteNote = styled('p')({
+  fontSize: '12px',
+  color: 'var(--gol-text-secondary)',
+  margin: '8px 0 0',
+});
+
 const SaveOutcomeLine = styled('p')({
   margin: '0 0 25px',
   padding: '10px 14px',
@@ -367,6 +437,8 @@ export default function OrganismEditorModal({
   library,
   battleSummaries,
   organisms,
+  onRequestDelete,
+  deleteError = null,
 }: OrganismEditorModalProps) {
   // The lazy-initialiser form, so the factory runs once per mount, not once per render — reading
   // `library` exactly once, at mount, for the M6 default-colour seed (FD9). One typed object that
@@ -476,6 +548,14 @@ export default function OrganismEditorModal({
     subjectId === null
       ? []
       : referencingOrganismNames(referencingOrganismIds(ruleIndex, subjectId), library);
+  // Story 4.22: the Delete button's DISABLED state only — a call to the domain verdict over the
+  // indexes above, never a re-derivation (Story 4.21 FD3). `protected` is the one kind that shapes
+  // this button; `blocked`/`allowed` are decided by the Library at click time, from its own settled
+  // data, which is why the click itself carries no verdict.
+  const deleteProtected =
+    organism !== null &&
+    organismDeleteVerdict(organism.id, usageIndex, ruleIndex).kind === 'protected';
+  const protectedNoteId = useId();
   // Story 4.14: resolved ONCE here (`getComputedStyle` forces a style recalculation) and passed
   // down to `<PreviewPanel>` — the `<BattlePage>` form (`BattlePage.tsx:420-427`). `document` is
   // guarded for the prerender even though this file is `ssr: false` (the house form, costs
@@ -771,6 +851,13 @@ export default function OrganismEditorModal({
             {saveError}
           </SaveErrorLine>
         )}
+        {/* Story 4.22, FD12: a refused delete, in the same idiom — conditionally mounted, so the
+            Library's publish (after the stacked dialog's exit) inserts it into a LIVE editor. */}
+        {deleteError !== null && (
+          <SaveErrorLine role="alert" data-editor-delete-error>
+            {deleteError}
+          </SaveErrorLine>
+        )}
         <EditorBody>
           <OrganismEditorLayout
             basicInfo={
@@ -792,6 +879,28 @@ export default function OrganismEditorModal({
                   onChange={setAgingEnabled}
                   colorToken={draft.colorToken}
                 />
+                {/* Story 4.22 (FD1 (a), FD10, FD11): the bottom of Column 1, edit sessions only.
+                    `data-editor-delete-organism` is the focus-restore key after a stacked dialog
+                    closes (FD8). Disabled while a save is in flight — a delete must not race the
+                    write — and for the protected default, whose reason renders beneath it. */}
+                {organism !== null && onRequestDelete !== undefined && (
+                  <>
+                    <DeleteOrganismButton
+                      type="button"
+                      data-editor-delete-organism=""
+                      disabled={isSaving || deleteProtected}
+                      aria-describedby={deleteProtected ? protectedNoteId : undefined}
+                      onClick={() => onRequestDelete()}
+                    >
+                      Delete Organism
+                    </DeleteOrganismButton>
+                    {deleteProtected && (
+                      <ProtectedDeleteNote id={protectedNoteId}>
+                        {PROTECTED_DELETE_MESSAGE}
+                      </ProtectedDeleteNote>
+                    )}
+                  </>
+                )}
               </>
             }
             rulesAction={

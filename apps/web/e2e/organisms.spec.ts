@@ -70,14 +70,14 @@ test.describe('organisms route (Story 4.1)', () => {
     // only reachable once useWorkspaceSeed's and OrganismLibrary's own load effect have both run
     // — every assertion on errors/axe below must come AFTER it, or it races hydration exactly as
     // appShell.spec.ts explains.
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     expect(errors).toEqual([]);
   });
 
   test('nav reflects the current route on both pages', async ({ page }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const nav = page.getByRole('navigation', { name: 'Main' });
     await expect(nav.getByRole('link')).toHaveCount(3); // Battles, Organisms, Settings (Story 5.1)
@@ -143,7 +143,7 @@ test.describe('organisms route (Story 4.1)', () => {
     await expect(organismsLink).toHaveAttribute('aria-current', 'page');
     await expect(nav.getByRole('link', { name: 'Battles' })).not.toHaveAttribute('aria-current');
     // Hydration signal before the error check, same discipline as the first test.
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -167,7 +167,7 @@ test.describe('organisms route (Story 4.1)', () => {
 
   test('has no axe accessibility violations', async ({ page }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
@@ -186,7 +186,7 @@ test.describe('organism card grid (Story 4.2)', () => {
 
     await page.goto('/organisms');
     // Hydration signal, same discipline as the describe block above.
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const card = page.getByRole('article', { name: "Conway's Classic" });
     await expect(card).toBeVisible();
@@ -207,7 +207,7 @@ test.describe('organism card grid (Story 4.2)', () => {
       ruleCount === 0 ? 'No rules' : ruleCount === 1 ? '1 rule' : `${ruleCount} rules`;
     await expect(card.getByText(ruleLabel, { exact: true })).toBeVisible();
 
-    await expect(page.getByRole('status')).toHaveText('1 Organism');
+    await expect(page.locator('[data-organism-count]')).toHaveText('1 Organism');
 
     expect(errors).toEqual([]);
   });
@@ -220,7 +220,7 @@ test.describe('organism card grid (Story 4.2)', () => {
     page.on('pageerror', (err) => errors.push(err.message));
 
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const before = await page.evaluate(() => localStorage.getItem('gol:organisms'));
     // The byte-identity check below is vacuous if the key is wrong (null === null) — prove the
@@ -232,14 +232,14 @@ test.describe('organism card grid (Story 4.2)', () => {
 
     await expect(page.getByText('No organisms match “zzz”.')).toBeVisible();
     await expect(page.getByRole('article')).toHaveCount(0);
-    await expect(page.getByRole('status')).toHaveText('0 of 1 Organism');
+    await expect(page.locator('[data-organism-count]')).toHaveText('0 of 1 Organism');
     await expect(search).toBeFocused();
 
     await search.fill('con');
     await expect(page.getByRole('article', { name: "Conway's Classic" })).toBeVisible();
 
     await search.fill('');
-    await expect(page.getByRole('status')).toHaveText('1 Organism');
+    await expect(page.locator('[data-organism-count]')).toHaveText('1 Organism');
 
     const after = await page.evaluate(() => localStorage.getItem('gol:organisms'));
     expect(after).toBe(before);
@@ -257,7 +257,7 @@ test.describe('organism card grid (Story 4.2)', () => {
     browserName,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const search = page.getByRole('textbox', { name: 'Search organisms' });
     await search.click();
@@ -284,7 +284,7 @@ test.describe('organism card grid (Story 4.2)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const ready = await new AxeBuilder({ page }).analyze();
     expect(ready.violations).toEqual([]);
@@ -318,7 +318,7 @@ test.describe('editor modal shell (Story 4.3)', () => {
 
     await page.goto('/organisms');
     // Hydration signal, same discipline as the blocks above.
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     // Let Next's idle-time `<Link>` prefetches land BEFORE the snapshot, so a script that arrives
     // after the click is the click's and not a late prefetch masquerading as the editor chunk.
     // The bundle gate (AC7) stays the authoritative proof; this is its in-browser echo.
@@ -353,7 +353,7 @@ test.describe('editor modal shell (Story 4.3)', () => {
     browserName,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     // WebKit needs Alt+Tab for the same reason the Story 4.1 block records.
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
@@ -378,7 +378,7 @@ test.describe('editor modal shell (Story 4.3)', () => {
     browserName,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     await openEditor(page);
 
@@ -433,7 +433,7 @@ test.describe('editor modal shell (Story 4.3)', () => {
       page,
     }) => {
       await page.goto('/organisms');
-      await expect(page.getByText("Conway's Classic")).toBeVisible();
+      await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
       const createButton = page.getByRole('button', { name: CREATE });
       await openEditor(page);
@@ -458,7 +458,7 @@ test.describe('editor modal shell (Story 4.3)', () => {
     page.on('pageerror', (err) => errors.push(err.message));
 
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     await openEditor(page);
     // Button's own colour transition (250ms) is unsynchronised with the Dialog's Fade — the
@@ -499,7 +499,7 @@ test.describe('three-column layout (Story 4.4)', () => {
    * three regions located by their accessible names — the names the layout's unit test pins. */
   async function openLayout(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     return {
       dialog,
@@ -829,7 +829,7 @@ test.describe('organism name field (Story 4.5)', () => {
    * Basic Information region — so a field that rendered in another column would not be found. */
   async function openNameField(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const input = dialog
       .getByRole('region', { name: 'Basic Information' })
@@ -962,7 +962,7 @@ test.describe('dominance control (Story 4.6)', () => {
    * Basic Information region — so a control that rendered in another column would not be found. */
   async function openDominanceControl(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
     const slider = basicInfo.getByRole('slider', { name: 'Dominance' });
@@ -1106,7 +1106,7 @@ test.describe('aging degradation toggle (Story 4.7)', () => {
    * column would not be found. Mirrors `openDominanceControl` above. */
   async function openAgingToggle(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
     const toggle = basicInfo.getByRole('switch', { name: 'Aging Degradation' });
@@ -1232,7 +1232,7 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
    * a radio. */
   async function openColorPicker(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
     const toggle = basicInfo.getByRole('button', { name: 'Change Color' });
@@ -1402,7 +1402,7 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
 test.describe('color reuse warning (Story 4.9)', () => {
   async function openColorPicker(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const basicInfo = dialog.getByRole('region', { name: 'Basic Information' });
     const toggle = basicInfo.getByRole('button', { name: 'Change Color' });
@@ -1555,7 +1555,7 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
 
   async function openRules(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const rules = dialog.getByRole('region', { name: 'Survival Rules' });
     const headerAdd = rules.locator('[data-add-rule="header"]');
@@ -1709,7 +1709,7 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
 test.describe('condition builder (Story 4.11)', () => {
   async function openRules(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const rules = dialog.getByRole('region', { name: 'Survival Rules' });
     const headerAdd = rules.locator('[data-add-rule="header"]');
@@ -1947,7 +1947,7 @@ test.describe('rule reordering (Story 4.12)', () => {
 
   async function openRules(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const rules = dialog.getByRole('region', { name: 'Survival Rules' });
     const headerAdd = rules.locator('[data-add-rule="header"]');
@@ -2147,7 +2147,7 @@ test.describe('rule reordering (Story 4.12)', () => {
 test.describe('editor validation & feedback (Story 4.13)', () => {
   async function openRules(page: Page) {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const rules = dialog.getByRole('region', { name: 'Survival Rules' });
     const headerAdd = rules.locator('[data-add-rule="header"]');
@@ -2320,7 +2320,7 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     page.on('pageerror', (err) => errors.push(err.message));
 
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     await expect(dish(dialog)).toBeAttached();
@@ -2354,7 +2354,7 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     const box = await preview(dialog).locator('[data-preview-dish]').boundingBox();
@@ -2377,7 +2377,7 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     const box = await dish(dialog).boundingBox();
@@ -2401,7 +2401,7 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
 
   test('a drag paints (one gesture, Clear enabled)', async ({ page }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     const box = await dish(dialog).boundingBox();
@@ -2427,7 +2427,7 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const before = await page.evaluate(() => [
       localStorage.getItem('gol:organisms'),
@@ -2461,7 +2461,7 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
     browserName,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
 
@@ -2487,7 +2487,7 @@ test.describe('preview grid & drawing (Story 4.14)', () => {
 
   test('axe after a draw, settled', async ({ page }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     const box = await dish(dialog).boundingBox();
@@ -2597,7 +2597,7 @@ test.describe('preview simulation (Story 4.15)', () => {
     page.on('pageerror', (err) => errors.push(err.message));
 
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     await expect(run(dialog, 'Play')).toBeEnabled();
@@ -2621,7 +2621,7 @@ test.describe('preview simulation (Story 4.15)', () => {
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     expect(await preview(dialog).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -2631,7 +2631,7 @@ test.describe('preview simulation (Story 4.15)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const emptyPalette = await distinctColours(dish(dialog));
 
@@ -2670,7 +2670,7 @@ test.describe('preview simulation (Story 4.15)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     await drawOneCell(page, dialog, 5, 5);
@@ -2692,7 +2692,7 @@ test.describe('preview simulation (Story 4.15)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const slider = preview(dialog).getByRole('slider', { name: 'Generations per second' });
 
@@ -2729,7 +2729,7 @@ test.describe('preview simulation (Story 4.15)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     await dialog.getByRole('button', { name: '+ Add Rule' }).first().click();
@@ -2748,7 +2748,7 @@ test.describe('preview simulation (Story 4.15)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const before = await page.evaluate(() => [
       localStorage.getItem('gol:organisms'),
@@ -2783,7 +2783,7 @@ test.describe('preview simulation (Story 4.15)', () => {
     browserName,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
 
@@ -2822,7 +2822,7 @@ test.describe('preview simulation (Story 4.15)', () => {
 
   test('axe: at rest with the controls, and paused after the extinction', async ({ page }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     const dialog = await openEditor(page);
 
     let { violations } = await new AxeBuilder({ page }).analyze();
@@ -2851,7 +2851,9 @@ test.describe('create & save organism (Story 4.16)', () => {
     await card1.getByRole('button', { name: '+ Add Condition' }).click();
   }
 
-  const countBadge = (page: Page) => page.getByRole('status');
+  // Story 4.22: by the badge's own hook — the Library has a second `role="status"` (the delete
+  // status) since then, and an unscoped `getByRole('status')` is a strict-mode failure.
+  const countBadge = (page: Page) => page.locator('[data-organism-count]');
   const back = (dialog: Locator) => dialog.getByRole('button', { name: 'Back to Library' });
 
   test('happy path: save publishes the in-dialog outcome; Back closes, refreshes the grid, and the record survives reload', async ({
@@ -2864,7 +2866,7 @@ test.describe('create & save organism (Story 4.16)', () => {
     page.on('pageerror', (err) => errors.push(err.message));
 
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
@@ -2906,7 +2908,7 @@ test.describe('create & save organism (Story 4.16)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const dialog = await openEditor(page);
     await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
@@ -2926,7 +2928,7 @@ test.describe('create & save organism (Story 4.16)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
@@ -2947,7 +2949,7 @@ test.describe('create & save organism (Story 4.16)', () => {
     browserName,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
@@ -2974,7 +2976,7 @@ test.describe('create & save organism (Story 4.16)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
@@ -3014,7 +3016,7 @@ test.describe('create & save organism (Story 4.16)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
@@ -3033,7 +3035,7 @@ test.describe('create & save organism (Story 4.16)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     const dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
@@ -3056,7 +3058,7 @@ test.describe('create & save organism (Story 4.16)', () => {
     page,
   }) => {
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
 
     let dialog = await openEditor(page);
     await fillValidDraft(dialog, 'Glider');
@@ -3157,7 +3159,8 @@ const cloneButton = (page: Page, name: string) =>
 const editorDialog = (page: Page) => page.getByRole('dialog', { name: 'Organism Editor' });
 const inUseDialog = (page: Page) => page.getByRole('dialog', { name: /^Used in \d+ Battles?$/ });
 const back = (dialog: Locator) => dialog.getByRole('button', { name: 'Back to Library' });
-const countBadge = (page: Page) => page.getByRole('status');
+// Story 4.22: by the badge's own hook, not `getByRole('status')` — see the 4.16 block's copy.
+const countBadge = (page: Page) => page.locator('[data-organism-count]');
 
 /** The settle idiom `openEditor` records, for whichever dialog follows an Edit click. */
 async function settled(page: Page, dialog: Locator) {
@@ -3168,6 +3171,10 @@ async function settled(page: Page, dialog: Locator) {
 
 const storage = (page: Page, key: string) => page.evaluate((k) => localStorage.getItem(k), key);
 
+/** FR-1.4's protected message (`prd.md:137`) — Story 4.21's block and Story 4.22's block both read
+ * it. */
+const PROTECTED_MESSAGE = "Conway's Classic is a built-in organism and can't be deleted.";
+
 test.describe('edit organism from library (Story 4.17)', () => {
   const USED = 'Aggressive Colonizer';
 
@@ -3175,7 +3182,7 @@ test.describe('edit organism from library (Story 4.17)', () => {
     await seedWorkspace(page);
     await seedExtraOrganisms(page);
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     await expect(countBadge(page)).toHaveText('5 Organisms');
   }
 
@@ -3397,7 +3404,7 @@ test.describe('clone organism (Story 4.18)', () => {
     await seedWorkspace(page);
     await seedExtraOrganisms(page);
     await page.goto('/organisms');
-    await expect(page.getByText("Conway's Classic")).toBeVisible();
+    await expect(page.getByText("Conway's Classic", { exact: true })).toBeVisible();
     await expect(countBadge(page)).toHaveText('5 Organisms');
   }
 
@@ -4015,7 +4022,8 @@ async function seedDeleteBlockExtras(page: Page) {
  * is exercised too) — the battle variant. `Silent Vector` is targeted by
  * `Vector Hunter`'s rule and placed nowhere — the rule variant. `Aggressive Colonizer` stays both
  * (the mock workspace's own rule reference), and `Vector Hunter` itself and `Conway's Classic`
- * cover, respectively, the `allowed` and `protected` no-Delete cases.
+ * cover, respectively, the `allowed` and `protected` cases — since Story 4.22 an enabled Delete
+ * that confirms, and a disabled one with its reason (test 1).
  */
 test.describe('delete integrity blocks (Story 4.21)', () => {
   const BOTH = 'Aggressive Colonizer';
@@ -4046,15 +4054,24 @@ test.describe('delete integrity blocks (Story 4.21)', () => {
   const blockDialog = (page: Page, name: string) =>
     page.getByRole('dialog', { name: `Cannot delete ${name}` });
 
-  test('1. Delete is present only on the blocked cards', async ({ page }) => {
+  // Replaced by Story 4.22 (Sidiar's 4.21 review decision FD2 (a)): the transitional "Delete only on
+  // blocked cards" rule is gone.
+  test("1. Delete is present on every card; Conway's Classic's is disabled, with its message", async ({
+    page,
+  }) => {
     const errors = captureErrors(page);
     await gotoSeeded(page);
 
-    await expect(deleteButton(page, BOTH)).toBeVisible();
-    await expect(deleteButton(page, BATTLE_ONLY)).toBeVisible();
-    await expect(deleteButton(page, RULE_ONLY)).toBeVisible();
-    await expect(deleteButton(page, "Conway's Classic")).toHaveCount(0);
-    await expect(deleteButton(page, 'Vector Hunter')).toHaveCount(0);
+    await expect(deleteButton(page, BOTH)).toBeEnabled();
+    await expect(deleteButton(page, BATTLE_ONLY)).toBeEnabled();
+    await expect(deleteButton(page, RULE_ONLY)).toBeEnabled();
+    await expect(deleteButton(page, 'Vector Hunter')).toBeEnabled();
+    const conway = deleteButton(page, "Conway's Classic");
+    await expect(conway).toBeDisabled();
+    await expect(conway).toHaveAccessibleDescription(PROTECTED_MESSAGE);
+    await expect(
+      page.getByRole('article', { name: "Conway's Classic" }).getByText(PROTECTED_MESSAGE),
+    ).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -4180,6 +4197,194 @@ test.describe('delete integrity blocks (Story 4.21)', () => {
     const dialog = await settled(page, blockDialog(page, BATTLE_ONLY));
     await expect(dialog).toContainText('It is used in 40 Battles:');
     await expect(dialog.getByRole('listitem')).toHaveCount(40);
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+});
+
+/**
+ * Story 4.22: safe delete and the protected default, in a real browser. The 4.21 seeding WITHOUT
+ * the filler battle, so `Glider` and `Vector Hunter` are both `allowed` (placed nowhere, targeted by
+ * nothing) and `Silent Vector` stays rule-blocked. No new payload builder.
+ */
+test.describe('safe delete & protected default (Story 4.22)', () => {
+  async function gotoSeeded(page: Page) {
+    await seedWorkspace(page);
+    await seedExtraOrganisms(page);
+    await seedDeleteBlockExtras(page);
+    await page.goto('/organisms');
+    await expect(countBadge(page)).toHaveText('7 Organisms');
+  }
+
+  function captureErrors(page: Page): string[] {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('pageerror', (err) => errors.push(err.message));
+    return errors;
+  }
+
+  const deleteButton = (page: Page, name: string) =>
+    page.getByRole('button', { name: `Delete ${name}`, exact: true });
+  const confirmDialog = (page: Page) => page.getByRole('dialog', { name: 'Delete Organism?' });
+  const toast = (page: Page) => page.locator('[data-delete-status]');
+
+  test('Delete → Confirm removes the organism: card gone, badge down, toast shown, focus on Create, and it is gone from storage', async ({
+    page,
+  }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    await deleteButton(page, 'Glider').click();
+    const dialog = await settled(page, confirmDialog(page));
+    await expect(dialog).toContainText('Are you sure you want to delete “Glider”?');
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    // A keyboard confirm, so the focus assertion below holds on WebKit too (it does not focus a
+    // clicked button).
+    await dialog.getByRole('button', { name: 'Delete Organism' }).press('Enter');
+
+    await page.waitForTimeout(300);
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole('article', { name: 'Glider' })).toHaveCount(0);
+    await expect(countBadge(page)).toHaveText('6 Organisms');
+    await expect(toast(page)).toHaveText('Organism deleted');
+    await expect(page.getByRole('button', { name: CREATE })).toBeFocused();
+
+    // Storage read directly, not through a `page.reload()`: the seeding helpers are
+    // `addInitScript`s, which run again on every navigation and would re-seed the deleted record.
+    const stored = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(stored)).toHaveLength(6);
+    expect(Object.keys(stored)).not.toContain('unused-glider');
+    expect(errors).toEqual([]);
+  });
+
+  test('Cancel and Escape change nothing', async ({ page }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+    const organismsBefore = await storage(page, 'gol:organisms');
+
+    await deleteButton(page, 'Glider').click();
+    let dialog = await settled(page, confirmDialog(page));
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await page.waitForTimeout(300);
+    await expect(dialog).not.toBeVisible();
+
+    await deleteButton(page, 'Glider').click();
+    dialog = await settled(page, confirmDialog(page));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await expect(dialog).not.toBeVisible();
+
+    await expect(countBadge(page)).toHaveText('7 Organisms');
+    await expect(toast(page)).toHaveText('');
+    expect(await storage(page, 'gol:organisms')).toBe(organismsBefore);
+    expect(errors).toEqual([]);
+  });
+
+  test('editor path: Edit → Delete Organism → Confirm returns to the Library with the toast', async ({
+    page,
+  }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    await editButton(page, 'Glider').click();
+    const editor = await settled(page, editorDialog(page));
+    await editor.getByRole('button', { name: 'Delete Organism' }).click();
+    const confirm = confirmDialog(page);
+    await expect(confirm).toBeVisible();
+    await page.waitForTimeout(300);
+    await confirm.getByRole('button', { name: 'Delete Organism' }).click();
+
+    await page.waitForTimeout(300);
+    await expect(confirm).not.toBeVisible();
+    await expect(editor).not.toBeVisible();
+    await expect(toast(page)).toHaveText('Organism deleted');
+    await expect(page.getByRole('article', { name: 'Glider' })).toHaveCount(0);
+    await expect(countBadge(page)).toHaveText('6 Organisms');
+    expect(errors).toEqual([]);
+  });
+
+  test('the protected card: Delete is disabled and its message is visible', async ({ page }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    const conway = deleteButton(page, "Conway's Classic");
+    await expect(conway).toBeDisabled();
+    await expect(conway).toHaveAccessibleDescription(PROTECTED_MESSAGE);
+    await expect(page.getByText(PROTECTED_MESSAGE)).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('axe: no violations with the confirmation open', async ({ page }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    await deleteButton(page, 'Glider').click();
+    await settled(page, confirmDialog(page));
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('axe: no violations with the toast shown', async ({ page }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    await deleteButton(page, 'Glider').click();
+    const dialog = await settled(page, confirmDialog(page));
+    await dialog.getByRole('button', { name: 'Delete Organism' }).click();
+    await expect(toast(page)).toHaveText('Organism deleted');
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  // AC8: `--gol-danger` on the editor's Column-1 surface, at rest and hovered (the card button's
+  // 4.21 measurement is the precedent).
+  test("axe color-contrast: the editor's Delete Organism at rest and hovered", async ({ page }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    await editButton(page, 'Glider').click();
+    const editor = await settled(page, editorDialog(page));
+    const button = editor.getByRole('button', { name: 'Delete Organism' });
+    await button.scrollIntoViewIfNeeded();
+
+    const atRest = await new AxeBuilder({ page })
+      .include('[data-editor-delete-organism]')
+      .withRules(['color-contrast'])
+      .analyze();
+    expect(atRest.violations).toEqual([]);
+
+    await button.hover();
+    await page.waitForTimeout(300);
+    const hovered = await new AxeBuilder({ page })
+      .include('[data-editor-delete-organism]')
+      .withRules(['color-contrast'])
+      .analyze();
+    expect(hovered.violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('axe: no violations with the confirmation stacked over the editor', async ({ page }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    await editButton(page, 'Glider').click();
+    const editor = await settled(page, editorDialog(page));
+    await editor.getByRole('button', { name: 'Delete Organism' }).click();
+    await expect(confirmDialog(page)).toBeVisible();
     await page.waitForTimeout(300);
 
     const { violations } = await new AxeBuilder({ page }).analyze();

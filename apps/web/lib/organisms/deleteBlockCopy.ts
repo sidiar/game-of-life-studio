@@ -1,8 +1,8 @@
 import { battleCount } from './usageLabels';
 
 /**
- * Story 4.21's copy for `<OrganismDeleteBlockedDialog>` — kept in a module the lazy DIALOG chunk
- * imports alone (FD5). `usageLabels.ts` is EAGER on `/organisms` as of Story 4.21 —
+ * Story 4.21's copy for `<OrganismDeleteBlockedDialog>`, and since Story 4.22 for
+ * `<OrganismDeleteConfirmDialog>` too — kept in a module only the lazy DIALOG chunks import (FD5). `usageLabels.ts` is EAGER on `/organisms` as of Story 4.21 —
  * `<OrganismLibrary>` imports its name resolvers for click-time resolution (FD7) — so putting these
  * block strings there would put them in the first load for a dialog most sessions never open. `battleCount` is imported, not duplicated, so the dialog's
  * "N Battles" is the identical string the footer and the 4.17 in-use warning print.
@@ -30,3 +30,15 @@ export function ruleBlockSentence(m: number): string {
 }
 
 export const RULE_BLOCK_REMEDY = 'Edit those rules to remove the reference, then try again.';
+
+/** Story 4.22: the confirmation's title (UX-DR15), a question, like `Delete Battle?`. */
+export const DELETE_CONFIRM_TITLE = 'Delete Organism?';
+
+/** FR-1.4's standard confirmation, verbatim (`prd.md:136`). `name` is already display-resolved
+ * (`toDisplayOrganism`) by the caller, so an `''` name reads `Unnamed organism` here. */
+export function deleteConfirmSentence(name: string): string {
+  return `Are you sure you want to delete “${name}”?`;
+}
+
+/** The destructive action's label — the object named, like `Delete Battle`. */
+export const DELETE_CONFIRM_ACTION = 'Delete Organism';
