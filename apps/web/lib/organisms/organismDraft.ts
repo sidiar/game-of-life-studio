@@ -1,6 +1,10 @@
 import { NEW_ORGANISM_DOMINANCE, type Organism } from '@gol/domain';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
-import { type ConditionDraftField, validateConditionDraft } from './conditionDraft';
+import {
+  type ConditionDraft,
+  type ConditionDraftField,
+  validateConditionDraft,
+} from './conditionDraft';
 import {
   ruleDraftFrom,
   ruleNeedsCondition,
@@ -143,4 +147,54 @@ export function validateOrganismDraft(draft: OrganismDraft): readonly DraftError
     }
   }
   return errors;
+}
+
+// --- Dirty scope — the editor's own, independent of the battle's (Story 4.23, AC1, AC5). ---
+
+/** `ConditionDraft`'s `id` is deliberately excluded (FD1): it is an editor-only key that never
+ * reaches `Condition`, so a deleted-and-re-added identical condition would save byte-identical and
+ * must read as clean. `pattern` is compared element-wise for a range (an array), by value
+ * otherwise — `property`/`operator` equal already guarantees the two sides share pattern shape. */
+function conditionDraftsEqual(a: ConditionDraft, b: ConditionDraft): boolean {
+  if (a.property !== b.property || a.operator !== b.operator) return false;
+  if (Array.isArray(a.pattern) || Array.isArray(b.pattern)) {
+    return (
+      Array.isArray(a.pattern) &&
+      Array.isArray(b.pattern) &&
+      a.pattern[0] === b.pattern[0] &&
+      a.pattern[1] === b.pattern[1]
+    );
+  }
+  return a.pattern === b.pattern;
+}
+
+/** A rule's `id` IS compared (FD1): it is persisted (RFC-004 §2.4), so a deleted-and-re-added
+ * identical rule under a fresh id is a real change to the record and must read as dirty. */
+function ruleDraftsEqual(a: RuleDraft, b: RuleDraft): boolean {
+  return (
+    a.id === b.id &&
+    a.payload.action === b.payload.action &&
+    a.payload.summary === b.payload.summary &&
+    a.conditions.length === b.conditions.length &&
+    a.conditions.every((condition, index) => conditionDraftsEqual(condition, b.conditions[index]))
+  );
+}
+
+/**
+ * The editor's own dirty scope (AR-33): `draft` diffed against a `baseline` — never a sticky
+ * "touched" flag, so a hand-revert back to the baseline's exact values reads clean again (FD1).
+ * Reference equality is the fast path; the id-less condition comparison and the id-ful rule
+ * comparison are what make `organismDraft.test.ts`'s revert/re-add cases behave as the story
+ * requires. Field order matches `OrganismDraft`'s own declaration.
+ */
+export function isOrganismDraftDirty(baseline: OrganismDraft, draft: OrganismDraft): boolean {
+  if (draft === baseline) return false;
+  if (draft.name !== baseline.name) return true;
+  if (draft.dominance !== baseline.dominance) return true;
+  if (draft.agingEnabled !== baseline.agingEnabled) return true;
+  if (draft.colorToken !== baseline.colorToken) return true;
+  if (draft.survivalRules.length !== baseline.survivalRules.length) return true;
+  return draft.survivalRules.some(
+    (rule, index) => !ruleDraftsEqual(rule, baseline.survivalRules[index]),
+  );
 }

@@ -524,7 +524,11 @@ describe('OrganismLibrary — editor modal shell (Story 4.3)', () => {
     await user.click(screen.getByRole('radio', { name: PALETTE[10].name }));
     expect(document.querySelector('[data-selected-name]')).toHaveTextContent(PALETTE[10].name);
 
+    // Story 4.23: every field above is dirty against the create seed, so Escape opens the
+    // unsaved-changes prompt rather than closing at once — Discard is the no-write close this
+    // test's own "draft does not survive an exit" premise wants.
     await user.keyboard('{Escape}');
+    await user.click(await screen.findByRole('button', { name: 'Discard' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     await user.click(createButton());
@@ -847,6 +851,9 @@ describe('OrganismLibrary — edit organism from library (Story 4.17)', () => {
     const name = within(dialog).getByRole('textbox', { name: 'Organism Name' });
     await user.type(name, ' II'); // a dirty draft, abandoned
     await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
+    // Story 4.23: a dirty draft routes Back through the unsaved-changes prompt; Discard is the
+    // no-write abandonment this test's own assertions below already expect.
+    await user.click(await screen.findByRole('button', { name: 'Discard' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     expect(save).not.toHaveBeenCalled();
@@ -1973,6 +1980,32 @@ describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () 
     expect(root).not.toHaveAttribute('aria-hidden');
   });
 
+  // Story 4.23, AC6: `closeEditor` (`modalProps.onClose`) stays a direct, unguarded close — the
+  // organism is gone, so there is nothing left to save the dirty draft into. This holds by
+  // construction (the guard lives in the modal, in front of its OWN controls, not in front of the
+  // Library's `onEditorDeleted` call), but it is worth pinning: unlike the test above, this draft
+  // is DIRTY, so a Back/✕/Escape here would have opened the unsaved-changes prompt.
+  it('AC6: a DIRTY editor closed by a successful editor-origin Delete skips the unsaved-changes prompt', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    const del = vi.spyOn(organisms, 'delete');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Glider' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.type(within(editor).getByRole('textbox', { name: 'Organism Name' }), ' II');
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    await user.click(within(confirm).getByRole('button', { name: 'Delete Organism' }));
+
+    await waitFor(() => expect(del).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Organism Editor' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('dialog', { name: 'Unsaved Changes' })).not.toBeInTheDocument();
+  });
+
   it('editor origin, blocked: the block dialog stacks over the editor; OK leaves the editor open with focus on its Delete', async () => {
     const user = userEvent.setup();
     const { organisms, battles } = deleteRig();
@@ -2105,6 +2138,37 @@ describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () 
         within(editor).getByRole('button', { name: 'Back to Library' }),
       ),
     );
+  });
+
+  // Story 4.23, AC9/FD12: a SUCCESSFUL Save (here, the re-creating Save the GONE alert leaves as
+  // the only way forward) clears the in-editor delete alert AND the Delete button's GONE-disabled
+  // state — continuing directly from the scenario the test above pins.
+  it('AC9: a successful re-creating Save clears the GONE alert and re-enables Delete', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Glider' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    // "Deleted in another tab": gone from storage, still on the Library's settled snapshot.
+    await organisms.delete(DELETE_UNUSED.id);
+    await user.click(within(confirm).getByRole('button', { name: 'Delete Organism' }));
+
+    await waitFor(() =>
+      expect(within(editor).getByRole('alert')).toHaveTextContent(
+        'This organism no longer exists. It may have been deleted in another tab.',
+      ),
+    );
+    expect(within(editor).getByRole('button', { name: 'Delete Organism' })).toBeDisabled();
+
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(within(editor).queryByRole('alert')).toBeNull());
+    expect(within(editor).getByRole('button', { name: 'Delete Organism' })).toBeEnabled();
+    expect(await organisms.load(DELETE_UNUSED.id)).not.toBeNull();
   });
 
   it('a second delete later in the session re-announces — the toast node re-mounts', async () => {
