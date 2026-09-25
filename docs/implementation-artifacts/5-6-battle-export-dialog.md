@@ -863,3 +863,18 @@ Proposed lane gate:
     requires: 5-6-battle-export-dialog
     why: >-
       Same surface and the same /battle headroom as 4.24.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 16s | 16s | 16 | 2,948 | 6,842 | 447,566 | 457,372 |
+| Step 1 — create | opus-5-5 | 1 | 7m 00s | 7m 00s | 134 | 3,873 | 347,116 | 8,283,620 | 8,634,743 |
+| Step 2 — implement | sonnet-5 | 2 | 1h 10m | 12h 28m | 1,140 | 87,813 | 1,228,719 | 119,565,450 | 120,883,122 |
+| Step 3 — review + PR | opus-5-5 | 4 | 15m 20s | 15m 20s | 290 | 12,161 | 673,241 | 12,029,206 | 12,714,898 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 200 | 72,526 | 232,749 | 9,719,088 | 10,024,563 |
+| **Total (create → PR ready)** | | 7 | **1h 32m** | 12h 50m | 1,580 | 106,795 | 2,255,918 | 140,325,842 | **142,690,135** |
+
+Run started 2026-09-24 20:24 CEST; wall clock runs to the point the run stopped for the owner's review. Active excludes 1 idle gap totalling 11h 18m (11h 18m from 21:14) — stretches with no transcript activity in the session or any subagent, such as a usage-limit reset or the machine asleep. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
