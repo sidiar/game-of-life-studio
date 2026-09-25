@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
+import { PROTECTED_DELETE_MESSAGE } from '@/lib/organisms/usageLabels';
 import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import OrganismCard from './OrganismCard';
 
@@ -255,18 +256,23 @@ describe('OrganismCard', () => {
     expect(results.violations).toEqual([]);
   });
 
-  // Story 4.21, FD2: Delete renders iff the Library passes `onRequestDelete` — never a boolean.
+  // Story 4.21, FD2: Delete renders iff the caller passes `onRequestDelete` — never a boolean.
+  // Story 4.22 made the Library pass it on EVERY card (that inversion is pinned in
+  // `OrganismLibrary.test.tsx`); the card's own contract is unchanged, so a caller that passes no
+  // handler still gets no Delete.
   describe('Delete (Story 4.21)', () => {
-    it('renders no Delete button when onRequestDelete is not passed', () => {
+    it('still renders no Delete button when onRequestDelete is not passed, even on the system card', () => {
       render(
         <OrganismCard
           organism={CONWAYS_CLASSIC}
+          system
           onRequestEdit={vi.fn()}
           onRequestClone={vi.fn()}
         />,
       );
 
       expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument();
+      expect(screen.queryByText(PROTECTED_DELETE_MESSAGE)).not.toBeInTheDocument();
     });
 
     it('renders Delete, correctly labelled and attributed, when onRequestDelete is passed', () => {
@@ -333,6 +339,80 @@ describe('OrganismCard', () => {
 
       const results = await axe(container);
       expect(results.violations).toEqual([]);
+    });
+  });
+
+  // Story 4.22, FD6: the protected default's Delete is natively disabled, and its reason is
+  // visible text the button names as its description.
+  describe('protected Delete (Story 4.22)', () => {
+    function renderProtected(onRequestDelete = vi.fn()) {
+      return render(
+        <OrganismCard
+          organism={CONWAYS_CLASSIC}
+          system
+          onRequestEdit={vi.fn()}
+          onRequestClone={vi.fn()}
+          onRequestDelete={onRequestDelete}
+        />,
+      );
+    }
+
+    it('renders Delete disabled, described by the visible protected message', () => {
+      renderProtected();
+
+      const del = screen.getByRole('button', { name: "Delete Conway's Classic" });
+      expect(del).toBeDisabled();
+      expect(del).toHaveAccessibleDescription(PROTECTED_DELETE_MESSAGE);
+      // The description target exists in the DOM and is visible text, not a tooltip (FD6).
+      const note = document.getElementById(del.getAttribute('aria-describedby') ?? '');
+      expect(note).not.toBeNull();
+      expect(note).toHaveTextContent(PROTECTED_DELETE_MESSAGE);
+      expect(note).toBeVisible();
+    });
+
+    it('a click on the disabled Delete calls nothing', async () => {
+      const user = userEvent.setup();
+      const onRequestDelete = vi.fn();
+      renderProtected(onRequestDelete);
+
+      await user.click(screen.getByRole('button', { name: "Delete Conway's Classic" }));
+
+      expect(onRequestDelete).not.toHaveBeenCalled();
+    });
+
+    it('a non-system card has an enabled Delete and no note', () => {
+      const [aggressive] = createMockOrganisms();
+      render(
+        <OrganismCard
+          organism={aggressive}
+          onRequestEdit={vi.fn()}
+          onRequestClone={vi.fn()}
+          onRequestDelete={vi.fn()}
+        />,
+      );
+
+      const del = screen.getByRole('button', { name: `Delete ${aggressive.name}` });
+      expect(del).toBeEnabled();
+      expect(del).not.toHaveAttribute('aria-describedby');
+      expect(screen.queryByText(PROTECTED_DELETE_MESSAGE)).not.toBeInTheDocument();
+    });
+
+    it('tab order on the protected card is Edit then Clone — the disabled Delete is skipped', async () => {
+      const user = userEvent.setup();
+      renderProtected();
+
+      await user.tab();
+      expect(screen.getByRole('button', { name: "Edit Conway's Classic" })).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', { name: "Clone Conway's Classic" })).toHaveFocus();
+      await user.tab();
+      expect(document.body).toHaveFocus();
+    });
+
+    it('has no axe accessibility violations', async () => {
+      const { container } = renderProtected();
+
+      expect((await axe(container)).violations).toEqual([]);
     });
   });
 });

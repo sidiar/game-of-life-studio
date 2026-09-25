@@ -22,6 +22,17 @@ import { useEffect } from 'react';
 // background genuinely non-interactive for pointer, keyboard AND assistive tech in one native
 // attribute, matching what aria-hidden already claims. Supported across the whole NFR-2.1 matrix
 // (Chrome 102+, Firefox 112+, Safari 15.5+) and passed through by React 19 as a boolean prop.
+// ONE registry across every active instance, at module level, because two instances can be active
+// at once: Story 4.22 stacks a Library-owned dialog over the mounted editor, so the editor's
+// instance and the delete controller's both observe the same mutations. With a map per instance
+// (the shape until 2026-09-25), the nested modal's mount marks the editor's own portal
+// aria-hidden, the editor's observer — registered first, so notified first — inerts that portal,
+// and the stacked instance then records `inert: true` as the portal's "prior" state: its cleanup
+// restores `true`, and the editor is handed back dead after a Cancel (measured in Chromium, e2e
+// "Cancel on the stacked confirmation"). The prior value is recorded ONCE here, by whichever
+// instance touches the element first, and every later instance only adds a hold.
+const claims = new Map<HTMLElement, { prior: boolean; holders: number }>();
+
 export function useInertBackground(active: boolean): void {
   useEffect(() => {
     if (!active) return;
@@ -32,7 +43,7 @@ export function useInertBackground(active: boolean): void {
     // (ModalManager.getHiddenSiblings), so one of them could legitimately have been inert on its
     // own account. Restoring `false` unconditionally would permanently un-inert it after the first
     // dialog cycle.
-    const restore = new Map<HTMLElement, boolean>();
+    const held = new Set<HTMLElement>();
 
     // Runs from a PLAIN useEffect, not useLayoutEffect — deliberately. MUI's own focus-trap move
     // (onto the dialog's autoFocus target) must already have happened before this runs; inerting a
@@ -44,8 +55,14 @@ export function useInertBackground(active: boolean): void {
         if (element.getAttribute('aria-hidden') !== 'true') continue;
         // Idempotent: an element already swept keeps the value captured the FIRST time, so a
         // repeated sweep can never record `true` as its "prior" state and strand it inert.
-        if (restore.has(element)) continue;
-        restore.set(element, element.inert);
+        if (held.has(element)) continue;
+        held.add(element);
+        const claim = claims.get(element);
+        if (claim !== undefined) {
+          claim.holders += 1;
+          continue;
+        }
+        claims.set(element, { prior: element.inert, holders: 1 });
         element.inert = true;
       }
     };
@@ -82,7 +99,20 @@ export function useInertBackground(active: boolean): void {
 
     return () => {
       observer.disconnect();
-      for (const [element, wasInert] of restore) element.inert = wasInert;
+      for (const [element, claim] of claims) {
+        if (held.has(element)) claim.holders -= 1;
+        // Released when no instance holds it any more — OR when MUI has already lifted its own
+        // `aria-hidden` from it while another instance still holds it. The second clause is the
+        // nested case: the stacked dialog's close un-hides the modal beneath it, and the instance
+        // that inerted that modal (the under-modal's own hook, via its observer) stays active
+        // for as long as the under-modal does. Nothing un-hidden by MUI is honestly inert.
+        // Never released here: an element still aria-hidden by another instance's modal — the
+        // page root under a still-open editor stays inert until that instance's own cleanup.
+        if (claim.holders <= 0 || element.getAttribute('aria-hidden') !== 'true') {
+          claims.delete(element);
+          element.inert = claim.prior;
+        }
+      }
     };
   }, [active]);
 }

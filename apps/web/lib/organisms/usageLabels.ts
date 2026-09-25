@@ -101,3 +101,12 @@ export function referencingOrganismNames(
 ): readonly string[] {
   return resolveDisplayOrganisms(organismIds, library).map((organism) => organism.name);
 }
+
+/**
+ * Story 4.22 (FR-1.4's protected message, `prd.md:137`; M9): the reason the protected default's
+ * Delete is disabled, rendered as visible text on its card AND in the editor (FD6). Here — the
+ * eager seam both surfaces already import — rather than in the card, which the lazy editor must not
+ * couple to (FD10), or in the lazy `deleteBlockCopy.ts`, which the eager card must not pull in.
+ */
+export const PROTECTED_DELETE_MESSAGE =
+  "Conway's Classic is a built-in organism and can't be deleted.";
