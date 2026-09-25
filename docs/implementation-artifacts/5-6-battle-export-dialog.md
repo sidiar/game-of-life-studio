@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 5.6: Battle Export Dialog
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -63,10 +63,15 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
 5. **The default Battle Only filename is the battle name in kebab-case, e.g. `triple-threat.json`**
    (FR-6.4). A pure `battleExportFilename(name: string): string` in `apps/web/lib/export/` builds it
    (FD7):
-   - normalise to NFKD and strip combining marks;
+   - normalise to NFKD and strip combining marks that follow a **Latin** base character only, then
+     renormalise to NFC **→ Sidiar (2026-09-25):** superseding the original "strip every
+     combining mark" — see the dated FD7 annotation below;
    - lowercase;
-   - turn every run of characters that are not a Unicode letter or number into one `-`;
+   - turn every run of characters that are not a Unicode letter, number, or (surviving, non-Latin)
+     combining mark into one `-`;
    - trim leading and trailing `-`;
+   - truncate to 60 code points, trim a trailing `-` the cut may leave **→ Sidiar (2026-09-25):**
+     new sub-step — see the dated FD7 annotation below;
    - append `.json`.
 
    If nothing is left (an untitled battle `''`, whitespace only, or all punctuation and emoji), the
@@ -323,10 +328,10 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
 
 _Code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `origin/main...HEAD`)._
 
-- [ ] [Review][Decision] Filename slug strips every combining mark, not just Latin accents — FD7/AC5 prescribe `normalize('NFKD').replace(/\p{M}+/gu, '')`, which silently garbles scripts whose vowel signs/viramas are `\p{M}` (Devanagari "नमस्ते" loses its vowel signs, Japanese が → か, Hangul decomposes to loose jamo), contradicting the code's own "non-Latin names are kept" claim. The code follows the spec verbatim, so changing it is a spec change. Options: (a) keep FD7 as written and reword the comment to "Latin-accented and mark-free scripts"; (b) strip only marks following a Latin base (`/(\p{Script=Latin})\p{M}+/gu` → `'$1'`) then `normalize('NFC')`, updating FD7/AC5 and adding an Indic/Japanese/Hangul test; (c) drop mark-stripping and NFC-normalise only, accepting `café` → `café.json`. [apps/web/lib/export/battleExportFilename.ts:10-16]
-- [ ] [Review][Decision] No length cap on the export filename — a long battle name (≥ ~250 UTF-8 bytes, sooner for multi-byte scripts) exceeds common filesystem limits and the browser/OS may truncate the name or drop `.json`. FD7 sets no cap and the battle-name field's own max length decides whether this is reachable. Options: (a) accept, if the name field's max length already keeps the slug under the limit; (b) cap the slug (e.g. 100 code points, trailing `-` trimmed) and add the case to FD7 and its test; (c) defer to a later filename-hygiene story together with Windows reserved names (`con`, `nul`). [apps/web/lib/export/battleExportFilename.ts:31-34]
-- [ ] [Review][Decision] Page-level export tests mock the whole `battleExporter` module rather than using the real serializer over `createFakeRepositories` with `downloadJsonFile` mocked, as Task 7 specified — so no page-level test can observe AC11's "a rejecting `exportBattle` … and no download". The file header documents the variance (wiring vs. round trip, which `exportBattleToFile.test.ts` owns). Options: (a) accept the variance and record it in the Dev Agent Record as an FD-level deviation; (b) rewrite `BattlePage.export.test.tsx` per Task 7 (real serializer, mocked `@/lib/export/downloadJsonFile`), asserting on the download seam. [apps/web/components/battle/BattlePage.export.test.tsx:17-34]
-- [ ] [Review][Decision] Bundle baselines re-baselined for routes this story does not touch — `npm run bundle:baseline` regenerates every route, so `/` (+104 B), `/organisms` (+66 B) and `/settings` (+184 B) moved alongside `/battle` and `/battle/new`; the Dev Agent Record calls these "pre-existing drift from main" without evidence. The growth-ratchet intent is that unexplained growth is caught, not absorbed. Options: (a) accept (the documented refresh procedure is whole-file, and the drift is small); (b) restore those three routes to `main`'s values and explain or fix their growth separately; (c) change `bundle:baseline` to refresh only named routes. [scripts/bundle-baselines.json:2-6]
+- [x] [Review][Decision] Filename slug strips every combining mark, not just Latin accents — FD7/AC5 prescribe `normalize('NFKD').replace(/\p{M}+/gu, '')`, which silently garbles scripts whose vowel signs/viramas are `\p{M}` (Devanagari "नमस्ते" loses its vowel signs, Japanese が → か, Hangul decomposes to loose jamo), contradicting the code's own "non-Latin names are kept" claim. The code follows the spec verbatim, so changing it is a spec change. Options: (a) keep FD7 as written and reword the comment to "Latin-accented and mark-free scripts"; (b) strip only marks following a Latin base (`/(\p{Script=Latin})\p{M}+/gu` → `'$1'`) then `normalize('NFC')`, updating FD7/AC5 and adding an Indic/Japanese/Hangul test; (c) drop mark-stripping and NFC-normalise only, accepting `café` → `café.json`. [apps/web/lib/export/battleExportFilename.ts:10-16] **→ Sidiar (2026-09-25): (b)** — strip only marks that follow a Latin base, then `normalize('NFC')`; update FD7/AC5 and add an Indic/Japanese/Hangul test.
+- [x] [Review][Decision] No length cap on the export filename — a long battle name (≥ ~250 UTF-8 bytes, sooner for multi-byte scripts) exceeds common filesystem limits and the browser/OS may truncate the name or drop `.json`. FD7 sets no cap and the battle-name field's own max length decides whether this is reachable. Options: (a) accept, if the name field's max length already keeps the slug under the limit; (b) cap the slug (e.g. 100 code points, trailing `-` trimmed) and add the case to FD7 and its test; (c) defer to a later filename-hygiene story together with Windows reserved names (`con`, `nul`). [apps/web/lib/export/battleExportFilename.ts:31-34] **→ Sidiar (2026-09-25): (b), capped at 60 code points** (60 × 4 B + `.json` = 245 B, under the 255-byte limit for any script), trailing `-` trimmed after the cut; add to FD7 and its test. Windows reserved names stay deferred (browsers already rename them).
+- [x] [Review][Decision] Page-level export tests mock the whole `battleExporter` module rather than using the real serializer over `createFakeRepositories` with `downloadJsonFile` mocked, as Task 7 specified — so no page-level test can observe AC11's "a rejecting `exportBattle` … and no download". The file header documents the variance (wiring vs. round trip, which `exportBattleToFile.test.ts` owns). Options: (a) accept the variance and record it in the Dev Agent Record as an FD-level deviation; (b) rewrite `BattlePage.export.test.tsx` per Task 7 (real serializer, mocked `@/lib/export/downloadJsonFile`), asserting on the download seam. [apps/web/components/battle/BattlePage.export.test.tsx:17-34] **→ Sidiar (2026-09-25): (a)** — accept; record in the Dev Agent Record as a deviation from Task 7, citing where each guarantee is proven: no-download-on-reject in `exportBattleToFile.test.ts` / `battleExporter.test.ts` (real serializer), the file contents in the AC11 round trip, save-then-export freshness in the e2e dirty-battle case, and wiring/order at page level.
+- [x] [Review][Decision] Bundle baselines re-baselined for routes this story does not touch — `npm run bundle:baseline` regenerates every route, so `/` (+104 B), `/organisms` (+66 B) and `/settings` (+184 B) moved alongside `/battle` and `/battle/new`; the Dev Agent Record calls these "pre-existing drift from main" without evidence. The growth-ratchet intent is that unexplained growth is caught, not absorbed. Options: (a) accept (the documented refresh procedure is whole-file, and the drift is small); (b) restore those three routes to `main`'s values and explain or fix their growth separately; (c) change `bundle:baseline` to refresh only named routes. [scripts/bundle-baselines.json:2-6] **→ Sidiar (2026-09-25): (a)** — accept, and correct the Dev Agent Record: the growth is THIS story's, not drift from main. Evidence: the baselines were taken on `main` at `5c338f5`; the only later `main` commit (#81) is scripts/docs; the synced branch already read `/` +0.1, `/organisms` +0.1, `/settings` +0.2 KB before any review patch. Most likely mechanism (unverified): the new lazy chunks grow the shared runtime's chunk map, which every route loads — the same class of side effect Story 2.14 measured.
 - [x] [Review][Patch] A stale save error hides every later export failure — `handleExport` cleared only `exportError`, so after a failed save a Workspace (or clean Battle Only) export failure rendered under `saveError ?? exportError` as the OLD save message, contradicting FD9's own "`handleExport` clears both" [apps/web/components/battle/BattlePage.tsx:handleExport]
 - [x] [Review][Patch] Focus restore after a completed or failed export ran before React committed — the `finally`'s synchronous `focusExportButtonIfLoose()` could hit the Export button while it was still `disabled={isSaving}` (failed Save & Export) or still `inert`, a spec-mandated no-op leaving focus on `<body>` (FD8/AC9); now requested through state and performed by the post-commit restore effect [apps/web/components/battle/BattlePage.tsx:handleExportExited]
 - [x] [Review][Patch] Focus-restore effect also fired on mount and could steal focus from `<body>` to Export Battle on page load; now gated on a restore actually being owed by an export dialog [apps/web/components/battle/BattlePage.tsx:focus-restore effect]
@@ -480,6 +485,56 @@ Test cases:
 
 The fallback is derived from `battleDisplayName`, not typed as a second literal, so it cannot
 drift from the header's "Untitled Battle".
+
+**→ Sidiar (2026-09-25), superseding the two paragraphs above (Review][Decision] items 1–2):**
+
+1. **Latin-only mark stripping.** Stripping every `\p{M}` regardless of script (the original
+   pipeline above) silently garbles scripts whose marks carry meaning: Devanagari vowel
+   signs/virama, Japanese dakuten/handakuten (がんばれ → かんはれ), and Hangul, whose precomposed
+   syllables NFKD-decompose into loose jamo with nothing to recompose them. The fix strips
+   combining marks only where they follow a **Latin** base character, then renormalises to NFC:
+   - `name.normalize('NFKD').replace(/(\p{Script=Latin})\p{M}+/gu, '$1').normalize('NFC')`, then
+     lowercase;
+   - `.replace(/[^\p{L}\p{N}\p{M}]+/gu, '-')` — **`\p{M}` is now exempted here too.** The literal
+     regex the review offered (`[^\p{L}\p{N}]+`, unchanged) still reads a surviving non-Latin mark
+     (a Devanagari matra, a Japanese dakuten) as "not a letter or number" and turns it into a
+     hyphen, contradicting the review's own "नमस्ते, がんばれ, 전투 survive intact" — so this
+     one extra exemption was necessary to actually deliver the stated outcome, not a separate
+     policy choice. Flagging it here per project-context's "surface any new conflict" rule rather
+     than silently picking a reading.
+   - trim leading/trailing `-`; fallback and `.json` suffix unchanged.
+
+2. **60-code-point cap**, capped at 60 code points, trailing `-` trimmed after the cut, applied to
+   the slug **before** the empty-check that triggers the `untitled-battle` fallback:
+   - `Array.from(slug).slice(0, 60).join('').replace(/-+$/, '')` — code points via `Array.from`,
+     never `.slice()`/`.length` on the raw string, which count UTF-16 units and can split a
+     surrogate pair (an astral character) in two.
+   - 60 code points × 4 bytes (UTF-8 worst case, any script) + `.json` (5 bytes) = 245 bytes,
+     under the 255-byte filename limit most filesystems enforce.
+   - Windows reserved device names (`con`, `nul`, …) stay deferred — browsers already rename them
+     on save.
+
+Updated test cases (superseding the table above):
+
+| Input | Output |
+|---|---|
+| `'Triple Threat'` | `triple-threat.json` |
+| `'  Triple   Threat  '` | `triple-threat.json` |
+| `'Café Wars!'` | `cafe-wars.json` |
+| `'Café Duel'` | `cafe-duel.json` |
+| `'Battle #2: Rematch'` | `battle-2-rematch.json` |
+| `''` | `untitled-battle.json` |
+| `'   '` | `untitled-battle.json` |
+| `'🔥🔥'` | `untitled-battle.json` |
+| `'!!!'` | `untitled-battle.json` |
+| a non-Latin name, e.g. `'מלחמה'` | `מלחמה.json` |
+| Devanagari `'नमस्ते'` | `नमस्ते.json` (vowel signs/virama intact) |
+| Japanese `'がんばれ'` | `がんばれ.json` (voiced kana intact) |
+| Hangul `'전투'` | `전투.json` (composed syllables, not loose jamo) |
+| a long Latin name (kebab exceeds 60 code points) | truncated to 60 code points |
+| a long CJK name (70 code points, no separators) | truncated to exactly 60 code points |
+| a boundary case where the 60-code-point cut lands on a `-` | trailing `-` trimmed |
+| a surrogate-pair character exactly at the cut | kept whole, never split into a lone surrogate |
 
 **FD8: Focus lands on EXPORT BATTLE after the operation settles, not at exit.** The button wears
 `disabled={isSaving}`, the visible half of the edit lock like every other sidebar control. If focus
@@ -677,7 +732,10 @@ gate below. This story adds **no** `@gol/domain` barrel export.
 
 Claude Sonnet 5 (claude-sonnet-5). Tasks 1–8 and the initial Task 9 attempt (through the HALT) were
 one Sonnet session; the 2026-09-25 completion of Task 9 (baseline refresh, `ci:dev`, story
-close-out) is a **second, separate Sonnet session** resuming the halted run from the synced branch.
+close-out) is a **second, separate Sonnet session** resuming the halted run from the synced branch;
+the 2026-09-25 owner review-decision close-out (filename fix, decision annotations, final `ci:dev`)
+is a **third, separate Sonnet session** resuming after the owner answered the four
+`[Review][Decision]` items.
 
 ### Debug Log References
 
@@ -711,8 +769,16 @@ close-out) is a **second, separate Sonnet session** resuming the halted run from
 - `npm run build:standalone` — green (Turbo cache hit; no code changed since the prior build).
 - `npm run bundle:check` — **PASSES** against the growth gate: `/battle` 310.1 KB vs. baseline
   309.5 KB (**+0.6 KB**, within the 8 KB allowance); `/battle/new` 309.9 KB vs. baseline 309.3 KB
-  (**+0.6 KB**). `/` +0.1 KB, `/organisms` +0.1 KB, `/settings` +0.2 KB — all pre-existing drift
-  from `main`, not new in this story.
+  (**+0.6 KB**). `/` +0.1 KB, `/organisms` +0.1 KB, `/settings` +0.2 KB. **Correction (Review][Decision]
+  item 4, → Sidiar 2026-09-25): this growth is THIS story's own, not "pre-existing drift from
+  `main`" as first recorded here.** Evidence: the committed baselines were measured on `main` at
+  `5c338f5`; the only later `main` commit before this branch synced (#81) touched only
+  `scripts/`/docs, not any of `/`, `/organisms`, `/settings`'s source; and the synced branch
+  already read `/` +0.1, `/organisms` +0.1, `/settings` +0.2 KB **before** the code-review patch
+  landed, i.e. from this story's Tasks 1–8 code alone. Most likely mechanism (unverified): the new
+  lazy chunks (`ExportBattleDialog`, `battleExporter`) grow the shared runtime's chunk map, which
+  every route loads — the same class of cross-route side effect Story 2.14 measured for a lazy
+  chunk elsewhere.
 - `npm run bundle:baseline` — refreshed `scripts/bundle-baselines.json` (tool-written; not hand-
   edited): `/` 341838→341942, `/battle` 316924→317553, `/battle/new` 316721→317350, `/organisms`
   306101→306167, `/settings` 300846→301030 (bytes gzip). Re-ran `bundle:check` after: all five
@@ -725,6 +791,27 @@ close-out) is a **second, separate Sonnet session** resuming the halted run from
   skip unrelated to this story — `deleteBattle.spec.ts:113` touch-pointer case — 0 failures). The
   new `export battle (Story 5.6)` describe block in `e2e/battleRoute.spec.ts` ran all 6 cases
   green, including the axe scan. `ci.log` kept locally as an untracked artifact, not committed.
+
+**2026-09-25 owner review-decision session (third Sonnet session, resuming after the four
+`[Review][Decision]` answers):**
+
+- `npm run build:standalone` — green.
+- `npm run bundle:check` — **PASSES**, `+0.0 KB` on all 5 routes (`/`, `/battle`, `/battle/new`,
+  `/organisms`, `/settings`): the filename-pipeline rewrite lives entirely inside the lazily
+  loaded `battleExporter` chunk, not the first-load graph, so no route moved and `bundle:baseline`
+  did not need to be re-run.
+- `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0**. All stages green: `typecheck`, `lint`,
+  `format:check`, `spec:check`, `boundary:check`, `test:coverage` (134 web test files / **2225**
+  tests passed, up from the prior session's 2212 — this session's own 8 new
+  `battleExportFilename.test.ts` cases plus normal suite variance from files touched since;
+  all `@gol/*` packages green, no flakes this run: `@gol/persistence` 103/103, `@gol/simulation`
+  408/408, `@gol/test-utils` 95/95, `@gol/domain` 212/212), `build:standalone`, `bundle:check`
+  (`+0.0 KB` all 5 routes), `bench` + `bench:check` (7.952 ms headroom, 47.7% of the frame budget),
+  `e2e:chromium` (278 passed, 1 pre-existing conditional skip — `deleteBattle.spec.ts:113`, same as
+  the prior session, unrelated to this story — 0 failures). The `export battle (Story 5.6)` describe
+  block ran all 6 cases green, including the axe scan, with no test changes needed (the e2e cases
+  use ASCII seeded names, per Dev Notes' own "keep the e2e on an ASCII name"). `ci.log` kept locally
+  as an untracked artifact, not committed.
 
 ### Completion Notes List
 
@@ -792,6 +879,56 @@ close-out) is a **second, separate Sonnet session** resuming the halted run from
     first, or accept a specific trim") is itself already marked ✅ RESOLVED at `deferred-work.md:408`
     by PR #81 — no further edit needed there.
 
+- **Owner review-decision session (2026-09-25, third Sonnet session, resuming after the owner
+  answered the four `[Review][Decision]` items).**
+  1. **Filename slug (items 1–2, `apps/web/lib/export/battleExportFilename.ts`):** rewrote
+     `kebabCase` to strip combining marks only when they follow a **Latin** base
+     (`.normalize('NFKD').replace(/(\p{Script=Latin})\p{M}+/gu, '$1').normalize('NFC')`) instead of
+     stripping every `\p{M}` regardless of script. **One correction beyond the review's literal
+     example regex was required to actually satisfy its own stated outcome:** the existing
+     "not a letter or number → `-`" step (`[^\p{L}\p{N}]+`) still reads a surviving non-Latin mark
+     (a Devanagari vowel sign, a Japanese dakuten) as punctuation and turns it into a hyphen —
+     confirmed empirically (`नमस्ते` → `नमस-त` with the literal example alone). Exempting `\p{M}`
+     in that step too (`[^\p{L}\p{N}\p{M}]+`) was necessary to make Devanagari/Japanese/Hangul
+     actually "survive intact" as the decision specifies. Flagged per project-context's "surface any
+     new conflict" rule rather than silently choosing a reading; this is a mechanical fix to
+     deliver the stated outcome, not a separate policy call. Added the 60-code-point cap
+     (`Array.from`-based, never `.slice()`/`.length` on the raw string, so a surrogate pair at the
+     cut is never split) with trailing-`-` trim after the cut. FD7 and AC5 annotated with dated
+     owner-decision notes (not silently rewritten). 8 new unit tests: Café Duel (mid-word Latin
+     accent), Devanagari, Japanese voiced kana, Hangul (pinned to composed-syllable code points, not
+     jamo), a long Latin name, a long CJK name, a hyphen-at-the-cut boundary, and a surrogate-pair-
+     at-the-cut boundary. All 17 tests in `battleExportFilename.test.ts` pass; the full
+     `apps/web/lib/export/` + `apps/web/components/battle/` suite (548 tests) is green with no
+     regressions.
+  2. **Page-level test variance (item 3): accepted, no test rewrite**, per the owner's ruling. This
+     is a deliberate deviation from Task 7's literal instruction ("uses the real
+     `createWorkspaceSerializer` over `createFakeRepositories`... `downloadJsonFile` mocked") for
+     `BattlePage.export.test.tsx` specifically, which instead mocks the whole
+     `@/lib/export/battleExporter` module (documented in that file's own header). AC11's guarantees
+     are proven elsewhere instead:
+     - **no download on a rejecting export:** `exportBattleToFile.test.ts` and
+       `battleExporter.test.ts`, both over the real serializer;
+     - **the file's exact contents** (envelope shape, `kind: 'battle'`, organism closure, no
+       `settings` key): the AC11 round trip in `exportBattleToFile.test.ts`;
+     - **save-then-export freshness** (the saved id flows into the export): the e2e dirty-battle
+       case in `e2e/battleRoute.spec.ts`'s `export battle (Story 5.6)` describe;
+     - **wiring and ordering** (save before export, choice-then-close-then-act, the FD2 alert-after-
+       exit ordering, focus restore per path): `BattlePage.export.test.tsx` itself, at the page
+       level, over the mocked module.
+     No code change for this item; only this record and the story's `[Review][Decision]` tick.
+  3. **Bundle-baseline drift (item 4): accepted, and the Dev Agent Record corrected** — see the
+     "Correction" note inline in the Debug Log's 2026-09-25 resumption entry above: the `/`,
+     `/organisms`, `/settings` growth is this story's own code (the new lazy chunks' effect on the
+     shared runtime's chunk map), not pre-existing drift from `main` as first recorded. No further
+     code or baseline change; `scripts/bundle-baselines.json` already carries the correct
+     (tool-written) numbers from the prior session.
+  - Re-ran `npm run build:standalone` and `npm run bundle:check`: still passes, unchanged from the
+    prior session (no route touched by this session's one code change to first-load-excluded
+    filename logic). No `bundle:baseline` re-run needed (no route moved).
+  - `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0** (see Debug Log below for the full
+    breakdown).
+
 ### File List
 
 **New:**
@@ -819,9 +956,17 @@ close-out) is a **second, separate Sonnet session** resuming the halted run from
 - `docs/implementation-artifacts/deferred-work.md` (5.4 hand-off entry closed; new "Deferred from:
   Story 5-6-battle-export-dialog" section)
 - `docs/implementation-artifacts/5-6-battle-export-dialog.md` (this file: frontmatter
-  `baseline_commit`, Status, Tasks/Subtasks, Dev Agent Record)
+  `baseline_commit`, Status, Tasks/Subtasks, Dev Agent Record, AC5/FD7 dated owner-decision
+  annotations, `[Review][Decision]` items ticked)
 - `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog: in-progress` →
   `review`)
+
+**Modified (2026-09-25 owner review-decision session):**
+- `apps/web/lib/export/battleExportFilename.ts` (Latin-only mark stripping + NFC recompose,
+  60-code-point cap, rewritten comments)
+- `apps/web/lib/export/battleExportFilename.test.ts` (8 new cases: Latin mid-word accent,
+  Devanagari, Japanese voiced kana, Hangul, long-Latin truncation, long-CJK truncation,
+  hyphen-at-the-cut boundary, surrogate-pair-at-the-cut boundary)
 
 ### Change Log
 
@@ -847,6 +992,23 @@ close-out) is a **second, separate Sonnet session** resuming the halted run from
   racy e2e axe scan, and test/comment/deferred-work fixes; 4 `[Review][Decision]` items left open
   for the owner; 1 deferred. Baselines refreshed via `bundle:baseline` (`/battle`, `/battle/new`
   +62 B each). `ci:dev` exit 0. Status → in-progress (open decisions).
+- 2026-09-25 — Owner answered all four `[Review][Decision]` items; this session applied them:
+  1. Filename slug now strips combining marks only when they follow a Latin base, then
+     renormalises to NFC, so Devanagari/Japanese/Hangul names survive intact (the review's own
+     literal example regex needed one further, necessary fix — exempting `\p{M}` in the
+     punctuation-collapse step too — to actually deliver that outcome; recorded as a surfaced
+     conflict in the Dev Agent Record, not a silent choice).
+  2. Added a 60-code-point cap on the slug (`Array.from`-based, trailing `-` trimmed after the
+     cut). 8 new unit tests cover both decisions.
+  3. Accepted the Task 7 page-level test variance; recorded the AC11 coverage mapping in the Dev
+     Agent Record. No code change.
+  4. Corrected the Dev Agent Record's "pre-existing drift from main" for the `/`, `/organisms`,
+     `/settings` baseline growth to the owner's explanation: it is this story's own code.
+  All four `[Review][Decision]` items ticked. AC5/FD7 annotated with dated owner-decision notes
+  (originals kept, not rewritten). `npm run build:standalone` and `bundle:check` pass, `+0.0 KB`
+  on all 5 routes (the change lives inside the lazy `battleExporter` chunk; no baseline refresh
+  needed). `npm run ci:dev` exit 0, no flakes (2225/2225 web tests, 278/279 e2e — 1 pre-existing
+  unrelated skip). Status → review.
 
 Dev Model: sonnet   # follows existing patterns (UnsavedChangesDialog idiom, useLeaveGuard lifecycle, 5.5's lib/export seam); every structural choice (lazy boundary, save-then-export, id return, act-on-exit) is pre-decided in FD1–FD9, so nothing is left to architect.
 
