@@ -72,6 +72,12 @@ export {
 } from './ruleReferenceIndex';
 export type { RuleReference, RuleReferenceIndex } from './ruleReferenceIndex';
 
+// Story 4.21's ONE delete verdict, consuming both referential-integrity axes above rather than
+// re-deriving either (FD3): `protected` (M9) beats usage, `blocked` carries both lists (FD4). Also
+// consumed by Story 4.22 (confirm/disabled) and Story 4.24's `openBattle` argument.
+export { organismDeleteVerdict } from './organismDeleteGuard';
+export type { OrganismDeleteVerdict } from './organismDeleteGuard';
+
 // The RFC-006 export envelope (Story 5.3) — the schema of record for every file this app writes,
 // and the dense-at-rest <-> sparse-on-the-wire conversion around it (AR-9 / AR-10). `IsoTimestamp`
 // stays out of the barrel: it is shared between two files in THIS package and no other package

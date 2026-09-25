@@ -254,4 +254,85 @@ describe('OrganismCard', () => {
     const results = await axe(container);
     expect(results.violations).toEqual([]);
   });
+
+  // Story 4.21, FD2: Delete renders iff the Library passes `onRequestDelete` — never a boolean.
+  describe('Delete (Story 4.21)', () => {
+    it('renders no Delete button when onRequestDelete is not passed', () => {
+      render(
+        <OrganismCard
+          organism={CONWAYS_CLASSIC}
+          onRequestEdit={vi.fn()}
+          onRequestClone={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument();
+    });
+
+    it('renders Delete, correctly labelled and attributed, when onRequestDelete is passed', () => {
+      render(
+        <OrganismCard
+          organism={CONWAYS_CLASSIC}
+          onRequestEdit={vi.fn()}
+          onRequestClone={vi.fn()}
+          onRequestDelete={vi.fn()}
+        />,
+      );
+
+      const del = screen.getByRole('button', { name: "Delete Conway's Classic" });
+      expect(del).toHaveAttribute('data-delete-organism-id', CONWAYS_CLASSIC.id);
+      expect(del).toHaveTextContent('Delete');
+    });
+
+    it('a click on Delete calls onRequestDelete exactly once, with no arguments', async () => {
+      const user = userEvent.setup();
+      const onRequestDelete = vi.fn();
+      render(
+        <OrganismCard
+          organism={CONWAYS_CLASSIC}
+          onRequestEdit={vi.fn()}
+          onRequestClone={vi.fn()}
+          onRequestDelete={onRequestDelete}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: "Delete Conway's Classic" }));
+
+      expect(onRequestDelete).toHaveBeenCalledTimes(1);
+      expect(onRequestDelete).toHaveBeenCalledWith();
+    });
+
+    it('tab order is Edit then Clone then Delete when Delete renders', async () => {
+      const user = userEvent.setup();
+      render(
+        <OrganismCard
+          organism={CONWAYS_CLASSIC}
+          onRequestEdit={vi.fn()}
+          onRequestClone={vi.fn()}
+          onRequestDelete={vi.fn()}
+        />,
+      );
+
+      await user.tab();
+      expect(screen.getByRole('button', { name: "Edit Conway's Classic" })).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', { name: "Clone Conway's Classic" })).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', { name: "Delete Conway's Classic" })).toHaveFocus();
+    });
+
+    it('has no axe accessibility violations with Delete rendered', async () => {
+      const { container } = render(
+        <OrganismCard
+          organism={CONWAYS_CLASSIC}
+          onRequestEdit={vi.fn()}
+          onRequestClone={vi.fn()}
+          onRequestDelete={vi.fn()}
+        />,
+      );
+
+      const results = await axe(container);
+      expect(results.violations).toEqual([]);
+    });
+  });
 });
