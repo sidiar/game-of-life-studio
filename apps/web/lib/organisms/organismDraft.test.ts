@@ -12,7 +12,12 @@ import {
   wholeNumberMessage,
   type ConditionDraft,
 } from './conditionDraft';
-import { createNewOrganismDraft, organismDraftFrom, validateOrganismDraft } from './organismDraft';
+import {
+  createNewOrganismDraft,
+  isOrganismDraftDirty,
+  organismDraftFrom,
+  validateOrganismDraft,
+} from './organismDraft';
 import { projectOrganismForSave } from './organismRecord';
 import { createNewRuleDraft, moveRule, RULE_NEEDS_CONDITION, type RuleDraft } from './ruleDraft';
 
@@ -294,5 +299,172 @@ describe('validateOrganismDraft', () => {
   it('(k, bound) the empty-name case is covered explicitly', () => {
     const errors = validateOrganismDraft({ ...base, name: '', survivalRules: [] });
     expect(errors).toEqual([{ target: { kind: 'name' }, message: ORGANISM_NAME_REQUIRED }]);
+  });
+});
+
+describe('isOrganismDraftDirty (Story 4.23, FD1)', () => {
+  const baseline = organismDraftFrom(CONWAYS_CLASSIC, () => crypto.randomUUID());
+
+  it('the identical baseline is clean', () => {
+    expect(isOrganismDraftDirty(baseline, baseline)).toBe(false);
+    expect(isOrganismDraftDirty(baseline, { ...baseline })).toBe(false);
+  });
+
+  it('an edited name is dirty', () => {
+    expect(isOrganismDraftDirty(baseline, { ...baseline, name: `${baseline.name}x` })).toBe(true);
+  });
+
+  it('an edited dominance is dirty', () => {
+    expect(isOrganismDraftDirty(baseline, { ...baseline, dominance: baseline.dominance + 1 })).toBe(
+      true,
+    );
+  });
+
+  it('an edited agingEnabled is dirty', () => {
+    expect(
+      isOrganismDraftDirty(baseline, { ...baseline, agingEnabled: !baseline.agingEnabled }),
+    ).toBe(true);
+  });
+
+  it('an edited colorToken is dirty', () => {
+    const other = PALETTE.find((entry) => entry.id !== baseline.colorToken);
+    if (other === undefined) throw new Error('PALETTE has fewer than 2 tokens');
+    expect(isOrganismDraftDirty(baseline, { ...baseline, colorToken: other.id })).toBe(true);
+  });
+
+  it('an edited rule action is dirty', () => {
+    const rules = [
+      {
+        ...baseline.survivalRules[0],
+        payload: { ...baseline.survivalRules[0].payload, action: 'die' as const },
+      },
+      ...baseline.survivalRules.slice(1),
+    ];
+    expect(isOrganismDraftDirty(baseline, { ...baseline, survivalRules: rules })).toBe(true);
+  });
+
+  it('an edited rule summary is dirty', () => {
+    const rules = [
+      {
+        ...baseline.survivalRules[0],
+        payload: { ...baseline.survivalRules[0].payload, summary: 'changed' },
+      },
+      ...baseline.survivalRules.slice(1),
+    ];
+    expect(isOrganismDraftDirty(baseline, { ...baseline, survivalRules: rules })).toBe(true);
+  });
+
+  it('an edited condition pattern is dirty', () => {
+    const rule = baseline.survivalRules[0];
+    const condition = rule.conditions[0];
+    if (condition.property !== 'cellState') throw new Error('fixture drifted from CONWAYS_CLASSIC');
+    const edited: ConditionDraft = {
+      ...condition,
+      pattern: condition.pattern === 'empty' ? 'occupied' : 'empty',
+    };
+    const patched = { ...rule, conditions: [edited, ...rule.conditions.slice(1)] };
+    expect(
+      isOrganismDraftDirty(baseline, {
+        ...baseline,
+        survivalRules: [patched, ...baseline.survivalRules.slice(1)],
+      }),
+    ).toBe(true);
+  });
+
+  it('a range condition edited on one element is dirty', () => {
+    const rule: RuleDraft = {
+      ...createNewRuleDraft('r1'),
+      conditions: [{ id: 'c1', property: 'age', operator: 'range', pattern: ['3', '4'] }],
+    };
+    const edited: RuleDraft = {
+      ...rule,
+      conditions: [{ id: 'c1', property: 'age', operator: 'range', pattern: ['3', '5'] }],
+    };
+    const draftBaseline = { ...createNewOrganismDraft([]), name: 'Glider', survivalRules: [rule] };
+    expect(isOrganismDraftDirty(draftBaseline, { ...draftBaseline, survivalRules: [edited] })).toBe(
+      true,
+    );
+    expect(isOrganismDraftDirty(draftBaseline, { ...draftBaseline, survivalRules: [rule] })).toBe(
+      false,
+    );
+  });
+
+  it('a reorder of rules is dirty', () => {
+    expect(baseline.survivalRules.length).toBeGreaterThan(1);
+    const reordered = [...baseline.survivalRules].reverse();
+    expect(isOrganismDraftDirty(baseline, { ...baseline, survivalRules: reordered })).toBe(true);
+  });
+
+  it('an added rule is dirty, and a removed rule is dirty', () => {
+    const added = [...baseline.survivalRules, createNewRuleDraft('new-rule')];
+    expect(isOrganismDraftDirty(baseline, { ...baseline, survivalRules: added })).toBe(true);
+
+    const removed = baseline.survivalRules.slice(1);
+    expect(isOrganismDraftDirty(baseline, { ...baseline, survivalRules: removed })).toBe(true);
+  });
+
+  it('an added or removed condition is dirty', () => {
+    const rule = baseline.survivalRules[0];
+    const withExtraCondition = {
+      ...rule,
+      conditions: [...rule.conditions, createNewConditionDraft('extra-condition')],
+    };
+    expect(
+      isOrganismDraftDirty(baseline, {
+        ...baseline,
+        survivalRules: [withExtraCondition, ...baseline.survivalRules.slice(1)],
+      }),
+    ).toBe(true);
+
+    const withoutFirstCondition = { ...rule, conditions: rule.conditions.slice(1) };
+    expect(
+      isOrganismDraftDirty(baseline, {
+        ...baseline,
+        survivalRules: [withoutFirstCondition, ...baseline.survivalRules.slice(1)],
+      }),
+    ).toBe(true);
+  });
+
+  it('a hand-revert back to the baseline values is clean', () => {
+    const edited = { ...baseline, name: `${baseline.name}x` };
+    expect(isOrganismDraftDirty(baseline, edited)).toBe(true);
+    const reverted = { ...edited, name: baseline.name };
+    expect(isOrganismDraftDirty(baseline, reverted)).toBe(false);
+  });
+
+  it('a re-added identical condition with a fresh id is clean (condition id is never compared)', () => {
+    const rule = baseline.survivalRules[0];
+    const condition = rule.conditions[0];
+    const removed = { ...rule, conditions: rule.conditions.slice(1) };
+    const draftBaseline = {
+      ...baseline,
+      survivalRules: [removed, ...baseline.survivalRules.slice(1)],
+    };
+    const reAdded = {
+      ...removed,
+      conditions: [{ ...condition, id: 'brand-new-condition-id' }, ...removed.conditions],
+    };
+    expect(
+      isOrganismDraftDirty(
+        { ...baseline, survivalRules: [rule, ...baseline.survivalRules.slice(1)] },
+        { ...baseline, survivalRules: [reAdded, ...baseline.survivalRules.slice(1)] },
+      ),
+    ).toBe(false);
+    // Sanity: removing it in the first place was dirty against the same baseline.
+    expect(
+      isOrganismDraftDirty(
+        { ...baseline, survivalRules: [rule, ...baseline.survivalRules.slice(1)] },
+        draftBaseline,
+      ),
+    ).toBe(true);
+  });
+
+  it('a re-added identical rule with a fresh rule id is dirty (rule id IS compared)', () => {
+    const rule = baseline.survivalRules[0];
+    const withoutFirstRule = baseline.survivalRules.slice(1);
+    const reAddedWithFreshId = [...withoutFirstRule, { ...rule, id: 'brand-new-rule-id' }];
+    expect(isOrganismDraftDirty(baseline, { ...baseline, survivalRules: reAddedWithFreshId })).toBe(
+      true,
+    );
   });
 });

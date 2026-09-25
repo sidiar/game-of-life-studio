@@ -4438,3 +4438,116 @@ test.describe('safe delete & protected default (Story 4.22)', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// AC10, in a real browser (RFC-008 Decision 2's e2e stays thin — the pure comparison matrix is
+// `organismDraft.test.ts`'s, the modal's integration of it is `OrganismEditorModal.test.tsx`'s).
+// This block pins the browser facts a jsdom run cannot: the confirmation actually stacks over the
+// editor, `localStorage` genuinely holds or omits the record, and axe sees a real layout.
+test.describe('unsaved-changes guard (Story 4.23)', () => {
+  const promptDialog = (page: Page) => page.getByRole('dialog', { name: 'Unsaved Changes' });
+
+  test('a clean editor closes at once through Back, with no prompt', async ({ page }) => {
+    await page.goto('/organisms');
+    const dialog = await openEditor(page);
+
+    await back(dialog).click();
+
+    await expect(dialog).not.toBeVisible();
+    await expect(promptDialog(page)).toHaveCount(0);
+  });
+
+  test('dirty → Back → prompt, then Keep Editing: the editor stays, the draft is untouched, and focus returns to Back', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    const dialog = await openEditor(page);
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
+
+    await back(dialog).click();
+    const prompt = promptDialog(page);
+    await expect(prompt).toBeVisible();
+    await expect(prompt.getByRole('button', { name: 'Keep Editing' })).toBeFocused();
+
+    await prompt.getByRole('button', { name: 'Keep Editing' }).click();
+
+    await expect(prompt).not.toBeVisible();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('Glider');
+    await expect(back(dialog)).toBeFocused();
+
+    // The Story 4.22 regression class: a stacked dialog's window unwinding and leaving the editor
+    // `inert`. Prove it is LIVE — a real pointer edit lands, and the next Back prompts again.
+    const name = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await name.click();
+    await name.press('End');
+    await name.pressSequentially(' II');
+    await expect(name).toHaveValue('Glider II');
+    await back(dialog).click();
+    await expect(prompt).toBeVisible();
+  });
+
+  test('Discard closes the editor with nothing written to localStorage', async ({ page }) => {
+    await page.goto('/organisms');
+    const dialog = await openEditor(page);
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
+
+    await back(dialog).click();
+    const prompt = promptDialog(page);
+    await prompt.getByRole('button', { name: 'Discard' }).click();
+
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText('Glider', { exact: true })).toHaveCount(0);
+    const stored = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(
+      Object.values(stored).some(
+        (o) => typeof o === 'object' && o !== null && (o as { name?: unknown }).name === 'Glider',
+      ),
+    ).toBe(false);
+  });
+
+  test('Save runs after the confirmation exits: the record is written and the editor closes', async ({
+    page,
+  }) => {
+    await page.goto('/organisms');
+    const dialog = await openEditor(page);
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
+    const rules = dialog.getByRole('region', { name: 'Survival Rules' });
+    await rules.locator('[data-add-rule="header"]').click();
+    await cardGroup(rules, 1).getByRole('button', { name: '+ Add Condition' }).click();
+
+    await back(dialog).click();
+    const prompt = promptDialog(page);
+    await prompt.getByRole('button', { name: 'Save' }).click();
+
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText('Glider', { exact: true })).toBeVisible();
+    const stored = JSON.parse((await storage(page, 'gol:organisms')) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    expect(
+      Object.values(stored).some(
+        (o) => typeof o === 'object' && o !== null && (o as { name?: unknown }).name === 'Glider',
+      ),
+    ).toBe(true);
+  });
+
+  test('axe: no violations with the unsaved-changes prompt open', async ({ page }) => {
+    await page.goto('/organisms');
+    const dialog = await openEditor(page);
+    await dialog.getByRole('textbox', { name: 'Organism Name' }).fill('Glider');
+
+    await back(dialog).click();
+    await expect(promptDialog(page)).toBeVisible();
+    // `openEditor`'s own settle rule: an axe scan landing mid-Fade measures a contrast no settled
+    // state has (the mid-fade trap every dialog in this app documents). `.last()` because the
+    // editor's OWN container (already settled) is also `.MuiDialog-container` and mounted first.
+    await expect(page.locator('.MuiDialog-container').last()).toHaveCSS('opacity', '1');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

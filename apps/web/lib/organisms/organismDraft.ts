@@ -1,6 +1,10 @@
 import { NEW_ORGANISM_DOMINANCE, type Organism } from '@gol/domain';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
-import { type ConditionDraftField, validateConditionDraft } from './conditionDraft';
+import {
+  type ConditionDraft,
+  type ConditionDraftField,
+  validateConditionDraft,
+} from './conditionDraft';
 import {
   ruleDraftFrom,
   ruleNeedsCondition,
@@ -14,8 +18,8 @@ import { validateOrganismName } from './organismName';
  * `<OrganismEditorModal>` holds it in `useState`, never `useOrganismEditorModal`, which owns
  * lifecycle only and sits in the first-load chunk). One typed object from the first field, not one
  * `useState` per field: Story 4.17 seeds the whole draft from a loaded `Organism` in one
- * assignment (`organismDraftFrom`, below), Story 4.23 diffs one object against one seed for the
- * editor's own dirty scope (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one
+ * assignment (`organismDraftFrom`, below), Story 4.23 diffs one object against one baseline (the
+ * seed until a successful Save, then that Save's snapshot) for the editor's own dirty scope (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one
  * field per story — 4.6
  * `dominance`, 4.7 `agingEnabled`/`colorToken`, 4.8's M6 colour seed and 4.10's `survivalRules` are
  * done, and Story 4.13's validator (`validateOrganismDraft`, below) reads all of them. It will
@@ -143,4 +147,54 @@ export function validateOrganismDraft(draft: OrganismDraft): readonly DraftError
     }
   }
   return errors;
+}
+
+// --- Dirty scope — the editor's own, independent of the battle's (Story 4.23, AC1, AC5). ---
+
+/** `ConditionDraft`'s `id` is deliberately excluded (FD1): it is an editor-only key that never
+ * reaches `Condition`, so a deleted-and-re-added identical condition would save byte-identical and
+ * must read as clean. `pattern` is compared element-wise for a range (an array), by value
+ * otherwise — `property`/`operator` equal already guarantees the two sides share pattern shape. */
+function conditionDraftsEqual(a: ConditionDraft, b: ConditionDraft): boolean {
+  if (a.property !== b.property || a.operator !== b.operator) return false;
+  if (Array.isArray(a.pattern) || Array.isArray(b.pattern)) {
+    return (
+      Array.isArray(a.pattern) &&
+      Array.isArray(b.pattern) &&
+      a.pattern[0] === b.pattern[0] &&
+      a.pattern[1] === b.pattern[1]
+    );
+  }
+  return a.pattern === b.pattern;
+}
+
+/** A rule's `id` IS compared (FD1): it is persisted (RFC-004 §2.4), so a deleted-and-re-added
+ * identical rule under a fresh id is a real change to the record and must read as dirty. */
+function ruleDraftsEqual(a: RuleDraft, b: RuleDraft): boolean {
+  return (
+    a.id === b.id &&
+    a.payload.action === b.payload.action &&
+    a.payload.summary === b.payload.summary &&
+    a.conditions.length === b.conditions.length &&
+    a.conditions.every((condition, index) => conditionDraftsEqual(condition, b.conditions[index]))
+  );
+}
+
+/**
+ * The editor's own dirty scope (AR-33): `draft` diffed against a `baseline` — never a sticky
+ * "touched" flag, so a hand-revert back to the baseline's exact values reads clean again (FD1).
+ * Reference equality is the fast path; the id-less condition comparison and the id-ful rule
+ * comparison are what make `organismDraft.test.ts`'s revert/re-add cases behave as the story
+ * requires. Field order matches `OrganismDraft`'s own declaration.
+ */
+export function isOrganismDraftDirty(baseline: OrganismDraft, draft: OrganismDraft): boolean {
+  if (draft === baseline) return false;
+  if (draft.name !== baseline.name) return true;
+  if (draft.dominance !== baseline.dominance) return true;
+  if (draft.agingEnabled !== baseline.agingEnabled) return true;
+  if (draft.colorToken !== baseline.colorToken) return true;
+  if (draft.survivalRules.length !== baseline.survivalRules.length) return true;
+  return draft.survivalRules.some(
+    (rule, index) => !ruleDraftsEqual(rule, baseline.survivalRules[index]),
+  );
 }

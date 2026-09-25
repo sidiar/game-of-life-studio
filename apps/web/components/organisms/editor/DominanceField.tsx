@@ -216,8 +216,9 @@ export default function DominanceField({
           onBlur={commit}
           onKeyDown={(event) => {
             // Enter commits WITHOUT blurring — the user may keep typing. Never `preventDefault`
-            // or `stopPropagation`: Escape must still reach the Dialog's `onClose` (Story 4.23
-            // inserts its guard there, not here).
+            // or `stopPropagation`: Escape must still reach the Dialog's `onClose`, which routes
+            // through the editor's unsaved-changes guard (Story 4.23) — a guard that lives in the
+            // modal, not in this field.
             if (event.key === 'Enter') commit();
           }}
         />
