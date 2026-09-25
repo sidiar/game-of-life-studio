@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -617,7 +617,7 @@ and `deleteProtected`; `ORGANISM_DELETE_FAILED` stays enabled; the disable and t
 focus move land in one commit, so the effect never targets the disabled button). #82's content was
 not re-reviewed. One decision, three patches, three dismissed.
 
-- [ ] [Review][Decision] **After the accepted re-creating Save, the editor's Delete stays disabled
+- [x] [Review][Decision] **After the accepted re-creating Save, the editor's Delete stays disabled
   for the rest of the session** [`useOrganismDelete.ts:238,387`, `OrganismEditorModal.tsx:655-656,:901`]
   — `editorDeleteError` is cleared only at the next `requestDelete` and at the editor's exit;
   `saveOrganism` clears only its own `saveError` / `saveOutcome`. Before (a) that was the
@@ -635,6 +635,8 @@ not re-reviewed. One decision, three patches, three dismissed.
   `deleteError === ORGANISM_DELETE_GONE && saveOutcome === null`, so a successful Save re-enables
   Delete and its next request clears the alert (the alert itself stays until then, as deferred).
   Left for Sidiar; nothing changed here.
+  **Resolved 2026-09-25 (Sidiar): (b)**: left to the 4.23 editor-state pass, as already deferred
+  in `deferred-work.md`. No code change.
 - [x] [Review][Patch] **The GONE-disabled Delete carries no accessible reason** [`OrganismEditorModal.tsx:863-866,:902`]
   — FD6: "a screen reader's browse mode reads the reason with the control … The same pattern
   applies to the editor's Delete", and AC8 "The disabled Delete's `aria-describedby` target exists
@@ -1210,6 +1212,9 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
     The first run on `3abe1e3`, before the patches, was **exit 1** in the e2e stage only: 234
     passed, then `net::ERR_CONNECTION_REFUSED` on `127.0.0.1:4173` for the rest — the shared-port
     collision with the other lane's worktree the Dev Record already names, not this branch.
+- 2026-09-25: Sidiar resolved the third-pass decision as (b): the disabled Delete under a stale
+  GONE alert after a re-creating Save goes to the 4.23 editor-state pass (recorded in
+  `deferred-work.md`). No code change; no review decision is open. Status → done.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none

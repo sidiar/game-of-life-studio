@@ -3192,6 +3192,8 @@ been answered yet:
   disabled under the now-false alert until Back/Escape. Whether to clear it on a successful Save
   now, or leave it to the 4.23 owner above, is an open decision in the story's third-pass Review
   Findings; whichever lands, the disabled control rides on the same cell as the sentence.
+  **Resolved 2026-09-25 (Sidiar): (b)**: left to the 4.23 editor-state pass. Clearing the GONE
+  alert, and with it the disabled Delete, on a successful Save is part of that item.
 - **The `useOrganismDelete` latch and `pending` are released at the dialog's EXIT, not in the
   writer's `finally` (Task 2 wording).** The Story 4.18 gate review's finding applies unchanged:
   `setDialogOpen(false)` only starts the ~195 ms fade, and a dialog re-enabled for it would take a
