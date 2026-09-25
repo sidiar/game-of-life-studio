@@ -45,10 +45,11 @@ export interface WorkspaceSerializer {
    * `ExportError('not-found')` when no battle exists under it — RFC-006 Decision 4's shape
    * (`:200-202`), restored by owner ruling after FD1's `exportBattle(battle)` variance was
    * reviewed (Story 5.4 review, 2026-09-24; `deferred-work.md`'s variance (7) is withdrawn, not
-   * deleted). **What this hands to Story 5.6:** the export entry point (the editor's Tools
-   * section, FR-6.1) must force a save — or block export — on a dirty/unsaved battle before
-   * calling this with its id, because there is no other way to export a battle that was never
-   * persisted; that obligation does not live here.
+   * deleted). **Story 5.6 closed the hand-off this paragraph used to describe as open:** the
+   * editor's Tools section (`<ExportBattleDialog>`, FR-6.1/7.13) saves a dirty or never-saved
+   * battle first (`<BattlePage>`'s `persistBattle`) and calls this function with the id that save
+   * just wrote — never with an id for a battle that was never persisted. That obligation lives in
+   * `apps/web`, not here; this function still has no reason to know about it.
    *
    * No prune/remap happens in this function. `BattleSchema.superRefine`'s Decision H.1 check
    * (`organismIds` ≡ the placed set) runs on every `load()`, real or fake — a record that failed

@@ -1,6 +1,7 @@
+import { readFile } from 'node:fs/promises';
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { CONWAYS_CLASSIC, CURRENT_FORMAT_VERSION } from '@gol/domain';
+import { CONWAYS_CLASSIC, CURRENT_FORMAT_VERSION, WorkspaceExportSchema } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 import { createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
 
@@ -1588,7 +1589,9 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     expect(errors).toEqual([]);
   });
 
-  test('the Tools section renders exactly one button; no other MVP-excluded controls anywhere (AC4)', async ({
+  // Story 5.6 (AC1): converted from "exactly one button" — EXPORT BATTLE now renders here too, so
+  // the assertion is "exactly the two MVP buttons, in the mockup's order; no others".
+  test('the Tools section renders exactly Clear Petri Dish then Export Battle; no other MVP-excluded controls anywhere (AC4, AC1)', async ({
     page,
   }) => {
     await seedWorkspace(page);
@@ -1596,8 +1599,11 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
 
     await expect(page.getByRole('heading', { level: 2, name: 'Tools' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /clear petri dish/i })).toHaveCount(1);
-    await expect(page.getByRole('button', { name: /export battle/i })).toHaveCount(0);
+    const toolsSection = page.getByRole('heading', { level: 2, name: 'Tools' }).locator('xpath=..');
+    await expect(toolsSection.getByRole('button')).toHaveText([
+      'Clear Petri Dish',
+      'Export Battle',
+    ]);
     await expect(page.getByRole('button', { name: /reset to saved/i })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /randomize/i })).toHaveCount(0);
   });
@@ -1653,6 +1659,168 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     // Enter on a focused <button> activates it exactly like a click — the dish moved away from
     // its painted baseline, proving the keypress actually reached `onClear`.
     await expect.poll(async () => countChangedPixels(dish), { timeout: 2000 }).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Story 5.6 — the Export Battle dialog, end to end (AC1, AC2, AC3, AC7, AC9, AC11).
+ *
+ * The composed route is the only place the real `download` event, a real MUI dialog and the real
+ * save path are all observable together — `battleExporter.test.ts` / `exportBattleToFile.test.ts`
+ * / `BattlePage.export.test.tsx` cover the seam and the wiring in isolation; this proves the whole
+ * chain fires from a real click through a real file.
+ */
+test.describe('export battle (Story 5.6)', () => {
+  function countPlacedCells(gridState: readonly (readonly number[])[]): number {
+    return gridState.reduce((total, row) => total + row.filter((cell) => cell !== 0).length, 0);
+  }
+
+  test('Battle Only downloads a WorkspaceExportSchema-valid single-battle file named by the seeded battle (AC1, AC2, AC3, AC11)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    const { battles } = createMockWorkspace();
+    const skirmish = battles.find((b) => b.id === MOCK_BATTLE_IDS.battleA);
+    if (skirmish === undefined) throw new Error('fixture battle missing');
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('button', { name: /export battle/i }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export Battle' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('Export this Battle only, or export entire Workspace?');
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      dialog.getByRole('button', { name: 'Battle Only' }).click(),
+    ]);
+
+    expect(download.suggestedFilename()).toBe('three-way-skirmish.json');
+
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const raw = await readFile(downloadPath as string, 'utf-8');
+    const file = JSON.parse(raw) as Record<string, unknown>;
+    expect('settings' in file).toBe(false);
+    const parsed = WorkspaceExportSchema.parse(file);
+
+    expect(parsed.kind).toBe('battle');
+    expect(parsed.battles).toHaveLength(1);
+    expect(parsed.battles[0].id).toBe(MOCK_BATTLE_IDS.battleA);
+    expect(parsed.battles[0].cells).toHaveLength(countPlacedCells(skirmish.gridState));
+
+    // AC9: focus lands back on EXPORT BATTLE once the dialog has closed.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /export battle/i })).toBeFocused();
+  });
+
+  test('a dirty battle: Save & Export Battle saves first, and the file carries the new cell (AC7)', async ({
+    page,
+  }) => {
+    await seedWorkspaceIfFresh(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleB}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Grand Colony War');
+
+    // Paint in the bottom-right quadrant — outside the fixture's own centrally-placed roster —
+    // the same "prove a NEW cell, not an existing one" shape the 2.14 resize e2e uses.
+    const dish = page.getByRole('img', { name: /petri dish/i });
+    const box = await dish.boundingBox();
+    if (box === null) throw new Error('the dish has no layout box');
+    await dish.click({ position: { x: box.width * 0.9, y: box.height * 0.9 } });
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'true');
+
+    await page.getByRole('button', { name: /export battle/i }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export Battle' });
+    await expect(dialog).toContainText('This battle has unsaved changes.');
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      dialog.getByRole('button', { name: 'Save & Export Battle' }).click(),
+    ]);
+
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const raw = await readFile(downloadPath as string, 'utf-8');
+    const parsed = WorkspaceExportSchema.parse(JSON.parse(raw));
+    expect(parsed.battles).toHaveLength(1);
+    expect(parsed.battles[0].id).toBe(MOCK_BATTLE_IDS.battleB);
+
+    // The saved record itself carries the new cell — the file, read back through the repository,
+    // must therefore carry more placed cells than the un-painted fixture did.
+    const { battles } = createMockWorkspace();
+    const original = battles.find((b) => b.id === MOCK_BATTLE_IDS.battleB);
+    if (original === undefined) throw new Error('fixture battle missing');
+    expect(parsed.battles[0].cells.length).toBeGreaterThan(countPlacedCells(original.gridState));
+  });
+
+  test('Entire Workspace downloads a whole-workspace file and never saves (AC4)', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('button', { name: /export battle/i }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export Battle' });
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      dialog.getByRole('button', { name: 'Entire Workspace' }).click(),
+    ]);
+
+    expect(download.suggestedFilename()).toMatch(
+      /^game-of-life-workspace-\d{4}-\d{2}-\d{2}\.json$/,
+    );
+    const downloadPath = await download.path();
+    const raw = await readFile(downloadPath as string, 'utf-8');
+    const parsed = WorkspaceExportSchema.parse(JSON.parse(raw));
+    expect(parsed.kind).toBe('workspace');
+  });
+
+  test('Cancel closes the dialog and changes nothing', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('button', { name: /export battle/i }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export Battle' });
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('[data-dirty]')).toHaveAttribute('data-dirty', 'false');
+    await expect(page.getByRole('button', { name: /export battle/i })).toBeFocused();
+  });
+
+  test('EXPORT BATTLE is absent from the Run view (FD12)', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+    await expect(page.getByRole('button', { name: /export battle/i })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Run' }).click();
+
+    await expect(page.getByRole('button', { name: /export battle/i })).toHaveCount(0);
+  });
+
+  test('has no axe accessibility violations on /battle with the export dialog open', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto(`/battle?id=${MOCK_BATTLE_IDS.battleA}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
+
+    await page.getByRole('button', { name: /export battle/i }).click();
+    // The three-wait settle the guard's axe test below uses (code review 2026-09-25: a bare
+    // `toBeVisible()` let axe scan mid-Fade and flag colour-contrast on blended colours).
+    const dialog = page.getByRole('dialog', { name: 'Export Battle' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveCSS('opacity', '1');
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
   });
 });
 
