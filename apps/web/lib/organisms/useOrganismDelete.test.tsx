@@ -7,8 +7,7 @@ import {
   createMockWorkspace,
   MOCK_ORGANISM_IDS,
 } from '@gol/test-utils';
-import { ORGANISM_DELETED } from '@/lib/organisms/saveOutcome';
-import { ORGANISM_DELETE_FAILED } from '@/lib/saveFailureMessage';
+import { ORGANISM_DELETE_FAILED, ORGANISM_DELETED } from '@/lib/organisms/saveOutcome';
 import { useOrganismDelete, type UseOrganismDeleteOptions } from './useOrganismDelete';
 
 /**
@@ -120,6 +119,8 @@ describe('useOrganismDelete', () => {
 
     act(() => hook.result.current.requestDelete(recordOf(library, GLIDER.id), 'card'));
     await battles.save(lateBattle(workspace));
+    // Renamed in the other tab as well: the block explains itself under the FRESH name.
+    await organisms.save({ ...GLIDER, name: 'Glider (renamed)' });
     act(() => hook.result.current.confirmProps?.onConfirm());
     await waitFor(() => expect(hook.result.current.confirmProps?.open).toBe(false));
     act(() => hook.result.current.confirmProps?.onExited?.());
@@ -128,7 +129,7 @@ describe('useOrganismDelete', () => {
     expect(hook.result.current.confirmProps).toBeNull();
     expect(hook.result.current.blockedProps).toMatchObject({
       open: true,
-      organismName: 'Glider',
+      organismName: 'Glider (renamed)',
       battleNames: ['Late Battle'],
       referencingNames: [],
     });
@@ -155,8 +156,8 @@ describe('useOrganismDelete', () => {
     expect(options.reload).toHaveBeenCalledTimes(1);
   });
 
-  it('a rejected delete queues the failure, publishes it on exit, and no toast', async () => {
-    const { organisms, hook, library } = await rig();
+  it('a rejected delete queues the failure, publishes it on exit, still reloads, and no toast', async () => {
+    const { organisms, hook, library, options } = await rig();
     vi.spyOn(organisms, 'delete').mockRejectedValue(new Error('boom'));
 
     act(() => hook.result.current.requestDelete(recordOf(library, GLIDER.id), 'card'));
@@ -167,20 +168,55 @@ describe('useOrganismDelete', () => {
     act(() => hook.result.current.confirmProps?.onExited?.());
     expect(hook.result.current.deleteError).toBe(ORGANISM_DELETE_FAILED);
     expect(hook.result.current.toast).toBeNull();
+    // The fresh read completed before the write was refused, so the cards may be stale.
+    expect(options.reload).toHaveBeenCalledTimes(1);
   });
 
-  it('a rejected re-verify read never deletes — no `.catch(() => [])` (FD4)', async () => {
-    const { organisms, battles, hook, library, options } = await rig();
+  it.each([
+    ['battles', 'corrupt'],
+    ['organisms', 'quota'],
+  ] as const)(
+    'a rejected re-verify read (%s.list) never deletes — no `.catch(() => [])` (FD4)',
+    async (repository, reason) => {
+      const { organisms, battles, hook, library, options } = await rig();
+      const del = vi.spyOn(organisms, 'delete');
+      vi.spyOn(repository === 'battles' ? battles : organisms, 'list').mockRejectedValue(
+        new Error(reason),
+      );
+
+      act(() => hook.result.current.requestDelete(recordOf(library, GLIDER.id), 'card'));
+      act(() => hook.result.current.confirmProps?.onConfirm());
+      await waitFor(() => expect(hook.result.current.confirmProps?.open).toBe(false));
+      act(() => hook.result.current.confirmProps?.onExited?.());
+
+      expect(del).not.toHaveBeenCalled();
+      expect(hook.result.current.deleteError).toBe(ORGANISM_DELETE_FAILED);
+      expect(options.reload).not.toHaveBeenCalled();
+    },
+  );
+
+  it('a Confirm landing during a Cancel fade neither writes nor leaves an outcome for the next window', async () => {
+    const { organisms, hook, library, options } = await rig();
     const del = vi.spyOn(organisms, 'delete');
-    vi.spyOn(battles, 'list').mockRejectedValue(new Error('corrupt'));
 
     act(() => hook.result.current.requestDelete(recordOf(library, GLIDER.id), 'card'));
+    act(() => hook.result.current.confirmProps?.onCancel());
+    expect(hook.result.current.confirmProps?.open).toBe(false);
+    // Still mounted and enabled through the fade — the buttons are only `pending`-disabled.
     act(() => hook.result.current.confirmProps?.onConfirm());
-    await waitFor(() => expect(hook.result.current.confirmProps?.open).toBe(false));
+    await Promise.resolve();
     act(() => hook.result.current.confirmProps?.onExited?.());
 
     expect(del).not.toHaveBeenCalled();
-    expect(hook.result.current.deleteError).toBe(ORGANISM_DELETE_FAILED);
+    expect(hook.result.current.confirmProps).toBeNull();
+    expect(options.reload).not.toHaveBeenCalled();
+
+    // The next window opens clean: a plain Cancel publishes nothing.
+    act(() => hook.result.current.requestDelete(recordOf(library, GLIDER.id), 'card'));
+    expect(hook.result.current.confirmProps?.open).toBe(true);
+    act(() => hook.result.current.confirmProps?.onCancel());
+    act(() => hook.result.current.confirmProps?.onExited?.());
+    expect(hook.result.current.toast).toBeNull();
     expect(options.reload).not.toHaveBeenCalled();
   });
 
@@ -258,6 +294,8 @@ describe('useOrganismDelete', () => {
     act(() => hook.result.current.requestDelete(recordOf(library, GLIDER.id), 'editor'));
     act(() => hook.result.current.confirmProps?.onConfirm());
     await waitFor(() => expect(hook.result.current.confirmProps?.open).toBe(false));
+    // Queued, not yet published: the confirmation is still fading over the inert editor.
+    expect(hook.result.current.editorDeleteError).toBeNull();
     act(() => hook.result.current.confirmProps?.onExited?.());
 
     expect(hook.result.current.editorDeleteError).toBe(ORGANISM_DELETE_FAILED);

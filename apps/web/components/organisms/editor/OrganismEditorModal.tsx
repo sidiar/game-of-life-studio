@@ -302,9 +302,9 @@ const SaveErrorLine = styled('p')({
 // bottom of Column 1", in the card `ActionButton`'s house substitutions (there is no pixel
 // reference — the shipped editor mockup has no such button): `--gol-border-control` for the
 // control boundary (SC 1.4.11), `--gol-danger` text, a `--gol-danger` border on hover (and only the
-// border — see the hover rule), NO
-// `transition` (the mid-fade axe trap), a real `:focus-visible` ring, and the card's disabled
-// treatment with its hover reset so a disabled button gives no false affordance. Defined here, not
+// border — see the hover rule), NO `transition` (the mid-fade axe trap), a real `:focus-visible`
+// ring, and the card's disabled treatment with its hover reset so a disabled button gives no false
+// affordance. Defined here, not
 // imported from `OrganismCard.tsx`: the lazy editor and the eager card must not couple through a
 // card-private component, and the duplication is one small style object.
 const DeleteOrganismButton = styled('button')({
@@ -854,7 +854,7 @@ export default function OrganismEditorModal({
         {/* Story 4.22, FD12: a refused delete, in the same idiom — conditionally mounted, so the
             Library's publish (after the stacked dialog's exit) inserts it into a LIVE editor. */}
         {deleteError !== null && (
-          <SaveErrorLine role="alert" data-editor-delete-error>
+          <SaveErrorLine role="alert" data-editor-delete-error="">
             {deleteError}
           </SaveErrorLine>
         )}

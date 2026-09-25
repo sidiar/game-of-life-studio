@@ -455,12 +455,18 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   //
   // `canOpen`: a CARD request is refused while the editor or gate is mounted — reachable only by a
   // programmatic caller, since their inert background already makes every card unreachable — and
-  // an EDITOR request only while the editor is, the one case where a Library-owned dialog stacks
-  // over it (FD9).
+  // an EDITOR request only while the editor is mounted AND open, the one case where a
+  // Library-owned dialog stacks over it (FD9). `open` matters: the editor's controls stay
+  // clickable through its own ~195 ms exit fade, and a Delete landing then would stack a window
+  // over an editor about to unmount — unwinding the two inert windows in the wrong order (FD9)
+  // and holding a toast for an editor exit that has already happened.
+  const editorOpen = modalProps.open;
   const canOpenDelete = useCallback(
     (origin: 'card' | 'editor') =>
-      origin === 'card' ? !editorMounted && !gateMounted : editorMounted && !gateMounted,
-    [editorMounted, gateMounted],
+      origin === 'card'
+        ? !editorMounted && !gateMounted
+        : editorMounted && editorOpen && !gateMounted,
+    [editorMounted, editorOpen, gateMounted],
   );
   // ⚠️ The editor-origin close after a successful delete. `modalProps.onClose` is the channel
   // Story 4.23's unsaved-changes guard will sit in front of — and this close must NOT prompt
@@ -495,10 +501,11 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // FIRST (it unmounts the editor and releases `inert`), then the delete toast held for an
   // editor-origin delete, in the same handler so the status node is created in the commit that
   // makes this subtree live again (FD7).
+  const { onExited: editorExited } = modalProps;
   const onEditorExited = useCallback(() => {
-    modalProps.onExited?.();
+    editorExited?.();
     onDeleteEditorExited();
-  }, [modalProps, onDeleteEditorExited]);
+  }, [editorExited, onDeleteEditorExited]);
 
   // Story 4.22: the editor's Column-1 Delete, bound to the record the hook opened the editor with
   // (FD11: after an in-session rename-and-save the dialog names the OLD name until the Library

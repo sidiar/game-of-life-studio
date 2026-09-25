@@ -2021,6 +2021,15 @@ describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () 
       ),
     );
     expect(del).not.toHaveBeenCalled();
+    // Review 2026-09-25: the editor is handed back LIVE. jsdom's `inert` blocks nothing (the focus
+    // assertion above passes either way), so this pins the write itself: the stacked window's
+    // cleanup must not restore the `inert` the editor's own `useInertBackground` observer put on
+    // the editor's portal when the confirmation marked it aria-hidden. The page root under the
+    // editor stays inert.
+    const editorPortal = editor.closest('body > *') as HTMLElement;
+    expect(editorPortal.inert).not.toBe(true);
+    const root = document.querySelector('[data-create-organism]')?.closest('body > *');
+    expect((root as HTMLElement).inert).toBe(true);
   });
 
   it('editor origin: a rejected delete is reported inside the still-open editor', async () => {

@@ -58,15 +58,3 @@ export function saveFailureMessage(error: unknown, subject: 'battle' | 'organism
     : 'This organism could not be saved. Nothing already stored was changed, and your work is ' +
         'still here — try again.';
 }
-
-/**
- * Story 4.22, FD12: a refused organism delete — the re-verify read or `organisms.delete` rejected.
- * One sentence for every error class: unlike a save, there is no draft to keep and no space to
- * free, so the only true things to say are that nothing changed and that a retry is possible
- * (`saveFailureMessage`'s discipline: state that existing data is untouched, name no affordance
- * that does not exist). True by the same AR-14 write shape — the next collection is serialised
- * before `setItem`, so a refused delete leaves `gol:organisms` byte-identical. Here, not in the
- * lazy `deleteBlockCopy.ts`, because `useOrganismDelete` publishes it from the first load.
- */
-export const ORGANISM_DELETE_FAILED =
-  'This organism could not be deleted. Nothing was changed — try again.';

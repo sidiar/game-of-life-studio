@@ -14,9 +14,8 @@ import type { BattleRepository, OrganismRepository } from '@gol/persistence';
 import type { OrganismDeleteBlockedDialogProps } from '@/components/organisms/OrganismDeleteBlockedDialog';
 import type { OrganismDeleteConfirmDialogProps } from '@/components/organisms/OrganismDeleteConfirmDialog';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
-import { ORGANISM_DELETED } from '@/lib/organisms/saveOutcome';
+import { ORGANISM_DELETE_FAILED, ORGANISM_DELETED } from '@/lib/organisms/saveOutcome';
 import { referencingOrganismNames, usageBattleNames } from '@/lib/organisms/usageLabels';
-import { ORGANISM_DELETE_FAILED } from '@/lib/saveFailureMessage';
 import { useInertBackground } from '@/lib/useInertBackground';
 
 /**
@@ -68,8 +67,13 @@ interface ConfirmOutcome {
   failed: boolean;
   /** A fresh read completed, so the cards may be stale: reload on exit. */
   reload: boolean;
-  /** FD5: the fresh verdict was `blocked` — hand off to the block dialog with the FRESH names. */
-  handoff: { battleNames: readonly string[]; referencingNames: readonly string[] } | null;
+  /** FD5: the fresh verdict was `blocked` — hand off to the block dialog with the FRESH names,
+   * the organism's own included. */
+  handoff: {
+    organismName: string;
+    battleNames: readonly string[];
+    referencingNames: readonly string[];
+  } | null;
 }
 
 export interface UseOrganismDeleteOptions {
@@ -212,7 +216,10 @@ export function useOrganismDelete({
       restoreRef.current =
         origin === 'card' ? { kind: 'card', organismId: organism.id } : { kind: 'editor' };
       // Cleared at the START of every request, so a repeat outcome re-mounts its node and
-      // re-announces (the editor's `saveOrganism` idiom).
+      // re-announces (the editor's `saveOrganism` idiom). The held toast too: an editor close
+      // that `onEditorDeleted` did not produce (a caller that passes none) must not publish a
+      // stale "Organism deleted" on some later, unrelated editor exit.
+      heldToastRef.current = null;
       setToast(null);
       setDeleteError(null);
       setEditorDeleteError(null);
@@ -242,7 +249,12 @@ export function useOrganismDelete({
   // AC3 / AC6 / AC7. A synchronous callback that `void`s an inner async run (React 19: never hand
   // an `async` function to a `(): void` prop).
   const handleConfirm = useCallback(() => {
-    if (deleteWindow === null || deleteWindow.kind !== 'confirm' || latchRef.current) return;
+    // `!dialogOpen`: the buttons stay enabled through a Cancel's ~195 ms exit fade (`pending` is
+    // false), so a Confirm landing in that window would write after the cancel, and the fade's
+    // own exit handler — running before the write settles — would release the window and leave
+    // the outcome queued for the NEXT window to publish as its own.
+    if (deleteWindow === null || deleteWindow.kind !== 'confirm' || !dialogOpen || latchRef.current)
+      return;
     latchRef.current = true;
     setPending(true);
     const { organismId, origin } = deleteWindow;
@@ -262,7 +274,8 @@ export function useOrganismDelete({
           battles.list(),
         ]);
         outcome.reload = true;
-        if (!freshOrganisms.some((organism) => organism.id === organismId)) {
+        const freshRecord = freshOrganisms.find((organism) => organism.id === organismId);
+        if (freshRecord === undefined) {
           // Deleted elsewhere (another tab): nothing to write, and no toast — this action deleted
           // nothing. The card is gone after the reload, so focus falls back to Create.
           if (origin === 'card') restoreRef.current = { kind: 'create' };
@@ -281,6 +294,9 @@ export function useOrganismDelete({
             restoreRef.current = origin === 'card' ? { kind: 'create' } : null;
           } else if (verdict.kind === 'blocked') {
             outcome.handoff = {
+              // The fresh record's name too — renamed in another tab, the block would otherwise
+              // explain itself under the click-time name.
+              organismName: toDisplayOrganism(freshRecord).name,
               battleNames: usageBattleNames(verdict.battles, freshSummaries),
               referencingNames: referencingOrganismNames(
                 verdict.referencingOrganismIds,
@@ -299,7 +315,7 @@ export function useOrganismDelete({
       // or a Cancel that overwrites the outcome (the Story 4.18 gate review's finding).
       setDialogOpen(false);
     })();
-  }, [deleteWindow, organisms, battles]);
+  }, [deleteWindow, dialogOpen, organisms, battles]);
 
   // The one exit handler for both dialogs, so every state change of a release lands in ONE
   // commit: the window's release (lifting `inert`) and whatever it publishes.
@@ -313,9 +329,11 @@ export function useOrganismDelete({
       // FD5: swap the variant and reopen in the same handler, so `deleteWindow` never goes `null` —
       // inert never releases and the focus effect never fires in between (the
       // `handleGateExited` handoff). The restore intent is the original origin's, unchanged.
-      const { battleNames, referencingNames } = outcome.handoff;
+      const { organismName, battleNames, referencingNames } = outcome.handoff;
       setDeleteWindow((current) =>
-        current === null ? null : { ...current, kind: 'blocked', battleNames, referencingNames },
+        current === null
+          ? null
+          : { ...current, kind: 'blocked', organismName, battleNames, referencingNames },
       );
       setDialogOpen(true);
       reload();

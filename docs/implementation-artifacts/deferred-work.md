@@ -3071,7 +3071,9 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
 - The two card entries already annotated "4.21/4.22" (`:743-755` the rules-preview sentence,
   `:775-788` the stat-cell semantics) are re-pointed to **Story 4.22 only**: this story adds the
   Delete button alone and does not reshape the card's stat block or add the natural-language rules
-  sentence.
+  sentence. **Re-pointed again by Story 4.22 (2026-09-25, FD13, owner question open):** 4.22
+  touched the action row only; both entries now point at the next card-content change or the
+  Epic 4 UX reconciliation touch — see the entries themselves.
 
 ### Questions for Sidiar, still open at story completion
 
@@ -3147,3 +3149,19 @@ Both carry a written default, implemented as stated:
    the next card-content change or the Epic 4 UX touch. Should either be built here instead?
 2. **FD12**: the delete-failure sentence `This organism could not be deleted. Nothing was changed —
    try again.` has no spec source. Is it acceptable as written?
+
+## Deferred from: code review of 4-22-safe-delete-protected-default (2026-09-25)
+
+Reviewed on **Fable** against an **Opus** implementation. All three are already recorded above;
+listed here so the review's own ledger is complete.
+
+- **Editor-origin focus restore relies on the reload resolving inside the editor's ~195 ms fade**
+  (`useOrganismDelete.ts`, `handleExited`) — the implementation's own entry above ("reloads the
+  Library at the confirmation's exit") already carries it. Revisit against a slow repository.
+- **A `dynamic()` chunk that fails to load leaves `useOrganismDelete`'s window authority set and
+  `guardedCreate` / `onRequestEdit` refusing** (`OrganismLibrary.tsx`) — pre-existing: Story 4.21's
+  "no `loading`/error fallback on any `dynamic()` boundary" class above. Fix once, for every
+  boundary.
+- **The in-editor delete alert outlives a later successful Save and can stand beside `saveError`**
+  (`OrganismEditorModal.tsx`) — the implementation's entry above already points it at the 4.23
+  editor-state pass.

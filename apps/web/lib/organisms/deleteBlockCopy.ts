@@ -34,8 +34,10 @@ export const RULE_BLOCK_REMEDY = 'Edit those rules to remove the reference, then
 /** Story 4.22: the confirmation's title (UX-DR15), a question, like `Delete Battle?`. */
 export const DELETE_CONFIRM_TITLE = 'Delete Organism?';
 
-/** FR-1.4's standard confirmation, verbatim (`prd.md:136`). `name` is already display-resolved
- * (`toDisplayOrganism`) by the caller, so an `''` name reads `Unnamed organism` here. */
+/** FR-1.4's standard confirmation (`prd.md:136`), with the house's curly quotes around the name
+ * (the `<DeleteBattleDialog>` precedent — the PRD's `[Organism Name]` placeholder carries none).
+ * `name` is already display-resolved (`toDisplayOrganism`) by the caller, so an `''` name reads
+ * `Unnamed organism` here. */
 export function deleteConfirmSentence(name: string): string {
   return `Are you sure you want to delete “${name}”?`;
 }

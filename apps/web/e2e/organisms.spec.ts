@@ -4311,6 +4311,35 @@ test.describe('safe delete & protected default (Story 4.22)', () => {
     expect(errors).toEqual([]);
   });
 
+  test('editor path: Cancel on the stacked confirmation hands the editor back live, with focus on its Delete', async ({
+    page,
+  }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    await editButton(page, 'Glider').click();
+    const editor = await settled(page, editorDialog(page));
+    const editorDelete = editor.getByRole('button', { name: 'Delete Organism' });
+    await editorDelete.click();
+    const confirm = confirmDialog(page);
+    await expect(confirm).toBeVisible();
+    await page.waitForTimeout(300);
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.waitForTimeout(300);
+    await expect(confirm).not.toBeVisible();
+    await expect(editor).toBeVisible();
+    const inertAncestors = await page.evaluate(
+      () => document.querySelector('[data-editor-delete-organism]')?.closest('[inert]') !== null,
+    );
+    expect(inertAncestors).toBe(false);
+    await expect(editorDelete).toBeFocused();
+    // The editor is still usable: a second Delete reopens the confirmation.
+    await editorDelete.click();
+    await expect(confirm).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   test('the protected card: Delete is disabled and its message is visible', async ({ page }) => {
     const errors = captureErrors(page);
     await gotoSeeded(page);
@@ -4385,6 +4414,23 @@ test.describe('safe delete & protected default (Story 4.22)', () => {
     const editor = await settled(page, editorDialog(page));
     await editor.getByRole('button', { name: 'Delete Organism' }).click();
     await expect(confirmDialog(page)).toBeVisible();
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  // AC8's "each dialog stacked over it" — the block dialog too, in a real browser (Story 4.21's
+  // scroll-region violation was one jsdom could not see).
+  test('axe: no violations with the block dialog stacked over the editor', async ({ page }) => {
+    const errors = captureErrors(page);
+    await gotoSeeded(page);
+
+    await editButton(page, 'Silent Vector').click();
+    const editor = await settled(page, editorDialog(page));
+    await editor.getByRole('button', { name: 'Delete Organism' }).click();
+    await expect(page.getByRole('dialog', { name: 'Cannot delete Silent Vector' })).toBeVisible();
     await page.waitForTimeout(300);
 
     const { violations } = await new AxeBuilder({ page }).analyze();

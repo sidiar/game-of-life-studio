@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -449,6 +449,97 @@ touching a file. Five failures here compile and pass tests anyway, and each is s
         numbers.
   - [x] Record every command and its real output summary in the Dev Agent Record.
 
+### Review Findings
+
+Reviewed on **Fable** against an **Opus** implementation (2026-09-25), via three parallel adversarial
+layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) plus the reviewer's own real-browser
+probe of the one path no test covered.
+
+- [ ] [Review][Decision] **Editor-origin Confirm on a record already deleted in another tab leaves
+  the editor open on a ghost** — AC6's "no longer exists" case says only "the write is skipped and
+  the Library reloads; no toast". For `origin: 'editor'` the code does exactly that
+  (`useOrganismDelete.ts`, the `freshRecord === undefined` branch): no close, no toast, no alert,
+  the editor stays open on a record that no longer exists, and its next Save would re-create it
+  through `organisms.save` (an upsert). Hook and Library tests cover the card origin only. Options:
+  **(a)** treat it as deleted for the editor origin — close the editor through the same FD9
+  sequence and reload, with no toast (this action deleted nothing) — one branch, no new copy;
+  **(b)** keep the editor open and publish an in-editor `role="alert"` with a new sentence ("This
+  organism no longer exists…"), which is a second unspecced copy line beside FD12's; **(c)** leave
+  as built and record it as an FD11-class residual (cross-tab deletion mid-edit). Left for Sidiar;
+  nothing changed here.
+- [x] [Review][Patch] **The editor is handed back DEAD after Cancel/Escape/OK on a dialog stacked
+  over it (first delete of a page session)** [`apps/web/lib/useInertBackground.ts`] — measured in
+  Chromium: after Cancel on the editor-origin confirmation, the editor's portal (and the page under
+  it) stayed `inert`; nothing on screen could be clicked or focused until a reload. FD9's reasoning
+  about "two restore maps unwinding in call order" missed that both instances hold a
+  `MutationObserver`: the nested modal's mount marks the editor's own portal `aria-hidden`, the
+  editor's observer (registered first, notified first) inerts that portal, and the stacked instance
+  then records `inert: true` as the portal's "prior" and restores it on cleanup. The chunk-cached
+  second open never hits it (the stacked instance's own effect sweep runs before the observers),
+  which is why no jsdom test and no e2e caught it — every e2e is a fresh page, but none cancelled
+  from the editor. Fix in the shared hook: ONE module-level claim registry (`prior` recorded once
+  per element by the first instance to touch it, later instances add a hold), and a cleanup that
+  releases an element when no instance holds it OR when MUI has already lifted its `aria-hidden`
+  (the nested case) — an element still hidden by another instance's modal stays inert. Pinned
+  three ways: `useInertBackground.test.tsx` ("a stacked instance releases…"), the Library's
+  "Escape on the stacked confirmation" test now asserts the editor's portal is not inert and the
+  root still is, and a new Chromium e2e ("Cancel on the stacked confirmation hands the editor back
+  live"). Both jsdom pins go red on the original hook. The sequential gate → editor handoff
+  (editor-hook test (e), "inert never dips") is unchanged: release still happens only at cleanup.
+- [x] [Review][Patch] **A Confirm landing during a Cancel's exit fade wrote after the cancel and
+  left the outcome queued for the next window** [`apps/web/lib/organisms/useOrganismDelete.ts`,
+  `handleConfirm`] — the buttons stay enabled through the fade (`pending` is false), so the latch
+  did not stop it; the fade's exit handler released the window before the write settled, and
+  `outcomeRef` then belonged to whichever window opened next (a Cancel there would have published
+  "Organism deleted"). Guarded on `!dialogOpen`; hook test added.
+- [x] [Review][Patch] **The editor's Delete was reachable during the editor's own exit fade**
+  [`apps/web/components/organisms/OrganismLibrary.tsx`, `canOpenDelete`] — a click within the
+  ~195 ms after Back/Escape stacked a window over an editor about to unmount (the FD9 unwind in the
+  wrong order, and a toast held for an editor exit that had already happened). The editor origin
+  now also requires `modalProps.open`.
+- [x] [Review][Patch] **Stale held toast** [`useOrganismDelete.ts`, `requestDelete`] —
+  `heldToastRef` was never cleared at the next request, so a caller passing no `onEditorDeleted`
+  would have published "Organism deleted" on a later, unrelated editor exit. Cleared with the rest.
+- [x] [Review][Patch] **The FD5 handoff kept the click-time organism name** [`useOrganismDelete.ts`,
+  `ConfirmOutcome.handoff`] — the hook and Library tests were titled "with the FRESH name" but only
+  asserted the battle name; an organism renamed in another tab was blocked under its old name. The
+  handoff now carries `toDisplayOrganism(freshRecord).name`; the hook test renames Glider between
+  click and Confirm and asserts it.
+- [x] [Review][Patch] **`ORGANISM_DELETE_FAILED` grew the battle routes** [`apps/web/lib/saveFailureMessage.ts`
+  → `apps/web/lib/organisms/saveOutcome.ts`] — an organisms-only sentence in a module `/battle` and
+  `/battle/new` import (+45/+46 B for code they never run, per the Debug Log). Moved beside
+  `ORGANISM_DELETED`, which is where it pairs anyway; baseline refreshed through the tool (numbers
+  in the Change Log — the battle routes do not net-shrink, because the shared-hook fix above grows
+  every route by a few dozen bytes).
+- [x] [Review][Patch] **`onEditorExited` depended on the whole `modalProps` object**
+  [`OrganismLibrary.tsx`] — re-created every render while reading one field; `onExited` is now
+  destructured, as `onClose` already was.
+- [x] [Review][Patch] **Refusal coverage was one-sided** [`useOrganismDelete.test.tsx`] — the
+  editor-origin refusal had no publish-after-exit ordering assertion (the one publish path without
+  one; testing standards); only `battles.list()` rejecting was pinned; a delete rejected AFTER a
+  successful fresh read was not asserted to still `reload()`. All three added (the read-rejection
+  test is now an `it.each` over both repositories).
+- [x] [Review][Patch] **AC8's "each dialog stacked over it" was real-browser-scanned for the
+  confirmation only** [`apps/web/e2e/organisms.spec.ts`] — the block dialog over the editor was
+  jsdom-only, and 4.21's own scroll-region violation was one jsdom could not see. Added.
+- [x] [Review][Patch] **"Verbatim" was not literal** [`apps/web/lib/organisms/deleteBlockCopy.ts`]
+  — `prd.md:136` has no quotation marks around `[Organism Name]` and `:137` no trailing period; the
+  code follows the story and the `<DeleteBattleDialog>` precedent, so only the comment moved.
+- [x] [Review][Patch] **`deferred-work.md`'s 4.21 section still sent readers to "Story 4.22 only"
+  for the two card-content entries** [`deferred-work.md:3071`] — Task 9 annotated three 4.21
+  entries and missed this fourth; annotated in place.
+- [x] [Review][Patch] **Nits** [`OrganismEditorModal.tsx`] — `data-editor-delete-error` was a bare
+  boolean (renders `="true"`; every sibling hook is `=""`), and the FD10 comment broke mid-phrase.
+- [x] [Review][Defer] **Editor-origin focus restore relies on the reload resolving inside the
+  editor's ~195 ms fade** [`useOrganismDelete.ts`, `handleExited`] — deferred, already recorded in
+  this story's `deferred-work.md` section ("reloads the Library at the confirmation's exit").
+- [x] [Review][Defer] **A `dynamic()` chunk that fails to load leaves the window authority set and
+  every guard refusing** [`OrganismLibrary.tsx`] — deferred, pre-existing: Story 4.21's recorded
+  "no `loading`/error fallback on any `dynamic()` boundary" class, to be fixed once for all.
+- [x] [Review][Defer] **The in-editor delete alert outlives a later successful Save and can stand
+  beside `saveError`** [`OrganismEditorModal.tsx`] — deferred, already recorded for the 4.23
+  editor-state pass.
+
 ## Dev Notes
 
 ### Forced decisions
@@ -873,7 +964,10 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 - `apps/web/lib/organisms/deleteBlockCopy.test.ts`
 - `apps/web/lib/organisms/saveOutcome.ts`
 - `apps/web/lib/organisms/usageLabels.ts`
-- `apps/web/lib/saveFailureMessage.ts`
+- `apps/web/lib/saveFailureMessage.ts` (review: the delete-failure sentence moved out again, to
+  `saveOutcome.ts`)
+- `apps/web/lib/useInertBackground.ts` (review: the nested-instance fix) and
+  `apps/web/lib/useInertBackground.test.tsx`
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
@@ -886,6 +980,30 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   disabled), the editor's Column-1 Delete Organism, the `useOrganismDelete` controller with a fresh
   re-verify before the write, the `Organism deleted` status and the refusal alert, the badge
   selectors retargeted, and the bundle baseline refreshed. Status → review.
+- 2026-09-25: Code review (Fable). Twelve patches applied — the load-bearing one is
+  `useInertBackground`'s module-level claim registry, without which the editor is handed back inert
+  after any Cancel/Escape/OK on a dialog stacked over it (measured in Chromium, now pinned in unit,
+  jsdom and e2e). Also: a Confirm-during-Cancel-fade guard, the editor-origin `open` guard, the
+  fresh-name handoff, the held-toast clear, `ORGANISM_DELETE_FAILED` moved to `saveOutcome.ts`,
+  `onEditorExited` deps, three refusal-coverage tests, the block-over-editor axe e2e, and doc/nit
+  fixes. Bundle baseline refreshed through the tool: `/organisms` 307423 → 307548 B (+125),
+  `/battle` 316969 → 316998, `/battle/new` 316767 → 316795, `/` 341838 → 341919 — the shared hook
+  grew every route; `/settings` unchanged. One owner decision left open (the editor-origin vanished
+  record, AC6). Status → in-progress.
+  - Review gate, `npm run ci:dev` redirected to a file with `$?` read directly: **exit 0** on the
+    third run (typecheck ✓; lint 0 errors, the 1 pre-existing `BattleGallery.tsx:248` warning;
+    format ✓; spec:check ✓ 274 ids; boundary ✓; coverage — web 131 files / 2213 tests, domain
+    212, simulation 408, persistence 103, test-utils 95; build ✓; bundle ✓ within the 8 KB
+    allowance on every route; bench 8.566 ms / 16.667 ms; e2e Chromium **282 passed**). The first
+    two runs were **exit 1** with 5 and then 10 `Test timed out in 5000ms` failures, all axe or
+    editor-flow tests in `OrganismLibrary.test.tsx` / `OrganismEditorModal.test.tsx`, a different
+    set each time and mostly in Stories 4.3–4.17 this branch does not touch — the machine's load
+    average was 17–25 from another session; the same two files passed 191/191 under coverage in
+    isolation, and the third run started once load fell under 6. The 5 s axe-scan ceiling under
+    coverage load is a known fragility (the Dev Record hit it once too); not changed here.
+  - Real-browser probe before the fix: the new e2e "Cancel on the stacked confirmation" failed on
+    the dev commit (`closest('[inert]')` on the editor's Delete returned the portal) and passes
+    with the hook fix; the 4.21 + 4.22 e2e blocks then ran 18/18 in Chromium.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none
