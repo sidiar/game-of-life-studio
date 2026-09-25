@@ -654,3 +654,18 @@ claude-sonnet-5
   targets, FD2 mid-write edits and per-category dirtiness; e2e proves the editor is live after Keep
   Editing; comment and `deferred-work.md` corrections. 3 decision-needed items left open for the
   owner (Review Findings) — status `in-progress`.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 59s | 59s | 28 | 4,486 | 9,674 | 830,753 | 844,941 |
+| Step 1 — create | opus-5-5 | 1 | 6m 15s | 6m 15s | 116 | 5,905 | 311,012 | 6,001,769 | 6,318,802 |
+| Step 2 — implement | sonnet-5 | 1 | 45m 07s | 45m 07s | 824 | 26,334 | 934,425 | 120,753,383 | 121,714,966 |
+| Step 3 — review + PR | opus-5-5 | 4 | 26m 20s | 26m 20s | 356 | 19,272 | 1,176,438 | 16,537,095 | 17,733,161 |
+| _of which the orchestrator_ | fable-5 | — | — | — | 78 | 19,947 | 40,798 | 2,544,943 | 2,605,766 |
+| **Total (create → PR ready)** | | 6 | **1h 18m** | 1h 18m | 1,324 | 55,997 | 2,431,549 | 144,123,000 | **146,611,870** |
+
+Run started 2026-09-25 19:08 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
