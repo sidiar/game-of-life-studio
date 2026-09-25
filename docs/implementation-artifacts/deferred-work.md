@@ -3094,15 +3094,15 @@ been answered yet:
   itself is intact (`createBattleExporter` is still a factory over the injected `AppRepositories`
   interface, never a concrete repository); only WHERE the factory is called moved, from the page
   boundary to inside a `next/dynamic`-adjacent bare `import()`. If the owner wants boundary
-  construction to match `/settings`, the growth-ratchet gate this file already tracks (the
-  "the bundle gate moves off absolute budgets" entry) should land first, so `/battle` is not
-  fighting a stale absolute ceiling while it happens.
+  construction to match `/settings`, nothing blocks it any more: #81 replaced the absolute budget
+  with the growth ratchet (`scripts/bundle-baselines.json`), so the move costs a reviewed baseline
+  refresh for `/battle` and `/battle/new`, not a fight with a ceiling.
 - **FD6: Entire Workspace exports the SAVED copy of a dirty battle, and does not save first.** The
   #77 AC's save obligation is Battle Only's alone ("before `exportBattle(id)` is called"); widening
   it to Entire Workspace was considered and rejected as scope creep on this story. The dialog's own
   copy discloses it ("Entire Workspace exports only what is already saved") when `needsSave` is
   true, so the gap is visible rather than silent. If the owner wants parity, it is a one-line
-  `await persistBattle()` before `exporter.exportWorkspace()` in `<BattlePage>`'s `runExportChoice`.
+  `await persistBattle()` before `exporter.exportWorkspace()` in `<BattlePage>`'s `handleExportExited`.
   The two related gaps FD6 itself already named — `useWorkspaceSeed` not mounted on `/battle`, and
   a partly-corrupt store yielding a partial file — stay with Story 5.11, unchanged by this story.
 - **`EditorToolsSection`'s `:not(:last-child)` margin rule assumes exactly two `ToolButton`s.** It
@@ -3110,3 +3110,15 @@ been answered yet:
   stays byte-for-byte identical to before this story when `onExport` is absent), but a THIRD tool
   button — none is planned; §9.3 excludes the mockup's other two outright — would need the rule
   re-checked rather than assumed to keep working.
+
+## Deferred from: code review of 5-6-battle-export-dialog (2026-09-25)
+
+- **The export failure alert can share a commit with `exportConfirming=false`.** If a choice's
+  rejection arrives before React has committed the dialog's exit, `setExportConfirming(false)` and
+  `setExportError(...)` batch into one commit: the `role="alert"` node is inserted before
+  `useInertBackground`'s cleanup releases `inert`, the silent-live-region case FD2 exists to
+  prevent. Only reachable by a synchronous or microtask rejection — every real rejection source
+  today is an IndexedDB request or a cold chunk fetch (macrotasks), so the exit commit lands first
+  in practice. A robust fix starts the export from a post-commit effect rather than from
+  `onTransitionExited`; worth doing if a synchronous failure source is ever added. The FD2
+  ordering test checks for a `[role="dialog"]`, not for `inert` ancestors, so it would not catch it.

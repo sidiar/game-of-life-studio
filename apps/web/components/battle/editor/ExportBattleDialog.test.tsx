@@ -42,6 +42,22 @@ describe('ExportBattleDialog (Story 5.6, AC2/AC7/AC9 — FR-7.13)', () => {
     ]);
   });
 
+  // Task 4 (code review 2026-09-25): the COMPUTED description, not the id plumbing — the save
+  // note joins it only when it is shown.
+  it('computes the accessible description from the prompt, plus the save note when needsSave', () => {
+    const { unmount } = renderDialog();
+    expect(screen.getByRole('dialog', { name: 'Export Battle' })).toHaveAccessibleDescription(
+      'Export this Battle only, or export entire Workspace?',
+    );
+    unmount();
+
+    renderDialog({ needsSave: true, neverSaved: true });
+    expect(screen.getByRole('dialog', { name: 'Export Battle' })).toHaveAccessibleDescription(
+      'Export this Battle only, or export entire Workspace? This battle has not been saved yet. ' +
+        'Save & Export Battle saves it first; Entire Workspace exports only what is already saved.',
+    );
+  });
+
   it('open={false} renders no dialog at all (MUI unmounts by default)', () => {
     renderDialog({ open: false });
 

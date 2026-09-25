@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 5.6: Battle Export Dialog
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -318,6 +318,30 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
   - [x] `spec:check` resolves every ID you cite (`FR-6.1`, `FR-6.4`, `FR-7.13`, `AR-2`, `AR-12`,
         `AR-27`, `AR-31`, `AR-44`, `Decision E.5`, `Decision F.1`, `Story 5.x` …). `npm run
         spec:check` passes clean (277/277 cited ids resolve).
+
+### Review Findings
+
+_Code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `origin/main...HEAD`)._
+
+- [ ] [Review][Decision] Filename slug strips every combining mark, not just Latin accents — FD7/AC5 prescribe `normalize('NFKD').replace(/\p{M}+/gu, '')`, which silently garbles scripts whose vowel signs/viramas are `\p{M}` (Devanagari "नमस्ते" loses its vowel signs, Japanese が → か, Hangul decomposes to loose jamo), contradicting the code's own "non-Latin names are kept" claim. The code follows the spec verbatim, so changing it is a spec change. Options: (a) keep FD7 as written and reword the comment to "Latin-accented and mark-free scripts"; (b) strip only marks following a Latin base (`/(\p{Script=Latin})\p{M}+/gu` → `'$1'`) then `normalize('NFC')`, updating FD7/AC5 and adding an Indic/Japanese/Hangul test; (c) drop mark-stripping and NFC-normalise only, accepting `café` → `café.json`. [apps/web/lib/export/battleExportFilename.ts:10-16]
+- [ ] [Review][Decision] No length cap on the export filename — a long battle name (≥ ~250 UTF-8 bytes, sooner for multi-byte scripts) exceeds common filesystem limits and the browser/OS may truncate the name or drop `.json`. FD7 sets no cap and the battle-name field's own max length decides whether this is reachable. Options: (a) accept, if the name field's max length already keeps the slug under the limit; (b) cap the slug (e.g. 100 code points, trailing `-` trimmed) and add the case to FD7 and its test; (c) defer to a later filename-hygiene story together with Windows reserved names (`con`, `nul`). [apps/web/lib/export/battleExportFilename.ts:31-34]
+- [ ] [Review][Decision] Page-level export tests mock the whole `battleExporter` module rather than using the real serializer over `createFakeRepositories` with `downloadJsonFile` mocked, as Task 7 specified — so no page-level test can observe AC11's "a rejecting `exportBattle` … and no download". The file header documents the variance (wiring vs. round trip, which `exportBattleToFile.test.ts` owns). Options: (a) accept the variance and record it in the Dev Agent Record as an FD-level deviation; (b) rewrite `BattlePage.export.test.tsx` per Task 7 (real serializer, mocked `@/lib/export/downloadJsonFile`), asserting on the download seam. [apps/web/components/battle/BattlePage.export.test.tsx:17-34]
+- [ ] [Review][Decision] Bundle baselines re-baselined for routes this story does not touch — `npm run bundle:baseline` regenerates every route, so `/` (+104 B), `/organisms` (+66 B) and `/settings` (+184 B) moved alongside `/battle` and `/battle/new`; the Dev Agent Record calls these "pre-existing drift from main" without evidence. The growth-ratchet intent is that unexplained growth is caught, not absorbed. Options: (a) accept (the documented refresh procedure is whole-file, and the drift is small); (b) restore those three routes to `main`'s values and explain or fix their growth separately; (c) change `bundle:baseline` to refresh only named routes. [scripts/bundle-baselines.json:2-6]
+- [x] [Review][Patch] A stale save error hides every later export failure — `handleExport` cleared only `exportError`, so after a failed save a Workspace (or clean Battle Only) export failure rendered under `saveError ?? exportError` as the OLD save message, contradicting FD9's own "`handleExport` clears both" [apps/web/components/battle/BattlePage.tsx:handleExport]
+- [x] [Review][Patch] Focus restore after a completed or failed export ran before React committed — the `finally`'s synchronous `focusExportButtonIfLoose()` could hit the Export button while it was still `disabled={isSaving}` (failed Save & Export) or still `inert`, a spec-mandated no-op leaving focus on `<body>` (FD8/AC9); now requested through state and performed by the post-commit restore effect [apps/web/components/battle/BattlePage.tsx:handleExportExited]
+- [x] [Review][Patch] Focus-restore effect also fired on mount and could steal focus from `<body>` to Export Battle on page load; now gated on a restore actually being owed by an export dialog [apps/web/components/battle/BattlePage.tsx:focus-restore effect]
+- [x] [Review][Patch] `focusExportButtonIfLoose` treated focus inside ANY dialog as loose, so an export settling after the user opened another dialog (Back → Unsaved Changes, resize-clip warning) yanked focus out of that dialog's trap; now only focus inside the export dialog itself counts [apps/web/components/battle/BattlePage.tsx:focusExportButtonIfLoose]
+- [x] [Review][Patch] Clicks during the dialog's fade-out could switch the recorded choice (Battle Only then Entire Workspace exported the workspace) and a Cancel after a choice still exported; the first choice now wins [apps/web/components/battle/BattlePage.tsx:handleChoose]
+- [x] [Review][Patch] Stale `runExportChoice` references (merged into `handleExportExited` during the bundle trims) in comments, the test header, and `deferred-work.md`'s FD6 one-liner [apps/web/components/battle/BattlePage.tsx; BattlePage.export.test.tsx; deferred-work.md]
+- [x] [Review][Patch] `deferred-work.md`'s FD1 entry still said `/battle` was "fighting a stale absolute ceiling" and asked for the growth ratchet to land first — #81 already landed it [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] Factually wrong comments: the mount-site comment said the lazy chunk is "never requested on the overwhelmingly common path" (every Export click requests it), and the lifecycle comment claimed it "stayed under Task 5's ~40-line guide" [apps/web/components/battle/BattlePage.tsx]
+- [x] [Review][Patch] Test named "…no download is attempted twice" asserted nothing about repeat attempts; now pins `exportBattle` called exactly once [apps/web/components/battle/BattlePage.export.test.tsx]
+- [x] [Review][Patch] AC9 focus coverage: only Cancel was tested at page level — added Escape, a failed Save & Export, and a completed Entire Workspace export landing focus on Export Battle [apps/web/components/battle/BattlePage.export.test.tsx]
+- [x] [Review][Patch] AC6 "a test pins that the exported cells equal the saved record's grid" was covered only by a cell count; the AC11 round trip now pins `fromBattleExport(...).gridState` against the saved record's `gridState` [apps/web/lib/export/exportBattleToFile.test.ts]
+- [x] [Review][Patch] Task 4's "test the computed description" was never tested — added `toHaveAccessibleDescription` for both variants [apps/web/components/battle/editor/ExportBattleDialog.test.tsx]
+- [x] [Review][Patch] The FD2 ordering test's `MutationObserver` never disconnected on failure and a regression surfaced as a timeout; now bounded and always disconnected [apps/web/components/battle/BattlePage.export.test.tsx]
+- [x] [Review][Patch] The e2e axe scan with the export dialog open ran on a bare `toBeVisible()`, mid-Fade, and failed `color-contrast` on blended colours in the review's `ci:dev` run; now uses the guard test's three-wait settle (`opacity: 1` + 300 ms) [apps/web/e2e/battleRoute.spec.ts:export battle axe test]
+- [x] [Review][Defer] Export failure alert can still share a commit with `exportConfirming=false` (so be inserted before `useInertBackground` releases `inert`) if a rejection arrives before React commits the exit — only reachable by a synchronous/microtask rejection; every real rejection source is an IndexedDB request or a cold chunk fetch (a macrotask), so the commit always lands first in practice [apps/web/components/battle/BattlePage.tsx:handleExportExited] — deferred, theoretical today
 
 ## Dev Notes
 
@@ -818,6 +842,11 @@ close-out) is a **second, separate Sonnet session** resuming the halted run from
   e2e cases including the new 6-case `export battle (Story 5.6)` describe, `bench:check` 56.6%
   headroom); appended a dated AC10 annotation recording the gate change; cleared Task 9's HALT
   marker (history kept, not deleted). Status → review.
+- 2026-09-25 — Code review (Opus): 14 patches applied (see Review Findings) — FD9 stale-save-error
+  masking, post-commit focus restore for every close path, first-choice-wins during the fade, the
+  racy e2e axe scan, and test/comment/deferred-work fixes; 4 `[Review][Decision]` items left open
+  for the owner; 1 deferred. Baselines refreshed via `bundle:baseline` (`/battle`, `/battle/new`
+  +62 B each). `ci:dev` exit 0. Status → in-progress (open decisions).
 
 Dev Model: sonnet   # follows existing patterns (UnsavedChangesDialog idiom, useLeaveGuard lifecycle, 5.5's lib/export seam); every structural choice (lazy boundary, save-then-export, id return, act-on-exit) is pre-decided in FD1–FD9, so nothing is left to architect.
 

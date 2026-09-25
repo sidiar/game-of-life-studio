@@ -21,7 +21,7 @@ vi.mock('next/navigation', () => ({
  * FD1 lazy module — replaced with a spy pair so these tests assert the WIRING (what gets called,
  * with what id, in what order relative to a save) rather than re-proving the real serializer round
  * trip, which `exportBattleToFile.test.ts` / `battleExporter.test.ts` / `exportWorkspaceToFile.test.ts`
- * already own. `vi.mock` intercepts the bare `import()` inside `runExportChoice` too (module-graph
+ * already own. `vi.mock` intercepts the bare `import()` inside `handleExportExited` too (module-graph
  * level, the same trap `BattlePage.modeToggle.test.tsx`'s header names for `next/dynamic`).
  */
 const battleExporterMock = vi.hoisted(() => ({
@@ -144,7 +144,7 @@ describe('BattlePage — Export Battle (Story 5.6)', () => {
     expect(dirtyValue(container)).toBe('true');
   });
 
-  it('a rejecting exportBattle shows the export alert and no download is attempted twice (AC8)', async () => {
+  it('a rejecting exportBattle shows the export alert, attempts the export exactly once, and restores focus (AC8, AC9)', async () => {
     const user = userEvent.setup();
     battleExporterMock.exportBattle.mockRejectedValueOnce(new Error('boom'));
     const repositories = seeded();
@@ -159,6 +159,76 @@ describe('BattlePage — Export Battle (Story 5.6)', () => {
     expect(alert).toHaveTextContent('This battle could not be exported. Try again.');
     expect(alert).not.toHaveTextContent('boom');
     expect(alert).not.toHaveTextContent(/story|AC\d|FR-/i);
+    expect(battleExporterMock.exportBattle).toHaveBeenCalledTimes(1);
+    // AC9 / FD8: a failed export lands focus on EXPORT BATTLE too.
+    await waitFor(() => expect(exportButton()).toHaveFocus());
+  });
+
+  // AC9 / FD8 (code review 2026-09-25): the failed-SAVE path is the one where the button is still
+  // `disabled={isSaving}` when the operation settles — the restore must wait for that commit.
+  it('a failed Save & Export restores focus to EXPORT BATTLE once the save lock releases (AC9)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    vi.spyOn(repositories.battles, 'save').mockRejectedValue(new Error('boom'));
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    const dialog = await openExportDialog(user);
+    await user.click(within(dialog).getByRole('button', { name: 'Save & Export Battle' }));
+
+    await screen.findByRole('alert');
+    await waitFor(() => expect(exportButton()).toHaveFocus());
+  });
+
+  it('a completed Entire Workspace export restores focus to EXPORT BATTLE (AC9)', async () => {
+    const user = userEvent.setup();
+    render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    const dialog = await openExportDialog(user);
+    await user.click(within(dialog).getByRole('button', { name: 'Entire Workspace' }));
+
+    await waitFor(() => expect(battleExporterMock.exportWorkspace).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(exportButton()).toHaveFocus());
+  });
+
+  it('Escape closes the dialog, exports nothing, and restores focus to EXPORT BATTLE (AC9)', async () => {
+    const user = userEvent.setup();
+    render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await openExportDialog(user);
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(battleExporterMock.exportBattle).not.toHaveBeenCalled();
+    expect(battleExporterMock.exportWorkspace).not.toHaveBeenCalled();
+    await waitFor(() => expect(exportButton()).toHaveFocus());
+  });
+
+  // FD9 (code review 2026-09-25): a stale save error must not mask a later export failure in the
+  // shared `saveError ?? exportError` slot — opening the dialog clears both.
+  it('after a failed save, a failed Entire Workspace export announces the EXPORT failure (FD9)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    vi.spyOn(repositories.battles, 'save').mockRejectedValueOnce(new Error('boom'));
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(nameField(), '!');
+    await user.click(saveButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not be saved/i);
+
+    battleExporterMock.exportWorkspace.mockRejectedValueOnce(new Error('boom'));
+    const dialog = await openExportDialog(user);
+    await user.click(within(dialog).getByRole('button', { name: 'Entire Workspace' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Your workspace could not be exported. Try again.',
+      ),
+    );
   });
 
   it('Entire Workspace calls exportWorkspace and never battles.save (FD6)', async () => {
@@ -220,7 +290,11 @@ describe('BattlePage — Export Battle (Story 5.6)', () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
-    const firstAlertHadNoDialog = new Promise<boolean>((resolve) => {
+    // Bounded and always disconnected (code review 2026-09-25): a regression fails here with a
+    // message instead of hanging to the test timeout, and the observer never leaks into later tests.
+    let observer: MutationObserver | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const firstAlertHadNoDialog = new Promise<boolean>((resolve, reject) => {
       const check = () => {
         const alert = document.querySelector('[role="alert"]');
         if (alert === null) return false;
@@ -228,16 +302,20 @@ describe('BattlePage — Export Battle (Story 5.6)', () => {
         return true;
       };
       if (check()) return;
-      const observer = new MutationObserver(() => {
-        if (check()) observer.disconnect();
-      });
+      observer = new MutationObserver(() => void check());
       observer.observe(document.body, { childList: true, subtree: true });
+      timer = setTimeout(() => reject(new Error('no export alert appeared within 3s')), 3000);
     });
 
-    const dialog = await openExportDialog(user);
-    await user.click(within(dialog).getByRole('button', { name: 'Battle Only' }));
+    try {
+      const dialog = await openExportDialog(user);
+      await user.click(within(dialog).getByRole('button', { name: 'Battle Only' }));
 
-    expect(await firstAlertHadNoDialog).toBe(true);
+      expect(await firstAlertHadNoDialog).toBe(true);
+    } finally {
+      observer?.disconnect();
+      clearTimeout(timer);
+    }
   });
 
   it('has no axe violations with the export dialog open, plain variant', async () => {

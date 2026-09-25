@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { organismClosure, WorkspaceExportSchema } from '@gol/domain';
+import { fromBattleExport, organismClosure, WorkspaceExportSchema } from '@gol/domain';
 import {
   createFakeRepositories,
   createMockWorkspace,
@@ -91,6 +91,10 @@ describe('exportBattleToFile', () => {
     expect(parsed.kind).toBe('battle');
     expect(parsed.battles).toHaveLength(1);
     expect(parsed.battles[0].id).toBe(MOCK_BATTLE_IDS.battleA);
+
+    // AC6 (code review 2026-09-25): the exported cells ARE the saved record's grid — decoded back
+    // to dense form and compared whole, not just counted.
+    expect(fromBattleExport(parsed.battles[0]).gridState).toEqual(battle.gridState);
 
     const expectedClosure = organismClosure(battle.organismIds, mockWorkspace.organisms);
     expect(parsed.organisms.map((o) => o.id).sort()).toEqual(

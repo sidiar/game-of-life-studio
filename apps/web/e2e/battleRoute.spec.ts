@@ -1812,7 +1812,12 @@ test.describe('export battle (Story 5.6)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
 
     await page.getByRole('button', { name: /export battle/i }).click();
-    await expect(page.getByRole('dialog', { name: 'Export Battle' })).toBeVisible();
+    // The three-wait settle the guard's axe test below uses (code review 2026-09-25: a bare
+    // `toBeVisible()` let axe scan mid-Fade and flag colour-contrast on blended colours).
+    const dialog = page.getByRole('dialog', { name: 'Export Battle' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveCSS('opacity', '1');
+    await page.waitForTimeout(300);
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);

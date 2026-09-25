@@ -56,20 +56,25 @@ const UnsavedChangesDialog = dynamic(() => import('./UnsavedChangesDialog'), { s
  * shares (all three dialogs on this route now share one MUI `Dialog` chunk). `/battle` had 0.4 KB
  * of first-load headroom at story creation, and this dialog's own module never imports the
  * serializer either — the export code reaches this component through a SEPARATE bare `import()`,
- * inside `<BattlePage>`'s post-choice handler (FD1's other half; see `runExportChoice`).
+ * inside `<BattlePage>`'s post-choice handler (FD1's other half; see `handleExportExited`).
  */
 const ExportBattleDialog = dynamic(() => import('./editor/ExportBattleDialog'), { ssr: false });
 
 /**
- * FD8's shared focus-restore check, used by both the Cancel/Escape/backdrop path (the effect keyed
- * on `exportConfirming`) and the completed-operation path (`runExportChoice`'s own `finally`) — one
- * definition so the two can never drift on what "loose" means. Matches `useLeaveGuard`'s own check:
- * `null`, `<body>`, or still inside the closing dialog.
+ * FD8's focus-restore check, run by the one post-commit restore effect for every close path
+ * (Cancel/Escape/backdrop, and a completed or failed choice) — so "loose" has one definition.
+ * Loose is `null`, `<body>`, or still inside the EXPORT dialog specifically (matched by its title
+ * id). Code review 2026-09-25: NOT any `[role="dialog"]` the way `useLeaveGuard`'s check reads — an
+ * export settles after its dialog is gone and the background is interactive again, so the user
+ * may have opened a different dialog (Back → Unsaved Changes, the resize-clip warning) meanwhile,
+ * and focus inside THAT dialog's trap is not ours to take.
  */
 function focusExportButtonIfLoose(): void {
   const active = document.activeElement;
   const focusIsLoose =
-    active === null || active === document.body || active.closest('[role="dialog"]') !== null;
+    active === null ||
+    active === document.body ||
+    active.closest('[aria-labelledby="export-battle-dialog-title"]') !== null;
   if (!focusIsLoose) return;
   document.querySelector<HTMLElement>('[data-export-battle]')?.focus();
 }
@@ -904,7 +909,8 @@ export default function BattlePage({
    * rather than reusing it: that hook is built around ITS specific `save`/`onLeave` contract and a
    * single dirty-battle question, where this dialog asks a different one (which of two exports) and
    * runs its side effect from `onExited` rather than from a button handler (FD2). Kept inline here
-   * rather than lifted to `lib/battle/useExportDialog.ts` — it stayed under Task 5's ~40-line guide.
+   * rather than lifted to `lib/battle/useExportDialog.ts` (bundle headroom, FD1) — roughly 70
+   * lines of code, over Task 5's ~40-line guide; a lift is a candidate refactor, not a defect.
    */
   const [exportConfirming, setExportConfirming] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -915,12 +921,20 @@ export default function BattlePage({
   // above). (a) Re-entrancy while an export is genuinely running (FD11: this button never
   // self-disables, the same choice `<DataManagement>`'s Export button makes and for the same
   // reason — a disabled focused control drops keyboard focus to `<body>`, deferred-work.md's Clear
-  // precedent). (b) Tells the focus-restore effect below apart a completed choice from a Cancel/
-  // Escape/backdrop: set synchronously, before `runExportChoice` starts, so it already reads `true`
-  // by the time that effect's commit runs — the effect skips the choice path entirely and leaves
-  // its own `finally` to restore focus once the operation has genuinely settled.
+  // precedent). (b) Holds the focus-restore effect below off while a choice is still running: set
+  // synchronously in `handleExportExited`, before its first `await`, so it already reads `true` by
+  // the time the exit commit's effect runs — the restore then waits for `exportFocusTick`.
   const exportInFlightRef = useRef(false);
-  // Unmount safety for the post-await `setExportError` in `runExportChoice` below, following
+  // Code review 2026-09-25 (FD8): `true` from the moment the dialog opens until focus has been
+  // restored once — so the restore effect never fires on mount (it would steal focus from
+  // `<body>` on page load) or on a later unrelated change of its deps.
+  const exportFocusOwedRef = useRef(false);
+  // Bumped by `handleExportExited`'s `finally` once a choice has settled. The restore runs from
+  // the EFFECT this re-renders, never inline in that `finally`: inline, it could run before React
+  // commits `isSaving=false` (a failed Save & Export leaves the button `disabled` until then) or
+  // before `inert` is released — `.focus()` on either is a no-op and focus stays on `<body>`.
+  const [exportFocusTick, setExportFocusTick] = useState(0);
+  // Unmount safety for the post-await `setExportError` in `handleExportExited` below, following
   // `useAsyncResource.ts`'s closure-flag reasoning adapted for an event handler rather than an
   // effect — the same shape `<DataManagement>`'s `mountedRef` uses, re-armed on every setup so
   // StrictMode's setup→cleanup→setup does not leave it permanently false.
@@ -956,22 +970,29 @@ export default function BattlePage({
    * `.focus()` targets a still-inert node and is a spec-mandated no-op — an immediate call inside
    * `handleExportExited` itself (before this component even re-renders) would do exactly that.
    *
-   * ⚠️ Only ever meaningfully fires for the Cancel/Escape/backdrop path — `exportInFlightRef` is
-   * `true` by the time this runs on the completed-choice path (see that ref's own comment), so this
-   * skips it there. That path restores focus itself, from `runExportChoice`'s `finally`, well after
-   * this effect's one relevant firing has already happened and `exportConfirming` has stopped
-   * changing.
+   * Serves EVERY close path: on Cancel/Escape/backdrop it fires on the exit commit; on a choice,
+   * `exportInFlightRef` holds it off at that commit and `handleExportExited`'s `finally` bumps
+   * `exportFocusTick` once the operation has settled, so it fires again after THAT commit — when
+   * `isSaving=false` has landed and the button is focusable. `exportFocusOwedRef` makes it fire at
+   * most once per dialog, and never on mount.
    */
   useEffect(() => {
-    if (exportConfirming || exportInFlightRef.current) return;
+    if (exportConfirming || exportInFlightRef.current || !exportFocusOwedRef.current) return;
+    exportFocusOwedRef.current = false;
     focusExportButtonIfLoose();
-  }, [exportConfirming]);
+  }, [exportConfirming, exportFocusTick]);
 
   // AC1: does nothing while a save (the edit lock) or an export is already running — no dialog
   // opens on top of either.
   const handleExport = useCallback(() => {
     if (savingRef.current || exportInFlightRef.current) return;
+    // FD9: clears BOTH messages. Code review 2026-09-25: clearing only `exportError` left a stale
+    // `saveError` winning the shared `saveError ?? exportError` slot, so a later Workspace (or
+    // clean Battle Only) export failure — neither path saves, so neither clears it — was never
+    // announced.
+    setSaveError(null);
     setExportError(null);
+    exportFocusOwedRef.current = true;
     setExportConfirming(true);
     setExportDialogOpen(true);
   }, []);
@@ -987,15 +1008,20 @@ export default function BattlePage({
   // FD2: a choice button ONLY records the choice and closes the dialog. Nothing async runs yet —
   // that is `handleExportExited`'s job, once the dialog is genuinely gone. One function for both
   // choices (bundle headroom, FD1) — the JSX below closes over the literal for each dialog prop.
+  //
+  // Code review 2026-09-25: the FIRST choice wins. The buttons stay clickable during the exit
+  // fade, so without this a second click (or a Cancel, which leaves the ref alone) would silently
+  // switch what gets exported.
   const handleChoose = useCallback((choice: 'battle' | 'workspace') => {
+    if (pendingExportChoiceRef.current !== null) return;
     pendingExportChoiceRef.current = choice;
     setExportDialogOpen(false);
   }, []);
 
   /**
    * FD2's steps, in order: (1) unmount the dialog / release `inert`, (2) if a choice was made, act
-   * on it, (3) set `exportError` on rejection, (4) `finally` clears the in-flight ref and restores
-   * focus. One `useCallback` rather than a separate post-exit function (bundle headroom, FD1) — the
+   * on it, (3) set `exportError` on rejection, (4) `finally` clears the in-flight ref and requests
+   * the focus restore (the effect above performs it, post-commit). One `useCallback` rather than a separate post-exit function (bundle headroom, FD1) — the
    * MUI `onTransitionExited` prop ignores a returned Promise, so an async callback here is fine.
    *
    * `import('@/lib/export/battleExporter')` is the FD1 boundary: the serializer, `organismClosure`,
@@ -1044,7 +1070,7 @@ export default function BattlePage({
       }
     } finally {
       exportInFlightRef.current = false;
-      if (exportMountedRef.current) focusExportButtonIfLoose();
+      if (exportMountedRef.current) setExportFocusTick((tick) => tick + 1);
     }
   }, [repositories, exportNeedsSave, persistedId, persistBattle]);
 
@@ -1242,9 +1268,7 @@ export default function BattlePage({
         <UnsavedChangesDialog {...leaveDialogProps} />
       )}
       {/* Mounted only while a confirmation is in flight, the same gate `leaveConfirming` uses above
-          — the lazy chunk is never requested on the overwhelmingly common path (every export from
-          a clean, already-saved battle skips the "needs save" body line but still opens this same
-          dialog once). */}
+          — the lazy chunk is requested on the first Export click, never on page load. */}
       {exportConfirming && (
         <ExportBattleDialog
           open={exportDialogOpen}
