@@ -193,4 +193,30 @@ describe('battleExportFilename', () => {
   it('drops a ZWJ followed by a mark and keeps the mark on the preceding letter', () => {
     expect(battleExportFilename('ब\u200D्क')).toBe('ब्क.json');
   });
+
+  // Third code review (2026-09-25), owner decision (b): the four Hangul filler code points are
+  // Unicode letters (`\p{L}`), so nothing else in the pipeline removes them; left alone, a
+  // filler-only name would survive as an invisible slug and skip the `untitled-battle` fallback.
+  it('falls back to untitled-battle for a name made of a single Hangul filler, one case per filler', () => {
+    expect(battleExportFilename('\u115F')).toBe('untitled-battle.json'); // HANGUL CHOSEONG FILLER
+    expect(battleExportFilename('\u1160')).toBe('untitled-battle.json'); // HANGUL JUNGSEONG FILLER
+    expect(battleExportFilename('\u3164')).toBe('untitled-battle.json'); // HANGUL FILLER
+    expect(battleExportFilename('\uFFA0')).toBe('untitled-battle.json'); // HALFWIDTH HANGUL FILLER
+  });
+
+  it('falls back to untitled-battle for a name made of a mix of all four Hangul fillers', () => {
+    expect(battleExportFilename('\u115F\u1160\u3164\uFFA0')).toBe('untitled-battle.json');
+  });
+
+  it('drops a Hangul filler embedded inside a Hangul name without leaving an invisible character or stray hyphen', () => {
+    const result = battleExportFilename('전\u3164투');
+    expect(result).toBe('전투.json');
+    expect(Array.from(result.replace('.json', ''))).toEqual(['전', '투']);
+  });
+
+  it('drops a Hangul filler embedded mid-word in a Latin name without leaving an invisible character or stray hyphen', () => {
+    const result = battleExportFilename('Tri\u115Fple Threat');
+    expect(result).toBe('triple-threat.json');
+    expect(Array.from(result)).toEqual(Array.from('triple-threat.json'));
+  });
 });

@@ -50,9 +50,20 @@ const MAX_SLUG_CODE_POINTS = 60;
  *
  * Every regex writes ZWNJ/ZWJ as `\u` escapes, never the literal glyphs, so no invisible character
  * sits in this source file (the exact hazard this decision guards the output filename against).
+ *
+ * The four Hangul filler code points (U+115F HANGUL CHOSEONG FILLER, U+1160 HANGUL JUNGSEONG
+ * FILLER, U+3164 HANGUL FILLER, U+FFA0 HALFWIDTH HANGUL FILLER) are dropped right after NFKD too,
+ * alongside the format-character drop (third code review, 2026-09-25, owner decision (b)): they
+ * are Unicode *letters* (`\p{L}`), not marks or format characters, so nothing else in this pipeline
+ * removes them, and NFKD collapses U+3164/U+FFA0 into U+1160 without making any of them visible.
+ * A filler-only name would otherwise survive as an invisible slug and skip the `untitled-battle`
+ * fallback AC5 promises. Every other Unicode default-ignorable code point is accepted as is \u2014 this
+ * is a narrow, named fix, not a general default-ignorable strip. Written as `\u` escapes, never the
+ * literal glyphs, matching the rest of this file's convention.
  */
 const FORMAT_CHARACTER_EXCEPT_JOINERS = /[^\P{Cf}\u200C\u200D]/gu;
 const JOINER_NOT_BETWEEN_LETTERS = /(?<!\p{L}\p{M}*)[\u200C\u200D]|[\u200C\u200D](?!\p{L})/gu;
+const HANGUL_FILLERS = /[\u115F\u1160\u3164\uFFA0]/gu;
 const LATIN_LETTER_MARKS = /(\p{Script=Latin})\p{M}+/gu;
 const ORPHAN_MARKS = /(^|[^\p{L}\p{M}])\p{M}+/gu;
 const NOT_LETTER_NUMBER_MARK_OR_JOINER = /[^\p{L}\p{N}\p{M}\u200C\u200D]+/gu;
@@ -62,6 +73,7 @@ const TRAILING_HYPHEN_OR_JOINER = /[-\u200C\u200D]+$/u;
 function kebabCase(name: string): string {
   return name
     .normalize('NFKD')
+    .replace(HANGUL_FILLERS, '')
     .replace(FORMAT_CHARACTER_EXCEPT_JOINERS, '')
     .replace(JOINER_NOT_BETWEEN_LETTERS, '')
     .replace(LATIN_LETTER_MARKS, '$1')

@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 5.6: Battle Export Dialog
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -75,6 +75,11 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
      invisible joiners standard Persian/Indic spelling requires; see the dated FD7 annotation below;
      **third code review (2026-09-25):** this step runs right after NFKD, before any mark handling,
      with the other format characters dropped before the joiner check, judged by code point;
+     **→ Sidiar (2026-09-25), fourth-round review decision (b) on Hangul fillers:** in this same
+     early step, also drop the four Hangul filler code points (U+115F, U+1160, U+3164, U+FFA0) —
+     they are Unicode *letters* (`\p{L}`), not marks or format characters, so nothing else in the
+     pipeline would otherwise remove them, and a filler-only name would survive as an invisible
+     slug; see the dated FD7 annotation below;
    - ~~turn every run of characters that are not a Unicode letter or number into one `-`;~~
      **→ Sidiar (2026-09-25):** turn every run of characters that are not a Unicode letter, number,
      or (surviving, non-Latin) combining mark into one `-`; **third-round review (2026-09-25):** a
@@ -371,7 +376,7 @@ _Second code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptan
 
 _Third code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `744a83b..8451e7d`, the ZWNJ/ZWJ owner-decision commit)._
 
-- [ ] [Review][Decision] Invisible code points that are not `\p{Cf}` still survive — default-ignorables classed as marks or letters: a combining grapheme joiner U+034F or a variation selector U+FE0F after a non-Latin letter (`'漢\uFE0F'` → `漢\uFE0F.json`), a Mongolian free variation selector U+180B, and a Hangul filler U+3164 (NFKD → U+1160, a letter), so a name of only `'\u3164'` yields an invisible slug and skips the `untitled-battle` fallback AC5 promises. Options: (a) drop every `\p{Default_Ignorable_Code_Point}` alongside `\p{Cf}` (except ZWNJ/ZWJ between letters; also drops Mongolian FVS, which select glyph shapes); (b) drop only the fillers (U+115F, U+1160, U+3164, U+FFA0) so the fallback holds, keep marks on letters as today; (c) accept as is. [apps/web/lib/export/battleExportFilename.ts:kebabCase]
+- [x] [Review][Decision] Invisible code points that are not `\p{Cf}` still survive — default-ignorables classed as marks or letters: a combining grapheme joiner U+034F or a variation selector U+FE0F after a non-Latin letter (`'漢\uFE0F'` → `漢\uFE0F.json`), a Mongolian free variation selector U+180B, and a Hangul filler U+3164 (NFKD → U+1160, a letter), so a name of only `'\u3164'` yields an invisible slug and skips the `untitled-battle` fallback AC5 promises. Options: (a) drop every `\p{Default_Ignorable_Code_Point}` alongside `\p{Cf}` (except ZWNJ/ZWJ between letters; also drops Mongolian FVS, which select glyph shapes); (b) drop only the fillers (U+115F, U+1160, U+3164, U+FFA0) so the fallback holds, keep marks on letters as today; (c) accept as is. [apps/web/lib/export/battleExportFilename.ts:kebabCase] **→ Sidiar (2026-09-25): (b)** — drop only the four Hangul fillers (U+115F, U+1160, U+3164, U+FFA0) so a filler-only name falls back to `untitled-battle.json` (AC5). Every other default-ignorable is accepted as is; any further text-shaping case goes to the deferred grapheme-cluster filename item, not this story.
 - [x] [Review][Patch] Joiner neighbours read as UTF-16 code units — `str[offset ± 1]` sees half a surrogate pair, so a ZWNJ/ZWJ next to an astral letter (Chakma, Brahmi, Adlam, CJK Ext-B) was dropped though it sat between letters; now a code-point `u`-regex lookbehind/lookahead [apps/web/lib/export/battleExportFilename.ts:kebabCase]
 - [x] [Review][Patch] Joiner context judged before the other format characters were gone — `'a' + LRM + ZWNJ + 'b'` (common in RTL copy-paste) dropped the ZWNJ; every non-joiner `\p{Cf}` is now dropped first [apps/web/lib/export/battleExportFilename.ts:kebabCase]
 - [x] [Review][Patch] Format-character handling ran after the orphan-mark strip — a mark behind a soft hyphen was stripped as orphan (`'क' + SHY + 'ि'` lost its vowel sign), and a ZWJ followed by a mark had the mark stripped then the ZWJ kept (`'ब' + ZWJ + '्क'` lost its virama); the `\p{Cf}`/joiner steps now run right after NFKD, and a joiner followed by a mark is dropped so the mark stays on its letter [apps/web/lib/export/battleExportFilename.ts:kebabCase]
@@ -614,6 +619,28 @@ Updated test cases (extending the table above):
 | a ZWNJ next to a space, punctuation, or at the start/end | dropped, not kept or hyphenated |
 | a ZWNJ the 60-code-point cut leaves at the end | trimmed, same as a trailing `-` |
 
+**→ Sidiar (2026-09-25), fourth-round review decision (b) on Hangul fillers:** the third code
+review found that invisible code points which are not `\p{Cf}` still survive — specifically the
+four Hangul filler code points (U+115F HANGUL CHOSEONG FILLER, U+1160 HANGUL JUNGSEONG FILLER,
+U+3164 HANGUL FILLER, U+FFA0 HALFWIDTH HANGUL FILLER), which NFKD-decomposes U+3164/U+FFA0 down
+to U+1160. All four are Unicode *letters* (`\p{L}`), so nothing earlier in the pipeline removes
+them, and a name made only of fillers would survive as an invisible slug and skip the
+`untitled-battle` fallback AC5 promises. The fix drops only these four code points, in the same
+early step as the format-character drop (right after NFKD, before mark handling) — a narrow,
+named fix, not a general default-ignorable strip. Every other Unicode default-ignorable code
+point (a combining grapheme joiner U+034F, a variation selector after a non-Latin letter, a
+Mongolian free variation selector, …) is accepted as is; any further text-shaping case is
+deferred, not part of this story.
+
+Updated test cases (extending the tables above):
+
+| Input | Output |
+|---|---|
+| a name made of a single Hangul filler (one case per filler: U+115F, U+1160, U+3164, U+FFA0) | `untitled-battle.json` |
+| a name made of a mix of all four Hangul fillers | `untitled-battle.json` |
+| a Hangul filler embedded inside a Hangul name, e.g. `'전ㅤ투'` | `전투.json` (filler dropped, no invisible character or stray hyphen) |
+| a Hangul filler embedded mid-word in a Latin name, e.g. `'Triᅟple Threat'` | `triple-threat.json` (filler dropped, no invisible character or stray hyphen) |
+
 **FD8: Focus lands on EXPORT BATTLE after the operation settles, not at exit.** The button wears
 `disabled={isSaving}`, the visible half of the edit lock like every other sidebar control. If focus
 were restored at dialog exit and a save then started, the focused button would disable and focus
@@ -819,7 +846,9 @@ resuming after the second code review's remaining `[Review][Decision]` item was 
 reviews (2026-09-25: over `origin/main...HEAD`, then over the owner-decision commit
 `9470143..d903c09`) ran on **Claude Opus 5.5** (claude-opus-5-5), the different-model reviewer.
 The third code review (2026-09-25, over the ZWNJ/ZWJ decision commit `744a83b..8451e7d`) also ran
-on **Claude Opus 5.5** (claude-opus-5-5).
+on **Claude Opus 5.5** (claude-opus-5-5). The 2026-09-25 Hangul-filler owner-decision close-out
+(the third code review's remaining `[Review][Decision]` item, answered option (b)) is a **fifth,
+separate Sonnet session** resuming after that answer.
 
 ### Debug Log References
 
@@ -944,6 +973,36 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
   files / **2242** tests (2236 + this review's 6). `bundle:check` `+0.0 KB` on every route (no
   baseline refresh). `bench:check` within budget (8.942 ms headroom). `e2e:chromium` 278 passed,
   1 pre-existing skip. `ci.log` not committed.
+
+**2026-09-25 owner review-decision session (fifth Sonnet session, resuming after the owner
+answered the third code review's Hangul-filler `[Review][Decision]` item with option (b)):**
+
+- `npm run build:standalone` — green.
+- `npm run bundle:check` — **PASSES**, `+0.0 KB` on all 5 routes: the filler drop lives entirely
+  inside the lazily loaded `battleExporter` chunk, so no route moved and `bundle:baseline` did not
+  need to be re-run.
+- First `npm run ci:dev > ci.log 2>&1; echo $?` of this session — **exit 1**: failed only at
+  `bench:check` (`step 100x60 x20` measured a 27.954 ms frame against the 16.667 ms budget, 11.287
+  ms over) — every earlier stage, including the full `test:coverage` run, was green. Diagnosed as
+  the same CPU-contention pattern this story's own record already documents (Task 9 resumption
+  session, fourth session): `uptime` showed a load average of 19–29 on this 6-core machine, and
+  `ps aux` showed the `lane-epic-4` worktree's own `ci:dev`/`test:coverage` actively running
+  concurrently at that moment. Not this session's code: the change stays inside the lazy
+  `battleExporter` chunk and touches no benchmarked hot path
+  (`packages/simulation`/`lib/canvas`).
+- Second `npm run ci:dev > ci.log 2>&1` (run once `lane-epic-4`'s own `ci:dev` had finished, no
+  contention) — **exit 0**, clean. `typecheck`, `lint` (0 errors, the same 1 pre-existing unrelated
+  `BattleGallery.tsx` warning), `format:check`, `spec:check`, `boundary:check` all green.
+  `test:coverage`: `@gol/persistence` 103/103, `@gol/test-utils` 95/95, `@gol/domain` 212/212,
+  `@gol/simulation` 408/408, web 134 test files / **2246** tests (up from the prior session's 2242
+  by 4 — this session's own 4 new `battleExportFilename.test.ts` cases, 38 in the file).
+  `build:standalone` green. `bundle:check` `+0.0 KB` all 5 routes. `bench` + `bench:check` green
+  (8.656 ms headroom, 51.9% of the 16.667 ms frame budget — contention gone). `e2e:chromium`: 278
+  passed, 1 pre-existing conditional skip (`deleteBattle.spec.ts:113`, unrelated to this story), 0
+  failures; the `export battle (Story 5.6)` describe block's 6 cases and axe scan all green, no e2e
+  changes needed (the filler fix is inside the lazy `battleExporter` module and the e2e seed names
+  are Latin/ASCII, per Dev Notes' "keep the e2e on an ASCII name"). `ci.log` kept locally as an
+  untracked artifact, not committed.
 
 ### Completion Notes List
 
@@ -1096,6 +1155,42 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
     needed).
   - `npm run ci:dev > ci.log 2>&1; echo $?` — see Debug Log ~~below~~ above *(third code review)* for the exact result.
 
+- **Owner review-decision session (2026-09-25, fifth Sonnet session, resuming after the owner
+  answered the third code review's Hangul-filler `[Review][Decision]` item with option (b)).**
+  1. **Hangul fillers (`apps/web/lib/export/battleExportFilename.ts`):** `kebabCase` now drops the
+     four Hangul filler code points (U+115F HANGUL CHOSEONG FILLER, U+1160 HANGUL JUNGSEONG FILLER,
+     U+3164 HANGUL FILLER, U+FFA0 HALFWIDTH HANGUL FILLER) via a new `HANGUL_FILLERS` regex, as the
+     first `.replace` right after `.normalize('NFKD')` — alongside, and before, the existing
+     format-character drop. These four are Unicode *letters* (`\p{L}`), not marks or format
+     characters, so nothing else in the pipeline removed them; left alone, a filler-only name
+     survived as an invisible slug and skipped the `untitled-battle` fallback AC5 promises (NFKD
+     also collapses U+3164/U+FFA0 down to U+1160, so all four routes converge on the same two
+     post-NFKD code points, but the regex names all four explicitly for clarity and to match the
+     decision text). The constant is written as `\u`-escapes (`\u115F`, `\u1160`, `\u3164`,
+     `\uFFA0`), never the literal glyphs — verified with `od -c` / a byte-level Python check after
+     writing, since typing `\uXXXX` directly in a tool-call parameter is a known way for it to get
+     silently decoded into the real (invisible) character. Every other Unicode default-ignorable
+     code point is left as is, per the owner's ruling — this is a narrow, named fix, not a general
+     default-ignorable strip.
+  2. **Tests (`battleExportFilename.test.ts`):** 4 new cases (38 in the file, up from 34): a
+     filler-only name for each of the four fillers individually → `untitled-battle.json`; a name
+     made of a mix of all four → `untitled-battle.json`; a filler embedded inside a Hangul name
+     (`'전\u3164투'` → `'전투.json'`, pinned via a code-point array equality check so no invisible
+     character can hide in the result) without a stray hyphen; a filler embedded mid-word in a
+     Latin name (`'Tri\u115Fple Threat'` → `'triple-threat.json'`) without a stray hyphen. Written
+     with `\u`-escapes matching the file's existing convention. The full `apps/web/lib/export/` +
+     `apps/web/components/battle/` suite (569 tests) is green with no regressions.
+  3. AC5/FD7 annotated with a fourth dated owner-decision note (originals kept, not rewritten,
+     matching the file's established pattern); the third code review's Hangul-filler
+     `[Review][Decision]` item ticked.
+  - `npm run build:standalone` and `npm run bundle:check` — pass, `+0.0 KB` on all 5 routes (the
+    change stays entirely inside the lazily loaded `battleExporter` chunk; no baseline refresh
+    needed).
+  - `npm run ci:dev > ci.log 2>&1; echo $?` — **first run: exit 1**, at `bench:check` only, under
+    confirmed CPU contention from the concurrently running `lane-epic-4` worktree's own `ci:dev`
+    (load average 19–29 on a 6-core machine at the time); **second run, no contention: exit 0**. See
+    the Debug Log's fifth-session entry above for the full breakdown of both runs.
+
 ### File List
 
 **New:**
@@ -1156,6 +1251,17 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
 - `docs/implementation-artifacts/5-6-battle-export-dialog.md` (review findings, record fixes, Status)
 - `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog` → `in-progress`)
 - `docs/implementation-artifacts/deferred-work.md` (the virama-conjunct cut)
+
+**Modified (2026-09-25 fifth Sonnet session, resuming after the owner's Hangul-filler decision):**
+- `apps/web/lib/export/battleExportFilename.ts` (`kebabCase` drops the four Hangul filler code
+  points — U+115F, U+1160, U+3164, U+FFA0 — as the first replace right after NFKD, alongside the
+  existing format-character drop; new `HANGUL_FILLERS` constant, `\u`-escaped; doc comment updated)
+- `apps/web/lib/export/battleExportFilename.test.ts` (4 new cases, 38 total: one per filler,
+  a mix of all four, a filler inside a Hangul name, a filler mid-word in a Latin name)
+- `docs/implementation-artifacts/5-6-battle-export-dialog.md` (this file: the Hangul-filler
+  `[Review][Decision]` item ticked; AC5/FD7 annotated with a fourth dated owner-decision note, not
+  silently rewritten; Dev Agent Record, File List, Change Log, Status)
+- `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog` → `review`)
 
 ### Change Log
 
@@ -1229,6 +1335,21 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
   "above", the truncation test's red-green note, an empty code span). 1 `[Review][Decision]` left
   open (non-`\p{Cf}` default-ignorable code points), 1 deferred (a cut through a virama conjunct).
   `ci:dev` exit 0 (2242 web tests). Status → in-progress.
+- 2026-09-25 — Owner answered the third code review's Hangul-filler `[Review][Decision]` item with
+  option (b); this session (fifth Sonnet session) applied it: `kebabCase` now drops the four Hangul
+  filler code points (U+115F, U+1160, U+3164, U+FFA0) as the first replace right after NFKD,
+  alongside the existing format-character drop — they are Unicode letters, not marks or format
+  characters, so nothing else in the pipeline removed them, and a filler-only name previously
+  survived as an invisible slug and skipped the `untitled-battle` fallback. 4 new unit tests (38 in
+  `battleExportFilename.test.ts`): one per filler, a mix of all four, a filler inside a Hangul
+  name, a filler mid-word in a Latin name — all `\u`-escaped, verified byte-clean. AC5/FD7
+  annotated with a fourth dated owner-decision note (originals kept, not rewritten); the decision
+  item ticked. `npm run build:standalone` and `bundle:check` pass, `+0.0 KB` on all 5 routes (the
+  change stays inside the lazy `battleExporter` chunk). `npm run ci:dev`: first run exit 1 at
+  `bench:check` only, under confirmed CPU contention from the concurrently running `lane-epic-4`
+  worktree (load average 19–29 on 6 cores); second run, no contention, exit 0 clean (2246/2246 web
+  tests, 278/279 e2e — 1 pre-existing unrelated skip, `bench:check` 51.9% headroom). Status →
+  review.
 
 Dev Model: sonnet   # follows existing patterns (UnsavedChangesDialog idiom, useLeaveGuard lifecycle, 5.5's lib/export seam); every structural choice (lazy boundary, save-then-export, id return, act-on-exit) is pre-decided in FD1–FD9, so nothing is left to architect.
 
