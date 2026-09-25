@@ -1423,3 +1423,48 @@ describe('BattleEditorView — the sidebar footer (Story 2.16)', () => {
     expect(screen.getAllByRole('button', { name: 'Back to Battles' })[0]).toBeEnabled();
   });
 });
+
+describe('BattleEditorView — Export Battle wiring (Story 5.6)', () => {
+  it('renders no Export Battle control when onExport is not supplied', () => {
+    renderEditor();
+
+    expect(screen.queryByRole('button', { name: /export battle/i })).toBeNull();
+  });
+
+  it('renders Export Battle, below Clear Petri Dish, when onExport is supplied (AC1)', () => {
+    renderEditor({ onExport: () => {} });
+
+    const buttons = screen.getAllByRole('button', { name: /clear petri dish|export battle/i });
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      'Clear Petri Dish',
+      'Export Battle',
+    ]);
+  });
+
+  it('forwards onExport untouched, once per click (AC1)', async () => {
+    const user = userEvent.setup();
+    const onExport = vi.fn();
+    renderEditor({ onExport });
+
+    await user.click(screen.getByRole('button', { name: 'Export Battle' }));
+
+    expect(onExport).toHaveBeenCalledTimes(1);
+  });
+
+  // AC1: `exportDisabled` alone — NOT `stats.livingCells === 0`, which Clear's own `disabled`
+  // reads. An empty battle (this suite's default GRID has living cells, so the assertion covers
+  // the opposite direction too — a battle with cells stays exportable when exportDisabled is not
+  // set).
+  it('disables Export Battle from exportDisabled alone, independent of living-cell count', () => {
+    renderEditor({ onExport: () => {}, exportDisabled: true });
+
+    expect(screen.getByRole('button', { name: 'Export Battle' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeEnabled();
+  });
+
+  it('Export Battle is enabled by default (exportDisabled defaults to false)', () => {
+    renderEditor({ onExport: () => {} });
+
+    expect(screen.getByRole('button', { name: 'Export Battle' })).toBeEnabled();
+  });
+});

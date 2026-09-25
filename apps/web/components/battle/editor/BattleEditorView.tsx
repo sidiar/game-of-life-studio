@@ -63,6 +63,8 @@ const ResizeClipWarningDialog = dynamic(() => import('./ResizeClipWarningDialog'
 // <EditorToolsSection> derives its `disabled` and its guards from `grid` and `isSaving`, both
 // already here. Story 2.16 adds exactly ONE: `onBack`, which spec §3.3 has always declared — the
 // footer's `disabled` is derived from `isSaving`, already here, like every other control's.
+// Story 5.6 adds `onExport?()` (spec §3.3 already declared it) and `exportDisabled?: boolean`,
+// both forwarded straight to `<EditorToolsSection>` — this component transforms neither.
 export interface BattleEditorViewProps {
   grid: RenderableGrid;
   size: { cols: number; rows: number };
@@ -166,6 +168,18 @@ export interface BattleEditorViewProps {
    * interprets `onSave`. ❌ Nothing else new on this interface.
    */
   onBack(): void;
+  /**
+   * Story 5.6 (FR-6.1/7.13, spec §3.3/§3.7): forwarded to `<EditorToolsSection>` untouched. Absent
+   * → the Export Battle control is not rendered at all (NFR-4.1); present → it renders below
+   * Clear Petri Dish.
+   */
+  onExport?(): void;
+  /**
+   * Story 5.6 (AC1): the visible half of `<BattlePage>`'s edit lock for Export Battle
+   * specifically — `isSaving` ALONE, never `stats.livingCells === 0` (FD10: an empty battle is
+   * exportable). Kept as its own prop rather than reusing Clear's `disabled` derivation.
+   */
+  exportDisabled?: boolean;
 }
 
 /**
@@ -187,6 +201,10 @@ type EditorMainProps = Omit<
   // Story 2.16: the footer lives in the SIDEBAR, so `<EditorMain>` has no use for its callback —
   // the same treatment the roster props get two lines up.
   | 'onBack'
+  // Story 5.6: the Tools section's Export Battle control lives in the SIDEBAR too — same
+  // treatment as `onBack` immediately above.
+  | 'onExport'
+  | 'exportDisabled'
 > & {
   tool: Tool;
   toolRef: number | null;
@@ -606,6 +624,10 @@ export default function BattleEditorView({
   // Story 2.16: pulled out because it belongs to the SIDEBAR's footer, not to `<EditorMain>` —
   // `EditorMainProps` omits it for the same reason.
   onBack,
+  // Story 5.6: pulled out because Export Battle lives in the SIDEBAR's Tools section, not in
+  // `<EditorMain>` — `EditorMainProps` omits both for the same reason as `onBack` above.
+  onExport,
+  exportDisabled = false,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
@@ -881,6 +903,8 @@ export default function BattleEditorView({
             <EditorToolsSection
               onClear={handleClear}
               disabled={stats.livingCells === 0 || isSaving}
+              onExport={onExport}
+              exportDisabled={exportDisabled}
             />
           </SidebarSection>
         </SidebarContent>

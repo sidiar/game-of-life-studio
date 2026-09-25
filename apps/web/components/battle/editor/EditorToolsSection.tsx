@@ -7,12 +7,13 @@ import { styled } from '@mui/material/styles';
  * derivation of its own — it receives one callback and one flag and renders one button.
  *
  * The mockup's Tools section ships FOUR buttons (`petri-dish-lab-mode.html:407-421`, markup
- * `:727-733`); spec §3.7 keeps TWO for the MVP and §9.3 excludes the other pair. This story ships
- * the first of the two:
- * - "EXPORT BATTLE" is Epic 5 (FR-6.1/7.13) — absent → not rendered (NFR-4.1). Forced decision 3:
- *   `onExport?()` is NOT declared on these props yet — Story 5.6 adds it when it has something to
- *   pass, following the precedent Story 2.14 set for the other direction ("the remaining sidebar
- *   sections bring whatever they need with them").
+ * `:727-733`); spec §3.7 keeps TWO for the MVP and §9.3 excludes the other pair. Story 2.15 shipped
+ * the first ("Clear Petri Dish" / Reset Grid); Story 5.6 ships the second:
+ * - "EXPORT BATTLE" is Epic 5 (FR-6.1/7.13) — absent → not rendered (NFR-4.1), exactly like Clear
+ *   before 2.15. `onExport?()` renders a SECOND `ToolButton`, below Clear, only when supplied; with
+ *   it absent this component renders exactly what it rendered before this story, byte for byte.
+ *   Its `disabled` is `exportDisabled` alone (Story 5.6 AC1) — it does NOT share Clear's
+ *   `stats.livingCells === 0` guard, because an empty battle is exportable (FD10).
  * - "RESET TO SAVED" and "RANDOMIZE" have NO backing FR at all (§9.3 excludes them from the MVP
  *   outright — not deferred, not in the product).
  *
@@ -47,6 +48,13 @@ const ToolButton = styled('button')({
   letterSpacing: '0.5px',
   cursor: 'pointer',
   fontFamily: 'inherit',
+  // Mockup's `.tool-btn { margin-bottom: 8px }` (`petri-dish-lab-mode.html:406-421`), applied as
+  // a sibling-combinator rather than a wrapping element: with a single button rendered (`onExport`
+  // absent) there is no `:not(:last-child)` match, so the DOM and every computed style stay
+  // byte-for-byte what they were before this story (AC1).
+  '&:not(:last-child)': {
+    marginBottom: '8px',
+  },
   '&:hover:not(:disabled)': {
     borderColor: 'var(--gol-text-secondary)',
     color: 'var(--gol-text-primary)',
@@ -77,12 +85,41 @@ export interface EditorToolsSectionProps {
   /** The visible half of `<BattlePage>`'s edit lock (trap 6), mirroring
    * `<BattleNameField disabled={isSaving}>` and `<GridSettingsSection disabled={isSaving}>`. */
   disabled?: boolean;
+  /**
+   * Story 5.6 (FR-6.1/7.13, spec §3.7): absent → not rendered (NFR-4.1), matching every other
+   * optional affordance on this route. Present → a second `ToolButton`, below Clear, labelled
+   * "Export Battle" and carrying `data-export-battle=""` (Story 5.6 FD8's DOM lookup target).
+   */
+  onExport?(): void;
+  /**
+   * Story 5.6 (AC1): `isSaving` ALONE — deliberately NOT `stats.livingCells === 0` the way Clear's
+   * own `disabled` is. An empty battle is exportable (FD10), so this control gets its own prop
+   * rather than reusing Clear's.
+   */
+  exportDisabled?: boolean;
 }
 
-export default function EditorToolsSection({ onClear, disabled = false }: EditorToolsSectionProps) {
+export default function EditorToolsSection({
+  onClear,
+  disabled = false,
+  onExport,
+  exportDisabled = false,
+}: EditorToolsSectionProps) {
   return (
-    <ToolButton type="button" onClick={onClear} disabled={disabled}>
-      Clear Petri Dish
-    </ToolButton>
+    <>
+      <ToolButton type="button" onClick={onClear} disabled={disabled}>
+        Clear Petri Dish
+      </ToolButton>
+      {onExport !== undefined && (
+        <ToolButton
+          type="button"
+          onClick={onExport}
+          disabled={exportDisabled}
+          data-export-battle=""
+        >
+          Export Battle
+        </ToolButton>
+      )}
+    </>
   );
 }
