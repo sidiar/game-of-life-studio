@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: done
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -637,6 +637,14 @@ not re-reviewed. One decision, three patches, three dismissed.
   Left for Sidiar; nothing changed here.
   **Resolved 2026-09-25 (Sidiar): (b)**: left to the 4.23 editor-state pass, as already deferred
   in `deferred-work.md`. No code change.
+- [ ] [Review][Patch] **Focus after the GONE alert goes to Back, not Save (Sidiar, 2026-09-25)**
+  [`apps/web/lib/organisms/useOrganismDelete.ts`, `OrganismEditorModal.tsx`]: when the editor's
+  Delete is disabled by the GONE alert, the restore target is the editor's Back button instead of
+  Save. Reason: an Enter held on the confirmation auto-repeats into the focused control after the
+  ~195 ms fade, and on Save that re-creates the record the alert just reported as gone; Back only
+  closes the editor. Replace the `editor-save` intent and `data-editor-save` hook with a Back
+  equivalent (drop the Save ones if nothing else uses them). Update the tests that pin focus on
+  Save, and the story text that names `editor-save`.
 - [x] [Review][Patch] **The GONE-disabled Delete carries no accessible reason** [`OrganismEditorModal.tsx:863-866,:902`]
   — FD6: "a screen reader's browse mode reads the reason with the control … The same pattern
   applies to the editor's Delete", and AC8 "The disabled Delete's `aria-describedby` target exists
