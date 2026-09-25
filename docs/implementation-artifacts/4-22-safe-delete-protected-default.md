@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -674,6 +674,59 @@ not re-reviewed. One decision, three patches, three dismissed.
   here); "no hook-level focus test for `editor-save`" (no restore intent has one; the Library test
   pins focus on Save end to end, and the Chromium e2e pins the same effect for the `editor` intent).
 
+#### Fourth pass (2026-09-25, Fable, on the Back build `326d2c5`, current with main)
+
+Reviewed on **Fable** against the **Opus** follow-up that built Sidiar's Back-not-Save decision
+(`f385b1d^..HEAD`), via the same three layers. The build matches the [Patch] wording exactly:
+`editor-back` / `data-editor-back` replace `editor-save` / `data-editor-save` (zero references
+left in `apps`, `packages` or e2e), the key sits on the one `BackButton` (`disabled={isSaving}`
+only, which cannot hold on this path: the editor was inert under the confirmation), the Library
+test pins focus on "Back to Library", and every story section that named Save now names Back
+(the (a)-build entries kept as history). Nothing settled is reopened: the ghost editor stays open
+with its alert, Delete is disabled after GONE, focus goes to Back. `npm run ci:dev` exit 0 (web
+136 files / 2301 tests, e2e Chromium 288). One decision, no patches, ten dismissed.
+
+- [ ] [Review][Decision] **The held-Enter chain does not end at Back**
+  [`useOrganismDelete.ts:194-219,:302`, `OrganismEditorModal.tsx:781-792`,
+  `useOrganismEditorModal.ts:214-221`, `OrganismLibrary.tsx:303-308,:470-474`] — the Back
+  decision's own premise is that an Enter still held after the confirmation auto-repeats into
+  whatever the restore effect focuses. Back was chosen because its click "only closes the
+  editor", but that close has a restore of its own: `useOrganismEditorModal`'s exit effect
+  focuses the opening card's Edit (`[data-edit-organism-id]`) or, if the card is gone, Create.
+  The Library's `reload()` is stale-while-revalidate, so on a slow repository the deleted
+  record's card outlives the editor's ~195 ms fade and its Edit is the target. An Enter held
+  through both fades (~0.5 s) therefore walks Confirm → Back → Edit-or-Create and opens an
+  editor uninvited — a blank Create, or the gone record's Edit, where a further deliberate Save
+  would re-create it. The same repeat lands on Create for the **card** origin
+  (`{ kind: 'create' }` on the same line) and on Delete for the `editor` intent, which the Back
+  change does not touch. Nothing in the chain writes by itself, so this is milder than the
+  Save re-create that was ruled out, and it is unreachable by mouse. Options: **(a)** accept
+  as-is — Back is the least-harmful actionable target; record for 4.23 that the post-GONE Back
+  must stay a plain close (its unsaved-changes prompt in front of `modalProps.onClose` would
+  otherwise catch the repeat on its autofocused button), the same exemption `closeEditor`
+  already carries at `OrganismLibrary.tsx:470-474`; **(b)** close the hazard for every restore
+  target at its one site: after the restore effect's `.focus()`, swallow `keydown` events with
+  `event.repeat` in the capture phase until the next `keyup` (a `{ once: true }` listener), so
+  no held key reaches Back, Create or Delete — no target changes, one effect, one unit test
+  that dispatches a `repeat: true` Enter on the focused target and asserts no click;
+  **(c)** hold the restore itself until `keyup` when a key is down at exit time (needs a
+  keydown/keyup tracker for the window's life; heavier than (b) for the same cover). Left for
+  Sidiar; nothing changed here.
+- Dismissed (10): the Blind Hunter's "no test presses Enter after the fade" (jsdom does not
+  synthesise Enter→click on a button, so the only meaningful test is of a guard, which is the
+  decision above); "no hook-level test for the renamed intent" (settled by the third pass: no
+  restore intent has one, the Library test pins the effect end to end — re-run here, green);
+  "`.focus()` on a disabled target is a silent no-op" (`isSaving` cannot be true at restore: the
+  editor was inert under the confirmation and its Delete is disabled while a write is in flight);
+  "data-attribute hook instead of the modal's ref" (FD8 mandates the DOM query, never a captured
+  element); "rationale copied into three files" and "owner name and date in source comments"
+  (also the Auditor's: house precedent throughout `BattlePage.tsx`, `not-found.tsx`,
+  `PetriDishCanvas.tsx`; the project-context rule targets "fixed per review" narration, and each
+  comment names the WHY); "status regresses done → review" (the workflow); the Auditor's
+  "historical story lines still say Save" (explicitly kept as the record of the (a) build); the
+  Edge Case Hunter's "4.23's unsaved-changes guard in front of Back" (folded into option (a)
+  above, not a defect today: no such prompt exists).
+
 ## Dev Notes
 
 ### Forced decisions
@@ -1244,6 +1297,11 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
     spec:check ✓ 277 ids; boundary ✓; coverage — web 136 files / 2301 tests, domain 212,
     simulation 408, persistence 103, test-utils 95; build ✓; bundle ✓ +0.0 KB on every route, no
     baseline refresh; bench 8.106 ms / 16.667 ms; e2e Chromium 288 passed.
+- 2026-09-25: Fourth-pass code review (Fable, on `326d2c5`): the Back build conforms to the
+  decision; one [Decision] left for Sidiar — the held-Enter chain past Back (the editor's own
+  close-restore lands on Edit/Create) — with options (a) accept and note for 4.23, (b) a
+  repeat-key swallow in the restore effect, (c) hold the restore until keyup. No patches, no
+  code change; `npm run ci:dev` exit 0. Status → in-progress until the decision is recorded.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none
