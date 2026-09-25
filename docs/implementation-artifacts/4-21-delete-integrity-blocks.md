@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 4.21: Delete Integrity Blocks
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -285,7 +285,7 @@ and pass tests anyway, and all four are settled there:
 Code review 2026-09-24 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor, review mode
 `full`). 2 decision-needed, 11 patch, 1 defer, 9 dismissed as noise.
 
-- [ ] [Review][Decision] FD2: Delete renders only on blocked cards until 4.22. Is that acceptable on `main`? — The
+- [x] [Review][Decision] FD2: Delete renders only on blocked cards until 4.22. Is that acceptable on `main`? — The
   Blind Hunter adds a UX/a11y angle to the story's own open question. In this build every Delete a
   user can see is red, labelled `Delete X`, and **always refuses**. Unused organisms show no Delete
   at all, so a screen-reader user hears a destructive action that never deletes. Options:
@@ -293,11 +293,15 @@ Code review 2026-09-24 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
   (b) fold 4.22's first AC (confirm-and-delete, plus its toast host) into this story;
   (c) accept (a) but add `aria-haspopup="dialog"` to Delete. That stays true in 4.22 too, where
   Delete opens either this dialog or the confirm dialog.
-- [ ] [Review][Decision] FD1: the editor Delete surface. — `organism-editor-design.md:284-300,
+  **Resolved 2026-09-25 (Sidiar): (a)** — the transitional state is accepted as built; Story 4.22
+  removes it.
+- [x] [Review][Decision] FD1: the editor Delete surface. — `organism-editor-design.md:284-300,
   :573-583` puts a "Delete Organism" button at the bottom of editor Column 1, but the shipped
   mockup has Delete only on the card. This story built the card only and recorded the divergence.
   Options: (a) build the editor button in Story 4.22, on the same verdict; (b) drop it in favour of
   the mockup and amend the UX doc; (c) leave it open for the next UX pass.
+  **Resolved 2026-09-25 (Sidiar): (a)** — Story 4.22 builds the editor Column-1 "Delete Organism"
+  button on the same verdict.
 - [x] [Review][Patch] Create/Edit are not guarded while the block dialog is pending. On the first
   Delete of a session the lazy dialog chunk is still loading, so nothing is `aria-hidden` yet,
   nothing is inert, and Create/Edit can open the editor. The block dialog then lands on top of it,
@@ -694,6 +698,10 @@ Modified:
 
   One item deferred (lazy-chunk load failure, pre-existing). FD1 and FD2 are left as open
   `[Review][Decision]` items, so Status → in-progress.
+- 2026-09-25 — Sidiar resolved both review decisions, neither needing a code change here: FD2 (a),
+  the blocked-only Delete is accepted as a transitional state; FD1 (a), the editor's Column-1
+  "Delete Organism" button is built in Story 4.22 on the same verdict (recorded in
+  `deferred-work.md`). Status → done.
 
 Dev Model: sonnet   # follows established patterns (4.19's domain derivations, 4.17/4.20's lazy dialog + focus-restore idiom, the card's ActionButton); the only new type is a small verdict union 4.22 consumes as-is
 Proposed lane gate: none

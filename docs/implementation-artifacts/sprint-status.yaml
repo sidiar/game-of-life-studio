@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-09-24
+# last_updated: 2026-09-25
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-09-24
+last_updated: 2026-09-25
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -136,7 +136,7 @@ development_status:
   4-18-clone-organism: done
   4-19-usage-rule-reference-derivations: done
   4-20-usage-visibility-ui: done
-  4-21-delete-integrity-blocks: in-progress
+  4-21-delete-integrity-blocks: done
   4-22-safe-delete-protected-default: backlog
   4-23-editor-unsaved-changes-scope: backlog
   4-24-edit-organism-from-battle: backlog

@@ -3030,12 +3030,15 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   library with no new prop reaching the editor, and AR-2/AR-27 staying trivially satisfied).
   **Whether the editor also gets a Delete is the next UX touch's decision, and at the latest
   Story 4.22's** — the owner's question on this point was left open at story completion (below).
+  **Decided 2026-09-25 (Sidiar, review decision FD1 (a)): Story 4.22 builds the editor's Column-1
+  "Delete Organism" button**, on the same `organismDeleteVerdict` as the card.
 - **Delete renders only on `blocked` cards; `allowed` and `protected` render none, a deliberately
   transitional state on `main` (FD2).** Story 4.22 owns the `allowed` path (confirm, delete, toast,
   refresh) and the `protected` path (a disabled button with its message). **Story 4.22 must remove
   this transitional rule** — its own card change turns Delete into a universal affordance, and the
   `<OrganismCard>` head comment already says so. The owner's question on folding 4.22's
-  confirm-and-delete into this story instead was left open (below).
+  confirm-and-delete into this story instead was left open (below). **Decided 2026-09-25 (Sidiar,
+  review decision FD2 (a)): the transitional state is accepted as built; nothing is folded in.**
 - **The `openBattle` argument on `organismDeleteVerdict` is threaded but unreachable (FD11).** The
   Library mounts no battle, so it never passes one, and FR-1.4's current-grid remedy variants
   (`prd.md:134` — "erase it from this grid…", "save this Battle to persist the removal…") are not
