@@ -3417,3 +3417,16 @@ full reasoning; the owner rules on each flagged one).
 - **FD7 — strip, not `.strict()`**, per the owner decision on the 5.7 review (entry above, option
   (a)). A `settings` key in a hand-edited file is stripped by the parse; no `settings` check was
   added and no schema was tightened.
+
+## Deferred from: code review of 5-8-atomic-import-pipeline (2026-09-25)
+
+- **Concurrent-writer race in the import's snapshot→restore window** — a write landing between
+  `applyImport`'s snapshot reads and a step-6 failure (a second tab — localStorage is shared and
+  nothing serializes cross-tab access — or a same-tab save racing an in-flight `importWorkspace`)
+  is silently reverted by the whole-collection restore
+  (`packages/persistence/src/workspaceImport.ts`), under `ImportError('write-failed')`, whose
+  message says the previous workspace was restored. Pre-existing class of problem: read-modify-write
+  without cross-tab isolation is the norm for every `save()` in the codebase; this path's
+  multi-await window is merely the widest, and the only one that rewrites both collections at
+  workspace scale. No UI caller exists until Story 5.9 — its wiring is the place to decide (e.g.
+  block saves while an import is in flight, or accept and document the single-writer assumption).

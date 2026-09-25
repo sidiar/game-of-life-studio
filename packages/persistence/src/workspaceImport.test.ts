@@ -228,6 +228,16 @@ describe('importWorkspace — every rejection leaves the store byte-identical (A
       },
     ],
     [
+      // The battle half of the duplicate-id superRefine, exercised in its own right: the
+      // deferred-work `:33` discharge rests on it running before `replaceAll` for BOTH
+      // collections, and battles are just as id-keyed at rest as organisms.
+      'a duplicate battle id (WorkspaceExportSchema superRefine)',
+      () => {
+        const wire = withTarget(validWire());
+        return { ...wire, battles: [...wire.battles, wire.battles[0]] };
+      },
+    ],
+    [
       "kind: 'battle' carrying two battles (cardinality superRefine)",
       () => {
         const wire = withTarget(validWire());

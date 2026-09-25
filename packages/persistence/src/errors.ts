@@ -69,6 +69,12 @@ export class ExportError extends Error {
  *                              restore threw too, so that sentence would be a lie; folding the two
  *                              codes together makes the reassuring copy reachable from the one
  *                              outcome it is false for.
+ *
+ * ⚠️ One caveat on `'write-failed'`'s "exactly as it was": rolling back over a workspace that was
+ * still FRESH (never seeded) restores it as "fresh after its first load" — stamped, with Conway's
+ * Classic ensured — because `replaceAll` stamps `gol:schema` and an empty-but-stamped store would
+ * never be seeded again (see `workspaceImport.ts`'s restore note). Equivalent, not byte-identical,
+ * for that one shape; unreachable from `/settings` today, where the seed runs first.
  */
 export type ImportErrorCode =
   | 'not-json'

@@ -406,8 +406,28 @@ describe('createWorkspaceSerializer.importWorkspace (mode-agnostic)', () => {
     expect(calls[0]).toBe('validate');
     expect(calls).not.toContain('settings.load');
     expect(calls).not.toContain('settings.save');
-    expect(calls.indexOf('clearAll')).toBeLessThan(calls.indexOf('organisms.replaceAll'));
-    expect(calls.indexOf('organisms.replaceAll')).toBeLessThan(calls.indexOf('battles.replaceAll'));
+    // The write region as an exact filtered sequence, not `indexOf` comparisons: `indexOf` is -1
+    // for an absent call and `-1 < i` passes, so a dropped `clearAll()` (or a dropped ensure)
+    // would slip through — and end-state assertions cannot catch it, because `replaceAll`
+    // overwrites whole collections either way. This is the one test guarding the ordering itself.
+    const writeRegion = calls.filter((name) =>
+      [
+        'clearAll',
+        'organisms.replaceAll',
+        'battles.replaceAll',
+        'organisms.exists',
+        'organisms.save',
+      ].includes(name),
+    );
+    expect(writeRegion).toEqual([
+      'clearAll',
+      'organisms.replaceAll',
+      'battles.replaceAll',
+      // `ensureDefaultOrganism` runs LAST, inside the guarded region: `exists`, then — Conway's
+      // Classic being absent from this file — the `save` that re-adds it.
+      'organisms.exists',
+      'organisms.save',
+    ]);
     expect((await repos.battles.listFull()).map((b) => b.id)).toEqual([battle.id]);
     expect((await repos.organisms.list()).map((o) => o.id)).toEqual([
       incoming.id,

@@ -105,6 +105,19 @@ describe('findDanglingReferences (AC3)', () => {
     ]);
   });
 
+  it('reports a missing target once per organism, however many of its rules name it', () => {
+    // Pins the "each (kind, id, referencedBy) at most once" contract on its rule-target half:
+    // the module has no per-organism set of its own — it leans on `ruleTargetIds`' cross-rule
+    // de-duplication, which this test keeps honest.
+    const envelope = {
+      organisms: [organism('a', [['ghost'], ['ghost']])],
+      battles: [],
+    };
+    expect(findDanglingReferences(envelope)).toEqual([
+      { kind: 'rule-target', id: 'ghost', referencedBy: 'a' },
+    ]);
+  });
+
   it('gives Conway’s Classic no exemption — a rule targeting it without carrying it is dangling', () => {
     const envelope = { organisms: [organism('a', [['conways-classic']])], battles: [] };
     expect(findDanglingReferences(envelope)).toEqual([

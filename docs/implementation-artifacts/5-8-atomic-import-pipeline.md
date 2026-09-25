@@ -4,7 +4,7 @@ baseline_commit: 388dd205a8d3cd05fc50ddf004bce51d05b444e6
 
 # Story 5.8: Atomic Import Pipeline
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -254,6 +254,62 @@ here so a reviewer can check each one on its own.
     `npm run build:standalone && npm run bundle:baseline`. Never hand-edit
     `scripts/bundle-baselines.json`.
   - [x] 5.3 Fill in the Dev Agent Record, including every forced decision you deviated from.
+
+### Review Findings
+
+Code review 2026-09-25 (Fable 5, full mode; layers: Blind Hunter, Edge Case Hunter, Acceptance
+Auditor — Auditor verdict: every AC/FD compliant). Buckets below; dismissed noise dropped at
+triage (2 items: a battle-id `__proto__` gap that `BattleExportSchema`'s `z.uuid()` forbids, and
+the Task 5.1 "RFC's three" vs deferred-work's "RFC's four" baseline count, where the lasting
+record in `deferred-work.md` is the internally consistent one).
+
+- [ ] [Review][Decision] **Rollback materializes an absent `gol:battles` key, so `'write-failed'`'s
+  "byte-identical" guarantee is false for the store shape every user has before saving their first
+  battle** — `restore()` (`packages/persistence/src/workspaceImport.ts:197-201`) runs
+  `battles.replaceAll(snapshot.battles)`; `seedDefaultWorkspace` deliberately never writes
+  `gol:battles`, so a first-load workspace has that key **absent**. A failed import over it rolls
+  back to `gol:battles = "{}"` where `getItem` was previously `null` — semantically identical
+  (every reader treats `null` and `"{}"` the same; no data loss), but not byte-identical, and
+  `storageUsage()` changes. The AC6 fixtures never cover this shape. This is a third concrete limit
+  of **FD2**'s repository-level snapshot, beside its recorded (a)/(b) — one owner ruling covers all
+  of them. Options:
+  - (a) Accept as a documented FD2 limit: add it as limit (c) to the FD2 entry in
+    `deferred-work.md`, optionally with a test pinning the semantic equivalence. Zero code change;
+    the `'write-failed'` guarantee reads "equivalent", not "byte-identical", for this shape (as FD3
+    already does for the fresh case).
+  - (b) Adopt FD2's lossless alternative: an opaque `snapshotWorkspace()` / `restoreWorkspace()`
+    pair on `AppRepositories` capturing the raw `gol:battles` / `gol:organisms` / `gol:schema`
+    strings (absent stays absent). Closes this, FD2 (a), FD2 (b) and FD3 in one move; costs an
+    interface change every mode and `@gol/test-utils`' fakes must mirror. Cheapest before Story
+    5.9 wires the import.
+- [x] [Review][Patch] **Serializer ordering test cannot fail for the regression it guards**
+  [`packages/persistence/src/workspaceSerializer.test.ts`] — `calls.indexOf('clearAll')` is `-1`
+  when the call is absent and `-1 < anyIndex` passes, so dropping `clearAll()` entirely (or
+  reordering around an absent entry) passes vacuously; the test also never asserts
+  `ensureDefaultOrganism`'s position after `battles.replaceAll`. Fixed: assert the full ordered
+  write-region subsequence with presence guaranteed.
+- [x] [Review][Patch] **`ImportErrorCode` JSDoc overstates `'write-failed'`**
+  [`packages/persistence/src/errors.ts`] — "the workspace is exactly as it was" is false in the
+  FD3 fresh-workspace rollback (the store comes back stamped, with Conway's Classic ensured —
+  "equivalent after its first load", per the story's own FD3). A 5.9 developer reading only
+  `errors.ts` would ship copy that is false in that case. Fixed: the caveat now rides in the JSDoc.
+- [x] [Review][Patch] **Cross-rule dedup of `dangling` is promised but unpinned**
+  [`packages/domain/src/referentialClosure.test.ts`] — the "each `(kind, id, referencedBy)` at most
+  once" contract leans on `ruleTargetIds`' per-organism `Set` (verified: it does de-duplicate
+  across rules), but no test had two rules on one organism naming the same missing target. Fixed:
+  test added, pinning one report.
+- [x] [Review][Patch] **`deferred-work.md:33` discharged on a half-tested claim**
+  [`packages/persistence/src/workspaceImport.test.ts`] — the discharge cites the duplicate-id
+  `superRefine` for "battles and organisms", but the corrupt matrix exercised only a duplicate
+  organism id. Fixed: duplicate battle id case added (rejected `'corrupt'`, store untouched).
+- [x] [Review][Defer] **Concurrent-writer race in the snapshot→restore window**
+  [`packages/persistence/src/workspaceImport.ts:157-176`] — deferred, pre-existing. A write landing
+  between the snapshot reads and a step-6 failure (second tab, or a same-tab save racing the
+  import) is silently reverted by the whole-collection restore, under an error whose message says
+  the workspace was restored. Read-modify-write without cross-tab isolation is the codebase's
+  existing norm for every `save()`; this window is merely the widest. No UI caller exists until
+  Story 5.9 — its wiring should decide (e.g. block saves while an import is in flight). Recorded in
+  `deferred-work.md`.
 
 ## Dev Notes
 
@@ -570,3 +626,8 @@ Proposed lane gate: none — 5.8 touches only packages/domain (new referentialCl
   `WorkspaceSerializer.importWorkspace`), `ImportError` with six codes, `findDanglingReferences` in
   `@gol/domain`, AR-44 integration tests over real localStorage, deferred-work records, bundle
   baselines refreshed. Status → review.
+- 2026-09-25 — Code review (Fable 5, full mode): 4 patches applied (write-region ordering asserted
+  as an exact sequence, `'write-failed'` JSDoc caveat, cross-rule dedup test, duplicate-battle-id
+  corrupt case), 1 deferred (snapshot-window concurrent-writer race → `deferred-work.md`, Story 5.9
+  wiring), 1 owner decision left open (rollback materializes an absent `gol:battles` key — FD2
+  limit (c) vs opaque snapshot), 2 dismissed. Status → in-progress pending the FD2/limit-(c) ruling.
