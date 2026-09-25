@@ -556,7 +556,7 @@ three layers. The build conforms to the decision and to every FD it touches (FD7
 publish, FD8 restore intent kept, FD9 untouched, FD12 surface reused, card origin unchanged). One
 decision, four patches, one dismissed.
 
-- [ ] [Review][Decision] **After the GONE alert, the editor's Delete stays enabled, and a repeat
+- [x] [Review][Decision] **After the GONE alert, the editor's Delete stays enabled, and a repeat
   Delete → Cancel dismisses the alert** [`useOrganismDelete.ts:217-232`, `OrganismEditorModal.tsx:886-896`]
   — the (b) build leaves focus on the editor's Delete and nothing disables it. A second click
   computes the click-time verdict against the RELOADED `usage`/`ruleIndex` (the id is absent from
@@ -572,6 +572,12 @@ decision, four patches, one dismissed.
   sentence and the new window is a confirm); **(c)** leave as built and record it as an FD11-class
   residual under the 4.23 editor-state pass, beside the alert-lifecycle entry. Left for Sidiar;
   nothing changed here.
+  **Resolved 2026-09-25 (Sidiar): (a)**: disable the editor's Delete while the GONE alert shows.
+- [ ] [Review][Patch] **Build the (a) resolution above** [`apps/web/components/organisms/editor/OrganismEditorModal.tsx`]:
+  the editor's `DeleteOrganismButton` is `disabled` while `deleteError === ORGANISM_DELETE_GONE`,
+  alongside the existing `isSaving` and `deleteProtected` conditions. Add a test that the button is
+  disabled once the GONE alert is published. Keep focus somewhere valid: the (b) build restores
+  focus to that button, and a disabled button cannot hold focus.
 - [x] [Review][Patch] **The alert-lifecycle ledger's rationale is false for the GONE copy**
   [`deferred-work.md:3124-3127`, `:3168-3170`] — the entry says "Harmless (the sentence stays
   true)": true for `ORGANISM_DELETE_FAILED`, false for `ORGANISM_DELETE_GONE`, which the accepted
