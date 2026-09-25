@@ -631,3 +631,18 @@ Proposed lane gate: none — 5.8 touches only packages/domain (new referentialCl
   corrupt case), 1 deferred (snapshot-window concurrent-writer race → `deferred-work.md`, Story 5.9
   wiring), 1 owner decision left open (rollback materializes an absent `gol:battles` key — FD2
   limit (c) vs opaque snapshot), 2 dismissed. Status → in-progress pending the FD2/limit-(c) ruling.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 55s | 55s | 36 | 9,954 | 32,653 | 1,082,181 | 1,124,824 |
+| Step 1 — create | opus-5-5 | 1 | 5m 37s | 5m 37s | 72 | 3,894 | 315,431 | 3,706,221 | 4,025,618 |
+| Step 2 — implement | opus-5-5 | 1 | 10m 32s | 10m 32s | 170 | 5,582 | 292,333 | 10,198,821 | 10,496,906 |
+| Step 3 — review + PR | fable-5 | 4 | 25m 42s | 25m 42s | 410 | 16,342 | 1,247,981 | 19,873,704 | 21,138,437 |
+| _of which the orchestrator_ | fable-5 | — | — | — | 90 | 25,252 | 66,066 | 3,082,752 | 3,174,160 |
+| **Total (create → PR ready)** | | 6 | **42m 47s** | 42m 47s | 688 | 35,772 | 1,888,398 | 34,860,927 | **36,785,785** |
+
+Run started 2026-09-25 19:08 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
