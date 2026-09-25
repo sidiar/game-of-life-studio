@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -468,7 +468,7 @@ probe of the one path no test covered.
   as built and record it as an FD11-class residual (cross-tab deletion mid-edit). Left for Sidiar;
   nothing changed here.
   **Resolved 2026-09-25 (Sidiar): (b)**: keep the editor open and publish an in-editor alert.
-- [ ] [Review][Patch] **Build the (b) resolution above** [`apps/web/lib/organisms/useOrganismDelete.ts`]:
+- [x] [Review][Patch] **Build the (b) resolution above** [`apps/web/lib/organisms/useOrganismDelete.ts`]:
   for `origin: 'editor'`, when Confirm's re-read finds the record gone, skip the write (as now),
   reload the Library, do not close the editor, and publish an in-editor `role="alert"` through the
   same `SaveErrorLine` surface FD12's failure uses. Copy (new, beside `ORGANISM_DELETE_FAILED` in
@@ -918,6 +918,16 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   `/battle/new` 316721 → 316767 B (+45/+46 B — the battle editor imports `saveFailureMessage.ts`,
   which gained `ORGANISM_DELETE_FAILED`); `/` and `/settings` unchanged. `npm run bundle:check`
   against the new baseline: exit 0.
+- Review decision (b) build (2026-09-25): the new hook test went red first (`editorDeleteError`
+  null), green after the change. First `npm run ci:dev`: **exit 1** — 2 `web` tests out of 2215,
+  both outside this change (`BattlePage.modeToggle` "restores focus to the Fullscreen button…",
+  and `OrganismLibrary` "reopens with an empty, error-free name field…" timed out at 5 s) under
+  load average ~17 from another session; both files passed 97/97 in isolation. Second `npm run
+  ci:dev` (redirected to a file, `$?` read directly): **exit 0** — typecheck ✓; lint 0 errors, the
+  1 pre-existing `BattleGallery.tsx:248` warning; format ✓; spec:check ✓ (274 ids); boundary ✓;
+  coverage — web 131 files / 2215 tests, domain 212, simulation 408, persistence 103, test-utils
+  95; build ✓; bundle ✓ (`/organisms` 300.4 KB vs 300.3 KB baseline, +0.1 KB; every other route
+  +0.0 — no baseline refresh); bench 8.618 ms / 16.667 ms; e2e Chromium 282 passed.
 
 ### Completion Notes List
 
@@ -954,6 +964,18 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 - **Not in the story's plan, surfaced**: the e2e `getByText("Conway's Classic")` retarget (49
   mechanical `exact: true` additions) — the same class as the FD7 retarget; and the 4.21 unit
   fixtures were hoisted to a module-scope `deleteRig()` shared with the 4.22 block.
+- ✅ Resolved review finding [Patch]: **the (b) resolution for the editor-origin vanished record**.
+  `ConfirmOutcome` gained `gone`; the exit handler publishes `ORGANISM_DELETE_GONE` ("This organism
+  no longer exists. It may have been deleted in another tab.", new in `saveOutcome.ts` beside
+  `ORGANISM_DELETE_FAILED`) into `editorDeleteError` for the editor origin only, so it renders
+  through the editor's existing FD12 `SaveErrorLine` `role="alert"`. The write is still skipped,
+  the Library still reloads, `onEditorDeleted` is not called (the editor stays open), no toast, and
+  focus returns to the editor's Delete (the `editor` restore intent is kept). The card origin is
+  unchanged (no alert; focus to Create). Tests: hook ("editor origin: a record deleted elsewhere
+  keeps the editor open…", red before the change) and Library ("editor origin: a record deleted in
+  another tab keeps the editor open with an in-editor alert…", with a publish-after-the-
+  confirmation's-exit ordering assertion); the card-origin hook test now also asserts no editor
+  alert.
 - **Owner questions open, defaults implemented**: FD13 (the card-content deferrals re-pointed to the
   next card-content change / Epic 4 UX touch) and FD12 (the failure sentence as written). Both are
   also listed at the end of this story's `deferred-work.md` section.
@@ -1014,6 +1036,12 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   - Real-browser probe before the fix: the new e2e "Cancel on the stacked confirmation" failed on
     the dev commit (`closest('[inert]')` on the editor's Delete returned the portal) and passes
     with the hook fix; the 4.21 + 4.22 e2e blocks then ran 18/18 in Chromium.
+
+- 2026-09-25: Addressed code review findings — 1 item resolved: Sidiar's decision (b) for the
+  editor-origin vanished record. `ORGANISM_DELETE_GONE` added to `saveOutcome.ts`; the
+  `useOrganismDelete` exit handler publishes it in-editor (existing FD12 `SaveErrorLine` alert)
+  for the editor origin, keeps the editor open, skips the write, reloads, no toast; card origin
+  unchanged. Hook and Library tests added. `npm run ci:dev` exit 0. Status → review.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none

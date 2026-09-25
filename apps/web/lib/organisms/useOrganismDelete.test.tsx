@@ -7,7 +7,11 @@ import {
   createMockWorkspace,
   MOCK_ORGANISM_IDS,
 } from '@gol/test-utils';
-import { ORGANISM_DELETE_FAILED, ORGANISM_DELETED } from '@/lib/organisms/saveOutcome';
+import {
+  ORGANISM_DELETE_FAILED,
+  ORGANISM_DELETE_GONE,
+  ORGANISM_DELETED,
+} from '@/lib/organisms/saveOutcome';
 import { useOrganismDelete, type UseOrganismDeleteOptions } from './useOrganismDelete';
 
 /**
@@ -153,6 +157,8 @@ describe('useOrganismDelete', () => {
     expect(del).not.toHaveBeenCalled();
     expect(hook.result.current.toast).toBeNull();
     expect(hook.result.current.deleteError).toBeNull();
+    // The card origin is unchanged by the editor-origin decision: no alert anywhere.
+    expect(hook.result.current.editorDeleteError).toBeNull();
     expect(options.reload).toHaveBeenCalledTimes(1);
   });
 
@@ -302,6 +308,34 @@ describe('useOrganismDelete', () => {
     expect(hook.result.current.deleteError).toBeNull();
     expect(options.onEditorDeleted).not.toHaveBeenCalled();
 
+    act(() => hook.result.current.onEditorExited());
+    expect(hook.result.current.editorDeleteError).toBeNull();
+    expect(hook.result.current.toast).toBeNull();
+  });
+
+  it('editor origin: a record deleted elsewhere keeps the editor open and publishes the in-editor alert on exit (review decision (b))', async () => {
+    const { organisms, hook, library, options } = await rig();
+
+    act(() => hook.result.current.requestDelete(recordOf(library, GLIDER.id), 'editor'));
+    await organisms.delete(GLIDER.id);
+    const del = vi.spyOn(organisms, 'delete');
+    act(() => hook.result.current.confirmProps?.onConfirm());
+    await waitFor(() => expect(hook.result.current.confirmProps?.open).toBe(false));
+    // Queued, not yet published: the confirmation is still fading over the inert editor.
+    expect(hook.result.current.editorDeleteError).toBeNull();
+    expect(options.reload).not.toHaveBeenCalled();
+
+    act(() => hook.result.current.confirmProps?.onExited?.());
+    expect(del).not.toHaveBeenCalled();
+    expect(hook.result.current.editorDeleteError).toBe(ORGANISM_DELETE_GONE);
+    expect(hook.result.current.deleteError).toBeNull();
+    expect(hook.result.current.toast).toBeNull();
+    expect(hook.result.current.windowActive).toBe(false);
+    // The editor stays open: this action deleted nothing, so nothing closes it.
+    expect(options.onEditorDeleted).not.toHaveBeenCalled();
+    expect(options.reload).toHaveBeenCalledTimes(1);
+
+    // A later, user-driven editor exit clears the alert and publishes no toast.
     act(() => hook.result.current.onEditorExited());
     expect(hook.result.current.editorDeleteError).toBeNull();
     expect(hook.result.current.toast).toBeNull();

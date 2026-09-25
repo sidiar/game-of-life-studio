@@ -14,7 +14,11 @@ import type { BattleRepository, OrganismRepository } from '@gol/persistence';
 import type { OrganismDeleteBlockedDialogProps } from '@/components/organisms/OrganismDeleteBlockedDialog';
 import type { OrganismDeleteConfirmDialogProps } from '@/components/organisms/OrganismDeleteConfirmDialog';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
-import { ORGANISM_DELETE_FAILED, ORGANISM_DELETED } from '@/lib/organisms/saveOutcome';
+import {
+  ORGANISM_DELETE_FAILED,
+  ORGANISM_DELETE_GONE,
+  ORGANISM_DELETED,
+} from '@/lib/organisms/saveOutcome';
 import { referencingOrganismNames, usageBattleNames } from '@/lib/organisms/usageLabels';
 import { useInertBackground } from '@/lib/useInertBackground';
 
@@ -65,6 +69,8 @@ interface ConfirmOutcome {
   origin: OrganismDeleteOrigin;
   deleted: boolean;
   failed: boolean;
+  /** The fresh read found the record already gone (deleted in another tab). */
+  gone: boolean;
   /** A fresh read completed, so the cards may be stale: reload on exit. */
   reload: boolean;
   /** FD5: the fresh verdict was `blocked` — hand off to the block dialog with the FRESH names,
@@ -120,8 +126,9 @@ export interface UseOrganismDeleteResult {
   toast: string | null;
   /** A card-origin refusal, for the Library's `role="alert"` line. */
   deleteError: string | null;
-  /** An editor-origin refusal, rendered INSIDE the editor (FD12) — the Library's own alert would
-   * sit under the still-open, inert editor and never be heard. */
+  /** An editor-origin refusal (FD12), or the record found already gone at Confirm (review decision
+   * (b)), rendered INSIDE the editor — the Library's own alert would sit under the still-open,
+   * inert editor and never be heard. */
   editorDeleteError: string | null;
   /** Compose into the editor's `onExited`, AFTER the hook's own: publishes the toast held for an
    * editor-origin delete (FD7) and clears the editor-origin alert with the editor it lived in. */
@@ -263,6 +270,7 @@ export function useOrganismDelete({
         origin,
         deleted: false,
         failed: false,
+        gone: false,
         reload: false,
         handoff: null,
       };
@@ -277,7 +285,10 @@ export function useOrganismDelete({
         const freshRecord = freshOrganisms.find((organism) => organism.id === organismId);
         if (freshRecord === undefined) {
           // Deleted elsewhere (another tab): nothing to write, and no toast — this action deleted
-          // nothing. The card is gone after the reload, so focus falls back to Create.
+          // nothing. The card is gone after the reload, so focus falls back to Create. The editor
+          // origin keeps the editor open (review decision (b)) — focus returns to its Delete — and
+          // is told why in-editor at the exit, so its next Save is a deliberate re-create.
+          outcome.gone = true;
           if (origin === 'card') restoreRef.current = { kind: 'create' };
         } else {
           const verdict = organismDeleteVerdict(
@@ -355,6 +366,9 @@ export function useOrganismDelete({
       if (outcome.origin === 'card') setDeleteError(ORGANISM_DELETE_FAILED);
       else setEditorDeleteError(ORGANISM_DELETE_FAILED);
     }
+    // Review decision (b): the card origin says nothing (its card is gone after the reload); the
+    // editor origin, still open on a record that no longer exists, says so in-editor.
+    if (outcome?.gone && outcome.origin === 'editor') setEditorDeleteError(ORGANISM_DELETE_GONE);
     // Before the editor exits, for the editor origin: the card is gone by the time the editor
     // hook's focus restore looks it up, which is what makes its Create fallback land (FD8).
     if (outcome?.reload) reload();

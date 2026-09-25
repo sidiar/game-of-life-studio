@@ -38,3 +38,13 @@ export const ORGANISM_DELETED = 'Organism deleted';
  */
 export const ORGANISM_DELETE_FAILED =
   'This organism could not be deleted. Nothing was changed — try again.';
+
+/**
+ * Story 4.22 review decision (b), Sidiar 2026-09-25: an EDITOR-origin Confirm whose re-verify read
+ * finds the record already gone (deleted in another tab). The write is skipped and the editor stays
+ * open — this action deleted nothing, so nothing closes it — and this sentence is published inside
+ * the editor through the same `SaveErrorLine` surface as `ORGANISM_DELETE_FAILED`. The card origin
+ * publishes nothing for the same case: its card is simply gone after the reload.
+ */
+export const ORGANISM_DELETE_GONE =
+  'This organism no longer exists. It may have been deleted in another tab.';

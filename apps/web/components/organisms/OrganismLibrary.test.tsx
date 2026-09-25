@@ -2055,6 +2055,51 @@ describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () 
     expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBe(editor);
   });
 
+  it('editor origin: a record deleted in another tab keeps the editor open with an in-editor alert, writes nothing and publishes no toast (review decision (b))', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Glider' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    // "Deleted in another tab": gone from storage, still on the Library's settled snapshot.
+    await organisms.delete(DELETE_UNUSED.id);
+    const del = vi.spyOn(organisms, 'delete');
+    // The ordering assertion, scoped to the stacked confirmation (the editor is a dialog too, and
+    // stays): at the first moment the alert exists, the confirmation is already gone.
+    const seen: boolean[] = [];
+    const observer = new MutationObserver(() => {
+      if (seen.length === 0 && document.querySelector('[data-editor-delete-error]') !== null) {
+        seen.push(confirmDialog() !== null);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    await user.click(within(confirm).getByRole('button', { name: 'Delete Organism' }));
+
+    await waitFor(() =>
+      expect(within(editor).getByRole('alert')).toHaveTextContent(
+        'This organism no longer exists. It may have been deleted in another tab.',
+      ),
+    );
+    observer.disconnect();
+    expect(seen).toEqual([false]);
+    expect(confirmDialog()).toBeNull();
+    expect(del).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBe(editor);
+    expect(document.querySelector('[data-delete-error]')).toBeNull();
+    expect(toastNode()).toBeNull();
+    // The Library reloaded behind the editor: the card is gone, the badge dropped.
+    await waitFor(() => expect(countBadge()).toHaveTextContent('6 Organisms'));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(editor).getByRole('button', { name: 'Delete Organism' }),
+      ),
+    );
+  });
+
   it('a second delete later in the session re-announces — the toast node re-mounts', async () => {
     const user = userEvent.setup();
     const { organisms, battles } = deleteRig();
