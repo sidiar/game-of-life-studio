@@ -129,7 +129,7 @@ describe('battleExportFilename', () => {
   // are kept as the invisible joiners real spelling requires. Written as \u-escapes (never the
   // literal glyphs) so no invisible character sits in this file's own source.
   it('keeps ZWNJ in a Persian word rather than turning it into a word-breaking hyphen', () => {
-    // 'می‌خواهم' ("I want"): می + ZWNJ (U+200C) + خواهم.
+    // Persian "I want": می + ZWNJ (U+200C) + خواهم.
     expect(battleExportFilename('می\u200Cخواهم')).toBe('می\u200Cخواهم.json');
   });
 
@@ -160,5 +160,37 @@ describe('battleExportFilename', () => {
     // cut lands exactly on the kept ZWNJ, which must not survive as a trailing invisible character.
     const name = `${'a'.repeat(59)}\u200C${'a'.repeat(10)}`;
     expect(battleExportFilename(name)).toBe(`${'a'.repeat(59)}.json`);
+  });
+
+  // Third code review (2026-09-25): joiner context is judged by code point and after every other
+  // format character is gone, and a joiner is judged before the orphan-mark strip.
+  it('drops a BOM, bidi isolates, and a name made only of format characters falls back', () => {
+    expect(battleExportFilename('\uFEFFBattle')).toBe('battle.json');
+    expect(battleExportFilename('\u2067Battle\u2069 Royale')).toBe('battle-royale.json');
+    expect(battleExportFilename('\u200E\u00AD\u200C')).toBe('untitled-battle.json');
+  });
+
+  it('drops a joiner in an emoji sequence, next to a digit or hyphen, or doubled', () => {
+    expect(battleExportFilename('\u{1F468}\u200D\u{1F469} Battle')).toBe('battle.json');
+    expect(battleExportFilename('a\u200C1')).toBe('a1.json');
+    expect(battleExportFilename('a\u200C-b')).toBe('a-b.json');
+    expect(battleExportFilename('a\u200C\u200Cb')).toBe('ab.json');
+  });
+
+  it('keeps a joiner between two astral (surrogate-pair) letters', () => {
+    // Chakma letter AA (U+11103), outside the BMP: still a letter on each side of the ZWNJ.
+    expect(battleExportFilename('\u{11103}\u200C\u{11103}')).toBe('\u{11103}\u200C\u{11103}.json');
+  });
+
+  it('keeps a ZWNJ an LRM sits beside, since the LRM is dropped first', () => {
+    expect(battleExportFilename('می\u200E\u200Cخواهم')).toBe('می\u200Cخواهم.json');
+  });
+
+  it('keeps a mark a soft hyphen sat in front of attached to its letter', () => {
+    expect(battleExportFilename('क\u00ADि')).toBe('कि.json');
+  });
+
+  it('drops a ZWJ followed by a mark and keeps the mark on the preceding letter', () => {
+    expect(battleExportFilename('ब\u200D्क')).toBe('ब्क.json');
   });
 });

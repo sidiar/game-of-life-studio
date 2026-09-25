@@ -3122,3 +3122,12 @@ been answered yet:
   in practice. A robust fix starts the export from a post-commit effect rather than from
   `onTransitionExited`; worth doing if a synchronous failure source is ever added. The FD2
   ordering test checks for a `[role="dialog"]`, not for `inert` ancestors, so it would not catch it.
+
+## Deferred from: third code review of 5-6-battle-export-dialog (2026-09-25)
+
+- **A 60-code-point cut through a virama conjunct keeps a dangling half** —
+  `apps/web/lib/export/battleExportFilename.ts:truncateSlug`. The cluster-drop rule only looks at
+  whether the next code point is a mark, so a cut landing between `क्` and `ष` (with or without a
+  ZWJ between them; a trailing ZWJ is trimmed) keeps `क्` with a visible halant. Pre-existing for the
+  no-joiner case. A grapheme-cluster cut (`Intl.Segmenter`, whose Unicode 15.1 rules keep Indic
+  conjuncts whole) would cover both; mind the lazy `battleExporter` chunk's size and engine support.

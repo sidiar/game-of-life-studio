@@ -30,55 +30,47 @@ const MAX_SLUG_CODE_POINTS = 60;
  *   NFKD-decomposes into after a space, or a mark after a digit, a hyphen or at the start. Kept,
  *   those produced invisible characters in the filename (`'❤️'` → an invisible slug that skipped
  *   the `untitled-battle` fallback).
- * - Unicode format characters (`\p{Cf}`) are dropped next, BEFORE the punctuation/whitespace
- *   collapse below, with one exception (Story 5.6 review decision 2026-09-25, ZWNJ/ZWJ): ZWNJ
- *   (U+200C) and ZWJ (U+200D) are kept when they sit directly between two letter clusters (a
- *   letter, optionally followed by combining marks, on each side) — that is standard Persian and
- *   Indic spelling (`می‌خواهم`, a Devanagari conjunct), not a hyphenation point. Left unhandled,
- *   the collapse step below would turn every `\p{Cf}` character, ZWNJ/ZWJ included, into a
- *   word-breaking `-` (`می‌خواهم` → `می-خواهم`), which is exactly the garbling decision 1 set out
- *   to prevent for other scripts. Every other format character — a soft hyphen (U+00AD), LRM/RLM
- *   (U+200E/U+200F), a bidi embedding/isolate, a BOM (U+FEFF), a ZWNJ/ZWJ next to a space,
- *   punctuation, or at the start/end — is dropped silently rather than turned into a hyphen. The
- *   collapse step's own character class also exempts ZWNJ/ZWJ, so a kept one is never re-hyphenated
- *   there; by construction every ZWNJ/ZWJ that reaches the collapse step already has a letter (or
- *   letter+mark cluster) on each side, so it can never lead, trail, or sit next to a `-` in the
- *   result.
+ * - Unicode format characters (`\p{Cf}`) are handled FIRST, right after NFKD and before any mark
+ *   handling (Story 5.6 review decision 2026-09-25, ZWNJ/ZWJ), with one exception: ZWNJ (U+200C)
+ *   and ZWJ (U+200D) are kept when they sit directly between two letter clusters (a letter,
+ *   optionally followed by combining marks, before; a letter after) — that is standard Persian and
+ *   Indic spelling (Persian "mi" + ZWNJ + "khaham", a Devanagari conjunct), not a hyphenation
+ *   point. Left unhandled, the collapse step below would turn every `\p{Cf}` character, ZWNJ/ZWJ
+ *   included, into a word-breaking `-`, which is exactly the garbling decision 1 set out to prevent
+ *   for other scripts. Every other format character — a soft hyphen (U+00AD), LRM/RLM
+ *   (U+200E/U+200F), a bidi embedding/isolate, a BOM (U+FEFF) — is dropped silently first, so it
+ *   can neither shield a joiner from its letters (letter + LRM + ZWNJ + letter keeps the ZWNJ) nor
+ *   orphan a mark it sat in front of. Then a ZWNJ/ZWJ that is not between letter clusters (next to
+ *   a space, punctuation, a digit, another joiner, a mark after it, or at the start/end) is dropped
+ *   too, never hyphenated. Both checks are code-point regexes (`u` flag), so an astral letter (a
+ *   surrogate pair, e.g. Chakma or Brahmi) counts as a letter (third code review, 2026-09-25). The
+ *   collapse step's own character class also exempts ZWNJ/ZWJ, so a kept one is never
+ *   re-hyphenated there; a kept one always has a letter cluster on each side, so it can never lead,
+ *   trail, or sit next to a `-` in the result.
+ *
+ * Every regex writes ZWNJ/ZWJ as `\u` escapes, never the literal glyphs, so no invisible character
+ * sits in this source file (the exact hazard this decision guards the output filename against).
  */
+const FORMAT_CHARACTER_EXCEPT_JOINERS = /[^\P{Cf}\u200C\u200D]/gu;
+const JOINER_NOT_BETWEEN_LETTERS = /(?<!\p{L}\p{M}*)[\u200C\u200D]|[\u200C\u200D](?!\p{L})/gu;
+const LATIN_LETTER_MARKS = /(\p{Script=Latin})\p{M}+/gu;
+const ORPHAN_MARKS = /(^|[^\p{L}\p{M}])\p{M}+/gu;
+const NOT_LETTER_NUMBER_MARK_OR_JOINER = /[^\p{L}\p{N}\p{M}\u200C\u200D]+/gu;
+const COMBINING_MARK = /^\p{M}$/u;
+const TRAILING_HYPHEN_OR_JOINER = /[-\u200C\u200D]+$/u;
+
 function kebabCase(name: string): string {
   return name
     .normalize('NFKD')
-    .replace(/(\p{Script=Latin})\p{M}+/gu, '$1')
+    .replace(FORMAT_CHARACTER_EXCEPT_JOINERS, '')
+    .replace(JOINER_NOT_BETWEEN_LETTERS, '')
+    .replace(LATIN_LETTER_MARKS, '$1')
     .normalize('NFC')
-    .replace(/(^|[^\p{L}\p{M}])\p{M}+/gu, '$1')
-    .replace(/\p{Cf}/gu, (char: string, offset: number, str: string) => {
-      if (char !== ZERO_WIDTH_NON_JOINER && char !== ZERO_WIDTH_JOINER) {
-        return '';
-      }
-      const before = str[offset - 1];
-      const after = str[offset + 1];
-      const betweenLetters =
-        before !== undefined &&
-        /[\p{L}\p{M}]/u.test(before) &&
-        after !== undefined &&
-        /\p{L}/u.test(after);
-      return betweenLetters ? char : '';
-    })
+    .replace(ORPHAN_MARKS, '$1')
     .toLowerCase()
-    .replace(COLLAPSE_PATTERN, '-')
+    .replace(NOT_LETTER_NUMBER_MARK_OR_JOINER, '-')
     .replace(/^-+|-+$/g, '');
 }
-
-// Written as \u-escapes, never the literal glyphs, so no invisible character sits in the source
-// itself (the exact hazard this decision guards the output filename against).
-const ZERO_WIDTH_NON_JOINER = '\u200C';
-const ZERO_WIDTH_JOINER = '\u200D';
-const COLLAPSE_PATTERN = new RegExp(
-  `[^\\p{L}\\p{N}\\p{M}${ZERO_WIDTH_NON_JOINER}${ZERO_WIDTH_JOINER}]+`,
-  'gu',
-);
-
-const COMBINING_MARK = /^\p{M}$/u;
 
 /**
  * Cap a slug at MAX_SLUG_CODE_POINTS code points, then trim a trailing `-` the cut may have left
@@ -107,8 +99,6 @@ function truncateSlug(slug: string): string {
   }
   return kept.join('').replace(TRAILING_HYPHEN_OR_JOINER, '');
 }
-
-const TRAILING_HYPHEN_OR_JOINER = new RegExp(`[-${ZERO_WIDTH_NON_JOINER}${ZERO_WIDTH_JOINER}]+$`);
 
 /**
  * The default Battle Only export filename (FR-6.4, Story 5.6 FD7): the battle name in kebab-case,

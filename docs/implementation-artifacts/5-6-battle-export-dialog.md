@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 5.6: Battle Export Dialog
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -73,6 +73,8 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
      Unicode format character (`\p{Cf}`) — a soft hyphen, LRM/RLM, a bidi mark, a BOM — **except**
      ZWNJ/ZWJ sitting directly between two letters (or letter+mark clusters), which are kept as the
      invisible joiners standard Persian/Indic spelling requires; see the dated FD7 annotation below;
+     **third code review (2026-09-25):** this step runs right after NFKD, before any mark handling,
+     with the other format characters dropped before the joiner check, judged by code point;
    - ~~turn every run of characters that are not a Unicode letter or number into one `-`;~~
      **→ Sidiar (2026-09-25):** turn every run of characters that are not a Unicode letter, number,
      or (surviving, non-Latin) combining mark into one `-`; **third-round review (2026-09-25):** a
@@ -366,6 +368,17 @@ _Second code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptan
 - [x] [Review][Patch] The 60-code-point cut can split a base+mark cluster — 59×`क` + `कि` keeps the 60th `क` and drops its vowel sign ि, silently changing the word (the garbling decision 1 set out to prevent); when the cut lands before a mark, drop the partial cluster (base + marks) instead [apps/web/lib/export/battleExportFilename.ts:truncateSlug]
 - [x] [Review][Patch] The "Café Duel … without an NFC precomposed form nearby" test uses precomposed U+00E9 like "Café Wars", so the decomposed-input path is never exercised; use `'Café Duel'` [apps/web/lib/export/battleExportFilename.test.ts]
 - [x] [Review][Patch] Story records: AC5's original bullets and the Debug Log's "pre-existing drift from `main`" sentence were deleted rather than struck (history is struck, never deleted); the "2225, up from 2212 … normal suite variance" explanation omits the review commit's +5 tests; Completion Notes item 4 points to the Debug Log "below" (it is above); Agent Model Used omits the Opus review sessions [docs/implementation-artifacts/5-6-battle-export-dialog.md]
+
+_Third code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `744a83b..8451e7d`, the ZWNJ/ZWJ owner-decision commit)._
+
+- [ ] [Review][Decision] Invisible code points that are not `\p{Cf}` still survive — default-ignorables classed as marks or letters: a combining grapheme joiner U+034F or a variation selector U+FE0F after a non-Latin letter (`'漢\uFE0F'` → `漢\uFE0F.json`), a Mongolian free variation selector U+180B, and a Hangul filler U+3164 (NFKD → U+1160, a letter), so a name of only `'\u3164'` yields an invisible slug and skips the `untitled-battle` fallback AC5 promises. Options: (a) drop every `\p{Default_Ignorable_Code_Point}` alongside `\p{Cf}` (except ZWNJ/ZWJ between letters; also drops Mongolian FVS, which select glyph shapes); (b) drop only the fillers (U+115F, U+1160, U+3164, U+FFA0) so the fallback holds, keep marks on letters as today; (c) accept as is. [apps/web/lib/export/battleExportFilename.ts:kebabCase]
+- [x] [Review][Patch] Joiner neighbours read as UTF-16 code units — `str[offset ± 1]` sees half a surrogate pair, so a ZWNJ/ZWJ next to an astral letter (Chakma, Brahmi, Adlam, CJK Ext-B) was dropped though it sat between letters; now a code-point `u`-regex lookbehind/lookahead [apps/web/lib/export/battleExportFilename.ts:kebabCase]
+- [x] [Review][Patch] Joiner context judged before the other format characters were gone — `'a' + LRM + ZWNJ + 'b'` (common in RTL copy-paste) dropped the ZWNJ; every non-joiner `\p{Cf}` is now dropped first [apps/web/lib/export/battleExportFilename.ts:kebabCase]
+- [x] [Review][Patch] Format-character handling ran after the orphan-mark strip — a mark behind a soft hyphen was stripped as orphan (`'क' + SHY + 'ि'` lost its vowel sign), and a ZWJ followed by a mark had the mark stripped then the ZWJ kept (`'ब' + ZWJ + '्क'` lost its virama); the `\p{Cf}`/joiner steps now run right after NFKD, and a joiner followed by a mark is dropped so the mark stays on its letter [apps/web/lib/export/battleExportFilename.ts:kebabCase]
+- [x] [Review][Patch] Literal invisible ZWNJ in source comments contradicting the "no invisible character in the source" claim — `battleExportFilename.ts` JSDoc (2×) and a test comment; rewritten without glyphs; regex constants hoisted above their users and written as `\u` escapes in regex literals (no string-built `RegExp`) [apps/web/lib/export/battleExportFilename.ts, battleExportFilename.test.ts]
+- [x] [Review][Patch] Missing coverage — BOM, bidi isolates, an all-format-character name → fallback, emoji ZWJ sequence, joiner next to a digit / hyphen / another joiner, astral letters, LRM beside a ZWNJ, soft hyphen before a mark, ZWJ before a mark: 6 new cases (34 in the file) [apps/web/lib/export/battleExportFilename.test.ts]
+- [x] [Review][Patch] Story records: "the remaining 5 were not independently re-verified" — they are the second code review's 5 tests (2225 + 5 + 6 = 2236); "see Debug Log below" → above (again); the truncation test was also green before the fourth-session fix; an empty code span where literal joiners were written [this file]
+- [x] [Review][Defer] A 60-code-point cut through a virama conjunct keeps a dangling half (`…क्` + ZWJ + `ष` cut at the ZWJ leaves `क्`, and the same without a ZWJ) — the cluster-drop rule only looks at a following mark; a grapheme-cluster cut (`Intl.Segmenter`, Unicode 15.1 Indic conjunct rules) would cover both [apps/web/lib/export/battleExportFilename.ts:truncateSlug] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -805,6 +818,8 @@ character fix, decision annotations, final `ci:dev`) is a **fourth, separate Son
 resuming after the second code review's remaining `[Review][Decision]` item was answered. Both code
 reviews (2026-09-25: over `origin/main...HEAD`, then over the owner-decision commit
 `9470143..d903c09`) ran on **Claude Opus 5.5** (claude-opus-5-5), the different-model reviewer.
+The third code review (2026-09-25, over the ZWNJ/ZWJ decision commit `744a83b..8451e7d`) also ran
+on **Claude Opus 5.5** (claude-opus-5-5).
 
 ### Debug Log References
 
@@ -908,15 +923,27 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
   `spec:check`, `boundary:check` all green. `test:coverage`: `@gol/persistence` 103/103,
   `@gol/test-utils` 95/95, `@gol/domain` 212/212, `@gol/simulation` 408/408, web 134 test files /
   **2236** tests (up from the prior session's 2225 by 11 — this session's own 6 new
-  `battleExportFilename.test.ts` cases account for 6 of the 11; the remaining 5 were not
+  `battleExportFilename.test.ts` cases account for 6 of the 11; ~~the remaining 5 were not
   independently re-verified against a specific diff and are called out here rather than silently
-  assumed). `build:standalone` green. `bundle:check` `+0.0 KB` all 5 routes. `bench` + `bench:check`
+  assumed~~ *(third code review: the other 5 are the second code review's own tests, 22 in the file
+  at `744a83b`; 2225 + 5 + 6 = 2236)*). `build:standalone` green. `bundle:check` `+0.0 KB` all 5 routes. `bench` + `bench:check`
   green (8.293 ms headroom, 49.8% of the 16.667 ms frame budget). `e2e:chromium`: 278 passed, 1
   pre-existing conditional skip (`deleteBattle.spec.ts:113`, unrelated to this story), 0 failures —
   the `export battle (Story 5.6)` describe block's 6 cases and axe scan all green, no e2e changes
   needed (this session's fix is inside the lazy `battleExporter` module and Latin-script-only e2e
   seed names, so the ZWNJ/ZWJ paths are covered by the unit suite only, per Dev Notes' "keep the
   e2e on an ASCII name"). `ci.log` kept locally as an untracked artifact, not committed.
+
+**2026-09-25 third code review (Opus), patches applied:**
+
+- `battleExportFilename.test.ts` alone: 34/34. Red-green against `8451e7d`'s source: the astral,
+  LRM-beside-ZWNJ, soft-hyphen-before-mark and ZWJ-before-mark cases failed (4); the BOM/bidi/
+  fallback and emoji/digit/hyphen/doubled-joiner cases already passed (regression coverage).
+- `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0**, first run, no flakes. `@gol/persistence`
+  103/103, `@gol/test-utils` 95/95, `@gol/domain` 212/212, `@gol/simulation` 408/408, web 134
+  files / **2242** tests (2236 + this review's 6). `bundle:check` `+0.0 KB` on every route (no
+  baseline refresh). `bench:check` within budget (8.942 ms headroom). `e2e:chromium` 278 passed,
+  1 pre-existing skip. `ci.log` not committed.
 
 ### Completion Notes List
 
@@ -1043,7 +1070,7 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
      (U+FEFF) — **except** ZWNJ (U+200C) / ZWJ (U+200D) sitting directly between two letter clusters
      (a letter, optionally followed by combining marks, on each side), checked via the character
      immediately before/after each match in the source string. The collapse pattern
-     (`COLLAPSE_PATTERN`) now also exempts `‌`/`‍`, so a kept joiner is never
+     (`COLLAPSE_PATTERN`) now also exempts `\u200C`/`\u200D`, so a kept joiner is never
      re-hyphenated there, and `truncateSlug`'s trailing trim (`TRAILING_HYPHEN_OR_JOINER`) strips a
      trailing ZWNJ/ZWJ the 60-code-point cut may leave, alongside the trailing `-` it already
      trimmed. The two joiner constants are written as `\u`-escapes (`'\u200C'`, `'\u200D'`), never
@@ -1057,7 +1084,7 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
      start/end is dropped in each position; a ZWNJ the 60-code-point cut leaves as the last kept
      code point is trimmed. Verified red-green: before the fix, the Persian and Devanagari cases
      failed with a `-` in place of the joiner (`می-خواهم.json`, `क्-ष.json`) and the soft-hyphen
-     case produced `ba-ttle.json`; the RLM/LRM and edge-adjacency cases happened to already pass
+     case produced `ba-ttle.json`; the RLM/LRM, edge-adjacency and 60-code-point-cut *(third code review)* cases happened to already pass
      (their surrounding hyphen or leading/trailing trim already absorbed the difference), so they
      serve as regression coverage rather than red-green proof. All 28 tests in
      `battleExportFilename.test.ts` pass (22 before this session, + 6 new); the full `apps/web/lib/export/` +
@@ -1067,7 +1094,7 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
   - `npm run build:standalone` and `npm run bundle:check` — pass, `+0.0 KB` on all 5 routes (the
     change stays entirely inside the lazily loaded `battleExporter` chunk; no baseline refresh
     needed).
-  - `npm run ci:dev > ci.log 2>&1; echo $?` — see Debug Log below for the exact result.
+  - `npm run ci:dev > ci.log 2>&1; echo $?` — see Debug Log ~~below~~ above *(third code review)* for the exact result.
 
 ### File List
 
@@ -1121,6 +1148,14 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
   `[Review][Decision]` item ticked; AC5/FD7 annotated with a third dated owner-decision note, not
   silently rewritten; Dev Agent Record, File List, Change Log, Status)
 - `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog` → `review`)
+
+**Modified (2026-09-25 third code review, Opus):**
+- `apps/web/lib/export/battleExportFilename.ts` (format-character/joiner handling moved right after
+  NFKD, judged by code point; regex constants hoisted, `\u`-escaped; no literal joiner in comments)
+- `apps/web/lib/export/battleExportFilename.test.ts` (6 new cases, 34 total; comment literal removed)
+- `docs/implementation-artifacts/5-6-battle-export-dialog.md` (review findings, record fixes, Status)
+- `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog` → `in-progress`)
+- `docs/implementation-artifacts/deferred-work.md` (the virama-conjunct cut)
 
 ### Change Log
 
@@ -1185,6 +1220,15 @@ answered the ZWNJ/ZWJ `[Review][Decision]` item):**
   (originals kept, not rewritten); the decision item ticked. `npm run build:standalone` and
   `bundle:check` pass, `+0.0 KB` on all 5 routes (the change stays inside the lazy `battleExporter`
   chunk). `npm run ci:dev` run to completion — see Debug Log for the exact result. Status → review.
+- 2026-09-25 — Third code review (Opus) over `744a83b..8451e7d`: 6 patches applied — the
+  `\p{Cf}`/joiner steps now run right after NFKD (other format characters dropped first, then a
+  ZWNJ/ZWJ not between letter clusters, judged by code point so astral letters count; a joiner
+  followed by a mark is dropped and the mark stays on its letter); regex constants hoisted and
+  written with `\u` escapes, no literal joiner left in source comments; 6 new unit tests (34 in
+  `battleExportFilename.test.ts`); story-record corrections (2225 + 5 + 6 = 2236, "below" →
+  "above", the truncation test's red-green note, an empty code span). 1 `[Review][Decision]` left
+  open (non-`\p{Cf}` default-ignorable code points), 1 deferred (a cut through a virama conjunct).
+  `ci:dev` exit 0 (2242 web tests). Status → in-progress.
 
 Dev Model: sonnet   # follows existing patterns (UnsavedChangesDialog idiom, useLeaveGuard lifecycle, 5.5's lib/export seam); every structural choice (lazy boundary, save-then-export, id return, act-on-exit) is pre-decided in FD1–FD9, so nothing is left to architect.
 
