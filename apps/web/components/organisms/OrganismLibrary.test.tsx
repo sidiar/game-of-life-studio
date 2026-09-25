@@ -31,6 +31,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * The count badge, by its own `data-organism-count` hook. Story 4.22 added a second `role="status"`
+ * to the page (the always-mounted delete status), so an unscoped `getByRole('status')` is a
+ * strict-mode failure now — every badge query below was retargeted here, mechanically, with no
+ * assertion changed.
+ */
+function queryCountBadge(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[data-organism-count]');
+}
+
+function countBadge(): HTMLElement {
+  const badge = queryCountBadge();
+  if (badge === null) throw new Error('the count badge is not rendered');
+  return badge;
+}
+
 describe('OrganismLibrary', () => {
   it('shows loading copy while seedStatus is "seeding", even after list() has resolved', async () => {
     const mocks = createMockOrganisms();
@@ -204,7 +220,7 @@ describe('OrganismLibrary', () => {
       expect(screen.getAllByRole('listitem')).toHaveLength(1);
     });
     expect(screen.getByRole('heading', { level: 2, name: 'Patient Defender' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('1 of 4 Organisms');
+    expect(countBadge()).toHaveTextContent('1 of 4 Organisms');
 
     await user.clear(search);
 
@@ -212,7 +228,7 @@ describe('OrganismLibrary', () => {
       expect(screen.getAllByRole('listitem')).toHaveLength(4);
     });
     // Exact, not substring: the pre-clear text '1 of 4 Organisms' also contains '4 Organisms'.
-    expect(screen.getByRole('status')).toHaveTextContent(/^4 Organisms$/);
+    expect(countBadge()).toHaveTextContent(/^4 Organisms$/);
   });
 
   it('shows a message, not an empty control, when the search matches nothing — the input stays and keeps focus', async () => {
@@ -361,20 +377,22 @@ describe('OrganismLibrary', () => {
     expect(results.violations).toEqual([]);
   });
 
-  // Story 4.16 Task 11 (2026-09-22): the save-outcome region moved INTO the editor modal, so this
-  // component is back to having exactly one `role="status"` element — the pre-4.16 selector.
+  // Story 4.16 Task 11 (2026-09-22): the save-outcome region moved INTO the editor modal. Story
+  // 4.22 then added the delete status region, so the badge is found by its own hook and its role
+  // asserted directly.
   it('shows the count badge only once ready, as a role="status"', async () => {
     const { organisms, battles } = createFakeRepositories({ organisms: createMockOrganisms() });
 
     const { rerender } = render(
       <OrganismLibrary organisms={organisms} battles={battles} seedStatus="seeding" />,
     );
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(queryCountBadge()).not.toBeInTheDocument();
 
     rerender(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('3 Organisms');
+      expect(countBadge()).toHaveTextContent('3 Organisms');
     });
+    expect(countBadge()).toHaveAttribute('role', 'status');
   });
 });
 
@@ -631,7 +649,7 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(mocks.length));
 
-    const countBadgeBefore = screen.getByRole('status');
+    const countBadgeBefore = countBadge();
     expect(countBadgeBefore).toHaveTextContent(`${mocks.length} Organisms`);
 
     await user.click(createButton());
@@ -649,7 +667,7 @@ describe('OrganismLibrary — save flow (Story 4.16)', () => {
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(headings[0]).toBe('Aardvark');
 
-    const countBadgeAfter = screen.getByRole('status');
+    const countBadgeAfter = countBadge();
     // The SAME DOM node — a 'loading' reset in between would unmount and remount it.
     expect(countBadgeAfter).toBe(countBadgeBefore);
     expect(countBadgeAfter).toHaveTextContent(`${mocks.length + 1} Organisms`);
@@ -909,7 +927,7 @@ describe('OrganismLibrary — edit organism from library (Story 4.17)', () => {
     const save = vi.spyOn(organisms, 'save');
     render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await ready();
-    const badgeBefore = screen.getByRole('status');
+    const badgeBefore = countBadge();
     expect(badgeBefore).toHaveTextContent(/^5 Organisms$/);
 
     await user.click(editButton(USED_NAME));
@@ -933,7 +951,7 @@ describe('OrganismLibrary — edit organism from library (Story 4.17)', () => {
     });
     expect(screen.queryByRole('heading', { level: 2, name: USED_NAME })).toBeNull();
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
-    const badgeAfter = screen.getByRole('status');
+    const badgeAfter = countBadge();
     expect(badgeAfter).toBe(badgeBefore);
     expect(badgeAfter).toHaveTextContent(/^5 Organisms$/);
     expect(battleList).toHaveBeenCalledTimes(2);
@@ -1024,7 +1042,7 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
     const battleSave = vi.spyOn(battles, 'save');
     render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await ready();
-    const badgeBefore = screen.getByRole('status');
+    const badgeBefore = countBadge();
     expect(badgeBefore).toHaveTextContent(/^5 Organisms$/);
 
     await user.click(cloneButton('Glider'));
@@ -1043,7 +1061,7 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
 
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(6));
     expect(screen.getByRole('heading', { level: 2, name: 'Glider (Copy)' })).toBeInTheDocument();
-    const badgeAfter = screen.getByRole('status');
+    const badgeAfter = countBadge();
     expect(badgeAfter).toBe(badgeBefore);
     expect(badgeAfter).toHaveTextContent(/^6 Organisms$/);
     expect(list).toHaveBeenCalledTimes(2);
@@ -1149,7 +1167,7 @@ describe('OrganismLibrary — clone organism (Story 4.18)', () => {
       .mockRejectedValueOnce(new QuotaExceededError('gol:organisms'));
     render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await ready();
-    const badgeBefore = screen.getByRole('status');
+    const badgeBefore = countBadge();
 
     await user.click(cloneButton('Glider'));
 
@@ -1461,38 +1479,50 @@ describe('OrganismLibrary — usage footer wiring (Story 4.20)', () => {
  * for the rule-only case, which nothing in the mock workspace covers on its own: `Vector Hunter`'s
  * rule targets `Silent Vector`, and `Silent Vector` is placed nowhere.
  */
-describe('OrganismLibrary — delete integrity blocks (Story 4.21)', () => {
-  const UNUSED: Organism = { ...CONWAYS_CLASSIC, id: 'unused-glider', name: 'Glider' };
-  const RULE_ONLY_TARGET: Organism = {
-    ...CONWAYS_CLASSIC,
-    id: 'silent-vector',
-    name: 'Silent Vector',
-    survivalRules: [],
-  };
-  const REFERENCER: Organism = {
-    ...CONWAYS_CLASSIC,
-    id: 'vector-hunter',
-    name: 'Vector Hunter',
-    survivalRules: [
-      {
-        id: 'vector-hunter-rule',
-        contentHash: 'vector-hunter-rule-hash',
-        conditions: [{ property: 'organismType', operator: 'eq', pattern: 'silent-vector' }],
-        payload: { summary: 'targets Silent Vector', action: 'survive' },
-      },
+const DELETE_UNUSED: Organism = { ...CONWAYS_CLASSIC, id: 'unused-glider', name: 'Glider' };
+const DELETE_RULE_ONLY_TARGET: Organism = {
+  ...CONWAYS_CLASSIC,
+  id: 'silent-vector',
+  name: 'Silent Vector',
+  survivalRules: [],
+};
+const DELETE_REFERENCER: Organism = {
+  ...CONWAYS_CLASSIC,
+  id: 'vector-hunter',
+  name: 'Vector Hunter',
+  survivalRules: [
+    {
+      id: 'vector-hunter-rule',
+      contentHash: 'vector-hunter-rule-hash',
+      conditions: [{ property: 'organismType', operator: 'eq', pattern: 'silent-vector' }],
+      payload: { summary: 'targets Silent Vector', action: 'survive' },
+    },
+  ],
+};
+
+/** The Story 4.21 delete workspace, shared with Story 4.22's block below: the mock workspace plus
+ * Conway's Classic, an unused Glider, and the rule-only pair. */
+function deleteRig() {
+  const workspace = createMockWorkspace();
+  const fakes = createFakeRepositories({
+    organisms: [
+      CONWAYS_CLASSIC,
+      ...workspace.organisms,
+      DELETE_UNUSED,
+      DELETE_RULE_ONLY_TARGET,
+      DELETE_REFERENCER,
     ],
-  };
+    battles: workspace.battles,
+  });
+  return { ...fakes, workspace };
+}
+
+describe('OrganismLibrary — delete integrity blocks (Story 4.21)', () => {
   const BOTH_NAME = 'Aggressive Colonizer';
   const BATTLE_ONLY_NAME = 'Patient Defender';
 
-  function rig() {
-    const workspace = createMockWorkspace();
-    const fakes = createFakeRepositories({
-      organisms: [CONWAYS_CLASSIC, ...workspace.organisms, UNUSED, RULE_ONLY_TARGET, REFERENCER],
-      battles: workspace.battles,
-    });
-    return { ...fakes, workspace };
-  }
+  // The fixtures moved to module scope (`deleteRig`) in Story 4.22, which shares them.
+  const rig = deleteRig;
 
   const editButton = (name: string) => screen.getByRole('button', { name: `Edit ${name}` });
   const deleteButton = (name: string) => screen.queryByRole('button', { name: `Delete ${name}` });
@@ -1503,7 +1533,9 @@ describe('OrganismLibrary — delete integrity blocks (Story 4.21)', () => {
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(7));
   }
 
-  it('renders Delete only on cards whose verdict is "blocked" — not on an unused organism', async () => {
+  // Inverted by Story 4.22 (Sidiar's 4.21 review decision FD2 (a)): the transitional "Delete only
+  // on blocked cards" rule is gone — every card renders Delete, and the verdict decides what it does.
+  it('renders Delete on every card — blocked and unused alike', async () => {
     const { organisms, battles } = rig();
     render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await ready();
@@ -1511,16 +1543,22 @@ describe('OrganismLibrary — delete integrity blocks (Story 4.21)', () => {
     expect(deleteButton(BOTH_NAME)).not.toBeNull();
     expect(deleteButton(BATTLE_ONLY_NAME)).not.toBeNull();
     expect(deleteButton('Silent Vector')).not.toBeNull();
-    expect(deleteButton('Glider')).toBeNull();
-    expect(deleteButton('Vector Hunter')).toBeNull();
+    expect(deleteButton('Glider')).toBeEnabled();
+    expect(deleteButton('Vector Hunter')).toBeEnabled();
   });
 
-  it("Conway's Classic has no Delete even though it is placed in a battle (M9)", async () => {
+  // Inverted by Story 4.22: Conway's Classic now HAS a Delete — disabled, with its reason, even
+  // though a battle places it (`protected` wins in the verdict, M9).
+  it("Conway's Classic has a DISABLED Delete even though it is placed in a battle (M9)", async () => {
     const { organisms, battles } = rig();
     render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
     await ready();
 
-    expect(deleteButton("Conway's Classic")).toBeNull();
+    const del = deleteButton("Conway's Classic");
+    expect(del).toBeDisabled();
+    expect(del).toHaveAccessibleDescription(
+      "Conway's Classic is a built-in organism and can't be deleted.",
+    );
   });
 
   it('a click on a battle-only organism opens the dialog naming the seeded battles, with no rule section', async () => {
@@ -1733,6 +1771,416 @@ describe('OrganismLibrary — delete integrity blocks (Story 4.21)', () => {
 
     await user.click(deleteButton(BOTH_NAME) as HTMLElement);
     await screen.findByRole('dialog', { name: `Cannot delete ${BOTH_NAME}` });
+
+    expect((await axe(document.body)).violations).toEqual([]);
+  });
+});
+
+/**
+ * Story 4.22: safe delete through the real Library, the real controller and the real (lazy)
+ * dialogs. Glider and Vector Hunter are `allowed` (nothing places or targets them); Silent Vector
+ * is rule-blocked and opens the editor directly (no battle places it, so no in-use gate).
+ */
+describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () => {
+  const LATE_BATTLE_ID = 'c5b3e4f6-7d8a-4b9c-8e0f-2a3b4c5d6e7f';
+
+  const deleteButton = (name: string) => screen.getByRole('button', { name: `Delete ${name}` });
+  const confirmDialog = () => screen.queryByRole('dialog', { name: 'Delete Organism?' });
+  const toastNode = () => document.querySelector('[data-delete-toast]');
+  const createButton = () => screen.getByRole('button', { name: '+ Create New Organism' });
+
+  async function ready() {
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(7));
+  }
+
+  /** Records, for every DOM mutation from now on, whether a dialog was still mounted at the moment
+   * the given node first existed — the project-context ordering assertion ("at the first moment
+   * the alert exists, the dialog is already gone"). `dialogPresent` defaults to "any dialog"; the
+   * editor origin passes a narrower probe, because the editor is a dialog too and STAYS. */
+  function watchFirstAppearance(
+    selector: string,
+    dialogPresent: () => boolean = () => document.querySelector('[role="dialog"]') !== null,
+  ) {
+    const seen: { dialogPresent: boolean }[] = [];
+    const observer = new MutationObserver(() => {
+      if (seen.length === 0 && document.querySelector(selector) !== null) {
+        seen.push({ dialogPresent: dialogPresent() });
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return {
+      seen,
+      stop: () => observer.disconnect(),
+    };
+  }
+
+  function lateBattleFor(organismId: string, workspace: ReturnType<typeof createMockWorkspace>) {
+    const [template] = workspace.battles;
+    return {
+      ...template,
+      id: LATE_BATTLE_ID,
+      name: 'Late Battle',
+      organismIds: [MOCK_ORGANISM_IDS.aggressiveColonizer, organismId],
+    };
+  }
+
+  it("an unused card's Delete opens the confirmation; Cancel writes nothing and returns focus to Delete", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    const del = vi.spyOn(organisms, 'delete');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+    const badgeBefore = countBadge().textContent;
+
+    await user.click(deleteButton('Glider'));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    expect(dialog).toHaveAccessibleDescription('Are you sure you want to delete “Glider”?');
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(confirmDialog()).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(deleteButton('Glider')));
+    expect(del).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { level: 2, name: 'Glider' })).toBeInTheDocument();
+    expect(countBadge().textContent).toBe(badgeBefore);
+    expect(toastNode()).toBeNull();
+  });
+
+  it('Escape on the confirmation cancels, and nothing is written', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    const del = vi.spyOn(organisms, 'delete');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton('Glider'));
+    await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(confirmDialog()).toBeNull());
+    expect(del).not.toHaveBeenCalled();
+    expect(toastNode()).toBeNull();
+  });
+
+  it('Confirm deletes: the card is gone, the badge drops by one, the toast lands only after the dialog is gone, and focus is on Create', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    const del = vi.spyOn(organisms, 'delete');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+    expect(countBadge()).toHaveTextContent('7 Organisms');
+
+    await user.click(deleteButton('Glider'));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    const watch = watchFirstAppearance('[data-delete-toast]');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete Organism' }));
+
+    await waitFor(() => expect(toastNode()).not.toBeNull());
+    watch.stop();
+    expect(watch.seen).toEqual([{ dialogPresent: false }]);
+    expect(document.querySelector('[data-delete-status]')).toHaveTextContent('Organism deleted');
+    expect(del).toHaveBeenCalledTimes(1);
+    expect(del).toHaveBeenCalledWith(DELETE_UNUSED.id);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(6));
+    expect(screen.queryByRole('heading', { level: 2, name: 'Glider' })).toBeNull();
+    expect(countBadge()).toHaveTextContent('6 Organisms');
+    expect(createButton()).toHaveFocus();
+  });
+
+  it('a battle placing the organism, saved between the click and Confirm, blocks the delete and opens the block dialog with the fresh name (FD4)', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles, workspace } = deleteRig();
+    const del = vi.spyOn(organisms, 'delete');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton('Glider'));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    // "Saved in another tab": the Library's settled snapshot never sees it.
+    await battles.save(lateBattleFor(DELETE_UNUSED.id, workspace));
+    await user.click(within(dialog).getByRole('button', { name: 'Delete Organism' }));
+
+    const block = await screen.findByRole('dialog', { name: 'Cannot delete Glider' });
+    expect(within(block).getByText('It is used in 1 Battle:')).toBeInTheDocument();
+    expect(within(block).getByText('Late Battle')).toBeInTheDocument();
+    expect(confirmDialog()).toBeNull();
+    expect(del).not.toHaveBeenCalled();
+    expect(await organisms.load(DELETE_UNUSED.id)).not.toBeNull();
+
+    await user.click(within(block).getByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(document.activeElement).toBe(deleteButton('Glider')));
+    expect(toastNode()).toBeNull();
+  });
+
+  it('a rejected delete reports the failure after the dialog exits, and the card stays', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    vi.spyOn(organisms, 'delete').mockRejectedValue(new Error('boom'));
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton('Glider'));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    const watch = watchFirstAppearance('[data-delete-error]');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete Organism' }));
+
+    await waitFor(() => expect(document.querySelector('[data-delete-error]')).not.toBeNull());
+    watch.stop();
+    expect(watch.seen).toEqual([{ dialogPresent: false }]);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This organism could not be deleted. Nothing was changed — try again.',
+    );
+    expect(screen.getByRole('heading', { level: 2, name: 'Glider' })).toBeInTheDocument();
+    expect(toastNode()).toBeNull();
+  });
+
+  it("Conway's Classic's disabled Delete opens nothing", async () => {
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    fireEvent.click(deleteButton("Conway's Classic"));
+
+    await expect(screen.findByRole('dialog', {}, { timeout: 500 })).rejects.toThrow();
+  });
+
+  it('editor origin: Edit → Delete Organism → Confirm closes the editor, removes the card, and the toast lands after the EDITOR exits', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    const del = vi.spyOn(organisms, 'delete');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Glider' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    const watch = watchFirstAppearance('[data-delete-toast]');
+    await user.click(within(confirm).getByRole('button', { name: 'Delete Organism' }));
+
+    await waitFor(() => expect(toastNode()).not.toBeNull());
+    watch.stop();
+    // Neither the confirmation nor the editor was still mounted when the toast first existed.
+    expect(watch.seen).toEqual([{ dialogPresent: false }]);
+    expect(del).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('heading', { level: 2, name: 'Glider' })).toBeNull();
+    expect(countBadge()).toHaveTextContent('6 Organisms');
+    await waitFor(() => expect(createButton()).toHaveFocus());
+    // FD9: both inert windows unwound — the page root is live again.
+    const root = document.querySelector('[data-create-organism]')?.closest('body > *');
+    expect(root).not.toBeNull();
+    expect((root as HTMLElement).inert).not.toBe(true);
+    expect(root).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('editor origin, blocked: the block dialog stacks over the editor; OK leaves the editor open with focus on its Delete', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Silent Vector' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    const nameField = within(editor).getByRole('textbox', { name: 'Organism Name' });
+    await user.clear(nameField);
+    await user.type(nameField, 'Draft Name');
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    const block = await screen.findByRole('dialog', { name: 'Cannot delete Silent Vector' });
+    expect(within(block).getByText('Vector Hunter')).toBeInTheDocument();
+    await user.click(within(block).getByRole('button', { name: 'OK' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Cannot delete Silent Vector' })).toBeNull(),
+    );
+    expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBe(editor);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(editor).getByRole('button', { name: 'Delete Organism' }),
+      ),
+    );
+    // The draft is untouched.
+    expect(within(editor).getByRole('textbox', { name: 'Organism Name' })).toHaveValue(
+      'Draft Name',
+    );
+  });
+
+  it('editor origin: Escape on the stacked confirmation closes only it — the editor stays open, focus back on its Delete', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    const del = vi.spyOn(organisms, 'delete');
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Glider' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(confirmDialog()).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBe(editor);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(editor).getByRole('button', { name: 'Delete Organism' }),
+      ),
+    );
+    expect(del).not.toHaveBeenCalled();
+    // Review 2026-09-25: the editor is handed back LIVE. jsdom's `inert` blocks nothing (the focus
+    // assertion above passes either way), so this pins the write itself: the stacked window's
+    // cleanup must not restore the `inert` the editor's own `useInertBackground` observer put on
+    // the editor's portal when the confirmation marked it aria-hidden. The page root under the
+    // editor stays inert.
+    const editorPortal = editor.closest('body > *') as HTMLElement;
+    expect(editorPortal.inert).not.toBe(true);
+    const root = document.querySelector('[data-create-organism]')?.closest('body > *');
+    expect((root as HTMLElement).inert).toBe(true);
+  });
+
+  it('editor origin: a rejected delete is reported inside the still-open editor', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    vi.spyOn(organisms, 'delete').mockRejectedValue(new Error('boom'));
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Glider' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    await user.click(within(confirm).getByRole('button', { name: 'Delete Organism' }));
+
+    await waitFor(() => expect(confirmDialog()).toBeNull());
+    await waitFor(() =>
+      expect(within(editor).getByRole('alert')).toHaveTextContent(
+        'This organism could not be deleted. Nothing was changed — try again.',
+      ),
+    );
+    expect(document.querySelector('[data-delete-error]')).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBe(editor);
+  });
+
+  it('editor origin: a record deleted in another tab keeps the editor open with an in-editor alert, writes nothing and publishes no toast (review decision (b))', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Glider' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    // "Deleted in another tab": gone from storage, still on the Library's settled snapshot.
+    await organisms.delete(DELETE_UNUSED.id);
+    const del = vi.spyOn(organisms, 'delete');
+    // The ordering assertion, scoped to the stacked confirmation (the editor is a dialog too, and
+    // stays): at the first moment the alert exists, the confirmation is already gone.
+    const watch = watchFirstAppearance(
+      '[data-editor-delete-error]',
+      () => confirmDialog() !== null,
+    );
+    await user.click(within(confirm).getByRole('button', { name: 'Delete Organism' }));
+
+    await waitFor(() =>
+      expect(within(editor).getByRole('alert')).toHaveTextContent(
+        'This organism no longer exists. It may have been deleted in another tab.',
+      ),
+    );
+    watch.stop();
+    expect(watch.seen).toEqual([{ dialogPresent: false }]);
+    expect(confirmDialog()).toBeNull();
+    expect(del).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBe(editor);
+    expect(document.querySelector('[data-delete-error]')).toBeNull();
+    expect(toastNode()).toBeNull();
+    // The Library reloaded behind the editor: the card is gone, the badge dropped.
+    await waitFor(() => expect(countBadge()).toHaveTextContent('6 Organisms'));
+    // Second review decision (a): the editor's Delete is disabled while the alert shows — its only
+    // outcome would be this alert again, and a Cancel would have dismissed it. A disabled button
+    // cannot hold focus, so focus goes to Back (Sidiar, 2026-09-25) — not Save: an Enter held on
+    // the confirmation auto-repeats into the focused control after the fade, and on Save that
+    // re-creates the record the alert just reported gone; on Back it only closes the editor.
+    expect(within(editor).getByRole('button', { name: 'Delete Organism' })).toBeDisabled();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(editor).getByRole('button', { name: 'Back to Library' }),
+      ),
+    );
+  });
+
+  it('a second delete later in the session re-announces — the toast node re-mounts', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton('Glider'));
+    let dialog = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete Organism' }));
+    await waitFor(() => expect(toastNode()).not.toBeNull());
+    const first = toastNode();
+
+    await user.click(deleteButton('Vector Hunter'));
+    // Cleared at the START of the request.
+    expect(toastNode()).toBeNull();
+    dialog = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete Organism' }));
+    await waitFor(() => expect(toastNode()).not.toBeNull());
+
+    expect(toastNode()).not.toBe(first);
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(5));
+  });
+
+  it('has no axe violations with the confirmation open', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton('Glider'));
+    await screen.findByRole('dialog', { name: 'Delete Organism?' });
+
+    expect((await axe(document.body)).violations).toEqual([]);
+  });
+
+  it('has no axe violations with the toast shown and the protected card present', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(deleteButton('Glider'));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete Organism?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete Organism' }));
+    await waitFor(() => expect(toastNode()).not.toBeNull());
+    expect(deleteButton("Conway's Classic")).toBeDisabled();
+
+    expect((await axe(document.body)).violations).toEqual([]);
+  });
+
+  it('has no axe violations with the confirmation stacked over the editor', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Glider' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    await screen.findByRole('dialog', { name: 'Delete Organism?' });
+
+    expect((await axe(document.body)).violations).toEqual([]);
+  });
+
+  it('has no axe violations with the block dialog stacked over the editor', async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = deleteRig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Silent Vector' }));
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Delete Organism' }));
+    await screen.findByRole('dialog', { name: 'Cannot delete Silent Vector' });
 
     expect((await axe(document.body)).violations).toEqual([]);
   });

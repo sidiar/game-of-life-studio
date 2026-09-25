@@ -4,22 +4,26 @@ import { useId } from 'react';
 import { styled } from '@mui/material/styles';
 import type { Organism } from '@gol/domain';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
+import { PROTECTED_DELETE_MESSAGE } from '@/lib/organisms/usageLabels';
 
 // Mockup: .organism-card / .card-header / .organism-color / .organism-name / .card-stats /
 // .stat-item / .rules-preview / .card-actions / .action-btn / .organism-card.preloaded::before
 // (organism-library.html:192-261, 309-332, 404-444). Story 4.2's FD1 trimmed the mockup's usage
 // line, rules SENTENCE and action buttons off the card — Dominance/Aging/rule-count ship, "Used in
 // N battles" is FR-1.7's (4.19/4.20), the rules sentence needs Story 4.10's action/condition
-// vocabulary. Of the action row, Edit (Story 4.17) and Clone (Story 4.18) ship. Delete joins the
-// row in Story 4.21, but ONLY for a card whose verdict is `blocked` (FD2, the NFR-4.1 transitional
-// rule) — an `allowed` or `protected` card renders no Delete until Story 4.22 adds the confirm
-// path and the disabled state; a button that would do nothing is a dead affordance.
+// vocabulary. The action row is Edit (Story 4.17), Clone (Story 4.18) and Delete (Story 4.21's
+// block, Story 4.22's confirm and protected state): `<OrganismLibrary>` passes `onRequestDelete`
+// on every card, and the verdict behind it decides whether Delete confirms, explains a block, or —
+// on the protected default — renders disabled with its reason as visible text (M9, FD6).
 //
 // The tab-stop policy, decided in Story 4.17 (closing Story 4.2's provisional FD5) and extended in
-// Story 4.21: a card has Edit then Clone as its first two keyboard stops, and a THIRD — Delete —
-// only on a card that renders it. The 4.17 decision was "the article is not a stop", not "one stop
-// per card"; a stop wrapping a stop is legal but noisy, which is why the article itself stays out
-// of the tab order regardless of how many buttons it holds. `aria-labelledby` stays on the article
+// Stories 4.21/4.22: a card has Edit then Clone as its first two keyboard stops, and Delete as the
+// third on every card EXCEPT the protected one, where the native `disabled` button is skipped. Its
+// reason stays reachable anyway — as text in browse mode, and as the button's description
+// (`aria-describedby`) — so a keyboard user loses a dead stop, not the explanation. The 4.17
+// decision was "the article is not a stop", not "one stop per card"; a stop wrapping a stop is
+// legal but noisy, which is why the article itself stays out of the tab order regardless of how
+// many buttons it holds. `aria-labelledby` stays on the article
 // (it still names the region for a screen reader's landmark/article navigation), and
 // `:focus-within` still lifts the card when any button is focused, so the keyboard path keeps the
 // hover state (the Story 1.9 parity rule).
@@ -138,8 +142,8 @@ const RulesLine = styled('p')({
   margin: 0,
 });
 
-// Mockup: .card-actions (:309-312). Edit and Clone ship; Story 4.21 adds Delete to the row for a
-// blocked card, and Story 4.22 extends it to every card.
+// Mockup: .card-actions (:309-312). Edit, Clone and Delete — the last on every card the Library
+// passes a handler for, which since Story 4.22 is every card.
 const CardActions = styled('div')({
   display: 'flex',
   gap: '8px',
@@ -199,7 +203,10 @@ const ActionButton = styled('button')({
   '&[data-danger]': {
     color: 'var(--gol-danger)',
   },
-  '&[data-danger]:hover': {
+  // `:not(:disabled)`: this rule and `&:disabled:hover` above have equal specificity, so without
+  // it the LATER one wins and the protected card's disabled Delete would turn red on hover — the
+  // false affordance the disabled reset exists to remove (Story 4.22).
+  '&[data-danger]:hover:not(:disabled)': {
     borderColor: 'var(--gol-danger)',
   },
   '@media (prefers-reduced-motion: reduce)': {
@@ -208,8 +215,8 @@ const ActionButton = styled('button')({
 });
 
 // Mockup: .organism-card.preloaded::before (:220-232) — reimplemented as REAL TEXT, not a
-// pseudo-element, so it is in the accessibility tree and a screen reader hears why Delete will be
-// disabled once Story 4.22 adds it (AC3, M9). No `aria-label` on it (Story 4.2 review): a
+// pseudo-element, so it is in the accessibility tree beside the disabled Delete it explains (AC3,
+// M9; the reason itself is `ProtectedNote`, below). No `aria-label` on it (Story 4.2 review): a
 // role-less `<span>` is ARIA `generic`, where `aria-label` is PROHIBITED — assistive tech ignores
 // it and reads the text node anyway, and axe only files it as "needs review" (not a violation)
 // because the span has text, which is why the `[]`-violations assertions never caught it. The
@@ -229,11 +236,23 @@ const SystemTag = styled('span')({
   letterSpacing: '0.5px',
 });
 
+// Story 4.22, FD6: the protected Delete's reason, as visible text under the action row — a native
+// `disabled` button is out of the tab order, so a `title` or tooltip (the mockup's hover shortcut)
+// would never reach a keyboard or touch user. The `RulesLine` treatment (12px, secondary text), so
+// no new token and no raw hex (AR-46).
+const ProtectedNote = styled('p')({
+  fontSize: '12px',
+  color: 'var(--gol-text-secondary)',
+  margin: '8px 0 0',
+});
+
 export interface OrganismCardProps {
   organism: Organism;
   /**
-   * Passed by `<OrganismLibrary>`, which owns the M9 knowledge (`organism.id === CONWAYS_CLASSIC_ID`)
-   * — this card stays dumb about which organism is protected.
+   * The protected default (M9): the SYSTEM tag, the accent border, and — when Delete renders — a
+   * DISABLED Delete with its reason as visible text (Story 4.22). `<OrganismLibrary>` passes the
+   * delete verdict's `protected` kind, so M9 has one source; this card stays dumb about which
+   * organism is protected and why.
    */
   system?: boolean;
   /**
@@ -257,11 +276,11 @@ export interface OrganismCardProps {
   cloning?: boolean;
   /**
    * The Delete button's click (Story 4.21, FD2). Renders the third `ActionButton` iff this prop is
-   * PRESENT — never a `deletable` boolean plus a fixed handler — so `<OrganismLibrary>` decides
-   * whether Delete exists at all by whether it passes the prop. Story 4.21 passes it only for a
-   * `blocked` verdict (an `allowed` or `protected` card gets none until Story 4.22). The card
-   * knows nothing about usage, verdicts or indexes — the `<BattleTile>` `onRequestDelete(): void`
-   * contract, again.
+   * PRESENT — never a `deletable` boolean plus a fixed handler — so a caller decides whether Delete
+   * exists at all by whether it passes the prop. `<OrganismLibrary>` passes it on every card since
+   * Story 4.22; a surface that passes none keeps rendering no Delete. On a `system` card the button
+   * renders `disabled` and this is never called. The card knows nothing about usage, verdicts or
+   * indexes — the `<BattleTile>` `onRequestDelete(): void` contract, again.
    */
   onRequestDelete?(): void;
 }
@@ -272,8 +291,8 @@ export interface OrganismCardProps {
  * page boundary and passes down resolved records, never a repository reference, to this component.
  * The Edit (Story 4.17) and Clone (Story 4.18) actions render on EVERY card, Conway's Classic
  * included: M9 protects it from deletion, not from editing or cloning. Delete (Story 4.21) renders
- * only when `onRequestDelete` is passed — the Library's job, not this component's — until
- * Story 4.22 extends it to every card.
+ * only when `onRequestDelete` is passed — the Library's job, not this component's — and on the
+ * `system` card it renders disabled, with the reason beside it (Story 4.22).
  */
 export default function OrganismCard({
   organism,
@@ -288,6 +307,8 @@ export default function OrganismCard({
   // (`BattleNameField.tsx:110-113`'s precedent), and a hardcoded id breaks the moment the grid
   // renders a second card.
   const nameId = useId();
+  const protectedNoteId = useId();
+  const deleteProtected = system && onRequestDelete !== undefined;
 
   return (
     <Card aria-labelledby={nameId} data-system={system ? '' : undefined}>
@@ -330,21 +351,29 @@ export default function OrganismCard({
         >
           Clone
         </ActionButton>
-        {/* Story 4.21: the third stop, rendered iff the Library passed the prop (a `blocked`
-            verdict). `data-danger` selects the red variant above; `data-delete-organism-id` is the
-            focus-restore lookup key (FD9), the same pattern Edit/Clone's own attributes set. */}
+        {/* The third stop, rendered iff the Library passed the prop. `data-danger` selects the
+            red variant above; `data-delete-organism-id` is the focus-restore lookup key (Story 4.21
+            FD9, Story 4.22 FD8). On the protected card: native `disabled` (M9's wording, the
+            mockup's `:442`), described by the note below (FD6). */}
         {onRequestDelete !== undefined && (
           <ActionButton
             type="button"
             aria-label={`Delete ${display.name}`}
+            aria-describedby={deleteProtected ? protectedNoteId : undefined}
             data-delete-organism-id={organism.id}
             data-danger=""
+            disabled={deleteProtected}
             onClick={() => onRequestDelete()}
           >
             Delete
           </ActionButton>
         )}
       </CardActions>
+      {deleteProtected && (
+        <ProtectedNote id={protectedNoteId} data-protected-note="">
+          {PROTECTED_DELETE_MESSAGE}
+        </ProtectedNote>
+      )}
       {system && <SystemTag>SYSTEM</SystemTag>}
     </Card>
   );

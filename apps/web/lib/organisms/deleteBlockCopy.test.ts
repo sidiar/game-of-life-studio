@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   BATTLE_BLOCK_REMEDY,
   battleBlockSentence,
+  DELETE_CONFIRM_ACTION,
+  DELETE_CONFIRM_TITLE,
   deleteBlockTitle,
+  deleteConfirmSentence,
   RULE_BLOCK_REMEDY,
   ruleBlockSentence,
 } from './deleteBlockCopy';
@@ -34,5 +37,13 @@ describe('ruleBlockSentence', () => {
 
   it('exports the remedy verbatim', () => {
     expect(RULE_BLOCK_REMEDY).toBe('Edit those rules to remove the reference, then try again.');
+  });
+});
+
+describe('the Story 4.22 confirmation copy', () => {
+  it("asks FR-1.4's question verbatim, quoting the display name", () => {
+    expect(DELETE_CONFIRM_TITLE).toBe('Delete Organism?');
+    expect(deleteConfirmSentence('Glider')).toBe('Are you sure you want to delete “Glider”?');
+    expect(DELETE_CONFIRM_ACTION).toBe('Delete Organism');
   });
 });

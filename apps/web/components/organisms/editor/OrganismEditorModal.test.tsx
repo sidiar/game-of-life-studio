@@ -17,6 +17,8 @@ import { displayColor, MAX_AGE_SHADE } from '@/lib/palette/displayColor';
 import { PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
 import { ruleActionLabel, RULE_NEEDS_CONDITION } from '@/lib/organisms/ruleDraft';
 import { ORGANISM_NAME_REQUIRED } from '@/lib/organisms/organismName';
+import { PROTECTED_DELETE_MESSAGE } from '@/lib/organisms/usageLabels';
+import { ORGANISM_DELETE_FAILED, ORGANISM_DELETE_GONE } from '@/lib/organisms/saveOutcome';
 import { computeGridLayout } from '@/lib/canvas/gridLayout';
 import { PREVIEW_GRID_SIZE } from '@/lib/organisms/previewGrid';
 import { ruleContentHash } from '@/lib/organisms/ruleContentHash';
@@ -68,6 +70,10 @@ function mountModal(
     /** Story 4.20: the battle summaries behind the footer's "Used in N Battles". The default `[]`
      * is "no battle places anything", which is what every earlier case here assumed. */
     battleSummaries?: readonly BattleSummaries[number][];
+    /** Story 4.22: the Column-1 Delete's callback; absent (the default) renders no Delete. */
+    onRequestDelete?: () => void;
+    /** Story 4.22, FD12: an editor-origin delete refusal the Library published. */
+    deleteError?: string | null;
   } = {},
 ) {
   const library = overrides.library ?? LIBRARY;
@@ -87,6 +93,8 @@ function mountModal(
       battleSummaries={overrides.battleSummaries ?? NO_BATTLES}
       organisms={organisms}
       onSaved={onSaved}
+      onRequestDelete={overrides.onRequestDelete}
+      deleteError={overrides.deleteError}
     />,
   );
   return { ...result, organisms, onSaved, onClose };
@@ -2501,6 +2509,130 @@ describe('OrganismEditorModal', () => {
 
         expect(within(footer).getByRole('button', { name: 'Used in 2 Battles' })).toHaveFocus();
       });
+    });
+  });
+
+  // Story 4.22 (FD1 (a), FD6, FD10, FD11, FD12): the Column-1 "Delete Organism". The editor only
+  // renders it and reports the click — the verdict, dialogs and write are the Library's, pinned in
+  // `OrganismLibrary.test.tsx`.
+  describe('Delete Organism (Story 4.22)', () => {
+    const [AGGRESSIVE] = createMockOrganisms();
+    const deleteOrganism = () => screen.queryByRole('button', { name: 'Delete Organism' });
+
+    it('renders no Delete in a create session, even with the callback passed', () => {
+      mountModal({ onRequestDelete: vi.fn() });
+
+      expect(deleteOrganism()).toBeNull();
+    });
+
+    it("renders no Delete after a create session's first Save either (FD11)", async () => {
+      const user = userEvent.setup();
+      const onSaved = vi.fn();
+      mountModal({ onRequestDelete: vi.fn(), onSaved });
+
+      const dialog = screen.getByRole('dialog');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+
+      expect(deleteOrganism()).toBeNull();
+    });
+
+    it('renders no Delete in an edit session when no callback is passed', () => {
+      mountModal({ organism: AGGRESSIVE });
+
+      expect(deleteOrganism()).toBeNull();
+    });
+
+    it('renders Delete at the bottom of Basic Information in an edit session, and a click calls the prop', async () => {
+      const user = userEvent.setup();
+      const onRequestDelete = vi.fn();
+      mountModal({ organism: AGGRESSIVE, onRequestDelete });
+
+      const button = deleteOrganism() as HTMLElement;
+      expect(button).toBeEnabled();
+      expect(button).toHaveAttribute('data-editor-delete-organism');
+      const column = screen.getByRole('region', { name: 'Basic Information' });
+      expect(column).toContainElement(button);
+      await user.click(button);
+
+      expect(onRequestDelete).toHaveBeenCalledTimes(1);
+      expect(onRequestDelete).toHaveBeenCalledWith();
+    });
+
+    it("is disabled for Conway's Classic, described by the visible protected message", async () => {
+      const user = userEvent.setup();
+      const onRequestDelete = vi.fn();
+      mountModal({ organism: CONWAYS_CLASSIC, onRequestDelete });
+
+      const button = deleteOrganism() as HTMLElement;
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleDescription(PROTECTED_DELETE_MESSAGE);
+      expect(screen.getByText(PROTECTED_DELETE_MESSAGE)).toBeVisible();
+      await user.click(button);
+      expect(onRequestDelete).not.toHaveBeenCalled();
+    });
+
+    it('is disabled while a save is in flight', async () => {
+      const user = userEvent.setup();
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      let resolveSave!: () => void;
+      vi.spyOn(organisms, 'save').mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave = resolve;
+          }),
+      );
+      mountModal({ organism: AGGRESSIVE, organisms, onRequestDelete: vi.fn() });
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(deleteOrganism()).toBeDisabled());
+
+      await act(async () => resolveSave());
+      await waitFor(() => expect(deleteOrganism()).toBeEnabled());
+    });
+
+    it('renders a published delete refusal as an alert inside the editor (FD12)', () => {
+      mountModal({
+        organism: AGGRESSIVE,
+        onRequestDelete: vi.fn(),
+        deleteError: 'This organism could not be deleted. Nothing was changed — try again.',
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'This organism could not be deleted. Nothing was changed — try again.',
+      );
+    });
+
+    it('is disabled while the record-gone alert shows, and only for that sentence (second review decision (a))', () => {
+      const first = mountModal({
+        organism: AGGRESSIVE,
+        onRequestDelete: vi.fn(),
+        deleteError: ORGANISM_DELETE_GONE,
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(ORGANISM_DELETE_GONE);
+      expect(deleteOrganism()).toBeDisabled();
+      // FD6: the disabled button's reason travels with it (third-pass review).
+      expect(deleteOrganism()).toHaveAccessibleDescription(ORGANISM_DELETE_GONE);
+      first.unmount();
+
+      // A refused delete (FD12) leaves Delete enabled: a retry is that alert's whole point.
+      mountModal({
+        organism: AGGRESSIVE,
+        onRequestDelete: vi.fn(),
+        deleteError: ORGANISM_DELETE_FAILED,
+      });
+      expect(deleteOrganism()).toBeEnabled();
+      expect(deleteOrganism()).not.toHaveAccessibleDescription();
+    });
+
+    it('has no axe violations with Delete rendered, enabled and protected', async () => {
+      const first = mountModal({ organism: AGGRESSIVE, onRequestDelete: vi.fn() });
+      expect((await axe(document.body)).violations).toEqual([]);
+      first.unmount();
+
+      mountModal({ organism: CONWAYS_CLASSIC, onRequestDelete: vi.fn() });
+      expect((await axe(document.body)).violations).toEqual([]);
     });
   });
 });

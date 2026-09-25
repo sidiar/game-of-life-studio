@@ -139,6 +139,37 @@ describe('useInertBackground', () => {
     expect(isInert(late)).toBe(false);
   });
 
+  /**
+   * Story 4.22 review (2026-09-25): two instances at once — a dialog stacked over the editor. MUI
+   * marks the editor's own portal aria-hidden when the nested modal mounts, and BOTH observers see
+   * it, the editor's first (registered first). With a map per instance the stacked one recorded
+   * `inert: true` as the portal's prior state and its cleanup handed the editor back dead
+   * (measured in Chromium; the e2e "Cancel on the stacked confirmation" pins the browser).
+   */
+  it('a stacked instance releases what the under-modal instance also holds, once MUI un-hides it', async () => {
+    const root = appendBackground(true);
+    const under = render(<Probe active />);
+    expect(isInert(root)).toBe(true);
+
+    // The under-modal's own portal, hidden by the nested modal's mount; the second instance opens
+    // over it (a `dynamic()` chunk: it activates before its Modal marks anything).
+    const editorPortal = appendBackground(false);
+    const stacked = render(<Probe active />);
+    editorPortal.setAttribute('aria-hidden', 'true');
+    await flushObservers();
+    expect(isInert(editorPortal)).toBe(true);
+
+    // The nested modal closes: MUI lifts its aria-hidden from the portal, then the stacked
+    // instance cleans up. The editor must be live again; the page root stays inert under it.
+    editorPortal.removeAttribute('aria-hidden');
+    stacked.unmount();
+    expect(isInert(editorPortal)).toBe(false);
+    expect(isInert(root)).toBe(true);
+
+    under.unmount();
+    expect(isInert(root)).toBe(false);
+  });
+
   it('does not strand an element inert when a sweep runs twice over it', async () => {
     const hidden = appendBackground(true);
     const { unmount } = render(<Probe active />);
