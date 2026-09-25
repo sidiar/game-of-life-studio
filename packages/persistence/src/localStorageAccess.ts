@@ -1,5 +1,6 @@
-import { CURRENT_FORMAT_VERSION } from '@gol/domain';
-import { CorruptDataError } from './errors';
+import { CURRENT_FORMAT_VERSION, isFormatMigrationError, migrate } from '@gol/domain';
+import type { MigratableDocument, Migrator } from '@gol/domain';
+import { CorruptDataError, NewerFormatVersionError } from './errors';
 import type { StorageUsage } from './repositories';
 
 // The flat, prefixed key namespace (RFC-006 Decision 7 / AR-9). Centralised so no repository
@@ -56,7 +57,10 @@ function writeKey(key: StorageKey, value: unknown): void {
   // serialised BEFORE localStorage is touched, then handed over in a single setItem. Nothing
   // clears, empties, or incrementally appends to the key first, so a quota failure leaves the
   // previous value byte-identical — the write simply did not happen.
-  const candidate = JSON.stringify(value);
+  commitCandidate(key, JSON.stringify(value));
+}
+
+function commitCandidate(key: StorageKey, candidate: string): void {
   try {
     localStorage.setItem(key, candidate);
   } catch (error) {
@@ -76,8 +80,10 @@ export function readStoredValue(key: StorageKey): unknown {
   }
 }
 
-/** An id-keyed collection (`gol:battles`, `gol:organisms`); `{}` when never written. */
-export function readCollection(key: StorageKey): Record<string, unknown> {
+// The raw collection read, WITHOUT the format check. `ensureCurrentAtRestFormat` needs both
+// collections before it can decide anything, and reading them through `readCollection` would
+// re-enter the check and recurse.
+function readRawCollection(key: StorageKey): Record<string, unknown> {
   const parsed = readStoredValue(key);
   if (parsed === undefined) return {};
   // An array parses as JSON but would hand every downstream consumer numeric "ids".
@@ -85,6 +91,173 @@ export function readCollection(key: StorageKey): Record<string, unknown> {
     throw new CorruptDataError(key, 'expected an object keyed by id');
   }
   return parsed as Record<string, unknown>;
+}
+
+// Plain objects only: a `Map` or a class instance is an object too, and `JSON.stringify` renders
+// either as `{}` — the write-back would then wipe the collection and restamp it as migrated.
+function asCollection(key: StorageKey, value: unknown): Record<string, unknown> {
+  const proto: unknown =
+    typeof value === 'object' && value !== null ? Object.getPrototypeOf(value) : undefined;
+  if (Array.isArray(value) || (proto !== Object.prototype && proto !== null)) {
+    throw new CorruptDataError(key, 'a format migration did not produce an object keyed by id');
+  }
+  return value as Record<string, unknown>;
+}
+
+// `migrate` stamps `currentVersion` after every step, so this only guards an injected migrator —
+// but a stamp of `{}` or `"2"` would make every later read throw, which is worth one comparison.
+function asFormatVersion(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new CorruptDataError(STORAGE_KEYS.schema, 'a format migration did not produce a version');
+  }
+  return value;
+}
+
+function memoize<T>(read: () => T): () => T {
+  let cached: { value: T } | undefined;
+  return () => (cached ??= { value: read() }).value;
+}
+
+/*
+ * THE AT-REST FORMAT CHECK (AR-11 / Decision I.3): the same `migrate()` that file import runs, at
+ * the other boundary. Runs on EVERY collection read AND every data write (`writeDataKey`),
+ * statelessly — not once at bootstrap, because `/battle?id=` deep-links read the repositories
+ * without any bootstrap hook, and not behind a module-level "already migrated" flag, which would go
+ * stale the moment another tab migrates. Writes need their own call: `replaceAll` builds a whole
+ * collection without reading first, and a write that skipped the check would land current-format
+ * data under a stale stamp — for the next read to migrate AGAIN, or to reject as newer-version.
+ * The cost is one `getItem` and a ~20-byte `JSON.parse`. `gol:settings` is outside the chain
+ * (Decision F): it is never in any envelope and self-heals through `SettingsSchema`'s defaults.
+ *
+ * A thrown `FormatMigrationError` is surfaced with the migration error as `cause`, before anything
+ * is written, so the store is left exactly as it was:
+ *   - `'newer-version'` -> `NewerFormatVersionError` — a newer build's data. NOT corruption: the
+ *                          data is intact, a reload into that build is the fix, and a reset would
+ *                          destroy it. A `CorruptDataError` subclass, so every existing
+ *                          non-destructive "can't read your data" path still handles it, while a
+ *                          UI tells it apart by class without reaching into `cause`;
+ *   - anything else     -> plain `CorruptDataError` — a stamp with no usable version (NFR-7.3), or
+ *                          a `'missing-step'`, which the registry-integrity test makes unreachable
+ *                          for the production registry (a programming error, not the data's).
+ *
+ * Exported for tests only (the injected `migrator` is how the write-back path is reachable while
+ * the real registry is empty); the package barrel does not re-export it.
+ */
+export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
+  const lazyBattles = memoize(() => readRawCollection(STORAGE_KEYS.battles));
+  const lazyOrganisms = memoize(() => readRawCollection(STORAGE_KEYS.organisms));
+
+  // Absent ⇒ fresh store, or only settings were ever written (settings never stamp).
+  const stamp = readStoredValue(STORAGE_KEYS.schema);
+  if (stamp === undefined) return;
+  if (typeof stamp !== 'object' || stamp === null || Array.isArray(stamp)) {
+    throw new CorruptDataError(STORAGE_KEYS.schema, 'expected a { formatVersion } record');
+  }
+
+  // Raw JSON, no Zod parse — migration runs BEFORE validation here too. The envelope's own
+  // top-level names, so a step reads the same keys at either boundary. The collections are LAZY:
+  // the identity path never touches them, so a current store pays for the stamp alone, and a
+  // corrupt `gol:battles` cannot make an organism read fail. A step that does read one gets the
+  // same CorruptDataError `readCollection` would have thrown.
+  const doc = {
+    formatVersion: (stamp as { formatVersion?: unknown }).formatVersion,
+    get battles() {
+      return lazyBattles();
+    },
+    get organisms() {
+      return lazyOrganisms();
+    },
+  };
+
+  let migrated: MigratableDocument;
+  try {
+    migrated = migrator(doc, 'at-rest');
+  } catch (error) {
+    if (isFormatMigrationError(error)) {
+      // `migrate` only reaches 'newer-version' past its integer check, so `foundVersion` is a
+      // number there — but an injected migrator (the test seam) is under no such contract, and
+      // `FormatMigrationError.foundVersion` is typed `unknown`. Checked rather than cast, so the
+      // subclass's `foundVersion: number` never lies; a non-numeric one is "no usable version".
+      if (error.code === 'newer-version' && typeof error.foundVersion === 'number') {
+        throw new NewerFormatVersionError(
+          STORAGE_KEYS.schema,
+          error.foundVersion,
+          error.supportedVersion,
+          error.message,
+          { cause: error },
+        );
+      }
+      throw new CorruptDataError(STORAGE_KEYS.schema, error.message, { cause: error });
+    }
+    throw error;
+  }
+  // Identity passthrough: the stored data is already current. The only path reachable while the
+  // registry is empty.
+  if (migrated === doc) return;
+
+  writeBackMigrated(
+    asCollection(STORAGE_KEYS.battles, migrated['battles']),
+    asCollection(STORAGE_KEYS.organisms, migrated['organisms']),
+    asFormatVersion(migrated['formatVersion']),
+  );
+}
+
+/*
+ * WRITE-BACK ORDERING IS LOAD-BEARING, and differs from `stampSchemaVersion`'s on purpose.
+ * Migration steps are NOT idempotent, and localStorage has no multi-key transaction, so every
+ * failure must leave either the fully-old store or the fully-new one — never migrated data under
+ * an old stamp:
+ *
+ *   data written, stamp not    -> the next load re-runs the steps over already-migrated data.
+ *                                 So a stamp-write failure ALSO restores both data originals.
+ *   battles written, organisms  -> half the store is on the new format. Restore battles.
+ *   not
+ *
+ * Both candidates are serialised before storage is touched (the `writeKey` discipline), the
+ * originals are captured, and the stamp is OVERWRITTEN last — `stampSchemaVersion()` only writes
+ * an absent stamp, which is the wrong tool here. The original error (a `QuotaExceededError` stays
+ * one) is rethrown after the rollback.
+ */
+function writeBackMigrated(
+  battles: Record<string, unknown>,
+  organisms: Record<string, unknown>,
+  formatVersion: number,
+): void {
+  const candidates = [
+    [STORAGE_KEYS.battles, JSON.stringify(battles)],
+    [STORAGE_KEYS.organisms, JSON.stringify(organisms)],
+    [STORAGE_KEYS.schema, JSON.stringify({ formatVersion })],
+  ] as const;
+  const originals = [
+    [STORAGE_KEYS.battles, localStorage.getItem(STORAGE_KEYS.battles)],
+    [STORAGE_KEYS.organisms, localStorage.getItem(STORAGE_KEYS.organisms)],
+  ] as const;
+  // Only the keys a commit actually overwrote are rolled back: a `setItem` that threw left its key
+  // byte-identical, and touching an untouched key is the one way the rollback could lose data.
+  const committed = new Set<StorageKey>();
+  try {
+    for (const [key, candidate] of candidates) {
+      commitCandidate(key, candidate);
+      committed.add(key);
+    }
+  } catch (error) {
+    // Remove the overwritten keys, THEN restore: restoring one original beside the other's migrated
+    // (possibly larger) value could itself exceed the quota, whereas the originals alone fit — the
+    // store held exactly them a moment ago. The caller gets the write's error, not a rollback
+    // artefact. The stamp is always last, so it is never in the set.
+    const overwritten = originals.filter(([key]) => committed.has(key));
+    for (const [key] of overwritten) localStorage.removeItem(key);
+    for (const [key, original] of overwritten) {
+      if (original !== null) localStorage.setItem(key, original);
+    }
+    throw error;
+  }
+}
+
+/** An id-keyed collection (`gol:battles`, `gol:organisms`); `{}` when never written. */
+export function readCollection(key: StorageKey): Record<string, unknown> {
+  ensureCurrentAtRestFormat();
+  return readRawCollection(key);
 }
 
 /*
@@ -106,15 +279,23 @@ function stampSchemaVersion(): void {
 /**
  * Fresh ⇔ no `gol:schema` record exists (RFC-006 Decision 7) — this is the storage-specific
  * ANSWER to the mode-agnostic "has this workspace ever been initialized?" question that
- * AppRepositories.isFreshWorkspace() asks. Presence-only check (not the stamp's value — Decision
- * I asserts stamps, never branches on them).
+ * AppRepositories.isFreshWorkspace() asks. Presence-only, because freshness is a presence question:
+ * "was anything ever written?". The stamp's VALUE is `formatVersion` — the one version Decision I
+ * does allow a branch on — and it is read by the format check (`ensureCurrentAtRestFormat`), not
+ * here.
  */
 export function hasSchemaStamp(): boolean {
   return localStorage.getItem(STORAGE_KEYS.schema) !== null;
 }
 
-/** The write path for workspace DATA (battles, organisms): write, then stamp (AC2). */
+/**
+ * The write path for workspace DATA (battles, organisms): check the format, write, then stamp
+ * (AC2). The check runs here and not only in `readCollection` because `replaceAll` never reads —
+ * see THE AT-REST FORMAT CHECK above. It throws before the write, so a store on a newer format is
+ * never overwritten by this build (AR-11).
+ */
 export function writeDataKey(key: StorageKey, value: unknown): void {
+  ensureCurrentAtRestFormat();
   writeKey(key, value);
   try {
     stampSchemaVersion();

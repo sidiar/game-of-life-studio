@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BattleSchema, type Battle } from '@gol/domain';
+import { BattleSchema, CURRENT_FORMAT_VERSION, type Battle } from '@gol/domain';
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
-import { CorruptDataError } from './errors';
+import { CorruptDataError, NewerFormatVersionError } from './errors';
 import { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
@@ -223,6 +223,36 @@ describe('quota (AC3)', () => {
     });
 
     await expect(repo().save(makeBattle(ID_B, 'Rejected'))).rejects.toThrow(QuotaExceededError);
+    expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe(before);
+  });
+});
+
+describe('the at-rest format check (Story 5.7)', () => {
+  // `list()`/`listFull()` skip a single unreadable record; a whole store on a newer format is a
+  // different fault and must not be skipped past as "no battles".
+  it('rejects load, list and listFull with CorruptDataError on a newer gol:schema stamp', async () => {
+    await repo().save(makeBattle(ID_A));
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
+    );
+
+    await expect(repo().load(ID_A)).rejects.toThrow(NewerFormatVersionError);
+    await expect(repo().list()).rejects.toThrow(NewerFormatVersionError);
+    await expect(repo().listFull()).rejects.toThrow(NewerFormatVersionError);
+  });
+
+  it('rejects replaceAll on a newer stamp and leaves the store byte-identical', async () => {
+    // The one write that never reads first; without its own check it would overwrite the newer
+    // build's data and leave that build's stamp behind.
+    await repo().save(makeBattle(ID_A));
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
+    );
+    const before = localStorage.getItem(STORAGE_KEYS.battles);
+
+    await expect(repo().replaceAll([makeBattle(ID_B)])).rejects.toThrow(NewerFormatVersionError);
     expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe(before);
   });
 });

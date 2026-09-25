@@ -1453,7 +1453,7 @@ So that a bad browser state never leaves me with a broken app.
 **Acceptance Criteria:**
 
 **Given** app load, **When** any `gol:*` namespace fails parsing or schema validation, **Then** the app renders a graceful error explaining the situation instead of crashing (NFR-7.3)
-**And** the error offers a reset to the default workspace (the 5.10 path) as the recovery action; declining leaves the stored data untouched for manual rescue
+**And** the error offers a reset to the default workspace (the 5.10 path) as the recovery action; declining leaves the stored data untouched for manual rescue — **except** a `NewerFormatVersionError` (`@gol/persistence`; a `CorruptDataError` subclass, so test it first): the data is intact and a newer build reads it, so the only recovery offered is a reload, never a reset (owner decision, Story 5.7 review, 2026-09-25 — see the 5.11 hand-off in `deferred-work.md`)
 **And** an unknown organism id encountered defensively falls back per NFR-7.3 rather than blocking load
 **And** corruption scenarios are integration-tested per namespace
 
