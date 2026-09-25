@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -573,7 +573,7 @@ decision, four patches, one dismissed.
   residual under the 4.23 editor-state pass, beside the alert-lifecycle entry. Left for Sidiar;
   nothing changed here.
   **Resolved 2026-09-25 (Sidiar): (a)**: disable the editor's Delete while the GONE alert shows.
-- [ ] [Review][Patch] **Build the (a) resolution above** [`apps/web/components/organisms/editor/OrganismEditorModal.tsx`]:
+- [x] [Review][Patch] **Build the (a) resolution above** [`apps/web/components/organisms/editor/OrganismEditorModal.tsx`]:
   the editor's `DeleteOrganismButton` is `disabled` while `deleteError === ORGANISM_DELETE_GONE`,
   alongside the existing `isSaving` and `deleteProtected` conditions. Add a test that the button is
   disabled once the GONE alert is published. Keep focus somewhere valid: the (b) build restores
@@ -986,6 +986,14 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   95; build ✓; bundle ✓ (`/organisms` 300.4 KB vs 300.3 KB baseline, +0.1 KB; every other route
   +0.0 — no baseline refresh); bench 8.618 ms / 16.667 ms; e2e Chromium 282 passed.
 
+- Second-pass decision (a) build (2026-09-25): the new editor test and the amended Library test
+  went red first (Delete enabled; focus on Delete), green after the change. `npm run ci:dev`
+  (redirected to a file, `$?` read directly): **exit 0** on the first run — typecheck ✓; lint 0
+  errors, the 1 pre-existing `BattleGallery.tsx:248` warning; format ✓; spec:check ✓ (274 ids);
+  boundary ✓; coverage — web 131 files / 2216 tests, domain 212, simulation 408, persistence 103,
+  test-utils 95; build ✓; bundle ✓ (`/organisms` 300.4 KB vs 300.3 KB baseline, +0.1 KB; every
+  other route +0.0 — no baseline refresh); bench 7.411 ms / 16.667 ms; e2e Chromium 282 passed.
+
 ### Completion Notes List
 
 - **AC1/AC9**: every Library card passes `onRequestDelete`; `system` comes from
@@ -1033,6 +1041,17 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   another tab keeps the editor open with an in-editor alert…", with a publish-after-the-
   confirmation's-exit ordering assertion); the card-origin hook test now also asserts no editor
   alert.
+- ✅ Resolved review finding [Patch]: **the second-pass (a) resolution — the editor's Delete is
+  disabled while the record-gone alert shows**. `OrganismEditorModal`'s `DeleteOrganismButton` is
+  `disabled={isSaving || deleteProtected || deleteError === ORGANISM_DELETE_GONE}`; a refusal
+  (`ORGANISM_DELETE_FAILED`) leaves it enabled, since a retry is that alert's point. Focus: the (b)
+  build restored focus to that Delete, which is now disabled on the same commit and cannot take
+  focus, so the gone branch sets a new `editor-save` restore intent in `useOrganismDelete` and the
+  focus effect lands on the editor's Save (new `data-editor-save` lookup key) — the editor's
+  primary action, and the one the alert's re-create path runs through. The card origin is
+  unchanged (Create). Tests: editor ("is disabled while the record-gone alert shows, and only for
+  that sentence", red before the change) and the Library's editor-origin gone test (Delete disabled,
+  focus on Save — red before the change, it previously asserted focus on Delete).
 - **Owner questions open, defaults implemented**: FD13 (the card-content deferrals re-pointed to the
   next card-content change / Epic 4 UX touch) and FD12 (the failure sentence as written). Both are
   also listed at the end of this story's `deferred-work.md` section.
@@ -1111,6 +1130,11 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   editor's Delete after the GONE alert (still enabled; a repeat Delete → Cancel dismisses the
   alert). Local `npm run ci:dev` on `bd21831` before the patches: exit 0 on the first run
   (web 131 files, e2e Chromium 282 passed). Status → in-progress.
+
+- 2026-09-25: Addressed code review findings — 1 item resolved: Sidiar's second-pass decision (a).
+  The editor's Delete is disabled while `ORGANISM_DELETE_GONE` shows; focus after that alert goes
+  to the editor's Save (new `editor-save` restore intent, `data-editor-save` key) instead of the
+  now-disabled Delete. Editor and Library tests. Status → review.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none

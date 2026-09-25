@@ -18,6 +18,7 @@ import { PALETTE, resolvePaletteColor } from '@/lib/palette/paletteRegistry';
 import { ruleActionLabel, RULE_NEEDS_CONDITION } from '@/lib/organisms/ruleDraft';
 import { ORGANISM_NAME_REQUIRED } from '@/lib/organisms/organismName';
 import { PROTECTED_DELETE_MESSAGE } from '@/lib/organisms/usageLabels';
+import { ORGANISM_DELETE_FAILED, ORGANISM_DELETE_GONE } from '@/lib/organisms/saveOutcome';
 import { computeGridLayout } from '@/lib/canvas/gridLayout';
 import { PREVIEW_GRID_SIZE } from '@/lib/organisms/previewGrid';
 import { ruleContentHash } from '@/lib/organisms/ruleContentHash';
@@ -2601,6 +2602,25 @@ describe('OrganismEditorModal', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(
         'This organism could not be deleted. Nothing was changed — try again.',
       );
+    });
+
+    it('is disabled while the record-gone alert shows, and only for that sentence (second review decision (a))', () => {
+      const first = mountModal({
+        organism: AGGRESSIVE,
+        onRequestDelete: vi.fn(),
+        deleteError: ORGANISM_DELETE_GONE,
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(ORGANISM_DELETE_GONE);
+      expect(deleteOrganism()).toBeDisabled();
+      first.unmount();
+
+      // A refused delete (FD12) leaves Delete enabled: a retry is that alert's whole point.
+      mountModal({
+        organism: AGGRESSIVE,
+        onRequestDelete: vi.fn(),
+        deleteError: ORGANISM_DELETE_FAILED,
+      });
+      expect(deleteOrganism()).toBeEnabled();
     });
 
     it('has no axe violations with Delete rendered, enabled and protected', async () => {

@@ -41,7 +41,7 @@ import { appendRule, createNewRuleDraft, type RuleDraft } from '@/lib/organisms/
 import { readGridColors } from '@/lib/canvas/themeColors';
 import { projectOrganismForSave } from '@/lib/organisms/organismRecord';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
-import { saveOutcomeMessage } from '@/lib/organisms/saveOutcome';
+import { ORGANISM_DELETE_GONE, saveOutcomeMessage } from '@/lib/organisms/saveOutcome';
 import {
   PROTECTED_DELETE_MESSAGE,
   referencingOrganismNames,
@@ -158,7 +158,8 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
   /**
    * Story 4.22, FD12: an editor-origin delete the Library could not complete — or, since the
    * story's review decision (b), one whose re-verify found the record already deleted in another
-   * tab (`ORGANISM_DELETE_GONE`; the editor stays open on it). Rendered INSIDE the editor, in the
+   * tab (`ORGANISM_DELETE_GONE`; the editor stays open on it, with its Delete disabled while the
+   * sentence shows — second review decision (a)). Rendered INSIDE the editor, in the
    * `SaveErrorLine` idiom, because the editor stays open (nothing was deleted) and a Library-side
    * alert would sit under it, inert and unheard. Published by the Library only once the stacked
    * dialog has exited; `null`/absent is "nothing to report".
@@ -805,6 +806,9 @@ export default function OrganismEditorModal({
               disabled={isSaving}
               sx={SAVE_SX}
               ref={saveButtonRef}
+              // Story 4.22: the focus-restore key after the record-gone alert, which disables the
+              // editor's Delete (`useOrganismDelete`'s `editor-save` restore intent).
+              data-editor-save=""
             >
               Save
             </Button>
@@ -885,13 +889,16 @@ export default function OrganismEditorModal({
                 {/* Story 4.22 (FD1 (a), FD10, FD11): the bottom of Column 1, edit sessions only.
                     `data-editor-delete-organism` is the focus-restore key after a stacked dialog
                     closes (FD8). Disabled while a save is in flight — a delete must not race the
-                    write — and for the protected default, whose reason renders beneath it. */}
+                    write — for the protected default, whose reason renders beneath it, and while
+                    the record-gone alert shows (second review decision (a)): its only outcome
+                    would be that alert again, and a Cancel would have dismissed it. A refusal
+                    (`ORGANISM_DELETE_FAILED`) leaves it enabled — a retry is that alert's point. */}
                 {organism !== null && onRequestDelete !== undefined && (
                   <>
                     <DeleteOrganismButton
                       type="button"
                       data-editor-delete-organism=""
-                      disabled={isSaving || deleteProtected}
+                      disabled={isSaving || deleteProtected || deleteError === ORGANISM_DELETE_GONE}
                       aria-describedby={deleteProtected ? protectedNoteId : undefined}
                       onClick={() => onRequestDelete()}
                     >

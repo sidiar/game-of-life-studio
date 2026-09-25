@@ -61,7 +61,11 @@ interface DeleteWindow {
 
 /** Where focus is owed once the window has exited (FD8). */
 type RestoreIntent =
-  { kind: 'card'; organismId: string } | { kind: 'editor' } | { kind: 'create' } | null;
+  | { kind: 'card'; organismId: string }
+  | { kind: 'editor' }
+  | { kind: 'editor-save' }
+  | { kind: 'create' }
+  | null;
 
 /** What a Confirm settled on, consumed by the exit handler — never published from the writer
  * (the project-context live-region trap: the background is still inert until the exit). */
@@ -208,7 +212,9 @@ export function useOrganismDelete({
           )
         : intent.kind === 'editor'
           ? document.querySelector<HTMLElement>('[data-editor-delete-organism]')
-          : null;
+          : intent.kind === 'editor-save'
+            ? document.querySelector<HTMLElement>('[data-editor-save]')
+            : null;
     (target ?? document.querySelector<HTMLElement>('[data-create-organism]'))?.focus();
   }, [deleteWindow]);
 
@@ -286,10 +292,12 @@ export function useOrganismDelete({
         if (freshRecord === undefined) {
           // Deleted elsewhere (another tab): nothing to write, and no toast — this action deleted
           // nothing. The card is gone after the reload, so focus falls back to Create. The editor
-          // origin keeps the editor open (review decision (b)) — focus returns to its Delete — and
-          // is told why in-editor at the exit, so its next Save is a deliberate re-create.
+          // origin keeps the editor open (review decision (b)) and is told why in-editor at the
+          // exit, so its next Save is a deliberate re-create. Its Delete is disabled while that
+          // alert shows (second review decision (a)) and a disabled button cannot take focus, so
+          // focus goes to the editor's Save instead.
           outcome.gone = true;
-          if (origin === 'card') restoreRef.current = { kind: 'create' };
+          restoreRef.current = origin === 'card' ? { kind: 'create' } : { kind: 'editor-save' };
         } else {
           const verdict = organismDeleteVerdict(
             organismId,
