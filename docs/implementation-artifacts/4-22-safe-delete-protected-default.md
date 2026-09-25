@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -112,7 +112,10 @@ touching a file. Five failures here compile and pass tests anyway, and each is s
      write is skipped and the Library reloads. There is no toast, because this action deleted
      nothing. *(Review decision (b), Sidiar 2026-09-25 — editor origin only: the editor stays open
      and reports `ORGANISM_DELETE_GONE` in-editor through FD12's `SaveErrorLine` alert; the card
-     origin stays silent, its card is simply gone after the reload.)*
+     origin stays silent, its card is simply gone after the reload. Second-pass decision (a),
+     Sidiar 2026-09-25: while that alert shows, the editor's Delete is `disabled` and described by
+     the alert; a disabled button cannot hold focus, so focus lands on the editor's Save through the
+     `editor-save` restore intent.)*
    - If the fresh read shows it is now `protected`, nothing is deleted. That is unreachable (ids do
      not change), but the verdict is total, so the handler must not assume otherwise.
 
@@ -214,7 +217,8 @@ touching a file. Five failures here compile and pass tests anyway, and each is s
       `confirming` precedent).
     - `pending` is the UI state; the **latch ref** is the authority.
     - The restore intent is `{ kind: 'card', organismId } | { kind: 'editor' } | { kind: 'create' }
-      | null`.
+      | null` — plus `{ kind: 'editor-save' }` since the second-pass decision (a): the editor-origin
+      gone branch, whose Delete is disabled on the same commit and cannot take focus.
   - [x] `requestDelete(organism, origin)` works as follows:
     - It is synchronous. Set the window authority ref **first**, which is 4.21's
       `deleteWindowRef` guard against the lazy-chunk window.
@@ -252,9 +256,10 @@ touching a file. Five failures here compile and pass tests anyway, and each is s
         Its targets:
     - card → `[data-delete-organism-id="…"]`;
     - editor → `[data-editor-delete-organism]`;
+    - editor-save → `[data-editor-save]` (second-pass decision (a));
     - create → `[data-create-organism]`.
 
-    All three are looked up by DOM query with `CSS.escape`, never with a captured element (FD8).
+    All four are looked up by DOM query with `CSS.escape`, never with a captured element (FD8).
   - [x] Return `{ requestDelete, windowActive, blockedProps | null, confirmProps | null, toast,
         deleteError, closeEditorRequested… }` in whatever exact shape keeps `<OrganismLibrary>` thin.
         Keep **one** source of "which dialog is mounted".
@@ -604,6 +609,58 @@ decision, four patches, one dismissed.
   the editor is still inert in the same task that lifts it. The observer pins what the file's
   established idiom pins (no publish from the writer during the fade), nothing more.
 
+#### Third pass (2026-09-25, Fable, on the (a) build `d5b3c92`, synced with main as `3abe1e3`)
+
+Reviewed on **Fable** against the **Opus** follow-up that built Sidiar's second-pass decision (a),
+via the same three layers. The build conforms to the [Patch] wording (disabled alongside `isSaving`
+and `deleteProtected`; `ORGANISM_DELETE_FAILED` stays enabled; the disable and the `editor-save`
+focus move land in one commit, so the effect never targets the disabled button). #82's content was
+not re-reviewed. One decision, three patches, three dismissed.
+
+- [ ] [Review][Decision] **After the accepted re-creating Save, the editor's Delete stays disabled
+  for the rest of the session** [`useOrganismDelete.ts:238,387`, `OrganismEditorModal.tsx:655-656,:901`]
+  — `editorDeleteError` is cleared only at the next `requestDelete` and at the editor's exit;
+  `saveOrganism` clears only its own `saveError` / `saveOutcome`. Before (a) that was the
+  second-pass ledger's "stale sentence" item (deferred to 4.23), because an enabled Delete's next
+  request cleared it. With (a) the button that would clear it is the one disabled, the card origin
+  is barred while the editor is mounted (`canOpen`), so once the user Saves — the path (b) exists
+  for — the record is real and deletable again while the editor shows a disabled Delete under a
+  "no longer exists" alert until Back/Escape. Options: **(a)** clear the GONE alert (and so the
+  disable) when the editor's Save succeeds, now — a small clear-on-saved channel from the Library
+  (the editor's `onSaved` is deferred by `useOrganismEditorModal` until exit, so it needs its own
+  callback), which is a slice of the "one owner, cleared together on Save" item the second pass
+  sent to 4.23; **(b)** leave it with the 4.23 editor-state pass as already deferred — the ledger
+  (amended by this pass) says the disabled Delete rides on the same cell, and until then the user
+  closes the editor and deletes from the card; **(c)** editor-local, no new channel: disable on
+  `deleteError === ORGANISM_DELETE_GONE && saveOutcome === null`, so a successful Save re-enables
+  Delete and its next request clears the alert (the alert itself stays until then, as deferred).
+  Left for Sidiar; nothing changed here.
+- [x] [Review][Patch] **The GONE-disabled Delete carries no accessible reason** [`OrganismEditorModal.tsx:863-866,:902`]
+  — FD6: "a screen reader's browse mode reads the reason with the control … The same pattern
+  applies to the editor's Delete", and AC8 "The disabled Delete's `aria-describedby` target exists
+  in the DOM". The protected path does it (`protectedNoteId`); the new disabled state does not —
+  the GONE `SaveErrorLine` has no `id`, and `aria-describedby` is `undefined`. The alert is
+  announced once at publish, so not a hard failure, but a user who meets the dimmed button later
+  hears no reason. One `useId()` on the line, referenced while the GONE sentence shows; assertion
+  added to the editor's decision-(a) test. The JSX comment's "a Cancel would have dismissed it"
+  also names the confirmation's Cancel now (the Blind Hunter read it as the editor's).
+- [x] [Review][Patch] **Story text is stale against the fourth restore intent and the (a)
+  behaviour** [`4-22-…md:113-115`, `:216-217`, `:252-256`, `:939`] — Task 2 still lists three
+  restore intents and three focus targets, the Implementation Plan says `card` / `editor` /
+  `create`, and AC6's editor-origin carve-out names the alert but not the disabled Delete or the
+  focus-to-Save; 4.23 reads the AC (the second pass's own argument for putting (b) there).
+- [x] [Review][Patch] **The ledger still describes an escape (a) removed** [`deferred-work.md:3177-3187`,
+  `:3228-3233`] — "cleared at the start of the next delete request" is unreachable from the
+  editor while GONE shows, and neither entry names the disabled Delete riding on the same cell.
+  Amended in place; the decision above is cross-referenced.
+- Dismissed (3): the Blind Hunter's "behaviour keyed on sentence identity" (both sides import the
+  one exported constant; a discriminated prop is a refactor of a settled contract, not a bug);
+  "focus lands on Save, the write" (the Save-vs-Back target is already with the owner, flagged
+  outside this review; the one behavioural angle worth his knowing — a held Enter from the
+  confirmation auto-repeats into Save after the ~195 ms fade — is reported to him, not raised
+  here); "no hook-level focus test for `editor-save`" (no restore intent has one; the Library test
+  pins focus on Save end to end, and the Chromium e2e pins the same effect for the `editor` intent).
+
 ## Dev Notes
 
 ### Forced decisions
@@ -936,7 +993,8 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 
 - **Controller** `lib/organisms/useOrganismDelete.ts`: one window cell (`confirm` | `blocked`,
   held through the fade), `dialogOpen`, `pending` + a synchronous latch ref, the window authority
-  ref (4.21's `deleteWindowRef`), a restore-intent ref (`card` / `editor` / `create`), a queued
+  ref (4.21's `deleteWindowRef`), a restore-intent ref (`card` / `editor` / `create`, and since
+  the second-pass decision (a) `editor-save`), a queued
   Confirm outcome ref, and a held-toast ref for the editor origin. `useInertBackground` is called
   above the focus effect (order load-bearing). Click-time verdict from the Library's settled data;
   Confirm re-reads both lists in one `Promise.all` (no `.catch`), rebuilds both indexes, re-runs
@@ -1135,6 +1193,23 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   The editor's Delete is disabled while `ORGANISM_DELETE_GONE` shows; focus after that alert goes
   to the editor's Save (new `editor-save` restore intent, `data-editor-save` key) instead of the
   now-disabled Delete. Editor and Library tests. Status → review.
+- 2026-09-25: Third-pass code review (Fable) of the (a) build, after the #82 sync. Conforms to the
+  decision's [Patch] wording. Three patches applied: the GONE-disabled Delete is now
+  `aria-describedby` the alert line (FD6's pattern, one `useId()`; asserted in the decision-(a)
+  editor test, and the FD12 refusal asserted to carry no description), the story's Task 2 /
+  Implementation Plan / AC6 text now name the fourth restore intent and the (a) behaviour, and the
+  two `deferred-work.md` alert-lifecycle entries say the disabled Delete rides on the same cell.
+  Three dismissed. One owner decision left open: after the accepted re-creating Save the editor's
+  Delete stays disabled until the editor closes — clear on Save now, leave to 4.23, or
+  editor-local re-enable. Status → in-progress.
+  - Review gate, `npm run ci:dev` redirected to a file with `$?` read directly: **exit 0** on the
+    patched tree (typecheck ✓; lint 0 errors, the 1 pre-existing `BattleGallery.tsx:248` warning;
+    format ✓; spec:check ✓ 277 ids; boundary ✓; coverage — web 136 files / 2301 tests, domain 12
+    files, simulation 23, persistence 8, test-utils 6, all passed; build ✓; bundle ✓ +0.0 KB on
+    every route, no baseline refresh; bench 7.550 ms / 16.667 ms; e2e Chromium **288 passed**).
+    The first run on `3abe1e3`, before the patches, was **exit 1** in the e2e stage only: 234
+    passed, then `net::ERR_CONNECTION_REFUSED` on `127.0.0.1:4173` for the rest — the shared-port
+    collision with the other lane's worktree the Dev Record already names, not this branch.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none

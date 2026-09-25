@@ -2612,6 +2612,8 @@ describe('OrganismEditorModal', () => {
       });
       expect(screen.getByRole('alert')).toHaveTextContent(ORGANISM_DELETE_GONE);
       expect(deleteOrganism()).toBeDisabled();
+      // FD6: the disabled button's reason travels with it (third-pass review).
+      expect(deleteOrganism()).toHaveAccessibleDescription(ORGANISM_DELETE_GONE);
       first.unmount();
 
       // A refused delete (FD12) leaves Delete enabled: a retry is that alert's whole point.
@@ -2621,6 +2623,7 @@ describe('OrganismEditorModal', () => {
         deleteError: ORGANISM_DELETE_FAILED,
       });
       expect(deleteOrganism()).toBeEnabled();
+      expect(deleteOrganism()).not.toHaveAccessibleDescription();
     });
 
     it('has no axe violations with Delete rendered, enabled and protected', async () => {

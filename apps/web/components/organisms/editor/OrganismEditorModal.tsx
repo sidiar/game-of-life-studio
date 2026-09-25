@@ -559,6 +559,10 @@ export default function OrganismEditorModal({
     organism !== null &&
     organismDeleteVerdict(organism.id, usageIndex, ruleIndex).kind === 'protected';
   const protectedNoteId = useId();
+  // The record-gone alert's id, so the Delete it disables (second review decision (a)) is
+  // described by its reason — FD6's pattern: a natively `disabled` button is out of the tab
+  // order, and the one-shot live announcement is gone by the time browse mode meets it.
+  const deleteErrorId = useId();
   // Story 4.14: resolved ONCE here (`getComputedStyle` forces a style recalculation) and passed
   // down to `<PreviewPanel>` — the `<BattlePage>` form (`BattlePage.tsx:420-427`). `document` is
   // guarded for the prerender even though this file is `ssr: false` (the house form, costs
@@ -861,7 +865,7 @@ export default function OrganismEditorModal({
             deleted elsewhere), in the same idiom — conditionally mounted, so the Library's publish
             (after the stacked dialog's exit) inserts it into a LIVE editor. */}
         {deleteError !== null && (
-          <SaveErrorLine role="alert" data-editor-delete-error="">
+          <SaveErrorLine role="alert" id={deleteErrorId} data-editor-delete-error="">
             {deleteError}
           </SaveErrorLine>
         )}
@@ -891,15 +895,23 @@ export default function OrganismEditorModal({
                     closes (FD8). Disabled while a save is in flight — a delete must not race the
                     write — for the protected default, whose reason renders beneath it, and while
                     the record-gone alert shows (second review decision (a)): its only outcome
-                    would be that alert again, and a Cancel would have dismissed it. A refusal
-                    (`ORGANISM_DELETE_FAILED`) leaves it enabled — a retry is that alert's point. */}
+                    would be that alert again, and a Cancel on that confirmation would have
+                    dismissed it. Disabled for the protected default or the gone record, the
+                    button is described by its reason (FD6). A refusal (`ORGANISM_DELETE_FAILED`)
+                    leaves it enabled — a retry is that alert's point. */}
                 {organism !== null && onRequestDelete !== undefined && (
                   <>
                     <DeleteOrganismButton
                       type="button"
                       data-editor-delete-organism=""
                       disabled={isSaving || deleteProtected || deleteError === ORGANISM_DELETE_GONE}
-                      aria-describedby={deleteProtected ? protectedNoteId : undefined}
+                      aria-describedby={
+                        deleteProtected
+                          ? protectedNoteId
+                          : deleteError === ORGANISM_DELETE_GONE
+                            ? deleteErrorId
+                            : undefined
+                      }
                       onClick={() => onRequestDelete()}
                     >
                       Delete Organism
