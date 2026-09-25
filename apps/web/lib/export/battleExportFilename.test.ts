@@ -123,4 +123,42 @@ describe('battleExportFilename', () => {
     const name = `${'क'.repeat(59)}कि`;
     expect(battleExportFilename(name)).toBe(`${'क'.repeat(59)}.json`);
   });
+
+  // Third-round review (2026-09-25, owner decision (a) on ZWNJ/ZWJ): format characters (`\p{Cf}`)
+  // are dropped before the non-letter collapse, except ZWNJ/ZWJ directly between two letters, which
+  // are kept as the invisible joiners real spelling requires. Written as \u-escapes (never the
+  // literal glyphs) so no invisible character sits in this file's own source.
+  it('keeps ZWNJ in a Persian word rather than turning it into a word-breaking hyphen', () => {
+    // 'می‌خواهم' ("I want"): می + ZWNJ (U+200C) + خواهم.
+    expect(battleExportFilename('می\u200Cخواهم')).toBe('می\u200Cخواهم.json');
+  });
+
+  it('keeps an Indic ZWJ between two letter clusters intact', () => {
+    // क + ् (virama) + ZWJ (U+200D) + ष: a genuine Devanagari conjunct, not a hyphenation point.
+    const name = `क्\u200Dष`;
+    expect(battleExportFilename(name)).toBe(`क्\u200Dष.json`);
+  });
+
+  it('drops a soft hyphen inside a Latin word rather than turning it into a hyphen', () => {
+    expect(battleExportFilename('Ba\u00ADttle')).toBe('battle.json');
+  });
+
+  it('drops RLM and LRM bidi marks silently', () => {
+    expect(battleExportFilename('Battle\u200E Royale\u200F')).toBe('battle-royale.json');
+  });
+
+  it('drops a ZWNJ next to a space, punctuation, or at the start/end rather than keeping it', () => {
+    expect(battleExportFilename('\u200CBattle')).toBe('battle.json');
+    expect(battleExportFilename('Battle\u200C')).toBe('battle.json');
+    expect(battleExportFilename('Battle\u200C Royale')).toBe('battle-royale.json');
+    expect(battleExportFilename('Battle \u200CRoyale')).toBe('battle-royale.json');
+    expect(battleExportFilename('Battle\u200C!Royale')).toBe('battle-royale.json');
+  });
+
+  it('trims a ZWNJ the 60-code-point cut leaves at the end rather than keeping it invisible', () => {
+    // 59 letters, then a ZWNJ between two letters (kept by kebabCase), then 10 more letters: the
+    // cut lands exactly on the kept ZWNJ, which must not survive as a trailing invisible character.
+    const name = `${'a'.repeat(59)}\u200C${'a'.repeat(10)}`;
+    expect(battleExportFilename(name)).toBe(`${'a'.repeat(59)}.json`);
+  });
 });

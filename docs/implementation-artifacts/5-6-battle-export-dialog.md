@@ -4,7 +4,7 @@ baseline_commit: bf62145d4092d5d3918fbfc61b096007fccb96ad
 
 # Story 5.6: Battle Export Dialog
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -69,13 +69,20 @@ touching a file. `/battle` has 0.4 KB of bundle headroom (FD1).**
      combining mark not attached to a letter (an emoji's variation selector, a spacing accent's
      mark after a space), so no invisible mark survives into the filename;
    - lowercase;
+   - **third-round review (2026-09-25), owner decision (a):** before this collapse runs, drop every
+     Unicode format character (`\p{Cf}`) — a soft hyphen, LRM/RLM, a bidi mark, a BOM — **except**
+     ZWNJ/ZWJ sitting directly between two letters (or letter+mark clusters), which are kept as the
+     invisible joiners standard Persian/Indic spelling requires; see the dated FD7 annotation below;
    - ~~turn every run of characters that are not a Unicode letter or number into one `-`;~~
      **→ Sidiar (2026-09-25):** turn every run of characters that are not a Unicode letter, number,
-     or (surviving, non-Latin) combining mark into one `-`;
+     or (surviving, non-Latin) combining mark into one `-`; **third-round review (2026-09-25):** a
+     surviving ZWNJ/ZWJ is exempted here too, so it is never re-hyphenated;
    - trim leading and trailing `-`;
    - truncate to 60 code points, trim a trailing `-` the cut may leave **→ Sidiar (2026-09-25):**
      new sub-step — see the dated FD7 annotation below; **second code review (2026-09-25):** a cut
-     that would split a letter + mark cluster drops the whole partial cluster;
+     that would split a letter + mark cluster drops the whole partial cluster; **third-round review
+     (2026-09-25):** the trailing trim also strips a ZWNJ/ZWJ the cut leaves as the last kept code
+     point, so a kept joiner never survives as an invisible trailing character;
    - append `.json`.
 
    If nothing is left (an untitled battle `''`, whitespace only, or all punctuation and emoji), the
@@ -354,7 +361,7 @@ _Code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Audi
 
 _Second code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `9470143..d903c09`, the owner-decision commit)._
 
-- [ ] [Review][Decision] Format characters become word-breaking hyphens — ZWNJ/ZWJ (`\p{Cf}`) are not L/N/M, so the collapse turns them into `-` mid-word: Persian `'می‌خواهم'` → `می-خواهم.json`, Devanagari `'क्‍ष'` → `क्-ष.json`, and a soft hyphen `'ab­cd'` → `ab-cd.json`. ZWNJ is standard Persian/Indic spelling, so this cuts against decision 1's "non-Latin scripts survive intact". Options: (a) keep ZWNJ/ZWJ when between two letters (invisible characters in a filename) and drop soft hyphens; (b) drop every `\p{Cf}` silently (Persian words then render joined); (c) accept the hyphen as today. [apps/web/lib/export/battleExportFilename.ts:kebabCase]
+- [x] [Review][Decision] Format characters become word-breaking hyphens — ZWNJ/ZWJ (`\p{Cf}`) are not L/N/M, so the collapse turns them into `-` mid-word: Persian `'می‌خواهم'` → `می-خواهم.json`, Devanagari `'क्‍ष'` → `क्-ष.json`, and a soft hyphen `'ab­cd'` → `ab-cd.json`. ZWNJ is standard Persian/Indic spelling, so this cuts against decision 1's "non-Latin scripts survive intact". Options: (a) keep ZWNJ/ZWJ when between two letters (invisible characters in a filename) and drop soft hyphens; (b) drop every `\p{Cf}` silently (Persian words then render joined); (c) accept the hyphen as today. [apps/web/lib/export/battleExportFilename.ts:kebabCase] **→ Sidiar (2026-09-25): (a)** — keep ZWNJ (U+200C) / ZWJ (U+200D) only when between two letters (or letter+mark clusters); drop every other `\p{Cf}` (soft hyphen, bidi marks, BOM, …) and any ZWNJ/ZWJ not between letters, so no invisible character can lead, trail, or sit next to a hyphen. Persian `می‌خواهم` survives intact.
 - [x] [Review][Patch] Orphan combining marks survive the `\p{M}` exemption — a mark not on a letter (VS16 U+FE0F, keycap U+20E3, a spacing accent's NFKD mark after a space, a mark after a digit/hyphen/at the start) is kept: `'❤️'` → `️.json` (invisible, skips the `untitled-battle` fallback AC5 promises for emoji), `'Battle ❤️ Royale'` → `battle-️-royale.json`, `'Rock´n´Roll'` → `rock-́n-́roll.json`, `'́'` → `́.json`; strip every mark run not attached to a letter before the collapse [apps/web/lib/export/battleExportFilename.ts:kebabCase]
 - [x] [Review][Patch] The 60-code-point cut can split a base+mark cluster — 59×`क` + `कि` keeps the 60th `क` and drops its vowel sign ि, silently changing the word (the garbling decision 1 set out to prevent); when the cut lands before a mark, drop the partial cluster (base + marks) instead [apps/web/lib/export/battleExportFilename.ts:truncateSlug]
 - [x] [Review][Patch] The "Café Duel … without an NFC precomposed form nearby" test uses precomposed U+00E9 like "Café Wars", so the decomposed-input path is never exercised; use `'Café Duel'` [apps/web/lib/export/battleExportFilename.test.ts]
@@ -564,6 +571,36 @@ exemption keeps exactly what decision 1 meant — a mark on its base letter. The
 likewise drops a letter + mark cluster it would otherwise split (its base kept, its marks cut
 off), rather than silently changing the word.
 
+**→ Sidiar (2026-09-25), third-round review decision (a) on format characters (ZWNJ/ZWJ):** ZWNJ
+(U+200C) and ZWJ (U+200D) are Unicode format characters (`\p{Cf}`), not letters, numbers, or marks,
+so the punctuation/whitespace collapse above was turning every one of them into a word-breaking
+`-` — Persian `'می‌خواهم'` → `می-خواهم.json`, a Devanagari conjunct `'क्‍ष'` → `क्-ष.json` — exactly
+the garbling decision 1 set out to prevent for other scripts, since ZWNJ is ordinary Persian/Indic
+spelling, not punctuation. The fix, applied before the collapse step so these characters never
+reach it as hyphen candidates:
+- every `\p{Cf}` character is dropped silently — a soft hyphen (U+00AD), LRM/RLM (U+200E/U+200F),
+  a bidi embedding/isolate, a BOM (U+FEFF) — **except** ZWNJ/ZWJ sitting directly between two
+  letter clusters (a letter, optionally followed by combining marks, on each side), which are kept
+  as the invisible joiners real spelling requires;
+- a ZWNJ/ZWJ next to a space, punctuation, or at the start/end of the name is not "between two
+  letters", so it is dropped like any other format character, never turned into a hyphen;
+- the collapse step's own character class now also exempts ZWNJ/ZWJ, so a kept one is never
+  re-hyphenated there; by construction a surviving ZWNJ/ZWJ always has a letter (or letter+mark
+  cluster) on each side, so no invisible character can lead, trail, or sit next to a `-`;
+- the 60-code-point truncation's trailing trim also strips a ZWNJ/ZWJ the cut leaves as the last
+  kept code point, alongside the trailing `-` it already trimmed.
+
+Updated test cases (extending the table above):
+
+| Input | Output |
+|---|---|
+| Persian `'می‌خواهم'` ("I want") | `می‌خواهم.json` (ZWNJ intact, not a hyphen) |
+| Devanagari conjunct `'क्‍ष'` (ZWJ between क् and ष) | `क्‍ष.json` (ZWJ intact) |
+| a soft hyphen inside a Latin word, `'Ba­ttle'` | `battle.json` (dropped, not hyphenated) |
+| RLM/LRM bidi marks, `'Battle‎ Royale‏'` | `battle-royale.json` (dropped silently) |
+| a ZWNJ next to a space, punctuation, or at the start/end | dropped, not kept or hyphenated |
+| a ZWNJ the 60-code-point cut leaves at the end | trimmed, same as a trailing `-` |
+
 **FD8: Focus lands on EXPORT BATTLE after the operation settles, not at exit.** The button wears
 `disabled={isSaving}`, the visible half of the edit lock like every other sidebar control. If focus
 were restored at dialog exit and a save then started, the focused button would disable and focus
@@ -763,9 +800,11 @@ one Sonnet session; the 2026-09-25 completion of Task 9 (baseline refresh, `ci:d
 close-out) is a **second, separate Sonnet session** resuming the halted run from the synced branch;
 the 2026-09-25 owner review-decision close-out (filename fix, decision annotations, final `ci:dev`)
 is a **third, separate Sonnet session** resuming after the owner answered the four
-`[Review][Decision]` items. Both code reviews (2026-09-25: over `origin/main...HEAD`, then over the
-owner-decision commit `9470143..d903c09`) ran on **Claude Opus 5.5** (claude-opus-5-5), the
-different-model reviewer.
+`[Review][Decision]` items; the 2026-09-25 ZWNJ/ZWJ owner review-decision close-out (the format-
+character fix, decision annotations, final `ci:dev`) is a **fourth, separate Sonnet session**
+resuming after the second code review's remaining `[Review][Decision]` item was answered. Both code
+reviews (2026-09-25: over `origin/main...HEAD`, then over the owner-decision commit
+`9470143..d903c09`) ran on **Claude Opus 5.5** (claude-opus-5-5), the different-model reviewer.
 
 ### Debug Log References
 
@@ -845,6 +884,39 @@ different-model reviewer.
   block ran all 6 cases green, including the axe scan, with no test changes needed (the e2e cases
   use ASCII seeded names, per Dev Notes' own "keep the e2e on an ASCII name"). `ci.log` kept locally
   as an untracked artifact, not committed.
+
+**2026-09-25 owner review-decision session (fourth Sonnet session, resuming after the owner
+answered the ZWNJ/ZWJ `[Review][Decision]` item):**
+
+- `npm run build:standalone` — green.
+- `npm run bundle:check` — **PASSES**, `+0.0 KB` on all 5 routes: the `\p{Cf}` handling lives
+  entirely inside the lazily loaded `battleExporter` chunk, so no route moved and `bundle:baseline`
+  did not need to be re-run.
+- First `npm run ci:dev > ci.log 2>&1; echo $?` of this session — **exit 1**: two failures, both in
+  Epic 4 lane files this story does not touch and both under `test:coverage`'s full concurrent run
+  — `components/battle/BattlePage.test.tsx` ("a Play-mode resize is ephemeral…", Story 3.16) and
+  `components/organisms/OrganismLibrary.test.tsx` / `OrganismEditorModal.test.tsx` (several Story
+  4.16–4.18 cases, quota/corrupt-data timing and a collision-warning test). Re-ran each of the three
+  files alone: all passed cleanly (123/123, 70/70, 98/98). The machine's load average was 12–19 on 6
+  cores at the time (a second worktree's own `ci:dev` running concurrently), matching this story's
+  own documented precedent for `OrganismEditorModal.test.tsx`/`RulesEditor.test.tsx` CPU-contention
+  flakes in the Task 9 resumption session. A second full `ci:dev` run reproduced the same pattern —
+  different specific tests in the same two files failing — reinforcing the contention diagnosis
+  rather than a regression from this session's one-file change.
+- Third `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0**, clean. `typecheck`, `lint`
+  (0 errors, the same 1 pre-existing unrelated `BattleGallery.tsx` warning), `format:check`,
+  `spec:check`, `boundary:check` all green. `test:coverage`: `@gol/persistence` 103/103,
+  `@gol/test-utils` 95/95, `@gol/domain` 212/212, `@gol/simulation` 408/408, web 134 test files /
+  **2236** tests (up from the prior session's 2225 by 11 — this session's own 6 new
+  `battleExportFilename.test.ts` cases account for 6 of the 11; the remaining 5 were not
+  independently re-verified against a specific diff and are called out here rather than silently
+  assumed). `build:standalone` green. `bundle:check` `+0.0 KB` all 5 routes. `bench` + `bench:check`
+  green (8.293 ms headroom, 49.8% of the 16.667 ms frame budget). `e2e:chromium`: 278 passed, 1
+  pre-existing conditional skip (`deleteBattle.spec.ts:113`, unrelated to this story), 0 failures —
+  the `export battle (Story 5.6)` describe block's 6 cases and axe scan all green, no e2e changes
+  needed (this session's fix is inside the lazy `battleExporter` module and Latin-script-only e2e
+  seed names, so the ZWNJ/ZWJ paths are covered by the unit suite only, per Dev Notes' "keep the
+  e2e on an ASCII name"). `ci.log` kept locally as an untracked artifact, not committed.
 
 ### Completion Notes List
 
@@ -962,6 +1034,41 @@ different-model reviewer.
   - `npm run ci:dev > ci.log 2>&1; echo $?` — **exit 0** (see Debug Log above for the full
     breakdown).
 
+- **Owner review-decision session (2026-09-25, fourth Sonnet session, resuming after the owner
+  answered the ZWNJ/ZWJ `[Review][Decision]` item with option (a)).**
+  1. **Format characters (`apps/web/lib/export/battleExportFilename.ts`):** `kebabCase` now runs a
+     `.replace(/\p{Cf}/gu, …)` step **before** the punctuation/whitespace collapse (so these
+     characters never reach the collapse as hyphen candidates): every Unicode format character is
+     dropped — a soft hyphen (U+00AD), LRM/RLM (U+200E/U+200F), a bidi embedding/isolate, a BOM
+     (U+FEFF) — **except** ZWNJ (U+200C) / ZWJ (U+200D) sitting directly between two letter clusters
+     (a letter, optionally followed by combining marks, on each side), checked via the character
+     immediately before/after each match in the source string. The collapse pattern
+     (`COLLAPSE_PATTERN`) now also exempts `‌`/`‍`, so a kept joiner is never
+     re-hyphenated there, and `truncateSlug`'s trailing trim (`TRAILING_HYPHEN_OR_JOINER`) strips a
+     trailing ZWNJ/ZWJ the 60-code-point cut may leave, alongside the trailing `-` it already
+     trimmed. The two joiner constants are written as `\u`-escapes (`'\u200C'`, `'\u200D'`), never
+     the literal glyphs, so no invisible character sits in the source itself — the exact hazard this
+     decision guards the output filename against.
+  2. **Tests (`battleExportFilename.test.ts`):** 6 new cases, all written with `\u`-escapes matching
+     the file's existing `'\u0301\u0302'` convention (never literal invisible characters in code,
+     only in illustrative comments): a Persian word (`می‌خواهم`) survives with its ZWNJ intact; an
+     Indic ZWJ conjunct (`क्‍ष`) survives intact; a soft hyphen inside a Latin word is dropped, not
+     hyphenated; RLM/LRM are dropped silently; a ZWNJ next to a space, punctuation, or at the
+     start/end is dropped in each position; a ZWNJ the 60-code-point cut leaves as the last kept
+     code point is trimmed. Verified red-green: before the fix, the Persian and Devanagari cases
+     failed with a `-` in place of the joiner (`می-خواهم.json`, `क्-ष.json`) and the soft-hyphen
+     case produced `ba-ttle.json`; the RLM/LRM and edge-adjacency cases happened to already pass
+     (their surrounding hyphen or leading/trailing trim already absorbed the difference), so they
+     serve as regression coverage rather than red-green proof. All 28 tests in
+     `battleExportFilename.test.ts` pass (22 before this session, + 6 new); the full `apps/web/lib/export/` +
+     `apps/web/components/battle/` suite (559 tests) is green with no regressions.
+  3. AC5/FD7 annotated with a third dated owner-decision note (originals kept, not rewritten,
+     matching the file's established pattern); the ZWNJ/ZWJ `[Review][Decision]` item ticked.
+  - `npm run build:standalone` and `npm run bundle:check` — pass, `+0.0 KB` on all 5 routes (the
+    change stays entirely inside the lazily loaded `battleExporter` chunk; no baseline refresh
+    needed).
+  - `npm run ci:dev > ci.log 2>&1; echo $?` — see Debug Log below for the exact result.
+
 ### File List
 
 **New:**
@@ -1000,6 +1107,20 @@ different-model reviewer.
 - `apps/web/lib/export/battleExportFilename.test.ts` (8 new cases: Latin mid-word accent,
   Devanagari, Japanese voiced kana, Hangul, long-Latin truncation, long-CJK truncation,
   hyphen-at-the-cut boundary, surrogate-pair-at-the-cut boundary)
+
+**Modified (2026-09-25 fourth Sonnet session, resuming after the owner's ZWNJ/ZWJ decision):**
+- `apps/web/lib/export/battleExportFilename.ts` (`kebabCase` drops every `\p{Cf}` format character
+  before the collapse step, keeping ZWNJ/ZWJ only between two letter clusters; the collapse pattern
+  and `truncateSlug`'s trailing trim both exempt/strip ZWNJ/ZWJ too; constants written as
+  `\u`-escapes, never literal glyphs, so no invisible character sits in the source itself)
+- `apps/web/lib/export/battleExportFilename.test.ts` (6 new cases: Persian ZWNJ kept intact, an
+  Indic ZWJ conjunct kept, a soft hyphen dropped, RLM/LRM dropped, a ZWNJ next to
+  space/punctuation/start/end dropped, a ZWNJ trimmed at the 60-code-point cut; all `\u`-escaped,
+  matching the file's existing `'\u0301\u0302'` convention)
+- `docs/implementation-artifacts/5-6-battle-export-dialog.md` (this file: the ZWNJ/ZWJ
+  `[Review][Decision]` item ticked; AC5/FD7 annotated with a third dated owner-decision note, not
+  silently rewritten; Dev Agent Record, File List, Change Log, Status)
+- `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog` → `review`)
 
 ### Change Log
 
@@ -1051,6 +1172,19 @@ different-model reviewer.
   Agent Model Used). 5 new unit tests (22 in `battleExportFilename.test.ts`); FD7 annotated and
   its table extended. 1 `[Review][Decision]` left open (ZWNJ/ZWJ/soft hyphen → `-`). Status →
   in-progress.
+- 2026-09-25 — Owner answered the ZWNJ/ZWJ `[Review][Decision]` item with option (a); this session
+  (fourth Sonnet session) applied it: `kebabCase` now drops every `\p{Cf}` format character before
+  the collapse step — a soft hyphen, LRM/RLM, a bidi embedding/isolate, a BOM — **except** ZWNJ
+  (U+200C) / ZWJ (U+200D) directly between two letter clusters, which are kept as the invisible
+  joiners Persian/Indic spelling requires; the collapse pattern and the 60-code-point truncation's
+  trailing trim were both updated to exempt/strip ZWNJ/ZWJ too, so a kept joiner is never
+  re-hyphenated and a cut-off one never survives as an invisible trailing character. 6 new unit
+  tests (28 in `battleExportFilename.test.ts`): Persian ZWNJ kept intact, an Indic ZWJ conjunct
+  kept, a soft hyphen dropped, RLM/LRM dropped, a ZWNJ next to space/punctuation/start/end dropped,
+  a ZWNJ trimmed at the 60-code-point cut. AC5/FD7 annotated with a third dated owner-decision note
+  (originals kept, not rewritten); the decision item ticked. `npm run build:standalone` and
+  `bundle:check` pass, `+0.0 KB` on all 5 routes (the change stays inside the lazy `battleExporter`
+  chunk). `npm run ci:dev` run to completion — see Debug Log for the exact result. Status → review.
 
 Dev Model: sonnet   # follows existing patterns (UnsavedChangesDialog idiom, useLeaveGuard lifecycle, 5.5's lib/export seam); every structural choice (lazy boundary, save-then-export, id return, act-on-exit) is pre-decided in FD1–FD9, so nothing is left to architect.
 

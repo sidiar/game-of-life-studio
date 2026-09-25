@@ -30,6 +30,20 @@ const MAX_SLUG_CODE_POINTS = 60;
  *   NFKD-decomposes into after a space, or a mark after a digit, a hyphen or at the start. Kept,
  *   those produced invisible characters in the filename (`'❤️'` → an invisible slug that skipped
  *   the `untitled-battle` fallback).
+ * - Unicode format characters (`\p{Cf}`) are dropped next, BEFORE the punctuation/whitespace
+ *   collapse below, with one exception (Story 5.6 review decision 2026-09-25, ZWNJ/ZWJ): ZWNJ
+ *   (U+200C) and ZWJ (U+200D) are kept when they sit directly between two letter clusters (a
+ *   letter, optionally followed by combining marks, on each side) — that is standard Persian and
+ *   Indic spelling (`می‌خواهم`, a Devanagari conjunct), not a hyphenation point. Left unhandled,
+ *   the collapse step below would turn every `\p{Cf}` character, ZWNJ/ZWJ included, into a
+ *   word-breaking `-` (`می‌خواهم` → `می-خواهم`), which is exactly the garbling decision 1 set out
+ *   to prevent for other scripts. Every other format character — a soft hyphen (U+00AD), LRM/RLM
+ *   (U+200E/U+200F), a bidi embedding/isolate, a BOM (U+FEFF), a ZWNJ/ZWJ next to a space,
+ *   punctuation, or at the start/end — is dropped silently rather than turned into a hyphen. The
+ *   collapse step's own character class also exempts ZWNJ/ZWJ, so a kept one is never re-hyphenated
+ *   there; by construction every ZWNJ/ZWJ that reaches the collapse step already has a letter (or
+ *   letter+mark cluster) on each side, so it can never lead, trail, or sit next to a `-` in the
+ *   result.
  */
 function kebabCase(name: string): string {
   return name
@@ -37,10 +51,32 @@ function kebabCase(name: string): string {
     .replace(/(\p{Script=Latin})\p{M}+/gu, '$1')
     .normalize('NFC')
     .replace(/(^|[^\p{L}\p{M}])\p{M}+/gu, '$1')
+    .replace(/\p{Cf}/gu, (char: string, offset: number, str: string) => {
+      if (char !== ZERO_WIDTH_NON_JOINER && char !== ZERO_WIDTH_JOINER) {
+        return '';
+      }
+      const before = str[offset - 1];
+      const after = str[offset + 1];
+      const betweenLetters =
+        before !== undefined &&
+        /[\p{L}\p{M}]/u.test(before) &&
+        after !== undefined &&
+        /\p{L}/u.test(after);
+      return betweenLetters ? char : '';
+    })
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\p{M}]+/gu, '-')
+    .replace(COLLAPSE_PATTERN, '-')
     .replace(/^-+|-+$/g, '');
 }
+
+// Written as \u-escapes, never the literal glyphs, so no invisible character sits in the source
+// itself (the exact hazard this decision guards the output filename against).
+const ZERO_WIDTH_NON_JOINER = '\u200C';
+const ZERO_WIDTH_JOINER = '\u200D';
+const COLLAPSE_PATTERN = new RegExp(
+  `[^\\p{L}\\p{N}\\p{M}${ZERO_WIDTH_NON_JOINER}${ZERO_WIDTH_JOINER}]+`,
+  'gu',
+);
 
 const COMBINING_MARK = /^\p{M}$/u;
 
@@ -51,6 +87,11 @@ const COMBINING_MARK = /^\p{M}$/u;
  * A cut that lands inside a letter + combining-mark cluster (the next code point is a mark, e.g.
  * a Devanagari vowel sign) drops the whole partial cluster rather than keeping its base without
  * its marks, which would silently change the word (second code review, 2026-09-25).
+ *
+ * The trailing trim also strips a ZWNJ/ZWJ the cut may leave as the last kept code point (Story
+ * 5.6 review decision 2026-09-25): `kebabCase` only ever keeps a ZWNJ/ZWJ between two letters, so
+ * one landing at the very end here is a cut artifact, not real spelling, and would otherwise
+ * survive as an invisible trailing character.
  */
 function truncateSlug(slug: string): string {
   const codePoints = Array.from(slug);
@@ -64,8 +105,10 @@ function truncateSlug(slug: string): string {
     }
     kept.pop(); // the cluster's base letter
   }
-  return kept.join('').replace(/-+$/, '');
+  return kept.join('').replace(TRAILING_HYPHEN_OR_JOINER, '');
 }
+
+const TRAILING_HYPHEN_OR_JOINER = new RegExp(`[-${ZERO_WIDTH_NON_JOINER}${ZERO_WIDTH_JOINER}]+$`);
 
 /**
  * The default Battle Only export filename (FR-6.4, Story 5.6 FD7): the battle name in kebab-case,
