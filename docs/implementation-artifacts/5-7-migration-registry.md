@@ -4,7 +4,7 @@ baseline_commit: 747727b
 
 # Story 5.7: Migration Registry
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -140,6 +140,8 @@ reviewer can check each item on its own.
     Map a thrown `FormatMigrationError` to `CorruptDataError('gol:schema', <message>, { cause })`, so
     every existing caller's CorruptDataError handling covers it and Story 5.11 can branch on
     `cause.code === 'newer-version'` for its copy.
+    *(Superseded for `'newer-version'` by the owner's 2026-09-25 decision: it now surfaces as
+    `NewerFormatVersionError`, a `CorruptDataError` subclass in `@gol/persistence` — see FD9.)*
     ⚠️ The raw collection read inside this function must not re-enter `readCollection`, or it
     recurses. Use a private raw reader.
   - [x] 3.2 **Write-back with rollback.** The steps are not idempotent, and localStorage has no
@@ -167,7 +169,8 @@ reviewer can check each item on its own.
     - no stamp: reads proceed and nothing is written;
     - a stamp of `{formatVersion: 2}`: `readCollection` throws `CorruptDataError` whose `cause`
       satisfies `isFormatMigrationError` with code `'newer-version'`, and **both data keys are
-      byte-identical afterwards**;
+      byte-identical afterwards**; *(now `NewerFormatVersionError`, still `instanceof
+      CorruptDataError` — FD9)*
     - stamps of `"x"`, `{}` and `{formatVersion: '1'}`: `CorruptDataError`;
     - through an injected synthetic migrator (export the function for tests only, or test through
       a small seam; do not widen the package barrel), write-back succeeds and restamps;
@@ -211,7 +214,7 @@ Reviewed 2026-09-25 on **Fable 5.1** against the **Opus** implementation, via th
 adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). Decisions are the owner's
 and are left unresolved here; patches were applied in the review's own commit.
 
-- [ ] [Review][Decision] **A newer `gol:schema` stamp has no recovery path — the reset FD9 leans
+- [x] [Review][Decision] **A newer `gol:schema` stamp has no recovery path — the reset FD9 leans
   on cannot clear it** — `clearAll()` → `removeDataKeys()` keeps `gol:schema` by design (Story 1.5:
   "stays stamped through clearAll() on purpose"), so after the 5.11 reset the store is empty and
   *every* read still throws `CorruptDataError(newer-version)`; even the re-seed's `save()` is
@@ -232,8 +235,11 @@ and are left unresolved here; patches were applied in the review's own commit.
   (`CorruptDataError` is one, `errors.ts`): its own error class or a `CorruptDataError` subclass;
   `@gol/domain`'s `FormatMigrationError` stays an interface + factory (no classes in the domain);
   5.11 shows only "a newer version of the app saved this data — reload" for it and offers no
-  reset. `clearAll()` keeps the stamp (Story 1.5 unchanged).
-- [ ] [Review][Decision] **FD2 — the step contract `(doc, representation)`** — no governing spec
+  reset. `clearAll()` keeps the stamp (Story 1.5 unchanged). **✓ Applied 2026-09-25:**
+  `NewerFormatVersionError extends CorruptDataError` (`packages/persistence/src/errors.ts`, exported
+  from the barrel), thrown by `ensureCurrentAtRestFormat` for `'newer-version'` only; FD9 annotated;
+  5.11's reload-only obligation recorded in `deferred-work.md`.
+- [x] [Review][Decision] **FD2 — the step contract `(doc, representation)`** — no governing spec
   fixes a step's signature: RFC-006 Decision 3's snippet is single-argument and silently assumes one
   shape at both boundaries, which RFC-006 Decisions 2 and 7 (dense/id-keyed at rest, sparse arrays
   on the wire) make impossible; Decision I.3 only requires one atomic function per version. The
@@ -243,8 +249,9 @@ and are left unresolved here; patches were applied in the review's own commit.
   **(c)** two tables (the fork AR-11 forbids). Free to change only while the registry is empty.
   [`packages/domain/src/formatMigrations.ts:37-48`] **→ Sidiar (2026-09-25): (a)** — confirmed
   as shipped: one atomic step per version, `(doc, 'envelope' | 'at-rest')`, branching on the shape
-  only where a step touches battle structure or collection form. No code change.
-- [ ] [Review][Decision] **FD7, narrowed to strip-vs-`.strict()`** — re-pointing `colorToken`
+  only where a step touches battle structure or collection form. No code change. **✓ Confirmed
+  2026-09-25.**
+- [x] [Review][Decision] **FD7, narrowed to strip-vs-`.strict()`** — re-pointing `colorToken`
   `.max()`, `name` `.min(1)` and the summary 120→100 cap to the first `formatVersion` bump is
   *settled* by Decision I.1 ("any change to any persisted shape bumps `formatVersion`"): each fails
   a record valid today. Strip-vs-strict is not: nothing the app writes carries unknown keys, so
@@ -259,7 +266,8 @@ and are left unresolved here; patches were applied in the review's own commit.
   worth preserving. Loose schemas (`z.looseObject`, keep-but-ignore) were considered and rejected:
   they would make the `settings` exclusion depend on the import code rather than the parser, and
   propagate foreign keys through the store and onward exports. No code change; the
-  `deferred-work.md:27` entry closes on this decision.
+  `deferred-work.md:27` entry closes on this decision. **✓ Applied 2026-09-25:** the entry is
+  struck and marked closed by this decision.
 - FD5 (`z.literal(ORGANISM_SCHEMA_VERSION)`) is **settled, not open**: Decision I.4 says verbatim
   "asserted at load (mismatch ⇒ corrupt, NFR-7.3 path)", RFC-006 Alternative 5 is normative on the
   same point, and AC3 requires it. No decision item.
@@ -429,6 +437,14 @@ merging numbers.
   5.10 path; declining leaves the data untouched, which this story guarantees by throwing before
   any write). A new top-level error class would need every caller updated now for a screen that
   does not exist yet.
+  **↪ Revised by owner decision (Sidiar, 2026-09-25, review item (a)):** a newer stamp is **not**
+  a corruption condition — the data is intact and a newer build reads it, so a reload is the fix
+  and a reset would destroy recoverable data. It now surfaces as `NewerFormatVersionError`, a
+  `CorruptDataError` subclass in `@gol/persistence` carrying `foundVersion` / `supportedVersion`
+  (the migration error stays its `cause`); `FormatMigrationError` in `@gol/domain` stays an
+  interface + factory. Story 5.11 shows only "a newer version of the app saved this data —
+  reload" for it and offers no reset; `clearAll()` keeps the stamp (Story 1.5 unchanged). Every
+  other migration failure (a stamp with no usable version) is still a plain `CorruptDataError`.
 
 ### What exists: read these before writing a line
 
@@ -576,7 +592,7 @@ collides on every two-lane sync, and `[[sync.rules]]` resolves it) and
 - **FD7** re-points six `deferred-work.md` entries that named this story as their home, and keeps
   Zod's strip rather than `.strict()`.
 - **FD9**: a downgraded browser (a newer stamp) reads as `CorruptDataError` until Story 5.11
-  words it.
+  words it. *(Resolved 2026-09-25: `NewerFormatVersionError`, reload-only in 5.11 — see FD9.)*
 
 ### References
 
@@ -623,6 +639,12 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   7.031 ms, 9.6 ms headroom; e2e:chromium 278 passed / 1 skipped). No CI run exists for the branch
   (CI is pull_request-only). The one ESLint warning (`BattleGallery.tsx:248`) is pre-existing on
   `main`; `apps/web` is untouched.
+- **Owner-decision pass 2026-09-25:** red first — the six newer-stamp assertions retargeted to
+  `NewerFormatVersionError` failed (the error was still a plain `CorruptDataError`), then green.
+  `npm run ci:dev` → exit 0 (domain 243 / persistence 126 / web 2246 / test-utils 95 / simulation
+  408 passed; `@gol/persistence` 99.5% stmts / 97.64% branches, `errors.ts` 100%; bundle:check
+  +0.1 KB gzipped per route, within the allowance — no baseline refresh; bench:check 9.321 ms
+  headroom; e2e:chromium 278 passed / 1 skipped). One prettier fix on a retargeted test file.
 
 ### Completion Notes List
 
@@ -669,6 +691,32 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
     before anything is written (not specified by the story; the alternative was writing garbage).
 - Open owner flags carried unchanged from the story: FD2 (step contract), FD5 (literal stamp
   assertion), FD7 (re-pointed tightening; strip kept), FD9 (downgrade reads as corrupt).
+- **Owner decisions applied (Sidiar, 2026-09-25):**
+  - ✅ Resolved review finding [Decision]: newer `gol:schema` stamp — option (a). New
+    `NewerFormatVersionError extends CorruptDataError` in `packages/persistence/src/errors.ts`
+    (`key`, `foundVersion`, `supportedVersion`, the `FormatMigrationError` as `cause`), exported
+    from the `@gol/persistence` barrel; `ensureCurrentAtRestFormat` throws it for `'newer-version'`
+    only — a stamp with no usable version (`'corrupt'`) and `'missing-step'` stay plain
+    `CorruptDataError`. `FormatMigrationError` in `@gol/domain` unchanged (interface + factory).
+    `clearAll()` untouched (keeps the stamp). **Why a subclass, not a sibling class:** every
+    existing consumer of `CorruptDataError` is non-destructive and stays correct for newer data
+    without a change — `saveFailureMessage`'s `instanceof` branch ("could not be read … nothing
+    already stored was changed"; true: this build cannot read it), the Gallery/tile
+    degrade-to-empty catches, `load()`'s documented "stored-but-unreadable throws
+    `CorruptDataError`" contract and the repository tests pinning it. A sibling class would have
+    silently moved `saveFailureMessage` to its generic branch and made every future "unreadable"
+    handler list two classes. The one consumer that must NOT treat it as corrupt — 5.11's reset
+    offer — checks the subclass first; recorded as a 5.11 hand-off in `deferred-work.md`. Tests:
+    the access-layer newer-stamp test asserts class, `name`, `key`, both versions, `cause.code`
+    and byte-identical keys; the five bad-stamp cases assert it is NOT a `NewerFormatVersionError`;
+    the write-guard and repository `load`/`list`/`listFull`/`replaceAll` cases assert the
+    subclass. FD9 (Dev Notes), Task 3.1/3.4 notes, the open-flags list, the
+    `ensureCurrentAtRestFormat` JSDoc and the `deferred-work.md` FD9 entry annotated.
+  - ✅ Resolved review finding [Decision]: FD2 step contract — option (a), confirmed as shipped.
+    No code change.
+  - ✅ Resolved review finding [Decision]: FD7 strip-vs-`.strict()` — option (a), strip kept. No
+    code change; the `deferred-work.md` "Unknown keys are stripped" entry struck and marked closed
+    by this decision.
 
 ### File List
 
@@ -678,6 +726,8 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 - `packages/domain/src/organismSchema.ts`
 - `packages/domain/src/organismSchema.test.ts`
 - `packages/domain/src/workspaceExportSchema.ts` (JSDoc only)
+- `packages/persistence/src/errors.ts` (`NewerFormatVersionError`)
+- `packages/persistence/src/index.ts` (barrel export)
 - `packages/persistence/src/localStorageAccess.ts`
 - `packages/persistence/src/localStorageAccess.test.ts`
 - `packages/persistence/src/localStorageBattleRepository.test.ts`
@@ -702,6 +752,9 @@ Proposed lane gate: none — 5.7 touches only packages/domain (formatMigrations.
   now also guards `writeDataKey`/`replaceAll`, committed-keys-only rollback, stamp/collection/step
   output guards, test hardening), 3 items deferred, 3 owner decisions left open (newer-stamp
   recovery vs `clearAll`, FD2, strip-vs-strict). Status → in-progress pending those decisions.
+- 2026-09-25 — Addressed code review findings - 3 items resolved (owner decisions): newer-version
+  now surfaces as `NewerFormatVersionError` (a `CorruptDataError` subclass, reload-only hand-off to
+  5.11); FD2 confirmed; strip kept and the deferred entry closed. Status → review.
 
 ---
 

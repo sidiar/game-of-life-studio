@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BattleSchema, CURRENT_FORMAT_VERSION, type Battle } from '@gol/domain';
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
-import { CorruptDataError } from './errors';
+import { CorruptDataError, NewerFormatVersionError } from './errors';
 import { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
@@ -237,9 +237,9 @@ describe('the at-rest format check (Story 5.7)', () => {
       JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
     );
 
-    await expect(repo().load(ID_A)).rejects.toThrow(CorruptDataError);
-    await expect(repo().list()).rejects.toThrow(CorruptDataError);
-    await expect(repo().listFull()).rejects.toThrow(CorruptDataError);
+    await expect(repo().load(ID_A)).rejects.toThrow(NewerFormatVersionError);
+    await expect(repo().list()).rejects.toThrow(NewerFormatVersionError);
+    await expect(repo().listFull()).rejects.toThrow(NewerFormatVersionError);
   });
 
   it('rejects replaceAll on a newer stamp and leaves the store byte-identical', async () => {
@@ -252,7 +252,7 @@ describe('the at-rest format check (Story 5.7)', () => {
     );
     const before = localStorage.getItem(STORAGE_KEYS.battles);
 
-    await expect(repo().replaceAll([makeBattle(ID_B)])).rejects.toThrow(CorruptDataError);
+    await expect(repo().replaceAll([makeBattle(ID_B)])).rejects.toThrow(NewerFormatVersionError);
     expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe(before);
   });
 });

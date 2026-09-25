@@ -22,6 +22,10 @@ export { LocalStorageSettingsRepository } from './localStorageSettingsRepository
 // Callers need these to tell "storage is full" apart from "stored data is unreadable" — both are
 // recoverable states the UI reports differently (NFR-7.2 / NFR-7.3).
 export { CorruptDataError } from './errors';
+// A store stamped by a NEWER build (AR-11) — a CorruptDataError subclass, so existing
+// "unreadable" handling still covers it, but not corruption: the fix is a reload, never a reset
+// (Story 5.11 branches on this class before any reset offer).
+export { NewerFormatVersionError } from './errors';
 export { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
 export type { StorageKey } from './localStorageAccess';
 

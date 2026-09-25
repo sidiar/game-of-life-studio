@@ -11,6 +11,32 @@ export class CorruptDataError extends Error {
 }
 
 /**
+ * The store was written by a NEWER build of the app: its `gol:schema` stamp is past the format this
+ * build supports (AR-11 / Decision I — `FormatMigrationError` code `'newer-version'`, carried as
+ * `cause`). Not corruption: the data is intact and a newer build reads it, so the recovery is a
+ * reload into that build — never a reset, which would destroy recoverable data (owner decision,
+ * Story 5.7 review, 2026-09-25). Thrown before anything is written.
+ *
+ * A SUBCLASS of `CorruptDataError`, not a sibling, so every existing "stored data is unreadable"
+ * path stays correct unchanged: this build genuinely cannot read the data, and each of those paths
+ * is non-destructive (`saveFailureMessage`'s "nothing already stored was changed", the Gallery's
+ * degrade-to-empty catches, `load()`'s documented throw). A UI that WOULD act destructively on
+ * corrupt data — a reset offer — must test `instanceof NewerFormatVersionError` FIRST.
+ */
+export class NewerFormatVersionError extends CorruptDataError {
+  constructor(
+    key: string,
+    readonly foundVersion: number,
+    readonly supportedVersion: number,
+    detail: string,
+    options?: { cause?: unknown },
+  ) {
+    super(key, detail, options);
+    this.name = 'NewerFormatVersionError';
+  }
+}
+
+/**
  * `WorkspaceSerializer.exportBattle(id)` found no battle under that id (RFC-006 Decision 4's
  * `ExportError('not-found')`, restored by owner ruling — Story 5.4 review, 2026-09-24). `code` is
  * the RFC snippet's `'not-found'` discriminant, so callers branch on it rather than parse

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CURRENT_FORMAT_VERSION, OrganismSchema, type Organism } from '@gol/domain';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
-import { CorruptDataError } from './errors';
+import { CorruptDataError, NewerFormatVersionError } from './errors';
 import { STORAGE_KEYS } from './localStorageAccess';
 
 afterEach(() => {
@@ -161,8 +161,8 @@ describe('the at-rest format check (Story 5.7)', () => {
       JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
     );
 
-    await expect(repo().load('org-a')).rejects.toThrow(CorruptDataError);
-    await expect(repo().list()).rejects.toThrow(CorruptDataError);
+    await expect(repo().load('org-a')).rejects.toThrow(NewerFormatVersionError);
+    await expect(repo().list()).rejects.toThrow(NewerFormatVersionError);
   });
 
   it('rejects replaceAll on a newer stamp and leaves the store byte-identical', async () => {
@@ -173,7 +173,9 @@ describe('the at-rest format check (Story 5.7)', () => {
     );
     const before = localStorage.getItem(STORAGE_KEYS.organisms);
 
-    await expect(repo().replaceAll([makeOrganism('org-b')])).rejects.toThrow(CorruptDataError);
+    await expect(repo().replaceAll([makeOrganism('org-b')])).rejects.toThrow(
+      NewerFormatVersionError,
+    );
     expect(localStorage.getItem(STORAGE_KEYS.organisms)).toBe(before);
   });
 });

@@ -1,6 +1,6 @@
 import { CURRENT_FORMAT_VERSION, isFormatMigrationError, migrate } from '@gol/domain';
 import type { MigratableDocument, Migrator } from '@gol/domain';
-import { CorruptDataError } from './errors';
+import { CorruptDataError, NewerFormatVersionError } from './errors';
 import type { StorageUsage } from './repositories';
 
 // The flat, prefixed key namespace (RFC-006 Decision 7 / AR-9). Centralised so no repository
@@ -129,10 +129,14 @@ function memoize<T>(read: () => T): () => T {
  * The cost is one `getItem` and a ~20-byte `JSON.parse`. `gol:settings` is outside the chain
  * (Decision F): it is never in any envelope and self-heals through `SettingsSchema`'s defaults.
  *
- * A thrown `FormatMigrationError` — a newer build's data, or a stamp with no usable version — is
- * surfaced as `CorruptDataError` with the migration error as `cause`, so every existing
- * "can't read your data" path handles it and a caller can still tell `newer-version` apart. It is
- * thrown before anything is written: declining to reset leaves the store exactly as it was.
+ * A thrown `FormatMigrationError` is surfaced with the migration error as `cause`, before anything
+ * is written, so the store is left exactly as it was:
+ *   - `'newer-version'` -> `NewerFormatVersionError` — a newer build's data. NOT corruption: the
+ *                          data is intact, a reload into that build is the fix, and a reset would
+ *                          destroy it. A `CorruptDataError` subclass, so every existing
+ *                          non-destructive "can't read your data" path still handles it, while a
+ *                          UI tells it apart by class without reaching into `cause`;
+ *   - anything else     -> plain `CorruptDataError` — a stamp with no usable version (NFR-7.3).
  *
  * Exported for tests only (the injected `migrator` is how the write-back path is reachable while
  * the real registry is empty); the package barrel does not re-export it.
@@ -168,6 +172,16 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
     migrated = migrator(doc, 'at-rest');
   } catch (error) {
     if (isFormatMigrationError(error)) {
+      // `migrate` only reaches 'newer-version' past its integer check, so `foundVersion` is one.
+      if (error.code === 'newer-version') {
+        throw new NewerFormatVersionError(
+          STORAGE_KEYS.schema,
+          error.foundVersion as number,
+          error.supportedVersion,
+          error.message,
+          { cause: error },
+        );
+      }
       throw new CorruptDataError(STORAGE_KEYS.schema, error.message, { cause: error });
     }
     throw error;

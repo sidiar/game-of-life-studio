@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMigrator, CURRENT_FORMAT_VERSION, isFormatMigrationError } from '@gol/domain';
 import type { FormatMigration } from '@gol/domain';
-import { CorruptDataError } from './errors';
+import { CorruptDataError, NewerFormatVersionError } from './errors';
 import {
   ensureCurrentAtRestFormat,
   hasSchemaStamp,
@@ -313,7 +313,7 @@ describe('the at-rest format check (Story 5.7, AR-11)', () => {
     expect(readCollection(STORAGE_KEYS.organisms)).toEqual(JSON.parse(ORGANISMS));
   });
 
-  it('rejects a newer stamp as CorruptDataError caused by newer-version, leaving every key byte-identical', () => {
+  it('rejects a newer stamp as NewerFormatVersionError caused by newer-version, leaving every key byte-identical', () => {
     seed(JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }));
     const before = snapshot();
 
@@ -324,10 +324,17 @@ describe('the at-rest format check (Story 5.7, AR-11)', () => {
       thrown = error;
     }
 
+    // Its own class, so a UI tells it apart without reaching into `cause` — and still a
+    // CorruptDataError, so every existing non-destructive "unreadable" path keeps handling it.
+    expect(thrown).toBeInstanceOf(NewerFormatVersionError);
     expect(thrown).toBeInstanceOf(CorruptDataError);
-    const cause = (thrown as CorruptDataError).cause;
-    expect(isFormatMigrationError(cause) && cause.code).toBe('newer-version');
-    expect((thrown as Error).message).toContain('newer version');
+    const newer = thrown as NewerFormatVersionError;
+    expect(newer.name).toBe('NewerFormatVersionError');
+    expect(newer.key).toBe(STORAGE_KEYS.schema);
+    expect(newer.foundVersion).toBe(CURRENT_FORMAT_VERSION + 1);
+    expect(newer.supportedVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(isFormatMigrationError(newer.cause) && newer.cause.code).toBe('newer-version');
+    expect(newer.message).toContain('newer version');
     expect(snapshot()).toEqual(before);
   });
 
@@ -341,6 +348,8 @@ describe('the at-rest format check (Story 5.7, AR-11)', () => {
     seed(stamp);
 
     expect(() => readCollection(STORAGE_KEYS.organisms)).toThrow(CorruptDataError);
+    // A stamp with no usable version IS corruption — only a newer one is not.
+    expect(() => readCollection(STORAGE_KEYS.organisms)).not.toThrow(NewerFormatVersionError);
     expect(localStorage.getItem(STORAGE_KEYS.schema)).toBe(stamp);
   });
 
@@ -350,7 +359,9 @@ describe('the at-rest format check (Story 5.7, AR-11)', () => {
     seed(JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }));
     const before = snapshot();
 
-    expect(() => writeDataKey(STORAGE_KEYS.battles, { 'battle-9': {} })).toThrow(CorruptDataError);
+    expect(() => writeDataKey(STORAGE_KEYS.battles, { 'battle-9': {} })).toThrow(
+      NewerFormatVersionError,
+    );
     expect(snapshot()).toEqual(before);
   });
 
