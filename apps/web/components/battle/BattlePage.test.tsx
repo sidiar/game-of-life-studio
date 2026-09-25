@@ -387,7 +387,10 @@ describe('BattlePage', () => {
     // enabled: Conway's Classic is in the library, so the seeded roster resolves (AC7).
     expect(screen.getByRole('button', { name: 'Lab' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(8);
+    // Story 5.6: converted from 8 — EXPORT BATTLE now renders below Clear Petri Dish (AC1); an
+    // empty battle is exportable (FD10), so it is enabled here, not disabled like CLEAR.
+    expect(screen.getByRole('button', { name: 'Export Battle' })).toBeEnabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(9);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -542,7 +545,10 @@ describe('BattlePage', () => {
     // RUN-ONLY, so this LAB-mode count holds; an eleventh Lab control (Epic 4's per-row pencil)
     // still fails here.
     expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeEnabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 7);
+    // Story 5.6: converted from `+ 7` — EXPORT BATTLE renders below Clear Petri Dish (AC1),
+    // enabled (`exportDisabled` is `isSaving` alone, not tied to living-cell count).
+    expect(screen.getByRole('button', { name: 'Export Battle' })).toBeEnabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 8);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);

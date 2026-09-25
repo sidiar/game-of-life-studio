@@ -2860,7 +2860,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `exportWorkspace()` has never self-validated its output either, and every test in
   `workspaceSerializer.test.ts` asserts the envelope's shape by parsing the RETURNED value, matching
   that existing convention. No residual work.
-- **Hand-off to Story 5.6: the export entry point must save, or block export on, a dirty/unsaved
+- ~~**Hand-off to Story 5.6: the export entry point must save, or block export on, a dirty/unsaved
   battle before calling `exportBattle(id)`.** `exportBattle` (Story 5.4, reverted to
   `exportBattle(id)` by the 2026-09-24 owner ruling) reads the battle through
   `repos.battles.load(id)`, so it can only export what is already persisted; a battle that was
@@ -2868,7 +2868,12 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   saved copy, not FR-6.1's "current Battle". The "Export Battle" action (the editor's Tools
   section) is Story 5.6's to build — it owns deciding what "force a save first" means for the
   editor's dirty-state tracking (RFC-005) and wiring it in before the `exportBattle(id)` call, or
-  disabling/blocking the action while the battle is dirty or unsaved. Not decided here.
+  disabling/blocking the action while the battle is dirty or unsaved. Not decided here.~~ — **✅
+  CLOSED by Story 5.6.** Took the "saved first" branch (FD4, the #77 AC): `<ExportBattleDialog>`'s
+  Battle Only button reads "Save & Export Battle" whenever `isDirty || persistedId === null`, runs
+  the existing `saveBattle` path (`<BattlePage>`'s `persistBattle`, split in Task 3 to report the
+  id it wrote), and calls `exportBattle(id)` with that id only once the save resolved. A failed
+  save exports nothing and reports through the existing `saveError` line.
 - **`toEnvelope('battle', …)` accepts zero or many battles at the producer.** Cardinality is now
   enforced by `WorkspaceExportSchema` at parse time only; `toEnvelope` (Story 5.3's API, exported
   from the barrel) will still build a `kind: 'battle'` envelope the schema rejects. `exportBattle`
@@ -3017,3 +3022,31 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   Safari; FileSaver.js waits ~40 s for this reason. A longer delay costs nothing but a briefly-held
   blob. Not changed in review because FD3 chose 0 ms explicitly; revisit on the first real-Safari
   report of a cancelled or empty download (Story 5.6 reuses this seam).
+
+## Deferred from: Story 5-6-battle-export-dialog (2026-09-24)
+
+- **FD1 variance: the serializer is built inside the lazily loaded `battleExporter.ts` module,
+  from the injected `repositories`, not at the route boundary the way Story 5.5's `/settings` page
+  builds it.** `/battle` had only 0.4 KB of first-load gzip headroom at story creation
+  (`scripts/check-bundle-size.mjs:59-78`'s 310 KB ceiling against a 309.6 KB measurement), and a
+  boundary-built serializer would pull `createWorkspaceSerializer`, `organismClosure`, `toEnvelope`
+  and `APP_VERSION` into the static graph — more than the headroom allows. The AR-2/AR-27 seam
+  itself is intact (`createBattleExporter` is still a factory over the injected `AppRepositories`
+  interface, never a concrete repository); only WHERE the factory is called moved, from the page
+  boundary to inside a `next/dynamic`-adjacent bare `import()`. If the owner wants boundary
+  construction to match `/settings`, the growth-ratchet gate this file already tracks (the
+  "the bundle gate moves off absolute budgets" entry) should land first, so `/battle` is not
+  fighting a stale absolute ceiling while it happens.
+- **FD6: Entire Workspace exports the SAVED copy of a dirty battle, and does not save first.** The
+  #77 AC's save obligation is Battle Only's alone ("before `exportBattle(id)` is called"); widening
+  it to Entire Workspace was considered and rejected as scope creep on this story. The dialog's own
+  copy discloses it ("Entire Workspace exports only what is already saved") when `needsSave` is
+  true, so the gap is visible rather than silent. If the owner wants parity, it is a one-line
+  `await persistBattle()` before `exporter.exportWorkspace()` in `<BattlePage>`'s `runExportChoice`.
+  The two related gaps FD6 itself already named — `useWorkspaceSeed` not mounted on `/battle`, and
+  a partly-corrupt store yielding a partial file — stay with Story 5.11, unchanged by this story.
+- **`EditorToolsSection`'s `:not(:last-child)` margin rule assumes exactly two `ToolButton`s.** It
+  reproduces the mockup's `.tool-btn { margin-bottom: 8px }` without a wrapper element (so the DOM
+  stays byte-for-byte identical to before this story when `onExport` is absent), but a THIRD tool
+  button — none is planned; §9.3 excludes the mockup's other two outright — would need the rule
+  re-checked rather than assumed to keep working.

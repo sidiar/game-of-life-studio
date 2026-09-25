@@ -20,6 +20,7 @@ import { buildRosterIds } from '@/lib/battle/rosterUnion';
 import { DEFAULT_TOOL } from '@/lib/battle/tool';
 import { useDirtyGuard } from '@/lib/battle/useDirtyGuard';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { useInertBackground } from '@/lib/useInertBackground';
 import { useLeaveGuard } from '@/lib/battle/useLeaveGuard';
 import { useUndoableGrid } from '@/lib/battle/useUndoableGrid';
 import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
@@ -48,6 +49,30 @@ const Body = styled('div')({
  * stack back into the route's HTML, which is the cost this avoids.
  */
 const UnsavedChangesDialog = dynamic(() => import('./UnsavedChangesDialog'), { ssr: false });
+
+/**
+ * Story 5.6 (FD1): the export dialog, loaded ON DEMAND for the identical reason as
+ * `<UnsavedChangesDialog>` above — see that call's own comment for the measurement this one
+ * shares (all three dialogs on this route now share one MUI `Dialog` chunk). `/battle` had 0.4 KB
+ * of first-load headroom at story creation, and this dialog's own module never imports the
+ * serializer either — the export code reaches this component through a SEPARATE bare `import()`,
+ * inside `<BattlePage>`'s post-choice handler (FD1's other half; see `runExportChoice`).
+ */
+const ExportBattleDialog = dynamic(() => import('./editor/ExportBattleDialog'), { ssr: false });
+
+/**
+ * FD8's shared focus-restore check, used by both the Cancel/Escape/backdrop path (the effect keyed
+ * on `exportConfirming`) and the completed-operation path (`runExportChoice`'s own `finally`) — one
+ * definition so the two can never drift on what "loose" means. Matches `useLeaveGuard`'s own check:
+ * `null`, `<body>`, or still inside the closing dialog.
+ */
+function focusExportButtonIfLoose(): void {
+  const active = document.activeElement;
+  const focusIsLoose =
+    active === null || active === document.body || active.closest('[role="dialog"]') !== null;
+  if (!focusIsLoose) return;
+  document.querySelector<HTMLElement>('[data-export-battle]')?.focus();
+}
 
 /**
  * Story 3.11 forced decision 1, option (a): the Run view — and with it THE ENGINE — is loaded ON
@@ -754,6 +779,17 @@ export default function BattlePage({
   // AC5 / NFR-7.2: a refused save's message, rendered as a `role="alert"` line above the status bar
   // (forced decision 4b). `null` is "no failure to report" — never `''`.
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Story 5.6 (AC5 / NFR-7.2, FD9): the export dialog's OWN failure slot, declared here — ahead of
+  // `persistBattle` below, which clears it on every save attempt — rather than beside the rest of
+  // the export wiring further down. The eslint `react-hooks` (React Compiler) rule flags a forward
+  // reference to a `useState` setter used inside an earlier callback's body as unpreservable
+  // memoization, even though it is sound at runtime (the setter is stable and the callback does not
+  // run until well after this render's declarations have all executed) — declaring it before its
+  // first use is the fix, not a suppression. Shares `saveError`'s `role="alert"` slot on
+  // `<BattleEditorView>` rather than adding a second surface — see that prop below.
+  const [exportError, setExportError] = useState<string | null>(null);
+
   // AC2, AC3, AC4, AC5 — the whole save. Declared before the four early returns below like every
   // other hook here.
   //
@@ -772,6 +808,15 @@ export default function BattlePage({
   // `<EditorStatusBar>` has always called. One code path, one place the outcome is decided, and
   // AC5's `role="alert"` surface untouched.
   //
+  // Story 5.6 (Task 3, FD5): further split into `persistBattle` (below), which does today's whole
+  // body UNCHANGED and reports the id it wrote, and this thin boolean wrapper — `saveBattle` keeps
+  // `useLeaveGuard`'s `save(): Promise<boolean>` contract byte-compatible, and its identity stays
+  // stable under the same deps as `persistBattle`'s own. The reason a separate function has to
+  // REPORT the id: after a save inside the same handler, `saveStamp` STATE has not updated yet
+  // (the handler closed over the pre-save render), so on `/battle/new`'s first save that value is
+  // still `null` — the export path (`handleExportExited` below) needs the id `persistBattle` just
+  // minted, not a re-read of stale state.
+  //
   // ⚠️ Why a boolean at all: this function is total (it catches its own rejection into `saveError`
   // and resolves either way), so `await handleSave()` told a caller NOTHING — and Story 2.16's
   // Save-and-leave must not navigate over a failed write, which would discard exactly the data
@@ -779,16 +824,19 @@ export default function BattlePage({
   // render's closed-over value, not the post-save one. ❌ Do not "simplify" this back to a void
   // promise; `BattlePage.test.tsx`'s rejecting-save test is what reddens if it is.
   //
-  // `false` covers BOTH "refused" (the edit lock, or no grid) and "threw" — from the caller's
+  // `null` covers BOTH "refused" (the edit lock, or no grid) and "threw" — from the caller's
   // side those are the same fact: nothing was written, so nothing may be left behind.
-  const saveBattle = useCallback(async (): Promise<boolean> => {
-    if (savingRef.current || grid === null) return false;
+  const persistBattle = useCallback(async (): Promise<string | null> => {
+    if (savingRef.current || grid === null) return null;
     savingRef.current = true;
     setIsSaving(true);
     // Cleared at the START of the attempt, not only on success: an identical message re-rendered
     // in place would not re-announce through `role="alert"`, so a second failure would be silent.
     // Unmounting the line first makes every attempt's outcome audible.
     setSaveError(null);
+    // Story 5.6 (FD9): a save attempt clears a stale EXPORT message too, so a later save can never
+    // leave yesterday's export failure sitting on screen next to today's outcome.
+    setExportError(null);
 
     const now = new Date();
     // The loaded record is the fallback SOURCE for both fields, never a thing to write back to.
@@ -825,17 +873,23 @@ export default function BattlePage({
       // success for a write that then throws — and RFC-006 Decision 7 says a failed write "also
       // fails the dirty-flag clear, so the user keeps their unsaved indicator" in as many words.
       setIsDirty(false);
-      return true;
+      return id;
     } catch (error) {
       // ❌ Never swallowed: an unreported save failure is the worst outcome in this story. `isDirty`
       // is deliberately left TRUE.
       setSaveError(saveFailureMessage(error, 'battle'));
-      return false;
+      return null;
     } finally {
       savingRef.current = false;
       setIsSaving(false);
     }
   }, [grid, rosterIds, battleName, repositories, saveStamp, loadedIdentity]);
+
+  // Story 5.6 (Task 3): the thin wrapper `useLeaveGuard`'s `save(): Promise<boolean>` contract
+  // needs — see `persistBattle`'s own comment for why the split exists at all.
+  const saveBattle = useCallback(async (): Promise<boolean> => {
+    return (await persistBattle()) !== null;
+  }, [persistBattle]);
 
   // `<EditorStatusBar>`'s SAVE, unchanged in contract (`onSave(): void`): it fires and forgets,
   // because the bar has no use for the outcome — the `role="alert"` line and the dirty flag are
@@ -843,6 +897,156 @@ export default function BattlePage({
   const handleSave = useCallback(() => {
     void saveBattle();
   }, [saveBattle]);
+
+  /**
+   * Story 5.6 (FR-6.1/7.13): the Export Battle dialog's own three-phase lifecycle — `exportConfirming`
+   * (mounted: open or exiting) and `exportDialogOpen` (the fade), copying `useLeaveGuard`'s shape
+   * rather than reusing it: that hook is built around ITS specific `save`/`onLeave` contract and a
+   * single dirty-battle question, where this dialog asks a different one (which of two exports) and
+   * runs its side effect from `onExited` rather than from a button handler (FD2). Kept inline here
+   * rather than lifted to `lib/battle/useExportDialog.ts` — it stayed under Task 5's ~40-line guide.
+   */
+  const [exportConfirming, setExportConfirming] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  // Recorded by a choice button (Battle Only / Save & Export Battle, or Entire Workspace) and
+  // consumed once in `onExited` — nothing async runs before then (FD2).
+  const pendingExportChoiceRef = useRef<'battle' | 'workspace' | null>(null);
+  // Two jobs, one ref (bundle headroom, FD1 — the same one-ref-two-jobs shape `savingRef` uses
+  // above). (a) Re-entrancy while an export is genuinely running (FD11: this button never
+  // self-disables, the same choice `<DataManagement>`'s Export button makes and for the same
+  // reason — a disabled focused control drops keyboard focus to `<body>`, deferred-work.md's Clear
+  // precedent). (b) Tells the focus-restore effect below apart a completed choice from a Cancel/
+  // Escape/backdrop: set synchronously, before `runExportChoice` starts, so it already reads `true`
+  // by the time that effect's commit runs — the effect skips the choice path entirely and leaves
+  // its own `finally` to restore focus once the operation has genuinely settled.
+  const exportInFlightRef = useRef(false);
+  // Unmount safety for the post-await `setExportError` in `runExportChoice` below, following
+  // `useAsyncResource.ts`'s closure-flag reasoning adapted for an event handler rather than an
+  // effect — the same shape `<DataManagement>`'s `mountedRef` uses, re-armed on every setup so
+  // StrictMode's setup→cleanup→setup does not leave it permanently false.
+  const exportMountedRef = useRef(true);
+  useEffect(() => {
+    exportMountedRef.current = true;
+    return () => {
+      exportMountedRef.current = false;
+    };
+  }, []);
+
+  // Called HERE, this dialog's parent, for the identical ordering reason `useLeaveGuard` calls it
+  // from ITS parent (see that hook's own comment): MUI's focus-trap move is a child effect and must
+  // already have happened before this runs.
+  useInertBackground(exportConfirming);
+
+  // FD5: `persistedId` — the id an export should use when the battle does NOT need saving first.
+  // `saveStamp` wins over `loadedIdentity` because a save inside THIS session is newer information
+  // than what the page loaded with. FD7 (AC7): `needsSave` is the whole "saved first" gate, and
+  // `neverSaved` picks which of the two body sentences the dialog shows. Both are read fresh on
+  // every render rather than snapshotted at open time — safe because the background is `inert` for
+  // the dialog's whole open-and-exiting window (FD2: nothing async runs meanwhile, so neither value
+  // can change out from under it).
+  const persistedId = saveStamp?.id ?? loadedIdentity?.id ?? null;
+  const exportNeedsSave = isDirty || persistedId === null;
+
+  /**
+   * FD8's DOM-lookup restore, mirroring `useLeaveGuard`'s own effect and for the identical reasons:
+   * WebKit does not focus a `<button>` on click, and `disableRestoreFocus` on `<ExportBattleDialog>`
+   * turns off MUI's own restore for the same reason `<UnsavedChangesDialog>`'s does. Ordering is
+   * the point: this must run AFTER `useInertBackground`'s cleanup has released `inert` (React runs
+   * every cleanup for a commit before any setup, and that hook is declared ABOVE this effect), or
+   * `.focus()` targets a still-inert node and is a spec-mandated no-op — an immediate call inside
+   * `handleExportExited` itself (before this component even re-renders) would do exactly that.
+   *
+   * ⚠️ Only ever meaningfully fires for the Cancel/Escape/backdrop path — `exportInFlightRef` is
+   * `true` by the time this runs on the completed-choice path (see that ref's own comment), so this
+   * skips it there. That path restores focus itself, from `runExportChoice`'s `finally`, well after
+   * this effect's one relevant firing has already happened and `exportConfirming` has stopped
+   * changing.
+   */
+  useEffect(() => {
+    if (exportConfirming || exportInFlightRef.current) return;
+    focusExportButtonIfLoose();
+  }, [exportConfirming]);
+
+  // AC1: does nothing while a save (the edit lock) or an export is already running — no dialog
+  // opens on top of either.
+  const handleExport = useCallback(() => {
+    if (savingRef.current || exportInFlightRef.current) return;
+    setExportError(null);
+    setExportConfirming(true);
+    setExportDialogOpen(true);
+  }, []);
+
+  // AC2/AC9: Escape and a backdrop click both route through `<ExportBattleDialog>`'s `onCancel`,
+  // same as this. Changes nothing — no save, no export, `pendingExportChoiceRef` stays `null`, and
+  // `exportInFlightRef` stays `false` — which is what tells the focus-restore effect above this IS
+  // the Cancel path once `exportConfirming` clears.
+  const handleExportCancel = useCallback(() => {
+    setExportDialogOpen(false);
+  }, []);
+
+  // FD2: a choice button ONLY records the choice and closes the dialog. Nothing async runs yet —
+  // that is `handleExportExited`'s job, once the dialog is genuinely gone. One function for both
+  // choices (bundle headroom, FD1) — the JSX below closes over the literal for each dialog prop.
+  const handleChoose = useCallback((choice: 'battle' | 'workspace') => {
+    pendingExportChoiceRef.current = choice;
+    setExportDialogOpen(false);
+  }, []);
+
+  /**
+   * FD2's steps, in order: (1) unmount the dialog / release `inert`, (2) if a choice was made, act
+   * on it, (3) set `exportError` on rejection, (4) `finally` clears the in-flight ref and restores
+   * focus. One `useCallback` rather than a separate post-exit function (bundle headroom, FD1) — the
+   * MUI `onTransitionExited` prop ignores a returned Promise, so an async callback here is fine.
+   *
+   * `import('@/lib/export/battleExporter')` is the FD1 boundary: the serializer, `organismClosure`,
+   * `toEnvelope` and `APP_VERSION` all arrive through this ONE bare `import()` call, which is what
+   * keeps them out of `/battle`'s static graph. Built fresh per call from the injected
+   * `repositories` — never imported statically, never cached across calls (AR-2/AR-27: still a
+   * factory over the interface, not a concrete repository).
+   *
+   * `exportInFlightRef` is armed right before the async work starts, rather than in the choose
+   * handlers above — arming it earlier would buy nothing (the button is unreachable, `inert`, for
+   * the dialog's whole open-and-exiting window) and this keeps the "armed / cleared" pair in one
+   * function's control flow.
+   */
+  const handleExportExited = useCallback(async () => {
+    setExportConfirming(false);
+    const choice = pendingExportChoiceRef.current;
+    pendingExportChoiceRef.current = null;
+    if (choice === null) return;
+
+    exportInFlightRef.current = true;
+    try {
+      const { createBattleExporter } = await import('@/lib/export/battleExporter');
+      const exporter = createBattleExporter(repositories);
+      if (choice === 'workspace') {
+        // FD6: no save here — Entire Workspace exports what is already persisted, and the
+        // dialog's own copy already told the user that when `exportNeedsSave` was true.
+        await exporter.exportWorkspace();
+      } else {
+        // FD4/FD5: save first ONLY when needed, and use the id the save just wrote — never a
+        // re-read of `saveStamp` state, which has not updated yet inside this same tick.
+        const id = exportNeedsSave ? await persistBattle() : persistedId;
+        // A failed save already reported itself into `saveError` (`persistBattle`'s own catch);
+        // nothing here to export and nothing here to report a second time (FD9).
+        if (id === null) return;
+        await exporter.exportBattle(id);
+      }
+    } catch {
+      // AC8: plain words, no `error.message`, no story IDs — the same discipline
+      // `saveFailureMessage` follows for the sibling surface.
+      if (exportMountedRef.current) {
+        setExportError(
+          choice === 'workspace'
+            ? 'Your workspace could not be exported. Try again.'
+            : 'This battle could not be exported. Try again.',
+        );
+      }
+    } finally {
+      exportInFlightRef.current = false;
+      if (exportMountedRef.current) focusExportButtonIfLoose();
+    }
+  }, [repositories, exportNeedsSave, persistedId, persistBattle]);
 
   /**
    * Story 2.16's whole in-app guard — the dialog's three phases, the inert background, and the
@@ -979,10 +1183,18 @@ export default function BattlePage({
           isDirty={isDirty}
           onSave={handleSave}
           isSaving={isSaving}
-          saveError={saveError}
+          /* Story 5.6 (FD9): shares ONE `role="alert"` slot with the save failure rather than
+             adding a second surface. The two cannot both be non-null in practice (a save attempt
+             clears `exportError` and `handleExport` clears both), and if they ever were, the save
+             message wins — it is the more actionable one. */
+          saveError={saveError ?? exportError}
           /* Story 2.16 (FR-7.10, spec §3.3): the ONLY new prop on this interface. The guard itself
              runs here — `<BattleEditorView>` forwards the press and interprets nothing. */
           onBack={handleBack}
+          /* Story 5.6 (FR-6.1/7.13): same treatment as `onBack` immediately above — the guard runs
+             here, `<BattleEditorView>` forwards the press. */
+          onExport={handleExport}
+          exportDisabled={isSaving}
         />
       )}
       {/* Story 3.11 (AC3, AC6): the Run chassis, MOUNTED in place of the editor — not beside it,
@@ -1028,6 +1240,21 @@ export default function BattlePage({
            (forced decision 3a), so this dialog cannot be open when a save started anywhere else
            is in flight — the only save it can be showing is its own. */
         <UnsavedChangesDialog {...leaveDialogProps} />
+      )}
+      {/* Mounted only while a confirmation is in flight, the same gate `leaveConfirming` uses above
+          — the lazy chunk is never requested on the overwhelmingly common path (every export from
+          a clean, already-saved battle skips the "needs save" body line but still opens this same
+          dialog once). */}
+      {exportConfirming && (
+        <ExportBattleDialog
+          open={exportDialogOpen}
+          needsSave={exportNeedsSave}
+          neverSaved={persistedId === null}
+          onCancel={handleExportCancel}
+          onChooseBattle={() => handleChoose('battle')}
+          onChooseWorkspace={() => handleChoose('workspace')}
+          onExited={handleExportExited}
+        />
       )}
     </Root>
   );

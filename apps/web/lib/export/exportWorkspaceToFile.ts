@@ -3,8 +3,13 @@ import { downloadJsonFile } from './downloadJsonFile';
 import { workspaceExportFilename } from './workspaceExportFilename';
 
 /**
- * The reusable export seam (AC6, Story 5.5) — Stories 5.6 and 5.9 both reuse this function rather
- * than re-assembling its three steps inline.
+ * The reusable export seam (AC6, Story 5.5) — reused rather than re-assembled inline wherever the
+ * app writes a whole-workspace file. Story 5.6's Entire Workspace choice (`<ExportBattleDialog>`,
+ * `apps/web/lib/export/battleExporter.ts`) is the second caller, unchanged from `<DataManagement>`'s
+ * own; Story 5.9's import-time "Export First" prompt is the third and does not exist yet.
+ *
+ * A single-BATTLE export is a DIFFERENT function, `exportBattleToFile.ts` (Story 5.6) — same shape,
+ * a different envelope kind and a different filename source, not a variant of this one.
  *
  * Runs `exportWorkspace()`, derives the filename from the SAME `exportedAt` the envelope carries
  * (FD4 — one `now()` call per export, never a second), and hands both to `downloadJsonFile`.
