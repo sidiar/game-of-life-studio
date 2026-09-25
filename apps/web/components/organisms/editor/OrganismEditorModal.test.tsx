@@ -2471,8 +2471,9 @@ describe('OrganismEditorModal', () => {
 
       // Owner's decision on review item D5 (2026-09-24): one press closes ONE layer. A held Escape
       // used to close the panel and then the editor, because the panel's capture listener is gone
-      // by the time the OS auto-repeat arrives — destructive today, since the editor has no dirty
-      // guard until Story 4.23.
+      // by the time the OS auto-repeat arrives. The editor here is CLEAN, so the second layer is a
+      // plain close; on a dirty draft it would open Story 4.23's prompt instead, and the editor's
+      // own FD10 guard keeps a held repeat from doing even that.
       //
       // ⚠️ The middle event is SYNTHETIC, standing in for a real auto-repeat: neither
       // `user.keyboard` nor Playwright's `page.keyboard.press` ever sets `repeat`, so no ordinary
@@ -2818,9 +2819,15 @@ describe('OrganismEditorModal', () => {
       await dirtyTheDraft(user, dialog);
       await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
 
-      await user.click(within(unsavedChangesDialog()).getByRole('button', { name: 'Save' }));
+      const confirm = unsavedChangesDialog();
+      await user.click(within(confirm).getByRole('button', { name: 'Save' }));
+
+      // FD3: nothing is written while the confirmation is still up (its exit fade).
+      expect(confirm).toBeInTheDocument();
+      expect(saveSpy).not.toHaveBeenCalled();
 
       await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+      expect(confirm).not.toBeInTheDocument();
       await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     });
@@ -2858,14 +2865,18 @@ describe('OrganismEditorModal', () => {
       await dirtyTheDraft(user, dialog);
       await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
 
-      await user.click(within(unsavedChangesDialog()).getByRole('button', { name: 'Save' }));
+      const confirm = unsavedChangesDialog();
+      await user.click(within(confirm).getByRole('button', { name: 'Save' }));
 
+      // AC3: the alert lands in the LIVE editor, never under the confirmation.
+      expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
       await within(dialog).findByRole('alert');
+      expect(confirm).not.toBeInTheDocument();
       expect(onClose).not.toHaveBeenCalled();
       expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBeInTheDocument();
     });
 
-    it('is clean after a successful Save (no dialog on the next close), and dirty again after a post-save edit', async () => {
+    it('is clean after a successful Save (no dialog on the next close)', async () => {
       const user = userEvent.setup();
       const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
       const { onClose, onSaved } = mountModal({ organisms });
@@ -2966,15 +2977,30 @@ describe('OrganismEditorModal', () => {
       mountModal({ organism: edited, library: [CONWAYS_CLASSIC, edited], battleSummaries });
       const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
 
+      await dirtyTheDraft(user, dialog);
+      const nameBefore = (
+        screen.getByRole('textbox', { name: 'Organism Name' }) as HTMLInputElement
+      ).value;
       const trigger = within(dialog).getByRole('button', { name: 'Used in 1 Battle' });
       await user.click(trigger);
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
-      await dirtyTheDraft(user, dialog);
-      await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
+      // KEYBOARD only — a pointer click on Back would close the panel through D1's outside
+      // `pointerdown` first and prove nothing about `closePanel()`. Focus moved programmatically
+      // (the Tab-away D1 accepts), then Enter.
+      const back = within(dialog).getByRole('button', { name: 'Back to Library' });
+      back.focus();
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await user.keyboard('{Enter}');
 
-      expect(unsavedChangesDialog()).toBeInTheDocument();
+      const confirm = unsavedChangesDialog();
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // The prompt's Escape reaches the PROMPT, not a stale panel listener.
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(confirm).not.toBeInTheDocument());
+      expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue(nameBefore);
     });
 
     it('a repeat-carrying Escape does not open the confirmation (FD10) — a genuine keydown does', async () => {
@@ -2989,6 +3015,192 @@ describe('OrganismEditorModal', () => {
 
       fireEvent.keyDown(dialog, { key: 'Escape', repeat: false });
       expect(unsavedChangesDialog()).toBeInTheDocument();
+    });
+
+    it.each([
+      [
+        'dominance',
+        async (_user: ReturnType<typeof userEvent.setup>) => {
+          fireEvent.change(screen.getByRole('slider', { name: 'Dominance' }), {
+            target: { value: '42' },
+          });
+        },
+      ],
+      [
+        'colour',
+        async (user: ReturnType<typeof userEvent.setup>) => {
+          await user.click(screen.getByRole('button', { name: 'Change Color' }));
+          await user.click(screen.getByRole('radio', { name: PALETTE[9].name }));
+        },
+      ],
+      [
+        'aging',
+        async (user: ReturnType<typeof userEvent.setup>) => {
+          await user.click(screen.getByRole('switch', { name: 'Aging Degradation' }));
+        },
+      ],
+    ] as const)('an edit to %s makes the editor dirty (AC1)', async (_field, edit) => {
+      const user = userEvent.setup();
+      const { onClose } = mountModal();
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+
+      await edit(user);
+      await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(unsavedChangesDialog()).toBeInTheDocument();
+    });
+
+    it('Keep Editing restores focus to Back when Back asked (FD7)', async () => {
+      const user = userEvent.setup();
+      mountModal();
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      await dirtyTheDraft(user, dialog);
+      const back = within(dialog).getByRole('button', { name: 'Back to Library' });
+      await user.click(back);
+
+      await user.click(
+        within(unsavedChangesDialog()).getByRole('button', { name: 'Keep Editing' }),
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Unsaved Changes' })).not.toBeInTheDocument(),
+      );
+      await waitFor(() => expect(back).toHaveFocus());
+    });
+
+    it('Escape → Keep Editing restores focus to the control that held it at keydown (FD7)', async () => {
+      const user = userEvent.setup();
+      mountModal();
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      await dirtyTheDraft(user, dialog);
+      const nameField = within(dialog).getByRole('textbox', { name: 'Organism Name' });
+      expect(nameField).toHaveFocus();
+
+      await user.keyboard('{Escape}');
+      await user.click(
+        within(unsavedChangesDialog()).getByRole('button', { name: 'Keep Editing' }),
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Unsaved Changes' })).not.toBeInTheDocument(),
+      );
+      await waitFor(() => expect(nameField).toHaveFocus());
+    });
+
+    it('Keep Editing leaves `saveAttempted` and the outcome line untouched (AC3)', async () => {
+      const user = userEvent.setup();
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      const { onSaved } = mountModal({ organisms });
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      await user.click(headerAddButton(rules));
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+      await dirtyTheDraft(user, dialog);
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+      expect(document.querySelector('[data-save-outcome]')).not.toBeNull();
+
+      // Dirty again with an INVALID edit, refused by the gate so `saveAttempted` is set and the
+      // inline error shows.
+      await user.clear(within(dialog).getByRole('textbox', { name: 'Organism Name' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      expect(await within(dialog).findByText(ORGANISM_NAME_REQUIRED)).toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
+      await user.click(
+        within(unsavedChangesDialog()).getByRole('button', { name: 'Keep Editing' }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Unsaved Changes' })).not.toBeInTheDocument(),
+      );
+
+      expect(within(dialog).getByText(ORGANISM_NAME_REQUIRED)).toBeInTheDocument();
+    });
+
+    it('an edit typed while the write is in flight still counts as dirty (FD2)', async () => {
+      const user = userEvent.setup();
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      let resolveSave!: () => void;
+      vi.spyOn(organisms, 'save').mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave = resolve;
+          }),
+      );
+      const { onClose, onSaved } = mountModal({ organisms });
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      await user.click(headerAddButton(rules));
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+      await dirtyTheDraft(user, dialog);
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(within(dialog).getByRole('button', { name: 'Back to Library' })).toBeDisabled(),
+      );
+
+      await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), ' II');
+      await act(async () => resolveSave());
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+
+      await user.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
+      expect(onClose).not.toHaveBeenCalled();
+      expect(unsavedChangesDialog()).toBeInTheDocument();
+    });
+
+    it('no confirmation opens over a CLOSING editor (the `!open` exit fade, AC7)', async () => {
+      const user = userEvent.setup();
+      const onClose = vi.fn();
+      const organisms = createFakeRepositories({ organisms: [...LIBRARY] }).organisms;
+      const props = {
+        origin: 'library' as const,
+        organism: null,
+        onClose,
+        library: LIBRARY,
+        battleSummaries: NO_BATTLES,
+        organisms,
+        onSaved: vi.fn(),
+      };
+      const { rerender } = render(<OrganismEditorModal open {...props} />);
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      await dirtyTheDraft(user, dialog);
+
+      rerender(<OrganismEditorModal open={false} {...props} />);
+      // Still mounted through the exit fade; Back is still clickable there.
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Back to Library' }));
+
+      expect(screen.queryByRole('dialog', { name: 'Unsaved Changes' })).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('a delete alert published into the editor clears a stale save line (AC9/FD12)', async () => {
+      const user = userEvent.setup();
+      const [aggressive] = createMockOrganisms();
+      const organisms = createFakeRepositories({ organisms: [...LIBRARY] }).organisms;
+      const onSaved = vi.fn();
+      const props = {
+        open: true,
+        origin: 'library' as const,
+        organism: aggressive,
+        onClose: vi.fn(),
+        library: LIBRARY,
+        battleSummaries: NO_BATTLES,
+        organisms,
+        onSaved,
+        onRequestDelete: vi.fn(),
+      };
+      const { rerender } = render(<OrganismEditorModal {...props} deleteError={null} />);
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+      expect(document.querySelector('[data-save-outcome]')).not.toBeNull();
+
+      rerender(<OrganismEditorModal {...props} deleteError={ORGANISM_DELETE_FAILED} />);
+
+      expect(document.querySelector('[data-save-outcome]')).toBeNull();
+      expect(within(dialog).getByRole('alert')).toHaveTextContent(ORGANISM_DELETE_FAILED);
     });
 
     it('registers no `beforeunload` listener while dirty (FD9 — `useDirtyGuard` stays the only one)', async () => {

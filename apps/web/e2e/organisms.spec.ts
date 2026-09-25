@@ -4474,6 +4474,16 @@ test.describe('unsaved-changes guard (Story 4.23)', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('textbox', { name: 'Organism Name' })).toHaveValue('Glider');
     await expect(back(dialog)).toBeFocused();
+
+    // The Story 4.22 regression class: a stacked dialog's window unwinding and leaving the editor
+    // `inert`. Prove it is LIVE — a real pointer edit lands, and the next Back prompts again.
+    const name = dialog.getByRole('textbox', { name: 'Organism Name' });
+    await name.click();
+    await name.press('End');
+    await name.pressSequentially(' II');
+    await expect(name).toHaveValue('Glider II');
+    await back(dialog).click();
+    await expect(prompt).toBeVisible();
   });
 
   test('Discard closes the editor with nothing written to localStorage', async ({ page }) => {

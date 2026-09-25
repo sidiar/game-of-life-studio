@@ -89,7 +89,11 @@ export interface OrganismEditorLifecycleProps {
    * no-op during that window). The whole mode switch: no title change, no `mode` prop.
    */
   organism: Organism | null;
-  /** Close ✕, the back label and Escape all route here. Story 4.23 guards it. */
+  /**
+   * The unguarded close. The ✕, the back label and Escape reach it only through the modal's own
+   * unsaved-changes guard (Story 4.23), which sits IN FRONT of this callback; a caller invoking it
+   * directly (the Library's close after a successful delete, AC6) closes with no prompt.
+   */
   onClose(): void;
   /**
    * Fired once the exit transition has finished — the parent hook's cue to release `inert` and
@@ -736,9 +740,6 @@ export default function OrganismEditorModal({
       // silently swallow an edit typed while the write was in flight.
       setBaseline(attemptedDraft);
       setSaveOutcome(saveOutcomeMessage(record));
-      // Story 4.23, AC9/FD12: fired on every SUCCESSFUL write only — never on a refusal or a
-      // rejection, and never itself a repository call (the caller's own state, AR-2/AR-27).
-      onSaveSucceeded?.();
     } catch (error) {
       setSaveError(saveFailureMessage(error, 'organism'));
       record = null;
@@ -758,6 +759,11 @@ export default function OrganismEditorModal({
     // dialog has exited; a route-level unmount of the whole Library mid-write is the one residual
     // (the write still lands; nothing reports it — `deferred-work.md`).
     if (record !== null) {
+      // Story 4.23, AC9/FD12: fired on every SUCCESSFUL write only — never on a refusal or a
+      // rejection, and never itself a repository call (the caller's own state, AR-2/AR-27). Out
+      // here beside `onSaved` for the same reason: a throw from the caller's callback must never
+      // turn a stored write into "could not be saved".
+      onSaveSucceeded?.();
       onSaved(record);
     }
     return record !== null;
@@ -883,6 +889,11 @@ export default function OrganismEditorModal({
     setConfirming(false);
     const outcome = closeOutcomeRef.current;
     closeOutcomeRef.current = null;
+    // FD7 restores focus for Keep Editing (Escape, backdrop) only. Discard closes the editor and
+    // the parent hook owns focus from there; Save hands focus to the write's own rules (the
+    // invalid field, or Save once the write settles) — a restore to Back/✕ first would be a
+    // wasted move into a control about to close or lock.
+    if (outcome === 'discard' || outcome === 'save') closeFocusIntentRef.current = null;
     if (outcome === 'discard') {
       // FD6: no write. A create session that had already saved once still hands its last saved
       // record on through the unchanged `pendingSavedRef` path (`useOrganismEditorModal`'s own).

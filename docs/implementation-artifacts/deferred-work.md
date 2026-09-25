@@ -1196,8 +1196,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   not whether it is valid. **Partial — Story 4.13 (FD7):** moot for the gate itself — a pointer
   Save blurs the textbox first, a keyboard Save means focus has already left it, and no Save
   hotkey exists. The *when-is-the-draft-read* question re-points to Story 4.23 (the dirty diff)
-  and Story 4.16 (the persisted value); revisit if a Save hotkey ever lands. **Resolved 2026-09-25
-  (Story 4.23, default, Question 3): accept and document.** An Escape pressed inside the dominance
+  and Story 4.16 (the persisted value); revisit if a Save hotkey ever lands. **Default applied
+  2026-09-25 (Story 4.23, Question 3 — pending owner confirmation): accept and document.** An Escape pressed inside the dominance
   textbox while it holds uncommitted out-of-range or incomplete text reads the pre-edit
   `draft.dominance` for the dirty check, so on an otherwise-clean draft the editor closes with no
   prompt and the pending text is discarded; in-range values commit live and are unaffected. A
@@ -2525,7 +2525,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   "focus is loose → create button" sweep. **Re-pointed (Story 4.20, 2026-09-23):** 4.20 was the next
   Library touch and does not reach this path — it adds one prop to the editor's call site and moves
   one count onto `resolveOrganismUsage`, neither of which is in the focus-restore path.
-  **Re-pointed again (Story 4.23, 2026-09-25, default per Question 4):** not in any 4.23 AC — the
+  **Re-pointed again (Story 4.23, 2026-09-25, Question 4 default — pending owner confirmation):** not in any 4.23 AC — the
   story's own focus-restore work is FD7's (the confirmation's own three outcomes), a different path
   from this one (the Library's post-`onSaved` reload settling under a search filter). Stands on the
   next Library touch or the Epic 4 UX reconciliation pass, not built here.
@@ -3014,10 +3014,11 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   it wants an imperative close on the event, not a derived one. **Resolved (Story 4.23, FD11,
   2026-09-25):** exactly the imperative shape named here — `<UsageIndicator>` exposes
   `closePanel()` through `useImperativeHandle` (React 19 `ref`-as-prop), and
-  `<OrganismEditorModal>`'s `handleRequestClose` calls it before opening
-  `<EditorUnsavedChangesDialog>`, unconditionally, before evaluating anything else. It does not move
-  focus itself. `OrganismEditorModal.test.tsx`'s "closes an open usage panel before the confirmation
-  mounts" pins it.
+  `<OrganismEditorModal>`'s `handleRequestClose` calls it on the dirty path only — after the
+  saving / `!open` / already-confirming / GONE-or-clean checks, immediately before opening
+  `<EditorUnsavedChangesDialog>`. It does not move focus itself. `OrganismEditorModal.test.tsx`'s
+  "closes an open usage panel before the confirmation mounts" pins it on the keyboard-only path
+  (Tab to Back, Enter — no `pointerdown` to close the panel first).
 
 ## Deferred from: code review of 4-20-usage-visibility-ui (2026-09-24, second pass)
 
@@ -3224,9 +3225,10 @@ been answered yet:
   `ORGANISM_DELETE_GONE` on the write that resolves them — the Delete button's GONE-disabled state
   clears with it, since it reads the same `deleteError` prop. The reverse direction (a fresh delete
   alert clearing a stale save line) is the render-time `prevDeleteError` comparison in the modal,
-  never a `useEffect`. `OrganismEditorModal.test.tsx`'s Story 4.23 suite and
-  `OrganismLibrary.test.tsx`'s "AC9: a successful re-creating Save clears the GONE alert and
-  re-enables Delete" pin both directions.
+  never a `useEffect`. `OrganismLibrary.test.tsx`'s "AC9: a successful re-creating
+  Save clears the GONE alert and re-enables Delete" pins the Save direction;
+  `OrganismEditorModal.test.tsx`'s "a delete alert published into the editor clears a stale save
+  line (AC9/FD12)" pins the reverse.
   **Resolved 2026-09-25 (Sidiar): (b)**: left to the 4.23 editor-state pass. Clearing the GONE
   alert, and with it the disabled Delete, on a successful Save is part of that item.
 - **For Story 4.23: the Back after a GONE alert must stay a plain close, with no prompt** (Story 4.22
@@ -3240,8 +3242,8 @@ been answered yet:
   `event.repeat` keydowns after the restore's `.focus()` until `keyup`.
   **Resolved (Story 4.23, FD8, 2026-09-25):** `handleRequestClose` checks
   `deleteError === ORGANISM_DELETE_GONE` alongside `!isDirty`, before it ever opens the
-  confirmation — and covers all three channels (Back, ✕, Escape), per Sidiar's Question 1 default
-  ("yes, all three"), not Back alone: exempting only Back would leave ✕ and Escape prompting over a
+  confirmation — and covers all three channels (Back, ✕, Escape), per the story's Question 1 default
+  ("yes, all three" — pending owner confirmation), not Back alone: exempting only Back would leave ✕ and Escape prompting over a
   draft whose record is already gone, the same "nothing in the chain writes on its own" reasoning
   this entry gives. `OrganismEditorModal.test.tsx`'s "the GONE exemption closes directly through
   Back, ✕ and Escape even on a dirty draft" pins it.

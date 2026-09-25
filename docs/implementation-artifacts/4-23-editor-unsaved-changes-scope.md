@@ -4,7 +4,7 @@ baseline_commit: 388dd205a8d3cd05fc50ddf004bce51d05b444e6
 
 # Story 4.23: Editor Unsaved-Changes Scope
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -222,6 +222,65 @@ implementation-level ACs this story is held to. The numbered ACs are the review 
       locally). If `/organisms` first-load grows past the ratchet, refresh the baseline per
       `project-context.md` (it should not grow, because everything lands inside the lazy editor
       chunk).
+
+### Review Findings
+
+Code review 2026-09-25 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor, full mode).
+3 decision-needed, 15 patch, 0 defer, 9 dismissed.
+
+- [ ] [Review][Decision] Confirmation-Save closes the editor over an edit typed during the write —
+  `handleConfirmationExited`'s `'save'` branch runs `saveOrganism().then((ok) => { if (ok) onClose(); })`.
+  Fields stay editable while the write is in flight, and FD2 moves the baseline to the ATTEMPTED
+  snapshot precisely so a mid-write edit stays dirty; but this path then calls `onClose()` without
+  re-checking, so that edit is dropped with no prompt. AC3 says literally "a valid draft that writes
+  successfully closes the editor". Options: (a) keep as shipped — the user chose "Save" and close;
+  a mid-write edit on a localStorage write is a sub-frame window; (b) close only if the draft is
+  still clean against the new baseline, otherwise stay open (read through a ref); (c) as (b) but
+  re-open the prompt instead of staying silently open.
+- [ ] [Review][Decision] A held Enter on Back/✕ cycles the prompt open → Keep Editing → open —
+  Enter activates a `<button>` on keydown and auto-repeats: the first keydown opens the prompt with
+  focus on Keep Editing (FD4 `autoFocus`), the next repeat clicks Keep Editing, FD7 restores focus to
+  Back after the fade, the next repeat re-opens it. Nothing is ever discarded (Keep Editing is the
+  safe action), but the prompt flickers for as long as the key is held. FD10 guards only Escape.
+  Options: (a) accept — harmless by FD4's own design; (b) swallow `repeat` keydowns on the
+  confirmation's buttons until keyup (the `UsageIndicator` D5 technique); (c) ignore a repeat-Enter
+  on Back/✕ themselves (needs an `onKeyDown` beside `onClick`).
+- [ ] [Review][Decision] Questions 1–4 are recorded as "resolved" without an owner ruling — the dev
+  applied every written-in default (Q1 GONE exemption on all three channels; Q2 no `beforeunload`;
+  Q3 accept that Escape from inside the dominance textbox discards uncommitted out-of-range text on
+  an otherwise clean draft — independently re-raised by the Edge Case Hunter; Q4 renamed-out-of-search
+  focus re-pointed onward). The review reworded `deferred-work.md` to "default applied, pending owner
+  confirmation". Options per question: confirm the default, or override (Q1: Back only; Q2: add a
+  dirty-only `beforeunload`; Q3: flush the field's pending text before the dirty check; Q4: build it
+  here).
+- [x] [Review][Patch] `EditorUnsavedChangesDialog.test.tsx` missing although Task 3 is ticked (copy,
+  order, autoFocus, callbacks, repeat Escape ignored, axe) [apps/web/components/organisms/editor/EditorUnsavedChangesDialog.test.tsx]
+- [x] [Review][Patch] `onSaveSucceeded` called inside the `try` — a throwing callback would report a
+  stored write as failed and skip `onSaved`; moved beside `onSaved`, after `finally` [apps/web/components/organisms/editor/OrganismEditorModal.tsx]
+- [x] [Review][Patch] FD7 focus restore ran for Discard/Save too, moving focus into an editor that is
+  closing (or about to lock for the write); now restores only on Keep Editing / Escape / backdrop [apps/web/components/organisms/editor/OrganismEditorModal.tsx]
+- [x] [Review][Patch] Stale "no dirty guard until Story 4.23" comment on the D5 test [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] FD11 test passed with `closePanel()` deleted (a pointer click on Back closes the
+  panel through D1 first); now keyboard-only, and Escape dismisses the PROMPT [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] AC9 reverse direction (a fresh delete alert clears a stale save line) untested,
+  and `deferred-work.md` claimed both directions pinned [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] Prompt-Save VALID / REJECTING tests did not assert the outcome lands only after
+  the confirmation has gone (AC3) [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] No test for "no confirmation over a closing editor" (`!open`, AC7) [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] FD7 restore tested for ✕ only — added Back and the Escape-captured element;
+  Keep Editing leaves `saveAttempted` and the outcome lines untouched (AC3) [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] FD2 "an edit typed mid-write stays dirty" had no test [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] Test titled "clean after save … and dirty again" only checked the clean half
+  (the next test covers the other); renamed [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] Modal-level dirty only via name / add-rule; added dominance, colour and aging
+  representatives (Task 7) [apps/web/components/organisms/editor/OrganismEditorModal.test.tsx]
+- [x] [Review][Patch] e2e Keep Editing did not prove the editor is live and clickable afterwards
+  (the 4.22 leftover-`inert` regression class) [apps/web/e2e/organisms.spec.ts]
+- [x] [Review][Patch] `deferred-work.md` said `closePanel()` runs "unconditionally, before evaluating
+  anything else" — it runs on the dirty path only, after the checks; "both directions pinned" claim
+  corrected [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] Comments still describing the pre-FD2 model: `organismDraft.ts` header ("one
+  seed") and the `onClose` prop doc ("Story 4.23 guards it") [apps/web/lib/organisms/organismDraft.ts, apps/web/components/organisms/editor/OrganismEditorModal.tsx]
 
 ## Dev Notes
 
@@ -588,3 +647,10 @@ claude-sonnet-5
   stacked-over-editor window + inert registry, the house dialog idiom); the dirty-diff contract was
   fixed in code since 4.5 and every design choice is pinned as an FD in Dev Notes.
 - Proposed lane gate: none.
+- 2026-09-25: Code review (opus). 15 patches applied in a separate review commit: new
+  `EditorUnsavedChangesDialog.test.tsx` (Task 3's missing deliverable); `onSaveSucceeded` moved out
+  of the `try` beside `onSaved`; FD7 focus restore limited to Keep Editing/Escape/backdrop; the
+  FD11 test made keyboard-only; new tests for AC9's reverse clear, the `!open` lock, FD7 Back/Escape
+  targets, FD2 mid-write edits and per-category dirtiness; e2e proves the editor is live after Keep
+  Editing; comment and `deferred-work.md` corrections. 3 decision-needed items left open for the
+  owner (Review Findings) — status `in-progress`.

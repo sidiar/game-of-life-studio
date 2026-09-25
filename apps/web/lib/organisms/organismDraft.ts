@@ -18,8 +18,8 @@ import { validateOrganismName } from './organismName';
  * `<OrganismEditorModal>` holds it in `useState`, never `useOrganismEditorModal`, which owns
  * lifecycle only and sits in the first-load chunk). One typed object from the first field, not one
  * `useState` per field: Story 4.17 seeds the whole draft from a loaded `Organism` in one
- * assignment (`organismDraftFrom`, below), Story 4.23 diffs one object against one seed for the
- * editor's own dirty scope (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one
+ * assignment (`organismDraftFrom`, below), Story 4.23 diffs one object against one baseline (the
+ * seed until a successful Save, then that Save's snapshot) for the editor's own dirty scope (AR-33), and Story 4.16 parses one object into an `Organism`. Grows one
  * field per story — 4.6
  * `dominance`, 4.7 `agingEnabled`/`colorToken`, 4.8's M6 colour seed and 4.10's `survivalRules` are
  * done, and Story 4.13's validator (`validateOrganismDraft`, below) reads all of them. It will
