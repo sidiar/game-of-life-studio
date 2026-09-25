@@ -25,6 +25,7 @@
     "e2e": "turbo run e2e",
     "e2e:chromium": "turbo run e2e:chromium",
     "bundle:check": "node scripts/check-bundle-size.mjs",
+    "bundle:baseline": "node scripts/check-bundle-size.mjs --update",
     "bench": "turbo run bench --concurrency=1",
     "bench:check": "node scripts/check-bench-budget.mjs",
     "spec:check": "node scripts/check-spec-ids.mjs",

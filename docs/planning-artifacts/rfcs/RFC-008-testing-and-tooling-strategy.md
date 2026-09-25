@@ -65,7 +65,7 @@ The architecture was, however, *designed* for testability: a pure functional eng
 | **Accessibility** | **axe-core** (`@axe-core/playwright` + `vitest-axe`) | Automated WCAG checks (NFR-8.3). |
 | **Lint / format** | **ESLint** (typescript-eslint) + **Prettier** | Mainstream, well-understood, showcase-legible. *(Biota/Biome is a faster all-in-one alternative — see Alternatives.)* |
 | **Type-check** | **`tsc --noEmit`** (strict) | Types are a test; run as a CI gate. |
-| **Bundle analysis** | **`@next/bundle-analyzer`** | Enforce RFC-003's ~300 KB budget. |
+| **Bundle analysis** | **`@next/bundle-analyzer`** + `scripts/check-bundle-size.mjs` | The gate fails a route whose first-load JS grows more than ~8 KB gzip past its committed baseline (`scripts/bundle-baselines.json`, written by `npm run bundle:baseline`); the analyzer diagnoses what arrived. Replaced RFC-003's absolute ~300 KB budget, 2026-09-25. |
 | **CI / hooks** | **GitHub Actions** + **husky** + **lint-staged** | Free for the public repo (NFR-6.2); Turborepo caching. |
 
 ### Decision 2: Test layers — an engine-heavy pyramid
@@ -145,7 +145,7 @@ Coverage is a **floor on the core**, not a vanity number everywhere.
 
 ```
 typecheck (tsc) ─► lint (eslint) ─► unit+integration (vitest + coverage gate)
-   ─► build (next, bundle-budget check) ─► e2e (playwright, 3 browsers) ─► a11y (axe)
+   ─► build (next, bundle-growth check) ─► e2e (playwright, 3 browsers) ─► a11y (axe)
 ```
 
 - **PR gates:** typecheck, lint, unit/integration + coverage floor (Decision 3), build. E2e/a11y run on PRs to `main`.
