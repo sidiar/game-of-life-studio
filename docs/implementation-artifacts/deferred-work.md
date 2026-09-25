@@ -3124,7 +3124,14 @@ been answered yet:
 - **An editor-origin delete refusal stays on screen until the editor closes or the next delete.**
   The `deleteError` prop is cleared at the start of the next delete request and when the editor
   exits, not by a later Save — the editor's own save-outcome lines are separate cells. Harmless
-  (the sentence stays true), noted for the 4.23 editor-state pass.
+  for `ORGANISM_DELETE_FAILED` (the sentence stays true), noted for the 4.23 editor-state pass.
+  **Amended (second-pass review, 2026-09-25):** NOT harmless for `ORGANISM_DELETE_GONE` (review
+  decision (b)): the accepted re-creating Save falsifies "no longer exists" while the alert stays
+  mounted beside "Organism saved". The reverse order is the same class — a stale "Organism saved"
+  or `saveError` line stays mounted beside a freshly published GONE alert (the editor clears its
+  own outcome cells only at the next Save; `requestDelete` clears only the hook's). Both go to the
+  4.23 editor-state pass: one owner for the editor's outcome lines and the Library-published
+  delete alert, cleared together on Save.
 - **The `useOrganismDelete` latch and `pending` are released at the dialog's EXIT, not in the
   writer's `finally` (Task 2 wording).** The Story 4.18 gate review's finding applies unchanged:
   `setDialogOpen(false)` only starts the ~195 ms fade, and a dialog re-enabled for it would take a
@@ -3167,4 +3174,7 @@ listed here so the review's own ledger is complete.
   boundary.
 - **The in-editor delete alert outlives a later successful Save and can stand beside `saveError`**
   (`OrganismEditorModal.tsx`) — the implementation's entry above already points it at the 4.23
-  editor-state pass.
+  editor-state pass. **Amended by the second-pass review (2026-09-25):** with decision (b)'s
+  `ORGANISM_DELETE_GONE` the lingering sentence becomes FALSE after the re-creating Save, and the
+  reverse order (a stale "Organism saved" / `saveError` beside a fresh GONE alert) is the same
+  class — see the amended entry above.

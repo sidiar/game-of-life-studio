@@ -636,7 +636,8 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
         {deleteToast !== null && <StatusText data-delete-toast="">{deleteToast}</StatusText>}
       </div>
       {/* Story 4.22, AC7/FD12: a refused card-origin delete, published once the confirmation has
-          exited (an editor-origin refusal renders inside the still-open editor instead). */}
+          exited (an editor-origin refusal — or, review decision (b), a record the re-verify found
+          already deleted elsewhere — renders inside the still-open editor instead). */}
       {deleteError !== null && (
         <StatusText role="alert" data-delete-error="">
           {deleteError}

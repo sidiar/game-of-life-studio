@@ -156,10 +156,12 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
    */
   onRequestDelete?(): void;
   /**
-   * Story 4.22, FD12: an editor-origin delete the Library could not complete. Rendered INSIDE the
-   * editor, in the `SaveErrorLine` idiom, because the editor stays open (nothing was deleted) and a
-   * Library-side alert would sit under it, inert and unheard. Published by the Library only once
-   * the stacked dialog has exited; `null`/absent is "nothing to report".
+   * Story 4.22, FD12: an editor-origin delete the Library could not complete — or, since the
+   * story's review decision (b), one whose re-verify found the record already deleted in another
+   * tab (`ORGANISM_DELETE_GONE`; the editor stays open on it). Rendered INSIDE the editor, in the
+   * `SaveErrorLine` idiom, because the editor stays open (nothing was deleted) and a Library-side
+   * alert would sit under it, inert and unheard. Published by the Library only once the stacked
+   * dialog has exited; `null`/absent is "nothing to report".
    */
   deleteError?: string | null;
 }
@@ -851,8 +853,9 @@ export default function OrganismEditorModal({
             {saveError}
           </SaveErrorLine>
         )}
-        {/* Story 4.22, FD12: a refused delete, in the same idiom — conditionally mounted, so the
-            Library's publish (after the stacked dialog's exit) inserts it into a LIVE editor. */}
+        {/* Story 4.22, FD12: a refused delete (or, review decision (b), a record found already
+            deleted elsewhere), in the same idiom — conditionally mounted, so the Library's publish
+            (after the stacked dialog's exit) inserts it into a LIVE editor. */}
         {deleteError !== null && (
           <SaveErrorLine role="alert" data-editor-delete-error="">
             {deleteError}

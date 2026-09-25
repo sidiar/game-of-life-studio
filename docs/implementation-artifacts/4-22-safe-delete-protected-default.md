@@ -3,7 +3,7 @@ baseline_commit: 087900177933e95ab54a12c19fddd185c63a8deb
 ---
 # Story 4.22: Safe Delete & Protected Default
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -110,7 +110,9 @@ touching a file. Five failures here compile and pass tests anyway, and each is s
    Two more re-verify cases:
    - If the fresh read shows the organism **no longer exists** (it was deleted in another tab), the
      write is skipped and the Library reloads. There is no toast, because this action deleted
-     nothing.
+     nothing. *(Review decision (b), Sidiar 2026-09-25 — editor origin only: the editor stays open
+     and reports `ORGANISM_DELETE_GONE` in-editor through FD12's `SaveErrorLine` alert; the card
+     origin stays silent, its card is simply gone after the reload.)*
    - If the fresh read shows it is now `protected`, nothing is deleted. That is unreachable (ids do
      not change), but the verdict is total, so the handler must not assume otherwise.
 
@@ -546,6 +548,55 @@ probe of the one path no test covered.
 - [x] [Review][Defer] **The in-editor delete alert outlives a later successful Save and can stand
   beside `saveError`** [`OrganismEditorModal.tsx`] — deferred, already recorded for the 4.23
   editor-state pass.
+
+#### Second pass (2026-09-25, Fable, on the (b) build `bd21831`)
+
+Reviewed on **Fable** against the **Opus** follow-up that built Sidiar's decision (b), via the same
+three layers. The build conforms to the decision and to every FD it touches (FD7 same-commit
+publish, FD8 restore intent kept, FD9 untouched, FD12 surface reused, card origin unchanged). One
+decision, four patches, one dismissed.
+
+- [ ] [Review][Decision] **After the GONE alert, the editor's Delete stays enabled, and a repeat
+  Delete → Cancel dismisses the alert** [`useOrganismDelete.ts:217-232`, `OrganismEditorModal.tsx:886-896`]
+  — the (b) build leaves focus on the editor's Delete and nothing disables it. A second click
+  computes the click-time verdict against the RELOADED `usage`/`ruleIndex` (the id is absent from
+  both, so `allowed`), reopens "Delete Glider?" for a record the editor just said is gone, and
+  `requestDelete` clears `editorDeleteError` at its start. Confirm → `gone` → the same alert again
+  (coherent); **Cancel → `outcome === null` publishes nothing**, so the editor is back on the ghost
+  with no alert, and its next Save re-creates the record with no signal on screen. The re-create
+  itself is accepted (decision (b)); this is about the one signal (b) relies on being dismissible.
+  Options: **(a)** disable the editor's Delete while `deleteError === ORGANISM_DELETE_GONE` (one
+  prop on `DeleteOrganismButton`, `disabled={isSaving || deleteProtected || …}`, plus a test) —
+  the button's only possible outcome is the alert already on screen; **(b)** keep the GONE alert
+  across a cancelled repeat (skip the `requestDelete` clear when the pending message is the GONE
+  sentence and the new window is a confirm); **(c)** leave as built and record it as an FD11-class
+  residual under the 4.23 editor-state pass, beside the alert-lifecycle entry. Left for Sidiar;
+  nothing changed here.
+- [x] [Review][Patch] **The alert-lifecycle ledger's rationale is false for the GONE copy**
+  [`deferred-work.md:3124-3127`, `:3168-3170`] — the entry says "Harmless (the sentence stays
+  true)": true for `ORGANISM_DELETE_FAILED`, false for `ORGANISM_DELETE_GONE`, which the accepted
+  re-creating Save falsifies while the alert stays mounted beside "Organism saved"
+  (`data-save-status`). The reverse order is the same class: a stale "Organism saved" / `saveError`
+  line stays mounted beside a freshly published GONE alert (`OrganismEditorModal.tsx:651-652`
+  clears them only at the next Save; `requestDelete` clears only the hook's own cells). Both stay
+  deferred to the 4.23 editor-state pass; the ledger just has to say so accurately.
+- [x] [Review][Patch] **Consumer-side docs still describe `deleteError` as a refusal only**
+  [`OrganismEditorModal.tsx:159`, `:854`; `OrganismLibrary.tsx:638`] — the hook's
+  `editorDeleteError` doc was updated for (b); the editor's prop doc, its JSX comment and the
+  Library's card-alert comment were not, and now under-describe the channel.
+- [x] [Review][Patch] **AC6's vanished-record case has no editor-origin carve-out**
+  [`4-22-safe-delete-protected-default.md:111-113`] — the (b) behaviour lives only in Review
+  Findings and the Completion Notes; 4.23 inherits this editor and reads the AC.
+- [x] [Review][Patch] **The new Library test re-implements `watchFirstAppearance` inline**
+  [`OrganismLibrary.test.tsx:2073-2079`] — the helper hard-codes `[role="dialog"]`, which the
+  editor origin cannot use (the editor is a dialog and stays), so the test duplicated the observer
+  with `confirmDialog()`. Give the helper a dialog predicate parameter and reuse it.
+- Dismissed (1): the Edge Case Hunter's "the ordering observer is blind to an alert inserted while
+  the editor is still inert" — its guard (`editor.closest(...).inert` at first appearance) would
+  false-fail on correct code: `useInertBackground` lifts `inert` from a plain `useEffect` (by
+  design, after MUI's focus-trap move) on a transition-lane update, so at the observer's microtask
+  the editor is still inert in the same task that lifts it. The observer pins what the file's
+  established idiom pins (no publish from the writer during the fade), nothing more.
 
 ## Dev Notes
 
@@ -1042,6 +1093,18 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   `useOrganismDelete` exit handler publishes it in-editor (existing FD12 `SaveErrorLine` alert)
   for the editor origin, keeps the editor open, skips the write, reloads, no toast; card origin
   unchanged. Hook and Library tests added. `npm run ci:dev` exit 0. Status → review.
+- 2026-09-25: Second-pass code review (Fable) of the (b) build. Conforms to the decision and every
+  FD it touches. Four patches applied — all documentation and test hygiene, no behaviour change:
+  the `deferred-work.md` alert-lifecycle entries amended (the "sentence stays true" rationale is
+  false for `ORGANISM_DELETE_GONE`, and the reverse stale-"Organism saved"-beside-GONE order joins
+  the same 4.23 item), the editor's `deleteError` prop doc / JSX comment and the Library's
+  card-alert comment now name the GONE case, AC6 carries the editor-origin carve-out inline, and
+  `watchFirstAppearance` took a dialog-predicate parameter so the new Library test reuses it
+  instead of an inline observer. One dismissed (an inert-aware ordering guard that would
+  false-fail: `useInertBackground` is a plain `useEffect`). One owner decision left open: the
+  editor's Delete after the GONE alert (still enabled; a repeat Delete → Cancel dismisses the
+  alert). Local `npm run ci:dev` on `bd21831` before the patches: exit 0 on the first run
+  (web 131 files, e2e Chromium 282 passed). Status → in-progress.
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none

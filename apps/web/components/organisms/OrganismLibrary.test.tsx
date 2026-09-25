@@ -1795,12 +1795,16 @@ describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () 
 
   /** Records, for every DOM mutation from now on, whether a dialog was still mounted at the moment
    * the given node first existed — the project-context ordering assertion ("at the first moment
-   * the alert exists, the dialog is already gone"). */
-  function watchFirstAppearance(selector: string) {
+   * the alert exists, the dialog is already gone"). `dialogPresent` defaults to "any dialog"; the
+   * editor origin passes a narrower probe, because the editor is a dialog too and STAYS. */
+  function watchFirstAppearance(
+    selector: string,
+    dialogPresent: () => boolean = () => document.querySelector('[role="dialog"]') !== null,
+  ) {
     const seen: { dialogPresent: boolean }[] = [];
     const observer = new MutationObserver(() => {
       if (seen.length === 0 && document.querySelector(selector) !== null) {
-        seen.push({ dialogPresent: document.querySelector('[role="dialog"]') !== null });
+        seen.push({ dialogPresent: dialogPresent() });
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -2070,13 +2074,10 @@ describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () 
     const del = vi.spyOn(organisms, 'delete');
     // The ordering assertion, scoped to the stacked confirmation (the editor is a dialog too, and
     // stays): at the first moment the alert exists, the confirmation is already gone.
-    const seen: boolean[] = [];
-    const observer = new MutationObserver(() => {
-      if (seen.length === 0 && document.querySelector('[data-editor-delete-error]') !== null) {
-        seen.push(confirmDialog() !== null);
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    const watch = watchFirstAppearance(
+      '[data-editor-delete-error]',
+      () => confirmDialog() !== null,
+    );
     await user.click(within(confirm).getByRole('button', { name: 'Delete Organism' }));
 
     await waitFor(() =>
@@ -2084,8 +2085,8 @@ describe('OrganismLibrary — safe delete & protected default (Story 4.22)', () 
         'This organism no longer exists. It may have been deleted in another tab.',
       ),
     );
-    observer.disconnect();
-    expect(seen).toEqual([false]);
+    watch.stop();
+    expect(watch.seen).toEqual([{ dialogPresent: false }]);
     expect(confirmDialog()).toBeNull();
     expect(del).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBe(editor);
