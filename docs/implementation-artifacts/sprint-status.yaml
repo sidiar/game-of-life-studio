@@ -153,7 +153,7 @@ development_status:
   5-5-export-workspace: done
   5-6-battle-export-dialog: done
   5-7-migration-registry: done
-  5-8-atomic-import-pipeline: backlog
+  5-8-atomic-import-pipeline: review
   5-9-import-ui-destructive-warning: backlog
   5-10-clear-all-data: backlog
   5-11-load-time-corruption-handling: backlog

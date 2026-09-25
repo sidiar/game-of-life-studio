@@ -1,3 +1,5 @@
+import type { DanglingReference } from '@gol/domain';
+
 /** Stored data that exists but cannot be read as what it claims to be (NFR-7.3). */
 export class CorruptDataError extends Error {
   constructor(
@@ -51,6 +53,83 @@ export class ExportError extends Error {
   ) {
     super(`No battle found for id "${id}"`);
     this.name = 'ExportError';
+  }
+}
+
+/**
+ * Why an import file was refused, or how its write went wrong (RFC-006 Decision 3 / Decision 5).
+ * Six codes: Decision 3's `'not-json' | 'newer-version' | 'corrupt'`, Decision 5's `'write-failed'`,
+ * and two additions recorded as a variance in `deferred-work.md`:
+ *
+ *   - `'dangling-reference'` — the file references organisms it does not carry. A different thing
+ *                              to tell the user than "this is not a workspace file at all".
+ *   - `'rollback-failed'`    — ⚠️ MUST stay distinct from `'write-failed'`. `'write-failed'` means
+ *                              the rollback succeeded and the workspace is exactly as it was, which
+ *                              is what lets Story 5.9 say "your workspace is unchanged". Here the
+ *                              restore threw too, so that sentence would be a lie; folding the two
+ *                              codes together makes the reassuring copy reachable from the one
+ *                              outcome it is false for.
+ */
+export type ImportErrorCode =
+  | 'not-json'
+  | 'newer-version'
+  | 'corrupt'
+  | 'dangling-reference'
+  | 'write-failed'
+  | 'rollback-failed';
+
+export interface ImportErrorDetails {
+  /** `'newer-version'`: the file's `formatVersion`, and the one this build supports. */
+  foundVersion?: number;
+  supportedVersion?: number;
+  /** `'corrupt'` from a schema failure: the Zod issues, for diagnostics — never shown verbatim. */
+  issues?: readonly { path: PropertyKey[]; message: string }[];
+  /** `'dangling-reference'`: every unresolvable id at once. */
+  dangling?: readonly DanglingReference[];
+  /** `'rollback-failed'`: the restore's own error. The write's error is `cause`. */
+  rollbackError?: unknown;
+  /** Appended to the message — developer-facing only; the UI's wording is Story 5.9's. */
+  detail?: string;
+  cause?: unknown;
+}
+
+const IMPORT_MESSAGES: Readonly<Record<ImportErrorCode, string>> = {
+  'not-json': 'The import file is not valid JSON',
+  'newer-version': 'The import file was written by a newer format than this build supports',
+  corrupt: 'The import file is not a valid workspace export',
+  'dangling-reference': 'The import file references organisms it does not carry',
+  'write-failed': 'The import could not be written; the previous workspace was restored',
+  'rollback-failed':
+    'The import could not be written, and restoring the previous workspace failed too',
+};
+
+/**
+ * `WorkspaceSerializer.importWorkspace`'s one rejection type, the same pattern as `ExportError`:
+ * callers branch on `code`, never on `message`. `QuotaExceededError` from a failed write stays
+ * reachable as `cause`, so "storage is full" is still identifiable under `'write-failed'`.
+ */
+export class ImportError extends Error {
+  readonly foundVersion?: number;
+  readonly supportedVersion?: number;
+  readonly issues?: readonly { path: PropertyKey[]; message: string }[];
+  readonly dangling?: readonly DanglingReference[];
+  readonly rollbackError?: unknown;
+
+  constructor(
+    readonly code: ImportErrorCode,
+    details: ImportErrorDetails = {},
+  ) {
+    const { detail, cause, ...fields } = details;
+    super(
+      detail === undefined ? IMPORT_MESSAGES[code] : `${IMPORT_MESSAGES[code]}: ${detail}`,
+      cause === undefined ? undefined : { cause },
+    );
+    this.name = 'ImportError';
+    this.foundVersion = fields.foundVersion;
+    this.supportedVersion = fields.supportedVersion;
+    this.issues = fields.issues;
+    this.dangling = fields.dangling;
+    this.rollbackError = fields.rollbackError;
   }
 }
 
