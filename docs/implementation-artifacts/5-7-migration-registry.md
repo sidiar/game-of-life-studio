@@ -4,7 +4,7 @@ baseline_commit: 747727b
 
 # Story 5.7: Migration Registry
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -86,7 +86,9 @@ reviewer can check each item on its own.
     `supportedVersion: number`. It also exports `isFormatMigrationError(value)`. Messages are
     plain English. `'newer-version'` reads like *"This data was written by a newer version of Game
     of Life Studio (format N); this version supports format M. Update the app to open it."* The
-    UI copy is Story 5.9's / 5.11's to choose, and the code is what they branch on.
+    UI copy is Story 5.9's / 5.11's to choose, and the code is what they branch on. *(At rest,
+    5.11 branches on the `NewerFormatVersionError` class instead — owner decision 2026-09-25, FD9;
+    the `code` stays on the `cause` and is what 5.8's import boundary maps into `ImportError`.)*
   - [x] 1.4 `formatMigrations.test.ts` (per-file ≥90% gate) covers:
     - identity (a current-version envelope comes back with `toBe`, and a spy registry is never
       called);
@@ -330,7 +332,8 @@ and are left unresolved here; patches were applied in the review's own commit.
 
 Dismissed as noise (6): the import-boundary test proves the expression order the story asked for
 (5.8 owns the real pipeline); `/*#__PURE__*/` on `migrate` (every route reaches `readCollection`
-anyway); untrusted `formatVersion` strings in messages (5.11 owns copy and branches on `code`);
+anyway); untrusted `formatVersion` strings in messages (5.11 owns copy and branches on `code` —
+*since the owner decision, on the `NewerFormatVersionError` class for the at-rest case*);
 `createMigrator`/`ensureCurrentAtRestFormat` exported as seams (FD3 / Task 3.4 specify it);
 `PALETTE_VERSION` named in a JSDoc sentence (a mention, not a reference); an
 `ORGANISM_SCHEMA_VERSION ≤ CURRENT_FORMAT_VERSION` pin (independent axes, Story 1.5 FD3).
@@ -345,6 +348,61 @@ touches only `apps/web` plus `bundle-baselines.json`/`deferred-work.md`/`sprint-
 4.23–4.26 sit over the existing repository API — no `lane-gates.yaml` row proposed. The baseline
 JSON will collide on the sync: re-run `npm run bundle:baseline` on the merged tree rather than
 merging numbers.
+
+#### Owner-decision pass (2026-09-25, reviewed on Fable 5.1 against the Opus resume commit `355dffe`)
+
+Scoped to `c9541d7..355dffe` — whether the three `[Review][Decision]` answers above were applied
+faithfully. Verdict: the code matches decision (a) exactly (`NewerFormatVersionError extends
+CorruptDataError` in `@gol/persistence`, thrown only for `'newer-version'`; `@gol/domain` and
+`clearAll()` untouched); FD2 and FD7 needed no code. 0 `decision-needed`, 6 `patch`, 2 `defer`,
+3 dismissed. Patches applied in this pass's own commit.
+
+- [x] [Review][Patch] **`error.foundVersion as number` narrowed `unknown` on trust**
+  [`packages/persistence/src/localStorageAccess.ts:175-183`] — `migrate` does guarantee an integer
+  before `'newer-version'`, but `ensureCurrentAtRestFormat` accepts any injected `Migrator`, and
+  `FormatMigrationError.foundVersion` is typed `unknown`; the subclass's `foundVersion: number`
+  could hold a string. Now `typeof error.foundVersion === 'number'` is part of the condition and a
+  non-numeric one falls through to plain `CorruptDataError` ("no usable version"). Two tests added:
+  an injected gapped registry (`'missing-step'`) maps to plain `CorruptDataError` and NOT the
+  subclass; a synthetic `'newer-version'` with `foundVersion: '2'` is not promoted. The JSDoc's
+  "anything else" line now names `'missing-step'` (unreachable for the production registry — the
+  integrity test — so its "corrupt" posture is unchanged and not a decision).
+- [x] [Review][Patch] **Story 5.11's AC in `epics.md` still promised a reset for every load
+  failure** [`docs/planning-artifacts/epics.md:1456`] — `create-story` builds 5.11 from `epics.md`
+  plus the previous story file, not from `deferred-work.md`, so the one artefact it is guaranteed
+  to read contradicted the decision. The AC now carries the `NewerFormatVersionError` exception
+  inline (reload only, subclass tested first).
+- [x] [Review][Patch] **5.11 hand-off named only the reset offer** [`deferred-work.md` FD9
+  hand-off] — `saveFailureMessage`'s "try again" copy, the Gallery/Tile degrade-to-empty catches
+  and the missing `@gol/test-utils` seam are now listed there as the surfaces 5.11 must branch in.
+- [x] [Review][Patch] **`deferred-work.md` FD7 entry still said strip-vs-strict was re-pointed and
+  "flagged for the owner"** [`deferred-work.md` FD7] — annotated: the strip half is closed by
+  decision (a); only the three value-range tightenings stay pointed at the first bump.
+- [x] [Review][Patch] **Stale "5.11 branches on `code`" statements** [Task 1.3, the review's
+  "dismissed as noise" line, Completion Notes Task 3] — annotated to the class-based branch.
+- [x] [Review][Patch] **Open-flags list annotated FD9 as resolved but not FD2/FD7** [Open flags for
+  the owner] — all three now carry their resolution.
+- [x] [Review][Defer] **`saveFailureMessage` / Gallery degrade paths show corruption copy for a
+  newer stamp** [`apps/web/lib/saveFailureMessage.ts:38`, `BattleGallery.tsx:220`,
+  `BattleTile.tsx:429`] — deferred, pre-existing: non-destructive, the copy is 5.11's by the owner
+  decision, and `apps/web` is outside 5.7. Recorded in the 5.11 hand-off.
+- [x] [Review][Defer] **`@gol/test-utils` fakes cannot produce a `NewerFormatVersionError`**
+  [`packages/test-utils/src/fakeRepositories.ts:87-120`] — deferred: a 5.11 test need, the class is
+  constructible from the barrel; add a seam only if that proves awkward. Recorded in the hand-off.
+
+Dismissed as noise (3): "the subclass makes a destructive default, guarded by a comment only" (no
+reset path exists in the codebase; the owner chose subclass-or-own-class and the subclass rationale
+is recorded; `epics.md` and the hand-off now both carry the rule); `'missing-step'` collapsed into
+`CorruptDataError` (unreachable for the production registry by the integrity test; a programming
+error, and its posture is unchanged from before this commit); `NewerFormatVersionError.message`
+still opens "could not be read" (true for this build — the detail sentence carries the
+newer-version explanation, and the user-facing copy is 5.11's).
+
+Cross-epic: this pass touches `packages/persistence` (`errors.ts`, `index.ts`,
+`localStorageAccess.ts`) and `epics.md`'s 5.11 AC; PR #83 (4.22) touches nothing under
+`packages/persistence` and 4.23–4.26 sit over the existing repository API — no `lane-gates.yaml`
+row proposed. CI on PR #84 for `355dffe`: `quality` and all four `e2e` browsers green; local
+`ci:dev` after the patches in the Dev Agent Record.
 
 ## Dev Notes
 
@@ -585,12 +643,14 @@ collides on every two-lane sync, and `[[sync.rules]]` resolves it) and
 
 - **FD2** is the shape every future step and Story 5.8 inherit: one step per version, taking
   `(doc, representation)`. If the owner prefers a different contract, change it now, while the
-  registry is empty and changing it is free.
+  registry is empty and changing it is free. *(Resolved 2026-09-25: confirmed as shipped, option
+  (a).)*
 - **FD5** turns a silently accepted foreign `schemaVersion` into a corrupt record at load. That is
   Decision I.4 as written, but it is a behaviour change on existing (hypothetical, out-of-band)
   data.
 - **FD7** re-points six `deferred-work.md` entries that named this story as their home, and keeps
-  Zod's strip rather than `.strict()`.
+  Zod's strip rather than `.strict()`. *(Resolved 2026-09-25: strip kept everywhere, option (a);
+  the strip entry is closed, not re-pointed.)*
 - **FD9**: a downgraded browser (a newer stamp) reads as `CorruptDataError` until Story 5.11
   words it. *(Resolved 2026-09-25: `NewerFormatVersionError`, reload-only in 5.11 — see FD9.)*
 
@@ -645,6 +705,12 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   408 passed; `@gol/persistence` 99.5% stmts / 97.64% branches, `errors.ts` 100%; bundle:check
   +0.1 KB gzipped per route, within the allowance — no baseline refresh; bench:check 9.321 ms
   headroom; e2e:chromium 278 passed / 1 skipped). One prettier fix on a retargeted test file.
+- **Review of the owner-decision pass 2026-09-25 (Fable 5.1):** CI on PR #84 for `355dffe` —
+  `quality` and all four `e2e` browsers green. After the review's patches, `npm run ci:dev` → exit 0
+  (domain 243 / persistence 128 (+2) / web 2246 / test-utils 95 / simulation 408 passed;
+  `@gol/persistence` 99.5% stmts / 97.7% branches, `errors.ts` 100%; bundle:check +0.1 KB gzipped
+  on the home route, within the allowance — no baseline refresh; bench:check 9.707 ms headroom;
+  e2e:chromium 278 passed).
 
 ### Completion Notes List
 
@@ -663,7 +729,8 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
   mix-up found.
 - **Task 3:** `ensureCurrentAtRestFormat(migrator = migrate)` at the top of `readCollection`, over a
   private `readRawCollection`; `FormatMigrationError` → `CorruptDataError('gol:schema', message,
-  { cause })`. Write-back: all three candidates serialised first, originals captured, battles →
+  { cause })` *(since the owner decision: `'newer-version'` with a numeric `foundVersion` →
+  `NewerFormatVersionError`, a subclass; everything else stays plain)*. Write-back: all three candidates serialised first, originals captured, battles →
   organisms → stamp (overwritten, not `stampSchemaVersion`); any failure removes both data keys
   then restores the originals, and rethrows the original error. `hasSchemaStamp` comment rewritten.
   `writeKey` split into serialise + `commitCandidate` so the write-back shares the quota mapping.
@@ -734,6 +801,7 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 - `packages/persistence/src/localStorageOrganismRepository.test.ts`
 - `packages/persistence/src/workspaceSerializer.ts` (JSDoc only)
 - `scripts/bundle-baselines.json` (tool-written, +0.7 KB per route)
+- `docs/planning-artifacts/epics.md` (Story 5.11 AC: the `NewerFormatVersionError` exception)
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
 - `docs/implementation-artifacts/5-7-migration-registry.md`
@@ -755,6 +823,11 @@ Proposed lane gate: none — 5.7 touches only packages/domain (formatMigrations.
 - 2026-09-25 — Addressed code review findings - 3 items resolved (owner decisions): newer-version
   now surfaces as `NewerFormatVersionError` (a `CorruptDataError` subclass, reload-only hand-off to
   5.11); FD2 confirmed; strip kept and the deferred entry closed. Status → review.
+- 2026-09-25 — Code review of the owner-decision pass (Fable 5.1, scoped to `c9541d7..355dffe`):
+  the three answers are applied faithfully; 6 patches applied in the review's own commit
+  (`foundVersion` checked rather than cast, two tests; `epics.md` 5.11 AC and the hand-off carry
+  the reload-only exception and its surfaces; stale annotations), 2 deferred to 5.11, 0 owner
+  decisions open. Status → done.
 
 ---
 

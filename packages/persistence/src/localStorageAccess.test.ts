@@ -365,6 +365,53 @@ describe('the at-rest format check (Story 5.7, AR-11)', () => {
     expect(snapshot()).toEqual(before);
   });
 
+  it('maps a migration failure other than newer-version to a plain CorruptDataError', () => {
+    // A registry gap ('missing-step') over a valid older stamp: only an injected registry can have
+    // one (the integrity test pins the production registry), and it must not read as "newer".
+    seed(JSON.stringify({ formatVersion: 1 }));
+    const gapped = createMigrator({ migrations: {}, currentVersion: 2 });
+    const before = snapshot();
+
+    let thrown: unknown;
+    try {
+      ensureCurrentAtRestFormat(gapped);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(CorruptDataError);
+    expect(thrown).not.toBeInstanceOf(NewerFormatVersionError);
+    const cause = (thrown as CorruptDataError).cause;
+    expect(isFormatMigrationError(cause) && cause.code).toBe('missing-step');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('does not promote a newer-version error whose foundVersion is not a number', () => {
+    // `migrate` guarantees an integer before it can say 'newer-version'; an injected migrator does
+    // not, and `NewerFormatVersionError.foundVersion: number` must never hold anything else.
+    seed(JSON.stringify({ formatVersion: 1 }));
+    const malformed = Object.assign(new Error('newer, but with a string version'), {
+      name: 'FormatMigrationError' as const,
+      code: 'newer-version' as const,
+      foundVersion: '2',
+      supportedVersion: 1,
+    });
+    expect(isFormatMigrationError(malformed)).toBe(true);
+
+    let thrown: unknown;
+    try {
+      ensureCurrentAtRestFormat(() => {
+        throw malformed;
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(CorruptDataError);
+    expect(thrown).not.toBeInstanceOf(NewerFormatVersionError);
+    expect((thrown as CorruptDataError).cause).toBe(malformed);
+  });
+
   it('propagates a non-migration error from the migrator unchanged', () => {
     seed(JSON.stringify({ formatVersion: 1 }));
     const bug = new TypeError('a bug, not a format problem');

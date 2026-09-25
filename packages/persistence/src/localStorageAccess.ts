@@ -136,7 +136,9 @@ function memoize<T>(read: () => T): () => T {
  *                          destroy it. A `CorruptDataError` subclass, so every existing
  *                          non-destructive "can't read your data" path still handles it, while a
  *                          UI tells it apart by class without reaching into `cause`;
- *   - anything else     -> plain `CorruptDataError` — a stamp with no usable version (NFR-7.3).
+ *   - anything else     -> plain `CorruptDataError` — a stamp with no usable version (NFR-7.3), or
+ *                          a `'missing-step'`, which the registry-integrity test makes unreachable
+ *                          for the production registry (a programming error, not the data's).
  *
  * Exported for tests only (the injected `migrator` is how the write-back path is reachable while
  * the real registry is empty); the package barrel does not re-export it.
@@ -172,11 +174,14 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
     migrated = migrator(doc, 'at-rest');
   } catch (error) {
     if (isFormatMigrationError(error)) {
-      // `migrate` only reaches 'newer-version' past its integer check, so `foundVersion` is one.
-      if (error.code === 'newer-version') {
+      // `migrate` only reaches 'newer-version' past its integer check, so `foundVersion` is a
+      // number there — but an injected migrator (the test seam) is under no such contract, and
+      // `FormatMigrationError.foundVersion` is typed `unknown`. Checked rather than cast, so the
+      // subclass's `foundVersion: number` never lies; a non-numeric one is "no usable version".
+      if (error.code === 'newer-version' && typeof error.foundVersion === 'number') {
         throw new NewerFormatVersionError(
           STORAGE_KEYS.schema,
-          error.foundVersion as number,
+          error.foundVersion,
           error.supportedVersion,
           error.message,
           { cause: error },

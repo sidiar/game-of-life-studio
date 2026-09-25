@@ -3174,6 +3174,10 @@ full reasoning; the owner rules on each).
   valid on `main` today fail validation, so each needs a `formatVersion` bump and a repair step.
   Re-pointed above to **the first `formatVersion` bump — the registry's first real step**; the
   battle `schemaVersion` entry is closed as not needed. Flagged for the owner.
+  **↪ Owner decision (Sidiar, 2026-09-25, FD7 option (a)):** the strip-vs-strict half is *closed*,
+  not re-pointed — strip stays everywhere and its entry above is struck; only the three value-range
+  tightenings (`colorToken` `.max()`, `name` `.min(1)`, the 120-vs-100 cap) remain pointed at the
+  first `formatVersion` bump.
 - **FD8 — `gol:settings` is outside the chain.** Device-local (Decision F), never in an envelope,
   self-healing through `SettingsSchema`'s per-field defaults.
 - **FD9 — a newer at-rest stamp surfaces as `CorruptDataError('gol:schema', …, { cause })`, with
@@ -3192,6 +3196,17 @@ full reasoning; the owner rules on each).
   newer build, a reset would destroy it, and `clearAll()` keeps the newer stamp anyway, so a reset
   would leave the same error over an empty store. 5.11 must test `instanceof NewerFormatVersionError`
   **before** `instanceof CorruptDataError`, since the former is a subclass of the latter.
+  **Surfaces 5.11 must branch in, not only the reset offer** (owner-decision review pass,
+  2026-09-25): `apps/web/lib/saveFailureMessage.ts` — its `CorruptDataError` branch ends "try
+  again", which is untrue under a newer stamp (every save now throws the subclass from
+  `writeDataKey`'s guard; the fix is a reload); `BattleGallery.tsx`'s `organisms.list().catch(() =>
+  [])` and `BattleTile.tsx`'s degrade-to-`unavailable` swallow a newer-stamp store as a blank/empty
+  gallery with no hint. All non-destructive today, so left for 5.11's copy rather than patched in
+  5.7 (`apps/web` is outside 5.7). `@gol/test-utils`' fakes have no seam that produces a
+  `NewerFormatVersionError` (`FakeSeed.stamped` is a boolean, not a version) — 5.11's reload branch
+  is testable by constructing the class from the barrel; add a seam only if that proves awkward.
+  `epics.md`'s 5.11 AC carries the same exception inline, since `create-story` reads `epics.md`, not
+  this file.
 
 ## Deferred from: code review of 5-7-migration-registry (2026-09-25)
 
@@ -3219,3 +3234,22 @@ strip-vs-`.strict()`) are `[Review][Decision]` items in the story file, not here
   thrown error is the rollback's, not the write's. By construction the originals fit (the store held
   exactly them a moment ago) and a `SecurityError` would have failed the earlier `getItem`, so no
   realistic path reaches it — but the branch is unguarded and untested.
+
+## Deferred from: code review of 5-7-migration-registry, owner-decision pass (2026-09-25)
+
+Reviewed on **Fable** against the **Opus** resume commit `355dffe`, scoped to the three applied
+owner decisions. Both items are Story 5.11's and are also listed in the FD9 hand-off above.
+
+- **`saveFailureMessage` and the Gallery degrade paths show corruption copy for a newer stamp** —
+  `apps/web/lib/saveFailureMessage.ts`'s `CorruptDataError` branch ends "try again", which cannot
+  succeed under a newer stamp (every save throws `NewerFormatVersionError` from `writeDataKey`'s
+  guard; the fix is a reload); `BattleGallery.tsx`'s `organisms.list().catch(() => [])` and
+  `BattleTile.tsx`'s degrade-to-`unavailable` swallow a newer-stamp store as an empty gallery with
+  no hint. Non-destructive and pre-existing (the same paths showed the same copy when the error was
+  a plain `CorruptDataError`); the copy is 5.11's by the owner decision and `apps/web` is outside
+  5.7. Pick up with Story 5.11: branch on `instanceof NewerFormatVersionError` before
+  `instanceof CorruptDataError` in each.
+- **`@gol/test-utils` fakes have no seam that produces a `NewerFormatVersionError`** —
+  `FakeSeed.stamped` is a boolean, not a version, so 5.11's reload branch is testable only by
+  constructing the class (barrel-exported) or mocking a repository method. Add a seam in 5.11 only
+  if that proves awkward.
