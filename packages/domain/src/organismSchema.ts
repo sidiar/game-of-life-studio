@@ -28,11 +28,12 @@ export const NEW_ORGANISM_DOMINANCE = 5;
 export const ORGANISM_SCHEMA_VERSION = 1 as const;
 
 export const OrganismSchema = z.object({
-  // Write-time stamp updated by RFC-006's formatVersion chain and asserted at load
-  // (Decision I.4) — never branched on independently. Floored at 1 because the migration
-  // chain counts upward from the first published version; 0 or a negative gives it no
-  // starting point.
-  schemaVersion: z.number().int().min(1),
+  // Write-time stamp, ASSERTED at load (Decision I.4: mismatch ⇒ corrupt, NFR-7.3) and never
+  // branched on. A literal is safe because `migrate()` (`formatMigrations.ts`) runs the
+  // `formatVersion` chain BEFORE this parse at both boundaries — at-rest load and file import — so
+  // a record a migration step was meant to restamp has been restamped by the time it gets here. A
+  // future rules-shape bump changes `ORGANISM_SCHEMA_VERSION` and ships the step that restamps.
+  schemaVersion: z.literal(ORGANISM_SCHEMA_VERSION),
   // Plain string, NOT `.uuid()` — the protected default organism (FR-1.5, seeded in Story
   // 1.5) uses a stable well-known id ('conways-classic'), not a UUID. Non-empty because the
   // library is keyed by id, and every empty id would collide with every other.

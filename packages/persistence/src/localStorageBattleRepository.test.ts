@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BattleSchema, type Battle } from '@gol/domain';
+import { BattleSchema, CURRENT_FORMAT_VERSION, type Battle } from '@gol/domain';
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { CorruptDataError } from './errors';
 import { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
@@ -224,5 +224,21 @@ describe('quota (AC3)', () => {
 
     await expect(repo().save(makeBattle(ID_B, 'Rejected'))).rejects.toThrow(QuotaExceededError);
     expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe(before);
+  });
+});
+
+describe('the at-rest format check (Story 5.7)', () => {
+  // `list()`/`listFull()` skip a single unreadable record; a whole store on a newer format is a
+  // different fault and must not be skipped past as "no battles".
+  it('rejects load, list and listFull with CorruptDataError on a newer gol:schema stamp', async () => {
+    await repo().save(makeBattle(ID_A));
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
+    );
+
+    await expect(repo().load(ID_A)).rejects.toThrow(CorruptDataError);
+    await expect(repo().list()).rejects.toThrow(CorruptDataError);
+    await expect(repo().listFull()).rejects.toThrow(CorruptDataError);
   });
 });

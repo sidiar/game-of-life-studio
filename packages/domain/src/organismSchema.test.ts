@@ -136,6 +136,13 @@ describe('OrganismSchema', () => {
     rejects({ ...validOrganism, schemaVersion: -5 }, 'schemaVersion');
   });
 
+  // Decision I.4: the stamp is ASSERTED at load, not range-checked. A stamp other than the current
+  // one is the NFR-7.3 corrupt path — the format chain has already run before this parse, so a
+  // record a migration step was meant to upgrade never reaches it un-upgraded.
+  it('rejects a schemaVersion other than ORGANISM_SCHEMA_VERSION', () => {
+    rejects({ ...validOrganism, schemaVersion: ORGANISM_SCHEMA_VERSION + 1 }, 'schemaVersion');
+  });
+
   it('rejects a non-boolean agingEnabled', () => {
     rejects({ ...validOrganism, agingEnabled: 'yes' }, 'agingEnabled');
   });

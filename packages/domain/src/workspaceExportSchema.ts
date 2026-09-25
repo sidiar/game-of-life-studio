@@ -126,9 +126,10 @@ export const BattleExportSchema = z
  * close with `.strict()`. A reader cannot see an absence, hence this comment.
  *
  * ⚠️ `formatVersion` is a `z.literal`, so a file from a NEWER build fails `parse` outright. That is
- * the floor, not the feature: the graceful "this app is too old" message and the source-keyed
- * `MIGRATIONS[from]` chain belong to Story 5.7, which runs `migrate()` BEFORE `parse()`. Widening
- * this to a range to be helpful would make that rejection path unreachable (Decision I).
+ * the floor, not the feature: the graceful "this app is too old" rejection and the source-keyed
+ * `MIGRATIONS[from]` chain live in `formatMigrations.ts`'s `migrate()`, and running it BEFORE this
+ * `parse()` is Story 5.8's `importWorkspace` obligation. Widening this to a range to be helpful
+ * would make that rejection path unreachable (Decision I).
  *
  * `appVersion` is provenance only — stamped, reported, never branched on (Decision I.4), the same
  * posture `gol:schema`'s stamp takes from the at-rest side.

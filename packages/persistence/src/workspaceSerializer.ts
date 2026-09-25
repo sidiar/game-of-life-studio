@@ -80,8 +80,8 @@ export interface WorkspaceSerializer {
  *
  * `exportBattle` reads `repos.battles.load(id)` plus `repos.organisms.list()` — the RFC-006
  * Decision 4 shape (see the interface JSDoc above for the owner ruling that restored it over
- * FD1's `exportBattle(battle)` variance). `parse` / `migrate` / `importWorkspace` are still
- * absent, and are Stories 5.7 and 5.8.
+ * FD1's `exportBattle(battle)` variance). `parse` / `importWorkspace` are still absent, and are
+ * Story 5.8's; the `migrate()` they will run first is `@gol/domain`'s (Story 5.7).
  */
 export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): WorkspaceSerializer {
   const { repos, appVersion, now } = deps;

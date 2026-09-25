@@ -109,3 +109,18 @@ export type { ExportMeta } from './workspaceExportProjection';
 // edge — battle export's organism set (placed ∪ rule targets, transitively). Consumed by
 // `exportBattle` in `@gol/persistence`.
 export { organismClosure } from './organismClosure';
+
+// The source-keyed format migration chain (Story 5.7, AR-11 / Decision I): ONE `migrate()` run
+// before the boundary parse at both at-rest load (`@gol/persistence`'s `readCollection`) and file
+// import (Story 5.8). `createMigrator` is the injected-registry seam its tests need while the real
+// registry is empty; production code calls `migrate`. Callers branch on the error's `code`.
+export { createMigrator, isFormatMigrationError, migrate, MIGRATIONS } from './formatMigrations';
+export type {
+  FormatMigration,
+  FormatMigrationError,
+  FormatMigrationErrorCode,
+  MigratableDocument,
+  MigrationRepresentation,
+  Migrator,
+  MigratorConfig,
+} from './formatMigrations';

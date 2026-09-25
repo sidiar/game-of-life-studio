@@ -22,9 +22,9 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - ~~**⚠️ RFC-001 §3's Battle load snippet is unimplementable and now contradicts the code**~~ — **✅ Resolved in Story 1.4.** RFC-001 §3 now declares `IsoTimestamp = z.iso.datetime().transform(...)` for `createdAt`/`updatedAt`, matching the shipped schema and RFC-006's spelling of the same two fields. Two further defects in the same snippet were corrected while there: it read from a per-battle `battle-${id}` key (RFC-006 Decision 7 stores the whole collection under one `gol:battles` key), and its `save()` re-parsed an in-memory `Battle` whose `Date` fields the input schema rejects. The `z.string().uuid()` call was also updated to `z.uuid()` to match the Zod v4 deprecation already applied in code.
 
-- **`Battle` carries no `schemaVersion` stamp while `Organism` does** — `OrganismSchema` opens with `schemaVersion: z.number().int()` and a comment saying it is asserted at load, but `BattleSchema` has no equivalent field. A battle written today is therefore indistinguishable from one written after any future shape change. This matches RFC-001 §3 as written (and Decision I says `formatVersion` on the envelope is the only thing anything branches on), so it is not a port defect — revisit when Story 5.7 builds the migration registry and it becomes clear whether per-entity stamps are needed at all.
+- ~~**`Battle` carries no `schemaVersion` stamp while `Organism` does**~~ — **✅ Closed as not needed in Story 5.7 (FD7):** Decision I makes `formatVersion` the only driver, and the at-rest chain (`ensureCurrentAtRestFormat`) now runs over the whole store keyed on `gol:schema`; a per-battle stamp would be a second version axis of the kind Decision I.4 exists to forbid. Original: `OrganismSchema` opens with `schemaVersion: z.number().int()` and a comment saying it is asserted at load, but `BattleSchema` has no equivalent field. A battle written today is therefore indistinguishable from one written after any future shape change. This matches RFC-001 §3 as written (and Decision I says `formatVersion` on the envelope is the only thing anything branches on), so it is not a port defect — revisit when Story 5.7 builds the migration registry and it becomes clear whether per-entity stamps are needed at all.
 - ~~**Duplicate rule `id` / `contentHash` within one `survivalRules` array are accepted**~~ — **✅ Closed in Story 3.4 (FD3), by cache-key design rather than by a schema change.** `SurvivalRulesSchema` is still a bare `z.array(SurvivalRuleSchema)` with no uniqueness refine, and deliberately so — a `@gol/domain` schema change is Epic 4/5 territory. The collision this entry predicted cannot occur because the Decision E.4 cache is keyed on the **ordered join of the whole rule list's** `contentHash`es (`JSON.stringify` of the array, so the encoding is injective over arbitrary opaque strings), not per rule: a duplicate hash *inside* one organism is harmless, since the key still distinguishes the lists, and order is priority (FR-2.6) so a join is also strictly more correct than §3.5's "hash **set**" wording. Keying per rule — the option not taken — is exactly where the duplicate would have returned the wrong compiled closure. Pinned by `compileEvaluators.test.ts` ("is immune to a duplicate contentHash inside one rule list"). ⚠️ The cache does assume `contentHash` is a faithful content address (AR-21): two rules with the same hash are the same rule. Duplicate rule **`id`**s remain unconsumed and out of scope.
-- **Unknown keys are stripped, not rejected, at every schema** — Zod's default is strip, verified: `BattleSchema.safeParse({...battle, futureField: 123}).data` silently drops `futureField`. A record written by a newer build, loaded and re-saved by an older one, loses the new fields with no error; a corrupt file with junk keys validates clean, which sits awkwardly against RFC-006's stated posture of treating corruption as rejectable. The strict-vs-strip decision belongs with the code that actually reads persisted data — Story 1.4 (repository load) and Story 5.7/5.8 (migration + atomic import). **Story 1.4 deliberately kept strip** and changed no schema: making them `.strict()` would reject exactly the forward-compatible records the Story 5.7 migration chain exists to upgrade, so the two must be decided together. Now rests wholly with 5.7/5.8.
+- **Unknown keys are stripped, not rejected, at every schema** — Zod's default is strip, verified: `BattleSchema.safeParse({...battle, futureField: 123}).data` silently drops `futureField`. A record written by a newer build, loaded and re-saved by an older one, loses the new fields with no error; a corrupt file with junk keys validates clean, which sits awkwardly against RFC-006's stated posture of treating corruption as rejectable. The strict-vs-strip decision belongs with the code that actually reads persisted data — Story 1.4 (repository load) and Story 5.7/5.8 (migration + atomic import). **Story 1.4 deliberately kept strip** and changed no schema: making them `.strict()` would reject exactly the forward-compatible records the Story 5.7 migration chain exists to upgrade, so the two must be decided together. Now rests wholly with 5.7/5.8. **↪ Story 5.7 (FD7) kept strip, deliberately:** a newer-format document is now rejected by version before any parse (AC4), unknown keys in a same-format document are stripped at parse and so never persisted, `WorkspaceExportSchema`'s JSDoc makes the strip the settings-exclusion mechanism, and `.strict()` would reject a hand-edited file for an extra comment key. Any tightening is a persisted-shape change and belongs to **the first `formatVersion` bump — the registry's first real step**. Flagged for the owner.
 - **`updatedAt` earlier than `createdAt` is accepted** — no cross-field date check in `BattleSchema`'s superRefine. The Battle Gallery sorts by `updatedAt` (Story 1.10), so a corrupted record sorts as the oldest battle in the workspace with no signal. Revisit alongside the `z.date()`/ISO-string decision if that lands a date-handling refactor anyway.
 - **`.max()` counts UTF-16 code units, not user-visible characters** — `Organism.name` `.max(50)`, `Battle.name` `.max(100)`, `payload.summary` `.max(120)`. An organism name of 26 emoji (52 code units) is rejected as "over 50 characters". Matches RFC-001/RFC-004 as written; the mismatch only becomes user-visible when Epic 4's Organism Editor grows a character counter (Story 4.5) — make the counter agree with the schema then, or move both to grapheme counting.
 
@@ -57,7 +57,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 ## Deferred from: code review of 1-7-palette-token-registry-display-color-lut (2026-08-06)
 
 - ~~**`displayColorAt` clamps a corrupt numeric index silently, with no diagnostic**~~ — **RESOLVED in Story 1.8** (code review 2026-08-06). The answer was not to instrument the clamp but to remove the path that reaches it: `buildRefToFillGroup` (`apps/web/lib/refToFillGroup.ts`) resolves every roster token through `paletteIndexOf` **once per battle** at LUT-build time, so the renderer's inner loop only ever holds indices already in `[0, PALETTE.length)`, and `groupByColourState` derives `ageShade` as `groupId - tokenIndex * 8 ∈ [0, 7]`. The warn-once diagnostic is affordable precisely because it no longer lives in the loop. The clamp stays as a last-resort guard; nothing reaches it during a real render.
-- **The warn-dedupe `Set` is unbounded and `colorToken` has no `.max()`** — `warnedUnknownTokens` grows for the process lifetime, keyed on strings from loaded user files, and `OrganismSchema.colorToken` is `z.string().min(1).refine(…)` with no length cap (unlike `name: z.string().max(50)` one line above). Bounded in practice by the 255-organisms-per-battle limit, but the import path is untrusted. Story 1.7 deliberately made **no** behavioural change to the schema, so the cap belongs with **Story 5.7** (migration/import hardening).
+- **The warn-dedupe `Set` is unbounded and `colorToken` has no `.max()`** — `warnedUnknownTokens` grows for the process lifetime, keyed on strings from loaded user files, and `OrganismSchema.colorToken` is `z.string().min(1).refine(…)` with no length cap (unlike `name: z.string().max(50)` one line above). Bounded in practice by the 255-organisms-per-battle limit, but the import path is untrusted. Story 1.7 deliberately made **no** behavioural change to the schema, so the cap belongs with **Story 5.7** (migration/import hardening). **↪ Re-pointed in Story 5.7 (FD7):** a persisted-shape change, so it needs a `formatVersion` bump and a real repair step; its home is now **the first `formatVersion` bump — the registry's first real step**, not Story 5.7/5.8. Flagged for the owner.
 - **Duplicate ids in `PALETTE_SOURCE` are swallowed at module init** — `new Map(PALETTE.map((c, i) => [c.id, i]))` keeps the *last* index for a repeated id, making the earlier `PALETTE` slot unreachable through `paletteIndexOf` with no init-time error. Only `paletteRegistry.test.ts`'s unique-ids test catches it. A one-line `paletteIndexById.size !== PALETTE.length` guard beside the Map would make it a build-time failure. Hardening, not a defect — revisit if the palette is ever extended.
 - ~~**`contrastRatio` cannot accept a CVD-simulated colour — G1/G2 gate normal vision only**~~ — **✅ Resolved in Story 4.9.** `contrastRatio`/`relativeLuminance` take a hex string and re-linearise internally; `simulateCvd` returns `LinearRgb` and the module has no de-linearising function, so no call sequence produces a contrast number for a simulated colour. Measured manually, worst-case contrast vs `#0a0a0a` across 20 tokens × 8 shades is normal 3.06, protan 3.23, **deutan 2.96**, tritan 3.06 — deutan dips below the normal-vision worst case recorded in the validation doc but still clears the 2.5 G2 gate, so this is an ungated path rather than a live failure. Splitting `relativeLuminance(hex)` into `luminanceOfLinear(LinearRgb)` + a thin hex wrapper costs three lines. Pick up with **Stories 4.9 / 6.11**, which re-confirm the palette. Story 4.9 added `luminanceOfLinear`/`contrastRatioOfLinear` and a new G5 gate (every token, every shade, under CVD simulation, both sides simulated) — see `palette-cvd-validation.md`'s Story 4.9 re-confirmation section.
 - **`paletteTokenUsage.test.ts` is a hand-maintained list, not a scan** — it covers `CONWAYS_CLASSIC` and `createMockOrganisms()` only, which is exactly what Story 1.7 Task 5 specified. Four other fixture files carry `colorToken`s outside the guard: `packages/persistence/src/createLocalStorageRepositories.test.ts` and `localStorageOrganismRepository.test.ts` (`cyan`), `packages/domain/src/organismSchema.test.ts` (`coral-red`), `packages/test-utils/src/fakeRepositories.test.ts` (`vermillion`). All four are real tokens today, so nothing is broken — but a new fixture added anywhere outside the two enumerated sources gets no coverage from the guard that exists to catch exactly that.
@@ -100,7 +100,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **Organism dots are 12x12 px with a 6 px gap — below WCAG 2.2 SC 2.5.8's 24 px target minimum** — surfaced by the 2026-08-08 review. Story 1.10 converted the mockup's decorative `.participant-dot` divs into real focusable markers, which is what brings SC 2.5.8 into scope; the geometry was kept to match the mockup (Sidiar, option (a) on the review's decision 2). The spacing exception does not rescue it either: 18 px centre-to-centre cannot fit non-intersecting 24 px undisturbed circles. The automated gate is structurally blind to this — `target-size` ships `enabled: false` in axe-core 4.12.1 — so it will not resurface on its own. **Pick this up with the first UX pass that revisits tile density**, or Story 6.x if a compact/comfortable display setting lands; the fix is either larger hit areas behind the same visual or more gap, and both are design calls no mockup currently specifies.
 
-- **`name` fields carry no `.min(1)` floor, so an empty name reaches the DOM as an empty accessible name** — `OrganismSchema.name` and `BattleSummarySchema.name` are both `z.string().max(N)` with no lower bound, so `""` parses and `list()` returns it. Downstream, `BattleTile` renders `aria-label=""` on an organism dot (a `<button>` with no accessible name — axe `button-name`, WCAG 4.1.2 serious) and an empty `<h2>` for the battle title (axe `empty-heading`). The gallery e2e asserts zero `AxeBuilder` violations with default best-practice rules, so a single such record breaks the whole run. `resolveTileOrganisms`'s fallback covers only an *absent* organism, not a present-but-empty name. A presentation-layer guard in `tileOrganisms.ts`/`BattleTile.tsx` is the cheap patch (tracked as a Story 1.10 review patch item); the schema floor is the root fix. **Pick this up with Stories 5.7/5.8**, which own schema strictness and validation hardening — a `.min(1)` on a name field is a persisted-shape change and belongs with the rest of that pass rather than bolted on from a Gallery story.
+- **`name` fields carry no `.min(1)` floor, so an empty name reaches the DOM as an empty accessible name** — `OrganismSchema.name` and `BattleSummarySchema.name` are both `z.string().max(N)` with no lower bound, so `""` parses and `list()` returns it. Downstream, `BattleTile` renders `aria-label=""` on an organism dot (a `<button>` with no accessible name — axe `button-name`, WCAG 4.1.2 serious) and an empty `<h2>` for the battle title (axe `empty-heading`). The gallery e2e asserts zero `AxeBuilder` violations with default best-practice rules, so a single such record breaks the whole run. `resolveTileOrganisms`'s fallback covers only an *absent* organism, not a present-but-empty name. A presentation-layer guard in `tileOrganisms.ts`/`BattleTile.tsx` is the cheap patch (tracked as a Story 1.10 review patch item); the schema floor is the root fix. **Pick this up with Stories 5.7/5.8**, which own schema strictness and validation hardening — a `.min(1)` on a name field is a persisted-shape change and belongs with the rest of that pass rather than bolted on from a Gallery story. **↪ Re-pointed in Story 5.7 (FD7):** a persisted-shape change, so it needs a `formatVersion` bump and a real repair step; its home is now **the first `formatVersion` bump — the registry's first real step**, not Story 5.7/5.8. Flagged for the owner.
 
 ## Deferred from: Story 1-11-battle-tile-thumbnails implementation (2026-08-08)
 
@@ -1111,7 +1111,8 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   intent, say so — then this story flips (add `maxLength` + the 2.11 clamp, delete
   `OrganismNameField.test.tsx`'s over-limit case and the e2e's exact-value assertion; ~10 lines).
 - **`OrganismSchema.name` still admits `''`.** `MAX_ORGANISM_NAME_LENGTH` landed but no `.min(1)`
-  did — that persisted-shape change stays with Stories 5.7/5.8 (the `.min(1)` entry above). The
+  did — that persisted-shape change stays with Stories 5.7/5.8 (the `.min(1)` entry above) —
+  **↪ re-pointed by Story 5.7 (FD7) to the first `formatVersion` bump**. The
   editor's inline "required" error and 4.13's Save gate are the only enforcement; an imported
   workspace with an empty organism name loads and renders an empty card title today.
 - ~~**`role="alert"` per field vs. a Save-time summary.**~~ ✅ Resolved in Story 4.13 (FD6): the
@@ -1576,6 +1577,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 - **UX-DR10's 100 vs RFC-004 §2.4's 120** (FD2) — the editor caps `MAX_RULE_SUMMARY_LENGTH` at 100,
   the schema still accepts up to 120 for records that arrive by import/migration. The next RFC
   touch should either lower the schema (a persisted-shape change, Story 5.7's) or raise UX-DR10.
+  **↪ Re-pointed in Story 5.7 (FD7):** lowering the schema cap would fail records valid today, so
+  it needs a `formatVersion` bump and a repair step — the registry's first real step, not 5.7.
 - **Two "+ Add Rule" controls share one accessible name in the empty state** (FD9) —
   `<BattleGallery>`'s FD2 precedent had two labels from the specs; this one has one. A
   screen-reader user hears the same button twice; if that is unwanted the empty-state CTA can take
@@ -2420,7 +2423,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   `OrganismSchema.parse`, which proves the written record IS the current shape, so the current
   constant is the only honest stamp. "Keep" would preserve a stale stamp once a future
   `formatVersion` step has migrated the field set. Both are `1` today; Story 5.7's registry should
-  read this. `projectOrganismForSave` is untouched.
+  read this. `projectOrganismForSave` is untouched. **✅ Read by Story 5.7 (FD5):** the RESTAMP is
+  what lets `OrganismSchema.schemaVersion` become `z.literal(ORGANISM_SCHEMA_VERSION)` — every
+  write already stamps the constant, and a future step that changes the organism shape restamps.
 
 ## Deferred from: Story 4-17-edit-organism-from-library (2026-09-22)
 
@@ -3131,3 +3136,47 @@ been answered yet:
   ZWJ between them; a trailing ZWJ is trimmed) keeps `क्` with a visible halant. Pre-existing for the
   no-joiner case. A grapheme-cluster cut (`Intl.Segmenter`, whose Unicode 15.1 rules keep Indic
   conjuncts whole) would cover both; mind the lazy `battleExporter` chunk's size and engine support.
+
+## Deferred from: Story 5-7-migration-registry (2026-09-25)
+
+Variances and forced decisions recorded rather than absorbed (the story file's Dev Notes carry the
+full reasoning; the owner rules on each).
+
+- **FD1 — the registry lives in `@gol/domain` (`formatMigrations.ts`), not beside the serializer.**
+  RFC-006 Decision 3's snippet places `migrate()` near the serializer; that is illustrative. The
+  registry is pure, DOM-free, consumed by both boundaries, and belongs under the ≥90% per-file gate.
+- **FD2 — ⚠️ one step per version, told which representation it holds: `(doc, 'envelope' |
+  'at-rest')`.** Architecture-shaping, flagged for the owner. At rest the collections are id-keyed
+  objects and a battle is dense; on the wire they are arrays and a battle is sparse with no roster.
+  Neither can be converted to the other before migration (the converters need current-version
+  parsed records), so a step branches on the SHAPE — never on a version — inside its one atomic
+  function. Rejected: two tables (the fork AR-11 forbids), migrating only envelopes (circular), a
+  canonical intermediate form (a third shape). Free to change while the registry is empty.
+- **FD3 — `createMigrator({ migrations, currentVersion })` is the test seam; `migrate` is its
+  production instance.** No mutable module-level registry, no shipped fake step.
+- **FD4 — `FormatMigrationError` is an interface + factory + guard (`code: 'corrupt' |
+  'newer-version' | 'missing-step'`), not RFC-006's `ImportError`.** The at-rest boundary is not an
+  import; Story 5.8 owns `ImportError` and maps this into it.
+- **FD5 — `OrganismSchema.schemaVersion` is now `z.literal(ORGANISM_SCHEMA_VERSION)`** (Decision
+  I.4, "asserted at load (mismatch ⇒ corrupt)"). A stored record with any other stamp now fails its
+  parse — `load` throws `CorruptDataError`, `list` skips it. A behaviour change for (hypothetical,
+  out-of-band) data; flagged for the owner. The sweep found only `1` and the deliberate `0` test.
+- **FD6 — the at-rest check runs inside `readCollection`, on every read, statelessly.** Not at
+  bootstrap (`/battle?id=` never runs `useWorkspaceSeed`), no "already migrated" flag (stale across
+  tabs). **Implementation note:** the at-rest document's `battles` / `organisms` are LAZY getters,
+  so the identity path reads only `gol:schema` — the cost FD6 states — and a corrupt `gol:battles`
+  cannot make an organism read fail. A step that reads a collection gets the same
+  `CorruptDataError` `readCollection` would throw. Write-back serialises all three candidates
+  first, overwrites the stamp LAST, and on any failure removes both data keys then restores both
+  originals (remove-then-restore, so the rollback cannot itself exceed the quota).
+- **FD7 — the schema-tightening items that named Story 5.7 are NOT taken here** (strip vs strict,
+  `colorToken` `.max()`, `name` `.min(1)`, the rule-summary 120-vs-100 cap). Each makes records
+  valid on `main` today fail validation, so each needs a `formatVersion` bump and a repair step.
+  Re-pointed above to **the first `formatVersion` bump — the registry's first real step**; the
+  battle `schemaVersion` entry is closed as not needed. Flagged for the owner.
+- **FD8 — `gol:settings` is outside the chain.** Device-local (Decision F), never in an envelope,
+  self-healing through `SettingsSchema`'s per-field defaults.
+- **FD9 — a newer at-rest stamp surfaces as `CorruptDataError('gol:schema', …, { cause })`, with
+  the `FormatMigrationError` as `cause`.** A downgraded browser reads as "can't read your data"
+  until Story 5.11 words it (branching on `cause.code === 'newer-version'`); nothing is written
+  before the throw, so declining a reset leaves the data untouched.

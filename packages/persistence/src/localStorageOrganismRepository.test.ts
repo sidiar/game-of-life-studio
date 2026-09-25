@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { OrganismSchema, type Organism } from '@gol/domain';
+import { CURRENT_FORMAT_VERSION, OrganismSchema, type Organism } from '@gol/domain';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { CorruptDataError } from './errors';
 import { STORAGE_KEYS } from './localStorageAccess';
@@ -148,5 +148,20 @@ describe('reserved id', () => {
 
   it('rejects "__proto__" within replaceAll', async () => {
     await expect(repo().replaceAll([makeOrganism('__proto__')])).rejects.toThrow();
+  });
+});
+
+describe('the at-rest format check (Story 5.7)', () => {
+  // `list()` skips a single unreadable record; a whole store on a newer format is a different
+  // fault and must not be skipped past as "no organisms".
+  it('rejects load and list with CorruptDataError on a newer gol:schema stamp', async () => {
+    await repo().save(makeOrganism('org-a'));
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
+    );
+
+    await expect(repo().load('org-a')).rejects.toThrow(CorruptDataError);
+    await expect(repo().list()).rejects.toThrow(CorruptDataError);
   });
 });

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CURRENT_FORMAT_VERSION } from '@gol/domain';
+import { createMigrator, CURRENT_FORMAT_VERSION, isFormatMigrationError } from '@gol/domain';
+import type { FormatMigration } from '@gol/domain';
 import { CorruptDataError } from './errors';
 import {
+  ensureCurrentAtRestFormat,
   hasSchemaStamp,
   measureStorageUsage,
   QuotaExceededError,
@@ -262,5 +264,184 @@ describe('storage usage (AR-14, Story 5.2)', () => {
 
     expect(() => measureStorageUsage()).not.toThrow();
     expect(measureStorageUsage().bytes).toBeGreaterThan(0);
+  });
+});
+
+describe('the at-rest format check (Story 5.7, AR-11)', () => {
+  const BATTLES = JSON.stringify({ 'battle-1': { name: 'Stored battle' } });
+  const ORGANISMS = JSON.stringify({ 'org-1': { name: 'Stored organism' } });
+
+  function seed(stamp: string | null): void {
+    localStorage.setItem(STORAGE_KEYS.battles, BATTLES);
+    localStorage.setItem(STORAGE_KEYS.organisms, ORGANISMS);
+    if (stamp !== null) localStorage.setItem(STORAGE_KEYS.schema, stamp);
+  }
+
+  function snapshot(): Array<string | null> {
+    return [STORAGE_KEYS.battles, STORAGE_KEYS.organisms, STORAGE_KEYS.schema].map((key) =>
+      localStorage.getItem(key),
+    );
+  }
+
+  it('lets reads proceed on a current stamp and writes nothing', () => {
+    seed(JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION }));
+    const before = snapshot();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+
+    expect(readCollection(STORAGE_KEYS.battles)).toEqual(JSON.parse(BATTLES));
+    expect(readCollection(STORAGE_KEYS.organisms)).toEqual(JSON.parse(ORGANISMS));
+    expect(setItem).not.toHaveBeenCalled();
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('lets reads proceed with no stamp (fresh, or settings-only) and writes nothing', () => {
+    seed(null);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+
+    expect(readCollection(STORAGE_KEYS.battles)).toEqual(JSON.parse(BATTLES));
+    expect(setItem).not.toHaveBeenCalled();
+    expect(localStorage.getItem(STORAGE_KEYS.schema)).toBeNull();
+  });
+
+  it('does not read the collections on the identity path — a corrupt gol:battles cannot break an organism read', () => {
+    seed(JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION }));
+    localStorage.setItem(STORAGE_KEYS.battles, '{ not json');
+
+    expect(readCollection(STORAGE_KEYS.organisms)).toEqual(JSON.parse(ORGANISMS));
+  });
+
+  it('rejects a newer stamp as CorruptDataError caused by newer-version, leaving every key byte-identical', () => {
+    seed(JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }));
+    const before = snapshot();
+
+    let thrown: unknown;
+    try {
+      readCollection(STORAGE_KEYS.battles);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(CorruptDataError);
+    const cause = (thrown as CorruptDataError).cause;
+    expect(isFormatMigrationError(cause) && cause.code).toBe('newer-version');
+    expect((thrown as Error).message).toContain('newer version');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it.each([
+    ['not JSON', 'x'],
+    ['JSON but not an object', '"x"'],
+    ['an array', '[]'],
+    ['an object with no formatVersion', '{}'],
+    ['a string formatVersion', JSON.stringify({ formatVersion: '1' })],
+  ])('rejects a stamp that is %s as CorruptDataError', (_label, stamp) => {
+    seed(stamp);
+
+    expect(() => readCollection(STORAGE_KEYS.organisms)).toThrow(CorruptDataError);
+    expect(localStorage.getItem(STORAGE_KEYS.schema)).toBe(stamp);
+  });
+
+  it('propagates a non-migration error from the migrator unchanged', () => {
+    seed(JSON.stringify({ formatVersion: 1 }));
+    const bug = new TypeError('a bug, not a format problem');
+
+    expect(() =>
+      ensureCurrentAtRestFormat(() => {
+        throw bug;
+      }),
+    ).toThrow(bug);
+  });
+
+  describe('write-back through a synthetic v1 → v2 migrator', () => {
+    // Renames every stored name, so a migrated byte is distinguishable from an original one.
+    const renameAll = (collection: unknown) =>
+      Object.fromEntries(
+        Object.entries(collection as Record<string, { name: string }>).map(([id, record]) => [
+          id,
+          { ...record, name: `${record.name} (v2)` },
+        ]),
+      );
+    const step: FormatMigration = (doc, representation) => {
+      expect(representation).toBe('at-rest');
+      return { battles: renameAll(doc['battles']), organisms: renameAll(doc['organisms']) };
+    };
+    const migrator = createMigrator({ migrations: { 1: step }, currentVersion: 2 });
+
+    /**
+     * Fails the FIRST `setItem` to one key, the way a full store does. Only the first: the rollback
+     * then restores that key's original, which fits because the store held it a moment ago.
+     */
+    function failWritesTo(target: string) {
+      const originalSetItem = Storage.prototype.setItem;
+      let failed = false;
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (key === target && !failed) {
+          failed = true;
+          const error = new Error('mock quota failure') as Error & { name: string };
+          error.name = 'QuotaExceededError';
+          throw error;
+        }
+        originalSetItem.call(this, key, value);
+      });
+    }
+
+    it('writes both migrated collections and restamps', () => {
+      seed(JSON.stringify({ formatVersion: 1 }));
+
+      ensureCurrentAtRestFormat(migrator);
+
+      expect(readStoredValue(STORAGE_KEYS.battles)).toEqual({
+        'battle-1': { name: 'Stored battle (v2)' },
+      });
+      expect(readStoredValue(STORAGE_KEYS.organisms)).toEqual({
+        'org-1': { name: 'Stored organism (v2)' },
+      });
+      expect(readStoredValue(STORAGE_KEYS.schema)).toEqual({ formatVersion: 2 });
+    });
+
+    it('restores battles and leaves the stamp alone when the organisms write hits quota', () => {
+      seed(JSON.stringify({ formatVersion: 1 }));
+      const before = snapshot();
+      failWritesTo(STORAGE_KEYS.organisms);
+
+      expect(() => ensureCurrentAtRestFormat(migrator)).toThrow(QuotaExceededError);
+      expect(snapshot()).toEqual(before);
+    });
+
+    it('restores both data keys when the stamp write itself fails', () => {
+      // Migrated data under the old stamp would be migrated AGAIN on the next load.
+      seed(JSON.stringify({ formatVersion: 1 }));
+      const before = snapshot();
+      failWritesTo(STORAGE_KEYS.schema);
+
+      expect(() => ensureCurrentAtRestFormat(migrator)).toThrow(QuotaExceededError);
+      expect(snapshot()).toEqual(before);
+    });
+
+    it('rolls back to an absent key when a collection had never been written', () => {
+      localStorage.setItem(STORAGE_KEYS.battles, BATTLES);
+      localStorage.setItem(STORAGE_KEYS.schema, JSON.stringify({ formatVersion: 1 }));
+      failWritesTo(STORAGE_KEYS.schema);
+
+      expect(() => ensureCurrentAtRestFormat(migrator)).toThrow(QuotaExceededError);
+      expect(localStorage.getItem(STORAGE_KEYS.organisms)).toBeNull();
+      expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe(BATTLES);
+    });
+
+    it('rejects a step whose output is not an id-keyed collection, writing nothing', () => {
+      seed(JSON.stringify({ formatVersion: 1 }));
+      const before = snapshot();
+      const broken = createMigrator({
+        migrations: { 1: (doc) => ({ ...doc, organisms: [] }) },
+        currentVersion: 2,
+      });
+
+      expect(() => ensureCurrentAtRestFormat(broken)).toThrow(CorruptDataError);
+      expect(snapshot()).toEqual(before);
+    });
   });
 });
