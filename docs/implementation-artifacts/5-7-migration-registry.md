@@ -225,7 +225,14 @@ and are left unresolved here; patches were applied in the review's own commit.
   FD9 as shipped and make 5.11 call a new persistence-level "reset format" alongside the reset.
   Folds in the story's FD9 flag, which is sharper than stated: the error *class* is a footnote, the
   recovery path is the question. [`packages/persistence/src/localStorageAccess.ts` `removeDataKeys`,
-  `createLocalStorageRepositories.ts:26-36`]
+  `createLocalStorageRepositories.ts:26-36`] **→ Sidiar (2026-09-25): (a)** — a newer stamp is not
+  a corruption condition: the data is intact and a newer build reads it, so a reload is the fix
+  and a reset would destroy recoverable data. 5.7 surfaces `newer-version` so the UI can tell it
+  apart without reaching into `cause` — at the persistence boundary, where classes are allowed
+  (`CorruptDataError` is one, `errors.ts`): its own error class or a `CorruptDataError` subclass;
+  `@gol/domain`'s `FormatMigrationError` stays an interface + factory (no classes in the domain);
+  5.11 shows only "a newer version of the app saved this data — reload" for it and offers no
+  reset. `clearAll()` keeps the stamp (Story 1.5 unchanged).
 - [ ] [Review][Decision] **FD2 — the step contract `(doc, representation)`** — no governing spec
   fixes a step's signature: RFC-006 Decision 3's snippet is single-argument and silently assumes one
   shape at both boundaries, which RFC-006 Decisions 2 and 7 (dense/id-keyed at rest, sparse arrays
@@ -234,7 +241,9 @@ and are left unresolved here; patches were applied in the review's own commit.
   confirm as shipped (steps branch on the SHAPE inside one function; both boundaries share every
   organism rewrite); **(b)** a canonical intermediate form (a third shape to keep in sync);
   **(c)** two tables (the fork AR-11 forbids). Free to change only while the registry is empty.
-  [`packages/domain/src/formatMigrations.ts:37-48`]
+  [`packages/domain/src/formatMigrations.ts:37-48`] **→ Sidiar (2026-09-25): (a)** — confirmed
+  as shipped: one atomic step per version, `(doc, 'envelope' | 'at-rest')`, branching on the shape
+  only where a step touches battle structure or collection form. No code change.
 - [ ] [Review][Decision] **FD7, narrowed to strip-vs-`.strict()`** — re-pointing `colorToken`
   `.max()`, `name` `.min(1)` and the summary 120→100 cap to the first `formatVersion` bump is
   *settled* by Decision I.1 ("any change to any persisted shape bumps `formatVersion`"): each fails
@@ -244,7 +253,13 @@ and are left unresolved here; patches were applied in the review's own commit.
   bump. Options: **(a)** keep strip everywhere (as shipped; a hand-edited file with a comment key
   still imports; the settings exclusion stays a strip); **(b)** `.strict()` on the *envelope* only,
   at import (5.8), leaving at-rest schemas strip; **(c)** `.strict()` everywhere at the first bump.
-  [`docs/implementation-artifacts/deferred-work.md:27`]
+  [`docs/implementation-artifacts/deferred-work.md:27`] **→ Sidiar (2026-09-25): (a)** — keep strip everywhere, as
+  shipped. A newer-format document is refused by version before any parse (AC4), so the only
+  unknown keys a same-format document can carry are hand edits, foreign tools or junk — nothing
+  worth preserving. Loose schemas (`z.looseObject`, keep-but-ignore) were considered and rejected:
+  they would make the `settings` exclusion depend on the import code rather than the parser, and
+  propagate foreign keys through the store and onward exports. No code change; the
+  `deferred-work.md:27` entry closes on this decision.
 - FD5 (`z.literal(ORGANISM_SCHEMA_VERSION)`) is **settled, not open**: Decision I.4 says verbatim
   "asserted at load (mismatch ⇒ corrupt, NFR-7.3 path)", RFC-006 Alternative 5 is normative on the
   same point, and AC3 requires it. No decision item.
