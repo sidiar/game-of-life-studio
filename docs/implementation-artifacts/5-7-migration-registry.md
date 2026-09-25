@@ -687,3 +687,18 @@ Proposed lane gate: none — 5.7 touches only packages/domain (formatMigrations.
   now also guards `writeDataKey`/`replaceAll`, committed-keys-only rollback, stamp/collection/step
   output guards, test hardening), 3 items deferred, 3 owner decisions left open (newer-stamp
   recovery vs `clearAll`, FD2, strip-vs-strict). Status → in-progress pending those decisions.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 3m 59s | 3m 59s | 20 | 4,326 | 10,078 | 571,610 | 586,034 |
+| Step 1 — create | opus-5-5 | 1 | 6m 19s | 6m 19s | 104 | 2,444 | 260,302 | 4,776,793 | 5,039,643 |
+| Step 2 — implement | opus-5-5 | 1 | 10m 29s | 10m 29s | 152 | 2,145 | 247,139 | 7,826,564 | 8,076,000 |
+| Step 3 — review + PR | fable-5-1 | 4 | 17m 25s | 17m 25s | 4,592 | 20,173 | 1,582,018 | 20,591,693 | 22,198,476 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 52 | 15,725 | 30,240 | 1,676,754 | 1,722,771 |
+| **Total (create → PR ready)** | | 6 | **38m 12s** | 38m 12s | 4,868 | 29,088 | 2,099,537 | 33,766,660 | **35,900,153** |
+
+Run started 2026-09-25 13:48 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
