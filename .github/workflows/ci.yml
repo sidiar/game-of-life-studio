@@ -82,7 +82,7 @@ jobs:
       - name: Build (static export)
         run: npm run build:standalone
 
-      - name: Bundle-size budget
+      - name: Bundle-size growth (vs committed baseline)
         run: npm run bundle:check
 
       # ⚠️ Two steps, not one, and in this order (Story 3.7). `bench` MEASURES

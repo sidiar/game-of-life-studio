@@ -198,6 +198,19 @@ a run that matches zero test files now fails, in all four workspaces.
 | `packages/test-utils` | **~80%** — decided in Story 3.7; AR-39 names it nowhere | aggregate (`mockWorkspace.ts` is at 75% branches, so per-file would fail) |
 | `apps/web` | **no gate** — deliberate counter-metric | — |
 
+**Bundle size is gated on GROWTH, not a ceiling** (AR-3; since 2026-09-25)
+
+- `npm run bundle:check` (`scripts/check-bundle-size.mjs`) fails a route whose gzipped first-load
+  JS grows **more than 8 KB past its committed baseline** in `scripts/bundle-baselines.json`. There
+  are no absolute per-route budgets any more — don't reintroduce one, and don't "find headroom" by
+  trimming unrelated code.
+- A change that grows a route **refreshes the baseline in the same PR**: `npm run build:standalone`
+  then `npm run bundle:baseline`, and commit the JSON diff so review sees the number move. The file
+  is tool-written — never hand-edit a number into it. Growth left un-baselined accumulates against
+  the allowance, and the next PR inherits the bill.
+- Heavy, rarely-shown UI still goes behind `next/dynamic` (AR-35) — the gate got cheaper to satisfy,
+  not the first-load cost.
+
 **Performance is gated too, as of Story 3.7** (AR-43 / NFR-1.1)
 
 - `npm run bench` (`vitest bench`, **never Turbo-cached** — a replayed benchmark is a lie) then

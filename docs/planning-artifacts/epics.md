@@ -156,7 +156,7 @@ Extracted from the Architecture umbrella document (Decisions A–K, M1–M10, Cr
 
 - AR-1: Turborepo monorepo — `apps/web` (Next.js) + `packages/domain`, `packages/simulation`, `packages/persistence`, `packages/test-utils`; workspace + `turbo.json` task config (`apps/api` is post-MVP)
 - AR-2: Next.js App Router + TypeScript strict; standalone mode statically exported via `output: 'export'`; build-time mode selection through `NEXT_PUBLIC_MODE` + repository factory
-- AR-3: CI/CD — GitHub Actions pipeline: typecheck → lint → unit/integration + coverage gates → build (bundle budget ~300KB) → e2e (Playwright, 3 browsers) → a11y (axe); husky + lint-staged pre-commit; $0 static deployment (Vercel/GitHub Pages)
+- AR-3: CI/CD — GitHub Actions pipeline: typecheck → lint → unit/integration + coverage gates → build (bundle-size gate: per-route first-load JS may not grow more than ~8 KB gzip past a committed baseline) → e2e (Playwright, 3 browsers) → a11y (axe); husky + lint-staged pre-commit; $0 static deployment (Vercel/GitHub Pages)
 - AR-4: Toolchain — Vitest (+ v8 coverage, bench), React Testing Library, Playwright (Chromium/Firefox/WebKit), fast-check, axe-core, ESLint + Prettier, `tsc --noEmit`
 - AR-5: `@gol/test-utils` package — grid builders, fake repositories, fixed RNG seeds, canonical organisms (Conway's Classic + the three PRD organisms)
 
@@ -368,7 +368,7 @@ So that regressions are blocked from the first story onward.
 
 **Acceptance Criteria:**
 
-**Given** a push or PR, **When** GitHub Actions runs, **Then** the pipeline executes typecheck → lint → unit tests with coverage → build with ~300 KB bundle budget → Playwright e2e (Chromium/Firefox/WebKit) → axe-core a11y check on the home route, failing on any gate (AR-3/4)
+**Given** a push or PR, **When** GitHub Actions runs, **Then** the pipeline executes typecheck → lint → unit tests with coverage → build with a bundle-size gate (per-route growth against a committed baseline) → Playwright e2e (Chromium/Firefox/WebKit) → axe-core a11y check on the home route, failing on any gate (AR-3/4)
 **Given** a local commit, **When** it is created, **Then** husky + lint-staged run lint and format checks pre-commit
 **Given** any component file containing a raw hex/colour literal outside the theme token file and the palette registry, **When** lint runs, **Then** the AR-46 rule fails the build
 **And** the toolchain is Vitest (+ v8 coverage), React Testing Library, Playwright, fast-check, axe-core, ESLint + Prettier, `tsc --noEmit` (AR-4)
