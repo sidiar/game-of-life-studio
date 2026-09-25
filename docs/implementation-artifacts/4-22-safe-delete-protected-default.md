@@ -1007,3 +1007,18 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 
 Dev Model: opus   # architecture-shaping: first Library-owned dialog stacked over the mounted editor (two nested inert windows, close sequencing) — the pattern Story 4.23's unsaved-changes dialog builds on — plus the extracted delete controller and the Library's second live region
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 22s | 22s | 16 | 2,970 | 9,495 | 446,438 | 458,919 |
+| Step 1 — create | opus-5-5 | 1 | 7m 17s | 7m 17s | 122 | 3,500 | 411,366 | 7,630,723 | 8,045,711 |
+| Step 2 — implement | opus-5-5 | 1 | 35m 47s | 35m 47s | 348 | 5,991 | 599,897 | 40,293,996 | 40,900,232 |
+| Step 3 — review + PR | fable-5-1 | 4 | 36m 38s | 36m 38s | 6,462 | 16,452 | 2,852,277 | 34,408,977 | 37,284,168 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 66 | 16,751 | 44,038 | 2,170,844 | 2,231,699 |
+| **Total (create → PR ready)** | | 6 | **1h 20m** | 1h 20m | 6,948 | 28,913 | 3,873,035 | 82,780,134 | **86,689,030** |
+
+Run started 2026-09-25 10:14 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
