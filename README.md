@@ -100,7 +100,8 @@ npm run dev:standalone   # http://localhost:3000
 | `npm run e2e`                     | Playwright e2e + axe (Chromium/Firefox/WebKit/tablet)                         |
 | `npm run e2e:chromium`            | The same suite, Chromium only                                                 |
 | `npm run bench` / `bench:check`   | Engine benchmark at the 100×60 × 20-organism baseline / fail over budget      |
-| `npm run bundle:check`            | Fails if a route's first-load JS exceeds its gzipped budget                   |
+| `npm run bundle:check`            | Fails if a route's gzipped first-load JS grows >8 KB past its baseline        |
+| `npm run bundle:baseline`         | Re-measures and rewrites `scripts/bundle-baselines.json` (commit it)          |
 | `npm run spec:check`              | Fails if a spec ID cited in code (`RFC-004 §3.5`, `AR-2`…) no longer resolves |
 | `npm run boundary:check`          | Proves the engine-boundary ESLint rule still fires on every escape shape      |
 | `npm run ci` / `npm run ci:dev`   | **The full quality gate — see below** / same, e2e on Chromium only            |

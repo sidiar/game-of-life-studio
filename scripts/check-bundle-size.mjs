@@ -1,6 +1,6 @@
-// Fails CI when a route's first-load JavaScript exceeds its RFC-003 / AR-3 bundle budget. Runs
-// after `build:standalone`, against the shipped static export (apps/web/out) — the exact bytes
-// the $0 static host serves.
+// Fails CI when a route's first-load JavaScript GROWS more than a fixed allowance past its committed
+// baseline (AR-3, RFC-008). Runs after `build:standalone`, against the shipped static export
+// (apps/web/out) — the exact bytes the $0 static host serves.
 //
 // METRIC: gzipped transfer size of the JS each page loads. Next 16's static export does not print
 // a "First Load JS" table to gate against, and the raw (uncompressed) sum is far larger even for
@@ -8,107 +8,68 @@
 // user pays and what a KB figure can sensibly bound; that is what this gate enforces.
 //
 // Story 2.4 (deferred-work.md:149): generalised from a single hardcoded `out/index.html` read to a
-// ROUTE LIST, each with its own budget — `/battle` and `/battle/new` ship their own first-load
-// payload (the editor canvas, this story) and were entirely unmeasured before. The export emits
-// SIBLING `.html` files for a route, not directory indexes — `/battle/new` is `out/battle/new.html`
-// (a nested file, because `battle.html` already claims the flat name), never `out/battle-new.html`.
-import { readFileSync, existsSync } from 'node:fs';
+// ROUTE LIST. The export emits SIBLING `.html` files for a route, not directory indexes —
+// `/battle/new` is `out/battle/new.html` (a nested file, because `battle.html` already claims the
+// flat name), never `out/battle-new.html`.
+//
+// ── GROWTH, NOT A CEILING (Sidiar, accepted 2026-09-09; landed 2026-09-25) ─────────────────────
+//
+// The gate used to hold an absolute `budgetGzipKb` per route. It stood in for NFR-1.2 (initial
+// load < 2 s on desktop broadband), and at a few hundred KB gzip it was never the binding
+// constraint on that NFR — the ~300 KB figure (AR-3, RFC-003:48) was itself "a target to be
+// validated by benchmarking after MUI integration". The home route was raised four times
+// (300 -> 320 -> 330 -> 340, the last deliberately off-formula), and `/battle`'s 310 went stale by
+// two stories without its derivation comment moving: the pattern of a control being worked around.
+// Design, rationale and the two rejected alternatives (delete the gate; measure NFR-1.2 directly
+// with Lighthouse in CI): deferred-work.md, "the bundle gate moves off absolute budgets".
+//
+// What replaced it keeps the one signal that ever mattered — THIS CHANGE ADDED WEIGHT AND NOBODY
+// NOTICED:
+//
+//   - `scripts/bundle-baselines.json` holds each route's last measured gzip size, in BYTES. It is
+//     WRITTEN BY THIS SCRIPT (`npm run bundle:baseline`), never typed by hand — a measurement
+//     retyped into a comment is what went stale last time.
+//   - A route fails when it measures more than GROWTH_ALLOWANCE_KB over its baseline. An
+//     accidental +40 KB import fails regardless of where any ceiling happens to sit.
+//   - Intended growth is accepted by refreshing the baseline in the same PR: a one-line JSON diff,
+//     visible in review, with no formula to re-derive. A PR that deliberately grows a route past
+//     the allowance must do this, and should do it whenever it grows a route at all — the
+//     allowance is measured from the COMMITTED baseline, so growth left un-baselined accumulates
+//     against it across changes and the next PR inherits the bill.
+//   - A route with no baseline, or a baseline with no route, is a failure: a new route must be
+//     measured before it is gated, and a removed one must not leave a number nobody checks.
+//
+// The retired absolute budgets, for the comments elsewhere that cite them (BattleTile.tsx,
+// BattleEditorView.tsx): home 300 -> 320 (Story 1.13, Sidiar 2026-08-13, measured 306.3 KB) ->
+// 330 (Story 1.10 review, Sidiar 2026-08-25, measured 317.5 KB over a 306.8 KB baseline) -> 340
+// (Story 2.14, Sidiar 2026-08-31, measured 329.5 KB); `/battle` and `/battle/new` 310 (Story 2.4,
+// measured 295.2 KB); `/organisms` 305 (Story 4.1, 290.5 KB); `/settings` 305 (Story 5.1,
+// 291.5 KB). None of those numbers is enforced any more.
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 
 const OUT_DIR = join('apps', 'web', 'out');
+const BASELINE_FILE = join('scripts', 'bundle-baselines.json');
 
-// Each entry's budget is set from a MEASUREMENT, never a round number — see the comment on the
-// entry itself for the formula and the measured value it came from. `check-bundle-size.mjs` is the
-// single authority for every figure here; do not restate one anywhere else
-// (`BattleTile.tsx` already says so for the home figure).
+// ~8 KB, the figure the accepted design names: large enough that ordinary story-sized growth and
+// Turbopack chunk-splitting noise (Story 2.14 measured ~2.1 KB of the latter from merely adding
+// modules to the graph) pass, small enough that a stray barrel import or a statically imported MUI
+// Dialog stack (+18.1 KB, Story 1.13) does not.
+const GROWTH_ALLOWANCE_KB = 8;
+
+const UPDATE = process.argv.includes('--update');
+
+// `key` is the route's identity in bundle-baselines.json; `name` is only for the printed report.
 const ROUTES = [
-  {
-    // 300 -> 320 (Story 1.13, Sidiar 2026-08-13): RFC-003 §"Component Inventory" and AR-3 both
-    // quote ~300 KB, but RFC-003:48 frames that figure as a target "to be validated by
-    // benchmarking after MUI integration" — Story 1.13 (the delete-confirmation dialog) was that
-    // benchmark. Measured against the 1.12 baseline of 288.2 KB, the dialog landed the home route
-    // at 306.3 KB gzip. New budget: ceil((306.3 + 12) / 5) * 5 = 320. RFC-003:48/253/309 and
-    // epics.md:159/:371 still read "~300KB" — a docs-reconciliation item in deferred-work.md,
-    // never edited from here.
-    //
-    // 320 -> 330 (Story 1.10 review, Sidiar 2026-08-25): BattleTile's organism-dot tooltip moved
-    // to `@mui/material/Tooltip`. Measured against the 1.13 baseline of 306.8 KB, the swap landed
-    // the home route at 317.5 KB gzip — it passed the 320 budget but did not leave the ~12 KB
-    // headroom the gate is meant to carry, which is what triggered the move. Same formula:
-    // ceil((317.5 + 12) / 5) * 5 = 330.
-    // 330 -> 340 (Story 2.14, Sidiar 2026-08-31): the home route reached 329.5 KB gzip — 0.5 KB
-    // headroom — without importing a line of this story's code. Measured three ways on one tree:
-    // the Story 2.13 baseline was 326.8 KB; with the resize dialog STATICALLY imported `/` is
-    // 328.9 KB; with `next/dynamic` it is 329.5 KB. So ~2.1 KB is a Turbopack chunk-splitting
-    // side effect of adding modules to the graph at all, and only ~0.6 KB is the `next/dynamic`
-    // boundary itself. The alternative considered and not taken was moving `<DeleteBattleDialog>`
-    // behind `next/dynamic` too (which Story 2.14 proved works, and would return the MUI Dialog
-    // stack's ~18 KB to the on-demand path) — still available if the home route needs real relief
-    // rather than a raise.
-    //
-    // NOTE, so the next reader does not re-derive it and find a discrepancy: this is the first
-    // raise NOT produced by the formula above. ceil((329.5 + 12) / 5) * 5 = 345; Sidiar set 340
-    // explicitly, which carries 10.5 KB headroom against the ~12 KB the gate is meant to hold.
-    // A deliberate call, not a miscalculation — the formula remains the default for future raises.
-    name: 'home (/)',
-    html: 'index.html',
-    budgetGzipKb: 340,
-  },
-  {
-    // New in Story 2.4 (deferred-work.md:149) — the first story to add real weight to the battle
-    // route (the retained-renderer edit canvas, `<BattleEditorView>`). Measured at 295.2 KB gzip
-    // (`/battle`, the marginally heavier of the two battle-route pages — see `battle/new` below).
-    // Same formula as the home budget's two moves: ceil((295.2 + 12) / 5) * 5 = 310.
-    //
-    // ⚠️ THE FORMULA ABOVE NO LONGER DERIVES THIS NUMBER, and 310 is deliberately NOT being
-    // raised to restore it (Sidiar, 2026-09-09). Stories 2.15/2.16 grew `/battle` to 305.0 KB
-    // without this comment moving, so the 295.2 KB the derivation quotes is two stories stale and
-    // the real headroom is ~5 KB, not the ~14.8 KB the arithmetic implies. Story 3.3 adds 0.2 KB
-    // of that; the drift is not its doing.
-    //
-    // The reason this is a correction and not a raise: THE ABSOLUTE-KB GATE IS BEING RETIRED. It
-    // stands in for NFR-1.2 (initial load < 2 s on desktop broadband), and at these sizes it is
-    // not the binding constraint on that NFR — the home route has already been raised four times
-    // (300 -> 320 -> 330 -> 340), the last one deliberately off-formula, which is the pattern of a
-    // control being worked around rather than one doing its job. The accepted replacement gates on
-    // GROWTH against a committed baseline instead, so an unnoticed +40 KB import fails regardless
-    // of where a ceiling happens to sit, and no story has to re-derive a round number. Design and
-    // rationale: `deferred-work.md`, "the bundle gate moves off absolute budgets". Until that
-    // lands, 310 stands as a ceiling that still passes — read it as a stale ratchet, not a budget.
-    name: 'battle (/battle)',
-    html: 'battle.html',
-    budgetGzipKb: 310,
-  },
-  {
-    // Shares its budget with `/battle` rather than getting a separately-derived number: both pages
-    // mount the same `<BattlePage>` bundle and differ only in which branch runs at runtime, so
-    // their first-load JS is the same code — measured at 295.1 KB gzip here, 0.1 KB under
-    // `/battle`'s 295.2 (JSON payload differences), well inside one budget's headroom.
-    name: 'battle/new (/battle/new)',
-    html: join('battle', 'new.html'),
-    budgetGzipKb: 310,
-  },
-  {
-    // New in Story 4.1 — the first story to measure `/organisms`. A new measurement, not a raise
-    // (deferred-work.md's "the bundle gate moves off absolute budgets" entry is being retired
-    // separately; this entry does not pre-empt that). Measured at 290.5 KB gzip; same formula as
-    // every other entry's initial derivation: ceil((290.5 + 12) / 5) * 5 = 305.
-    name: 'organisms (/organisms)',
-    html: 'organisms.html',
-    budgetGzipKb: 305,
-  },
-  {
-    // New in Story 5.1 — the first story to measure `/settings`. A new measurement, not a raise
-    // (same footing as the `/organisms` entry above; `deferred-work.md`'s "the bundle gate moves
-    // off absolute budgets" entry is being retired separately, and a first measurement for a new
-    // route does not pre-empt that). Measured at 291.5 KB gzip; same formula as every other
-    // entry's initial derivation: ceil((291.5 + 12) / 5) * 5 = 305.
-    name: 'settings (/settings)',
-    html: 'settings.html',
-    budgetGzipKb: 305,
-  },
+  { key: '/', name: 'home (/)', html: 'index.html' },
+  { key: '/battle', name: 'battle (/battle)', html: 'battle.html' },
+  { key: '/battle/new', name: 'battle/new (/battle/new)', html: join('battle', 'new.html') },
+  { key: '/organisms', name: 'organisms (/organisms)', html: 'organisms.html' },
+  { key: '/settings', name: 'settings (/settings)', html: 'settings.html' },
 ];
+
+const kb = (bytes) => (bytes / 1024).toFixed(1);
 
 function measureRoute({ name, html }) {
   const htmlPath = join(OUT_DIR, html);
@@ -129,7 +90,7 @@ function measureRoute({ name, html }) {
     console.error(
       `✖ bundle-size: no JS assets found in ${htmlPath} for route "${name}". This almost ` +
         `certainly means the markup format changed and the gate is no longer scraping real ` +
-        `asset paths — treat as a failure, not an empty (and vacuously passing) budget.`,
+        `asset paths — treat as a failure, not an empty (and vacuously passing) measurement.`,
     );
     return null;
   }
@@ -156,10 +117,22 @@ function measureRoute({ name, html }) {
     return null;
   }
 
-  return { assetCount: assetPaths.size, rawKB: rawBytes / 1024, gzipKB: gzipBytes / 1024 };
+  return { assetCount: assetPaths.size, rawBytes, gzipBytes };
+}
+
+function readBaselines() {
+  if (!existsSync(BASELINE_FILE)) {
+    console.error(
+      `✖ bundle-size: ${BASELINE_FILE} not found. Run \`npm run bundle:baseline\` after ` +
+        `\`npm run build:standalone\` and commit the file.`,
+    );
+    return null;
+  }
+  return JSON.parse(readFileSync(BASELINE_FILE, 'utf8'));
 }
 
 let ok = true;
+const measured = {};
 
 for (const route of ROUTES) {
   const result = measureRoute(route);
@@ -167,22 +140,66 @@ for (const route of ROUTES) {
     ok = false;
     continue;
   }
+  measured[route.key] = result;
+}
 
-  const { assetCount, rawKB, gzipKB } = result;
+if (UPDATE) {
+  // Never write a partial file: a route that failed to measure would silently lose its baseline.
+  if (!ok) process.exit(1);
+  const baselines = Object.fromEntries(ROUTES.map((r) => [r.key, measured[r.key].gzipBytes]));
+  writeFileSync(BASELINE_FILE, `${JSON.stringify(baselines, null, 2)}\n`);
+  for (const route of ROUTES) {
+    console.log(`${route.name}: ${kb(baselines[route.key])} KB gzip`);
+  }
+  console.log(`\n✓ wrote ${BASELINE_FILE} — commit it with the change that moved these numbers.`);
+  process.exit(0);
+}
+
+const baselines = readBaselines();
+if (baselines === null) process.exit(1);
+
+for (const stale of Object.keys(baselines).filter((k) => !ROUTES.some((r) => r.key === k))) {
+  console.error(
+    `✖ bundle-size: ${BASELINE_FILE} has a baseline for "${stale}", which is not a gated route. ` +
+      `Remove it (\`npm run bundle:baseline\` rewrites the file from ROUTES).`,
+  );
+  ok = false;
+}
+
+for (const route of ROUTES) {
+  const result = measured[route.key];
+  if (result === undefined) continue;
+
+  const { assetCount, rawBytes, gzipBytes } = result;
+  const baseline = baselines[route.key];
   console.log(`${route.name} first-load JS  (${assetCount} assets)`);
-  console.log(`  raw (uncompressed): ${rawKB.toFixed(1)} KB`);
-  console.log(`  gzipped (transfer): ${gzipKB.toFixed(1)} KB`);
-  console.log(`  budget (gzipped):   ${route.budgetGzipKb} KB`);
+  console.log(`  raw (uncompressed): ${kb(rawBytes)} KB`);
+  console.log(`  gzipped (transfer): ${kb(gzipBytes)} KB`);
 
-  if (gzipKB > route.budgetGzipKb) {
+  if (typeof baseline !== 'number') {
     console.error(
-      `✖ bundle-size: "${route.name}" is ${gzipKB.toFixed(1)} KB, exceeding its ` +
-        `${route.budgetGzipKb} KB budget by ${(gzipKB - route.budgetGzipKb).toFixed(1)} KB. Run ` +
-        `\`npm run analyze -w web\` to inspect.`,
+      `✖ bundle-size: "${route.name}" has no baseline in ${BASELINE_FILE}. A new route is ` +
+        `measured before it is gated: run \`npm run bundle:baseline\` and commit the file.`,
+    );
+    ok = false;
+    console.log('');
+    continue;
+  }
+
+  const growthKB = (gzipBytes - baseline) / 1024;
+  const sign = growthKB >= 0 ? '+' : '';
+  console.log(`  baseline (gzipped): ${kb(baseline)} KB  (${sign}${growthKB.toFixed(1)} KB)`);
+
+  if (growthKB > GROWTH_ALLOWANCE_KB) {
+    console.error(
+      `✖ bundle-size: "${route.name}" grew ${growthKB.toFixed(1)} KB past its baseline, over the ` +
+        `${GROWTH_ALLOWANCE_KB} KB allowance. Run \`npm run analyze -w web\` to see what arrived; ` +
+        `if the growth is intended, \`npm run bundle:baseline\` and commit the new baseline so ` +
+        `review sees the number move.`,
     );
     ok = false;
   } else {
-    console.log(`✓ within budget (${(route.budgetGzipKb - gzipKB).toFixed(1)} KB headroom).`);
+    console.log(`✓ within the ${GROWTH_ALLOWANCE_KB} KB growth allowance.`);
   }
   console.log('');
 }

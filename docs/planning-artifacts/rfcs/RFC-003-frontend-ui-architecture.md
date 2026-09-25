@@ -45,7 +45,7 @@ The Game of Life Studio presents unique frontend challenges:
 - Different animation styles (subtle lifts vs glowing scan lines)
 
 **Performance Budget Considerations:**
-- Static export bundle should stay within target (~200KB initial / ~300KB total) — to be validated by benchmarking after MUI integration
+- Static export bundle should stay within target (~200KB initial / ~300KB total) — to be validated by benchmarking after MUI integration. *(Validated and retired as an absolute ceiling, 2026-09-25: after MUI integration the routes measured ~290–334 KB gzip, well inside NFR-1.2's load budget, and the ceiling was raised four times without carrying signal. CI now gates each route's first-load JS on **growth** — at most ~8 KB gzip past a committed per-route baseline — in `scripts/check-bundle-size.mjs`.)*
 - Theme switching must complete within ~16ms to avoid frame drops
 - CSS repaint/reflow must stay minimal to maintain 60 FPS
 - Animations cannot interfere with simulation engine performance
@@ -250,7 +250,7 @@ primary: { main: '#00d4ff', contrastText: '#0a0a0a' }
   - Per-component imports for effective tree-shaking (Next.js handles this).
   - Avoid premium `@mui/x-*` packages entirely.
   - Dynamic imports for heavy, rarely-used components (e.g., Organism Editor).
-  - Benchmark against the ~300KB total budget after integration and monitor with a bundle analyzer.
+  - Benchmark against the ~300KB total budget after integration and monitor with a bundle analyzer. *(Done; the absolute budget is now a growth gate against a committed baseline — see Performance Budget Considerations above.)*
 
 **Risk 2: Biotech Terminal Theme Requires Heavy Overriding**
 - **Risk:** MUI's Material Design defaults (rounded corners, elevation shadows, color roles) fight the monospace, green-on-black terminal aesthetic.
@@ -306,6 +306,6 @@ primary: { main: '#00d4ff', contrastText: '#0a0a0a' }
 
 **Next Steps (implementation):**
 1. Build MUI theme-switching prototype (CSS-variables mode + FOUC script)
-2. Benchmark bundle size against the ~300KB budget and validate switching <100ms
+2. Benchmark bundle size against the ~300KB budget and validate switching <100ms *(bundle half done; now gated on growth against a committed baseline — see Performance Budget Considerations)*
 3. Validate WCAG AA contrast for the Clinical Lab theme
 4. Build out Biotech Terminal `styleOverrides` and custom keyframe effects
