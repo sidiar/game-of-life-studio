@@ -356,3 +356,34 @@ describe('isFreshWorkspace', () => {
     expect(await repos.isFreshWorkspace()).toBe(false);
   });
 });
+
+describe('snapshotWorkspace / restoreWorkspace (mirrors the real pair)', () => {
+  it('restores both collections — raw records included — and leaves settings alone', async () => {
+    const repos = createFakeRepositories({
+      battles: [makeBattle(ID_A)],
+      raw: { organisms: { broken: { id: 'broken' } } },
+    });
+    const snapshot = await repos.snapshotWorkspace();
+
+    await repos.clearAll();
+    await repos.organisms.save(makeOrganism('mock-org'));
+    await repos.settings.save({ ...DEFAULT_SETTINGS, theme: 'biotech-terminal' });
+    await repos.restoreWorkspace(snapshot);
+
+    expect((await repos.battles.listFull()).map((b) => b.id)).toEqual([ID_A]);
+    expect(await repos.organisms.exists('mock-org')).toBe(false);
+    await expect(repos.organisms.load('broken')).rejects.toBeInstanceOf(CorruptDataError);
+    expect((await repos.settings.load()).theme).toBe('biotech-terminal');
+  });
+
+  it('restores freshness: a fresh snapshot leaves the fake fresh again', async () => {
+    const repos = createFakeRepositories();
+    const snapshot = await repos.snapshotWorkspace();
+    await repos.organisms.save(makeOrganism('mock-org'));
+
+    await repos.restoreWorkspace(snapshot);
+
+    expect(await repos.isFreshWorkspace()).toBe(true);
+    expect(await repos.organisms.list()).toEqual([]);
+  });
+});

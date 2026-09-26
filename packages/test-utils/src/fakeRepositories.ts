@@ -18,7 +18,15 @@ import {
   type BattleRepository,
   type OrganismRepository,
   type SettingsRepository,
+  type WorkspaceSnapshot,
 } from '@gol/persistence';
+
+/** What the fake's opaque `WorkspaceSnapshot` holds — its own stores, as they were. */
+interface FakeWorkspaceData {
+  battles: ReadonlyMap<string, unknown>;
+  organisms: ReadonlyMap<string, unknown>;
+  stamped: boolean;
+}
 
 /**
  * Pre-populates a fake store. `battles`/`organisms`/`settings` validate on the way in (same as a
@@ -269,6 +277,29 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
 
     async isFreshWorkspace() {
       return !stamped;
+    },
+
+    // Mirrors the real pair's contract: lossless, settings excluded, and freshness (the `stamped`
+    // flag, this fake's `gol:schema`) restored too — a rollback over a fresh store leaves it fresh.
+    // Shallow Map copies suffice: every write here REPLACES a record (`set` / `clear`), none
+    // mutates one in place, so the captured values cannot change under the snapshot. Raw
+    // (corrupt) records ride along untouched, as the real store's raw strings do.
+    async snapshotWorkspace() {
+      const data: FakeWorkspaceData = {
+        battles: new Map(battleStore),
+        organisms: new Map(organismStore),
+        stamped,
+      };
+      return data as unknown as WorkspaceSnapshot;
+    },
+
+    async restoreWorkspace(snapshot) {
+      const data = snapshot as unknown as FakeWorkspaceData;
+      battleStore.clear();
+      for (const [id, record] of data.battles) battleStore.set(id, record);
+      organismStore.clear();
+      for (const [id, record] of data.organisms) organismStore.set(id, record);
+      stamped = data.stamped;
     },
 
     // Mirrors the real meter through the SAME exported helper (storageBytesOf) rather than

@@ -322,6 +322,45 @@ export function removeDataKeys(): void {
   for (const key of DATA_KEYS) localStorage.removeItem(key);
 }
 
+/** The raw strings of the workspace's data keys; `null` = the key was absent. Never settings. */
+export type RawDataKeys = Readonly<Record<'battles' | 'organisms' | 'schema', string | null>>;
+
+/**
+ * The lossless capture behind `AppRepositories.snapshotWorkspace()`. The format check runs FIRST,
+ * so a store this build may not write (a newer at-rest format) is refused before the import
+ * touches anything — every data write would refuse it anyway. On a current store the check reads
+ * only the stamp, so a corrupt collection is captured as its raw bytes rather than failing.
+ */
+export function captureDataKeys(): RawDataKeys {
+  ensureCurrentAtRestFormat();
+  return Object.freeze({
+    battles: localStorage.getItem(STORAGE_KEYS.battles),
+    organisms: localStorage.getItem(STORAGE_KEYS.organisms),
+    schema: localStorage.getItem(STORAGE_KEYS.schema),
+  });
+}
+
+/*
+ * The byte-identical restore behind `AppRepositories.restoreWorkspace()`. Remove every data key
+ * FIRST, then write the originals back: an original set beside a larger imported value could
+ * itself exceed the quota, whereas the originals alone fit — the store held exactly them a moment
+ * ago (`writeBackMigrated`'s reasoning). Data before stamp, as everywhere (`stampSchemaVersion`),
+ * and an absent key stays absent — which is what restores a still-FRESH workspace as fresh rather
+ * than as a stamped-but-empty one the seed would never revisit. No format check: these bytes are
+ * the store's own, not this build's output.
+ */
+export function restoreDataKeys(snapshot: RawDataKeys): void {
+  const ordered = [
+    [STORAGE_KEYS.organisms, snapshot.organisms],
+    [STORAGE_KEYS.battles, snapshot.battles],
+    [STORAGE_KEYS.schema, snapshot.schema],
+  ] as const;
+  for (const [key] of ordered) localStorage.removeItem(key);
+  for (const [key, original] of ordered) {
+    if (original !== null) commitCandidate(key, original);
+  }
+}
+
 // Every engine stores a localStorage string as UTF-16 internally, and Chromium meters its
 // per-origin quota (10 MiB) in exactly those code units × 2 — which is why the folk "5 MB limit"
 // actually measures as ~5 M *characters*. `String.prototype.length` already counts code units, so

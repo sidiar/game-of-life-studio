@@ -59,7 +59,7 @@ export class ExportError extends Error {
 /**
  * Why an import file was refused, or how its write went wrong (RFC-006 Decision 3 / Decision 5).
  * Six codes: Decision 3's `'not-json' | 'newer-version' | 'corrupt'`, Decision 5's `'write-failed'`,
- * and two additions recorded as a variance in `deferred-work.md`:
+ * and two additions — a deliberate, owner-ruled extension of RFC-006, recorded in `deferred-work.md`:
  *
  *   - `'dangling-reference'` — the file references organisms it does not carry. A different thing
  *                              to tell the user than "this is not a workspace file at all".
@@ -69,12 +69,6 @@ export class ExportError extends Error {
  *                              restore threw too, so that sentence would be a lie; folding the two
  *                              codes together makes the reassuring copy reachable from the one
  *                              outcome it is false for.
- *
- * ⚠️ One caveat on `'write-failed'`'s "exactly as it was": rolling back over a workspace that was
- * still FRESH (never seeded) restores it as "fresh after its first load" — stamped, with Conway's
- * Classic ensured — because `replaceAll` stamps `gol:schema` and an empty-but-stamped store would
- * never be seeded again (see `workspaceImport.ts`'s restore note). Equivalent, not byte-identical,
- * for that one shape; unreachable from `/settings` today, where the seed runs first.
  */
 export type ImportErrorCode =
   | 'not-json'

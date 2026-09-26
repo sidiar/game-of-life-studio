@@ -150,3 +150,36 @@ describe('isFreshWorkspace (Story 1.5 AC1)', () => {
     expect(await repos.isFreshWorkspace()).toBe(false);
   });
 });
+
+describe('snapshotWorkspace / restoreWorkspace (Story 5.8 owner ruling)', () => {
+  const DATA_KEYS = [STORAGE_KEYS.battles, STORAGE_KEYS.organisms, STORAGE_KEYS.schema] as const;
+  const raw = () => DATA_KEYS.map((key) => localStorage.getItem(key));
+
+  it('puts every data key back byte for byte — absent stays absent — and never touches settings', async () => {
+    const repos = createLocalStorageRepositories();
+    await repos.organisms.save(organism());
+    localStorage.setItem(STORAGE_KEYS.organisms, '{"x": {"not": "an organism"}}');
+    const before = raw();
+    expect(before[0]).toBeNull();
+    const snapshot = await repos.snapshotWorkspace();
+
+    await repos.battles.save(battle());
+    await repos.settings.save({ ...DEFAULT_SETTINGS, theme: 'biotech-terminal' });
+    const settings = localStorage.getItem(STORAGE_KEYS.settings);
+    await repos.restoreWorkspace(snapshot);
+
+    expect(raw()).toEqual(before);
+    expect(localStorage.getItem(STORAGE_KEYS.settings)).toBe(settings);
+  });
+
+  it('restores a fresh store as fresh: the stamp a later write laid down is removed', async () => {
+    const repos = createLocalStorageRepositories();
+    const snapshot = await repos.snapshotWorkspace();
+    await repos.battles.save(battle());
+
+    await repos.restoreWorkspace(snapshot);
+
+    expect(raw()).toEqual([null, null, null]);
+    expect(await repos.isFreshWorkspace()).toBe(true);
+  });
+});

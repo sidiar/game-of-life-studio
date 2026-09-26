@@ -412,6 +412,7 @@ describe('createWorkspaceSerializer.importWorkspace (mode-agnostic)', () => {
     // overwrites whole collections either way. This is the one test guarding the ordering itself.
     const writeRegion = calls.filter((name) =>
       [
+        'snapshotWorkspace',
         'clearAll',
         'organisms.replaceAll',
         'battles.replaceAll',
@@ -420,6 +421,8 @@ describe('createWorkspaceSerializer.importWorkspace (mode-agnostic)', () => {
       ].includes(name),
     );
     expect(writeRegion).toEqual([
+      // Step 5 before step 6: the opaque capture the rollback restores from.
+      'snapshotWorkspace',
       'clearAll',
       'organisms.replaceAll',
       'battles.replaceAll',
@@ -434,6 +437,38 @@ describe('createWorkspaceSerializer.importWorkspace (mode-agnostic)', () => {
       CONWAYS_CLASSIC.id,
     ]);
     expect(summary).toEqual({ kind: 'workspace', battleCount: 1, organismCount: 2 });
+    expect(calls).not.toContain('restoreWorkspace');
+  });
+
+  it('rolls a failed write back through restoreWorkspace — a fresh store comes back fresh', async () => {
+    const calls: string[] = [];
+    const fake = createFakeRepositories();
+    const repos = recordingRepos(fake, calls);
+    const quota = new Error('mock quota failure');
+    vi.mocked(repos.battles.replaceAll).mockRejectedValueOnce(quota);
+    const incoming = chainOrganism('solo');
+    const source = createWorkspaceSerializer({
+      repos: createFakeRepositories({
+        battles: [battlePlacingOnly('55555555-5555-4555-8555-555555555555', incoming.id)],
+        organisms: [incoming],
+      }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+    const file = JSON.stringify(await source.exportWorkspace());
+    const serializer = createWorkspaceSerializer({ repos, appVersion: '1.2.3', now: fixedNow });
+
+    const error = await serializer.importWorkspace(file).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ImportError);
+    expect((error as ImportError).code).toBe('write-failed');
+    expect((error as ImportError).cause).toBe(quota);
+    expect(calls.slice(-1)).toEqual(['restoreWorkspace']);
+    // Byte-identical in the fake's terms: nothing listed, and still never initialized — the
+    // organisms write that DID land is gone, and so is the stamp it set.
+    expect(await fake.isFreshWorkspace()).toBe(true);
+    expect(await fake.organisms.list()).toEqual([]);
+    expect(await fake.battles.listFull()).toEqual([]);
   });
 
   it('never touches a repository when the file is rejected', async () => {

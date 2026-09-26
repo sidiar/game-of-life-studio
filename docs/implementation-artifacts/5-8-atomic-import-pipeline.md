@@ -4,7 +4,7 @@ baseline_commit: 388dd205a8d3cd05fc50ddf004bce51d05b444e6
 
 # Story 5.8: Atomic Import Pipeline
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -263,7 +263,7 @@ triage (2 items: a battle-id `__proto__` gap that `BattleExportSchema`'s `z.uuid
 the Task 5.1 "RFC's three" vs deferred-work's "RFC's four" baseline count, where the lasting
 record in `deferred-work.md` is the internally consistent one).
 
-- [ ] [Review][Decision] **Rollback materializes an absent `gol:battles` key, so `'write-failed'`'s
+- [x] [Review][Decision] **Rollback materializes an absent `gol:battles` key, so `'write-failed'`'s
   "byte-identical" guarantee is false for the store shape every user has before saving their first
   battle** — `restore()` (`packages/persistence/src/workspaceImport.ts:197-201`) runs
   `battles.replaceAll(snapshot.battles)`; `seedDefaultWorkspace` deliberately never writes
@@ -282,6 +282,21 @@ record in `deferred-work.md` is the internally consistent one).
     strings (absent stays absent). Closes this, FD2 (a), FD2 (b) and FD3 in one move; costs an
     interface change every mode and `@gol/test-utils`' fakes must mirror. Cheapest before Story
     5.9 wires the import.
+
+  **Owner ruling (Sidiar, 2026-09-26): go with (b).** Adopt the opaque
+  `snapshotWorkspace()` / `restoreWorkspace()` pair on `AppRepositories`, mirrored in
+  `@gol/test-utils`' fakes. This one ruling also closes the FD2 owner flag (limits (a) and (b))
+  and the FD3 fresh-rollback caveat: the rollback becomes byte-identical, including absent keys,
+  so the `'write-failed'` JSDoc caveat added by the 2026-09-25 review is reverted to the strong
+  wording. Update the FD2/FD3 records in `deferred-work.md` accordingly.
+
+  **Owner ruling (Sidiar, 2026-09-26) on FD5: keep the six `ImportError` codes.** Recorded as a
+  deliberate extension of RFC-006 Decisions 3/5 (`'dangling-reference'`, `'rollback-failed'`
+  added so Story 5.9's copy can be truthful and specific). No code change.
+
+  **Implemented 2026-09-26:** `AppRepositories.snapshotWorkspace()` / `restoreWorkspace()` (branded
+  opaque `WorkspaceSnapshot`); `applyImport` uses them for steps 5 and 7; the FD3 re-ensure and the
+  `'write-failed'` caveat are gone; FD2/FD3 struck and FD5 annotated in `deferred-work.md`.
 - [x] [Review][Patch] **Serializer ordering test cannot fail for the regression it guards**
   [`packages/persistence/src/workspaceSerializer.test.ts`] — `calls.indexOf('clearAll')` is `-1`
   when the call is absent and `-1 < anyIndex` passes, so dropping `clearAll()` entirely (or
@@ -599,6 +614,38 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`, via `/bmad-dev-story` un
   lines and mirrors `ensureCurrentAtRestFormat`'s.
 - **Owner flags (unchanged from the story):** FD2 (repository-level snapshot, lossy for
   per-record-corrupt entries) and FD5 (six codes).
+- **Owner decisions applied (2026-09-26, resume of draft PR #85):**
+  - ✅ Resolved review finding [Decision]: rollback materialized an absent `gol:battles` key —
+    owner ruling (b). `AppRepositories` gains `snapshotWorkspace(): Promise<WorkspaceSnapshot>` /
+    `restoreWorkspace(snapshot)`; `WorkspaceSnapshot` is a branded opaque type, barrel-exported as
+    a type. The localStorage mode captures the raw `gol:battles` / `gol:organisms` / `gol:schema`
+    strings (`captureDataKeys`) and restores them by removing all three then writing back the
+    non-null originals, organisms → battles → stamp (`restoreDataKeys`), so an absent key stays
+    absent. `@gol/test-utils`' fake mirrors it (Map copies + the `stamped` flag). `applyImport`'s
+    snapshot and rollback use the pair; the `WorkspaceSnapshot` struct, the `restore()` helper and
+    the FD3 post-rollback `ensureDefaultOrganism` are removed. `ensureDefaultOrganism` in the
+    forward write region is unchanged (AC5).
+  - `errors.ts`: the `'write-failed'` caveat is reverted — "exactly as it was" holds for every
+    shape now; the code list's intro now calls the two extra codes an owner-ruled RFC-006
+    extension (FD5).
+  - FD5 ruling (keep six codes): no code change; recorded in `deferred-work.md` and above.
+  - **Forced decision taken here:** the localStorage capture runs `ensureCurrentAtRestFormat()`
+    first, so a store on a newer at-rest format is still refused with `NewerFormatVersionError`
+    before anything is written (the existing test stands, renamed). On a current store that check
+    reads only the stamp, so a whole-collection-corrupt store is captured raw and can now be
+    imported over (FD2 limit (b) closed).
+  - **AC7 note:** AC7's "the `AppRepositories` interface and `@gol/test-utils`' fakes are
+    unchanged (FD2)" is superseded by this owner ruling.
+  - Tests: the FD3 fresh-rollback test now asserts all four keys byte-identical and
+    `isFreshWorkspace() === true`; new `workspaceImport.test.ts` cases for a first-load store with
+    no `gol:battles` key (limit (c)), a per-record-corrupt entry (limit (a)) and a
+    whole-collection-corrupt store (limit (b), both the byte-identical rollback and a successful
+    import over it); `workspaceSerializer.test.ts` pins `snapshotWorkspace` first in the write-region
+    sequence and adds a fake-backed rollback test (fresh store comes back fresh);
+    `createLocalStorageRepositories.test.ts` and `fakeRepositories.test.ts` each gain two pair tests.
+  - `npm run ci:dev > scratchpad/ci.log 2>&1; echo $?` → **EXIT 0**. `@gol/persistence` 157 tests,
+    99.24% stmts / 97.16% branches; `@gol/test-utils` 97 tests; e2e:chromium 288 passed. Bundle
+    check green (+0.1 KB gzip per route, within the ratchet; baseline not refreshed).
 
 ### File List
 
@@ -612,6 +659,12 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`, via `/bmad-dev-story` un
 - `packages/persistence/src/workspaceSerializer.ts`
 - `packages/persistence/src/workspaceSerializer.test.ts`
 - `scripts/bundle-baselines.json` (tool-written by `npm run bundle:baseline`)
+- `packages/persistence/src/repositories.ts` (owner decision: `snapshotWorkspace` / `restoreWorkspace`)
+- `packages/persistence/src/localStorageAccess.ts` (owner decision: `captureDataKeys` / `restoreDataKeys`)
+- `packages/persistence/src/createLocalStorageRepositories.ts` (owner decision)
+- `packages/persistence/src/createLocalStorageRepositories.test.ts` (owner decision)
+- `packages/test-utils/src/fakeRepositories.ts` (owner decision)
+- `packages/test-utils/src/fakeRepositories.test.ts` (owner decision)
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
 - `docs/implementation-artifacts/5-8-atomic-import-pipeline.md`
@@ -631,6 +684,11 @@ Proposed lane gate: none — 5.8 touches only packages/domain (new referentialCl
   corrupt case), 1 deferred (snapshot-window concurrent-writer race → `deferred-work.md`, Story 5.9
   wiring), 1 owner decision left open (rollback materializes an absent `gol:battles` key — FD2
   limit (c) vs opaque snapshot), 2 dismissed. Status → in-progress pending the FD2/limit-(c) ruling.
+- 2026-09-26 — Owner decisions applied: review decision resolved with option (b) — opaque
+  `snapshotWorkspace()` / `restoreWorkspace()` on `AppRepositories` (localStorage + fake), used by
+  the import's snapshot and rollback; FD3 re-ensure and the `'write-failed'` caveat removed; FD2/FD3
+  struck and FD5 (six codes kept) annotated in `deferred-work.md`. Addressed code review findings -
+  1 item resolved (Date: 2026-09-26). Status → review.
 
 ---
 

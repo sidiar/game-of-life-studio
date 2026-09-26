@@ -8,6 +8,7 @@ export type {
   OrganismRepository,
   SettingsRepository,
   StorageUsage,
+  WorkspaceSnapshot,
 } from './repositories';
 
 export { createLocalStorageRepositories } from './createLocalStorageRepositories';

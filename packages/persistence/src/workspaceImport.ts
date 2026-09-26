@@ -5,9 +5,7 @@ import {
   isFormatMigrationError,
   migrate,
   WorkspaceExportSchema,
-  type Battle,
   type ExportKind,
-  type Organism,
   type WorkspaceExport,
 } from '@gol/domain';
 import type { AppRepositories } from './repositories';
@@ -35,8 +33,9 @@ import { assertSafeCollectionId, describeIssues, ImportError } from './errors';
  *
  * `kind` is never branched on (M8 / FR-8.4): a battle-kind file replaces the whole workspace
  * exactly as a workspace-kind one does. Settings are untouched BY CONSTRUCTION (AR-12 / Decision
- * F): nothing here references `repos.settings`, the snapshot holds only battles and organisms, and
- * `clearAll()` is data-only — there is no settings snapshot-and-restore to get wrong.
+ * F): nothing here references `repos.settings`, the snapshot holds only workspace data (never
+ * `gol:settings`), and `clearAll()` is data-only — there is no settings snapshot-and-restore to
+ * get wrong.
  */
 
 /** What `applyImport` wrote — the figures Story 5.9's confirmation reports. */
@@ -128,24 +127,18 @@ function assertReferentialClosure(envelope: WorkspaceExport): void {
   });
 }
 
-interface WorkspaceSnapshot {
-  battles: Battle[];
-  organisms: Organism[];
-  wasFresh: boolean;
-}
-
 /**
  * Steps 5-7: the destructive whole-workspace replace (M8), guarded by a snapshot.
  *
- * ⚠️ The snapshot reads through the repository interfaces (`listFull` / `list`) and the restore
- * writes through them (`clearAll` / `replaceAll`) — the bulk methods the architecture added for
- * this path, which keeps import mode-agnostic. The known cost (recorded in `deferred-work.md`):
- * `listFull()` / `list()` SKIP a per-record-corrupt entry, so a rollback restores every READABLE
- * record rather than the exact bytes; and a whole-collection-corrupt store fails the snapshot read,
- * so it cannot be imported over until Story 5.11's reset exists.
+ * The snapshot is `AppRepositories.snapshotWorkspace()` — opaque and lossless — and the rollback is
+ * its `restoreWorkspace()`, so a `'write-failed'` workspace is byte-identical to its pre-import
+ * state in every shape: a per-record-corrupt entry, a whole-collection-corrupt key, an absent key
+ * and a still-fresh (unstamped) store all come back exactly as they were. Rebuilding the rollback
+ * from `listFull()` / `list()` + `replaceAll()` could promise none of that (Story 5.8 owner
+ * ruling, recorded in `deferred-work.md`).
  *
- * A snapshot read that throws propagates UNCHANGED, before anything is written: the fault is in
- * the store, not the file, and reporting it is Story 5.11's.
+ * A snapshot that throws (a store this build may not write) propagates UNCHANGED, before anything
+ * is written: the fault is in the store, not the file, and reporting it is Story 5.11's.
  */
 export async function applyImport(
   repos: AppRepositories,
@@ -154,11 +147,7 @@ export async function applyImport(
   // Pure, and done before the snapshot so no work that can fail sits inside the write region.
   const incoming = fromEnvelope(envelope);
 
-  const snapshot: WorkspaceSnapshot = {
-    battles: await repos.battles.listFull(),
-    organisms: await repos.organisms.list(),
-    wasFresh: await repos.isFreshWorkspace(),
-  };
+  const snapshot = await repos.snapshotWorkspace();
 
   try {
     // Clear FIRST and write organisms before battles: the store's peak size is then never old
@@ -171,7 +160,7 @@ export async function applyImport(
     await ensureDefaultOrganism(repos.organisms);
   } catch (writeError) {
     try {
-      await restore(repos, snapshot);
+      await repos.restoreWorkspace(snapshot);
     } catch (rollbackError) {
       // Neither error is swallowed: the write's is `cause`, the restore's rides beside it.
       throw new ImportError('rollback-failed', { cause: writeError, rollbackError });
@@ -185,18 +174,4 @@ export async function applyImport(
     battleCount: incoming.battles.length,
     organismCount: incoming.organisms.length + (carriesConway ? 0 : 1),
   };
-}
-
-/*
- * ⚠️ A FRESH workspace is restored as "fresh after its first load", not as fresh. `replaceAll`
- * stamps `gol:schema`, so restoring an empty snapshot leaves a stamped-but-empty store that
- * `isFreshWorkspace()` will never seed again — the hole the at-rest stamp-ordering comment in
- * `localStorageAccess.ts` describes. Ending with `ensureDefaultOrganism` puts back what the next
- * load's seed would have written.
- */
-async function restore(repos: AppRepositories, snapshot: WorkspaceSnapshot): Promise<void> {
-  await repos.clearAll();
-  await repos.organisms.replaceAll(snapshot.organisms);
-  await repos.battles.replaceAll(snapshot.battles);
-  if (snapshot.wasFresh) await ensureDefaultOrganism(repos.organisms);
 }

@@ -17,6 +17,7 @@ import { createLocalStorageRepositories } from './createLocalStorageRepositories
 import { ImportError, NewerFormatVersionError } from './errors';
 import { QuotaExceededError, STORAGE_KEYS } from './localStorageAccess';
 import type { AppRepositories } from './repositories';
+import { seedDefaultWorkspace } from './seedDefaultWorkspace';
 import { validateImportFile } from './workspaceImport';
 import { createWorkspaceSerializer } from './workspaceSerializer';
 
@@ -358,10 +359,11 @@ describe('importWorkspace — every rejection leaves the store byte-identical (A
     expect((error.rollbackError as QuotaExceededError).cause).toBe(thrown[1]);
   });
 
-  it('write-failed over a FRESH workspace restores it as its first load would — Conway’s Classic re-ensured', async () => {
+  it('write-failed over a FRESH workspace restores it as fresh — every data key absent again', async () => {
     const repos = createLocalStorageRepositories();
     await repos.settings.save(SETTINGS);
-    const settingsBefore = localStorage.getItem(STORAGE_KEYS.settings);
+    const before = rawStore();
+    expect(before[STORAGE_KEYS.schema]).toBeNull();
     failBattlesWritesAfterOrganisms(new Set([1]));
 
     await expectImportError(
@@ -370,15 +372,65 @@ describe('importWorkspace — every rejection leaves the store byte-identical (A
     );
     vi.restoreAllMocks();
 
-    // `replaceAll` stamped the store during the restore, so the seed would never run again; the
-    // rollback's own ensure is what keeps Conway's Classic from vanishing.
-    expect(await repos.isFreshWorkspace()).toBe(false);
-    expect((await repos.organisms.list()).map((o) => o.id)).toEqual([CONWAYS_CLASSIC_ID]);
-    expect(await repos.battles.listFull()).toEqual([]);
-    expect(localStorage.getItem(STORAGE_KEYS.settings)).toBe(settingsBefore);
+    // The organisms write stamped `gol:schema`; the restore removes it again, so the next load's
+    // seed still runs — no stamped-but-empty store, and no Conway's Classic the user never had.
+    expect(rawStore()).toEqual(before);
+    expect(await repos.isFreshWorkspace()).toBe(true);
   });
 
-  it('a snapshot read that throws propagates unchanged, before anything is written', async () => {
+  it('write-failed over a first-load workspace (no gol:battles key yet) leaves that key ABSENT', async () => {
+    const repos = createLocalStorageRepositories();
+    await seedDefaultWorkspace(repos);
+    await repos.settings.save(SETTINGS);
+    const before = rawStore();
+    expect(before[STORAGE_KEYS.battles]).toBeNull();
+    failBattlesWritesAfterOrganisms(new Set([1]));
+
+    await expectImportError(
+      importOver(repos, JSON.stringify(withTarget(validWire()))),
+      'write-failed',
+    );
+
+    expect(rawStore()).toEqual(before);
+  });
+
+  it('write-failed restores a per-record-corrupt entry byte for byte — not just the readable records', async () => {
+    const repos = await seedExistingWorkspace();
+    const organisms = JSON.parse(localStorage.getItem(STORAGE_KEYS.organisms)!) as Record<
+      string,
+      unknown
+    >;
+    localStorage.setItem(
+      STORAGE_KEYS.organisms,
+      JSON.stringify({ ...organisms, broken: { id: 'broken', name: 42 } }),
+    );
+    const before = rawStore();
+    failBattlesWritesAfterOrganisms(new Set([1]));
+
+    await expectImportError(
+      importOver(repos, JSON.stringify(withTarget(validWire()))),
+      'write-failed',
+    );
+
+    expect(rawStore()).toEqual(before);
+  });
+
+  it('a whole-collection-corrupt store can be imported over, and a failed import puts its bytes back', async () => {
+    const repos = await seedExistingWorkspace();
+    localStorage.setItem(STORAGE_KEYS.battles, 'not json at all');
+    const before = rawStore();
+    const file = JSON.stringify(withTarget(validWire()));
+    failBattlesWritesAfterOrganisms(new Set([1]));
+
+    await expectImportError(importOver(repos, file), 'write-failed');
+    expect(rawStore()).toEqual(before);
+
+    vi.restoreAllMocks();
+    await importOver(repos, file);
+    expect((await repos.battles.listFull()).map((b) => b.id)).toEqual([INCOMING_BATTLE_ID]);
+  });
+
+  it('a snapshot that throws (a newer at-rest format) propagates unchanged, before anything is written', async () => {
     const repos = await seedExistingWorkspace();
     localStorage.setItem(
       STORAGE_KEYS.schema,

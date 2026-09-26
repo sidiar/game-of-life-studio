@@ -61,6 +61,18 @@ export interface StorageUsage {
   bytes: number;
 }
 
+declare const workspaceSnapshotBrand: unique symbol;
+
+/**
+ * An opaque, lossless capture of the workspace's DATA (battles, organisms and the format stamp —
+ * never settings, Decision F / AR-12), taken by `snapshotWorkspace()` and only ever handed back to
+ * `restoreWorkspace()` on the SAME `AppRepositories`. Branded so no caller can build one or read
+ * into it: what it holds is the implementation's business (raw `gol:*` strings for localStorage).
+ */
+export interface WorkspaceSnapshot {
+  readonly [workspaceSnapshotBrand]: 'WorkspaceSnapshot';
+}
+
 export interface AppRepositories {
   battles: BattleRepository;
   organisms: OrganismRepository;
@@ -87,4 +99,20 @@ export interface AppRepositories {
    * same reasoning that puts `clearAll()` here rather than on one repository.
    */
   storageUsage(): Promise<StorageUsage>;
+  /**
+   * The atomic import's pre-import capture (AR-10 / RFC-006 Decision 5, Story 5.8 owner ruling).
+   * Lossless BY DESIGN, which is why it is not built from `listFull()` / `list()` + `replaceAll()`:
+   * those skip a per-record-corrupt entry, fail on a whole-collection-corrupt one, and materialize
+   * or stamp keys the store never held — so a rollback through them was "equivalent", not
+   * identical. What this captures is restored exactly, an absent key as absent.
+   *
+   * Throws (before anything is written) only when this build may not write the store at all — a
+   * newer at-rest format (`NewerFormatVersionError`) or an unreadable stamp (`CorruptDataError`).
+   */
+  snapshotWorkspace(): Promise<WorkspaceSnapshot>;
+  /**
+   * Puts the workspace data back exactly as `snapshotWorkspace()` captured it — including a key
+   * that was absent then — and leaves settings untouched (Decision F / AR-12).
+   */
+  restoreWorkspace(snapshot: WorkspaceSnapshot): Promise<void>;
 }
