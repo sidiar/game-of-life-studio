@@ -6,10 +6,22 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
+import { styled } from '@mui/material/styles';
 // Story 4.20, FD6: the two copy formatters moved to `lib/organisms/usageLabels.ts` so the editor
 // footer renders the SAME "Used in [N] Battle(s)" sentence without importing this lazy chunk for a
 // string. Re-exported nowhere — both surfaces import the module, not each other.
-import { battleCountLabel, organismInUseMessage } from '@/lib/organisms/usageLabels';
+import {
+  battleCountLabel,
+  organismInUseBattleMessage,
+  organismInUseMessage,
+  type OrganismGateUsage,
+} from '@/lib/organisms/usageLabels';
+import type { OrganismEditorOrigin } from './editor/OrganismEditorModal';
+// Story 4.24, AC6: the editor footer's own disclosure, imported STATICALLY. This file and the
+// editor are both lazy chunks on every route that mounts them, so no first-load cost moves; and
+// `UsageIndicator` derives nothing, so the gate and the footer render one component over one
+// resolved triple rather than two that agree by coincidence.
+import UsageIndicator from './editor/UsageIndicator';
 
 // Per-component imports only (AR-35) — `import { Dialog } from '@mui/material'` pulls the whole
 // barrel. On this route that is not merely a convention: `<OrganismLibrary>` reaches this file
@@ -28,17 +40,34 @@ const PAPER_MAX_WIDTH = '440px';
 // record: on `root` they apply to every size, collapsing size="small"/"large" into medium.
 const BUTTON_SX = { fontSize: '13px', padding: '12px 24px' } as const;
 
+// Story 4.24: separates the disclosure from the sentence above it.
+const UsageRow = styled('div')({
+  marginTop: '16px',
+});
+
 export interface OrganismInUseDialogProps {
   open: boolean;
-  /** The number of DISTINCT saved battles placing the organism (Decision H: "used" = placed),
-   * from `buildUsageIndex` — never assumed `0` while the battle list is still loading. */
-  usedInBattles: number;
-  /** Escape and backdrop both route here. Changes nothing at all; focus goes back to the card. */
+  /**
+   * Story 4.24 (FR-1.3, M5, FD3): which entry point opened the gate. `'library'` offers Clone &
+   * Edit and the PRD's sentence; `'battle'` offers Edit Anyway / Cancel only, with the battle
+   * sentence — no clone from the Battle Editor.
+   */
+  origin: OrganismEditorOrigin;
+  /**
+   * What the gate shows (Story 4.24, AC6) — the caller's resolved triple, the SAME one the editor
+   * footer renders. `battleNames.length` is N, the count in the title and the sentence: the ONE
+   * source, so the title and the disclosure cannot disagree. The names are the DISTINCT battles
+   * placing the organism (Decision H: "used" = placed), from `resolveOrganismUsage` — never
+   * assumed empty while the battle list is still loading.
+   */
+  usage: OrganismGateUsage;
+  /** Escape and backdrop both route here. Changes nothing at all; focus goes back to the trigger
+   * (the card's Edit button, or the battle roster's ✎). */
   onCancel(): void;
   /** Clone the organism, then proceed to the editor on the CLONE, once this dialog has fully
    * exited (Story 4.18, AC9). The write itself is not this dialog's concern — it fires the
-   * callback and waits for `pending` to clear. */
-  onCloneAndEdit(): void;
+   * callback and waits for `pending` to clear. Rendered iff `origin === 'library'` (Story 4.24). */
+  onCloneAndEdit?(): void;
   /** Proceed to the editor on the SAME organism, once this dialog has fully exited. */
   onEditAnyway(): void;
   /**
@@ -69,10 +98,16 @@ export interface OrganismInUseDialogProps {
  * Escape during the write closes the gate before the clone id is stashed, and the write lands
  * with no editor and no explanation.
  *
- * The battle-origin variant (FR-3.12 / Story 4.24) is **Edit Anyway / Cancel only** — no Clone &
- * Edit from the Battle Editor (M5, PRD `:127`) — so 4.24 will need an `origin` prop or a
- * `cloneable` flag to withhold the middle button; this comment is where that decision lands.
- * `organismInUseMessage` is unchanged: its clone sentence is now true.
+ * The battle-origin variant (FR-3.12 / Story 4.24) is **Cancel / Edit Anyway only** — no Clone &
+ * Edit from the Battle Editor (M5, PRD `:127`). It is chosen by the `origin` prop: the middle button
+ * is not rendered at all for `'battle'` (not disabled — absent), and the sentence is
+ * `organismInUseBattleMessage`, which points at the Library instead of asking a question that
+ * variant cannot answer (FD3). `'library'` keeps `organismInUseMessage` verbatim.
+ *
+ * Both variants render FR-1.3's "expandable to reveal which Battles" (Story 4.24, AC6) through the
+ * editor footer's own `<UsageIndicator>`, below the sentence — read-only names, no navigation (M7).
+ * Its document-capture Escape listener runs before MUI's bubble-phase handler, so with a panel open
+ * the first Escape closes the panel only and the next one cancels the gate (Story 4.20 D5).
  *
  * Composed exactly like `<UnsavedChangesDialog>` — the paper width, Cancel-first with
  * `autoFocus`, `disableRestoreFocus`, `onTransitionExited` — so the app keeps ONE dialog idiom.
@@ -82,13 +117,16 @@ export interface OrganismInUseDialogProps {
  */
 export default function OrganismInUseDialog({
   open,
-  usedInBattles,
+  origin,
+  usage,
   onCancel,
   onCloneAndEdit,
   onEditAnyway,
   pending,
   onExited,
 }: OrganismInUseDialogProps) {
+  const usedInBattles = usage.battleNames.length;
+  const cloneable = origin === 'library' && onCloneAndEdit !== undefined;
   return (
     <Dialog
       open={open}
@@ -115,8 +153,21 @@ export default function OrganismInUseDialog({
       {/* CONSEQUENCE FIRST, the convention the shipped dialogs follow: the heading names what is
           at stake, not what the buttons do. */}
       <DialogTitle id={TITLE_ID}>{battleCountLabel(usedInBattles)}</DialogTitle>
-      <DialogContent>
-        <DialogContentText id={BODY_ID}>{organismInUseMessage(usedInBattles)}</DialogContentText>
+      {/* `overflowY: visible`: the disclosure's panel opens UPWARD over the sentence, and the
+          content box's default `auto` would clip it into a scroll region of its own. */}
+      <DialogContent sx={{ overflowY: 'visible' }}>
+        <DialogContentText id={BODY_ID}>
+          {origin === 'battle'
+            ? organismInUseBattleMessage(usedInBattles)
+            : organismInUseMessage(usedInBattles)}
+        </DialogContentText>
+        <UsageRow>
+          <UsageIndicator
+            battleNames={usage.battleNames}
+            ruleCount={usage.ruleCount}
+            referencingNames={usage.referencingNames}
+          />
+        </UsageRow>
       </DialogContent>
       <DialogActions>
         {/* Safe first, recommended last. `autoFocus` + first in DOM order: MUI's focus trap
@@ -134,10 +185,13 @@ export default function OrganismInUseDialog({
           Cancel
         </Button>
         {/* Middle slot, plain — the `<UnsavedChangesDialog>` shape's middle button, text variant,
-            default colour. The accessible name has a real `&`, written `&amp;` in JSX. */}
-        <Button type="button" onClick={onCloneAndEdit} disabled={pending} sx={BUTTON_SX}>
-          Clone &amp; Edit
-        </Button>
+            default colour. The accessible name has a real `&`, written `&amp;` in JSX. Library
+            origin only (Story 4.24, M5): the battle variant has no clone path at all. */}
+        {cloneable && (
+          <Button type="button" onClick={onCloneAndEdit} disabled={pending} sx={BUTTON_SX}>
+            Clone &amp; Edit
+          </Button>
+        )}
         <Button
           type="button"
           onClick={onEditAnyway}

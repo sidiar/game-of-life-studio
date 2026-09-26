@@ -74,7 +74,8 @@ export type { RuleReference, RuleReferenceIndex } from './ruleReferenceIndex';
 
 // Story 4.21's ONE delete verdict, consuming both referential-integrity axes above rather than
 // re-deriving either (FD3): `protected` (M9) beats usage, `blocked` carries both lists (FD4). Also
-// consumed by Story 4.22 (confirm/disabled) and Story 4.24's `openBattle` argument.
+// consumed by Story 4.22 (confirm/disabled); its `openBattle` argument awaits a Delete over a live
+// grid, which Story 4.24's battle-origin editor does not offer.
 export { organismDeleteVerdict } from './organismDeleteGuard';
 export type { OrganismDeleteVerdict } from './organismDeleteGuard';
 

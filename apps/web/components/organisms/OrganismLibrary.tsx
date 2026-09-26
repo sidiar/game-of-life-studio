@@ -7,12 +7,12 @@ import {
   buildRuleReferenceIndex,
   buildUsageIndex,
   organismDeleteVerdict,
-  resolveOrganismUsage,
   type Organism,
 } from '@gol/domain';
 import type { BattleRepository, OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { cloneOrganismRecord } from '@/lib/organisms/organismClone';
+import { resolveOrganismGateUsage } from '@/lib/organisms/organismGateUsage';
 import { normalizeOrganismSearch, organismNameMatches } from '@/lib/organisms/organismNameMatches';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { sortLibrary } from '@/lib/organisms/sortLibrary';
@@ -529,23 +529,31 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     requestCreate();
   }, [isDeleteWindowActive, requestCreate]);
 
-  // Story 4.17, AC1: the count is the number of DISTINCT saved battles whose placed set holds the
-  // id (Decision H: "used" = placed) — read from the SAME settled list the page holds.
+  // Story 4.17, AC1: N is the number of DISTINCT saved battles whose placed set holds the id
+  // (Decision H: "used" = placed) — read from the SAME settled list the page holds.
   //
-  // ⚠️ Through `resolveOrganismUsage`, not `usage.get(id)?.length` (Story 4.20, AC5 / FD8). The two
-  // return the same number today, for exactly as long as no caller passes an `openBattle` — so the
-  // move is free NOW and is what keeps this warning, the editor footer and (Story 4.21) the delete
-  // block on ONE derivation with ONE argument for Story 4.24 to add. Left on the raw map read, this
-  // surface would start disagreeing with the others the moment 4.24 lands, which is precisely the
-  // failure the AC's "counts are consistent across all surfaces" exists to prevent.
+  // ⚠️ Through `resolveOrganismUsage` (inside `resolveOrganismGateUsage`), not `usage.get(id)`
+  // (Story 4.20, AC5 / FD8), so this warning, the editor footer and the delete block stay on ONE
+  // derivation. Story 4.24 (AC6): the gate now receives the RESOLVED usage — names, M, referencing
+  // names — so it can render the footer's own disclosure; this is the footer's derivation, over the
+  // footer's inputs (`summaries`, the rule index, the loaded library). No `openBattle`: the Library
+  // has no live grid, so it passes none and its answers are unchanged.
   //
   // Bails while the delete window is open (Story 4.21 code review; the hook's authority).
   const onRequestEdit = useCallback(
     (organism: Organism) => {
       if (isDeleteWindowActive()) return;
-      requestEdit(organism, resolveOrganismUsage(usage, organism.id).length);
+      requestEdit(
+        organism,
+        resolveOrganismGateUsage(organism.id, {
+          usageIndex: usage,
+          ruleIndex,
+          summaries,
+          library: loadedOrganisms,
+        }),
+      );
     },
-    [isDeleteWindowActive, requestEdit, usage],
+    [isDeleteWindowActive, requestEdit, usage, ruleIndex, summaries, loadedOrganisms],
   );
 
   // Folded at render, exactly as BattleGallery folds seedStatus against its own load state

@@ -180,6 +180,12 @@ export interface BattleEditorViewProps {
    * exportable). Kept as its own prop rather than reusing Clear's `disabled` derivation.
    */
   exportDisabled?: boolean;
+  /**
+   * Story 4.24 (FR-3.3 / FR-3.12, spec §3.3's `onEditOrganism?(id)`): a roster row's ✎, forwarded
+   * to `<OrganismRoster>` untouched. The usage gate and the editor run in `<BattlePage>`; this
+   * component interprets nothing and does not touch its own selection for it (FD1).
+   */
+  onEditOrganism?(organismId: string): void;
 }
 
 /**
@@ -205,6 +211,8 @@ type EditorMainProps = Omit<
   // treatment as `onBack` immediately above.
   | 'onExport'
   | 'exportDisabled'
+  // Story 4.24: the roster's ✎ lives in the SIDEBAR — the roster props' treatment.
+  | 'onEditOrganism'
 > & {
   tool: Tool;
   toolRef: number | null;
@@ -628,6 +636,8 @@ export default function BattleEditorView({
   // `<EditorMain>` — `EditorMainProps` omits both for the same reason as `onBack` above.
   onExport,
   exportDisabled = false,
+  // Story 4.24: the roster's, pulled out for the same reason as `onExport` above.
+  onEditOrganism,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
@@ -862,6 +872,7 @@ export default function BattleEditorView({
               workspaceEmpty={workspaceEmpty}
               onAddToRoster={handleAddToRoster}
               atCap={atCap}
+              onEditOrganism={onEditOrganism}
             />
           </SidebarSection>
           {/* AC7: the mockup's order is Organisms, then Battle Name — this story's own second

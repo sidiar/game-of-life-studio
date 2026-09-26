@@ -74,6 +74,12 @@ function mountModal(
     onRequestDelete?: () => void;
     /** Story 4.22, FD12: an editor-origin delete refusal the Library published. */
     deleteError?: string | null;
+    /** Story 4.24: the battle open under the editor (battle origin only). */
+    openBattle?: {
+      id: string | null;
+      name: string;
+      organismIds: readonly string[];
+    } | null;
   } = {},
 ) {
   const library = overrides.library ?? LIBRARY;
@@ -95,6 +101,7 @@ function mountModal(
       onSaved={onSaved}
       onRequestDelete={overrides.onRequestDelete}
       deleteError={overrides.deleteError}
+      openBattle={overrides.openBattle}
     />,
   );
   return { ...result, organisms, onSaved, onClose };
@@ -108,9 +115,8 @@ describe('OrganismEditorModal', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Organism Editor' })).toBeInTheDocument();
   });
 
-  // The prop is the seam Story 4.24/4.25 plug into — both branches are exercised even though only
-  // 'library' is reachable from UI today, so that a later regression on 'battle' reddens here and
-  // not on the day the battle origin is wired.
+  // The prop is the seam Story 4.24 plugged into (and 4.25 will reuse) — both branches pinned here;
+  // `BattlePage.editOrganism.test.tsx` reaches 'battle' through the battle page's own pencil.
   it.each([
     ['library', 'Back to Library'],
     ['battle', 'Back to Battle'],
@@ -2367,6 +2373,56 @@ describe('OrganismEditorModal', () => {
             .getAllByRole('listitem')
             .map((li) => li.textContent),
         ).toEqual(['Glider Wars', 'Untitled Battle']);
+      });
+
+      // Story 4.24 (AC7, M7, RFC-005 Decision 8): the battle origin passes the open battle, which
+      // the footer ADDS (deduped by id) and labels from its LIVE state.
+      it('(48b) a SAVED open battle placing the organism is counted once, under its LIVE name', async () => {
+        const user = userEvent.setup();
+        mountEdit({
+          origin: 'battle',
+          battleSummaries: PLACED,
+          openBattle: { id: 'b1', name: 'Renamed Live', organismIds: [EDITED.id] },
+        });
+
+        const trigger = within(usageFooter()).getByRole('button', { name: 'Used in 2 Battles' });
+        await user.click(trigger);
+
+        const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
+        expect(
+          within(panel)
+            .getAllByRole('listitem')
+            .map((li) => li.textContent),
+        ).toEqual(['Renamed Live', 'Untitled Battle']);
+      });
+
+      it('(48c) a NEVER-SAVED open battle adds "Current Battle (unsaved)"', async () => {
+        const user = userEvent.setup();
+        mountEdit({
+          origin: 'battle',
+          battleSummaries: PLACED,
+          openBattle: { id: null, name: '', organismIds: [EDITED.id] },
+        });
+
+        const trigger = within(usageFooter()).getByRole('button', { name: 'Used in 3 Battles' });
+        await user.click(trigger);
+
+        const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
+        expect(
+          within(panel)
+            .getAllByRole('listitem')
+            .map((li) => li.textContent),
+        ).toEqual(['Glider Wars', 'Untitled Battle', 'Current Battle (unsaved)']);
+      });
+
+      it('(48d) an open battle that does not PLACE the organism adds nothing', () => {
+        mountEdit({
+          origin: 'battle',
+          battleSummaries: [],
+          openBattle: { id: null, name: '', organismIds: [CONWAYS_CLASSIC.id] },
+        });
+
+        expect(within(usageFooter()).getByText('Used in 0 Battles')).toBeInTheDocument();
       });
 
       it('(49) M === 0 renders neither the rules label nor a panel (AC2)', () => {

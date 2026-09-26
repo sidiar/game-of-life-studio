@@ -23,14 +23,19 @@ const RosterList = styled('ul')({
   // Review (2026-08-27): this was `Row`'s own `&:last-of-type`, which never matched — each `Row`
   // is the ONLY `<button>` inside its own `<li>` (see `RosterListItem` below), so it was trivially
   // "last of its type" on every single row, and no row ever showed the mockup's separator. Scoped
-  // here instead, against the true last `<li>` in the list.
-  '& > li:last-child > button': {
+  // here instead, against the true last `<li>` in the list. Story 4.24: `> *`, not `> button` —
+  // the pencil's cell draws the same rule beside the row and must drop it on the same row.
+  '& > li:last-child > *': {
     borderBottom: 'none',
   },
 });
 
+// Story 4.24: a flex ROW, so the pencil's cell sits beside `<Row>` (which keeps `flex: 1`). No
+// click handler here, ever — the two buttons are siblings, so neither's click reaches the other,
+// and a handler on the `<li>` would turn the pencil's press into a selection too (FD1).
 const RosterListItem = styled('li')({
-  display: 'block',
+  display: 'flex',
+  alignItems: 'stretch',
 });
 
 /**
@@ -41,11 +46,13 @@ const RosterListItem = styled('li')({
  * ring, enumerated transitions, `prefers-reduced-motion` escape, no raw hex (AR-46).
  *
  * The row is ONE button spanning chip + name — not a div with a click handler and not a nested
- * control. Story 4.24's per-row ✎ is the thing that will eventually sit BESIDE it (a button inside
- * a button is invalid and unreachable by keyboard), which is why the row's own hit area stops at
- * its own element rather than being pushed onto the `<li>`.
+ * control. Story 4.24's per-row ✎ (`EditButton` below) sits BESIDE it, inside the same `<li>` (a
+ * button inside a button is invalid and unreachable by keyboard), which is why the row's own hit
+ * area stops at its own element rather than being pushed onto the `<li>`.
  */
 const Row = styled('button')({
+  flex: 1,
+  minWidth: 0,
   width: '100%',
   display: 'flex',
   alignItems: 'center',
@@ -75,6 +82,54 @@ const Row = styled('button')({
   '&[aria-pressed="true"]': {
     background: 'var(--gol-bg-hover)',
     borderLeftColor: 'var(--gol-accent)',
+  },
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
+  },
+});
+
+/**
+ * Story 4.24: the pencil's cell. It carries the row rule (`borderBottom`) across the width the
+ * pencil occupies, so the separator under a row stays one continuous line — `<Row>` draws it only
+ * under itself. The selected-row accent edge stays on `<Row>`, where it already is.
+ */
+const EditCell = styled('span')({
+  display: 'flex',
+  alignItems: 'center',
+  paddingRight: '12px',
+  borderBottom: '1px solid var(--gol-border)',
+});
+
+/**
+ * Mockup: `.organism-edit-btn` (clinical-lab-theme/petri-dish-lab-mode.html:238-257) — 26×26, a
+ * 1px border, the secondary text ramp, accent border and glyph on hover. Tokens only (AR-46): the
+ * mockup's `var(--border)` / `--text-secondary` / `--accent` are the `--gol-*` names here. The
+ * focus-visible state gets the accent too, plus the house focus ring — the mockup styles hover
+ * alone, and a keyboard user must see where the pencil is (FR-3.3, spec §3.4). Enumerated
+ * transitions (not the mockup's `all`) and a reduced-motion escape, the `Row` house style.
+ */
+const EditButton = styled('button')({
+  width: '26px',
+  height: '26px',
+  flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
+  background: 'transparent',
+  border: '1px solid var(--gol-border)',
+  color: 'var(--gol-text-secondary)',
+  fontFamily: 'inherit',
+  fontSize: '12px',
+  cursor: 'pointer',
+  transition: 'border-color 0.2s, color 0.2s',
+  '&:hover, &:focus-visible': {
+    borderColor: 'var(--gol-accent)',
+    color: 'var(--gol-accent)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
   },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
@@ -414,9 +469,9 @@ const DegradedNotice = styled('p')({
  * Story 2.9 wired, plus THIS story's `library` / `onAddToRoster` / `atCap`. The same discipline
  * `<BattleEditorView>` and `<EditorStatusBar>` each applied to their own oversized spec interfaces.
  *
- * ❌ Still no `onEditOrganism` (the per-row ✎ first renders in Story 4.24) and no
- * `onCreateOrganism` — Epic 4. Declaring them now would be an unverifiable claim, and rendering
- * their controls would be the dead affordance NFR-4.1 forbids.
+ * Story 4.24 adds `onEditOrganism` — the per-row ✎ renders iff it is passed. ❌ Still no
+ * `onCreateOrganism` (Story 4.25): declaring it now would be an unverifiable claim, and rendering
+ * its control would be the dead affordance NFR-4.1 forbids.
  */
 export interface OrganismRosterProps {
   /**
@@ -443,6 +498,12 @@ export interface OrganismRosterProps {
   onAddToRoster(organismId: string): void;
   /** Story 2.10 (AC5, Decision G.3): the roster identity array is at the 255-organism cap. */
   atCap?: boolean;
+  /**
+   * Story 4.24 (FR-3.3 / FR-3.12, spec §3.4): a row's ✎ was pressed — edit THAT row's organism.
+   * Selection is untouched (FD1): the pencil never calls `onSelectTool`. Absent → no pencil renders
+   * (NFR-4.1), which is also how Run mode, with no roster at all, stays pencil-free.
+   */
+  onEditOrganism?(organismId: string): void;
 }
 
 /**
@@ -465,6 +526,7 @@ export default function OrganismRoster({
   workspaceEmpty = false,
   onAddToRoster,
   atCap = false,
+  onEditOrganism,
 }: OrganismRosterProps) {
   const eraserSelected = selectedTool.kind === 'eraser';
 
@@ -507,6 +569,23 @@ export default function OrganismRoster({
                         <DuplicateColorWarning>Shared colour</DuplicateColorWarning>
                       )}
                     </Row>
+                    {/* Story 4.24: a SIBLING of `<Row>`, never nested in it. The glyph is
+                        decorative; the accessible name says what and whom. `data-edit-organism-id`
+                        is the focus-restore anchor `useOrganismEditorModal` looks up once the
+                        editor has exited. */}
+                    {onEditOrganism !== undefined && (
+                      <EditCell>
+                        <EditButton
+                          type="button"
+                          aria-label={`Edit ${organism.name}`}
+                          title="Edit organism"
+                          data-edit-organism-id={organism.id}
+                          onClick={() => onEditOrganism(organism.id)}
+                        >
+                          <span aria-hidden="true">✎</span>
+                        </EditButton>
+                      </EditCell>
+                    )}
                   </RosterListItem>
                 );
               })}

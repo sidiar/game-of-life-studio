@@ -1463,6 +1463,32 @@ describe('OrganismLibrary — usage footer wiring (Story 4.20)', () => {
     ).toEqual(['Three-Way Skirmish', 'Grand Colony War']);
   });
 
+  // Story 4.24, AC6: the gate itself now expands its count — the SAME names, the SAME rule count,
+  // through the same `<UsageIndicator>` — so the warning and the footer read one derivation.
+  it("expands the gate's count into the same battle names and rule disclosure the footer shows (Story 4.24, AC6)", async () => {
+    const user = userEvent.setup();
+    const { organisms, battles } = rig();
+    render(<OrganismLibrary organisms={organisms} battles={battles} seedStatus="ready" />);
+    await ready();
+
+    await user.click(editButton(USED_NAME));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    // The library variant keeps all three actions.
+    expect(within(gate).getByRole('button', { name: 'Clone & Edit' })).toBeInTheDocument();
+
+    await user.click(within(gate).getByRole('button', { name: 'Used in 2 Battles' }));
+    const panel = document.querySelector('[data-usage-battles-panel]') as HTMLElement;
+    expect(
+      within(panel)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Three-Way Skirmish', 'Grand Colony War']);
+    // Chaotic Spreader's rule targets Aggressive Colonizer in the mock workspace (Story 4.21).
+    expect(
+      within(gate).getByRole('button', { name: /^Targeted by \d+ organism rules?$/ }),
+    ).toBeInTheDocument();
+  });
+
   it('reports zero, without an expansion, for an organism no battle places', async () => {
     const user = userEvent.setup();
     const { organisms, battles } = rig();

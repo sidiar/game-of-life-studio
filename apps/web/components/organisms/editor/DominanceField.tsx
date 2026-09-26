@@ -147,8 +147,9 @@ export interface DominanceFieldProps {
  *   in it. The "1"/"100" marks are decorative and `aria-hidden` (3.13 trap 5).
  *
  * `useId()` for both ids (the slider's, which the label targets, and the description's): unlike the
- * modal's title this is not a singleton — Story 4.24's battle-origin editor is a second instance. No `transition` anywhere in this control (Story 4.5
- * FD5). Colours are `--gol-*` tokens throughout (AR-46).
+ * modal's title this is not a singleton — the editor has two mount sites (the Library and, since
+ * Story 4.24, the battle page), and nothing here may assume it is the only one in the document. No
+ * `transition` anywhere in this control (Story 4.5 FD5). Colours are `--gol-*` tokens throughout (AR-46).
  */
 export default function DominanceField({
   value,
