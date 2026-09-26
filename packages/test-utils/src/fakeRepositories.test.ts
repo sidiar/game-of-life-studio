@@ -6,7 +6,12 @@ import {
   type Battle,
   type Organism,
 } from '@gol/domain';
-import { CorruptDataError, STORAGE_KEYS, storageBytesOf } from '@gol/persistence';
+import {
+  CorruptDataError,
+  STORAGE_KEYS,
+  storageBytesOf,
+  type WorkspaceSnapshot,
+} from '@gol/persistence';
 import { createFakeRepositories } from './fakeRepositories';
 
 const PRESET = { cols: 50, rows: 30 } as const;
@@ -354,5 +359,62 @@ describe('isFreshWorkspace', () => {
     const repos = createFakeRepositories({ organisms: [makeOrganism('mock-org')] });
 
     expect(await repos.isFreshWorkspace()).toBe(false);
+  });
+});
+
+describe('snapshotWorkspace / restoreWorkspace (mirrors the real pair)', () => {
+  it('restores both collections — raw records included — and leaves settings alone', async () => {
+    const repos = createFakeRepositories({
+      battles: [makeBattle(ID_A)],
+      raw: { organisms: { broken: { id: 'broken' } } },
+    });
+    const snapshot = await repos.snapshotWorkspace();
+
+    await repos.clearAll();
+    await repos.organisms.save(makeOrganism('mock-org'));
+    await repos.settings.save({ ...DEFAULT_SETTINGS, theme: 'biotech-terminal' });
+    await repos.restoreWorkspace(snapshot);
+
+    expect((await repos.battles.listFull()).map((b) => b.id)).toEqual([ID_A]);
+    expect(await repos.organisms.exists('mock-org')).toBe(false);
+    await expect(repos.organisms.load('broken')).rejects.toBeInstanceOf(CorruptDataError);
+    expect((await repos.settings.load()).theme).toBe('biotech-terminal');
+  });
+
+  it('restores freshness: a fresh snapshot leaves the fake fresh again', async () => {
+    const repos = createFakeRepositories();
+    const snapshot = await repos.snapshotWorkspace();
+    await repos.organisms.save(makeOrganism('mock-org'));
+
+    await repos.restoreWorkspace(snapshot);
+
+    expect(await repos.isFreshWorkspace()).toBe(true);
+    expect(await repos.organisms.list()).toEqual([]);
+  });
+
+  // The brand is compile-time only and the real implementation shares it, so its raw-strings
+  // snapshot typechecks in here; the guard has to fire before anything is cleared.
+  it('rejects a snapshot this fake did not capture, before clearing anything', async () => {
+    const repos = createFakeRepositories({ organisms: [makeOrganism('kept')] });
+    const foreign = { battles: '{}', organisms: '{}', schema: null };
+
+    await expect(
+      repos.restoreWorkspace(foreign as unknown as WorkspaceSnapshot),
+    ).rejects.toBeInstanceOf(TypeError);
+
+    expect(await repos.organisms.exists('kept')).toBe(true);
+  });
+
+  it('detaches the capture from a raw-seeded record the caller still holds', async () => {
+    // `raw` inserts by reference (its point is bypassing validation, not sharing state), so the
+    // capture must copy — the real store's captured strings cannot mutate under the caller.
+    const record = JSON.parse(JSON.stringify(makeOrganism('raw-org'))) as Record<string, unknown>;
+    const repos = createFakeRepositories({ raw: { organisms: { 'raw-org': record } } });
+    const snapshot = await repos.snapshotWorkspace();
+
+    record['name'] = 'mutated after capture';
+    await repos.restoreWorkspace(snapshot);
+
+    expect((await repos.organisms.load('raw-org'))?.name).toBe('Test Organism');
   });
 });
