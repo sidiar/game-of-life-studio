@@ -690,3 +690,18 @@ Modified:
 Proposed lane gate: none   # 4.24 needs nothing from lane 5; 5.11 may touch <BattlePage>'s library-load path (textual overlap only, no dependency either way)
 
 Dev Model: opus   # establishes the battle-side editor mount and the library-overlay adoption that 4.25 builds on, with a silent grid-repaint trap (FD5) that a pattern-follower would miss
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 53s | 53s | 44 | 6,486 | 17,612 | 1,318,404 | 1,342,546 |
+| Step 1 — create | opus-5-5 | 3 | 7m 49s | 7m 49s | 272 | 11,175 | 764,743 | 13,699,690 | 14,475,880 |
+| Step 2 — implement | opus-5-5 | 1 | 29m 35s | 29m 35s | 438 | 11,241 | 766,577 | 53,898,788 | 54,677,044 |
+| Step 3 — review + PR | fable-5 | 4 | 40m 32s | 40m 32s | 472 | 24,650 | 1,793,193 | 34,697,567 | 36,515,882 |
+| _of which the orchestrator_ | fable-5 | — | — | — | 98 | 23,814 | 52,521 | 3,208,508 | 3,284,941 |
+| **Total (create → PR ready)** | | 8 | **1h 18m** | 1h 18m | 1,226 | 53,552 | 3,342,125 | 103,614,449 | **107,011,352** |
+
+Run started 2026-09-26 22:35 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
