@@ -3418,10 +3418,16 @@ owner decisions. Both items are Story 5.11's and are also listed in the FD9 hand
 ## Deferred from: code review of 4-23-editor-unsaved-changes-scope, owner-decision pass (2026-09-26)
 
 Reviewed on **Opus** (full-mode, 2026-09-25), three decision-needed items; Sidiar ruled on all three
-the next day. Two rulings needed no new entry here — (b) on the held-Enter flicker is fully fixed in
-`EditorUnsavedChangesDialog.tsx`'s own repeat guard, and the Question 1–4 defaults are confirmed
-in-place at their existing entries above (`:1200`, `:2528`, `:3246`). This is the one ruling that
-leaves a revisit open.
+the next day. Two rulings needed no new entry here. Ruling (b) on the held-Enter flicker is fully
+fixed by `EditorUnsavedChangesDialog.tsx`'s own repeat guard. The Question 1, 3 and 4 defaults are
+confirmed in place at their existing entries above:
+- Q1: "For Story 4.23: the Back after a GONE alert must stay a plain close", under 4-22's
+  implementation section.
+- Q3: "The dominance draft lags the textbox until blur/Enter", under 4-6's code review.
+- Q4: "Renaming an organism out of the active search filter drops focus", under 4-17's code review.
+
+Question 2 (no editor `beforeunload`) never had an entry. This is the one ruling that leaves a
+revisit open.
 
 - **Confirmation-Save closes the editor over an edit typed during the write, with no re-check.**
   `handleConfirmationExited`'s `'save'` branch runs `saveOrganism().then((ok) => { if (ok)
@@ -3433,3 +3439,17 @@ leaves a revisit open.
   "Save". **Revisit this decision if saves ever move to async storage** (a network-backed
   repository, Connected mode), where the window would widen from sub-frame to however long the
   request takes.
+
+## Deferred from: code review of 4-23-editor-unsaved-changes-scope, second pass on the rulings (2026-09-26)
+
+- **A held Enter on the unsaved-changes prompt's Discard (or Save, then close) carries past the
+  editor's unmount.** `ignoreRepeatEnter` only sees keydowns aimed at the prompt's own buttons.
+  After Discard's fade the editor closes, `useOrganismEditorModal` restores focus to the Library
+  trigger (or `[data-create-organism]`), and the still-held repeat re-opens the editor clean.
+  Nothing is written, so this is the same accepted carry-over already described under "For Story
+  4.23: the Back after a GONE alert must stay a plain close" (4-22's implementation section), and it
+  happens today on a plain clean Back/✕ close too. It is outside D2's prompt-flicker ruling.
+  The fix on file stands: swallow `event.repeat` keydowns after the close's focus restore until
+  `keyup`, using a `document`-scoped disarm (the `UsageIndicator` D5 shape, which fits here because
+  the listener must outlive the unmounted editor). Pick it up if a repeat ever lands on a control
+  that writes.

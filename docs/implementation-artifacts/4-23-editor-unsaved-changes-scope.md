@@ -4,7 +4,7 @@ baseline_commit: 388dd205a8d3cd05fc50ddf004bce51d05b444e6
 
 # Story 4.23: Editor Unsaved-Changes Scope
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -292,6 +292,37 @@ Code review 2026-09-25 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
 - [x] [Review][Patch] Comments still describing the pre-FD2 model: `organismDraft.ts` header ("one
   seed") and the `onClose` prop doc ("Story 4.23 guards it") [apps/web/lib/organisms/organismDraft.ts, apps/web/components/organisms/editor/OrganismEditorModal.tsx]
 
+#### Second pass — owner-rulings delta (2026-09-26)
+
+Code review 2026-09-26 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor, full mode),
+scoped to `65f76a2..HEAD` (the rulings' application, a8d8e92 + 52b8dd4). All three rulings are
+applied faithfully in the code: D1 and D3 have no code change, and the D2 guard sits on the
+prompt's three buttons, not on Back/✕. The Enter suppression was checked against MUI's
+`useButtonBase`, which hands a native `<button>`'s Enter activation to the browser, so a keydown
+`preventDefault` cancels it in all three engines. 0 decision-needed, 5 patch, 1 defer, 8 dismissed.
+
+- [x] [Review][Patch] Completion Notes and Change Log describe D2 as a `document` CAPTURE listener
+  calling `preventDefault`/`stopPropagation`. The shipped code instead puts an element-scoped
+  `onKeyDown` on each of the three buttons and calls `preventDefault` only. The records also claim
+  the fix "mirrors" the `UsageIndicator` D5 technique without surfacing the deliberate deviation. [docs/implementation-artifacts/4-23-editor-unsaved-changes-scope.md]
+- [x] [Review][Patch] "`npm run ci:dev` re-run green after the D2 fix (see Debug Log References)"
+  points at nothing: Debug Log References has no 2026-09-26 entry. The failed first attempt the
+  code comment cites is not recorded either. [docs/implementation-artifacts/4-23-editor-unsaved-changes-scope.md]
+- [x] [Review][Patch] The `ignoreRepeatEnter` comment states its invariant backwards ("a repeat
+  cannot occur without an intervening keyup"). It also says D5's outlive-the-panel reason "does not
+  apply here", which holds for the flicker the ruling targets but not once an outcome unmounts the
+  buttons (see the Defer item). [apps/web/components/organisms/editor/EditorUnsavedChangesDialog.tsx:44]
+- [x] [Review][Patch] The D2 test dispatches on Keep Editing only. Dropping `onKeyDown` from Discard
+  (the destructive button) or Save leaves every test green, so parametrize it over all three. [apps/web/components/organisms/editor/EditorUnsavedChangesDialog.test.tsx:100]
+- [x] [Review][Patch] The new `deferred-work.md` section cross-references entries by raw line number
+  (`:1200`, `:2528`, `:3246`) in a file both lanes append to, and it is already conflicting with
+  `main` after #85. It also says "Question 1–4 defaults are confirmed in-place at their existing
+  entries", but Question 2 has no entry. Anchor on the entry titles instead. [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Defer] A held Enter on the prompt's Discard (or Save, then close) carries past the
+  editor's unmount. `useOrganismEditorModal` restores focus to the Library trigger, and the still-held
+  repeat re-opens the editor clean. [apps/web/components/organisms/editor/OrganismEditorModal.tsx] — deferred, pre-existing (the
+  same carry-over already happens on a clean Back/✕ close today; outside D2's prompt-flicker scope)
+
 ## Dev Notes
 
 ### Forced decisions (defaults written in; the dev follows them unless the owner overrides)
@@ -542,6 +573,19 @@ claude-sonnet-5
   chunk, as the story predicted); every other route also within its growth allowance.
 - `npm run bench` + `npm run bench:check` — 5.903 ms frame vs 16.667 ms budget (64.6% headroom).
 - `npm run e2e:chromium` — 293 passed, 1 skipped (pre-existing skip, unrelated).
+- 2026-09-26, the D2 rulings pass: the first attempt used a `document` capture listener. It
+  regressed two unrelated `OrganismEditorModal` tests under the full suite and was replaced by the
+  per-button `onKeyDown` (see the code comment). No log of that pass's re-run was kept.
+- 2026-09-26, second-pass review (opus), recorded by the reviewer:
+  - `EditorUnsavedChangesDialog.test.tsx`: 13/13.
+  - Mutation check: with `onKeyDown` removed from Discard, the new Discard case fails (1 failed, 12
+    passed); restored afterwards.
+  - `npm run ci:dev` exited 0:
+    - spec:check: 279/279 ids resolve.
+    - web unit tests: 2361/2361.
+    - bundle: every route within its growth allowance.
+    - bench: 9.488 ms headroom (56.9%).
+    - e2e:chromium: 293 passed, 1 skipped.
 
 ### Completion Notes List
 
@@ -617,19 +661,30 @@ claude-sonnet-5
   - Confirmation-Save closing over a mid-write edit with no re-check: ruling (a), keep as shipped —
     no code change. Added a new `deferred-work.md` entry recording the ruling and its revisit
     trigger (async storage).
-  - The held-Enter flicker (prompt open → Keep Editing → open): ruling (b) — a `document`
-    CAPTURE listener in `EditorUnsavedChangesDialog.tsx`, armed for as long as the dialog is
-    `open`, calls `preventDefault`/`stopPropagation` on any Enter keydown carrying `repeat`,
-    mirroring `UsageIndicator`'s D5 repeat-guard technique and staying alongside FD10's existing
-    repeat-Escape guard (a different mechanism, since Enter's activation is a native browser
-    default action and Escape's dismissal is this dialog's own `onClose`). New test asserts
-    `fireEvent.keyDown(...)`'s return value (`false` = `preventDefault()` called) for a
-    repeat-carrying Enter and `true` for a genuine one — confirmed to fail with the guard removed.
+  - The held-Enter flicker (prompt open → Keep Editing → open): ruling (b). Each of the
+    confirmation's three `<Button>`s in `EditorUnsavedChangesDialog.tsx` carries an
+    `onKeyDown={ignoreRepeatEnter}` that calls `preventDefault()` on an Enter keydown carrying
+    `repeat`. That cancels the browser's native Enter activation of the focused button, and
+    `repeat` holds only until keyup, so no separate disarm is needed. **This deliberately departs
+    from the `UsageIndicator` D5 technique the ruling named:** the guard is element-scoped, not a
+    `document` listener, and it uses no `stopPropagation`. A first attempt used a `document`
+    capture listener, and it regressed two unrelated `OrganismEditorModal` tests under the full
+    suite, since a page-wide listener sees every keydown while the dialog is open. D5 needs
+    `document` scope only because its listener must outlive its already-closed panel. The flicker
+    the ruling targets does not need that, because these buttons stay mounted while the dialog is
+    open. The ruling's substance is met as written: repeats are swallowed on the confirmation's
+    buttons, and the fix sits at the prompt, not at Back/✕. The guard sits beside FD10's
+    repeat-Escape guard with a different mechanism, because Enter's activation is a native
+    default action while Escape's dismissal is this dialog's own `onClose`. The new test asserts
+    `fireEvent.keyDown(...)`'s return value (`false` means `preventDefault()` was called) for a
+    repeat-carrying Enter and `true` for a genuine one. It is parametrized over all three buttons
+    since the second-pass review.
   - Questions 1–4 defaults: all four confirmed by the owner — no code change. The three
     `deferred-work.md` entries this touches (Q1 GONE exemption, Q3 Dominance pending text, Q4
     renamed-out-of-search focus) reworded from "pending owner confirmation" to confirmed
     2026-09-26.
-  - `npm run ci:dev` re-run green after the D2 fix (see Debug Log References).
+  - `npm run ci:dev` was reported green after the D2 fix. That pass kept no log, and Debug Log
+    References records the reviewer's own green re-run of 2026-09-26.
 
 ### File List
 
@@ -687,11 +742,20 @@ claude-sonnet-5
   owner (Review Findings) — status `in-progress`.
 - 2026-09-26: Applied Sidiar's rulings on the three review decision items. D1 (confirmation-Save
   over a mid-write edit): ruling (a), no code change — recorded in a new `deferred-work.md` entry.
-  D2 (held-Enter flicker on Back/✕): ruling (b) — `EditorUnsavedChangesDialog.tsx` gained a
-  `document` capture listener that swallows repeat-carrying Enter keydowns while it is open (the
-  `UsageIndicator` D5 technique), with a new unit test. D3 (Questions 1–4): all four defaults
+  D2 (held-Enter flicker on Back/✕): ruling (b). `EditorUnsavedChangesDialog.tsx`'s three buttons
+  each gained an `onKeyDown` that `preventDefault`s a repeat-carrying Enter keydown. The guard is
+  element-scoped, a deliberate departure from D5's `document` listener (see Completion Notes), and
+  comes with a new unit test. D3 (Questions 1–4): all four defaults
   confirmed, no code change — the three affected `deferred-work.md` entries reworded from "pending
   owner confirmation" to confirmed. All three items checked off; `npm run ci:dev` re-run green.
+- 2026-09-26: Second-pass review (opus) of the rulings delta (`65f76a2..HEAD`). All three rulings
+  were applied faithfully. Results: 0 decision-needed, 5 patches applied, 1 defer, 8 dismissed.
+  - Records corrected to describe the per-button guard, with its departure from D5 made explicit.
+  - The D2 test is parametrized over all three buttons.
+  - The guard's comment is corrected.
+  - `deferred-work.md`'s line-number anchors are replaced with entry titles.
+  - A post-unmount held-Enter carry-over is deferred.
+  - `npm run ci:dev` is green. Status `done`.
 
 ---
 

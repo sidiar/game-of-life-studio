@@ -96,14 +96,18 @@ describe('EditorUnsavedChangesDialog (Story 4.23 — UX-DR16)', () => {
   // synthesizes that click itself, so the only observable trace of the guard is whether it cancels
   // the keydown. `fireEvent.keyDown` returns `element.dispatchEvent(...)`'s own result, which is
   // `false` only when a cancelable event was `preventDefault()`-ed — this fails the moment the guard
-  // is removed, the same shape as the repeat-Escape test above.
-  it('a repeat-carrying Enter is prevented from activating the focused button (D2); a genuine one is not', () => {
-    renderDialog();
-    const keepEditing = screen.getByRole('button', { name: 'Keep Editing' });
+  // is removed. Each button carries its own `onKeyDown`, so each is dispatched on: one button's
+  // guard proves nothing about another's, and Discard is the destructive one.
+  it.each(['Keep Editing', 'Discard', 'Save'])(
+    'a repeat-carrying Enter on %s is prevented from activating it (D2); a genuine one is not',
+    (name) => {
+      renderDialog();
+      const button = screen.getByRole('button', { name });
 
-    expect(fireEvent.keyDown(keepEditing, { key: 'Enter', repeat: true })).toBe(false);
-    expect(fireEvent.keyDown(keepEditing, { key: 'Enter', repeat: false })).toBe(true);
-  });
+      expect(fireEvent.keyDown(button, { key: 'Enter', repeat: true })).toBe(false);
+      expect(fireEvent.keyDown(button, { key: 'Enter', repeat: false })).toBe(true);
+    },
+  );
 
   it('fires onExited once the close transition has finished', async () => {
     const onExited = vi.fn();

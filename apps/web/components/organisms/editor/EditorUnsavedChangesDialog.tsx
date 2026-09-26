@@ -38,11 +38,13 @@ const BUTTON_SX = { fontSize: '13px', padding: '12px 24px' } as const;
 // regressed two unrelated `OrganismEditorModal` tests under the full suite (2026-09-26 CI run) —
 // `preventDefault` here only ever sees a keydown whose TARGET is one of these three buttons.
 // `UsageIndicator`'s D5 guard is `document`-scoped for a DIFFERENT reason (its listener has to
-// outlive its own already-closed panel); that does not apply here, since these buttons stay mounted
-// for as long as this dialog is `open` and so keep seeing every repeat themselves. `preventDefault`
-// on a keydown stops the browser's default "activate the focused button" action before it fires; a
-// repeat, by construction, cannot occur without an intervening keyup, so this already means "swallow
-// until keyup" with no separate disarm to write.
+// outlive its own already-closed panel). The flicker this guards needs no such reach: these buttons
+// stay mounted for as long as this dialog is `open` and so see every repeat themselves. A repeat
+// that outlives an outcome which unmounts them (Discard, a successful Save) is not covered here; it
+// is the pre-existing focus-restore carry-over `deferred-work.md` tracks. `preventDefault` on a
+// keydown stops the browser's default "activate the focused button" action before it fires. A key
+// reports `repeat` only while it is held, i.e. until its keyup, so filtering on `repeat` already
+// means "swallow until keyup" with no separate disarm to write.
 function ignoreRepeatEnter(event: ReactKeyboardEvent<HTMLButtonElement>) {
   if (event.key === 'Enter' && event.repeat) event.preventDefault();
 }
