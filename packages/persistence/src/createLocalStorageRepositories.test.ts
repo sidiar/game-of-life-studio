@@ -1,12 +1,14 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BattleSchema, DEFAULT_SETTINGS, OrganismSchema } from '@gol/domain';
 import { createLocalStorageRepositories } from './createLocalStorageRepositories';
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
 import { STORAGE_KEYS } from './localStorageAccess';
+import type { WorkspaceSnapshot } from './repositories';
 
 afterEach(() => {
+  vi.restoreAllMocks();
   localStorage.clear();
 });
 
@@ -148,5 +150,68 @@ describe('isFreshWorkspace (Story 1.5 AC1)', () => {
     await repos.clearAll();
 
     expect(await repos.isFreshWorkspace()).toBe(false);
+  });
+});
+
+describe('snapshotWorkspace / restoreWorkspace (Story 5.8 owner ruling)', () => {
+  const DATA_KEYS = [STORAGE_KEYS.battles, STORAGE_KEYS.organisms, STORAGE_KEYS.schema] as const;
+  const raw = () => DATA_KEYS.map((key) => localStorage.getItem(key));
+
+  it('puts every data key back byte for byte — absent stays absent — and never touches settings', async () => {
+    const repos = createLocalStorageRepositories();
+    await repos.organisms.save(organism());
+    localStorage.setItem(STORAGE_KEYS.organisms, '{"x": {"not": "an organism"}}');
+    const before = raw();
+    expect(before[0]).toBeNull();
+    const snapshot = await repos.snapshotWorkspace();
+
+    await repos.battles.save(battle());
+    await repos.settings.save({ ...DEFAULT_SETTINGS, theme: 'biotech-terminal' });
+    const settings = localStorage.getItem(STORAGE_KEYS.settings);
+    await repos.restoreWorkspace(snapshot);
+
+    expect(raw()).toEqual(before);
+    expect(localStorage.getItem(STORAGE_KEYS.settings)).toBe(settings);
+  });
+
+  it('restores a fresh store as fresh: the stamp a later write laid down is removed', async () => {
+    const repos = createLocalStorageRepositories();
+    const snapshot = await repos.snapshotWorkspace();
+    await repos.battles.save(battle());
+
+    await repos.restoreWorkspace(snapshot);
+
+    expect(raw()).toEqual([null, null, null]);
+    expect(await repos.isFreshWorkspace()).toBe(true);
+  });
+
+  // The brand is compile-time only and the fake shares it, so a foreign snapshot typechecks in;
+  // the guard has to fire BEFORE the remove phase or the mix-up destroys all three keys.
+  it('rejects a snapshot this store did not capture, before removing anything', async () => {
+    const repos = createLocalStorageRepositories();
+    await repos.organisms.save(organism());
+    const before = raw();
+    const foreign = { battles: new Map(), organisms: new Map(), stamped: true };
+
+    await expect(
+      repos.restoreWorkspace(foreign as unknown as WorkspaceSnapshot),
+    ).rejects.toBeInstanceOf(TypeError);
+
+    expect(raw()).toEqual(before);
+  });
+
+  it('removes the stamp first, so no partial-removal shape is ever stamped-but-empty', async () => {
+    const repos = createLocalStorageRepositories();
+    await repos.organisms.save(organism());
+    const snapshot = await repos.snapshotWorkspace();
+    const removeSpy = vi.spyOn(Storage.prototype, 'removeItem');
+
+    await repos.restoreWorkspace(snapshot);
+
+    expect(removeSpy.mock.calls.map(([key]) => key)).toEqual([
+      STORAGE_KEYS.schema,
+      STORAGE_KEYS.battles,
+      STORAGE_KEYS.organisms,
+    ]);
   });
 });

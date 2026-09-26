@@ -124,3 +124,10 @@ export type {
   Migrator,
   MigratorConfig,
 } from './formatMigrations';
+
+// The import-side referential-closure check (Story 5.8, RFC-006 Decision 5 / Decision E.5): every
+// cell's organism and every organism's rule target must be carried by the file itself. Returns a
+// list rather than throwing (no classes in this package); `@gol/persistence`'s import pipeline
+// turns a non-empty list into its typed rejection before anything is written.
+export { findDanglingReferences } from './referentialClosure';
+export type { DanglingReference } from './referentialClosure';

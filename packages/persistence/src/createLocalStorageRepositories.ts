@@ -1,8 +1,15 @@
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
-import type { AppRepositories } from './repositories';
-import { hasSchemaStamp, measureStorageUsage, removeDataKeys } from './localStorageAccess';
+import type { AppRepositories, WorkspaceSnapshot } from './repositories';
+import {
+  captureDataKeys,
+  hasSchemaStamp,
+  measureStorageUsage,
+  removeDataKeys,
+  restoreDataKeys,
+  type RawDataKeys,
+} from './localStorageAccess';
 
 /**
  * The Standalone-mode repository set. Mode selection itself lives in the app's factory
@@ -42,6 +49,16 @@ export function createLocalStorageRepositories(): AppRepositories {
     // meter only ever reads getItem() strings and sums key + value lengths (FD3) — it never parses.
     async storageUsage() {
       return measureStorageUsage();
+    },
+
+    // The opaque pair is the raw `gol:battles` / `gol:organisms` / `gol:schema` strings (Story 5.8
+    // owner ruling). The casts are the brand's whole point: only this object builds or reads one.
+    async snapshotWorkspace() {
+      return captureDataKeys() as unknown as WorkspaceSnapshot;
+    },
+
+    async restoreWorkspace(snapshot) {
+      restoreDataKeys(snapshot as unknown as RawDataKeys);
     },
   };
 }

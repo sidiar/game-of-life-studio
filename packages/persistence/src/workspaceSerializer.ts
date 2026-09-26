@@ -1,6 +1,7 @@
 import { organismClosure, toEnvelope, type WorkspaceExportWire } from '@gol/domain';
 import type { AppRepositories } from './repositories';
 import { ExportError } from './errors';
+import { applyImport, validateImportFile, type ImportSummary } from './workspaceImport';
 
 /**
  * The repository-driven half of the RFC-006 export path (AR-10 / RFC-006 Decision 4).
@@ -68,6 +69,16 @@ export interface WorkspaceSerializer {
    * telling the user about the corruption itself is Story 5.11's.
    */
   exportBattle(id: string): Promise<WorkspaceExportWire>;
+
+  /**
+   * The atomic import (AR-10 / RFC-006 Decision 5): `JSON.parse` → `migrate` → schema parse →
+   * `assertReferentialClosure`, then snapshot → `clearAll` → `organisms.replaceAll` →
+   * `battles.replaceAll` → `ensureDefaultOrganism`, restoring the snapshot on any write failure.
+   * A destructive whole-workspace replace for either `kind` (M8); settings are never touched
+   * (Decision F). Rejects with `ImportError` — see its codes for which outcomes leave the workspace
+   * unchanged. The pipeline itself is `workspaceImport.ts`.
+   */
+  importWorkspace(fileText: string): Promise<ImportSummary>;
 }
 
 /**
@@ -80,8 +91,9 @@ export interface WorkspaceSerializer {
  *
  * `exportBattle` reads `repos.battles.load(id)` plus `repos.organisms.list()` — the RFC-006
  * Decision 4 shape (see the interface JSDoc above for the owner ruling that restored it over
- * FD1's `exportBattle(battle)` variance). `parse` / `importWorkspace` are still absent, and are
- * Story 5.8's; the `migrate()` they will run first is `@gol/domain`'s (Story 5.7).
+ * FD1's `exportBattle(battle)` variance). `importWorkspace` composes `workspaceImport.ts`'s two
+ * halves — the pure `validateImportFile` runs to completion before any repository is touched, then
+ * `applyImport` writes. The RFC's separate `parse` step is `validateImportFile` itself.
  */
 export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): WorkspaceSerializer {
   const { repos, appVersion, now } = deps;
@@ -117,6 +129,12 @@ export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): Worksp
       const library = await repos.organisms.list();
       const closure = organismClosure(battle.organismIds, library);
       return toEnvelope('battle', [battle], closure, { appVersion, exportedAt: now() });
+    },
+
+    async importWorkspace(fileText: string): Promise<ImportSummary> {
+      // Synchronous, and before the first `await`: a rejected file never reaches `repos`.
+      const envelope = validateImportFile(fileText);
+      return applyImport(repos, envelope);
     },
   };
 }
