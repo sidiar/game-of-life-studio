@@ -1,5 +1,6 @@
 'use client';
 
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -23,6 +24,28 @@ const PAPER_MAX_WIDTH = '440px';
 // Pulled out of the theme's MuiButton root override for the reason the shipped dialogs record: on
 // `root` it applies to every size, collapsing size="small"/"large" into medium.
 const BUTTON_SX = { fontSize: '13px', padding: '12px 24px' } as const;
+
+// Review D2 (owner ruling (b), 2026-09-26): a HELD Enter on Back/✕ auto-repeats past the keydown
+// that opens this dialog. Unlike Escape's dismissal (this dialog's own `onClose`, below — not a
+// browser default action), Enter activates a focused `<button>` as part of the NATIVE keydown
+// default action: the very next repeated keydown, now targeting the autoFocused Keep Editing button
+// (FD4), fires its click too, FD7 then restores focus to Back once the exit fade ends, and the
+// still-held key repeats again there and re-opens the dialog. Nothing is ever discarded (Keep
+// Editing is the safe action), but the prompt flickers for as long as the key is held.
+//
+// Scoped to these three buttons' own `onKeyDown`, never a `document` listener: a page-wide capture
+// listener reaches every keydown on every mounted component while this dialog is open, which
+// regressed two unrelated `OrganismEditorModal` tests under the full suite (2026-09-26 CI run) —
+// `preventDefault` here only ever sees a keydown whose TARGET is one of these three buttons.
+// `UsageIndicator`'s D5 guard is `document`-scoped for a DIFFERENT reason (its listener has to
+// outlive its own already-closed panel); that does not apply here, since these buttons stay mounted
+// for as long as this dialog is `open` and so keep seeing every repeat themselves. `preventDefault`
+// on a keydown stops the browser's default "activate the focused button" action before it fires; a
+// repeat, by construction, cannot occur without an intervening keyup, so this already means "swallow
+// until keyup" with no separate disarm to write.
+function ignoreRepeatEnter(event: ReactKeyboardEvent<HTMLButtonElement>) {
+  if (event.key === 'Enter' && event.repeat) event.preventDefault();
+}
 
 export interface EditorUnsavedChangesDialogProps {
   open: boolean;
@@ -96,6 +119,7 @@ export default function EditorUnsavedChangesDialog({
         <Button
           type="button"
           onClick={onKeepEditing}
+          onKeyDown={ignoreRepeatEnter}
           autoFocus
           color="inherit"
           variant="outlined"
@@ -103,10 +127,22 @@ export default function EditorUnsavedChangesDialog({
         >
           Keep Editing
         </Button>
-        <Button type="button" onClick={onDiscard} color="error" sx={BUTTON_SX}>
+        <Button
+          type="button"
+          onClick={onDiscard}
+          onKeyDown={ignoreRepeatEnter}
+          color="error"
+          sx={BUTTON_SX}
+        >
           Discard
         </Button>
-        <Button type="button" onClick={onSave} variant="contained" sx={BUTTON_SX}>
+        <Button
+          type="button"
+          onClick={onSave}
+          onKeyDown={ignoreRepeatEnter}
+          variant="contained"
+          sx={BUTTON_SX}
+        >
           Save
         </Button>
       </DialogActions>

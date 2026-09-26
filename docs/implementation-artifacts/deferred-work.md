@@ -1197,7 +1197,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   Save blurs the textbox first, a keyboard Save means focus has already left it, and no Save
   hotkey exists. The *when-is-the-draft-read* question re-points to Story 4.23 (the dirty diff)
   and Story 4.16 (the persisted value); revisit if a Save hotkey ever lands. **Default applied
-  2026-09-25 (Story 4.23, Question 3 — pending owner confirmation): accept and document.** An Escape pressed inside the dominance
+  2026-09-25, confirmed by owner 2026-09-26 (Story 4.23, Question 3): accept and document.** An Escape pressed inside the dominance
   textbox while it holds uncommitted out-of-range or incomplete text reads the pre-edit
   `draft.dominance` for the dirty check, so on an otherwise-clean draft the editor closes with no
   prompt and the pending text is discarded; in-range values commit live and are unaffected. A
@@ -2525,7 +2525,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   "focus is loose → create button" sweep. **Re-pointed (Story 4.20, 2026-09-23):** 4.20 was the next
   Library touch and does not reach this path — it adds one prop to the editor's call site and moves
   one count onto `resolveOrganismUsage`, neither of which is in the focus-restore path.
-  **Re-pointed again (Story 4.23, 2026-09-25, Question 4 default — pending owner confirmation):** not in any 4.23 AC — the
+  **Re-pointed again (Story 4.23, 2026-09-25, Question 4 default, confirmed by owner 2026-09-26):** not in any 4.23 AC — the
   story's own focus-restore work is FD7's (the confirmation's own three outcomes), a different path
   from this one (the Library's post-`onSaved` reload settling under a search filter). Stands on the
   next Library touch or the Epic 4 UX reconciliation pass, not built here.
@@ -3243,7 +3243,7 @@ been answered yet:
   **Resolved (Story 4.23, FD8, 2026-09-25):** `handleRequestClose` checks
   `deleteError === ORGANISM_DELETE_GONE` alongside `!isDirty`, before it ever opens the
   confirmation — and covers all three channels (Back, ✕, Escape), per the story's Question 1 default
-  ("yes, all three" — pending owner confirmation), not Back alone: exempting only Back would leave ✕ and Escape prompting over a
+  ("yes, all three", confirmed by owner 2026-09-26), not Back alone: exempting only Back would leave ✕ and Escape prompting over a
   draft whose record is already gone, the same "nothing in the chain writes on its own" reasoning
   this entry gives. `OrganismEditorModal.test.tsx`'s "the GONE exemption closes directly through
   Back, ✕ and Escape even on a dirty draft" pins it.
@@ -3414,3 +3414,22 @@ owner decisions. Both items are Story 5.11's and are also listed in the FD9 hand
   `FakeSeed.stamped` is a boolean, not a version, so 5.11's reload branch is testable only by
   constructing the class (barrel-exported) or mocking a repository method. Add a seam in 5.11 only
   if that proves awkward.
+
+## Deferred from: code review of 4-23-editor-unsaved-changes-scope, owner-decision pass (2026-09-26)
+
+Reviewed on **Opus** (full-mode, 2026-09-25), three decision-needed items; Sidiar ruled on all three
+the next day. Two rulings needed no new entry here — (b) on the held-Enter flicker is fully fixed in
+`EditorUnsavedChangesDialog.tsx`'s own repeat guard, and the Question 1–4 defaults are confirmed
+in-place at their existing entries above (`:1200`, `:2528`, `:3246`). This is the one ruling that
+leaves a revisit open.
+
+- **Confirmation-Save closes the editor over an edit typed during the write, with no re-check.**
+  `handleConfirmationExited`'s `'save'` branch runs `saveOrganism().then((ok) => { if (ok)
+  onClose(); })` without re-diffing the draft against the baseline FD2 just moved to the attempted
+  snapshot — an edit typed while the write is in flight (fields stay editable during it, and FD2
+  moves the baseline there precisely so such an edit counts as dirty) is silently dropped, with no
+  prompt, the moment the write resolves. **Resolved 2026-09-26 (Sidiar): keep as shipped.** The
+  write is a localStorage call; the vulnerable window is one sub-frame, and the user already chose
+  "Save". **Revisit this decision if saves ever move to async storage** (a network-backed
+  repository, Connected mode), where the window would widen from sub-frame to however long the
+  request takes.

@@ -91,6 +91,20 @@ describe('EditorUnsavedChangesDialog (Story 4.23 — UX-DR16)', () => {
     expect(onKeepEditing).toHaveBeenCalledTimes(1);
   });
 
+  // Review D2 (owner ruling (b), 2026-09-26). Unlike Escape's dismissal above, Enter's activation of
+  // a focused button is the BROWSER's own default action, not this dialog's `onClose` — jsdom never
+  // synthesizes that click itself, so the only observable trace of the guard is whether it cancels
+  // the keydown. `fireEvent.keyDown` returns `element.dispatchEvent(...)`'s own result, which is
+  // `false` only when a cancelable event was `preventDefault()`-ed — this fails the moment the guard
+  // is removed, the same shape as the repeat-Escape test above.
+  it('a repeat-carrying Enter is prevented from activating the focused button (D2); a genuine one is not', () => {
+    renderDialog();
+    const keepEditing = screen.getByRole('button', { name: 'Keep Editing' });
+
+    expect(fireEvent.keyDown(keepEditing, { key: 'Enter', repeat: true })).toBe(false);
+    expect(fireEvent.keyDown(keepEditing, { key: 'Enter', repeat: false })).toBe(true);
+  });
+
   it('fires onExited once the close transition has finished', async () => {
     const onExited = vi.fn();
     const { rerender, onKeepEditing, onDiscard, onSave } = renderDialog({ onExited });

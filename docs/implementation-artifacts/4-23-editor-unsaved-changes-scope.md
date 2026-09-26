@@ -4,7 +4,7 @@ baseline_commit: 388dd205a8d3cd05fc50ddf004bce51d05b444e6
 
 # Story 4.23: Editor Unsaved-Changes Scope
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -228,7 +228,7 @@ implementation-level ACs this story is held to. The numbered ACs are the review 
 Code review 2026-09-25 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor, full mode).
 3 decision-needed, 15 patch, 0 defer, 9 dismissed.
 
-- [ ] [Review][Decision] Confirmation-Save closes the editor over an edit typed during the write —
+- [x] [Review][Decision] Confirmation-Save closes the editor over an edit typed during the write —
   `handleConfirmationExited`'s `'save'` branch runs `saveOrganism().then((ok) => { if (ok) onClose(); })`.
   Fields stay editable while the write is in flight, and FD2 moves the baseline to the ATTEMPTED
   snapshot precisely so a mid-write edit stays dirty; but this path then calls `onClose()` without
@@ -240,7 +240,7 @@ Code review 2026-09-25 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
   **Owner ruling (Sidiar, 2026-09-26): (a) — keep as shipped.** The write is localStorage, the
   vulnerable window is sub-frame. Record in `deferred-work.md`: revisit this decision if saves ever
   move to async storage.
-- [ ] [Review][Decision] A held Enter on Back/✕ cycles the prompt open → Keep Editing → open —
+- [x] [Review][Decision] A held Enter on Back/✕ cycles the prompt open → Keep Editing → open —
   Enter activates a `<button>` on keydown and auto-repeats: the first keydown opens the prompt with
   focus on Keep Editing (FD4 `autoFocus`), the next repeat clicks Keep Editing, FD7 restores focus to
   Back after the fade, the next repeat re-opens it. Nothing is ever discarded (Keep Editing is the
@@ -251,7 +251,7 @@ Code review 2026-09-25 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
   **Owner ruling (Sidiar, 2026-09-26): (b) — swallow `repeat` keydowns on the confirmation's
   buttons until keyup**, matching the `UsageIndicator` D5 technique and FD10's existing
   repeat-Escape guard. Fix at the prompt, not the trigger buttons.
-- [ ] [Review][Decision] Questions 1–4 are recorded as "resolved" without an owner ruling — the dev
+- [x] [Review][Decision] Questions 1–4 are recorded as "resolved" without an owner ruling — the dev
   applied every written-in default (Q1 GONE exemption on all three channels; Q2 no `beforeunload`;
   Q3 accept that Escape from inside the dominance textbox discards uncommitted out-of-range text on
   an otherwise clean draft — independently re-raised by the Edge Case Hunter; Q4 renamed-out-of-search
@@ -613,6 +613,23 @@ claude-sonnet-5
 - Questions 1–4 all resolved to their written-in defaults (no owner override surfaced during
   implementation): Q1 GONE exemption covers all three channels; Q2 no `beforeunload` listener; Q3
   Dominance pending text accept-and-document; Q4 renamed-out-of-search focus re-pointed onward.
+- **Review rulings applied (2026-09-26).** The owner ruled on all three decision-needed items:
+  - Confirmation-Save closing over a mid-write edit with no re-check: ruling (a), keep as shipped —
+    no code change. Added a new `deferred-work.md` entry recording the ruling and its revisit
+    trigger (async storage).
+  - The held-Enter flicker (prompt open → Keep Editing → open): ruling (b) — a `document`
+    CAPTURE listener in `EditorUnsavedChangesDialog.tsx`, armed for as long as the dialog is
+    `open`, calls `preventDefault`/`stopPropagation` on any Enter keydown carrying `repeat`,
+    mirroring `UsageIndicator`'s D5 repeat-guard technique and staying alongside FD10's existing
+    repeat-Escape guard (a different mechanism, since Enter's activation is a native browser
+    default action and Escape's dismissal is this dialog's own `onClose`). New test asserts
+    `fireEvent.keyDown(...)`'s return value (`false` = `preventDefault()` called) for a
+    repeat-carrying Enter and `true` for a genuine one — confirmed to fail with the guard removed.
+  - Questions 1–4 defaults: all four confirmed by the owner — no code change. The three
+    `deferred-work.md` entries this touches (Q1 GONE exemption, Q3 Dominance pending text, Q4
+    renamed-out-of-search focus) reworded from "pending owner confirmation" to confirmed
+    2026-09-26.
+  - `npm run ci:dev` re-run green after the D2 fix (see Debug Log References).
 
 ### File List
 
@@ -621,7 +638,9 @@ claude-sonnet-5
 - `apps/web/lib/organisms/organismDraft.test.ts` — modified: 15 new tests for
   `isOrganismDraftDirty` (Task 1).
 - `apps/web/components/organisms/editor/EditorUnsavedChangesDialog.tsx` — new: the confirmation
-  component (Task 3).
+  component (Task 3); modified: D2's repeat-Enter guard (review ruling (b), 2026-09-26).
+- `apps/web/components/organisms/editor/EditorUnsavedChangesDialog.test.tsx` — modified: D2's
+  repeat-carrying-Enter test (review ruling (b), 2026-09-26).
 - `apps/web/components/organisms/editor/OrganismEditorModal.tsx` — modified: `baseline`/`isDirty`
   (Task 2), the guarded request-close channel, `confirming`/`confirmOpen`, the confirmation's
   render and wiring, `data-editor-close` (Task 4), `saveOrganism`'s `Promise<boolean>` return
@@ -641,7 +660,9 @@ claude-sonnet-5
 - `apps/web/e2e/organisms.spec.ts` — modified: new "unsaved-changes guard (Story 4.23)" describe
   block, 5 tests (Task 7).
 - `docs/implementation-artifacts/deferred-work.md` — modified: six entries resolved, two
-  re-pointed per the Questions defaults (Task 8).
+  re-pointed per the Questions defaults (Task 8); the three Questions 1/3/4 entries reworded from
+  "pending owner confirmation" to confirmed 2026-09-26, and a new entry recording D1's owner ruling
+  (keep as shipped; revisit if saves move to async storage).
 - `docs/implementation-artifacts/sprint-status.yaml` — modified: `4-23-editor-unsaved-changes-scope`
   → `review`.
 
@@ -664,6 +685,13 @@ claude-sonnet-5
   targets, FD2 mid-write edits and per-category dirtiness; e2e proves the editor is live after Keep
   Editing; comment and `deferred-work.md` corrections. 3 decision-needed items left open for the
   owner (Review Findings) — status `in-progress`.
+- 2026-09-26: Applied Sidiar's rulings on the three review decision items. D1 (confirmation-Save
+  over a mid-write edit): ruling (a), no code change — recorded in a new `deferred-work.md` entry.
+  D2 (held-Enter flicker on Back/✕): ruling (b) — `EditorUnsavedChangesDialog.tsx` gained a
+  `document` capture listener that swallows repeat-carrying Enter keydowns while it is open (the
+  `UsageIndicator` D5 technique), with a new unit test. D3 (Questions 1–4): all four defaults
+  confirmed, no code change — the three affected `deferred-work.md` entries reworded from "pending
+  owner confirmation" to confirmed. All three items checked off; `npm run ci:dev` re-run green.
 
 ---
 
