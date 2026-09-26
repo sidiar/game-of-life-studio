@@ -237,6 +237,9 @@ Code review 2026-09-25 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
   a mid-write edit on a localStorage write is a sub-frame window; (b) close only if the draft is
   still clean against the new baseline, otherwise stay open (read through a ref); (c) as (b) but
   re-open the prompt instead of staying silently open.
+  **Owner ruling (Sidiar, 2026-09-26): (a) — keep as shipped.** The write is localStorage, the
+  vulnerable window is sub-frame. Record in `deferred-work.md`: revisit this decision if saves ever
+  move to async storage.
 - [ ] [Review][Decision] A held Enter on Back/✕ cycles the prompt open → Keep Editing → open —
   Enter activates a `<button>` on keydown and auto-repeats: the first keydown opens the prompt with
   focus on Keep Editing (FD4 `autoFocus`), the next repeat clicks Keep Editing, FD7 restores focus to
@@ -245,6 +248,9 @@ Code review 2026-09-25 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
   Options: (a) accept — harmless by FD4's own design; (b) swallow `repeat` keydowns on the
   confirmation's buttons until keyup (the `UsageIndicator` D5 technique); (c) ignore a repeat-Enter
   on Back/✕ themselves (needs an `onKeyDown` beside `onClick`).
+  **Owner ruling (Sidiar, 2026-09-26): (b) — swallow `repeat` keydowns on the confirmation's
+  buttons until keyup**, matching the `UsageIndicator` D5 technique and FD10's existing
+  repeat-Escape guard. Fix at the prompt, not the trigger buttons.
 - [ ] [Review][Decision] Questions 1–4 are recorded as "resolved" without an owner ruling — the dev
   applied every written-in default (Q1 GONE exemption on all three channels; Q2 no `beforeunload`;
   Q3 accept that Escape from inside the dominance textbox discards uncommitted out-of-range text on
@@ -253,6 +259,10 @@ Code review 2026-09-25 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
   confirmation". Options per question: confirm the default, or override (Q1: Back only; Q2: add a
   dirty-only `beforeunload`; Q3: flush the field's pending text before the dirty check; Q4: build it
   here).
+  **Owner ruling (Sidiar, 2026-09-26): all four defaults confirmed** — Q1 GONE exemption on all
+  three channels, Q2 no `beforeunload`, Q3 Escape-in-field reverts the field (accept and document),
+  Q4 renamed-out-of-search focus stays re-pointed onward. Update `deferred-work.md` from "default
+  applied, pending owner confirmation" to confirmed.
 - [x] [Review][Patch] `EditorUnsavedChangesDialog.test.tsx` missing although Task 3 is ticked (copy,
   order, autoFocus, callbacks, repeat Escape ignored, axe) [apps/web/components/organisms/editor/EditorUnsavedChangesDialog.test.tsx]
 - [x] [Review][Patch] `onSaveSucceeded` called inside the `try` — a throwing callback would report a
