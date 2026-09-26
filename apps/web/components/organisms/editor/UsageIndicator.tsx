@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
+import type { Ref } from 'react';
 import { styled } from '@mui/material/styles';
 import { battleCountLabel, ruleTargetCountLabel } from '@/lib/organisms/usageLabels';
 
@@ -50,6 +51,20 @@ export interface UsageIndicatorProps {
   /** The DISTINCT organism names behind M (`referencingOrganismNames`), already resolved through
    * the `Unnamed organism` fallback. */
   referencingNames: readonly string[];
+  /**
+   * Story 4.23, FD11: the imperative escape hatch `<OrganismEditorModal>`'s request-close handler
+   * calls BEFORE opening its unsaved-changes confirmation, so a panel left open by Tab-away (D1)
+   * cannot outlive it — its document-capture Escape listener would otherwise intercept the
+   * confirmation's own Escape and pull focus to a trigger behind the inert layer. React 19: `ref`
+   * as a regular prop, no `forwardRef`.
+   */
+  ref?: Ref<UsageIndicatorHandle>;
+}
+
+/** `closePanel` must NOT move focus (FD11) — this is not the panel's own Escape/outside-pointerdown
+ * path, both of which restore or leave focus by their own rules. */
+export interface UsageIndicatorHandle {
+  closePanel(): void;
 }
 
 // Mockup: `.editor-footer`'s content row (`clinical-lab-theme/organism-editor.html:818-828`) minus
@@ -196,11 +211,18 @@ export default function UsageIndicator({
   battleNames,
   ruleCount,
   referencingNames,
+  ref,
 }: UsageIndicatorProps) {
   // Ephemeral UI state (RFC-005 Decision 1): which ONE panel is open, never two booleans — "at
   // most one open at a time" is then the type's doing rather than a pair of effects keeping two
   // flags apart.
   const [openPanel, setOpenPanel] = useState<PanelKey | null>(null);
+
+  // Story 4.23, FD11: `setOpenPanel(null)` alone, deliberately no `openerRef.current?.focus()` —
+  // this imperative close must not move focus (it is not the Escape/outside-pointerdown path,
+  // which restore or leave focus by their own rules). The empty dep array is safe: `setOpenPanel`
+  // is a dispatch function, referentially stable for the component's lifetime.
+  useImperativeHandle(ref, () => ({ closePanel: () => setOpenPanel(null) }), []);
   const rootRef = useRef<HTMLDivElement>(null);
   // The trigger that opened the current panel — where Escape returns focus (AC4).
   const openerRef = useRef<HTMLButtonElement | null>(null);
@@ -221,8 +243,10 @@ export default function UsageIndicator({
   // used to close the panel and then the EDITOR: the effect below closes the panel on the first
   // keydown, React flushes and the effect's cleanup removes the listener long before the key's
   // auto-repeat arrives (a 250–500 ms OS delay, then a ~30 ms period), so the next repeated keydown
-  // reached MUI's root handler — and with no dirty guard until Story 4.23, that takes the draft.
-  // MUI's `useModal` does not check `event.repeat` either, so the guard lives here: once Escape has
+  // reached MUI's root handler — which, since Story 4.23, opens the unsaved-changes prompt on a
+  // dirty draft rather than closing the editor outright, but a HELD repeat must still not reach it
+  // (FD10 lives in the editor's own guard for that reason). MUI's `useModal` does not check
+  // `event.repeat` either, so the guard lives here: once Escape has
   // closed a panel, every Escape keydown with `repeat` set is stopped until the matching keyup ends
   // the hold. A deliberate second press has `repeat === false`, so it still closes the editor.
   //

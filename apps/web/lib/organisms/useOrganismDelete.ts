@@ -137,6 +137,13 @@ export interface UseOrganismDeleteResult {
   /** Compose into the editor's `onExited`, AFTER the hook's own: publishes the toast held for an
    * editor-origin delete (FD7) and clears the editor-origin alert with the editor it lived in. */
   onEditorExited(): void;
+  /**
+   * Story 4.23, AC9/FD12: wired to `<OrganismEditorModal>`'s `onSaveSucceeded` — a SUCCESSFUL Save
+   * clears the in-editor delete alert (both `ORGANISM_DELETE_FAILED` and `ORGANISM_DELETE_GONE`),
+   * and with it the Delete button's GONE-disabled state, so a re-creating Save leaves Delete live
+   * again. Never itself a repository call — the write stays the modal's own.
+   */
+  clearEditorDeleteError(): void;
 }
 
 export function useOrganismDelete({
@@ -393,6 +400,10 @@ export function useOrganismDelete({
     setToast(message);
   }, []);
 
+  // Story 4.23, AC9/FD12: a SUCCESSFUL Save clears the in-editor alert — never a repository call
+  // (the write is the modal's own).
+  const clearEditorDeleteError = useCallback(() => setEditorDeleteError(null), []);
+
   const isWindowActive = useCallback(() => windowRef.current, []);
 
   const confirmProps = useMemo<OrganismDeleteConfirmDialogProps | null>(
@@ -435,5 +446,6 @@ export function useOrganismDelete({
     deleteError,
     editorDeleteError,
     onEditorExited,
+    clearEditorDeleteError,
   };
 }

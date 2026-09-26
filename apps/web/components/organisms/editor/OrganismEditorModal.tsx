@@ -28,9 +28,11 @@ import AgingToggleField from './AgingToggleField';
 import AddRuleButton from './AddRuleButton';
 import RulesEditor from './RulesEditor';
 import PreviewPanel from './PreviewPanel';
-import UsageIndicator from './UsageIndicator';
+import UsageIndicator, { type UsageIndicatorHandle } from './UsageIndicator';
+import EditorUnsavedChangesDialog from './EditorUnsavedChangesDialog';
 import {
   createNewOrganismDraft,
+  isOrganismDraftDirty,
   organismDraftFrom,
   validateOrganismDraft,
   type DraftErrorTarget,
@@ -42,6 +44,7 @@ import { readGridColors } from '@/lib/canvas/themeColors';
 import { projectOrganismForSave } from '@/lib/organisms/organismRecord';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { ORGANISM_DELETE_GONE, saveOutcomeMessage } from '@/lib/organisms/saveOutcome';
+import { useInertBackground } from '@/lib/useInertBackground';
 import {
   PROTECTED_DELETE_MESSAGE,
   referencingOrganismNames,
@@ -86,13 +89,24 @@ export interface OrganismEditorLifecycleProps {
    * no-op during that window). The whole mode switch: no title change, no `mode` prop.
    */
   organism: Organism | null;
-  /** Close ✕, the back label and Escape all route here. Story 4.23 guards it. */
+  /**
+   * The unguarded close. The ✕, the back label and Escape reach it only through the modal's own
+   * unsaved-changes guard (Story 4.23), which sits IN FRONT of this callback; a caller invoking it
+   * directly (the Library's close after a successful delete, AC6) closes with no prompt.
+   */
   onClose(): void;
   /**
    * Fired once the exit transition has finished — the parent hook's cue to release `inert` and
    * restore focus (the `<UnsavedChangesDialog>` contract).
    */
   onExited?(): void;
+  /**
+   * Story 4.23, AC9/FD12: fired once per SUCCESSFUL write (not once per session) — the modal's own
+   * `saveOrganism` calls it right beside `onSaved`. Callers use it to clear state that outlives a
+   * single save (`<OrganismLibrary>` wires it to `clearEditorDeleteError`), never to persist
+   * anything: the modal's only side effect stays `organisms.save` (AR-2/AR-27).
+   */
+  onSaveSucceeded?(): void;
   /**
    * The write succeeded (Story 4.16). Amended 2026-09-22 (Task 11, AC3): the parent hook now only
    * STASHES the record — it does NOT close the dialog. The editor stays open so a later Save in
@@ -388,8 +402,10 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * draft per open is the `mounted` gate's doing (`<OrganismLibrary>` unmounts this modal after
  * every exit, so there is no reset effect and no `key` trick). The `useState` initialiser closes
  * over the `library` prop — legitimate because it runs once per mount and the `mounted` gate
- * guarantees a mount per open. The editor's own dirty scope (AR-33 — independent of the battle's)
- * arrives with Story 4.23, will live in this shell, and will diff this draft against its seed.
+ * guarantees a mount per open. The editor's own dirty scope (AR-33 — independent of the battle's,
+ * Story 4.23) lives in this shell: `draft` diffed against a `baseline` (never `seed`, which stays
+ * the FR-2.3 colour-warning comparison), guarding the three close controls behind
+ * `<EditorUnsavedChangesDialog>` (UX-DR16).
  *
  * Header layout follows the epics AC / UX-DR5 (`organism-editor-design.md:101-126`): Back on the
  * left, centred title, Save + Close on the right. ⚠️ The 2026-06-01 mockup revision
@@ -437,6 +453,7 @@ export default function OrganismEditorModal({
   onClose,
   onExited,
   onSaved,
+  onSaveSucceeded,
   library,
   battleSummaries,
   organisms,
@@ -447,8 +464,8 @@ export default function OrganismEditorModal({
   // `library` exactly once, at mount, for the M6 default-colour seed (FD9). One typed object that
   // grows a field per story (FD3), never one `useState` per field.
   //
-  // The seed is held, not recomputed: it is what Story 4.23 diffs the draft against (the factory's
-  // own contract — "the draft is diffed against its seed"), and it is what makes the FR-2.3 rule
+  // The seed is held, not recomputed: it is `baseline`'s own OPEN-TIME value (Story 4.23, FD2 —
+  // `baseline` below moves after a Save, `seed` never does), and it is what makes the FR-2.3 rule
   // "the default never warns" a token comparison rather than a flag (Story 4.9, FD2). An edit
   // session (Story 4.17) seeds from the record instead. That branch is IMPURE (it mints condition
   // ids through `crypto.randomUUID()`), which is fine for a lazy initialiser and would not be for
@@ -460,6 +477,12 @@ export default function OrganismEditorModal({
       : organismDraftFrom(organism, () => crypto.randomUUID()),
   );
   const [draft, setDraft] = useState<OrganismDraft>(seed);
+  // Story 4.23, FD2: the second cell the editor's own dirty diff compares against. `seed` stays
+  // untouched — it still feeds `ColorPickerField`'s `seedValue` (Story 4.9) — while `baseline`
+  // moves to the exact draft snapshot a SUCCESSFUL Save projected, so a later Back/Escape/✕ does
+  // not prompt about work that is already stored, and an edit typed AFTER that Save still counts
+  // as dirty (`saveOrganism`, below, never sets it from the draft at resolution time).
+  const [baseline, setBaseline] = useState<OrganismDraft>(seed);
   // Story 4.13 — the Save gate's own ephemeral UI state (RFC-005 Decision 1 / AR-33): the draft
   // object itself is NOT widened with validation state. `shellRef` scopes the focus effect's
   // lookup to this modal's own DOM (the dialog portals to `document.body`, and the house forbids
@@ -640,18 +663,45 @@ export default function OrganismEditorModal({
   // the same per-field validators anyway on every keystroke — a `useMemo` keyed on `draft` would
   // hit exactly as often as the draft changes.
   const errors = validateOrganismDraft(draft);
+  // Story 4.23, AC1, AC5 (AR-33): the editor's own dirty scope — a pure comparison against
+  // `baseline`, never a sticky flag, so a hand-revert reads clean again (FD1). Per render,
+  // unmemoised, the same reasoning `errors` above accepts.
+  const isDirty = isOrganismDraftDirty(baseline, draft);
+
+  // Story 4.23, AC9/FD12: the render-time "adjust state when a prop changes" pattern — NOT a
+  // `useEffect` (`react-hooks/set-state-in-effect`, `project-context.md`). A Library-published
+  // delete alert transitioning null → non-null clears any stale save outcome/error line, so
+  // "Organism saved" never stands beside "no longer exists". Comparing against a held previous
+  // value, not `useRef`, is what makes this a legal in-render `setState`: React re-renders
+  // immediately with the adjusted state before committing, rather than after a commit the way an
+  // effect would.
+  const [prevDeleteError, setPrevDeleteError] = useState(deleteError);
+  if (deleteError !== prevDeleteError) {
+    setPrevDeleteError(deleteError);
+    if (prevDeleteError === null && deleteError !== null) {
+      setSaveOutcome(null);
+      setSaveError(null);
+    }
+  }
 
   // Story 4.16, AC1/AC2/AC3/AC5, FD3/FD4/FD7, Task 11: the whole save, hoisted into a function
   // that reports its OUTCOME (the `BattlePage.tsx:750-848` shape, trimmed to this modal's needs)
   // — `handleSave` below stays the fire-and-forget entry point the Save `<Button>` has always
   // called.
-  const saveOrganism = useCallback(async (): Promise<void> => {
+  // Story 4.23, FD3/Task 5: reports its OUTCOME as a boolean — `true` only when the write actually
+  // resolved — so the confirmation's Save path (`handleConfirmExited`, below) can close the editor
+  // ONLY on success, mirroring `useLeaveGuard`'s "navigate only if the save succeeded" (Story 2.16
+  // forced decision 2). The gate refusal and a rejection both resolve `false`; `handleSave` stays
+  // the fire-and-forget entry point the header's Save `<Button>` has always called.
+  const saveOrganism = useCallback(async (): Promise<boolean> => {
     // `!open` (review 2026-09-22): the dialog stays mounted and interactive through the ~195 ms
     // exit fade after a CLEAN close (Back/Escape/✕ with nothing in flight), and a Save landing in
     // that window would start a write the close-lock (Task 12) cannot see — one that could resolve
     // after `onExited`, when the hook has nothing ahead to hand the record on to. Refusing here
-    // is what makes "no write resolves after the exit" true by construction, not by timing.
-    if (savingRef.current || !open) return;
+    // is what makes "no write resolves after the exit" true by construction, not by timing. The
+    // editor is still `open` at the moment the confirmation's own Save path runs this (FD3), so
+    // this guard passes for it.
+    if (savingRef.current || !open) return false;
     const first = errors[0];
     // Cleared at the START of every attempt, success or refusal — an identical message
     // re-rendered in place would not re-announce through `role="alert"`/`role="status"` (the
@@ -661,8 +711,12 @@ export default function OrganismEditorModal({
     if (first !== undefined) {
       setSaveAttempted(true);
       setFocusRequest((r) => ({ seq: (r?.seq ?? 0) + 1, target: first.target }));
-      return;
+      return false;
     }
+    // The snapshot this attempt is FOR — read once, here, never again after the `await` below
+    // (Story 4.23, FD2/Task 2): fields stay editable during the write, and an edit typed mid-write
+    // must still count as dirty against whatever baseline this attempt eventually projects.
+    const attemptedDraft = draft;
     savingRef.current = true;
     setIsSaving(true);
     let record: Organism | null = null;
@@ -673,7 +727,7 @@ export default function OrganismEditorModal({
       // id, so a later Save updates the organism this editor already created instead of minting a
       // sibling.
       const id = saveStamp?.id ?? crypto.randomUUID();
-      record = await projectOrganismForSave(draft, id);
+      record = await projectOrganismForSave(attemptedDraft, id);
       await organisms.save(record);
       // The stamp and the outcome are set BEFORE `finally` releases `savingRef` (review
       // 2026-09-22): the release must never precede the stamp, or a closure still holding
@@ -681,6 +735,10 @@ export default function OrganismEditorModal({
       // the one commit today, but the ordering should hold by construction, not by batching.
       // The stamp is set on the FIRST success only; every later pass already carries it.
       if (saveStamp === null) setSaveStamp({ id: record.id });
+      // Story 4.23, FD2: the baseline moves to the snapshot THIS attempt started from — never the
+      // draft read at resolution time (an anti-pattern the story names explicitly), which would
+      // silently swallow an edit typed while the write was in flight.
+      setBaseline(attemptedDraft);
       setSaveOutcome(saveOutcomeMessage(record));
     } catch (error) {
       setSaveError(saveFailureMessage(error, 'organism'));
@@ -701,28 +759,168 @@ export default function OrganismEditorModal({
     // dialog has exited; a route-level unmount of the whole Library mid-write is the one residual
     // (the write still lands; nothing reports it — `deferred-work.md`).
     if (record !== null) {
+      // Story 4.23, AC9/FD12: fired on every SUCCESSFUL write only — never on a refusal or a
+      // rejection, and never itself a repository call (the caller's own state, AR-2/AR-27). Out
+      // here beside `onSaved` for the same reason: a throw from the caller's callback must never
+      // turn a stored write into "could not be saved".
+      onSaveSucceeded?.();
       onSaved(record);
     }
-  }, [errors, draft, organisms, onSaved, saveStamp, open]);
+    return record !== null;
+  }, [errors, draft, organisms, onSaved, onSaveSucceeded, saveStamp, open]);
 
   const handleSave = useCallback(() => {
     void saveOrganism();
   }, [saveOrganism]);
 
-  // Story 4.16, AC3, Task 12 (owner's review decision, 2026-09-22, option (b)): Escape and the
-  // backdrop (unreachable under `fullScreen`, kept for documentation) both route through the
-  // dialog's `onClose`; the ✕ button calls it directly. One guarded handler, rather than checking
-  // `savingRef.current` twice. Back and — since Task 13 (second review's decision, option (b)) —
-  // the ✕ are ALSO `disabled={isSaving}`, so the two visible controls show the lock (Back wears
-  // `<SidebarFooter>`'s disabled trio, the ✕ MUI's disabled colour); for a click on either the
-  // `disabled` attribute is what stops it, and this guard is what remains for Escape and the
-  // backdrop, which `disabled` cannot reach. The lock lives HERE, not in the hook: `onClose` itself
-  // stays unguarded, so a caller who reaches it by another route (Story 4.23's guard will sit in
-  // front of it) inherits this lock only through these controls and Escape.
-  const handleRequestClose = useCallback(() => {
-    if (savingRef.current) return;
-    onClose();
-  }, [onClose]);
+  // Story 4.23: where focus is owed once the confirmation's exit transition has finished (FD7) —
+  // Back and ✕ resolve to a DOM lookup at restore time (never a captured element: WebKit does not
+  // focus a `<button>` on click), while Escape resolves to the specific element that held focus at
+  // keydown, captured because there is no selector for "whatever the user was in". A `null`
+  // element (nothing had focus, or it was outside `shellRef`) falls back to Back.
+  type CloseFocusIntent =
+    { kind: 'back' } | { kind: 'close' } | { kind: 'escape'; element: HTMLElement | null };
+  const closeFocusIntentRef = useRef<CloseFocusIntent | null>(null);
+  // Story 4.23, FD6: which outcome the confirmation settled on, read ONLY from its `onExited` — the
+  // three actions never act directly, so closing the confirmation and acting on it are always two
+  // separate commits (never stacked-unwinding, the Story 4.22 FD9 rule this confirmation is the
+  // second stacked dialog to follow).
+  const closeOutcomeRef = useRef<'keep' | 'discard' | 'save' | null>(null);
+  // The three-phase shape every stacked dialog in this app uses (`useLeaveGuard`'s template):
+  // `confirming` is the mounted window (open OR still fading), `confirmOpen` drives the fade alone.
+  const [confirming, setConfirming] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // FD11: the imperative escape hatch onto `<UsageIndicator>` — closing a panel left open by Tab
+  // (D1) before the confirmation mounts, so its document-capture Escape listener can never intercept
+  // the confirmation's own Escape and pull focus to a trigger behind the inert layer. Must not move
+  // focus itself (the ref's own contract): this is not the panel's own Escape path.
+  const usageIndicatorRef = useRef<UsageIndicatorHandle>(null);
+
+  // Called HERE, in the modal itself — the confirmation's PARENT — so this hook and the
+  // focus-restore effect below run as ITS parent effects, after MUI's own focus-trap move has
+  // already happened (the `useLeaveGuard` / `useOrganismEditorModal` placement rule). This call
+  // must stay ABOVE the focus-restore effect: React runs every cleanup for a commit before any
+  // setup, so on the commit that clears `confirming` this hook's cleanup (lifting `inert`) is
+  // guaranteed to run before that effect's `.focus()` call — a `.focus()` into a still-inert
+  // subtree is a silent no-op. The module-level claims registry (`useInertBackground.ts`, since
+  // Story 4.22) is what makes this nested window safe over the editor's own.
+  useInertBackground(confirming);
+
+  // Story 4.16, AC3, Task 12 (owner's review decision, 2026-09-22, option (b)); Story 4.23 (AC2,
+  // AC6, AC7, AC8, FD6-FD11): the ONE guarded close channel every user path (Back, ✕, Escape, the
+  // backdrop) now routes through. The order of checks is LOAD-BEARING:
+  //   1. `savingRef.current` — a write in flight (Task 12/13) locks every close path before
+  //      anything else is evaluated.
+  //   2. `!open` — the ~195 ms exit fade after a clean close is already under way; nothing here can
+  //      re-open a confirmation over a dialog that is on its way out.
+  //   3. `confirming` — the confirmation is already mounted (open or itself fading); a second
+  //      trigger while it is up must not stack a second window or restart its fade.
+  //   4. the GONE exemption (Story 4.22 fourth-pass decision (a) / FD8) or a CLEAN draft — both
+  //      close AT ONCE, with no dialog, through the unguarded `onClose` this prop already was.
+  //   5. otherwise: stash the focus-restore intent (FD7), close any open usage panel (FD11), and
+  //      open the confirmation — closing NOTHING yet.
+  const handleRequestClose = useCallback(
+    (intent: CloseFocusIntent) => {
+      if (savingRef.current) return;
+      if (!open) return;
+      if (confirming) return;
+      if (deleteError === ORGANISM_DELETE_GONE || !isDirty) {
+        onClose();
+        return;
+      }
+      closeFocusIntentRef.current = intent;
+      usageIndicatorRef.current?.closePanel();
+      setConfirming(true);
+      setConfirmOpen(true);
+    },
+    [onClose, open, confirming, deleteError, isDirty],
+  );
+
+  // Story 4.23, FD10: MUI's `useModal` does not check `event.repeat` itself, so a held Escape would
+  // otherwise re-run this handler on every auto-repeated keydown and re-open the confirmation each
+  // time its own fade started (the "at most once" requirement). `'repeat' in event` is the
+  // narrowing MUI's own `{}` `onClose` event type allows without a cast. The element captured here
+  // is `document.activeElement` at the moment OF the keydown/backdrop click — read before anything
+  // else runs, which is what makes it the FD7 "held focus at keydown" target, not a later guess.
+  const handleDialogClose = useCallback(
+    (event: object, reason: 'backdropClick' | 'escapeKeyDown') => {
+      if (reason === 'escapeKeyDown' && 'repeat' in event && event.repeat === true) return;
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      handleRequestClose({ kind: 'escape', element: active });
+    },
+    [handleRequestClose],
+  );
+
+  // Story 4.23, FD7: the focus restore, run as an effect keyed on `confirming` clearing — the same
+  // ordering `useLeaveGuard` and `useOrganismEditorModal` both use, and for the same reason: by the
+  // time this runs, `useInertBackground`'s cleanup (called ABOVE this effect, below) has released
+  // `inert` on the editor's own subtree. Focusing any earlier targets a node still inert, where
+  // `focus()` is a spec-mandated no-op.
+  useEffect(() => {
+    if (confirming) return;
+    const intent = closeFocusIntentRef.current;
+    if (intent === null) return;
+    closeFocusIntentRef.current = null;
+
+    // Do not steal focus the user has already placed somewhere real during the transition — the
+    // `useLeaveGuard` / `useOrganismEditorModal` "loose" rule.
+    const active = document.activeElement;
+    const focusIsLoose =
+      active === null || active === document.body || active.closest('[role="dialog"]') !== null;
+    if (!focusIsLoose) return;
+
+    const target =
+      intent.kind === 'back'
+        ? shellRef.current?.querySelector<HTMLElement>('[data-editor-back]')
+        : intent.kind === 'close'
+          ? shellRef.current?.querySelector<HTMLElement>('[data-editor-close]')
+          : intent.element !== null &&
+              document.contains(intent.element) &&
+              shellRef.current?.contains(intent.element)
+            ? intent.element
+            : shellRef.current?.querySelector<HTMLElement>('[data-editor-back]');
+    target?.focus();
+  }, [confirming]);
+
+  // Story 4.23, FD6: the confirmation's own exit handler — the ONE place any of its three outcomes
+  // takes effect, always AFTER its own fade has finished (never stacked in the same commit as the
+  // click, the FD9 rule Story 4.22 established for a dialog stacked over this editor).
+  const handleConfirmationExited = useCallback(() => {
+    setConfirming(false);
+    const outcome = closeOutcomeRef.current;
+    closeOutcomeRef.current = null;
+    // FD7 restores focus for Keep Editing (Escape, backdrop) only. Discard closes the editor and
+    // the parent hook owns focus from there; Save hands focus to the write's own rules (the
+    // invalid field, or Save once the write settles) — a restore to Back/✕ first would be a
+    // wasted move into a control about to close or lock.
+    if (outcome === 'discard' || outcome === 'save') closeFocusIntentRef.current = null;
+    if (outcome === 'discard') {
+      // FD6: no write. A create session that had already saved once still hands its last saved
+      // record on through the unchanged `pendingSavedRef` path (`useOrganismEditorModal`'s own).
+      onClose();
+    } else if (outcome === 'save') {
+      // FD3: the Save runs AFTER the confirmation has fully exited, into a live, non-inert editor —
+      // never under the dialog (`project-context.md`'s live-region rule). Close on success only.
+      void saveOrganism().then((ok) => {
+        if (ok) onClose();
+      });
+    }
+    // `'keep'` (or a stray `null`): nothing to do beyond the focus-restore effect above, which is
+    // already keyed on `confirming` clearing.
+  }, [onClose, saveOrganism]);
+
+  const handleConfirmKeepEditing = useCallback(() => {
+    closeOutcomeRef.current = 'keep';
+    setConfirmOpen(false);
+  }, []);
+  const handleConfirmDiscard = useCallback(() => {
+    closeOutcomeRef.current = 'discard';
+    setConfirmOpen(false);
+  }, []);
+  const handleConfirmSave = useCallback(() => {
+    closeOutcomeRef.current = 'save';
+    setConfirmOpen(false);
+  }, []);
 
   // Story 4.16, AC3: focus returns to Save once the write settles, success or failure — while
   // `isSaving` the button is `disabled`, which drops focus to `<body>` (the HTML focus-fixup
@@ -752,54 +950,57 @@ export default function OrganismEditorModal({
   }, [focusRequest]);
 
   return (
-    <Dialog
-      fullScreen
-      open={open}
-      // Fires for Escape — and for a backdrop click, which a fullScreen dialog cannot receive
-      // (the paper covers the backdrop). Routed through `handleRequestClose` (Task 12), which is a
-      // no-op while a write is in flight — `disableEscapeKeyDown` was removed from Modal in MUI v9
-      // (`<DeleteBattleDialog>` records the finding), so this guard is the only lock available.
-      // Still the one channel Story 4.23's unsaved-changes guard will insert itself in front of.
-      onClose={handleRequestClose}
-      onTransitionExited={onExited}
-      // The parent hook manages focus for every close path. MUI's default restore-to-trigger
-      // reads `document.activeElement` at OPEN time, and WebKit does not focus a `<button>` on
-      // click, so on that engine alone it faithfully restores focus to `<body>`: "the tab order
-      // restarts at the top of the document". Left on, it would also fire from the exit transition
-      // and silently overwrite the explicit move.
-      disableRestoreFocus
-      // The theme borders and rounds EVERY dialog paper (`theme.ts` MuiDialog.paper /
-      // MuiPaper.root) — right for a 440px confirmation, wrong for a full-viewport surface, which
-      // would otherwise paint a 1px `--gol-border` edge and `--gol-radius` corners against the
-      // window. Overridden here at the call site, never in the theme, per that file's own rule.
-      slotProps={{ paper: { sx: { border: 'none', borderRadius: 0 } } }}
-      aria-labelledby={TITLE_ID}
-    >
-      <Shell ref={shellRef}>
-        <EditorHeader>
-          <BackButton
-            type="button"
-            onClick={onClose}
-            disabled={isSaving}
-            // Task 12: locked while a write is in flight, the `BattlePage.tsx:1010`
-            // `backDisabled={isSaving}` idiom, wearing `<SidebarFooter>`'s disabled trio. This
-            // styled button carries no `transition` of its own (only the `:hover`/`:focus-visible`
-            // pseudo-classes do), so — unlike Save's MUI `Button` — there is no mid-fade axe trap
-            // to override here.
-            // Story 4.22: the focus-restore key after the record-gone alert, which disables the
-            // editor's Delete (`useOrganismDelete`'s `editor-back` restore intent). Back, not Save:
-            // a held Enter auto-repeats into the focused control after the confirmation's fade.
-            data-editor-back=""
-          >
-            {/* Decorative glyph; the accessible name must be exactly the label — "left arrow back
+    <>
+      <Dialog
+        fullScreen
+        open={open}
+        // Fires for Escape — and for a backdrop click, which a fullScreen dialog cannot receive
+        // (the paper covers the backdrop). Routed through `handleDialogClose` (Story 4.23, FD10),
+        // which ignores a repeat-carrying Escape and otherwise calls `handleRequestClose` with the
+        // element that held focus at the moment of the keydown/click (FD7) — `disableEscapeKeyDown`
+        // was removed from Modal in MUI v9 (`<DeleteBattleDialog>` records the finding), so this is
+        // the only place the lock (Task 12) and the unsaved-changes guard (Story 4.23) can sit for
+        // Escape and the backdrop.
+        onClose={handleDialogClose}
+        onTransitionExited={onExited}
+        // The parent hook manages focus for every close path. MUI's default restore-to-trigger
+        // reads `document.activeElement` at OPEN time, and WebKit does not focus a `<button>` on
+        // click, so on that engine alone it faithfully restores focus to `<body>`: "the tab order
+        // restarts at the top of the document". Left on, it would also fire from the exit transition
+        // and silently overwrite the explicit move.
+        disableRestoreFocus
+        // The theme borders and rounds EVERY dialog paper (`theme.ts` MuiDialog.paper /
+        // MuiPaper.root) — right for a 440px confirmation, wrong for a full-viewport surface, which
+        // would otherwise paint a 1px `--gol-border` edge and `--gol-radius` corners against the
+        // window. Overridden here at the call site, never in the theme, per that file's own rule.
+        slotProps={{ paper: { sx: { border: 'none', borderRadius: 0 } } }}
+        aria-labelledby={TITLE_ID}
+      >
+        <Shell ref={shellRef}>
+          <EditorHeader>
+            <BackButton
+              type="button"
+              onClick={() => handleRequestClose({ kind: 'back' })}
+              disabled={isSaving}
+              // Task 12: locked while a write is in flight, the `BattlePage.tsx:1010`
+              // `backDisabled={isSaving}` idiom, wearing `<SidebarFooter>`'s disabled trio. This
+              // styled button carries no `transition` of its own (only the `:hover`/`:focus-visible`
+              // pseudo-classes do), so — unlike Save's MUI `Button` — there is no mid-fade axe trap
+              // to override here.
+              // Story 4.22: the focus-restore key after the record-gone alert, which disables the
+              // editor's Delete (`useOrganismDelete`'s `editor-back` restore intent). Back, not Save:
+              // a held Enter auto-repeats into the focused control after the confirmation's fade.
+              data-editor-back=""
+            >
+              {/* Decorative glyph; the accessible name must be exactly the label — "left arrow back
                 to library" is noise. The house `←`, not the AC's `◄` ASCII stand-in (FD3). */}
-            <span aria-hidden="true">←</span> {backLabelFor(origin)}
-          </BackButton>
-          {/* A module constant, not `useId()`: one editor can exist at a time (it is a modal), so
+              <span aria-hidden="true">←</span> {backLabelFor(origin)}
+            </BackButton>
+            {/* A module constant, not `useId()`: one editor can exist at a time (it is a modal), so
               a second instance's id collision is not a reachable state. */}
-          <Title id={TITLE_ID}>Organism Editor</Title>
-          <Actions>
-            {/* Story 4.13's gate, Story 4.16's write, Task 11's stay-open amendment: `handleSave`
+            <Title id={TITLE_ID}>Organism Editor</Title>
+            <Actions>
+              {/* Story 4.13's gate, Story 4.16's write, Task 11's stay-open amendment: `handleSave`
                 runs `validateOrganismDraft` on click. An invalid draft is refused (errors shown,
                 focus moved, nothing closed, nothing written); a valid draft writes through
                 `organisms.save()` — success publishes the in-flow `SaveOutcomeLine` status and
@@ -807,17 +1008,17 @@ export default function OrganismEditorModal({
                 surfaces as the `SaveErrorLine` alert below. Either way the dialog stays open and
                 focus returns to this button once the write settles. `disabled` from the click
                 until the write settles, success or failure (AC2, AC3, FD8) — never at rest. */}
-            <Button
-              type="button"
-              variant="contained"
-              onClick={handleSave}
-              disabled={isSaving}
-              sx={SAVE_SX}
-              ref={saveButtonRef}
-            >
-              Save
-            </Button>
-            {/* Story 4.16, Task 13 (second review decision, owner's option (b), 2026-09-22):
+              <Button
+                type="button"
+                variant="contained"
+                onClick={handleSave}
+                disabled={isSaving}
+                sx={SAVE_SX}
+                ref={saveButtonRef}
+              >
+                Save
+              </Button>
+              {/* Story 4.16, Task 13 (second review decision, owner's option (b), 2026-09-22):
                 locked like Back while a write is in flight — the review found the ✕ exactly as
                 visible as Back, so a guard-only no-op (Task 12) left a live-looking button that
                 silently ignores the click. `disabled={isSaving}` here, plus the FD8
@@ -831,67 +1032,69 @@ export default function OrganismEditorModal({
                 rule out-specifies; no test measures the token, and SC 1.4.3 exempts disabled
                 controls). Unlike `BackButton`, this control has no border or background of its
                 own for that trio to touch. `handleRequestClose`'s guard stays for Escape and the
-                backdrop, which `disabled` cannot reach. */}
-            <IconButton
-              type="button"
-              aria-label="Close"
-              onClick={handleRequestClose}
-              disabled={isSaving}
-              sx={{ color: 'var(--gol-text-primary)', transition: 'none' }}
-            >
-              <span aria-hidden="true">✕</span>
-            </IconButton>
-          </Actions>
-        </EditorHeader>
-        {/* Story 4.16, AC3, FD5, Task 11: the in-flow outcome region — always mounted, between the
+                backdrop, which `disabled` cannot reach. `data-editor-close` is the Story 4.23 FD7
+                focus-restore key, the `data-editor-back` idiom above. */}
+              <IconButton
+                type="button"
+                aria-label="Close"
+                onClick={() => handleRequestClose({ kind: 'close' })}
+                disabled={isSaving}
+                data-editor-close=""
+                sx={{ color: 'var(--gol-text-primary)', transition: 'none' }}
+              >
+                <span aria-hidden="true">✕</span>
+              </IconButton>
+            </Actions>
+          </EditorHeader>
+          {/* Story 4.16, AC3, FD5, Task 11: the in-flow outcome region — always mounted, between the
             header and the body, beside `SaveErrorLine`. The child mounts with the sentence (the
             `ColorPickerField.tsx:380-390` idiom); cleared at the START of every attempt so a
             repeat success re-announces. Never both this and the alert line at once. */}
-        <div role="status" data-save-status>
-          {saveOutcome !== null && (
-            <SaveOutcomeLine data-save-outcome>{saveOutcome}</SaveOutcomeLine>
-          )}
-        </div>
-        {/* Story 4.16, AC5, FD7: a refused write, reported inside the editor beside the untouched
+          <div role="status" data-save-status>
+            {saveOutcome !== null && (
+              <SaveOutcomeLine data-save-outcome>{saveOutcome}</SaveOutcomeLine>
+            )}
+          </div>
+          {/* Story 4.16, AC5, FD7: a refused write, reported inside the editor beside the untouched
             draft. `role="alert"` (assertive, not `status`): a failed save IS an error, unlike the
             honest-but-not-yet-persisted notice this block replaces. Conditionally mounted and
             cleared at the START of every attempt (`saveOrganism`'s `setSaveError(null)`), so a
             repeat failure re-announces. */}
-        {saveError !== null && (
-          <SaveErrorLine role="alert" data-save-error>
-            {saveError}
-          </SaveErrorLine>
-        )}
-        {/* Story 4.22, FD12: a refused delete (or, review decision (b), a record found already
+          {saveError !== null && (
+            <SaveErrorLine role="alert" data-save-error>
+              {saveError}
+            </SaveErrorLine>
+          )}
+          {/* Story 4.22, FD12: a refused delete (or, review decision (b), a record found already
             deleted elsewhere), in the same idiom — conditionally mounted, so the Library's publish
             (after the stacked dialog's exit) inserts it into a LIVE editor. */}
-        {deleteError !== null && (
-          <SaveErrorLine role="alert" id={deleteErrorId} data-editor-delete-error="">
-            {deleteError}
-          </SaveErrorLine>
-        )}
-        <EditorBody>
-          <OrganismEditorLayout
-            basicInfo={
-              <>
-                <OrganismNameField
-                  value={draft.name}
-                  onChange={setName}
-                  showAllErrors={saveAttempted}
-                />
-                <ColorPickerField
-                  value={draft.colorToken}
-                  onChange={setColorToken}
-                  usersByToken={usersByToken}
-                  seedValue={seed.colorToken}
-                />
-                <DominanceField value={draft.dominance} onChange={setDominance} />
-                <AgingToggleField
-                  value={draft.agingEnabled}
-                  onChange={setAgingEnabled}
-                  colorToken={draft.colorToken}
-                />
-                {/* Story 4.22 (FD1 (a), FD10, FD11): the bottom of Column 1, edit sessions only.
+          {deleteError !== null && (
+            <SaveErrorLine role="alert" id={deleteErrorId} data-editor-delete-error="">
+              {deleteError}
+            </SaveErrorLine>
+          )}
+          <EditorBody>
+            <OrganismEditorLayout
+              basicInfo={
+                <>
+                  <OrganismNameField
+                    value={draft.name}
+                    onChange={setName}
+                    showAllErrors={saveAttempted}
+                  />
+                  <ColorPickerField
+                    value={draft.colorToken}
+                    onChange={setColorToken}
+                    usersByToken={usersByToken}
+                    seedValue={seed.colorToken}
+                  />
+                  <DominanceField value={draft.dominance} onChange={setDominance} />
+                  <AgingToggleField
+                    value={draft.agingEnabled}
+                    onChange={setAgingEnabled}
+                    colorToken={draft.colorToken}
+                  />
+                  {/* Story 4.22 (FD1 (a), FD10, FD11): the bottom of Column 1, edit sessions only.
                     `data-editor-delete-organism` is the focus-restore key after a stacked dialog
                     closes (FD8). Disabled while a save is in flight — a delete must not race the
                     write — for the protected default, whose reason renders beneath it, and while
@@ -900,69 +1103,85 @@ export default function OrganismEditorModal({
                     dismissed it. Disabled for the protected default or the gone record, the
                     button is described by its reason (FD6). A refusal (`ORGANISM_DELETE_FAILED`)
                     leaves it enabled — a retry is that alert's point. */}
-                {organism !== null && onRequestDelete !== undefined && (
-                  <>
-                    <DeleteOrganismButton
-                      type="button"
-                      data-editor-delete-organism=""
-                      disabled={isSaving || deleteProtected || deleteError === ORGANISM_DELETE_GONE}
-                      aria-describedby={
-                        deleteProtected
-                          ? protectedNoteId
-                          : deleteError === ORGANISM_DELETE_GONE
-                            ? deleteErrorId
-                            : undefined
-                      }
-                      onClick={() => onRequestDelete()}
-                    >
-                      Delete Organism
-                    </DeleteOrganismButton>
-                    {deleteProtected && (
-                      <ProtectedDeleteNote id={protectedNoteId}>
-                        {PROTECTED_DELETE_MESSAGE}
-                      </ProtectedDeleteNote>
-                    )}
-                  </>
-                )}
-              </>
-            }
-            rulesAction={
-              <AddRuleButton type="button" onClick={addRule} data-add-rule="header">
-                + Add Rule
-              </AddRuleButton>
-            }
-            rules={
-              <RulesEditor
-                rules={draft.survivalRules}
-                organisms={others}
-                onRulesChange={setSurvivalRules}
-                onAddRule={addRule}
-                showAllErrors={saveAttempted}
-              />
-            }
-            preview={
-              <PreviewPanel
-                colorToken={draft.colorToken}
-                agingEnabled={draft.agingEnabled}
-                colors={colors}
-                survivalRules={draft.survivalRules}
-              />
-            }
-          />
-        </EditorBody>
-        {/* Story 4.20, AC1: the editor's first footer, on every open, in both create and edit
+                  {organism !== null && onRequestDelete !== undefined && (
+                    <>
+                      <DeleteOrganismButton
+                        type="button"
+                        data-editor-delete-organism=""
+                        disabled={
+                          isSaving || deleteProtected || deleteError === ORGANISM_DELETE_GONE
+                        }
+                        aria-describedby={
+                          deleteProtected
+                            ? protectedNoteId
+                            : deleteError === ORGANISM_DELETE_GONE
+                              ? deleteErrorId
+                              : undefined
+                        }
+                        onClick={() => onRequestDelete()}
+                      >
+                        Delete Organism
+                      </DeleteOrganismButton>
+                      {deleteProtected && (
+                        <ProtectedDeleteNote id={protectedNoteId}>
+                          {PROTECTED_DELETE_MESSAGE}
+                        </ProtectedDeleteNote>
+                      )}
+                    </>
+                  )}
+                </>
+              }
+              rulesAction={
+                <AddRuleButton type="button" onClick={addRule} data-add-rule="header">
+                  + Add Rule
+                </AddRuleButton>
+              }
+              rules={
+                <RulesEditor
+                  rules={draft.survivalRules}
+                  organisms={others}
+                  onRulesChange={setSurvivalRules}
+                  onAddRule={addRule}
+                  showAllErrors={saveAttempted}
+                />
+              }
+              preview={
+                <PreviewPanel
+                  colorToken={draft.colorToken}
+                  agingEnabled={draft.agingEnabled}
+                  colors={colors}
+                  survivalRules={draft.survivalRules}
+                />
+              }
+            />
+          </EditorBody>
+          {/* Story 4.20, AC1: the editor's first footer, on every open, in both create and edit
             sessions (UX-DR6 — "persistent"). It holds the usage indicator and nothing else: Save
             stays in the header and the name stays out of it (FD1). The names are resolved through
             the display helpers (`usageBattleNames` / `referencingOrganismNames`), never raw — an
             `''` name parses for both schemas and would render as an empty `<li>` (FD10). */}
-        <EditorFooter>
-          <UsageIndicator
-            battleNames={usageBattleNames(usageEntries, battleSummaries)}
-            ruleCount={ruleCount}
-            referencingNames={referencingNames}
-          />
-        </EditorFooter>
-      </Shell>
-    </Dialog>
+          <EditorFooter>
+            <UsageIndicator
+              ref={usageIndicatorRef}
+              battleNames={usageBattleNames(usageEntries, battleSummaries)}
+              ruleCount={ruleCount}
+              referencingNames={referencingNames}
+            />
+          </EditorFooter>
+        </Shell>
+      </Dialog>
+      {/* Story 4.23: the unsaved-changes confirmation, STACKED over this still-mounted editor
+        (`confirming` outlives its own fade, the `useLeaveGuard` three-phase shape). Imported
+        statically above — this file is already inside the editor's own lazy chunk. */}
+      {confirming && (
+        <EditorUnsavedChangesDialog
+          open={confirmOpen}
+          onKeepEditing={handleConfirmKeepEditing}
+          onDiscard={handleConfirmDiscard}
+          onSave={handleConfirmSave}
+          onExited={handleConfirmationExited}
+        />
+      )}
+    </>
   );
 }

@@ -337,13 +337,14 @@ export function useOrganismEditorModal(
     }
   }, []);
 
-  // Close ✕, Back and Escape all land here. This callback is NOT itself guarded against an
-  // in-flight write — the Task 12/13 lock lives in the modal (Escape routes through its
-  // `handleRequestClose`; Back and ✕ are `disabled={isSaving}`), so it holds for the three user close
-  // paths and for nothing else that may one day reach `modalProps.onClose` directly (review
-  // 2026-09-22). Nothing else moves — no repository call, no state beyond the modal's own
-  // lifecycle; the unsaved-changes guard (Story 4.23) inserts itself in front of this callback
-  // later, and inherits the lock only through those three controls.
+  // Close ✕, Back and Escape all land here — but only once the modal's OWN guards have already
+  // decided the close is real. This callback is NOT itself guarded against an in-flight write (the
+  // Task 12/13 lock) or a dirty draft (Story 4.23's unsaved-changes guard): both live entirely
+  // inside `<OrganismEditorModal>`, in front of its three controls, and call this `onClose` prop
+  // only on a clean draft, the GONE exemption, Discard, or a successful confirmation-Save. Nothing
+  // else moves here — no repository call, no state beyond the modal's own lifecycle — so a caller
+  // that ever reached `modalProps.onClose` by some OTHER route (review 2026-09-22) would still
+  // bypass both guards, exactly as it always could.
   const handleClose = useCallback(() => setDialogOpen(false), []);
 
   // Story 4.16, FD4. Amended 2026-09-22 (Task 11, AC3): the editor stays open through a save, so

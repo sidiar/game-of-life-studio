@@ -468,10 +468,14 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
         : editorMounted && editorOpen && !gateMounted,
     [editorMounted, editorOpen, gateMounted],
   );
-  // ⚠️ The editor-origin close after a successful delete. `modalProps.onClose` is the channel
-  // Story 4.23's unsaved-changes guard will sit in front of — and this close must NOT prompt
-  // "discard changes?": the organism is gone, there is nothing left to save the draft into. When
-  // 4.23 lands, this call site keeps a direct, unguarded close (`deferred-work.md` records it).
+  // ⚠️ The editor-origin close after a successful delete. `modalProps.onClose` is the channel the
+  // modal's OWN unsaved-changes guard (Story 4.23) sits in front of, for its own three controls —
+  // Back, ✕ and Escape. This call site stays unguarded, and here is why: the organism is gone, so
+  // there is nothing left to save the dirty draft into, and "discard changes?" would be asking about
+  // a write that can no longer land anywhere. It holds by construction, not by a check added here —
+  // the guard lives in `<OrganismEditorModal>`, in front of its own controls, never in front of a
+  // caller reaching `onClose` directly (`OrganismLibrary.test.tsx`'s AC6 test pins a DIRTY draft
+  // through this exact path).
   const { onClose: closeEditor } = modalProps;
   const {
     requestDelete,
@@ -482,6 +486,7 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
     deleteError,
     editorDeleteError,
     onEditorExited: onDeleteEditorExited,
+    clearEditorDeleteError,
   } = useOrganismDelete({
     organisms,
     battles,
@@ -711,6 +716,7 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
           organisms={organisms}
           onRequestDelete={onEditorRequestDelete}
           deleteError={editorDeleteError}
+          onSaveSucceeded={clearEditorDeleteError}
         />
       )}
       {/* Story 4.17: the in-use gate, mounted on ITS window (the hook's `gateMounted`), for the
