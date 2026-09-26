@@ -4,7 +4,7 @@ baseline_commit: d61aec5e76ad0ef1e1e215bde4c8da434582c7c1
 
 # Story 4.24: Edit Organism from Battle
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -317,6 +317,69 @@ Back / ✕ / Escape returning to the entry context (`organism-editor-design.md` 
 - [x] **Task 9: Gate.** Run `npm run ci:dev` without piping it (Chromium e2e only, never the
       four-browser `ci` locally). Handle any bundle baseline refresh per AC12.
 
+### Review Findings
+
+Review 2026-09-26 (Fable, three parallel layers: Blind Hunter / Edge Case Hunter / Acceptance
+Auditor, full mode against this story file).
+
+- [ ] [Review][Decision] **The gate fires with circular copy when the only battle using the
+      organism is the open battle itself.** On `/battle/new`, paint the seeded organism (used in no
+      saved battle) and press its ✎: the gate reads "Used in 1 Battle. Editing it will affect all
+      Battles that use it. To make a variant for this Battle only, clone it in the Organism Library
+      and select the clone here." — but the one battle it "affects" is the battle the user is
+      already editing, so the warning gates nothing and the clone advice is circular. The behaviour
+      follows AC3/AC5 as written (the open battle counts; N ≥ 1 gates), so this is shipped-as-spec'd
+      and sharpens Question 2 (FD3 copy) rather than contradicting an AC. Options:
+      **(a)** keep as shipped — counting stays uniform and every placed-organism edit gets a gate;
+      **(b)** special-case the sentence when `battleNames` is exactly the open battle's own entry
+      (e.g. "used only in this Battle"), keeping the gate;
+      **(c)** treat sole-open-battle usage like N = 0 and open the editor directly — diverges from
+      AC5's "counting the open battle" and needs its own AC wording.
+- [x] [Review][Patch] The gate's usage panel is top-clipped by the Dialog Paper once the battle
+      list outgrows the small gate dialog — `overflowY: 'visible'` was set on `DialogContent` only,
+      while MUI's Paper keeps `overflowY: 'auto'`, and the panel opens UPWARD (`bottom: 150%`), so
+      names above the Paper's top edge are unreachable (the UsageIndicator's own recorded
+      clipped-top class, one container out) [apps/web/components/organisms/OrganismInUseDialog.tsx]
+- [x] [Review][Patch] The ✎ renders on an unresolved "Unknown organism" row and its press silently
+      no-ops after wiping the shared alert slot — withhold the pencil when
+      `organism.unresolved` (no record to edit; the NFR-4.1 dead-affordance rule the degraded
+      branch already follows) [apps/web/components/battle/editor/OrganismRoster.tsx:576]
+- [x] [Review][Patch] The pencil handler's blanket `catch {}` misattributes every non-repository
+      throw to the usage-read refusal and swallows the error — narrow the catch to the
+      `battles.list()` await (the export path's own shape), so a compute-stage bug surfaces on the
+      console instead of wearing the refusal copy [apps/web/components/battle/BattlePage.tsx:1127]
+- [x] [Review][Patch] The gate and the editor footer can order the "Targeted by [M]" referencing
+      names differently — the footer builds its rule index from the SORTED `library` prop, the two
+      gate callers built theirs from the unsorted loaded list; same N and M, different name order
+      in the same flow — build the gate's index over the sorted list
+      [apps/web/components/organisms/OrganismLibrary.tsx:529, apps/web/components/battle/BattlePage.tsx:1113]
+- [x] [Review][Patch] The page-level adoption test asserts the new name but not the new colour,
+      though Task 7 claims both ("the roster row shows the new name and colour") — the chip half of
+      the overlay adoption was pinned only in the Chromium e2e
+      [apps/web/components/battle/BattlePage.editOrganism.test.tsx:207]
+- [x] [Review][Patch] Stale two-member invariant comment on the shared alert slot ("The two cannot
+      both be non-null…") — unamended for the third member the same hunk adds
+      [apps/web/components/battle/BattlePage.tsx:1399]
+- [x] [Review][Defer] The gate's open-battle snapshot can be stale if the page changes during the
+      pencil's fetch window (`battleName`/`persistedId`/`grid` are click-time closures; the page is
+      not inert until a window mounts) — unreachable at localStorage speed; the sibling of the
+      dev-recorded Export/Back race, owned by the same AR-2 API-repository story — deferred,
+      recorded in deferred-work.md
+- [x] [Review][Defer] The `savedOrganisms` overlay is never cleared, so any future
+      `organismsResource.reload()` on this page would have session edits silently overwrite the
+      freshly loaded truth by id — latent until something reloads (Story 5.11 touches this
+      neighbourhood) — deferred, recorded in deferred-work.md
+- [x] [Review][Defer] The gate's dialog title and the disclosure trigger carry the identical
+      accessible name ("Used in N Battles") — a screen reader hears the same name for the dialog
+      and a button inside it, and every test needs `.MuiDialogActions-root` scoping to
+      disambiguate — deferred to the Epic 4 UX reconciliation, recorded in deferred-work.md
+- [x] [Review][Defer] `origin='library'` with `onCloneAndEdit` undefined renders the PRD's clone
+      question with no Clone & Edit button — representable but unreachable through the hook today;
+      copy and capability are not coupled — deferred, recorded in deferred-work.md
+- [x] [Review][Defer] The pencil and Export/Back guards are asymmetric during the fetch window —
+      already recorded by this story's own deferred-work entry ("The pencil press is not locked
+      against a concurrent Export / Back"), no second entry added — deferred, pre-recorded
+
 ## Dev Notes
 
 ### Forced decisions (defaults written in; follow them unless the owner overrides)
@@ -617,6 +680,12 @@ Modified:
   two-button in-use gate over `<BattlePage>`; expandable usage in both gate variants; live
   open-battle usage in gate and footer; saved-organism overlay adoption. `ci:dev` green. Status →
   review.
+- 2026-09-26: Code review (Fable, full mode, three parallel layers). 6 patches applied (gate
+  Paper overflow, no pencil on unresolved rows, catch narrowed to `battles.list()`, gate rule
+  index over the sorted library, adoption test's colour half, three-member slot comment); 5
+  deferred (4 recorded in `deferred-work.md`, 1 pre-recorded by the dev); 3 dismissed; 1 decision
+  left open for Sidiar (circular gate copy when the sole using battle is the open one — see
+  Review Findings). Status → in-progress pending that decision.
 
 Proposed lane gate: none   # 4.24 needs nothing from lane 5; 5.11 may touch <BattlePage>'s library-load path (textual overlap only, no dependency either way)
 

@@ -536,24 +536,28 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
   // (Story 4.20, AC5 / FD8), so this warning, the editor footer and the delete block stay on ONE
   // derivation. Story 4.24 (AC6): the gate now receives the RESOLVED usage — names, M, referencing
   // names — so it can render the footer's own disclosure; this is the footer's derivation, over the
-  // footer's inputs (`summaries`, the rule index, the loaded library). No `openBattle`: the Library
-  // has no live grid, so it passes none and its answers are unchanged.
+  // footer's inputs (`summaries`, the rule index, the SORTED library — the modal builds its own
+  // index from the sorted `library` prop below, and `referencingOrganismIds` dedupes in input
+  // order, so an index built over the unsorted loaded list would show the gate's "Targeted by"
+  // names in a different order from the footer's; review 2026-09-26). No `openBattle`: the
+  // Library has no live grid, so it passes none and its answers are unchanged.
   //
   // Bails while the delete window is open (Story 4.21 code review; the hook's authority).
   const onRequestEdit = useCallback(
     (organism: Organism) => {
       if (isDeleteWindowActive()) return;
+      const sortedLibrary = sortLibrary(loadedOrganisms);
       requestEdit(
         organism,
         resolveOrganismGateUsage(organism.id, {
           usageIndex: usage,
-          ruleIndex,
+          ruleIndex: buildRuleReferenceIndex(sortedLibrary),
           summaries,
-          library: loadedOrganisms,
+          library: sortedLibrary,
         }),
       );
     },
-    [isDeleteWindowActive, requestEdit, usage, ruleIndex, summaries, loadedOrganisms],
+    [isDeleteWindowActive, requestEdit, usage, summaries, loadedOrganisms],
   );
 
   // Folded at render, exactly as BattleGallery folds seedStatus against its own load state

@@ -1103,7 +1103,18 @@ export default function BattlePage({
       setEditOrganismError(null);
       void (async () => {
         try {
-          const summaries = await repositories.battles.list();
+          // The refusal copy covers exactly the read it names: only `battles.list()` may resolve
+          // to EDIT_USAGE_FAILURE (the export path's catch-around-the-repository-call shape). A
+          // throw from the compute stage below is a programming error, not "couldn't check" — it
+          // propagates as an unhandled rejection so the console (and the e2e clean-console gate)
+          // sees the real failure instead of a misattributed refusal (review 2026-09-26).
+          let summaries: readonly BattleSummary[];
+          try {
+            summaries = await repositories.battles.list();
+          } catch {
+            if (exportMountedRef.current) setEditOrganismError(EDIT_USAGE_FAILURE);
+            return;
+          }
           if (!exportMountedRef.current) return;
           const organism = organisms.find((entry) => entry.id === organismId);
           if (organism === undefined) return;
@@ -1114,18 +1125,22 @@ export default function BattlePage({
               .perOrganism.filter((entry) => entry.count > 0)
               .map((entry) => entry.organismId),
           };
+          // ⚠️ The SORTED list, not `organisms`: the editor footer builds its own rule index from
+          // the sorted `library` prop (`editorLibrary` below), and `referencingOrganismIds`
+          // dedupes in input order — an index built over the unsorted loaded list would show the
+          // gate's "Targeted by [M]" names in a different order from the footer's in the same
+          // gate → Edit Anyway → footer flow (review 2026-09-26; AC6 "the footer's derivations").
+          const sortedLibrary = sortLibrary(organisms);
           const usage = resolveOrganismGateUsage(organismId, {
             usageIndex: buildUsageIndex(summaries),
-            ruleIndex: buildRuleReferenceIndex(organisms),
+            ruleIndex: buildRuleReferenceIndex(sortedLibrary),
             summaries,
-            library: organisms,
+            library: sortedLibrary,
             openBattle,
           });
           setEditSummaries(summaries);
           setEditOpenBattle(openBattle);
           requestEdit(organism, usage);
-        } catch {
-          if (exportMountedRef.current) setEditOrganismError(EDIT_USAGE_FAILURE);
         } finally {
           editPendingRef.current = false;
         }
@@ -1398,9 +1413,10 @@ export default function BattlePage({
           onSave={handleSave}
           isSaving={isSaving}
           /* Story 5.6 (FD9): shares ONE `role="alert"` slot with the save failure rather than
-             adding a second surface. The two cannot both be non-null in practice (a save attempt
-             clears `exportError` and `handleExport` clears both), and if they ever were, the save
-             message wins — it is the more actionable one. */
+             adding a second surface. Story 4.24 adds the third member. No two can be non-null in
+             practice — every writer to the slot (save, export, the pencil) clears all three
+             before writing — and if they ever were, the save message wins: it is the most
+             actionable one. */
           saveError={saveError ?? exportError ?? editOrganismError}
           /* Story 2.16 (FR-7.10, spec §3.3): the ONLY new prop on this interface. The guard itself
              runs here — `<BattleEditorView>` forwards the press and interprets nothing. */

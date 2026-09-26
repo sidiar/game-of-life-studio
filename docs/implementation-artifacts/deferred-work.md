@@ -3581,3 +3581,36 @@ revisit open.
   mount its own dialog and then have the gate stack over it. Unreachable by a human at localStorage
   speed; it becomes reachable behind the AR-2 seam when an API repository lands, which is the story
   that owns a page-wide "one window at a time" latch.
+
+## Deferred from: code review of 4-24-edit-organism-from-battle (2026-09-26)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+
+- **The gate's open-battle snapshot can be stale if the page changes during the pencil's fetch
+  window.** `battleName`, `persistedId` and `rosterIds` are click-time closure values, `summaries`
+  is post-await, and the page is NOT inert until `requestEdit` mounts a window — a rename, save or
+  paint landing during the await produces a gate whose title/names disagree with the page behind
+  it. The stale-snapshot sibling of the entry above ("not locked against a concurrent Export /
+  Back"): unreachable by a human at localStorage speed, real behind the AR-2 seam, owned by the
+  same API-repository story (a page-wide latch, or snapshot-at-mount).
+- **The `savedOrganisms` overlay is never cleared and would mask any future library reload.** If
+  anything ever calls `organismsResource.reload()` on `<BattlePage>`, records edited earlier in the
+  session silently overwrite the freshly loaded truth by id (`applySavedOrganisms` replaces
+  loaded-by-id unconditionally). Latent today — nothing re-lists the library while the page is
+  mounted (that absence is FD5's own premise) — but Story 5.11 touches the library-load path near
+  `organismsResource`, so whichever story first adds a reload must also clear (or reconcile) the
+  overlay in the same change.
+- **The gate's dialog title and its disclosure trigger carry the identical accessible name.**
+  `DialogTitle` renders `battleCountLabel(n)` ("Used in 2 Battles") and the `<UsageIndicator>`
+  trigger button is named the same string, so a screen-reader user hears the same name for the
+  dialog and for a button inside it, and every test disambiguates via `.MuiDialogActions-root`
+  scoping. Harmless to axe; confusing to ears. A distinct trigger phrasing (or an `aria-label`
+  variant on the indicator for the gate context) belongs to the Epic 4 UX reconciliation — the
+  indicator is shared with the editor footer, where no clash exists.
+- **`origin='library'` with `onCloneAndEdit` undefined renders the PRD's clone question with no
+  Clone & Edit button.** `cloneable = origin === 'library' && onCloneAndEdit !== undefined`
+  withholds the button, but the body copy branches on `origin` alone, so that combination asks
+  "Clone this organism first…?" with no way to say yes. Unreachable through `useOrganismEditorModal`
+  today (its `gateProps` always supplies the handler); the prop went optional in Story 4.24 and
+  nothing couples copy to capability. Pick it up if the dialog ever gains a second library-side
+  caller.

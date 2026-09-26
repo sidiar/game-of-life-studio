@@ -384,6 +384,19 @@ describe('OrganismRoster — the edit pencil (Story 4.24, FR-3.3)', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
+  // Review 2026-09-26: an "Unknown organism" row has no record behind it, so a pencil there is
+  // the NFR-4.1 dead affordance — the page's handler would find nothing and silently no-op.
+  it('renders no pencil on an unresolved row, while resolved rows keep theirs', () => {
+    renderRoster({
+      onEditOrganism: () => {},
+      roster: [...ROSTER, organism({ id: 'org-gone', name: 'Unknown organism', unresolved: true })],
+    });
+
+    expect(screen.getByRole('button', { name: 'Unknown organism' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Unknown organism' })).toBeNull();
+    expect(document.querySelectorAll('[data-edit-organism-id]')).toHaveLength(ROSTER.length);
+  });
+
   it('has no axe violations with pencils rendered', async () => {
     const { container } = renderRoster({ onEditOrganism: () => {} });
 

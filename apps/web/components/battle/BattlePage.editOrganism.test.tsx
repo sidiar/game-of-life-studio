@@ -206,6 +206,18 @@ describe('BattlePage — edit organism from battle (Story 4.24)', () => {
     const { container } = await openSkirmish(repositories);
     expect(listOrganisms).toHaveBeenCalledTimes(1);
 
+    // Review 2026-09-26 (Task 7: "the roster row shows the new name AND colour"): the chip is the
+    // inline `background` on the row's decorative span — `displayColor` resolves tokens to
+    // concrete strings, so the adoption's colour half is assertable here, not only in the e2e.
+    const chipBackground = (rowName: string) => {
+      const chip = screen
+        .getByRole('button', { name: rowName })
+        .querySelector<HTMLElement>('span[aria-hidden="true"]');
+      if (chip === null) throw new Error(`no chip on row ${rowName}`);
+      return chip.style.background;
+    };
+    const chipBefore = chipBackground('Aggressive Colonizer');
+
     await user.click(pencil('Aggressive Colonizer'));
     const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
     await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
@@ -213,6 +225,13 @@ describe('BattlePage — edit organism from battle (Story 4.24)', () => {
     const name = within(editor).getByRole('textbox', { name: 'Organism Name' });
     await user.clear(name);
     await user.type(name, 'Renamed Colonizer');
+    await user.click(within(editor).getByRole('button', { name: 'Change Color' }));
+    await user.click(
+      within(within(editor).getByRole('radiogroup', { name: 'Organism Color' })).getByRole(
+        'radio',
+        { name: 'Amber' },
+      ),
+    );
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     await within(editor).findByText(/saved/i);
 
@@ -227,12 +246,15 @@ describe('BattlePage — edit organism from battle (Story 4.24)', () => {
       'data-edit-organism-id',
       'mock-aggressive-colonizer',
     );
+    // The chip half of the adoption (AC8): the row repainted with the saved colour.
+    expect(chipBackground('Renamed Colonizer')).not.toBe(chipBefore);
     expect(dirtyValue(container)).toBe('false');
     expect(saveBattle).not.toHaveBeenCalled();
     expect(listOrganisms).toHaveBeenCalledTimes(1);
     // The organism was written; the battle record was not touched.
     const stored = await repositories.organisms.load('mock-aggressive-colonizer');
     expect(stored?.name).toBe('Renamed Colonizer');
+    expect(stored?.colorToken).toBe('amber');
     // Roster ORDER is unchanged — only the edited row's label moved (no ref shift).
     const rowIds = [...document.querySelectorAll('[data-edit-organism-id]')].map((el) =>
       el.getAttribute('data-edit-organism-id'),

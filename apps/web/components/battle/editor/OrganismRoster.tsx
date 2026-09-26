@@ -572,8 +572,14 @@ export default function OrganismRoster({
                     {/* Story 4.24: a SIBLING of `<Row>`, never nested in it. The glyph is
                         decorative; the accessible name says what and whom. `data-edit-organism-id`
                         is the focus-restore anchor `useOrganismEditorModal` looks up once the
-                        editor has exited. */}
-                    {onEditOrganism !== undefined && (
+                        editor has exited.
+
+                        No pencil on an `unresolved` row (review 2026-09-26): there is no record
+                        behind an "Unknown organism" id to edit — the page's handler would find
+                        nothing and silently no-op — and a control that can do nothing is the
+                        dead affordance NFR-4.1 forbids, the same rule the degraded branch above
+                        already applies to the whole roster. */}
+                    {onEditOrganism !== undefined && organism.unresolved !== true && (
                       <EditCell>
                         <EditButton
                           type="button"

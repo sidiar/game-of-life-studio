@@ -146,7 +146,14 @@ export default function OrganismInUseDialog({
       // Left on, it would also fire from the exit transition and silently overwrite the explicit
       // move — or, after Edit Anyway, fight the editor's own focus trap.
       disableRestoreFocus
-      slotProps={{ paper: { sx: { maxWidth: PAPER_MAX_WIDTH } } }}
+      // `overflowY: 'visible'` on the PAPER too, not only the content box below: MUI's Paper
+      // defaults to `overflowY: 'auto'`, and the disclosure's panel opens UPWARD (`bottom: 150%`)
+      // past the top of this short dialog — overflow above a scroll container's block-start edge
+      // is unreachable by scrolling, so without this the first battle names are clipped off the
+      // Paper's top once the list outgrows it (the UsageIndicator's own recorded clipped-top
+      // class, one container out; review 2026-09-26). The gate's own content is short and fixed,
+      // so the Paper loses nothing by not scrolling.
+      slotProps={{ paper: { sx: { maxWidth: PAPER_MAX_WIDTH, overflowY: 'visible' } } }}
       aria-labelledby={TITLE_ID}
       aria-describedby={BODY_ID}
     >
