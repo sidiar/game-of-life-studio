@@ -6,7 +6,12 @@ import {
   type Battle,
   type Organism,
 } from '@gol/domain';
-import { CorruptDataError, STORAGE_KEYS, storageBytesOf } from '@gol/persistence';
+import {
+  CorruptDataError,
+  STORAGE_KEYS,
+  storageBytesOf,
+  type WorkspaceSnapshot,
+} from '@gol/persistence';
 import { createFakeRepositories } from './fakeRepositories';
 
 const PRESET = { cols: 50, rows: 30 } as const;
@@ -385,5 +390,31 @@ describe('snapshotWorkspace / restoreWorkspace (mirrors the real pair)', () => {
 
     expect(await repos.isFreshWorkspace()).toBe(true);
     expect(await repos.organisms.list()).toEqual([]);
+  });
+
+  // The brand is compile-time only and the real implementation shares it, so its raw-strings
+  // snapshot typechecks in here; the guard has to fire before anything is cleared.
+  it('rejects a snapshot this fake did not capture, before clearing anything', async () => {
+    const repos = createFakeRepositories({ organisms: [makeOrganism('kept')] });
+    const foreign = { battles: '{}', organisms: '{}', schema: null };
+
+    await expect(
+      repos.restoreWorkspace(foreign as unknown as WorkspaceSnapshot),
+    ).rejects.toBeInstanceOf(TypeError);
+
+    expect(await repos.organisms.exists('kept')).toBe(true);
+  });
+
+  it('detaches the capture from a raw-seeded record the caller still holds', async () => {
+    // `raw` inserts by reference (its point is bypassing validation, not sharing state), so the
+    // capture must copy — the real store's captured strings cannot mutate under the caller.
+    const record = JSON.parse(JSON.stringify(makeOrganism('raw-org'))) as Record<string, unknown>;
+    const repos = createFakeRepositories({ raw: { organisms: { 'raw-org': record } } });
+    const snapshot = await repos.snapshotWorkspace();
+
+    record['name'] = 'mutated after capture';
+    await repos.restoreWorkspace(snapshot);
+
+    expect((await repos.organisms.load('raw-org'))?.name).toBe('Test Organism');
   });
 });

@@ -281,13 +281,18 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
 
     // Mirrors the real pair's contract: lossless, settings excluded, and freshness (the `stamped`
     // flag, this fake's `gol:schema`) restored too — a rollback over a fresh store leaves it fresh.
-    // Shallow Map copies suffice: every write here REPLACES a record (`set` / `clear`), none
-    // mutates one in place, so the captured values cannot change under the snapshot. Raw
-    // (corrupt) records ride along untouched, as the real store's raw strings do.
+    // Every record is `roundTrip`ed into the copy: repository writes only REPLACE records, but a
+    // `raw`-seeded record enters by the caller's reference, and an aliased capture would mutate
+    // under them — the real store's captured strings cannot.
     async snapshotWorkspace() {
+      const detach = (store: ReadonlyMap<string, unknown>): ReadonlyMap<string, unknown> => {
+        const copy = new Map<string, unknown>();
+        for (const [id, record] of store) copy.set(id, roundTrip(record));
+        return copy;
+      };
       const data: FakeWorkspaceData = {
-        battles: new Map(battleStore),
-        organisms: new Map(organismStore),
+        battles: detach(battleStore),
+        organisms: detach(organismStore),
         stamped,
       };
       return data as unknown as WorkspaceSnapshot;
@@ -295,6 +300,17 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
 
     async restoreWorkspace(snapshot) {
       const data = snapshot as unknown as FakeWorkspaceData;
+      // The brand is compile-time only and every `AppRepositories` shares it, so a snapshot from
+      // the REAL implementation (raw strings) typechecks in here. Fail loudly before clearing
+      // anything: iterating a string yields garbage single-character "records", and a captured
+      // absent key (`null`) throws a bare TypeError halfway through.
+      if (
+        !(data.battles instanceof Map) ||
+        !(data.organisms instanceof Map) ||
+        typeof data.stamped !== 'boolean'
+      ) {
+        throw new TypeError('restoreWorkspace: the snapshot was not captured by this fake');
+      }
       battleStore.clear();
       for (const [id, record] of data.battles) battleStore.set(id, record);
       organismStore.clear();

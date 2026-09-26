@@ -131,9 +131,11 @@ function assertReferentialClosure(envelope: WorkspaceExport): void {
  * Steps 5-7: the destructive whole-workspace replace (M8), guarded by a snapshot.
  *
  * The snapshot is `AppRepositories.snapshotWorkspace()` — opaque and lossless — and the rollback is
- * its `restoreWorkspace()`, so a `'write-failed'` workspace is byte-identical to its pre-import
- * state in every shape: a per-record-corrupt entry, a whole-collection-corrupt key, an absent key
- * and a still-fresh (unstamped) store all come back exactly as they were. Rebuilding the rollback
+ * its `restoreWorkspace()`, so a `'write-failed'` workspace is byte-identical to the state the
+ * capture took (the pre-import store, after any at-rest migration the capture's format check owed
+ * it — see `snapshotWorkspace()`'s JSDoc) in every shape: a per-record-corrupt entry, a
+ * whole-collection-corrupt key, an absent key and a still-fresh (unstamped) store all come back
+ * exactly as they were. Rebuilding the rollback
  * from `listFull()` / `list()` + `replaceAll()` could promise none of that (Story 5.8 owner
  * ruling, recorded in `deferred-work.md`).
  *

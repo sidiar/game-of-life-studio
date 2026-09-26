@@ -106,8 +106,13 @@ export interface AppRepositories {
    * or stamp keys the store never held — so a rollback through them was "equivalent", not
    * identical. What this captures is restored exactly, an absent key as absent.
    *
-   * Throws (before anything is written) only when this build may not write the store at all — a
-   * newer at-rest format (`NewerFormatVersionError`) or an unreadable stamp (`CorruptDataError`).
+   * The capture runs the store's standard at-rest format check first, so it throws — before the
+   * IMPORT has written anything — when this build may not write the store at all: a newer at-rest
+   * format (`NewerFormatVersionError`) or an unreadable stamp (`CorruptDataError`). On an OLDER
+   * at-rest format that same check migrates the store in place before the capture, exactly as any
+   * read or write would (AR-11), and that write-back can fail on its own terms (e.g.
+   * `QuotaExceededError`) — so "pre-import" always means "after any pending at-rest migration",
+   * the shape every later read would have seen anyway.
    */
   snapshotWorkspace(): Promise<WorkspaceSnapshot>;
   /**

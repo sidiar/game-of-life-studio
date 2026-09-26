@@ -329,7 +329,10 @@ export type RawDataKeys = Readonly<Record<'battles' | 'organisms' | 'schema', st
  * The lossless capture behind `AppRepositories.snapshotWorkspace()`. The format check runs FIRST,
  * so a store this build may not write (a newer at-rest format) is refused before the import
  * touches anything — every data write would refuse it anyway. On a current store the check reads
- * only the stamp, so a corrupt collection is captured as its raw bytes rather than failing.
+ * only the stamp, so a corrupt collection is captured as its raw bytes rather than failing. On an
+ * OLDER format the check migrates and rewrites the store before the capture, as any read would
+ * (AR-11): the snapshot holds the migrated bytes — the store's next shape either way — and a
+ * quota failure inside that write-back escapes from here too.
  */
 export function captureDataKeys(): RawDataKeys {
   ensureCurrentAtRestFormat();
@@ -355,7 +358,19 @@ export function restoreDataKeys(snapshot: RawDataKeys): void {
     [STORAGE_KEYS.battles, snapshot.battles],
     [STORAGE_KEYS.schema, snapshot.schema],
   ] as const;
-  for (const [key] of ordered) localStorage.removeItem(key);
+  // The `WorkspaceSnapshot` brand is compile-time only and every `AppRepositories` shares it, so a
+  // snapshot captured by ANOTHER implementation (`@gol/test-utils`' Maps-and-flag fake) typechecks
+  // into this restore. Fail loudly BEFORE the remove phase: past it, a foreign value would not
+  // error but destroy — `setItem` coerces a Map to the string "[object Map]" over all three keys.
+  for (const [key, original] of ordered) {
+    if (original !== null && typeof original !== 'string') {
+      throw new TypeError(`restoreWorkspace: the snapshot's "${key}" is not this store's capture`);
+    }
+  }
+  // Stamp first on the way down (write-back order stays data-then-stamp, `ordered` as declared):
+  // every partial-removal shape is then unstamped-with-data — recoverable, since the next data
+  // write re-stamps — never the stamped-but-empty store the seeding-hole comment above describes.
+  for (const [key] of [...ordered].reverse()) localStorage.removeItem(key);
   for (const [key, original] of ordered) {
     if (original !== null) commitCandidate(key, original);
   }

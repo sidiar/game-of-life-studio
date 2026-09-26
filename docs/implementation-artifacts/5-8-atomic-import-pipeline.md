@@ -4,7 +4,7 @@ baseline_commit: 388dd205a8d3cd05fc50ddf004bce51d05b444e6
 
 # Story 5.8: Atomic Import Pipeline
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -325,6 +325,43 @@ record in `deferred-work.md` is the internally consistent one).
   existing norm for every `save()`; this window is merely the widest. No UI caller exists until
   Story 5.9 — its wiring should decide (e.g. block saves while an import is in flight). Recorded in
   `deferred-work.md`.
+
+Second review pass 2026-09-26 (Fable 5, full mode; layers: Blind Hunter, Edge Case Hunter,
+Acceptance Auditor) on the owner-decision commit (`3e574e7`) alone. Auditor verdict: both owner
+rulings implemented fully, no AC1–7 regression. 4 patches, 0 decisions, 0 defers, 0 dismissed:
+
+- [x] [Review][Patch] **`snapshotWorkspace()`'s docs overstate "throws before anything is
+  written"** [`packages/persistence/src/repositories.ts`, `localStorageAccess.ts`,
+  `workspaceImport.ts`] — `captureDataKeys` runs `ensureCurrentAtRestFormat()` first, and on a
+  store stamped with an OLDER format that check itself migrates and rewrites the three data keys
+  before the capture (latent: the registry is empty today, and the old `listFull` snapshot did the
+  same through `readCollection`). The snapshot then holds the migrated bytes, and a failure inside
+  that write-back escapes as `QuotaExceededError` — a type the JSDoc's exhaustive throw list does
+  not admit. Behavior is the established AR-11 mechanism and stays; the fix is doc precision only.
+  Fixed: JSDoc/comments scoped in `repositories.ts`, `localStorageAccess.ts` and
+  `workspaceImport.ts` — no behavior change.
+- [x] [Review][Patch] **A foreign `WorkspaceSnapshot` is accepted silently and the mix-up is
+  destructive** [`packages/persistence/src/localStorageAccess.ts`,
+  `packages/test-utils/src/fakeRepositories.ts`] — the brand is compile-time only and both
+  implementations share it, so a fake's snapshot type-checks into the real `restoreWorkspace`,
+  which removes all three keys **before** `commitCandidate(key, Map)` writes `"[object Map]"`
+  over each; the reverse direction iterates a string into garbage or throws a bare `TypeError`
+  on `null`. Fixed: `restoreDataKeys` validates string-or-null before its
+  remove phase, the fake checks its Maps and flag before clearing — both throw `TypeError`,
+  both pinned by tests asserting the store is untouched.
+- [x] [Review][Patch] **`restoreDataKeys`' removal phase transits the stamped-but-empty shape its
+  own module documents as un-healable** [`packages/persistence/src/localStorageAccess.ts`] — the
+  remove loop runs organisms → battles → schema, so between the second and third `removeItem` the
+  store is stamped with no data (the hole the at-rest stamp-ordering comment describes); a crash
+  there strands it. Removing the stamp first makes every crash prefix recoverable and costs
+  nothing. Fixed: removal now runs schema → battles → organisms (write-back unchanged,
+  data-then-stamp); order pinned by a `removeItem` spy.
+- [x] [Review][Patch] **The fake's snapshot aliases `raw`-seeded records, so "captured values
+  cannot change under the snapshot" overreaches** [`packages/test-utils/src/fakeRepositories.ts`]
+  — shallow `new Map(store)` copies share record references with the objects a `raw` seed
+  inserted by reference; a caller mutating one after the capture mutates the "captured" state,
+  diverging from the real store's immutable strings. Fixed: the capture `roundTrip`s each record (the file's own
+  detachment mechanism); pinned by a post-capture mutation test.
 
 ## Dev Notes
 
@@ -689,6 +726,11 @@ Proposed lane gate: none — 5.8 touches only packages/domain (new referentialCl
   the import's snapshot and rollback; FD3 re-ensure and the `'write-failed'` caveat removed; FD2/FD3
   struck and FD5 (six codes kept) annotated in `deferred-work.md`. Addressed code review findings -
   1 item resolved (Date: 2026-09-26). Status → review.
+- 2026-09-26 — Second code review (Fable 5, full mode) on the owner-decision commit: 4 patches
+  applied (snapshot JSDoc scoped to the at-rest-migration path, runtime guards against a foreign
+  `WorkspaceSnapshot` in both restores, stamp-first removal order in `restoreDataKeys`, detached
+  `roundTrip` capture in the fake), 0 decisions, 0 defers, 0 dismissed. CI green on the pushed
+  branch. Status → done.
 
 ---
 
