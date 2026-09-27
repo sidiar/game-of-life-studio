@@ -4,7 +4,7 @@ baseline_commit: d61aec5e76ad0ef1e1e215bde4c8da434582c7c1
 
 # Story 4.24: Edit Organism from Battle
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -393,6 +393,36 @@ Auditor, full mode against this story file).
       already recorded by this story's own deferred-work entry ("The pencil press is not locked
       against a concurrent Export / Back"), no second entry added — deferred, pre-recorded
 
+Second-pass review 2026-09-27 (Fable, three parallel layers: Blind Hunter / Edge Case Hunter /
+Acceptance Auditor, full mode against the ruling commit `9efe708`).
+
+- [x] [Review][Patch] The "still counts toward N" boundary the suppression comment claims —
+      `entries.length === 1` where the single entry belongs to ANOTHER battle while a battle is
+      open (id mismatch → still gates) — has no unit test; it is exactly the branch a refactor of
+      `entries[0].battleId === openBattle.id` would silently break
+      [apps/web/lib/organisms/organismGateUsage.test.ts]
+- [x] [Review][Patch] Dead optional chain behind the `entries.length === 1` guard —
+      `noUncheckedIndexedAccess` is off, so `entries[0]` is typed present and the `?.` reads as a
+      reachable-absence claim that is false [apps/web/lib/organisms/organismGateUsage.ts:60]
+- [x] [Review][Patch] The Dev Agent Record's Gate bullet predates the ruling commit — `9efe708`
+      added three tests and changed gate behaviour but recorded no post-ruling `ci:dev`; the
+      recorded counts are stale — a fresh post-ruling `ci:dev` ran green and is recorded below
+      [docs/implementation-artifacts/4-24-edit-organism-from-battle.md]
+- [x] [Review][Defer] FR-1.3's battle-origin sole-open-battle exception now lives only in this
+      story's ACs and Review Findings; the PRD's FR-1.3 text is unamended — deferred to the Epic 4
+      UX reconciliation, recorded in deferred-work.md
+
+Judgement call assessed (not an open item): the dev's reading that a SAVED open battle whose cells
+were all erased this session, with no other battle using the organism, also opens the editor with
+no warning is **within ruling (c)**. Three independent assessments converge: the ruling is phrased
+at battle-identity level ("the only battle using it"), and identity holds — under Decision H the
+sole usage entry belongs to the open battle whichever way; the code uses the domain's documented
+"is this the open battle" test (`entry.battleId === openBattle.id`, the `OrganismUsageEntry` doc)
+verbatim; and the circular-remedy rationale survives erasure — the only battle the edit affects is
+the one the user has open and controls, and the owner declined option (b), which would have kept
+the gate with better copy. The "adds, never removes" delete-protection contract in `@gol/domain`
+is untouched.
+
 ## Dev Notes
 
 ### Forced decisions (defaults written in; follow them unless the owner overrides)
@@ -653,6 +683,14 @@ Claude Opus 5.5 (bmad-dev-story, implement-next-story lane epic-4)
   still reading "Used in 1 Battle". AC3/AC5 wording amended per the ruling.
 - **Gate.** `npm run ci:dev` green: typecheck, lint, format, spec, boundary, coverage (web 2410
   tests), build, bundle, bench (9.682 ms headroom, 58.1% of frame), e2e Chromium 295 passed.
+- **Second-pass review (2026-09-27, Fable, against the ruling commit `9efe708`).** 3 patches
+  applied: a unit test for the sole-entry-is-another-battle boundary (still gates), the dead `?.`
+  behind the `length === 1` guard removed, and this fresh gate record. 1 deferred (FR-1.3's
+  battle-origin exception unamended in the PRD → deferred-work.md), 10 dismissed. The
+  saved-but-erased sole-open-battle case was assessed against ruling (c) and judged covered (see
+  Review Findings). Post-ruling gate: `npm run ci:dev` green — typecheck, lint, format, spec,
+  boundary, coverage (web 2415 tests), build, bundle, bench (9.195 ms headroom, 55.2% of frame),
+  e2e Chromium 295 passed.
 
 ### File List
 
@@ -707,6 +745,11 @@ Modified:
   Review Findings). Status → in-progress pending that decision.
 - 2026-09-27: Addressed code review findings - 1 item resolved (Sidiar's ruling (c):
   sole-open-battle usage does not gate; AC3/AC5 amended). Status → review.
+- 2026-09-27: Second-pass code review of the ruling commit (Fable, full mode, three parallel
+  layers). 3 patches applied (boundary test for a sole non-open-battle entry, dead `?.` removed,
+  fresh post-ruling gate recorded); 1 deferred (PRD FR-1.3 carry-forward, in deferred-work.md);
+  10 dismissed; the erased-cells judgement call assessed as covered by ruling (c). Nothing left
+  open. `ci:dev` green. Status → done.
 
 Proposed lane gate: none   # 4.24 needs nothing from lane 5; 5.11 may touch <BattlePage>'s library-load path (textual overlap only, no dependency either way)
 

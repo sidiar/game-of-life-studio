@@ -79,6 +79,20 @@ describe('resolveOrganismGateUsage (Story 4.24)', () => {
     expect(resolveOrganismGateUsage(second.id, data).battleNames).toEqual(['Solo']);
   });
 
+  // The other half of ruling (c)'s boundary: ONE user that is NOT the open battle. This is the
+  // branch a refactor of the `entries[0].battleId === openBattle.id` comparison (e.g. to a bare
+  // "one entry while a battle is open") would silently break into never gating.
+  it('a sole entry belonging to ANOTHER battle still gates while a battle is open (ruling c)', () => {
+    const usage = resolveOrganismGateUsage(second.id, {
+      usageIndex,
+      ruleIndex,
+      summaries,
+      library,
+      openBattle: { id: 'b1', name: 'Glider Wars live', organismIds: [] },
+    });
+    expect(usage.battleNames).toEqual(['Three-Way Skirmish']);
+  });
+
   it('labels the saved open battle by its LIVE name and does not double-count it', () => {
     const usage = resolveOrganismGateUsage(first.id, {
       usageIndex,

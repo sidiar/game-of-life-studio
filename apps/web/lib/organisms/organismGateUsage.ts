@@ -57,7 +57,7 @@ export function resolveOrganismGateUsage(
   // battle also uses the organism, the open battle still counts toward N. The editor footer is
   // unaffected: it resolves its own usage and still lists the open battle (AC7).
   const soleOpenBattle =
-    openBattle !== null && entries.length === 1 && entries[0]?.battleId === openBattle.id;
+    openBattle !== null && entries.length === 1 && entries[0].battleId === openBattle.id;
   return {
     battleNames: soleOpenBattle ? [] : usageBattleNames(entries, summaries, openBattle),
     ruleCount: ruleIndex.get(organismId)?.length ?? 0,

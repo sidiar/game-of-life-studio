@@ -3614,3 +3614,15 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   today (its `gateProps` always supplies the handler); the prop went optional in Story 4.24 and
   nothing couples copy to capability. Pick it up if the dialog ever gains a second library-side
   caller.
+
+## Deferred from: code review of 4-24-edit-organism-from-battle, second pass on the ruling (2026-09-27)
+
+Reviewed on **Fable** against an **Opus** ruling-implementation commit (`9efe708`, Sidiar's ruling
+(c): sole-open-battle usage does not gate), via three parallel adversarial layers.
+
+- **FR-1.3's battle-origin exception lives only in Story 4.24's ACs.** Ruling (c) carved a
+  battle-origin exception out of FR-1.3's "warn when used in N Battles" — sole-open-battle usage
+  opens the editor directly — and the amendment landed in the story file's AC3/AC5 only; the PRD's
+  FR-1.3 text still reads unconditional. Consistent with project practice (story ACs are the
+  review contract), but the exception risks being rediscovered as a "bug" by anyone reading the
+  PRD alone. Carry it into the PRD (or the FR-1.3 gloss) during the Epic 4 UX reconciliation.
