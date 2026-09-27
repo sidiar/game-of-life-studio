@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import type { SurvivalRule } from '@gol/domain';
@@ -10,8 +10,10 @@ import {
   createNewRuleDraft,
   ruleActionLabel,
   ruleDraftFrom,
+  removeRule,
   type RuleDraft,
 } from '@/lib/organisms/ruleDraft';
+import { ruleDeleteLabel, ruleDeleteSentence } from '@/lib/organisms/ruleDeleteCopy';
 import RulesEditor from './RulesEditor';
 
 const NO_RULES: readonly RuleDraft[] = [];
@@ -52,15 +54,30 @@ function Harness({
   initial,
   onState,
   showAllErrors = false,
+  exposeRemove,
+  onBeforeDeleteConfirm,
+  isSaving = false,
 }: {
   initial: readonly RuleDraft[];
   onState?: (rules: readonly RuleDraft[]) => void;
   showAllErrors?: boolean;
+  /** Story 4.26: a PARENT-driven removal — `onRulesChange` invoked directly, bypassing the
+   * confirmation entirely — the shape a delete used to take before this story, still reachable
+   * (a battle-side bulk edit, a future undo). Exposed via a callback, not a DOM control: this is
+   * not a user gesture. */
+  exposeRemove?: (remove: (id: string) => void) => void;
+  onBeforeDeleteConfirm?: () => void;
+  /** Second review decision (a), 2026-09-27: mirrors `<OrganismEditorModal>`'s `isSaving`. Default
+   * `false` — most tests here have no write in flight. */
+  isSaving?: boolean;
 }) {
   const [rules, setRules] = useState<readonly RuleDraft[]>(initial);
   useEffect(() => {
     onState?.(rules);
   }, [rules, onState]);
+  useEffect(() => {
+    exposeRemove?.((id) => setRules((current) => removeRule(current, id)));
+  }, [exposeRemove]);
   const addRule = () => {
     const id = crypto.randomUUID();
     setRules((current) => appendRule(current, createNewRuleDraft(id)));
@@ -76,8 +93,30 @@ function Harness({
         onRulesChange={(update) => setRules((current) => update(current))}
         onAddRule={addRule}
         showAllErrors={showAllErrors}
+        onBeforeDeleteConfirm={onBeforeDeleteConfirm}
+        isSaving={isSaving}
       />
     </>
+  );
+}
+
+/**
+ * Story 4.26: routes a delete through the confirmation, in the shape every card's ✕ now requires.
+ * Waits for the paper's `data-entered` (FD4's real ~225ms jsdom `Fade` timer — MUI puts
+ * `role="dialog"` directly on the Paper, so the accessible dialog node IS the one the guard's
+ * `data-entered` lands on) before clicking Delete Rule, then waits for the dialog to leave the DOM
+ * (`onExited`, FD3 — the removal itself lands there, never in the click's own commit).
+ */
+async function confirmDelete(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() =>
+    expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toHaveAttribute(
+      'data-entered',
+      '',
+    ),
+  );
+  await user.click(screen.getByRole('button', { name: 'Delete Rule' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument(),
   );
 }
 
@@ -159,6 +198,7 @@ describe('RulesEditor', () => {
     render(<Harness initial={THREE} />);
 
     await user.click(screen.getByRole('button', { name: 'Delete rule 2' }));
+    await confirmDelete(user);
 
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
     expect(screen.getByRole('group', { name: 'Rule 1' })).toBeInTheDocument();
@@ -174,19 +214,33 @@ describe('RulesEditor', () => {
     render(<Harness initial={THREE} />);
 
     await user.click(screen.getByRole('button', { name: 'Delete rule 3' }));
+    await confirmDelete(user);
 
     const second = screen.getByRole('group', { name: 'Rule 2' });
     expect(document.activeElement).toBe(within(second).getByRole('textbox', { name: 'Summary' }));
   });
 
   // The cascade the Summary target exists to prevent (AC5): after a keyboard delete, focus is on
-  // an `<input>` with no `<form>` around it, so a repeated Enter has nothing left to activate.
+  // an `<input>` with no `<form>` around it, so a repeated Enter has nothing left to activate. The
+  // first Enter (Story 4.26) now opens the dialog rather than deleting outright; confirm with
+  // Enter on Delete Rule once entered, then press Enter again on the Summary the removal lands on.
   it('a second Enter after a keyboard delete removes nothing more', async () => {
     const user = userEvent.setup();
     render(<Harness initial={THREE} />);
 
     screen.getByRole('button', { name: 'Delete rule 2' }).focus();
     await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toHaveAttribute(
+        'data-entered',
+        '',
+      ),
+    );
+    screen.getByRole('button', { name: 'Delete Rule' }).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument(),
+    );
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
 
     await user.keyboard('{Enter}');
@@ -201,21 +255,26 @@ describe('RulesEditor', () => {
     render(<Harness initial={[THREE[0]]} />);
 
     await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+    await confirmDelete(user);
 
     expect(screen.getByText('No Rules Defined')).toBeInTheDocument();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: '+ Add Rule' }));
   });
 
-  // The delete rule's OTHER branch: focus a user placed on a real control inside the list is
-  // left alone. `fireEvent.click` dispatches the click without the focus move a pointer makes —
-  // the shape of a mouse click in a browser that does not focus buttons on click.
-  it('deleting while focus sits in another card leaves that focus alone', async () => {
-    render(<Harness initial={THREE} />);
+  // The delete rule's OTHER branch: focus a user placed on a real control inside the list is left
+  // alone. Story 4.26: through the confirmation, focus is ALWAYS in the confirmation itself at
+  // confirm time (the whole background, including this card, is `inert` for the fade), so this
+  // branch is reachable only by a PARENT-driven removal — `onRulesChange` invoked directly,
+  // bypassing the dialog entirely (a battle-side bulk edit, a future undo). The branch itself is
+  // unchanged in `RulesEditor.tsx`; only how this test reaches it changed.
+  it('a parent-driven removal (not through the dialog) leaves focus in another card alone', () => {
+    let remove: (id: string) => void = () => {};
+    render(<Harness initial={THREE} exposeRemove={(fn) => (remove = fn)} />);
 
     const third = screen.getByRole('group', { name: 'Rule 3' });
     const summary = within(third).getByRole('textbox', { name: 'Summary' });
     summary.focus();
-    fireEvent.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+    act(() => remove(THREE[0].id));
 
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
     expect(document.activeElement).toBe(summary);
@@ -612,7 +671,11 @@ describe('RulesEditor', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Rule moved to position 3 of 3');
     });
 
-    it('the dragged card leaving the list closes the drag, so the next drag can start', () => {
+    // Story 4.26: opening the confirmation (not the removal itself, which now waits for
+    // `onExited`, FD3) is what cancels the drag — `handleDelete`'s own `updateDrag(null)`, the
+    // reason a dragged card's confirmation Escape must not be eaten by the drag's own listener.
+    it('opening the delete confirmation mid-drag cancels the drag, so the next drag can start', async () => {
+      const user = userEvent.setup();
       render(<Harness initial={THREE} />);
       rectsFor([0, 112, 224]);
 
@@ -621,7 +684,30 @@ describe('RulesEditor', () => {
       fireEvent.pointerMove(handle1, { pointerId: 1, buttons: 1, clientY: 300 });
       expect(document.querySelectorAll('[data-drop]')).toHaveLength(1);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(document.querySelectorAll('[data-dragging]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
+
+      await confirmDelete(user);
+
+      const handle = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle, { button: 0, isPrimary: true, pointerId: 3 });
+      expect(screen.getAllByRole('listitem')[0]).toHaveAttribute('data-dragging');
+    });
+
+    // The FD6 list-diff effect's drag branch: since Story 4.26 a USER delete closes the drag when
+    // the confirmation opens, so this branch is reachable only by a parent-driven removal.
+    it('the dragged card removed by the parent mid-drag closes the drag, so the next drag can start', () => {
+      let remove: (id: string) => void = () => {};
+      render(<Harness initial={THREE} exposeRemove={(fn) => (remove = fn)} />);
+      rectsFor([0, 112, 224]);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+      fireEvent.pointerMove(handle1, { pointerId: 1, buttons: 1, clientY: 300 });
+      expect(document.querySelectorAll('[data-drop]')).toHaveLength(1);
+
+      act(() => remove(THREE[0].id));
       expect(document.querySelectorAll('[data-dragging]')).toHaveLength(0);
       expect(document.querySelectorAll('[data-drop]')).toHaveLength(0);
 
@@ -630,7 +716,8 @@ describe('RulesEditor', () => {
       expect(screen.getAllByRole('listitem')[0]).toHaveAttribute('data-dragging');
     });
 
-    it('the announcement does not survive the empty state', () => {
+    it('the announcement does not survive the empty state', async () => {
+      const user = userEvent.setup();
       render(<Harness initial={THREE.slice(0, 2)} />);
 
       const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
@@ -638,11 +725,13 @@ describe('RulesEditor', () => {
       fireEvent.keyDown(handle1, { key: 'ArrowDown' });
       expect(screen.getByRole('status')).toHaveTextContent('Rule moved to position 2 of 2');
 
-      fireEvent.click(screen.getByRole('button', { name: 'Delete rule 1' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      await confirmDelete(user);
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      await confirmDelete(user);
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole('button', { name: '+ Add Rule' }));
+      await user.click(screen.getByRole('button', { name: '+ Add Rule' }));
       expect(screen.getByRole('status')).toBeEmptyDOMElement();
     });
 
@@ -654,6 +743,234 @@ describe('RulesEditor', () => {
       fireEvent.keyDown(handle, { key: 'ArrowDown' });
 
       expect((await axe(container)).violations).toEqual([]);
+    });
+  });
+
+  describe('the delete confirmation (Story 4.26)', () => {
+    it('opening names the Summary, and Rule N for an empty or whitespace-only Summary', async () => {
+      const user = userEvent.setup();
+      const withBlank: readonly RuleDraft[] = [
+        THREE[0],
+        { ...THREE[1], payload: { ...THREE[1].payload, summary: '   ' } },
+        THREE[2],
+      ];
+      render(<Harness initial={withBlank} />);
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toHaveAccessibleDescription(
+        ruleDeleteSentence(ruleDeleteLabel(THREE[0].payload.summary, 0)),
+      );
+      await confirmDelete(user);
+
+      // Renumbered — the whitespace-only Summary is now "Rule 1" of the remaining two.
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toHaveAccessibleDescription(
+        ruleDeleteSentence(ruleDeleteLabel('   ', 0)),
+      );
+      await confirmDelete(user);
+    });
+
+    it('nothing is removed while the dialog is open', async () => {
+      const user = userEvent.setup();
+      let latest: readonly RuleDraft[] = [];
+      render(<Harness initial={THREE} onState={(rules) => (latest = rules)} />);
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 2' }));
+
+      // A raw DOM count, not `getAllByRole` — `useInertBackground`'s own claims-registry comment
+      // records why: MUI marks the whole editor's own subtree `aria-hidden` while a stacked dialog
+      // is open, so a role query would find nothing here even though the cards are still mounted.
+      expect(document.querySelectorAll('[data-rule-id]')).toHaveLength(3);
+      expect(latest).toBe(THREE);
+    });
+
+    it.each(['Cancel', 'Escape', 'backdrop'] as const)(
+      '%s leaves rules referentially identical, and focus returns to that card’s ✕',
+      async (mode) => {
+        const user = userEvent.setup();
+        let latest: readonly RuleDraft[] = [];
+        render(<Harness initial={THREE} onState={(rules) => (latest = rules)} />);
+
+        await user.click(screen.getByRole('button', { name: 'Delete rule 2' }));
+        await waitFor(() =>
+          expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toHaveAttribute(
+            'data-entered',
+            '',
+          ),
+        );
+
+        if (mode === 'Cancel') {
+          await user.click(screen.getByRole('button', { name: 'Cancel' }));
+        } else if (mode === 'Escape') {
+          await user.keyboard('{Escape}');
+        } else {
+          await user.click(document.querySelector('.MuiBackdrop-root') as HTMLElement);
+        }
+
+        await waitFor(() =>
+          expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument(),
+        );
+        expect(screen.getAllByRole('listitem')).toHaveLength(3);
+        expect(latest).toBe(THREE);
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete rule 2' }));
+      },
+    );
+
+    it('a user.dblClick on ✕ opens one dialog and removes nothing (the request latch, not FD4 — the e2e proves FD4 with a real dblclick())', async () => {
+      const user = userEvent.setup();
+      let latest: readonly RuleDraft[] = [];
+      // The latch's observable trace: without it the second request re-runs `handleDelete` and
+      // calls `onBeforeDeleteConfirm` again — the single dialog alone would not show it, since a
+      // second `setConfirming` with the same id renders the same one dialog.
+      const onBeforeDeleteConfirm = vi.fn();
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => (latest = rules)}
+          onBeforeDeleteConfirm={onBeforeDeleteConfirm}
+        />,
+      );
+
+      await user.dblClick(screen.getByRole('button', { name: 'Delete rule 1' }));
+
+      expect(onBeforeDeleteConfirm).toHaveBeenCalledTimes(1);
+      expect(screen.getAllByRole('dialog', { name: 'Delete Rule?' })).toHaveLength(1);
+      expect(document.querySelectorAll('[data-rule-id]')).toHaveLength(3);
+      expect(latest).toBe(THREE);
+    });
+
+    // Second review decision (a), 2026-09-27: a delete request is refused outright while a write
+    // is in flight, so the confirmation's `inert` background can never swallow a Save outcome that
+    // lands while it is open.
+    it('a delete request while isSaving is true opens no dialog and calls onBeforeDeleteConfirm not at all', async () => {
+      const user = userEvent.setup();
+      let latest: readonly RuleDraft[] = [];
+      const onBeforeDeleteConfirm = vi.fn();
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => (latest = rules)}
+          onBeforeDeleteConfirm={onBeforeDeleteConfirm}
+          isSaving
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+
+      expect(onBeforeDeleteConfirm).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument();
+      expect(document.querySelectorAll('[data-rule-id]')).toHaveLength(3);
+      expect(latest).toBe(THREE);
+    });
+
+    it('isSaving settling to false makes the same ✕ open the confirmation again', async () => {
+      const user = userEvent.setup();
+      function Toggle() {
+        const [isSaving, setIsSaving] = useState(true);
+        return (
+          <>
+            <button type="button" onClick={() => setIsSaving(false)}>
+              Settle
+            </button>
+            <Harness initial={THREE} isSaving={isSaving} />
+          </>
+        );
+      }
+      render(<Toggle />);
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Settle' }));
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toBeInTheDocument();
+    });
+
+    // `fireEvent` (synchronous) so every click provably lands before the ~225ms `Fade` timer. Then
+    // wait for `data-entered`: a click that got past the guard would have closed the dialog, and a
+    // closing Fade never fires `onEntered` — the dialog would instead leave the DOM after its exit
+    // fade, so an assertion made straight after the clicks could not tell the two apart.
+    it('a backdrop mousedown+click and a Delete Rule click fired before entered do nothing', async () => {
+      let latest: readonly RuleDraft[] = [];
+      render(<Harness initial={THREE} onState={(rules) => (latest = rules)} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      const dialog = screen.getByRole('dialog', { name: 'Delete Rule?' });
+      expect(dialog).not.toHaveAttribute('data-entered');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete Rule' }));
+      const backdrop = document.querySelector('.MuiBackdrop-root') as HTMLElement;
+      fireEvent.mouseDown(backdrop);
+      fireEvent.click(backdrop);
+
+      await waitFor(() => expect(dialog).toHaveAttribute('data-entered', ''));
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toBe(dialog);
+      expect(latest).toBe(THREE);
+    });
+
+    // The first outcome wins: the dialog stays the top modal through its exit fade, so every
+    // control is still live there — a second, contrary action must not flip the outcome.
+    it.each([
+      ['Cancel then Delete Rule keeps the rule', 'Cancel', 'Delete Rule', 3],
+      ['Delete Rule then Cancel removes the rule', 'Delete Rule', 'Cancel', 2],
+    ] as const)('inside the exit fade, %s', async (_title, first, second, remaining) => {
+      const user = userEvent.setup();
+      render(<Harness initial={THREE} />);
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 2' }));
+      const dialog = screen.getByRole('dialog', { name: 'Delete Rule?' });
+      await waitFor(() => expect(dialog).toHaveAttribute('data-entered', ''));
+
+      fireEvent.click(within(dialog).getByRole('button', { name: first }));
+      fireEvent.click(within(dialog).getByRole('button', { name: second }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument(),
+      );
+      expect(screen.getAllByRole('listitem')).toHaveLength(remaining);
+    });
+
+    it('Space on ✕ opens the confirmation too (AC1)', async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={THREE} />);
+
+      screen.getByRole('button', { name: 'Delete rule 2' }).focus();
+      await user.keyboard(' ');
+
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toBeInTheDocument();
+      await confirmDelete(user);
+      expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    });
+
+    // Story 4.12: opening the confirmation mid-drag must cancel it — the drag's own document
+    // -capture Escape listener would otherwise eat the confirmation's Escape.
+    it('opening mid-drag cancels the drag (no li[data-dragging])', async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={THREE} />);
+
+      const handle1 = screen.getByRole('button', { name: 'Reorder rule 1' });
+      fireEvent.pointerDown(handle1, { button: 0, isPrimary: true, pointerId: 1 });
+      expect(screen.getAllByRole('listitem')[0]).toHaveAttribute('data-dragging');
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 2' }));
+
+      expect(document.querySelectorAll('li[data-dragging]')).toHaveLength(0);
+      await confirmDelete(user);
+    });
+
+    it('has no axe violations with the dialog open', async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={THREE} />);
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      await waitFor(() =>
+        expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toHaveAttribute(
+          'data-entered',
+          '',
+        ),
+      );
+
+      expect((await axe(document.body)).violations).toEqual([]);
     });
   });
 

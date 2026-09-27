@@ -1649,7 +1649,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   drift, not a code defect. Pre-existing in the story spec. **Pick this up in the next UX
   reconciliation touch** (the one Stories 4.3 and 4.10 both asked for over the 2026-06-01 accordion
   revision) — decide whether the delete button's paint follows the story or the mockup, in one place.
-- **A pointer double-click on a rule card's ✕ still cascades deletions** — every card has the same
+- ~~**A pointer double-click on a rule card's ✕ still cascades deletions** — every card has the same
   geometry, so when card N is deleted the card below slides synchronously into the same slot before
   the next click is dispatched, and the second click of a double-click (or any rapid re-click)
   hit-tests against the *new* ✕ at the same coordinates and deletes the neighbour too, with no
@@ -1667,7 +1667,15 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   on whatever the opening dialog has put under the pointer — MUI's backdrop during the Fade means
   an instant dismiss, so the dialog must not close on a click that arrives during its enter
   transition (or the second click must be otherwise inert); (2) the story that closes the cascade
-  should prove it — a unit or e2e test that a pointer double-click on ✕ removes at most one rule.
+  should prove it — a unit or e2e test that a pointer double-click on ✕ removes at most one rule.~~
+  **✅ Resolved in Story 4.26.** `<RuleDeleteConfirmDialog>` asks first (FD2), the removal lands only
+  in the dialog's `onExited` (FD3, never the click's own commit), and the enter guard (FD4, an
+  `entered` flag from the `Fade`'s own `onEntered`) makes both the backdrop and Delete Rule inert
+  until the dialog has actually finished opening — so a double-click's second click is a no-op
+  either way it lands (note (1)). A real `dblclick()` e2e proves at most one rule is removed
+  (note (2)); `RulesEditor.test.tsx` separately pins the request latch (jsdom's `dblClick` has no
+  hit-testing, so it cannot prove note (1)). The condition-row entry below is untouched — the owner's
+  call, not in scope here.
 
 ## Deferred from: Story 4-11-condition-builder (2026-09-17)
 
@@ -3695,3 +3703,29 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   `savingRef`, the page is `inert` while the editor is open, and no hotkey saves. If a future route
   can start a battle save while the editor is open, skip disabled targets
   (`trigger?.matches(':disabled')`) — and note the create button is disabled then too.
+
+## Deferred from: code review of 4-26-rule-delete-confirmation-dialog (2026-09-27)
+
+- **A parent-driven rule removal while the rule-delete confirmation is open is not handled.**
+  `handleDeleteExited` (`RulesEditor.tsx`) decides whether to clear the reorder announcement from
+  `rules.length === 1` as of its own render, not from what `removeRule` leaves, and the cancel-path
+  restore looks up `[data-rule-id="<id>"] [data-rule-delete]` with no fallback, so a card removed
+  underneath the dialog would leave a stale announcement or focus on `<body>`. Unreachable today:
+  the whole editor is `inert` for the confirmation window and nothing parent-side edits `rules`
+  then. If a parent-driven edit ever lands (battle-side bulk edit, undo), decide the announcement
+  from the updater's result and fall back to the FD6 loose-focus target.
+- **Story 4.23's editor unsaved-changes confirmation has the same last-writer-wins outcome shape**
+  (`OrganismEditorModal.tsx`, ~`:930-941`). MUI's Dialog stays the top modal through its exit fade
+  (`closeAfterTransition`), so a second, contrary action inside the fade (Keep Editing then a stray
+  Discard) overwrites the outcome ref. Story 4.26's review fixed its own dialog with a
+  first-outcome-wins guard (`if (confirmOutcomeRef.current !== null) return;`); the 4.23 handlers
+  take the same one-line guard plus a test.
+
+## Deferred from: code review of 4-26-rule-delete-confirmation-dialog.md, second pass (2026-09-27)
+
+- **The rule ✕ refused mid-Save gives no feedback.** Ruling (a) makes `handleDelete`
+  (`RulesEditor.tsx`) return early while `isSaving`, but the card's ✕ stays enabled and focusable,
+  so a click silently does nothing, while the modal's Save/Back/✕/Delete Organism show
+  `disabled={isSaving}`. Invisible with localStorage (millisecond window), and the rest of the rules
+  surface is deliberately editable mid-Save (4.23 FD2). With the API repository, thread the flag to
+  `RuleCard` and mark its ✕ `aria-disabled` (not `disabled` — that drops focus to `<body>`).
