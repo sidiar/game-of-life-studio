@@ -71,6 +71,12 @@ import RuleDeleteConfirmDialog from './RuleDeleteConfirmDialog';
  * the rest of the editor honestly non-interactive while the confirmation is up, over the module
  * -level claims registry that already makes this safe nested inside the editor's own inert window
  * (Story 4.22).
+ *
+ * **Second review decision (a), 2026-09-27.** `handleDelete` also refuses while `isSaving` (the
+ * modal's own write-in-flight state): the confirmation's `inert` background would otherwise
+ * swallow a Save outcome that lands while it is open (the project-context live-region trap), and
+ * refusing the request is simpler than the alternative of holding the outcome until the
+ * confirmation closes. See `isSaving`'s prop doc comment for the full reasoning.
  */
 
 // `.rules-header` reasoning aside, the list itself has no mockup chrome of its own beyond
@@ -144,6 +150,17 @@ export interface RulesEditorProps {
    * (`<OrganismEditorModal>`'s usage panel) before the confirmation mounts — must not move focus
    * itself. Optional: a caller with nothing to close passes none. */
   onBeforeDeleteConfirm?(): void;
+  /**
+   * Story 4.26, second review decision (a), 2026-09-27: `<OrganismEditorModal>`'s own `isSaving`
+   * state, true for the duration of a write. `handleDelete` refuses the request while true — the
+   * same lock the modal's other close paths (`savingRef`, Story 4.16 Task 12/13) already gate on.
+   * Reason: a Save outcome that lands while the confirmation is open would insert its
+   * `role="alert"`/`role="status"` line inside the subtree `useInertBackground` has just marked
+   * `inert`/`aria-hidden` — dropped for assistive tech, and never re-announced once the background
+   * goes live again (the project-context live-region trap). Refusing the delete while a write is
+   * in flight means that subtree is never inert during a Save, so the outcome always announces.
+   */
+  isSaving: boolean;
 }
 
 /** The delete confirmation's mounted window (Story 4.26, FD1) — open OR still fading. `null` means
@@ -168,6 +185,7 @@ export default function RulesEditor({
   onAddRule,
   showAllErrors,
   onBeforeDeleteConfirm,
+  isSaving,
 }: RulesEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const prevIdsRef = useRef<readonly string[] | null>(null);
@@ -215,9 +233,12 @@ export default function RulesEditor({
   );
 
   // Story 4.26: a REQUEST, not a removal (FD1). Refused while a confirmation is already mounted
-  // (the ref latch) or the id no longer exists (a stale event from an already-removed card).
+  // (the ref latch), the id no longer exists (a stale event from an already-removed card), or a
+  // write is in flight (second review decision (a), 2026-09-27) — see `isSaving`'s doc comment
+  // above for why a delete must never open the confirmation mid-Save.
   const handleDelete = useCallback(
     (id: string) => {
+      if (isSaving) return;
       if (confirmingRef.current !== null) return;
       const index = rules.findIndex((rule) => rule.id === id);
       if (index === -1) return;
@@ -233,7 +254,7 @@ export default function RulesEditor({
       setConfirming(next);
       setConfirmOpen(true);
     },
-    [rules, updateDrag, onBeforeDeleteConfirm],
+    [rules, updateDrag, onBeforeDeleteConfirm, isSaving],
   );
 
   // The FIRST outcome wins. MUI's Dialog (`closeAfterTransition`) stays the top modal for its whole

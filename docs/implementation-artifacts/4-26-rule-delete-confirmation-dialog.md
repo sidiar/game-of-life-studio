@@ -4,7 +4,7 @@ baseline_commit: 10947c5
 
 # Story 4.26: Rule-Delete Confirmation Dialog
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -192,7 +192,7 @@ so that a stray double-click never wipes out rules I meant to keep.
 Code review 2026-09-27 (Opus, against a Sonnet implementation): Blind Hunter + Edge Case Hunter +
 Acceptance Auditor. 1 decision-needed, 8 patch (all applied), 2 deferred, 7 dismissed.
 
-- [ ] [Review][Decision] A Save result that lands while the rule confirmation is open is never announced — `useInertBackground(confirming !== null)` (`RulesEditor.tsx`) makes the editor `inert`/`aria-hidden`, and fields stay editable during an in-flight write (Story 4.23 FD2), so a user can click ✕ mid-Save. If the write then resolves/rejects, the editor's `role="alert"`/`role="status"` line is inserted inside the hidden subtree and is never announced (the project-context live-region trap). With localStorage the window is milliseconds; with an API repository it is real. Options: **(a)** refuse the delete request while a write is in flight — thread `isSaving` into `<RulesEditor>` and return early in `handleDelete` (the lock the editor's other close paths already use); **(b)** accept for the MVP and record it in `deferred-work.md` beside the other API-repository residuals and the live-region-host class fix; **(c)** leave it to the portalled live-region host already proposed in `deferred-work.md` (fixes every surface at once, no 4.26 change).
+- [x] [Review][Decision] **Sidiar ruled (a), 2026-09-27:** refuse the delete request while a write is in flight — thread `isSaving` into `<RulesEditor>` and return early in `handleDelete` (the lock the editor's other close paths already use), consistent with Story 4.23's pattern in `OrganismEditorModal.tsx`. A Save result that lands while the rule confirmation is open is never announced — `useInertBackground(confirming !== null)` (`RulesEditor.tsx`) makes the editor `inert`/`aria-hidden`, and fields stay editable during an in-flight write (Story 4.23 FD2), so a user can click ✕ mid-Save. If the write then resolves/rejects, the editor's `role="alert"`/`role="status"` line is inserted inside the hidden subtree and is never announced (the project-context live-region trap). With localStorage the window is milliseconds; with an API repository it is real. Options considered: **(a)** refuse the delete request while a write is in flight — thread `isSaving` into `<RulesEditor>` and return early in `handleDelete` (the lock the editor's other close paths already use); **(b)** accept for the MVP and record it in `deferred-work.md` beside the other API-repository residuals and the live-region-host class fix; **(c)** leave it to the portalled live-region host already proposed in `deferred-work.md` (fixes every surface at once, no 4.26 change).
 - [x] [Review][Patch] The confirm/cancel outcome was last-writer-wins during the exit fade — the Dialog stays the top modal (`closeAfterTransition`) with `entered` still true, so Cancel followed by a stray Delete Rule click inside the fade deleted a declined rule (and the reverse kept a confirmed one). First outcome now wins; two tests pin both orders [`apps/web/components/organisms/editor/RulesEditor.tsx`]
 - [x] [Review][Patch] `deferred-work.md`'s resolution note (and the e2e comment) swapped notes (1) and (2) — note (1) is the inert second click (FD4), note (2) the dblclick proof [`docs/implementation-artifacts/deferred-work.md`, `apps/web/e2e/organisms.spec.ts`]
 - [x] [Review][Patch] The e2e `dblclick()` proof could not fail on an FD4 regression — a dismissed/confirmed dialog is still in the DOM for its exit fade. It now waits for `data-entered` and asserts the dialog is still visible before counting rules [`apps/web/e2e/organisms.spec.ts`]
@@ -347,6 +347,23 @@ Sonnet 5 (claude-sonnet-5)
   (2481/2481). Concluded pre-existing CPU-contention flakiness in this environment, not a
   regression from this story.
 
+### Review Decision (a) — Debug Log
+
+- `npx tsc --noEmit -p apps/web/tsconfig.json` — clean.
+- `npx vitest run components/organisms/editor/RulesEditor.test.tsx
+  components/organisms/editor/OrganismEditorModal.test.tsx` — 188/188 passed, including the three
+  new tests (two unit, one integration) pinning the refusal.
+- `npm run ci:dev` — first attempt: `test:coverage` timed out (5000ms default) on 11 tests across 4
+  unrelated files (`BattlePage.createOrganism.test.tsx`, `BattlePage.editOrganism.test.tsx`,
+  `OrganismLibrary.test.tsx`, and two pre-existing `OrganismEditorModal.test.tsx` tests unrelated to
+  this change — `(18)` axe/`(19)` saveAttempted), the same CPU-contention flakiness class recorded
+  above; none of the new or touched delete-confirmation tests were among the failures. Second full
+  run: clean end to end — `typecheck`, `lint`, `format:check`, `spec:check`, `boundary:check`,
+  `test:coverage` (2490/2490), `build:standalone`, `bundle:check` (all four routes within the 8 KB
+  allowance — `battle`/`battle/new` +3.0 KB, `organisms` +1.1 KB, `settings` +0.1 KB, `home` −0.3
+  KB, unchanged from the prior pass, no baseline refresh needed), `bench`/`bench:check` (NFR-1.1
+  frame unaffected), `e2e:chromium` (300 passed, 1 pre-existing skip).
+
 ### Completion Notes List
 
 - Implemented per the story's forced decisions (FD1-FD7) with no deviations from the defaults;
@@ -381,6 +398,18 @@ Sonnet 5 (claude-sonnet-5)
 - Bundle growth is small but non-zero on three of four routes (see Debug Log) despite the dialog
   and its copy module living in the editor's already-lazy chunk; `bundle:check` still passes well
   within its 8 KB allowance, so no baseline refresh was needed per the story's own conditional.
+- Applied Sidiar's review ruling (a), 2026-09-27: `isSaving: boolean` is now a required prop on
+  `<RulesEditor>`, threaded from `<OrganismEditorModal>`'s own `isSaving` state. `handleDelete`
+  refuses the request (returns before the confirming-ref latch check) while `isSaving` is true —
+  the same lock `handleRequestClose`'s `savingRef.current` check already gives the modal's own
+  close paths (Story 4.16 Task 12/13). This keeps the confirmation's `inert`/`aria-hidden`
+  background from ever being up during a write, so a Save outcome is always announced. Three tests
+  added: two in `RulesEditor.test.tsx` (no dialog opens and `onBeforeDeleteConfirm` is not called
+  while `isSaving`; the same ✕ opens the confirmation again once `isSaving` settles to `false`) and
+  one integration test in `OrganismEditorModal.test.tsx` (a rule delete opens no confirmation while
+  a real write is in flight, and opens it once the write settles) — mirroring the existing
+  "no confirmation opens while a write is in flight (the Task 12/13 lock runs first)" test for the
+  unsaved-changes confirmation.
 
 ### File List
 
@@ -401,6 +430,9 @@ Sonnet 5 (claude-sonnet-5)
 - 2026-09-27: Story created (ready-for-dev).
 - 2026-09-27: Implemented (Tasks 1-8); status set to review.
 - 2026-09-27: Code review (Opus): 8 patches applied, 2 deferred, 1 decision left open; status in-progress.
+- 2026-09-27: Applied Sidiar's review ruling (a) — `isSaving` threaded into `<RulesEditor>`,
+  `handleDelete` refuses the request while a write is in flight; three tests added; `npm run ci:dev`
+  green end to end; status set to review.
 
 Proposed lane gate: none
 

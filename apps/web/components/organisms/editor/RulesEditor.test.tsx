@@ -56,6 +56,7 @@ function Harness({
   showAllErrors = false,
   exposeRemove,
   onBeforeDeleteConfirm,
+  isSaving = false,
 }: {
   initial: readonly RuleDraft[];
   onState?: (rules: readonly RuleDraft[]) => void;
@@ -66,6 +67,9 @@ function Harness({
    * not a user gesture. */
   exposeRemove?: (remove: (id: string) => void) => void;
   onBeforeDeleteConfirm?: () => void;
+  /** Second review decision (a), 2026-09-27: mirrors `<OrganismEditorModal>`'s `isSaving`. Default
+   * `false` — most tests here have no write in flight. */
+  isSaving?: boolean;
 }) {
   const [rules, setRules] = useState<readonly RuleDraft[]>(initial);
   useEffect(() => {
@@ -90,6 +94,7 @@ function Harness({
         onAddRule={addRule}
         showAllErrors={showAllErrors}
         onBeforeDeleteConfirm={onBeforeDeleteConfirm}
+        isSaving={isSaving}
       />
     </>
   );
@@ -832,6 +837,53 @@ describe('RulesEditor', () => {
       expect(screen.getAllByRole('dialog', { name: 'Delete Rule?' })).toHaveLength(1);
       expect(document.querySelectorAll('[data-rule-id]')).toHaveLength(3);
       expect(latest).toBe(THREE);
+    });
+
+    // Second review decision (a), 2026-09-27: a delete request is refused outright while a write
+    // is in flight, so the confirmation's `inert` background can never swallow a Save outcome that
+    // lands while it is open.
+    it('a delete request while isSaving is true opens no dialog and calls onBeforeDeleteConfirm not at all', async () => {
+      const user = userEvent.setup();
+      let latest: readonly RuleDraft[] = [];
+      const onBeforeDeleteConfirm = vi.fn();
+      render(
+        <Harness
+          initial={THREE}
+          onState={(rules) => (latest = rules)}
+          onBeforeDeleteConfirm={onBeforeDeleteConfirm}
+          isSaving
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+
+      expect(onBeforeDeleteConfirm).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument();
+      expect(document.querySelectorAll('[data-rule-id]')).toHaveLength(3);
+      expect(latest).toBe(THREE);
+    });
+
+    it('isSaving settling to false makes the same ✕ open the confirmation again', async () => {
+      const user = userEvent.setup();
+      function Toggle() {
+        const [isSaving, setIsSaving] = useState(true);
+        return (
+          <>
+            <button type="button" onClick={() => setIsSaving(false)}>
+              Settle
+            </button>
+            <Harness initial={THREE} isSaving={isSaving} />
+          </>
+        );
+      }
+      render(<Toggle />);
+
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Settle' }));
+      await user.click(screen.getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toBeInTheDocument();
     });
 
     // `fireEvent` (synchronous) so every click provably lands before the ~225ms `Fade` timer. Then

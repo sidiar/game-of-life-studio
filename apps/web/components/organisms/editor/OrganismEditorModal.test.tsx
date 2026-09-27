@@ -3026,6 +3026,46 @@ describe('OrganismEditorModal', () => {
       await act(async () => resolveSave());
     });
 
+    // Second review decision (a), 2026-09-27 (Story 4.26): a rule delete is refused while a write
+    // is in flight, the same `isSaving` lock the test above pins for the unsaved-changes
+    // confirmation — `<RulesEditor>` never opens its own confirmation mid-Save, so a Save outcome
+    // is never announced inside a subtree the confirmation has made `inert`/`aria-hidden`.
+    it('a rule delete opens no confirmation while a write is in flight, and works again once it settles', async () => {
+      const user = userEvent.setup();
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      let resolveSave!: () => void;
+      const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave = resolve;
+          }),
+      );
+      mountModal({ organisms });
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      await user.click(headerAddButton(rules));
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+      await dirtyTheDraft(user, dialog);
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled(),
+      );
+
+      await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument();
+      expect(within(rules).getByRole('group', { name: 'Rule 1' })).toBeInTheDocument();
+
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+      await act(async () => resolveSave());
+      await waitFor(() =>
+        expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled(),
+      );
+
+      await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toBeInTheDocument();
+    });
+
     it('the GONE exemption closes directly through Back, ✕ and Escape even on a dirty draft (Story 4.22 fourth-pass decision (a))', async () => {
       for (const trigger of ['Back to Library', 'Close', null] as const) {
         const user = userEvent.setup();
