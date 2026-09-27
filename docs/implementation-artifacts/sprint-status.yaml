@@ -140,7 +140,7 @@ development_status:
   4-22-safe-delete-protected-default: done
   4-23-editor-unsaved-changes-scope: done
   4-24-edit-organism-from-battle: done
-  4-25-create-organism-from-battle: review
+  4-25-create-organism-from-battle: in-progress
   4-26-rule-delete-confirmation-dialog: backlog
   epic-4-retrospective: optional
 

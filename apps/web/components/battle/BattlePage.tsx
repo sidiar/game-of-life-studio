@@ -1058,10 +1058,11 @@ export default function BattlePage({
   // Story 4.25 (FD1): the create session's selection continuation. Stashed by
   // `handleCreateOrganism`, consumed by `handleEditorSaved` once the new organism's id has actually
   // joined `roster` (never before — `resolveSelectedTool` discards a `chosen` id that is not in
-  // `roster` and falls back to the first row). `null` on every path except "a create session is
-  // open and has not yet been adopted" — cleared on adoption AND on a pencil press (defence in
-  // depth: `isNew` below already makes a stale call unreachable, since a pencil session's id is
-  // always already in the library).
+  // `roster` and falls back to the first row). Set by a create press; cleared on adoption and on a
+  // pencil press. A create CLOSED WITHOUT SAVING never reaches `onSaved`, so its dead continuation
+  // lingers here until the next create (which overwrites it) or pencil press (which clears it) —
+  // harmless, because `isNew` below is false for every pencil session (its id is always already in
+  // the library), so only a create's own save can ever call it (code review 2026-09-27).
   const onCreatedRef = useRef<((organismId: string) => void) | null>(null);
 
   /**

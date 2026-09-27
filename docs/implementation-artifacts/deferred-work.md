@@ -3622,13 +3622,16 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   mounted (that absence is FD5's own premise) — but Story 5.11 touches the library-load path near
   `organismsResource`, so whichever story first adds a reload must also clear (or reconcile) the
   overlay in the same change. **↪ Widened by Story 4.25 (2026-09-27):** the overlay now also holds
-  records that are entirely ABSENT from the loaded list — a created organism reaches `organisms`
-  only through `applySavedOrganisms`'s append branch, never through a `battles`/`organisms` write
-  the loaded list itself would reflect. A future reload's reconciliation must therefore handle two
-  cases, not one: an overlay entry whose id the fresh load still has (resolve by whichever is
-  newer) AND an overlay entry whose id the fresh load has dropped entirely (a created-then-deleted
-  organism, reachable once Epic 4 or 5 ships an organism delete) — dropping the overlay wholesale on
-  reload would silently un-create it from the roster. Story 4.25 proposes a
+  records that are entirely ABSENT from the page's loaded snapshot — a created organism reaches
+  `organisms` only through `applySavedOrganisms`'s append branch, because the page never re-lists.
+  (The editor HAS written it to `gol:organisms`, so a fresh `organisms.list()` would return it;
+  code review 2026-09-27 corrected an earlier "would un-create it" claim here.) A future reload's
+  reconciliation must therefore handle: an overlay entry whose id the fresh load still has (resolve
+  by whichever is newer — a created record now lands in this case too, since the fresh load has it);
+  and an
+  overlay entry whose id the fresh load has dropped entirely (a created-then-deleted organism,
+  reachable once Epic 4 or 5 ships an organism delete), where the session roster still holds the
+  id and would render it as an unknown organism. Story 4.25 proposes a
   `5-11-load-time-corruption-handling → 4-25-create-organism-from-battle` `lane-gates.yaml` row for
   Sidiar's approval (its own story file, bottom); not added here unapproved.
 - **The gate's dialog title and its disclosure trigger carry the identical accessible name.**
@@ -3657,3 +3660,21 @@ Reviewed on **Fable** against an **Opus** ruling-implementation commit (`9efe708
   FR-1.3 text still reads unconditional. Consistent with project practice (story ACs are the
   review contract), but the exception risks being rediscovered as a "bug" by anyone reading the
   PRD alone. Carry it into the PRD (or the FR-1.3 gloss) during the Epic 4 UX reconciliation.
+
+## Deferred from: code review of 4-25-create-organism-from-battle (2026-09-27)
+
+- **`handleModeToggle` does not guard on the editor being mounted.** A programmatic Lab → Run →
+  Lab while the battle-origin editor is open would remount `<BattleEditorView>`, and a create
+  session's selection continuation (`onCreatedRef`) would then call the unmounted instance's
+  `setChosenTool` — the created row joins the roster unselected. Blocked for users by `inert`;
+  the toggle's guard (`savingRef` only) is 4.24's shape. Add `organismEditorMounted ||
+  organismGateMounted` to the toggle's bail when the next story touches it.
+- **`handleCreateOrganism` / `handleEditOrganism` key on `grid`.** Their identities churn on
+  every stroke commit, re-rendering the roster subtree; `grid` is only read at click time. Read it
+  through a ref (the hot-path budget) — pre-existing with 4.24's pencil, mirrored by 4.25.
+- **The roster's create button hover state is not contrast-checked.** 11px `--gol-accent` text on
+  `--gol-bg-hover`; axe only scans the resting state. Same token pair as the Library's create
+  button — check the pair once, for both.
+- **A third hand-synced copy of the e2e seed helper.** `createOrganismFromBattle.spec.ts` copies
+  the `buildSeedPayload`/`seedWorkspace` shape again; extract a shared `e2e/` helper before a
+  seed-format change has to be made three times.

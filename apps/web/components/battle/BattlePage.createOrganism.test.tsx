@@ -38,6 +38,32 @@ function dirtyValue(container: HTMLElement): string | null {
   return root.getAttribute('data-dirty');
 }
 
+function livingCellsFact(): string | null {
+  return within(screen.getByRole('region', { name: 'Battle statistics' }))
+    .getByRole('group', { name: /^Living Cells: \d+$/ })
+    .getAttribute('aria-label');
+}
+
+/** The row's colour chip: the inline `background` on its decorative span (the 4.24 technique). */
+function chipBackground(rowName: string): string {
+  const chip = screen
+    .getByRole('button', { name: rowName })
+    .querySelector<HTMLElement>('span[aria-hidden="true"]');
+  if (chip === null) throw new Error(`no chip on row ${rowName}`);
+  return chip.style.background;
+}
+
+/**
+ * Every roster ROW currently pressed (the list items only — the header's Lab/Run toggle carries
+ * `aria-pressed` too) — re-queried, never a node captured before a modal.
+ */
+function pressedRows(): HTMLElement[] {
+  return within(screen.getByRole('complementary'))
+    .getAllByRole('listitem')
+    .flatMap((item) => within(item).getAllByRole('button'))
+    .filter((button) => button.getAttribute('aria-pressed') === 'true');
+}
+
 const createButton = () => screen.getByRole('button', { name: /create new organism/i });
 const pencil = (name: string) => screen.getByRole('button', { name: `Edit ${name}` });
 
@@ -68,7 +94,7 @@ afterEach(() => {
 });
 
 describe('BattlePage — create organism from battle (Story 4.25)', () => {
-  it('renders the create button in Lab, after the search and add controls (AC1)', async () => {
+  it('renders the create button in Lab (AC1; its order is pinned in OrganismRoster.test.tsx)', async () => {
     await openSkirmish();
 
     expect(createButton()).toBeInTheDocument();
@@ -94,6 +120,11 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
   it('keeps the grid, data-dirty and the undo ring untouched across open and Back (AC2)', async () => {
     const user = userEvent.setup();
     const { container } = await openSkirmish();
+    // A dirty, undoable state: one Clear commit (the 4.24 AC4 test's technique).
+    await user.click(screen.getByRole('button', { name: /clear petri dish/i }));
+    expect(livingCellsFact()).toBe('Living Cells: 0');
+    expect(dirtyValue(container)).toBe('true');
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
     const url = window.location.href;
 
     await user.click(createButton());
@@ -103,7 +134,11 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
 
     expect(window.location.href).toBe(url);
     expect(router.push).not.toHaveBeenCalled();
-    expect(dirtyValue(container)).toBe('false');
+    expect(livingCellsFact()).toBe('Living Cells: 0');
+    expect(dirtyValue(container)).toBe('true');
+    // Undo still restores the pre-open grid.
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(livingCellsFact()).not.toBe('Living Cells: 0');
   });
 
   it('Save → Back adopts the created organism into the roster, selected, with no battle save and no re-list (AC4, AC8)', async () => {
@@ -117,16 +152,25 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     const existingRowOrder = [...document.querySelectorAll('[data-edit-organism-id]')].map((el) =>
       el.getAttribute('data-edit-organism-id'),
     );
+    const existingChips = workspace.organisms.map((organism) => chipBackground(organism.name));
 
     const editor = await createAndSave(user, 'Brand New Organism');
     // Still open after Save (Story 4.16 Task 11) — nothing adopted yet.
     expect(screen.queryByRole('button', { name: 'Brand New Organism' })).toBeNull();
+    // AC7: the footer still reads "Used in 0 Battles" AFTER the first save, too.
+    expect(within(editor).getByText('Used in 0 Battles')).toBeInTheDocument();
 
     await user.click(within(editor).getByRole('button', { name: /Back to Battle/ }));
     await waitForNoDialog();
 
     const row = await screen.findByRole('button', { name: 'Brand New Organism' });
     expect(row).toHaveAttribute('aria-pressed', 'true');
+    expect(pressedRows()).toEqual([row]);
+    // AC4's colour chip: rendered, and the M6 default over the WHOLE library — distinct from every
+    // existing row's colour (code review 2026-09-27: "pin the colour chip").
+    const newChip = chipBackground('Brand New Organism');
+    expect(newChip).not.toBe('');
+    for (const chip of existingChips) expect(newChip).not.toBe(chip);
     expect(dirtyValue(container)).toBe('false');
     expect(saveBattle).not.toHaveBeenCalled();
     expect(listOrganisms).toHaveBeenCalledTimes(1);
@@ -142,13 +186,15 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     expect(screen.queryByRole('option', { name: 'Brand New Organism' })).toBeNull();
   });
 
-  it('Cancel on a clean draft adds no row and leaves the selection unchanged (AC5)', async () => {
+  it('Cancel on a clean draft adds no row, leaves the selection unchanged and writes nothing (AC5)', async () => {
     const user = userEvent.setup();
-    await openSkirmish();
-    const previouslySelected = screen
-      .getAllByRole('button')
-      .find((button) => button.getAttribute('aria-pressed') === 'true');
-    expect(previouslySelected).toBeDefined();
+    const repositories = seeded();
+    const saveOrganism = vi.spyOn(repositories.organisms, 'save');
+    await openSkirmish(repositories);
+    const libraryBefore = await repositories.organisms.list();
+    const [selectedBefore] = pressedRows();
+    expect(selectedBefore).toBeDefined();
+    const selectedName = selectedBefore?.getAttribute('aria-label') ?? selectedBefore?.textContent;
 
     await user.click(createButton());
     const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
@@ -158,7 +204,15 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     expect(document.querySelectorAll('[data-edit-organism-id]')).toHaveLength(
       workspace.organisms.length,
     );
-    expect(previouslySelected).toHaveAttribute('aria-pressed', 'true');
+    // Re-queried after close — a node captured before the modal could be detached.
+    const selectedAfter = pressedRows();
+    expect(selectedAfter).toHaveLength(1);
+    expect(selectedAfter[0]?.getAttribute('aria-label') ?? selectedAfter[0]?.textContent).toBe(
+      selectedName,
+    );
+    // Nothing written to `gol:organisms`.
+    expect(saveOrganism).not.toHaveBeenCalled();
+    expect(await repositories.organisms.list()).toEqual(libraryBefore);
   });
 
   it('save then Discard-later-edits still adds the saved record (AC5, FD3)', async () => {
@@ -176,6 +230,52 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
 
     expect(await screen.findByRole('button', { name: 'First Save' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'First Save Extra' })).toBeNull();
+  });
+
+  it('Save → rename → Save → Back hands over the LAST saved record: one row, the second name (FD3)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    await openSkirmish(repositories);
+
+    const editor = await createAndSave(user, 'Draft One');
+    const nameField = within(editor).getByRole('textbox', { name: 'Organism Name' });
+    await user.clear(nameField);
+    await user.type(nameField, 'Draft Two');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    // The second save landed (same id, upserted — Story 4.16 `saveStamp`), not a second record.
+    await waitFor(async () => {
+      const names = (await repositories.organisms.list()).map((organism) => organism.name);
+      expect(names).toContain('Draft Two');
+      expect(names).not.toContain('Draft One');
+    });
+    await user.click(within(editor).getByRole('button', { name: /Back to Battle/ }));
+    await waitForNoDialog();
+
+    expect(await screen.findByRole('button', { name: 'Draft Two' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.queryByRole('button', { name: 'Draft One' })).toBeNull();
+    expect(document.querySelectorAll('[data-edit-organism-id]')).toHaveLength(
+      workspace.organisms.length + 1,
+    );
+  });
+
+  it('a create after a pencil press opens on fresh snapshots — "Used in 0 Battles", not the pencil\'s (FD4, AC7)', async () => {
+    const user = userEvent.setup();
+    await openSkirmish();
+
+    await user.click(pencil('Aggressive Colonizer'));
+    const gate = await screen.findByRole('dialog', { name: 'Used in 2 Battles' });
+    await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+    let editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    await user.click(within(editor).getByRole('button', { name: /Back to Battle/ }));
+    await waitForNoDialog();
+
+    await user.click(createButton());
+    editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    expect(within(editor).getByText('Used in 0 Battles')).toBeInTheDocument();
+    expect(within(editor).queryByText(/Used in [1-9]/)).toBeNull();
   });
 
   it('focus returns to the create button on both the saved and the cancelled path (AC6)', async () => {
@@ -211,8 +311,6 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     fireEvent.click(pencil('Aggressive Colonizer'));
     fireEvent.click(createButton());
 
-    expect(screen.queryByRole('dialog')).toBeNull();
-
     await act(async () => {
       resolveList([]);
     });
@@ -224,12 +322,39 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     );
   });
 
+  it('a create press while a battle save is in flight is a no-op (AC3, `savingRef`)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    let release: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(repositories.battles, 'save').mockReturnValue(pending);
+    await openSkirmish(repositories);
+    await user.click(screen.getByRole('button', { name: /clear petri dish/i }));
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+    fireEvent.click(createButton());
+
+    // Let the lazy editor module resolve had the press gone through, then release the save.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await act(async () => {
+      release?.();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('renders no create button in Run mode, and a Lab → Run → Lab round trip renders it again (AC8)', async () => {
     const user = userEvent.setup();
     await openSkirmish();
 
     await user.click(screen.getByRole('button', { name: 'Run' }));
     await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
+    expect(screen.queryByRole('button', { name: /create new organism/i })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Lab' }));
 
     expect(await screen.findByRole('button', { name: /create new organism/i })).toBeVisible();

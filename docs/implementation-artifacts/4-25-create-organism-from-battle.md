@@ -4,7 +4,7 @@ baseline_commit: 3917ab49d6a9a2ddb3d0980bad052d6380e92f49
 
 # Story 4.25: Create Organism from Battle
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -244,6 +244,82 @@ story does.
           appended records too (see the proposed lane gate below).
 - [x] **Task 6: Gate.** Run `npm run ci:dev` without piping it (Chromium e2e only, never the
       four-browser `ci` locally). Handle any baseline refresh per AC9.
+
+### Review Findings
+
+Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor).
+
+- [ ] [Review][Decision] Focus is lost when a create fills the roster to the cap (254 → 255) — AC6
+      says focus returns to `+ Create New Organism` on both paths, but the append that lands in the
+      editor's exit commit sets `atCap`, which unmounts the button (FD2) before the hook's restore
+      effect runs; `[data-create-organism]` resolves to nothing and focus drops to `<body>`
+      (`useOrganismEditorModal.ts` restore effect; `OrganismRoster.tsx` cap branch). Options:
+      (a) on a saved create, restore to the new row's ✎ (`[data-edit-organism-id="<newId>"]`) —
+      e.g. the hook records `{ kind: 'edit', organismId: saved.id }` for a create that saved, which
+      also changes the non-cap path's target away from AC6's create button; (b) keep AC6's target
+      and fall back to the new row's ✎ only when the create button is gone; (c) fall back to the
+      cap message / Organisms section heading (needs a focusable target); (d) accept — a
+      one-in-255 boundary, record it in `deferred-work.md`.
+- [ ] [Review][Decision] The create button stays enabled during a battle save and silently
+      no-ops — `handleCreateOrganism` bails on `savingRef.current` (AC3), but `CreateButton` has no
+      `disabled`, unlike SAVE / UNDO / the name field (`disabled={isSaving}`); NFR-4.1 forbids an
+      inert-looking control that does nothing. The 4.24 ✎ has the identical shape (guarded, not
+      disabled). Options: (a) thread `isSaving` down (the `exportDisabled` pattern) and disable
+      both the create button and the ✎ during a save; (b) disable the create button only, leaving
+      the ✎ as 4.24 shipped it; (c) accept — the save window is milliseconds on localStorage, and
+      record the ✎ + create pair in `deferred-work.md`.
+- [x] [Review][Patch] `onCreatedRef`'s comment claims it is `null` on every path except an open,
+      un-adopted create — false after a cancelled create (no `onSaved`, so the dead continuation
+      lingers until the next press); comment corrected to the real invariant
+      [apps/web/components/battle/BattlePage.tsx:1058]
+- [x] [Review][Patch] AC1's "after the search input and the add select" order is not pinned by any
+      test — DOM-order assertion added
+      [apps/web/components/battle/editor/OrganismRoster.test.tsx]
+- [x] [Review][Patch] The "no create button in Run mode" test never asserts absence while in Run
+      (AC8) [apps/web/components/battle/BattlePage.createOrganism.test.tsx:227]
+- [x] [Review][Patch] The Cancel test re-checks a node captured before the modal opened (passes on
+      a detached node) and never checks AC5's "nothing is written to `gol:organisms`" — re-query
+      after close, exactly one pressed row, `organisms.save` not called, library unchanged
+      [apps/web/components/battle/BattlePage.createOrganism.test.tsx:145]
+- [x] [Review][Patch] The pending-pencil test's first `queryByRole('dialog')` assertion is vacuous
+      (the lazy editor cannot have mounted synchronously on either path) — dropped; the test's
+      real proof (the mounted editor is the pencil's) stays
+      [apps/web/components/battle/BattlePage.createOrganism.test.tsx:214]
+- [x] [Review][Patch] AC4's colour chip on the created row is not asserted (Dev Notes: "Pin
+      everything the ACs claim, including … the colour chip")
+      [apps/web/components/battle/BattlePage.createOrganism.test.tsx:109]
+- [x] [Review][Patch] The AC2 test's title claims grid and undo ring are untouched but asserts
+      neither — living-cells fact and Undo restore added (the 4.24 test's technique)
+      [apps/web/components/battle/BattlePage.createOrganism.test.tsx:94]
+- [x] [Review][Patch] AC7's "Used in 0 Battles … after the first save" and FD4's stale-snapshot
+      reset (a create after a pencil press) are untested
+      [apps/web/components/battle/BattlePage.createOrganism.test.tsx]
+- [x] [Review][Patch] Save → rename → Save → Back (the FD3 "last saved record" hand-off) is
+      untested — one row, carrying the second name
+      [apps/web/components/battle/BattlePage.createOrganism.test.tsx]
+- [x] [Review][Patch] AC3's `savingRef` guard has no test (4.24's "a comment that claims a boundary
+      needs a test on that boundary") [apps/web/components/battle/BattlePage.createOrganism.test.tsx]
+- [x] [Review][Patch] The `deferred-work.md` amendment to the 4-24 overlay entry says a created
+      record reaches `organisms` "never through a … write the loaded list itself would reflect" and
+      that a reload "would silently un-create it" — but the editor already wrote it to
+      `gol:organisms`, so a fresh `list()` returns it; the reconcile risk is ordering (append vs
+      sorted load) and the created-then-deleted id, reworded
+      [docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Defer] `handleModeToggle` does not guard on `organismEditorMounted`, so a
+      programmatic Lab → Run → Lab while the editor is open would remount `<BattleEditorView>` and
+      leave the create continuation calling a dead setter (the row joins, unselected) — blocked for
+      users by `inert`; the toggle's guard shape is 4.24's [apps/web/components/battle/BattlePage.tsx:476]
+      — deferred, pre-existing
+- [x] [Review][Defer] `handleCreateOrganism` (like 4.24's `handleEditOrganism`) keys on `grid`,
+      so its identity churns on every stroke commit and re-renders the roster subtree; `grid` is
+      only needed at click time (read it through a ref) [apps/web/components/battle/BattlePage.tsx:1239]
+      — deferred, pre-existing
+- [x] [Review][Defer] The create button's hover state (11px `--gol-accent` on `--gol-bg-hover`)
+      is never contrast-checked; axe scans the resting state only. Same token pair as the Library's
+      create button [apps/web/components/battle/editor/OrganismRoster.tsx:347] — deferred,
+      pre-existing
+- [x] [Review][Defer] `createOrganismFromBattle.spec.ts` adds a third hand-synced copy of the e2e
+      seed helper [apps/web/e2e/createOrganismFromBattle.spec.ts] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -522,6 +598,8 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
 - 2026-09-27: Implemented (dev-story) — create-from-battle button, selection continuation, the
   overlay's append path exercised for the first time, and the AC10 test/e2e/comment sweep.
   `npm run ci:dev` green. Status → review.
+- 2026-09-27: Code review (opus) — 11 patches applied (one comment, one deferred-work correction,
+  nine test pins), 4 deferred, 2 decision-needed left open for Sidiar. Status → in-progress.
 
 Proposed lane gate: { story: 5-11-load-time-corruption-handling, requires: 4-25-create-organism-from-battle, why: "5.11 owns BattlePage's library-load / unknown-id path and inherits the 4-24 duty to clear or reconcile the savedOrganisms overlay on any reload; 4.25 widens that overlay to hold created records absent from the loaded list" }
 

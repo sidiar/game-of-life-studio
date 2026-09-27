@@ -430,6 +430,18 @@ describe('OrganismRoster — the create button (Story 4.25, FR-1.2, AC1)', () =>
     expect(button).toHaveAttribute('data-create-organism', '');
   });
 
+  // Code review 2026-09-27: AC1's "placed AFTER the search input and the + ADD select" (mockup
+  // `petri-dish-lab-mode.html:682-694`) — pinned by document order, not just presence.
+  it('renders after the search input and the add select', () => {
+    renderRoster({ library: LIBRARY, onCreateOrganism: () => {} });
+
+    const search = screen.getByRole('textbox', { name: /search organisms/i });
+    const select = screen.getByRole('combobox', { name: /add organism/i });
+    const button = screen.getByRole('button', { name: /create new organism/i });
+    expect(search.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(select.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   // FD2: every non-cap add-container state, including the two AC8 "nothing to add" states and the
   // "search matches nothing" state — never the cap or the degraded branch.
   it('appears in the normal, empty-workspace, roster-consumed and search-matches-nothing states', async () => {
