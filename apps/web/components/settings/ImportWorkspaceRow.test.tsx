@@ -306,15 +306,56 @@ describe('ImportWorkspaceRow', () => {
 
     resolveExport(envelope);
     await waitFor(() =>
-      expect(within(dialog).getByRole('status')).toHaveTextContent(
+      expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent(
+        'Your current workspace was downloaded.',
+      ),
+    );
+    expect(importSpy).not.toHaveBeenCalled();
+
+    // Once the export status has appeared, a second Import Anyway click goes through.
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Import Anyway' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(importSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a swallowed in-flight Import Anyway never becomes the choice — a later Cancel still cancels (Review Decision 1)', async () => {
+    // The test above cannot tell a swallowed click from one that closed the dialog: the import only
+    // runs on the exit transition's end, so right after the click both look alike. Here, had the
+    // click registered, `choiceRef` would already be 'import', the later Cancel would be ignored
+    // (first choice wins) and the exit would run the import.
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC, EXTRA_ORGANISM] });
+    const real = buildSerializer(repos);
+    const importSpy = vi.fn(real.importWorkspace);
+    let resolveExport!: (envelope: WorkspaceExportWire) => void;
+    const exportWorkspace = vi.fn(
+      () =>
+        new Promise<WorkspaceExportWire>((resolve) => {
+          resolveExport = resolve;
+        }),
+    );
+    renderRow({ repos, serializer: { exportWorkspace, importWorkspace: importSpy } });
+
+    const envelope = await real.exportWorkspace();
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+
+    const dialog = await screen.findByRole('dialog');
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Export Current Workspace First' }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Import Anyway' }));
+    resolveExport(envelope);
+    await waitFor(() =>
+      expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent(
         'Your current workspace was downloaded.',
       ),
     );
 
-    // Once the export status has appeared, a second Import Anyway click goes through.
-    await user.click(within(dialog).getByRole('button', { name: 'Import Anyway' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(importSpy).toHaveBeenCalledTimes(1);
+    expect(importSpy).not.toHaveBeenCalled();
   });
 
   it("shows the 'rollback-failed' copy without claiming the workspace is unchanged (pristine, no dialog)", async () => {

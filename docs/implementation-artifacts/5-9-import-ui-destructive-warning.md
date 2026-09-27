@@ -4,7 +4,7 @@ baseline_commit: 10947c504375c875ef9debb5e7b4e1e0de381ac5
 
 # Story 5.9: Import UI & Destructive Warning
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -297,6 +297,15 @@ Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
 - [x] [Review][Defer] A stats `reload()` that rejects after a successful import flips `<SettingsPage>` to its error state and unmounts the card, taking the "Import complete" status with it [`SettingsPage.tsx:157`] — deferred, pre-existing `useAsyncResource` reload-error shape
 - [x] [Review][Defer] Export row and Import row keep independent `pendingRef`s, so on a pristine workspace (no dialog) an Export click and a file pick can run `exportWorkspace` and `importWorkspace` concurrently [`DataManagement.tsx:147`] — deferred, same single-writer stance as FD5
 - [x] [Review][Defer] e2e `WorkspaceExportSchema.parse(IMPORT_ENVELOPE)` runs at describe-collection time, so a schema drift fails every test in `settings.spec.ts` with an opaque collection error [`apps/web/e2e/settings.spec.ts`] — deferred, test-hygiene only
+
+Code review 2026-09-27, second pass (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor),
+scoped to the owner-decision commit (`0cde252..c344258`). 0 decision-needed, 2 patch, 1 defer,
+9 dismissed. Both rulings verified as implemented (D1 (b) guard, no `disabled`; D2 (a) text
+matches `settings.html:409`'s first sentence).
+
+- [x] [Review][Patch] Decision 1's RTL test was vacuous — it still passed with the `exportInFlightRef` guard removed (mutation-checked), because the import only runs on the exit transition's end, so right after the click a swallowed and a registered Import Anyway look alike. Added a Cancel-after-swallowed-click test that fails without the guard, pinned `importSpy` at 0 before the second click, and re-query the dialog instead of reusing a stale handle [`ImportWorkspaceRow.test.tsx`]
+- [x] [Review][Patch] `ImportWarningDialog`'s doc comment described `exportInFlightRef` only as Export First's re-entrancy guard; it now also gates Import Anyway [`ImportWarningDialog.tsx:50-52`]
+- [x] [Review][Defer] `exportInFlightRef` is not scoped to the dialog that started the export — Export First → Cancel → pick another file while that export is still pending opens a new dialog in which Import Anyway and Export First are silent no-ops until it settles, and the old export's outcome then shows as this dialog's status [`ImportWorkspaceRow.tsx:229-271`] — deferred, root cause pre-dates the ruling; needs a multi-second export to reach
 
 ## Dev Notes
 
@@ -659,6 +668,9 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
 
 ### Change Log
 
+- 2026-09-27 — Second code review (owner-decision pass): replaced Decision 1's vacuous
+  no-op assertion with a mutation-checked Cancel-after-swallowed-click test, and extended
+  `ImportWarningDialog`'s doc comment to name the new Import Anyway gate. Status → done.
 - 2026-09-27 — Applied the owner's rulings on the two `[Review][Decision]` items:
   `handleImportAnyway` is now a no-op while Export First is in flight (Decision 1, ruling b), and
   the Import row description restores the mockup's first sentence ahead of the reworded

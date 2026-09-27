@@ -48,7 +48,8 @@ export interface ImportWarningDialogProps {
  * First** is a `text` button in the middle; it is not destructive on its own. **Import Anyway** is
  * `variant="contained" color="error"` — the one destructive control in this dialog, last in DOM
  * order. No button self-disables (the Story 5.5 FD8 focus-trap rule): Export First's own re-entrancy
- * guard lives in the caller's `exportInFlightRef` (`<ImportWorkspaceRow>`), not here.
+ * guard lives in the caller's `exportInFlightRef` (`<ImportWorkspaceRow>`), not here — and the same
+ * ref makes Import Anyway a silent no-op while that export is in flight.
  */
 export default function ImportWarningDialog({
   open,

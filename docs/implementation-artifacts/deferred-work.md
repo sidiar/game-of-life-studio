@@ -3756,3 +3756,14 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   describe-collection time**, so a schema drift fails every test in the file (Story 5.5's included)
   with an opaque collection error rather than one failing test. Move the parse into the tests (or a
   `beforeAll`) the next time that spec is touched.
+
+## Deferred from: code review of 5-9-import-ui-destructive-warning, owner-decision pass (2026-09-27)
+
+- **`exportInFlightRef` is not scoped to the dialog that started the export**
+  (`ImportWorkspaceRow.tsx`). Cancel stays live during Export First (it must, per AC3), so Export
+  First → Cancel → pick another file while that export is still pending opens a new dialog whose
+  Import Anyway (Decision 1's no-op guard) and Export First are silently ignored until the old
+  export settles, and the old export's outcome then shows as the new dialog's status. Needs a
+  multi-second export to reach (today's localStorage export settles in microseconds). Fix if ever
+  needed: a dialog-generation ref bumped on open (which also resets `exportInFlightRef`), captured
+  by `handleExportFirst`, gating its `setExportState` and the ref release.
