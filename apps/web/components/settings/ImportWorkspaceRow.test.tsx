@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { CONWAYS_CLASSIC, type Organism } from '@gol/domain';
+import { CONWAYS_CLASSIC, type Organism, type WorkspaceExportWire } from '@gol/domain';
 import {
   createWorkspaceSerializer,
   ImportError,
@@ -75,6 +75,11 @@ describe('ImportWorkspaceRow', () => {
 
     expect(screen.getByRole('heading', { level: 3, name: 'Import' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /import workspace/i })).toBeInTheDocument();
+    // Review Decision 2 (owner ruling a): the description states the whole-workspace replace on
+    // the pristine path too, not just the "warned first" clause (M8, AC1).
+    expect(screen.getByText(/replaces your entire workspace/i)).toHaveTextContent(
+      /replaces your entire workspace \(all battles & organisms\) with the imported file — same for a full workspace export or a single-battle export\. you are warned first whenever your current workspace holds data, and offered to export it before it is replaced\./i,
+    );
   });
 
   it('an invalid file shows the alert and never calls importWorkspace, with no warning dialog (AC2)', async () => {
@@ -268,6 +273,48 @@ describe('ImportWorkspaceRow', () => {
     );
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(importSpy).not.toHaveBeenCalled();
+  });
+
+  it('Import Anyway is a no-op while Export First is still in flight (Review Decision 1, owner ruling b)', async () => {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC, EXTRA_ORGANISM] });
+    const real = buildSerializer(repos);
+    const importSpy = vi.fn(real.importWorkspace);
+    let resolveExport!: (envelope: WorkspaceExportWire) => void;
+    const exportWorkspace = vi.fn(
+      () =>
+        new Promise<WorkspaceExportWire>((resolve) => {
+          resolveExport = resolve;
+        }),
+    );
+    renderRow({ repos, serializer: { exportWorkspace, importWorkspace: importSpy } });
+
+    const envelope = await real.exportWorkspace();
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+
+    const dialog = await screen.findByRole('dialog');
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Export Current Workspace First' }),
+    );
+    expect(exportWorkspace).toHaveBeenCalledTimes(1);
+
+    // The export has not settled yet — Import Anyway must be a no-op: no `disabled` attribute
+    // (FD8), so the click is simply swallowed and the dialog stays open with nothing imported.
+    await user.click(within(dialog).getByRole('button', { name: 'Import Anyway' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(importSpy).not.toHaveBeenCalled();
+
+    resolveExport(envelope);
+    await waitFor(() =>
+      expect(within(dialog).getByRole('status')).toHaveTextContent(
+        'Your current workspace was downloaded.',
+      ),
+    );
+
+    // Once the export status has appeared, a second Import Anyway click goes through.
+    await user.click(within(dialog).getByRole('button', { name: 'Import Anyway' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(importSpy).toHaveBeenCalledTimes(1);
   });
 
   it("shows the 'rollback-failed' copy without claiming the workspace is unchanged (pristine, no dialog)", async () => {

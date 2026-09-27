@@ -4,7 +4,7 @@ baseline_commit: 10947c504375c875ef9debb5e7b4e1e0de381ac5
 
 # Story 5.9: Import UI & Destructive Warning
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -283,8 +283,8 @@ The ACs are split here so a reviewer can check each one on its own.
 Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor, diff
 `10947c5..fd5afc7`). 2 decision-needed, 7 patch, 5 defer, 11 dismissed.
 
-- [ ] [Review][Decision] Export First can still be in flight when Import Anyway runs the import — `handleImportAnyway` / `handleDialogExited` never consult `exportInFlightRef` (`ImportWorkspaceRow.tsx:240-282`). A user who clicks Export First and then Import Anyway before the download settles gets `applyImport`'s `clearAll()` racing `exportWorkspace()`'s reads, so the "backup" can capture a partly replaced workspace; and if that export then fails, its in-dialog alert is set after the dialog has unmounted, so the user never learns the backup failed. Today's localStorage export settles in microseconds, so the window is narrow but real. Options: **(a)** keep the in-flight export promise in a ref and have `handleDialogExited` await it before `runImport`; if it rejected, do NOT import and publish the export-failure copy as the card's alert. **(b)** Make Import Anyway a no-op while an export is in flight (no `disabled`, per FD8), so the user must click again once the status appears. **(c)** Await the export as in (a) but import regardless of its outcome, surfacing the export failure alongside the import outcome. **(d)** Accept and record in `deferred-work.md` (single user, sub-millisecond window).
-- [ ] [Review][Decision] Import row description no longer says import replaces the whole workspace — AC1 / Open flags (`ImportWorkspaceRow.tsx:292-295`). The mockup (`settings.html:409`) reads "Replaces your entire workspace (all battles & organisms) with the imported file — same for a full workspace export or a single-battle export. You are always warned first…". The Open flag only licensed replacing the "always warned first" clause, but the implementation dropped the first sentence too, so on the pristine path (no dialog) nothing on screen says a battle file replaces the whole workspace (M8). The code comment also calls the text "FR-8.4's description", which it is not. Options: **(a)** restore the mockup's first sentence and keep the reworded second ("Replaces your entire workspace (all battles & organisms) with the imported file — same for a full workspace export or a single-battle export. You are warned first whenever your current workspace holds data…"). **(b)** Keep the current single sentence and only fix the comment.
+- [x] [Review][Decision] Export First can still be in flight when Import Anyway runs the import — `handleImportAnyway` / `handleDialogExited` never consult `exportInFlightRef` (`ImportWorkspaceRow.tsx:240-282`). A user who clicks Export First and then Import Anyway before the download settles gets `applyImport`'s `clearAll()` racing `exportWorkspace()`'s reads, so the "backup" can capture a partly replaced workspace; and if that export then fails, its in-dialog alert is set after the dialog has unmounted, so the user never learns the backup failed. Today's localStorage export settles in microseconds, so the window is narrow but real. Options: **(a)** keep the in-flight export promise in a ref and have `handleDialogExited` await it before `runImport`; if it rejected, do NOT import and publish the export-failure copy as the card's alert. **(b)** Make Import Anyway a no-op while an export is in flight (no `disabled`, per FD8), so the user must click again once the status appears. **(c)** Await the export as in (a) but import regardless of its outcome, surfacing the export failure alongside the import outcome. **(d)** Accept and record in `deferred-work.md` (single user, sub-millisecond window). **Owner ruling (Sidiar, 2026-09-27): (b)** — make Import Anyway a no-op while an export is in flight (no `disabled`, per FD8); the user clicks again once the export status appears.
+- [x] [Review][Decision] Import row description no longer says import replaces the whole workspace — AC1 / Open flags (`ImportWorkspaceRow.tsx:292-295`). The mockup (`settings.html:409`) reads "Replaces your entire workspace (all battles & organisms) with the imported file — same for a full workspace export or a single-battle export. You are always warned first…". The Open flag only licensed replacing the "always warned first" clause, but the implementation dropped the first sentence too, so on the pristine path (no dialog) nothing on screen says a battle file replaces the whole workspace (M8). The code comment also calls the text "FR-8.4's description", which it is not. Options: **(a)** restore the mockup's first sentence and keep the reworded second ("Replaces your entire workspace (all battles & organisms) with the imported file — same for a full workspace export or a single-battle export. You are warned first whenever your current workspace holds data…"). **(b)** Keep the current single sentence and only fix the comment. **Owner ruling (Sidiar, 2026-09-27): (a)** — restore the mockup's first sentence and keep the reworded second ("Replaces your entire workspace (all battles & organisms) with the imported file — same for a full workspace export or a single-battle export. You are warned first whenever your current workspace holds data…"); also fix the code comment that mislabels the text as "FR-8.4's description".
 - [x] [Review][Patch] Pristine path writes after unmount — no `mountedRef` check between the pick-time awaits and `runImport`, so leaving `/settings` mid-read still replaces the workspace with no visible outcome [`ImportWorkspaceRow.tsx:208-222`]
 - [x] [Review][Patch] Focus returned to Import before the import settled, contradicting the effect's own comment and AC7's "focus then returns" order — the restore effect fired on the `dialogMounted=false` commit while `runImport` was still pending [`ImportWorkspaceRow.tsx:151-155,266-282`]
 - [x] [Review][Patch] Repeating Export First is never re-announced — `exportState` kept its old value, so an identical outcome did not re-insert the live region; reset to `'idle'` before each attempt [`ImportWorkspaceRow.tsx:246-257`]
@@ -615,6 +615,21 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
   (`pristineWorkspace.test.ts`, `importFailureMessage.test.ts`, `importMessages.test.ts`,
   `ImportWorkspaceRow.test.tsx`, `DataManagement.test.tsx`, `SettingsPage.test.tsx`) passed clean
   in every one of these runs, including inside the flaking full-suite passes.
+- **Owner review decisions (2026-09-27)** — both `[Review][Decision]` items resolved per the
+  owner's rulings recorded on each:
+  - **Decision 1 (b):** `handleImportAnyway` now no-ops while `exportInFlightRef.current` is true
+    (no `disabled`, per FD8) — a second click once the export status appears goes through
+    normally. Covered by a new RTL test that holds `serializer.exportWorkspace` pending, clicks
+    Import Anyway during that window (dialog stays open, `importWorkspace` not called), resolves
+    the export, then clicks Import Anyway again (dialog exits, `importWorkspace` called once).
+  - **Decision 2 (a):** the Import row description now restores the mockup's first sentence
+    (`settings.html:409`) ahead of the existing reworded "warned first" sentence, and the stale
+    code comment mislabeling the text as "FR-8.4's description" is corrected to name the review
+    decision. Covered by extending the existing AC1 render test to assert the full description
+    text.
+  - `npm run ci:dev` re-run clean end to end (typecheck, lint, format:check, spec:check,
+    boundary:check, `test:coverage`, `build:standalone`, `bundle:check`, `bench`, `bench:check`,
+    all four `e2e` projects including `settings.spec.ts`'s Story 5.9 suite) — no deviation.
 
 ### File List
 
@@ -644,6 +659,11 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
 
 ### Change Log
 
+- 2026-09-27 — Applied the owner's rulings on the two `[Review][Decision]` items:
+  `handleImportAnyway` is now a no-op while Export First is in flight (Decision 1, ruling b), and
+  the Import row description restores the mockup's first sentence ahead of the reworded
+  "warned first" sentence, with the stale "FR-8.4's description" comment fixed (Decision 2, ruling
+  a). Both are covered by new/extended RTL assertions in `ImportWorkspaceRow.test.tsx`.
 - 2026-09-27 — Story 5.9 implemented: the Import row, the mandatory destructive-replace warning
   (suppressed only for a provably pristine workspace), Export-First-then-return, outcome copy per
   the FD4 table, and the full act-on-exit/focus-restore/re-entrancy shape mirroring Stories

@@ -248,6 +248,9 @@ export default function ImportWorkspaceRow({
 
   function handleImportAnyway() {
     if (choiceRef.current !== null) return;
+    // Review Decision 1, owner ruling (b): a no-op while Export First is in flight — no `disabled`
+    // (FD8) — so the user must click again once the export status appears.
+    if (exportInFlightRef.current) return;
     choiceRef.current = 'import';
     setDialogOpen(false);
   }
@@ -298,12 +301,15 @@ export default function ImportWorkspaceRow({
       <Row>
         <RowInfo>
           <RowLabel>Import</RowLabel>
-          {/* FR-8.4's description, NOT the mockup's "You are always warned first" — AC4 suppresses
-              the warning for a pristine workspace, so "always" would overclaim (Dev Notes' Open
-              Flags). */}
+          {/* Review Decision 2, owner ruling (a): the mockup's first sentence (`settings.html:409`),
+              restored verbatim, plus the reworded second — NOT the mockup's "You are always warned
+              first" clause, since AC4 suppresses the warning for a pristine workspace, so "always"
+              would overclaim (Dev Notes' Open Flags). */}
           <RowDescription>
-            You are warned first whenever your current workspace holds data, and offered to export
-            it before it is replaced.
+            Replaces your entire workspace (all battles &amp; organisms) with the imported file —
+            same for a full workspace export or a single-battle export. You are warned first
+            whenever your current workspace holds data, and offered to export it before it is
+            replaced.
           </RowDescription>
         </RowInfo>
         <ImportButton
