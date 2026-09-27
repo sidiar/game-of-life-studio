@@ -5,9 +5,9 @@ import type { Organism } from './organismSchema';
  * FR-8.4's "unmodified default workspace" predicate (Story 5.9 Task 1) — the gate that lets
  * import skip its destructive-replace warning. "Unmodified" means deep-equal to the FR-1.5 seed,
  * `CONWAYS_CLASSIC`: every field, including `survivalRules`' `id`/`contentHash` — a rule deleted
- * and re-added, or a rule reordered, produces a NEW `id`/`contentHash` pair in this codebase's
- * authoring flow (Epic 4), so a workspace that still carries the two originals really is
- * untouched, and one that does not really was edited. This lives in `@gol/domain`, not
+ * and re-added produces a NEW `id`/`contentHash` pair in this codebase's authoring flow (Epic 4),
+ * so a workspace that still carries the two originals really is untouched, and one that does not
+ * really was edited. A rule REORDER keeps its ids; it is caught because arrays compare in order. This lives in `@gol/domain`, not
  * `apps/web`, because it is a workspace-integrity predicate over `Organism` values — the same
  * "pure logic in `packages/domain`" placement `organismDeleteGuard.ts` and the referential-
  * integrity indexes already follow (project-context.md).

@@ -344,6 +344,125 @@ describe('ImportWorkspaceRow', () => {
     expect(onImported).not.toHaveBeenCalled();
   });
 
+  it('a rejecting list() read counts as NOT pristine — the warning still shows (AC4, "when in doubt, warn")', async () => {
+    // Pristine by content (Conway alone) — only the failed read can make it warn.
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC] });
+    const serializer = buildSerializer(repos);
+    const envelope = await serializer.exportWorkspace();
+    const importSpy = vi.fn(serializer.importWorkspace);
+    render(
+      <ImportWorkspaceRow
+        serializer={{ exportWorkspace: serializer.exportWorkspace, importWorkspace: importSpy }}
+        battles={{ list: vi.fn().mockRejectedValue(new Error('read boom')) }}
+        organisms={repos.organisms}
+        onImported={vi.fn()}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(importSpy).not.toHaveBeenCalled();
+  });
+
+  it('a backdrop click maps to Cancel: the store is untouched and focus returns to Import (AC3)', async () => {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC, EXTRA_ORGANISM] });
+    const real = buildSerializer(repos);
+    const importSpy = vi.fn(real.importWorkspace);
+    renderRow({
+      repos,
+      serializer: { exportWorkspace: real.exportWorkspace, importWorkspace: importSpy },
+    });
+
+    const envelope = await real.exportWorkspace();
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+    await screen.findByRole('dialog');
+
+    // MUI's backdrop-click target is the dialog container (mousedown AND click on itself).
+    const container = document.querySelector('.MuiDialog-container');
+    if (!(container instanceof HTMLElement)) throw new Error('dialog container not found');
+    await user.click(container);
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(importSpy).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /import workspace/i })).toHaveFocus(),
+    );
+  });
+
+  it('clicking Import while a flow is in flight does not open the picker again (Task 4.4)', async () => {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC] });
+    let resolveImport: (summary: ImportSummary) => void = () => {};
+    const importWorkspace = vi.fn().mockReturnValue(
+      new Promise<ImportSummary>((resolve) => {
+        resolveImport = resolve;
+      }),
+    );
+    renderRow({ repos, serializer: { exportWorkspace: vi.fn(), importWorkspace } });
+
+    const envelope = await buildSerializer(createFakeRepositories()).exportWorkspace();
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+    await waitFor(() => expect(importWorkspace).toHaveBeenCalledTimes(1));
+
+    const pickerClick = vi.spyOn(fileInput(), 'click');
+    await user.click(screen.getByRole('button', { name: /import workspace/i }));
+    expect(pickerClick).not.toHaveBeenCalled();
+
+    resolveImport({ kind: 'workspace', battleCount: 0, organismCount: 1 });
+    await screen.findByRole('status');
+  });
+
+  it('Import Anyway returns focus to Import only after the import has settled (AC7)', async () => {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC, EXTRA_ORGANISM] });
+    const real = buildSerializer(repos);
+    let resolveImport: (summary: ImportSummary) => void = () => {};
+    const importWorkspace = vi.fn().mockReturnValue(
+      new Promise<ImportSummary>((resolve) => {
+        resolveImport = resolve;
+      }),
+    );
+    renderRow({ repos, serializer: { exportWorkspace: real.exportWorkspace, importWorkspace } });
+
+    const envelope = await real.exportWorkspace();
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Import Anyway' }));
+
+    await waitFor(() => expect(importWorkspace).toHaveBeenCalledTimes(1));
+    const importButton = screen.getByRole('button', { name: /import workspace/i });
+    expect(importButton).not.toHaveFocus();
+
+    resolveImport({ kind: 'workspace', battleCount: 0, organismCount: 1 });
+    await screen.findByRole('status');
+    await waitFor(() => expect(importButton).toHaveFocus());
+  });
+
+  it('a repeated Export First re-inserts its status, so the second attempt is announced too (AC5)', async () => {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC, EXTRA_ORGANISM] });
+    const serializer = buildSerializer(repos);
+    renderRow({ repos, serializer });
+
+    const envelope = await serializer.exportWorkspace();
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+    const dialog = await screen.findByRole('dialog');
+    const exportFirst = within(dialog).getByRole('button', {
+      name: 'Export Current Workspace First',
+    });
+
+    await user.click(exportFirst);
+    const first = await within(dialog).findByRole('status');
+    await user.click(exportFirst);
+    await waitFor(() => expect(downloadJsonFile).toHaveBeenCalledTimes(2));
+    const second = await within(dialog).findByRole('status');
+
+    expect(second).not.toBe(first);
+  });
+
   it('has no axe accessibility violations with the warning dialog open', async () => {
     const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC, EXTRA_ORGANISM] });
     const serializer = buildSerializer(repos);

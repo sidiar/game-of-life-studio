@@ -4,9 +4,11 @@ import { ImportError, NewerFormatVersionError, QuotaExceededError } from '@gol/p
  * Story 5.9's copy table (Dev Notes FD4) — plain, non-technical, no story IDs, no `error.message`.
  * The claims are fixed even where the wording may later be polished:
  *
- * `applyImport` snapshots the workspace before its write region runs, and every non-`ImportError`
- * rejection from `validateImportFile` is thrown before that snapshot even starts — so "workspace
- * not changed" is a PROPERTY of the write path (the same reasoning `saveFailureMessage.ts`'s
+ * `applyImport` wraps its whole write region (clear, both `replaceAll`s, the default-organism
+ * re-ensure) so any throw inside it becomes `'write-failed'` / `'rollback-failed'`; every other
+ * rejection — `fromEnvelope`, the snapshot read, a programming error — is thrown before its first
+ * write, and nothing after the region can throw — so "workspace not changed" is a PROPERTY of the
+ * write path (the same reasoning `saveFailureMessage.ts`'s
  * header states for its own claims), not a hedge this function is guessing at. The one outcome
  * where it would be false, `'rollback-failed'`, is the one branch below that never says it.
  *
@@ -57,6 +59,13 @@ export function importFailureMessage(error: unknown): string {
           'restored. Reload, and restore from a backup (for example, an exported file) if ' +
           'anything is missing.'
         );
+      default: {
+        // Compile-time exhaustiveness: a new `ImportErrorCode` must get its own row here, never
+        // fall silently into the fallback below — which claims "not changed", and a new code may
+        // well be a partial-write one.
+        const unhandled: never = error.code;
+        void unhandled;
+      }
     }
   }
 

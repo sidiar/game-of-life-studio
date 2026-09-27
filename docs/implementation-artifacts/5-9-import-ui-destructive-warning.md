@@ -4,7 +4,7 @@ baseline_commit: 10947c504375c875ef9debb5e7b4e1e0de381ac5
 
 # Story 5.9: Import UI & Destructive Warning
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -277,6 +277,26 @@ The ACs are split here so a reviewer can check each one on its own.
     `npm run build:standalone && npm run bundle:baseline`. Never hand-edit
     `scripts/bundle-baselines.json`.
   - [x] 7.3 Fill in the Dev Agent Record, including every forced decision you deviated from.
+
+### Review Findings
+
+Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor, diff
+`10947c5..fd5afc7`). 2 decision-needed, 7 patch, 5 defer, 11 dismissed.
+
+- [ ] [Review][Decision] Export First can still be in flight when Import Anyway runs the import — `handleImportAnyway` / `handleDialogExited` never consult `exportInFlightRef` (`ImportWorkspaceRow.tsx:240-282`). A user who clicks Export First and then Import Anyway before the download settles gets `applyImport`'s `clearAll()` racing `exportWorkspace()`'s reads, so the "backup" can capture a partly replaced workspace; and if that export then fails, its in-dialog alert is set after the dialog has unmounted, so the user never learns the backup failed. Today's localStorage export settles in microseconds, so the window is narrow but real. Options: **(a)** keep the in-flight export promise in a ref and have `handleDialogExited` await it before `runImport`; if it rejected, do NOT import and publish the export-failure copy as the card's alert. **(b)** Make Import Anyway a no-op while an export is in flight (no `disabled`, per FD8), so the user must click again once the status appears. **(c)** Await the export as in (a) but import regardless of its outcome, surfacing the export failure alongside the import outcome. **(d)** Accept and record in `deferred-work.md` (single user, sub-millisecond window).
+- [ ] [Review][Decision] Import row description no longer says import replaces the whole workspace — AC1 / Open flags (`ImportWorkspaceRow.tsx:292-295`). The mockup (`settings.html:409`) reads "Replaces your entire workspace (all battles & organisms) with the imported file — same for a full workspace export or a single-battle export. You are always warned first…". The Open flag only licensed replacing the "always warned first" clause, but the implementation dropped the first sentence too, so on the pristine path (no dialog) nothing on screen says a battle file replaces the whole workspace (M8). The code comment also calls the text "FR-8.4's description", which it is not. Options: **(a)** restore the mockup's first sentence and keep the reworded second ("Replaces your entire workspace (all battles & organisms) with the imported file — same for a full workspace export or a single-battle export. You are warned first whenever your current workspace holds data…"). **(b)** Keep the current single sentence and only fix the comment.
+- [x] [Review][Patch] Pristine path writes after unmount — no `mountedRef` check between the pick-time awaits and `runImport`, so leaving `/settings` mid-read still replaces the workspace with no visible outcome [`ImportWorkspaceRow.tsx:208-222`]
+- [x] [Review][Patch] Focus returned to Import before the import settled, contradicting the effect's own comment and AC7's "focus then returns" order — the restore effect fired on the `dialogMounted=false` commit while `runImport` was still pending [`ImportWorkspaceRow.tsx:151-155,266-282`]
+- [x] [Review][Patch] Repeating Export First is never re-announced — `exportState` kept its old value, so an identical outcome did not re-insert the live region; reset to `'idle'` before each attempt [`ImportWorkspaceRow.tsx:246-257`]
+- [x] [Review][Patch] `importFailureMessage`'s `ImportError` switch has no exhaustiveness check — a future `ImportErrorCode` (possibly a partial-write one) would silently fall into the "not changed" fallback [`apps/web/lib/import/importFailureMessage.ts:23-60`]
+- [x] [Review][Patch] Inaccurate WHY comments — `pristineWorkspace.ts` claims a reorder mints new rule ids (it does not; array order catches it); `importFailureMessage.ts` attributes the "not changed" guarantee to `validateImportFile` instead of `applyImport`; `ImportWarningDialog.tsx` names the caller's `pendingRef` as Export First's guard (it is `exportInFlightRef`); `DataManagement.tsx` says it "calls exactly two serializer methods" [`pristineWorkspace.ts:5-9`, `importFailureMessage.ts:6-11`, `ImportWarningDialog.tsx:50-51`, `DataManagement.tsx:11-15`]
+- [x] [Review][Patch] `deferred-work.md`'s M8/FR-8.4 entry gives a self-contradictory authority rationale ("FR-8.4 sits above M8 only via the … rule being read the OTHER way") [`docs/implementation-artifacts/deferred-work.md` — Story 5-9 section]
+- [x] [Review][Patch] Untested claim-carrying branches — a rejecting `list()` must still warn (AC4 "when in doubt, warn"), a backdrop click must map to Cancel (AC3), and an Import-button click while a flow is pending must be a no-op (Task 4.4) [`ImportWorkspaceRow.test.tsx`]
+- [x] [Review][Defer] A store fault from `applyImport`'s snapshot read (`CorruptDataError` other than `NewerFormatVersionError`) falls to the fallback "This file could not be imported", blaming the file for a store fault [`importFailureMessage.ts:70-73`] — deferred, store-corruption UX is Story 5.11's
+- [x] [Review][Defer] No file-size cap before `file.text()` — a huge file is read and `JSON.parse`d in full before failing on quota [`ImportWorkspaceRow.tsx:190`] — deferred, no spec'd limit
+- [x] [Review][Defer] A stats `reload()` that rejects after a successful import flips `<SettingsPage>` to its error state and unmounts the card, taking the "Import complete" status with it [`SettingsPage.tsx:157`] — deferred, pre-existing `useAsyncResource` reload-error shape
+- [x] [Review][Defer] Export row and Import row keep independent `pendingRef`s, so on a pristine workspace (no dialog) an Export click and a file pick can run `exportWorkspace` and `importWorkspace` concurrently [`DataManagement.tsx:147`] — deferred, same single-writer stance as FD5
+- [x] [Review][Defer] e2e `WorkspaceExportSchema.parse(IMPORT_ENVELOPE)` runs at describe-collection time, so a schema drift fails every test in `settings.spec.ts` with an opaque collection error [`apps/web/e2e/settings.spec.ts`] — deferred, test-hygiene only
 
 ## Dev Notes
 

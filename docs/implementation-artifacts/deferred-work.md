@@ -3581,9 +3581,9 @@ full reasoning; the owner rules on each flagged one).
   always warns") and the mockup's Import row description ("You are always warned first",
   `settings.html:409`) all read as an unconditional warning; FR-8.4 (`prd.md:512`) and this
   story's own epic AC (`epics.md:1430`) suppress it for a pristine workspace (AC4). This story
-  followed the AC/FR-8.4 (narrower, more specific, and FR-8.4 sits above M8 only via the
-  "Architecture Decisions win cross-cutting" rule being read the OTHER way for a feature-level FR)
-  — flagged rather than silently picked, per Story 5.9 Dev Notes' Open Flags. If the owner later
+  followed the AC/FR-8.4 as the narrower, more specific rule, even though the authority order
+  ("Architecture Decisions win cross-cutting") ranks M8 above it — which is exactly why this is
+  flagged rather than silently picked, per Story 5.9 Dev Notes' Open Flags. If the owner later
   rules "always", AC4 and `isPristineWorkspace`'s only call site drop, and
   `<ImportWorkspaceRow>`'s dialog shows unconditionally; `isPristineWorkspace` itself would become
   dead code to remove, not to keep unused.
@@ -3729,3 +3729,30 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   `savingRef`, the page is `inert` while the editor is open, and no hotkey saves. If a future route
   can start a battle save while the editor is open, skip disabled targets
   (`trigger?.matches(':disabled')`) — and note the create button is disabled then too.
+
+## Deferred from: code review of 5-9-import-ui-destructive-warning (2026-09-27)
+
+- **A store fault from the import's snapshot read is reported as a bad file.** `applyImport`'s
+  `snapshotWorkspace()` can throw a `CorruptDataError` (e.g. a corrupt `gol:schema`) that is not a
+  `NewerFormatVersionError`; `importFailureMessage` has no branch for it, so the fallback says "This
+  file could not be imported", and the user retries with other files that all fail the same way.
+  The claim "workspace not changed" is still true. Store-corruption UX is Story 5.11's — give it a
+  "your saved workspace could not be read; nothing was imported" branch there.
+- **No file-size cap before `file.text()`** (`ImportWorkspaceRow.tsx`). `accept` is only a hint; a
+  very large file is read and `JSON.parse`d in full before the write fails on quota (reported
+  truthfully as `write-failed` + quota). No story specifies a limit; a pre-read
+  `file.size > ~5 MB` rejection would save the parse.
+- **A failed stats reload after a successful import hides the success message.** `onImported` →
+  `statsResource.reload()`; if that load rejects, `useAsyncResource` sets `status: 'error'`,
+  `<SettingsPage>` swaps to its error state and unmounts `<DataManagement>`, taking "Import
+  complete" with it. Pre-existing reload-error shape of `useAsyncResource` (Story 4.16); only
+  reachable if `list()` rejects on the data the import itself just wrote.
+- **Export and Import rows can run concurrently on a pristine workspace.** Their `pendingRef`s are
+  independent; with no warning dialog to make the flow modal, an Export click followed at once by a
+  file pick runs `exportWorkspace` and `importWorkspace` together, so the export may capture the
+  imported data. Same single-writer stance as Story 5.9 FD5; a shared card-level in-flight flag is
+  the fix if it is ever wanted.
+- **`settings.spec.ts` parses `IMPORT_ENVELOPE` with `WorkspaceExportSchema.parse` at
+  describe-collection time**, so a schema drift fails every test in the file (Story 5.5's included)
+  with an opaque collection error rather than one failing test. Move the parse into the tests (or a
+  `beforeAll`) the next time that spec is touched.

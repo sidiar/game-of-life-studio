@@ -147,9 +147,11 @@ export default function ImportWorkspaceRow({
   // Post-commit focus restore, run for every close path (Cancel/Escape/backdrop, or Import Anyway
   // once its import has settled). Must run AFTER `useInertBackground`'s cleanup has released
   // `inert` — React runs every cleanup for a commit before any setup, and that hook is declared
-  // above this effect.
+  // above this effect. `pendingRef` holds it back on the Import Anyway path: the
+  // `dialogMounted=false` commit lands while `runImport` is still awaiting, and AC7 orders the
+  // restore AFTER the outcome — the `focusTick` bump once the import settles re-fires this.
   useEffect(() => {
-    if (dialogMounted || !focusOwedRef.current) return;
+    if (dialogMounted || pendingRef.current || !focusOwedRef.current) return;
     focusOwedRef.current = false;
     focusImportButtonIfLoose();
   }, [dialogMounted, focusTick]);
@@ -215,6 +217,13 @@ export default function ImportWorkspaceRow({
       pristine = false;
     }
 
+    // Every step above awaited; if the row unmounted meanwhile (the user left `/settings`), the
+    // import must not run unseen — nobody is left to read its outcome.
+    if (!mountedRef.current) {
+      pendingRef.current = false;
+      return;
+    }
+
     if (pristine) {
       await runImport(text);
       pendingRef.current = false;
@@ -246,6 +255,9 @@ export default function ImportWorkspaceRow({
   async function handleExportFirst() {
     if (exportInFlightRef.current) return;
     exportInFlightRef.current = true;
+    // Back to 'idle' first, so a repeat attempt with the same outcome re-inserts its live region
+    // and is announced again, rather than leaving an identical node silently in place.
+    setExportState('idle');
     try {
       await exportWorkspaceToFile(serializer);
       if (mountedRef.current) setExportState('exported');

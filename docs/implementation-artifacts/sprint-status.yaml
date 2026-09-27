@@ -154,7 +154,7 @@ development_status:
   5-6-battle-export-dialog: done
   5-7-migration-registry: done
   5-8-atomic-import-pipeline: done
-  5-9-import-ui-destructive-warning: review
+  5-9-import-ui-destructive-warning: in-progress
   5-10-clear-all-data: backlog
   5-11-load-time-corruption-handling: backlog
   epic-5-retrospective: optional

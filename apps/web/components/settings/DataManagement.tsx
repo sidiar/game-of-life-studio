@@ -8,10 +8,10 @@ import { Card, CardTitle, Row, RowDescription, RowInfo, RowLabel } from './Setti
 import ImportWorkspaceRow from './ImportWorkspaceRow';
 
 export interface DataManagementProps {
-  // A `Pick`, not the whole interface (FD7 of Story 5.2, AR-2/27) — this component calls exactly
-  // two serializer methods and should not be able to reach for another. `exportWorkspaceToFile`
-  // is what actually calls `exportWorkspace`; `importWorkspace` is called through
-  // `<ImportWorkspaceRow>`, Story 5.9's second row.
+  // A `Pick`, not the whole interface (FD7 of Story 5.2, AR-2/27) — this card's subtree needs
+  // exactly two serializer methods and should not be able to reach for another. It calls neither
+  // directly: `exportWorkspaceToFile` calls `exportWorkspace`, and `importWorkspace` is passed
+  // through to `<ImportWorkspaceRow>`, Story 5.9's second row.
   serializer: Pick<WorkspaceSerializer, 'exportWorkspace' | 'importWorkspace'>;
   /** Story 5.9: the pristine-workspace check's `battleCount` half (AC4). */
   battles: Pick<BattleRepository, 'list'>;
