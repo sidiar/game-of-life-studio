@@ -46,8 +46,9 @@ export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled'
  * there is no `NEW_ORGANISM_AGING_ENABLED` constant (it would be a name for `false`); it happens
  * to equal `CONWAYS_CLASSIC.agingEnabled`, which is a coincidence, not a derivation. `colorToken`
  * is the M6 default for the library the editor opened over (Story 4.8, FR-2.3): `usedColorTokens`
- * is one token per organism, taken from the caller's loaded library — Story 4.25's battle-origin
- * editor passes the same list; an edit session (Story 4.17) never calls this factory, it seeds
+ * is one token per organism, taken from the caller's loaded library — the battle-origin editor
+ * (Story 4.25) passes the same `editorLibrary` list `<BattlePage>` resolves for the roster; an
+ * edit session (Story 4.17) never calls this factory, it seeds
  * from the record through `organismDraftFrom`. `survivalRules` seeds to a FRESH empty array per
  * call (Story 4.10) — never a shared module-level `[]` — for the same reason as the rest of the
  * draft: it is diffed against its seed, and a shared array would move with every edit made through

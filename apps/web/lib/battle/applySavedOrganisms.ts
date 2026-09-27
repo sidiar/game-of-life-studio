@@ -11,10 +11,10 @@ import type { Organism } from '@gol/domain';
  * would persist. The overlay has no failure path: each record is exactly what `organisms.save` just
  * wrote.
  *
- * Replace-by-id only. A saved record whose id is NOT in `list` is appended — a branch no caller can
- * reach under Story 4.24 (the battle origin only EDITS an organism the page already loaded), named
- * here because Story 4.25's create-from-battle reuses this overlay for a new organism. Nothing
- * beyond the plain append is built for it.
+ * Replace-by-id only. A saved record whose id is NOT in `list` is appended — unreachable under
+ * Story 4.24 alone (the battle origin only EDITS an organism the page already loaded), and reached
+ * for the first time by Story 4.25's create-from-battle, which lays a brand-new record over this
+ * same overlay. Nothing beyond the plain append was needed for it.
  *
  * Returns `list` ITSELF when there is nothing to lay over it, so the caller's memo keeps its
  * identity (`palette`, `runOrganisms`, `rosterIds` and `roster` all key on it) until the first

@@ -336,7 +336,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 - **The AC5 cap test is over-determined** — `BattlePage.test.tsx`'s cap test builds a 255-entry roster but passes `organisms: []`, so the addable library is empty for a second, independent reason and `queryByRole('combobox')` would be null even with the cap logic removed. Only the `/roster is full/` text assertion discriminates, and the cap-beats-empty priority is pinned at the unit level instead (`OrganismRoster.test.tsx`). Seeding 256 organisms — 255 placed plus one spare that WOULD otherwise be offered — is what would make the page-level test mean what its name says. **Pick this up in whichever story next touches this describe block.**
 
-- **Two library organisms with the same name are indistinguishable in the add dropdown** — `OrganismSchema.name` is `z.string().max(50)` with no uniqueness constraint, and an empty name resolves to the shared "Unnamed organism" fallback, so duplicates are reachable. `<option>` renders `organism.name` alone; the `DisplayOrganism`'s `color`/`colorToken` are resolved for the dropdown and then never used, and an `<option>` cannot carry the `<ColorChip>` a roster row uses. The user cannot tell which one they are adding, and the roster then shows two identically-named rows, possibly with an immediate "Shared colour" warning they had no forewarning of. **Pick this up in Epic 4** (Stories 4.24/4.25 own organism identity in the UI), or sooner if the `<select>` decision above replaces it with a custom listbox, which could carry a chip. **↪ Not addressed by Story 4.24 (2026-09-26):** 4.24 identifies the organism to edit by its ROW (one ✎ per roster row, `data-edit-organism-id`), not by name, so two same-named rows each edit the right record — but the add dropdown and the rows themselves are still indistinguishable by name. Re-pointed to **Story 4.25** (create-from-battle touches the add path) or the Epic 4 UX reconciliation.
+- **Two library organisms with the same name are indistinguishable in the add dropdown** — `OrganismSchema.name` is `z.string().max(50)` with no uniqueness constraint, and an empty name resolves to the shared "Unnamed organism" fallback, so duplicates are reachable. `<option>` renders `organism.name` alone; the `DisplayOrganism`'s `color`/`colorToken` are resolved for the dropdown and then never used, and an `<option>` cannot carry the `<ColorChip>` a roster row uses. The user cannot tell which one they are adding, and the roster then shows two identically-named rows, possibly with an immediate "Shared colour" warning they had no forewarning of. **Pick this up in Epic 4** (Stories 4.24/4.25 own organism identity in the UI), or sooner if the `<select>` decision above replaces it with a custom listbox, which could carry a chip. **↪ Not addressed by Story 4.24 (2026-09-26):** 4.24 identifies the organism to edit by its ROW (one ✎ per roster row, `data-edit-organism-id`), not by name, so two same-named rows each edit the right record — but the add dropdown and the rows themselves are still indistinguishable by name. **↪ Not addressed by Story 4.25 (2026-09-27) either:** the create path adds a NEW row via the overlay/roster append and never touches the `<select>` rendering itself — a created organism sharing a name with an existing one is exactly as indistinguishable in the dropdown as any other pair. Re-pointed to the **Epic 4 UX reconciliation** — no single remaining Epic 4 story owns the add path in isolation.
 
 - ~~**The search predicate does no Unicode normalisation and uses `toLowerCase`, not `toLocaleLowerCase`** — the review trimmed the query (the whitespace half was a live defect) but left these two. A decomposed "é" (NFD) never matches a precomposed one (NFC), and locale-sensitive casing (Turkish dotted/dotless i) is wrong under `toLowerCase`. Organism names are free user text, so both are reachable, just narrowly. `searchText.trim().normalize('NFC').toLocaleLowerCase()` against a likewise-normalised name is the whole fix. **Pick this up in whichever story next touches the search predicate**, or with Epic 6's i18n pass if one materialises.~~ **✅ Resolved in Story 4.2** — `lib/organisms/organismNameMatches.ts` (NFC + `toLocaleLowerCase`), consumed by `<OrganismLibrary>` and `<OrganismRoster>`.
 
@@ -982,8 +982,14 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   library changing under an already-mounted page — those stories inherit the guard rather than
   writing their own. **↪ Story 4.24 (2026-09-26): unreachable under 4.24 by construction** (FD8) —
   its editor opens from Lab only and changes the library only at the editor's exit, by replacing a
-  record in place (same id), so `runOrganisms` never turns `null` from it. The residual stays with
-  **Story 4.25**. Tests: `BattlePage.test.tsx`'s "Run from Gallery (Story 3.17)" describe
+  record in place (same id), so `runOrganisms` never turns `null` from it. **↪ Story 4.25
+  (2026-09-27): also unreachable, by construction** (FD5) — its create button is Lab-only too, and
+  the new organism's id enters `organisms` (the overlay) and `rosterIds` (the session roster) in
+  the SAME batched commit (`handleEditorSaved`), so `runOrganisms` is never `null` from it either.
+  After 4.25 no Epic 4 story changes the library under a mounted page (4.26 is editor-internal), so
+  this entry has **no remaining Epic 4 owner** — it passes to whichever story first changes the
+  library under a mounted **Run** page. Tests: `BattlePage.test.tsx`'s "Run from Gallery (Story
+  3.17)" describe
   (dangling roster and failed-library cases, both asserting `[data-status]` never mounts) and
   `battleRoute.spec.ts`'s AC8(b) e2e.
 - **The disabled RUN button states its reason only through `title`.** A `disabled` `<button>` is
@@ -992,7 +998,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   rather than this story's: every `disabled={isSaving}` control on `/battle` explains nothing at
   all, and the story's AC7 prescribed `title`. **Pick this up in Story 6.11** with the rest of the
   route's disabled-state a11y (the `aria-disabled` + `aria-describedby` shape keeps the control
-  focusable and the reason reachable, at the cost of a click that must refuse by hand).
+  focusable and the reason reachable, at the cost of a click that must refuse by hand). **↪ Story
+  4.25 review ruling (D2 a, 2026-09-27):** joins the list, not an exception to it — the create
+  button and the 4.24 ✎ both gained `disabled={isSaving}` with no `title`, matching every other
+  control this entry already names. No new gap; the count grows by two.
 - **A rejected `import()` of the Run chunk has no boundary nearer than `GlobalError`.** Offline,
   or a deploy that rotated chunk hashes under an open tab, makes `next/dynamic`'s promise reject
   after the editor has already unmounted — the whole page goes to Next's error surface with Lab
@@ -1302,9 +1311,13 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   a `PALETTE` id); 4.13 should confirm this and not add a colour-specific check — the same note the
   4.6 section left for dominance. **✅ Confirmed in Story 4.13:** no colour check written; the
   epic's "no color" AC item is recorded as unreachable by construction, not implemented.
-- **Story 4.25 must pass the battle's library** to `createNewOrganismDraft` / the modal's
+- ~~**Story 4.25 must pass the battle's library** to `createNewOrganismDraft` / the modal's
   `library` prop — the roster is not the library, and a default derived from the roster alone
-  would reuse a token another library organism holds.
+  would reuse a token another library organism holds.~~ **✅ Closed by Story 4.25 (2026-09-27):**
+  needed no new wiring — `<BattlePage>` already passes `library={editorLibrary}` (the same
+  overlay-applied, sorted list the pencil's edit session reads) to `<OrganismEditorModal>`
+  unconditionally, so a create session's `createNewOrganismDraft(library.map(…))` call seeds its
+  colour default off the whole library, never the roster, on both the edit and create paths alike.
 
 ## Deferred from: Story 3-14-cycle-counter-population-stats (2026-09-16)
 
@@ -1570,8 +1583,12 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   sidebar, the AC7 shape) rather than inherit the silent guard as written. **↪ Story 4.24
   (2026-09-26, FD8): unreachable under 4.24, not built.** The battle-origin editor opens from Lab
   only (the pencil exists only in the Lab roster), so no run is live when the library changes, and
-  the change is an in-place replace by id, so `runOrganisms` never goes `null`. Re-pointed to
-  **Story 4.25**, the next story that could change the library under a mounted page.
+  the change is an in-place replace by id, so `runOrganisms` never goes `null`. **↪ Story 4.25
+  (2026-09-27, FD5): also unreachable, not built.** The create button is Lab-only too, and the new
+  organism enters `organisms`/`rosterIds` in one batched commit, so `runOrganisms` never goes
+  `null` from it either. No Epic 4 story after 4.25 changes the library under a mounted page (4.26
+  is editor-internal) — this entry has **no remaining Epic 4 owner** and passes to whichever story
+  first changes the library under a mounted **Run** page.
 
 ## Deferred from: Story 4-10-rule-cards-empty-state (2026-09-17)
 
@@ -1817,11 +1834,14 @@ deferred:
   the stage's Exit button (which holds focus via its mount effect) unmounts with the view and focus
   lands on `<body>`. Unreachable today: the roster can only go dangling under a MOUNTED page once a
   library change can happen beneath it — the 3-11 review's Stories 4.24/4.25 case this adjust was
-  written for. **Owner: whichever of 4.24/4.25 first makes the adjust reachable** (**↪ not 4.24**,
-  2026-09-26, FD8: its edits happen in Lab only and replace records in place, so the adjust is not
-  exercised — re-pointed to **Story 4.25**) — in that branch
-  also set a restore flag whose target is the Mode group's `Lab` button (a `data-*` handle on
-  `ModeButton`) rather than the fullscreen entry.
+  written for. **↪ Not 4.24** (2026-09-26, FD8: its edits happen in Lab only and replace records in
+  place, so the adjust is not exercised) **and not 4.25 either** (2026-09-27, FD5: its create
+  button is Lab-only too, and the new organism enters `organisms`/`rosterIds` in one batched
+  commit, so `runOrganisms` never goes `null` from it). No Epic 4 story after 4.25 changes the
+  library under a mounted page (4.26 is editor-internal) — this entry has **no remaining Epic 4
+  owner** and passes to whichever story first changes the library under a mounted **Run** page; in
+  that branch also set a restore flag whose target is the Mode group's `Lab` button (a `data-*`
+  handle on `ModeButton`) rather than the fullscreen entry.
 - **A held `Enter` toggles the stage at key-repeat rate.** `Enter` dispatches `click` on every
   auto-repeated `keydown`, and each commit programmatically moves focus to the counterpart control
   (Exit on entry, the Fullscreen button on exit), so a held key ping-pongs the stage, each cycle
@@ -2341,7 +2361,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   on the page behind is the second guard. Say so in 4.24's story. **✅ Honoured by Story 4.24
   (2026-09-26, AC11):** the ✎ renders only in the Lab roster (Run has no roster), the editor's
   preview is the only `useSimulation` on screen while it is open, and the page behind is `inert`
-  for its whole window. 4.25's "+ Create" inherits the same rule.
+  for its whole window. **✅ Also honoured by Story 4.25 (2026-09-27, AC8):** the "+ Create New
+  Organism" button renders only in the Lab roster too, through the SAME `useOrganismEditorModal`
+  call 4.24 already made (no second hook, no second `useInertBackground`), so the rule holds for
+  both entry points by construction, not by a second check.
 - **The editor chunk's growth landed mostly OUTSIDE the single `grep -rl "Organism Color"` chunk.**
   Turbopack split the newly-shared `@gol/simulation` session/loop/strategy graph (already shipped
   by `/battle`) into two NEW chunk files rather than folding it into the modal's own chunk: the
@@ -2578,8 +2601,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   planning lines were not amended here (out of the story's scope); Stories 4.24/4.25 need to read
   them as "Save, then Back to Battle" and say so in their own ACs — deferred, resume review
   2026-09-22. **✅ Closed for Story 4.24 (2026-09-26):** its story file reads the epics line as
-  "Save, then Back to Battle" and its e2e runs exactly that flow. `epics.md`/`prd.md` themselves are
-  still unamended; Story 4.25 must read its own line the same way.
+  "Save, then Back to Battle" and its e2e runs exactly that flow. **✅ Closed for Story 4.25
+  (2026-09-27):** its story file reads its own epics line the same way ("Save, then Back to
+  Battle") and `createOrganismFromBattle.spec.ts` runs that flow end to end. `epics.md`/`prd.md`
+  themselves remain unamended for both stories — out of either story's scope.
 - **The WebKit branch of the save-close focus e2e is satisfied by NO element being focused** —
   `expect(page.locator(':focus').locator('xpath=ancestor-or-self::*[@role="dialog"]')).toHaveCount(0)`
   passes trivially when `:focus` matches nothing, which is exactly the "focus dropped to body"
@@ -3599,7 +3624,19 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   loaded-by-id unconditionally). Latent today — nothing re-lists the library while the page is
   mounted (that absence is FD5's own premise) — but Story 5.11 touches the library-load path near
   `organismsResource`, so whichever story first adds a reload must also clear (or reconcile) the
-  overlay in the same change.
+  overlay in the same change. **↪ Widened by Story 4.25 (2026-09-27):** the overlay now also holds
+  records that are entirely ABSENT from the page's loaded snapshot — a created organism reaches
+  `organisms` only through `applySavedOrganisms`'s append branch, because the page never re-lists.
+  (The editor HAS written it to `gol:organisms`, so a fresh `organisms.list()` would return it;
+  code review 2026-09-27 corrected an earlier "would un-create it" claim here.) A future reload's
+  reconciliation must therefore handle: an overlay entry whose id the fresh load still has (resolve
+  by whichever is newer — a created record now lands in this case too, since the fresh load has it);
+  and an
+  overlay entry whose id the fresh load has dropped entirely (a created-then-deleted organism,
+  reachable once Epic 4 or 5 ships an organism delete), where the session roster still holds the
+  id and would render it as an unknown organism. Story 4.25 proposes a
+  `5-11-load-time-corruption-handling → 4-25-create-organism-from-battle` `lane-gates.yaml` row for
+  Sidiar's approval (its own story file, bottom); not added here unapproved.
 - **The gate's dialog title and its disclosure trigger carry the identical accessible name.**
   `DialogTitle` renders `battleCountLabel(n)` ("Used in 2 Battles") and the `<UsageIndicator>`
   trigger button is named the same string, so a screen-reader user hears the same name for the
@@ -3626,3 +3663,35 @@ Reviewed on **Fable** against an **Opus** ruling-implementation commit (`9efe708
   FR-1.3 text still reads unconditional. Consistent with project practice (story ACs are the
   review contract), but the exception risks being rediscovered as a "bug" by anyone reading the
   PRD alone. Carry it into the PRD (or the FR-1.3 gloss) during the Epic 4 UX reconciliation.
+
+## Deferred from: code review of 4-25-create-organism-from-battle (2026-09-27)
+
+- **`handleModeToggle` does not guard on the editor being mounted.** A programmatic Lab → Run →
+  Lab while the battle-origin editor is open would remount `<BattleEditorView>`, and a create
+  session's selection continuation (`onCreatedRef`) would then call the unmounted instance's
+  `setChosenTool` — the created row joins the roster unselected. Blocked for users by `inert`;
+  the toggle's guard (`savingRef` only) is 4.24's shape. Add `organismEditorMounted ||
+  organismGateMounted` to the toggle's bail when the next story touches it.
+- **`handleCreateOrganism` / `handleEditOrganism` key on `grid`.** Their identities churn on
+  every stroke commit, re-rendering the roster subtree; `grid` is only read at click time. Read it
+  through a ref (the hot-path budget) — pre-existing with 4.24's pencil, mirrored by 4.25.
+- **The roster's create button hover state is not contrast-checked.** 11px `--gol-accent` text on
+  `--gol-bg-hover`; axe only scans the resting state. Same token pair as the Library's create
+  button — check the pair once, for both.
+- **A third hand-synced copy of the e2e seed helper.** `createOrganismFromBattle.spec.ts` copies
+  the `buildSeedPayload`/`seedWorkspace` shape again; extract a shared `e2e/` helper before a
+  seed-format change has to be made three times.
+
+## Deferred from: code review of 4-25-create-organism-from-battle, second pass on the rulings (2026-09-27)
+
+Reviewed on **Opus** against a **Sonnet** ruling-implementation commit (`6383547`, Sidiar's rulings
+D1 (a) and D2 (a)), via three parallel adversarial layers.
+
+- **The organism-editor focus restore can target a disabled ✎ and skip its fallback.**
+  `useOrganismEditorModal`'s restore effect resolves `[data-edit-organism-id]` and only falls back
+  to `[data-create-organism]` when that lookup is `null`. Since D2 (a) the battle roster's ✎ is
+  `disabled={isSaving}`, so a restore that ran mid-battle-save would find it, `.focus()` a disabled
+  button (a no-op) and leave focus on `<body>`. Unreachable today: both entry handlers bail under
+  `savingRef`, the page is `inert` while the editor is open, and no hotkey saves. If a future route
+  can start a battle save while the editor is open, skip disabled targets
+  (`trigger?.matches(':disabled')`) — and note the create button is disabled then too.

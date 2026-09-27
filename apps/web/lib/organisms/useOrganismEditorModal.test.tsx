@@ -379,10 +379,31 @@ describe('useOrganismEditorModal', () => {
       expect(onSaved).not.toHaveBeenCalled();
     });
 
+    // The Library origin (the Probe's default) keeps AC6's original target after a save — Story
+    // 4.25's review ruling (D1 a, 2026-09-27, see the battle-origin describe block below) only
+    // retargets the BATTLE origin's create. The intent stays `{ kind: 'create' }` here, so no Edit
+    // button lookup ever runs; the next test rules out "no matching node" as the reason.
     it('restores focus to the create button after Back following a save, exactly like a plain Close', async () => {
       const onSaved = vi.fn();
       const user = userEvent.setup();
       render(<Probe onSaved={onSaved} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onSaved(record));
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(document.activeElement).toBe(createButton());
+    });
+
+    // Strengthens the test above: proves the Library is exempt by ORIGIN, not merely because no
+    // matching Edit button happened to exist for `record.id`.
+    it('the Library origin never redirects a create intent, even when a same-id Edit button exists', async () => {
+      const onSaved = vi.fn();
+      const user = userEvent.setup();
+      render(<Probe onSaved={onSaved} cards={[...LIBRARY, record]} />);
       await user.click(createButton());
 
       act(() => hook().modalProps.onSaved(record));
@@ -425,6 +446,70 @@ describe('useOrganismEditorModal', () => {
       rerender(<Probe onSaved={vi.fn()} />);
 
       expect(hook().modalProps).toBe(first);
+    });
+  });
+
+  // Story 4.25 review, ruling (D1 a), 2026-09-27: the roster cap regression this closes is
+  // component-level (`BattlePage.createOrganism.test.tsx` — a create that fills the roster to 255
+  // unmounts the create button before this restore runs), but the RETARGET itself is the hook's own
+  // behaviour and belongs here, in the same shape as every other focus-restoration test in this
+  // file.
+  describe('focus restoration — a battle-origin create that saves (Story 4.25 review, ruling D1 a)', () => {
+    const created: Organism = {
+      schemaVersion: 1,
+      id: 'created-1',
+      name: 'New Organism',
+      colorToken: 'sky-blue',
+      dominance: 5,
+      agingEnabled: false,
+      survivalRules: [],
+    };
+
+    it("restores focus to the new organism's own Edit button, not the create button", async () => {
+      const user = userEvent.setup();
+      // The new row exists by restore time in the real page (the overlay adoption, the roster
+      // append and the exit all land in ONE commit — `BattlePage`'s `handleEditorSaved`); modelled
+      // here by including `created` in the Probe's rendered cards up front.
+      render(<Probe origin="battle" cards={[...LIBRARY, created]} />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onSaved(created));
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(document.activeElement).toBe(editButton(created));
+    });
+
+    it('still restores focus to the create button when the create session never saved', async () => {
+      const user = userEvent.setup();
+      render(<Probe origin="battle" />);
+      await user.click(createButton());
+
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(document.activeElement).toBe(createButton());
+    });
+
+    it('a pencil edit (Story 4.24) is unaffected — its intent is already `edit` at open time', async () => {
+      const user = userEvent.setup();
+      // `CONWAYS_CLASSIC` (`LIBRARY[0]`) carries no battle usage, so `requestEdit` opens the
+      // editor directly, with no gate to route through first.
+      const edited = LIBRARY[0];
+      render(<Probe origin="battle" cards={LIBRARY} />);
+
+      await user.click(editButton(edited));
+      act(() => hook().modalProps.onSaved({ ...edited, name: 'Renamed' }));
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
+
+      expect(document.activeElement).toBe(editButton(edited));
     });
   });
 

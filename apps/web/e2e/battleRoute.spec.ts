@@ -369,13 +369,15 @@ test.describe('battle route (Story 2.1)', () => {
     await expect(page.getByRole('button', { name: 'Erase', exact: true })).toHaveCount(0);
     // AC5/AC8: this story's own search + add control DOES render now — Conway's Classic is in
     // the seeded library but not placed here, so it is the add control's one option. Story 4.24's
-    // per-row pencil now renders, one per row (inverted from "absent"); the CREATE button (Story
-    // 4.25) remains the only later-story control still absent.
+    // per-row pencil now renders, one per row, and Story 4.25's create button now renders too
+    // (both inverted from "absent" — no later-story control is absent any more).
     await expect(sidebar.getByRole('textbox', { name: /search organisms/i })).toHaveCount(1);
     await expect(sidebar.getByRole('combobox', { name: /add organism/i })).toHaveCount(1);
     await expect(page.getByText('✎')).toHaveCount(3);
     await expect(sidebar.getByRole('button', { name: /^Edit / })).toHaveText(['✎', '✎', '✎']);
-    await expect(page.getByRole('button', { name: /create/i })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: '+ Create New Organism', exact: true }),
+    ).toHaveCount(1);
     // AC2: exactly one row selected, and it is the first.
     await expect(
       sidebar.getByRole('button', { name: 'Aggressive Colonizer', exact: true }),

@@ -186,6 +186,16 @@ export interface BattleEditorViewProps {
    * component interprets nothing and does not touch its own selection for it (FD1).
    */
   onEditOrganism?(organismId: string): void;
+  /**
+   * Story 4.25 (FD1): deliberately NOT spec §3.3's `onCreateOrganism?(): void` — this takes a
+   * continuation, called with the new organism's id once `<BattlePage>` has adopted it into the
+   * overlay and the session roster, in the SAME commit. `<OrganismRoster>`'s own prop stays
+   * spec-exact; only this component's differs, because selection (`chosenTool`) is owned HERE
+   * (spec §3.3) while the save and the adoption complete in `<BattlePage>`, at the editor's exit.
+   * A `selectOrganismRequest` prop instead would be a second synchronisation path; lifting
+   * `chosenTool` into `<BattlePage>` would reverse spec §3.3. See `handleCreateOrganism` below.
+   */
+  onCreateOrganism?(onCreated: (organismId: string) => void): void;
 }
 
 /**
@@ -213,6 +223,8 @@ type EditorMainProps = Omit<
   | 'exportDisabled'
   // Story 4.24: the roster's ✎ lives in the SIDEBAR — the roster props' treatment.
   | 'onEditOrganism'
+  // Story 4.25: the roster's create button lives in the SIDEBAR too — same treatment.
+  | 'onCreateOrganism'
 > & {
   tool: Tool;
   toolRef: number | null;
@@ -638,6 +650,8 @@ export default function BattleEditorView({
   exportDisabled = false,
   // Story 4.24: the roster's, pulled out for the same reason as `onExport` above.
   onEditOrganism,
+  // Story 4.25: same treatment — the sidebar's, not `<EditorMain>`'s.
+  onCreateOrganism,
   ...rest
 }: BattleEditorViewProps) {
   // The user's EXPLICIT choice, and only that. `null` means "has not chosen yet", which is a
@@ -654,8 +668,9 @@ export default function BattleEditorView({
   // choice below, so the new row renders selected on the very same paint, never a flash of the old
   // selection first.
   //
-  // This is a UX commitment Epic 4's create-from-battle (Story 4.25) inherits: an organism reached
-  // via this sidebar becomes both present AND selected in one action.
+  // This is a UX commitment Story 4.25's create-from-battle button follows too (see
+  // `handleCreateOrganism` below): an organism reached via this sidebar becomes both present AND
+  // selected in one action.
   const handleAddToRoster = useCallback(
     (organismId: string) => {
       onAddToRoster(organismId);
@@ -663,6 +678,16 @@ export default function BattleEditorView({
     },
     [onAddToRoster],
   );
+
+  // Story 4.25 (FD1): the identical add-AND-select pattern, wired through a continuation instead
+  // of a direct id. `<BattlePage>` owns the save and the adoption (they complete only at the
+  // editor's exit); this component owns selection (spec §3.3) and supplies the callback that
+  // selects once the new organism's id actually exists. `onCreateOrganism === undefined ?
+  // undefined : handleCreateOrganism` at the call site below keeps an absent prop meaning "no
+  // button" all the way down to `<OrganismRoster>` (NFR-4.1).
+  const handleCreateOrganism = useCallback(() => {
+    onCreateOrganism?.((organismId) => setChosenTool({ kind: 'organism', organismId }));
+  }, [onCreateOrganism]);
 
   const selectedTool = useMemo(
     () => resolveSelectedTool(chosenTool, roster, libraryUnavailable),
@@ -873,6 +898,10 @@ export default function BattleEditorView({
               onAddToRoster={handleAddToRoster}
               atCap={atCap}
               onEditOrganism={onEditOrganism}
+              onCreateOrganism={onCreateOrganism === undefined ? undefined : handleCreateOrganism}
+              /* Story 4.25 review ruling (D2 a, 2026-09-27): the same `isSaving` every other
+                 sidebar control in this component already ties its own `disabled` to. */
+              isSaving={isSaving}
             />
           </SidebarSection>
           {/* AC7: the mockup's order is Organisms, then Battle Name — this story's own second

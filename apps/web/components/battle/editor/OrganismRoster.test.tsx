@@ -284,15 +284,16 @@ describe('OrganismRoster — the degraded roster (AC7)', () => {
 });
 
 describe('OrganismRoster — what this story does NOT build (AC5)', () => {
-  it('renders no per-row edit pencil without `onEditOrganism`, and no create button, with an empty library (AC8)', () => {
+  it('renders no per-row edit pencil without `onEditOrganism`, no create button without `onCreateOrganism`, and neither with an empty library (AC8)', () => {
     renderRoster();
 
     // Story 4.24 inverted the pencil half of this: the ✎ now EXISTS, but only when a caller passes
-    // `onEditOrganism` (NFR-4.1 — see "the edit pencil" block below). Without it, still none. The
-    // create button is Story 4.25. The search box and the "+ ADD ORGANISM" dropdown are THIS
-    // story — see "the add control" describe block below — but with the default EMPTY library there
-    // is nothing to search or add, so neither renders here either (AC8's stated-empty-state, not a
-    // dead affordance).
+    // `onEditOrganism` (NFR-4.1 — see "the edit pencil" block below). Without it, still none.
+    // Story 4.25 does the identical thing for the create button — see "the create button" describe
+    // block below for the positive case. The search box and the "+ ADD ORGANISM" dropdown are
+    // Story 2.10's — see "the add control" describe block below — but with the default EMPTY
+    // library there is nothing to search or add, so neither renders here either (AC8's
+    // stated-empty-state, not a dead affordance).
     expect(screen.queryByText('✎')).toBeNull();
     expect(document.querySelector('[data-edit-organism-id]')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
@@ -399,6 +400,199 @@ describe('OrganismRoster — the edit pencil (Story 4.24, FR-3.3)', () => {
 
   it('has no axe violations with pencils rendered', async () => {
     const { container } = renderRoster({ onEditOrganism: () => {} });
+
+    expect((await axe(container)).violations).toEqual([]);
+  });
+
+  // Review ruling (D2 a, 2026-09-27): `<BattlePage>`'s `handleEditOrganism` already bails under
+  // `savingRef` (AC3) — this pins the VISIBLE half NFR-4.1 requires, mirroring the same-pattern
+  // test in "the create button" below.
+  it('disables every pencil while `isSaving`, and re-enables them once it clears', async () => {
+    const user = userEvent.setup();
+    const onEditOrganism = vi.fn();
+    const { rerender } = renderRoster({ onEditOrganism, isSaving: true });
+
+    for (const entry of ROSTER) {
+      expect(screen.getByRole('button', { name: `Edit ${entry.name}` })).toBeDisabled();
+    }
+    await user.click(screen.getByRole('button', { name: 'Edit Patient Defender' }));
+    expect(onEditOrganism).not.toHaveBeenCalled();
+
+    rerender(
+      <OrganismRoster
+        roster={ROSTER}
+        selectedTool={ORGANISM_TOOL}
+        onSelectTool={() => {}}
+        library={[]}
+        onAddToRoster={() => {}}
+        onEditOrganism={onEditOrganism}
+        isSaving={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Edit Patient Defender' })).toBeEnabled();
+  });
+
+  it('leaves row SELECTION enabled while `isSaving` — only the pencil is disabled', async () => {
+    const user = userEvent.setup();
+    const onSelectTool = vi.fn();
+    renderRoster({ onEditOrganism: () => {}, onSelectTool, isSaving: true });
+
+    await user.click(screen.getByRole('button', { name: 'Patient Defender' }));
+
+    expect(onSelectTool).toHaveBeenCalledWith({ kind: 'organism', organismId: 'org-p' });
+  });
+
+  it('has no axe violations with a disabled pencil (isSaving)', async () => {
+    const { container } = renderRoster({ onEditOrganism: () => {}, isSaving: true });
+
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});
+
+describe('OrganismRoster — the create button (Story 4.25, FR-1.2, AC1)', () => {
+  it('renders iff `onCreateOrganism` is passed', () => {
+    const { rerender } = renderRoster({ library: LIBRARY });
+    expect(screen.queryByRole('button', { name: /create new organism/i })).toBeNull();
+
+    rerender(
+      <OrganismRoster
+        roster={ROSTER}
+        selectedTool={ORGANISM_TOOL}
+        onSelectTool={() => {}}
+        library={LIBRARY}
+        onAddToRoster={() => {}}
+        onCreateOrganism={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeInTheDocument();
+  });
+
+  it('carries the spec-exact name and the focus-restore anchor', () => {
+    renderRoster({ library: LIBRARY, onCreateOrganism: () => {} });
+
+    const button = screen.getByRole('button', { name: '+ Create New Organism' });
+    expect(button).toHaveAttribute('data-create-organism', '');
+  });
+
+  // Code review 2026-09-27: AC1's "placed AFTER the search input and the + ADD select" (mockup
+  // `petri-dish-lab-mode.html:682-694`) — pinned by document order, not just presence.
+  it('renders after the search input and the add select', () => {
+    renderRoster({ library: LIBRARY, onCreateOrganism: () => {} });
+
+    const search = screen.getByRole('textbox', { name: /search organisms/i });
+    const select = screen.getByRole('combobox', { name: /add organism/i });
+    const button = screen.getByRole('button', { name: /create new organism/i });
+    expect(search.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(select.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // FD2: every non-cap add-container state, including the two AC8 "nothing to add" states and the
+  // "search matches nothing" state — never the cap or the degraded branch.
+  it('appears in the normal, empty-workspace, roster-consumed and search-matches-nothing states', async () => {
+    const user = userEvent.setup();
+
+    const normal = renderRoster({ library: LIBRARY, onCreateOrganism: () => {} });
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeInTheDocument();
+    normal.unmount();
+
+    const empty = renderRoster({ library: [], workspaceEmpty: true, onCreateOrganism: () => {} });
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeInTheDocument();
+    empty.unmount();
+
+    const consumed = renderRoster({
+      library: [],
+      workspaceEmpty: false,
+      onCreateOrganism: () => {},
+    });
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeInTheDocument();
+    consumed.unmount();
+
+    renderRoster({ library: LIBRARY, onCreateOrganism: () => {} });
+    await user.type(screen.getByRole('textbox', { name: /search organisms/i }), 'zzz-no-match');
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeInTheDocument();
+  });
+
+  it('does not appear at the cap or in the degraded branch', () => {
+    const atCap = renderRoster({ library: LIBRARY, atCap: true, onCreateOrganism: () => {} });
+    expect(screen.queryByRole('button', { name: /create new organism/i })).toBeNull();
+    expect(screen.getByText(/roster is full/i)).toBeInTheDocument();
+    atCap.unmount();
+
+    renderRoster({
+      roster: [],
+      selectedTool: ERASER_TOOL,
+      libraryUnavailable: true,
+      library: LIBRARY,
+      onCreateOrganism: () => {},
+    });
+    expect(screen.queryByRole('button', { name: /create new organism/i })).toBeNull();
+  });
+
+  it('a click calls the callback and neither `onSelectTool` nor `onAddToRoster`', async () => {
+    const user = userEvent.setup();
+    const onCreateOrganism = vi.fn();
+    const onSelectTool = vi.fn();
+    const onAddToRoster = vi.fn();
+    renderRoster({ library: LIBRARY, onCreateOrganism, onSelectTool, onAddToRoster });
+
+    await user.click(screen.getByRole('button', { name: /create new organism/i }));
+
+    expect(onCreateOrganism).toHaveBeenCalledTimes(1);
+    expect(onCreateOrganism).toHaveBeenCalledWith();
+    expect(onSelectTool).not.toHaveBeenCalled();
+    expect(onAddToRoster).not.toHaveBeenCalled();
+  });
+
+  it('has no axe violations with the create button rendered (library, empty and cap states)', async () => {
+    const withLibrary = renderRoster({ library: LIBRARY, onCreateOrganism: () => {} });
+    expect((await axe(withLibrary.container)).violations).toEqual([]);
+    withLibrary.unmount();
+
+    const empty = renderRoster({ library: [], workspaceEmpty: true, onCreateOrganism: () => {} });
+    expect((await axe(empty.container)).violations).toEqual([]);
+    empty.unmount();
+
+    const atCap = renderRoster({ library: LIBRARY, atCap: true, onCreateOrganism: () => {} });
+    expect((await axe(atCap.container)).violations).toEqual([]);
+  });
+
+  // Review ruling (D2 a, 2026-09-27): `<BattlePage>`'s `handleCreateOrganism` already bails under
+  // `savingRef` (AC3) — this pins the VISIBLE half NFR-4.1 requires, mirroring the pencil's test
+  // above.
+  it('disables itself while `isSaving`, and re-enables once it clears', async () => {
+    const user = userEvent.setup();
+    const onCreateOrganism = vi.fn();
+    const { rerender } = renderRoster({
+      library: LIBRARY,
+      onCreateOrganism,
+      isSaving: true,
+    });
+
+    const button = screen.getByRole('button', { name: /create new organism/i });
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(onCreateOrganism).not.toHaveBeenCalled();
+
+    rerender(
+      <OrganismRoster
+        roster={ROSTER}
+        selectedTool={ORGANISM_TOOL}
+        onSelectTool={() => {}}
+        library={LIBRARY}
+        onAddToRoster={() => {}}
+        onCreateOrganism={onCreateOrganism}
+        isSaving={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeEnabled();
+  });
+
+  it('has no axe violations with a disabled create button (isSaving)', async () => {
+    const { container } = renderRoster({
+      library: LIBRARY,
+      onCreateOrganism: () => {},
+      isSaving: true,
+    });
 
     expect((await axe(container)).violations).toEqual([]);
   });

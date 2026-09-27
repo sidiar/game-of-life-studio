@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
@@ -925,6 +925,105 @@ describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', (
     expect(screen.getAllByText('Shared colour')).toHaveLength(2);
     expect(screen.getByRole('button', { name: /Already Here/ })).toHaveTextContent('Shared colour');
     expect(screen.getByRole('button', { name: /New Arrival/ })).toHaveTextContent('Shared colour');
+  });
+});
+
+// Story 4.25 (FD1): the create button's own wrapper. `<OrganismRoster>`'s own signature stays
+// spec-exact `(): void` (pinned in `OrganismRoster.test.tsx`); this component's differs, taking a
+// continuation THIS test proves is called with whatever id the parent's roster hands back.
+describe('BattleEditorView — the create button wrapper (Story 4.25, FD1)', () => {
+  it('renders no create button without `onCreateOrganism`', () => {
+    renderEditor();
+
+    expect(screen.queryByRole('button', { name: /create new organism/i })).toBeNull();
+  });
+
+  it('a click calls `onCreateOrganism` with a continuation, and neither `onAddToRoster` nor `onSelectTool` directly', async () => {
+    const user = userEvent.setup();
+    const onCreateOrganism = vi.fn();
+    const onAddToRoster = vi.fn();
+    renderEditor({ onCreateOrganism, onAddToRoster });
+
+    await user.click(screen.getByRole('button', { name: /create new organism/i }));
+
+    expect(onCreateOrganism).toHaveBeenCalledTimes(1);
+    expect(onCreateOrganism).toHaveBeenCalledWith(expect.any(Function));
+    expect(onAddToRoster).not.toHaveBeenCalled();
+  });
+
+  // The add-AND-select pattern `handleAddToRoster` already establishes (forced decision 1), wired
+  // through a continuation instead of a direct id: the parent (`<BattlePage>`) calls it back once
+  // the created organism's id is actually in `roster` — simulated here with a rerender standing in
+  // for that round trip, the same pattern the add-control describe block above uses.
+  it('selects whatever id the continuation receives, once the parent hands back the updated roster', async () => {
+    const user = userEvent.setup();
+    let continuation: ((organismId: string) => void) | undefined;
+    const onCreateOrganism = vi.fn((onCreated: (organismId: string) => void) => {
+      continuation = onCreated;
+    });
+    const { rerender } = renderEditor({ rosterIds: [], roster: [], onCreateOrganism });
+
+    // Nothing chosen yet on an empty roster: the eraser (spec §3.3).
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: /create new organism/i }));
+    expect(continuation).toBeInstanceOf(Function);
+
+    // The continuation itself only sets THIS component's own state — no `roster` update yet, so
+    // calling it alone (before the rerender below) selects nothing resolvable and the eraser stays
+    // selected (`resolveSelectedTool` discards a `chosen` id absent from `roster`).
+    act(() => continuation?.('brand-new'));
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'true');
+
+    // The parent's response: the created organism now IN the roster.
+    const updatedRoster: readonly DisplayOrganism[] = [
+      { id: 'brand-new', name: 'Brand New', color: '#009E73', colorToken: 'bluish-green' },
+    ];
+    rerender(
+      <BattleEditorView
+        grid={GRID}
+        size={SIZE}
+        palette={PALETTE}
+        showGridLines
+        colors={COLORS}
+        rosterIds={updatedRoster.map((organism) => organism.id)}
+        roster={updatedRoster}
+        library={[]}
+        onAddToRoster={() => {}}
+        atCap={false}
+        battleName=""
+        onNameChange={() => {}}
+        isDirty={false}
+        onSave={() => {}}
+        onBack={() => {}}
+        isSaving={false}
+        saveError={null}
+        onCommitGrid={() => {}}
+        onUndo={() => {}}
+        canUndo={false}
+        onCreateOrganism={onCreateOrganism}
+      />,
+    );
+
+    // Selected WITHOUT a further click — the continuation carried the selection along.
+    expect(screen.getByRole('button', { name: 'Brand New' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  // Review ruling (D2 a, 2026-09-27): `isSaving` reaches `<OrganismRoster>` the same way it already
+  // reaches every other sidebar control in this component (`<BattleNameField>`,
+  // `<GridSettingsSection>`, `<EditorToolsSection>`, `<SidebarFooter>`) — no new prop threading
+  // through `<BattlePage>`, since `isSaving` was already required here (Story 2.13).
+  it('threads isSaving to the roster, disabling the create button and the 4.24 ✎', () => {
+    renderEditor({ onCreateOrganism: () => {}, onEditOrganism: () => {}, isSaving: true });
+
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeDisabled();
+    for (const entry of ROSTER) {
+      expect(screen.getByRole('button', { name: `Edit ${entry.name}` })).toBeDisabled();
+    }
   });
 });
 
