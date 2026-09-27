@@ -38,3 +38,39 @@ export const CardTitle = styled('h2')({
   paddingBottom: '12px',
   borderBottom: '1px solid var(--gol-border)',
 });
+
+/**
+ * The settings-item row primitives, LIFTED from `DataManagement.tsx` (Story 5.9 Task 4.1) rather
+ * than copied a third time — `<ImportWorkspaceRow>` is the second consumer, and the two-copies
+ * threshold this codebase lifts at (`SettingsCard.tsx`'s own header comment) is met. Mockup:
+ * `.settings-item` / `.settings-item-info` / `.settings-item-label` / `.settings-item-description`
+ * (`settings.html:139-174, 392-403`). `Row`'s rendered DOM and styles are byte-identical to
+ * `DataManagement.tsx`'s former copy.
+ */
+export const Row = styled('div')({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '20px',
+  padding: '15px 0',
+});
+
+export const RowInfo = styled('div')({
+  flex: 1,
+});
+
+// Mockup: .settings-item-label (:162-167).
+export const RowLabel = styled('h3')({
+  fontSize: '14px',
+  color: 'var(--gol-text-primary)',
+  margin: '0 0 4px',
+  fontWeight: 500,
+});
+
+// Mockup: .settings-item-description (:169-174).
+export const RowDescription = styled('p')({
+  fontSize: '13px',
+  color: 'var(--gol-text-secondary)',
+  margin: 0,
+  lineHeight: 1.5,
+});

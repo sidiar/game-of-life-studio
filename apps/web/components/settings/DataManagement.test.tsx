@@ -31,10 +31,27 @@ const ENVELOPE = {
   battles: [],
 };
 
+/**
+ * Story 5.9: `<DataManagement>` now requires `battles`/`organisms`/`onImported` for its second row
+ * (`<ImportWorkspaceRow>`), and `serializer` widens to `importWorkspace`. This file's Export
+ * assertions stay exactly as Story 5.5 wrote them — only the props each render call needs are new;
+ * `<ImportWorkspaceRow>`'s own behaviour is `ImportWorkspaceRow.test.tsx`'s job.
+ */
+function baseProps() {
+  return {
+    battles: { list: vi.fn().mockResolvedValue([]) },
+    organisms: { list: vi.fn().mockResolvedValue([]) },
+    onImported: vi.fn(),
+  };
+}
+
 describe('DataManagement', () => {
   it('renders the Data Management heading, the row label/description, and the Export button by role and accessible name (AC1)', () => {
-    const serializer = { exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE) };
-    render(<DataManagement serializer={serializer} />);
+    const serializer = {
+      exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE),
+      importWorkspace: vi.fn(),
+    };
+    render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'Data Management' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: 'Export Workspace' })).toBeInTheDocument();
@@ -47,9 +64,23 @@ describe('DataManagement', () => {
     expect(button).toHaveTextContent('Export');
   });
 
+  it('also renders the Import row (Story 5.9) alongside Export, as its second heading/button', () => {
+    const serializer = {
+      exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE),
+      importWorkspace: vi.fn(),
+    };
+    render(<DataManagement serializer={serializer} {...baseProps()} />);
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Import' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /import workspace/i })).toBeInTheDocument();
+  });
+
   it('clicking Export calls exportWorkspace exactly once and hands the download seam the AC3 filename and the envelope', async () => {
-    const serializer = { exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE) };
-    render(<DataManagement serializer={serializer} />);
+    const serializer = {
+      exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE),
+      importWorkspace: vi.fn(),
+    };
+    render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /export workspace/i }));
 
@@ -70,8 +101,11 @@ describe('DataManagement', () => {
     const pending = new Promise<typeof ENVELOPE>((resolve) => {
       resolveExport = resolve;
     });
-    const serializer = { exportWorkspace: vi.fn().mockReturnValue(pending) };
-    render(<DataManagement serializer={serializer} />);
+    const serializer = {
+      exportWorkspace: vi.fn().mockReturnValue(pending),
+      importWorkspace: vi.fn(),
+    };
+    render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     const button = screen.getByRole('button', { name: /export workspace/i });
     // Two synchronous clicks, before either await settles — the shape of a real rapid
@@ -94,8 +128,9 @@ describe('DataManagement', () => {
         .fn()
         .mockRejectedValueOnce(new Error('boom'))
         .mockResolvedValueOnce(ENVELOPE),
+      importWorkspace: vi.fn(),
     };
-    render(<DataManagement serializer={serializer} />);
+    render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     const button = screen.getByRole('button', { name: /export workspace/i });
     fireEvent.click(button);
@@ -122,10 +157,11 @@ describe('DataManagement', () => {
         .fn()
         .mockRejectedValueOnce(new Error('boom'))
         .mockRejectedValueOnce(new Error('boom again')),
+      importWorkspace: vi.fn(),
     };
     render(
       <StrictMode>
-        <DataManagement serializer={serializer} />
+        <DataManagement serializer={serializer} {...baseProps()} />
       </StrictMode>,
     );
 
@@ -143,8 +179,11 @@ describe('DataManagement', () => {
 
   it('Enter and Space on the focused Export button each trigger an export (a native <button>, AC9)', async () => {
     const user = userEvent.setup();
-    const serializer = { exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE) };
-    render(<DataManagement serializer={serializer} />);
+    const serializer = {
+      exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE),
+      importWorkspace: vi.fn(),
+    };
+    render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     const button = screen.getByRole('button', { name: /export workspace/i });
     await user.tab();
@@ -164,24 +203,33 @@ describe('DataManagement', () => {
   });
 
   it('adds no term/definition roles to the page (the readStats() index-pairing guard, AC9)', () => {
-    const serializer = { exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE) };
-    render(<DataManagement serializer={serializer} />);
+    const serializer = {
+      exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE),
+      importWorkspace: vi.fn(),
+    };
+    render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     expect(screen.queryAllByRole('term')).toHaveLength(0);
     expect(screen.queryAllByRole('definition')).toHaveLength(0);
   });
 
   it('has no axe accessibility violations in the ready state', async () => {
-    const serializer = { exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE) };
-    const { container } = render(<DataManagement serializer={serializer} />);
+    const serializer = {
+      exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE),
+      importWorkspace: vi.fn(),
+    };
+    const { container } = render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
   });
 
   it('has no axe accessibility violations in the error state, with the alert visible', async () => {
-    const serializer = { exportWorkspace: vi.fn().mockRejectedValue(new Error('boom')) };
-    const { container } = render(<DataManagement serializer={serializer} />);
+    const serializer = {
+      exportWorkspace: vi.fn().mockRejectedValue(new Error('boom')),
+      importWorkspace: vi.fn(),
+    };
+    const { container } = render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /export workspace/i }));
     await screen.findByRole('alert');

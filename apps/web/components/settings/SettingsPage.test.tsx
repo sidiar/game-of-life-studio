@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { createFakeRepositories, createMockOrganisms, createMockWorkspace } from '@gol/test-utils';
+import { CONWAYS_CLASSIC } from '@gol/domain';
+import { createWorkspaceSerializer } from '@gol/persistence';
+import {
+  createFakeRepositories,
+  createMockBattles,
+  createMockOrganisms,
+  createMockWorkspace,
+} from '@gol/test-utils';
 import { formatStorageSize } from '@/lib/settings/formatStorageSize';
 import SettingsPage from './SettingsPage';
 
@@ -35,7 +43,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="seeding"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -71,7 +79,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -102,7 +110,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -128,7 +136,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -151,7 +159,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -173,7 +181,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={workspace}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -194,7 +202,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="error"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -223,7 +231,7 @@ describe('SettingsPage', () => {
         organisms={organisms}
         seedStatus="seeding"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -234,7 +242,7 @@ describe('SettingsPage', () => {
         organisms={organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -255,7 +263,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -276,7 +284,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -299,7 +307,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -309,7 +317,7 @@ describe('SettingsPage', () => {
     expect(saveSpy).not.toHaveBeenCalled();
   });
 
-  it('renders exactly one h1, exactly two h2s (Statistics + Data Management), and no Epic 6/5.9/5.10 dead-section text (the no-dead-section guard, updated by Story 5.5)', async () => {
+  it('renders exactly one h1, exactly two h2s (Statistics + Data Management), and no Epic 6/6.10/5.10 dead-section text (the no-dead-section guard, updated by Story 5.9)', async () => {
     const repos = createFakeRepositories({ organisms: createMockOrganisms() });
 
     render(
@@ -319,7 +327,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -330,11 +338,10 @@ describe('SettingsPage', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
     expect(screen.getByRole('heading', { level: 2, name: 'Data Management' })).toBeInTheDocument();
-    // "Export" is now a real, live affordance (Story 5.5) — no longer in the forbidden list.
-    // Import/Auto-Save/Clear All are still dead sections (5.9/6.10/5.10), as are Epic 6's rows.
-    expect(
-      screen.queryByText(/display|simulation|theme|auto-save|import|clear/i),
-    ).not.toBeInTheDocument();
+    // "Export" (Story 5.5) and "Import" (Story 5.9) are now real, live affordances — no longer in
+    // the forbidden list. Auto-Save/Clear All are still dead sections (6.10/5.10), as are Epic 6's
+    // rows.
+    expect(screen.queryByText(/display|simulation|theme|auto-save|clear/i)).not.toBeInTheDocument();
   });
 
   it('has no axe accessibility violations once ready', async () => {
@@ -346,7 +353,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn() }}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
 
@@ -370,7 +377,10 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
-        serializer={{ exportWorkspace: vi.fn().mockRejectedValue(new Error('unreadable')) }}
+        serializer={{
+          exportWorkspace: vi.fn().mockRejectedValue(new Error('unreadable')),
+          importWorkspace: vi.fn(),
+        }}
       />,
     );
 
@@ -379,5 +389,65 @@ describe('SettingsPage', () => {
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
+  });
+
+  // Story 5.9 AC6: `onImported={statsResource.reload}` (`<SettingsPage>`'s own wiring) — this is
+  // the ONE place that wiring is exercised; `ImportWorkspaceRow.test.tsx` owns the import flow's
+  // own branches (dialog, pristine skip, failures).
+  it('a successful import refreshes the statistics counts (AC6)', async () => {
+    // Target: pristine (AC4) — zero battles, the seed alone — so the import runs with no warning
+    // dialog and this test stays about the refresh, not about dismissing a modal first.
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC] });
+    const serializer = createWorkspaceSerializer({
+      repos,
+      appVersion: '0.0.0',
+      now: () => new Date('2026-01-05T12:00:00.000Z'),
+    });
+
+    // A DIFFERENT, valid workspace file — one battle, the three mock organisms, no Conway's
+    // Classic reference (createMockBattles()[1] targets Conway and would fail the closure check
+    // without also carrying it; battle A does not).
+    const sourceRepos = createFakeRepositories({
+      organisms: createMockOrganisms(),
+      battles: [createMockBattles()[0]],
+    });
+    const sourceSerializer = createWorkspaceSerializer({
+      repos: sourceRepos,
+      appVersion: '0.0.0',
+      now: () => new Date('2026-01-05T12:00:00.000Z'),
+    });
+    const envelope = await sourceSerializer.exportWorkspace();
+    const file = new File([JSON.stringify(envelope)], 'workspace.json', {
+      type: 'application/json',
+    });
+
+    render(
+      <SettingsPage
+        settings={repos.settings}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        seedStatus="ready"
+        workspace={repos}
+        serializer={serializer}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('term')).toHaveLength(3);
+    });
+    expect(readStats()['Saved Battles']).toBe('0');
+    expect(readStats().Organisms).toBe('1');
+
+    const user = userEvent.setup();
+    const input = document.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('import file input not found');
+    await user.upload(input, file);
+
+    // `ensureDefaultOrganism` adds Conway's Classic back (M9): the source carried 3 organisms and
+    // no Conway, so the imported library ends at 4.
+    await waitFor(() => {
+      expect(readStats()['Saved Battles']).toBe('1');
+    });
+    expect(readStats().Organisms).toBe('4');
   });
 });

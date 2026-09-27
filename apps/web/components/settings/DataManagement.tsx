@@ -2,50 +2,30 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
-import type { WorkspaceSerializer } from '@gol/persistence';
+import type { BattleRepository, OrganismRepository, WorkspaceSerializer } from '@gol/persistence';
 import { exportWorkspaceToFile } from '@/lib/export/exportWorkspaceToFile';
-import { Card, CardTitle } from './SettingsCard';
+import { Card, CardTitle, Row, RowDescription, RowInfo, RowLabel } from './SettingsCard';
+import ImportWorkspaceRow from './ImportWorkspaceRow';
 
 export interface DataManagementProps {
-  // A `Pick`, not the whole interface (FD7 of Story 5.2, AR-2/27) — this component calls exactly
-  // one serializer method and should not be able to reach for another. `exportWorkspaceToFile`
-  // (the reusable seam Stories 5.6/5.9 build on) is what actually calls it; this component never
-  // calls `serializer.exportWorkspace()` itself.
-  serializer: Pick<WorkspaceSerializer, 'exportWorkspace'>;
+  // A `Pick`, not the whole interface (FD7 of Story 5.2, AR-2/27) — this card's subtree needs
+  // exactly two serializer methods and should not be able to reach for another. It calls neither
+  // directly: `exportWorkspaceToFile` calls `exportWorkspace`, and `importWorkspace` is passed
+  // through to `<ImportWorkspaceRow>`, Story 5.9's second row.
+  serializer: Pick<WorkspaceSerializer, 'exportWorkspace' | 'importWorkspace'>;
+  /** Story 5.9: the pristine-workspace check's `battleCount` half (AC4). */
+  battles: Pick<BattleRepository, 'list'>;
+  /** Story 5.9: the pristine-workspace check's organism-library half (AC4). */
+  organisms: Pick<OrganismRepository, 'list'>;
+  /** Story 5.9 AC6: fired after a successful import so `<SettingsPage>` can refresh its counts. */
+  onImported(): void;
 }
 
 const DATA_MANAGEMENT_HEADING_ID = 'data-management-heading';
 
-// Mockup: .settings-group / .settings-item (settings.html:139-157, 392-403). One row today —
-// Export only; Import/Auto-Save/Clear All arrive in 5.9/6.10/5.10 (FD7 — no dead affordance, and
-// no card-level description paragraph promising them either).
-const Row = styled('div')({
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: '20px',
-  padding: '15px 0',
-});
-
-const RowInfo = styled('div')({
-  flex: 1,
-});
-
-// Mockup: .settings-item-label (:162-167).
-const RowLabel = styled('h3')({
-  fontSize: '14px',
-  color: 'var(--gol-text-primary)',
-  margin: '0 0 4px',
-  fontWeight: 500,
-});
-
-// Mockup: .settings-item-description (:169-174).
-const RowDescription = styled('p')({
-  fontSize: '13px',
-  color: 'var(--gol-text-secondary)',
-  margin: 0,
-  lineHeight: 1.5,
-});
+// Mockup: .settings-group / .settings-item (settings.html:139-157, 392-403). Export and Import
+// (Story 5.9) — Auto-Save/Clear All arrive in 6.10/5.10 (FD7 — no dead affordance, and no
+// card-level description paragraph promising them either).
 
 // Mockup: .btn (settings.html:181-198), plus .settings-item-control's `flex-shrink: 0` (:176-178)
 // so the button never shrinks at narrow widths — the house primary-button idiom
@@ -95,7 +75,9 @@ const EXPORT_ERROR_MESSAGE =
 
 /**
  * The Data Management card (AC1, Story 5.5) — the first control this page renders, alongside
- * Workspace Statistics. One row: Export Workspace.
+ * Workspace Statistics. Two rows: Export Workspace, and Import (Story 5.9's
+ * `<ImportWorkspaceRow>`, its own component rather than folded in here — Story 5.10 is about to
+ * grow this file with Clear All, and a third row's worth of state does not belong in Export's).
  *
  * FD8: re-entrancy without self-disabling. A `useRef<boolean>` in-flight flag makes a second click
  * while an export is running a no-op, WITHOUT `disabled` on the focused button — `deferred-work.md`
@@ -107,7 +89,12 @@ const EXPORT_ERROR_MESSAGE =
  * started by a click, not synced to an effect's own lifecycle) is flipped false in a cleanup-only
  * effect, and the click handler checks it before calling `setState` on the settled promise.
  */
-export default function DataManagement({ serializer }: DataManagementProps) {
+export default function DataManagement({
+  serializer,
+  battles,
+  organisms,
+  onImported,
+}: DataManagementProps) {
   const [hasError, setHasError] = useState(false);
   const pendingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -157,6 +144,12 @@ export default function DataManagement({ serializer }: DataManagementProps) {
         </ExportButton>
       </Row>
       {hasError && <ErrorText role="alert">{EXPORT_ERROR_MESSAGE}</ErrorText>}
+      <ImportWorkspaceRow
+        serializer={serializer}
+        battles={battles}
+        organisms={organisms}
+        onImported={onImported}
+      />
     </Card>
   );
 }

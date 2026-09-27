@@ -3561,6 +3561,40 @@ full reasoning; the owner rules on each flagged one).
   multi-await window is merely the widest, and the only one that rewrites both collections at
   workspace scale. No UI caller exists until Story 5.9 — its wiring is the place to decide (e.g.
   block saves while an import is in flight, or accept and document the single-writer assumption).
+  **↪ Ruled by Story 5.9's wiring (FD5, 2026-09-27): accept and document the single-writer
+  assumption.** `<ImportWorkspaceRow>` adds no cross-tab locking; see "Deferred from:
+  Story 5-9-import-ui-destructive-warning" below for the accepted mitigation and its bound.
+
+## Deferred from: Story 5-9-import-ui-destructive-warning (2026-09-27)
+
+- **FD5 ruling applied: single-writer assumption accepted and documented, not fixed.** The entry
+  above ("Concurrent-writer race in the import's snapshot→restore window", code review of 5-8)
+  asked this story's wiring to decide. `<ImportWorkspaceRow>` does none of: blocking other writes
+  while an import is in flight, `navigator.locks`, or a `storage`-event guard. What it DOES do,
+  which is the accepted mitigation: `pendingRef` makes the row's own flow non-reentrant end to end
+  (pick → outcome, spanning the whole warning-dialog window), the warning dialog is modal (nothing
+  else on `/settings` writes `gol:battles`/`gol:organisms` while it is open), and no other surface
+  on this route writes either collection. A SECOND TAB can still race an import — that remains the
+  codebase-wide norm for every `save()`, not a gap specific to this path, and cross-tab locking is
+  out of scope here (Story 5.9 Dev Notes FD5).
+- **Accepted limit: the pristine check (AC4) reads through `battles.list()` / `organisms.list()`,
+  which SKIP a per-record-corrupt entry** (the same fault-isolation stance `exportWorkspace()`
+  already accepts, `workspaceSerializer.ts`'s own note). A workspace whose only battle is an
+  unreadable record therefore reads as `battleCount === 0` — indistinguishable from a genuinely
+  empty workspace for this predicate — so a corrupt-but-nonempty workspace could suppress the
+  warning it should show. Store-corruption UX (a caller learning about a skipped record at all) is
+  Story 5.11's; `isPristineWorkspace` itself has no seam for "count included an unreadable entry".
+- **Surfaced, not resolved: the M8/FR-8.4 "always warns" vs "suppressed for pristine" wording
+  conflict.** Architecture M8 (`architecture.md:354`), RFC-006 Decision 5 ("The confirmation
+  always warns") and the mockup's Import row description ("You are always warned first",
+  `settings.html:409`) all read as an unconditional warning; FR-8.4 (`prd.md:512`) and this
+  story's own epic AC (`epics.md:1430`) suppress it for a pristine workspace (AC4). This story
+  followed the AC/FR-8.4 as the narrower, more specific rule, even though the authority order
+  ("Architecture Decisions win cross-cutting") ranks M8 above it — which is exactly why this is
+  flagged rather than silently picked, per Story 5.9 Dev Notes' Open Flags. If the owner later
+  rules "always", AC4 and `isPristineWorkspace`'s only call site drop, and
+  `<ImportWorkspaceRow>`'s dialog shows unconditionally; `isPristineWorkspace` itself would become
+  dead code to remove, not to keep unused.
 
 ## Deferred from: code review of 4-23-editor-unsaved-changes-scope, owner-decision pass (2026-09-26)
 
@@ -3729,3 +3763,41 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   `disabled={isSaving}`. Invisible with localStorage (millisecond window), and the rest of the rules
   surface is deliberately editable mid-Save (4.23 FD2). With the API repository, thread the flag to
   `RuleCard` and mark its ✕ `aria-disabled` (not `disabled` — that drops focus to `<body>`).
+
+## Deferred from: code review of 5-9-import-ui-destructive-warning (2026-09-27)
+
+- **A store fault from the import's snapshot read is reported as a bad file.** `applyImport`'s
+  `snapshotWorkspace()` can throw a `CorruptDataError` (e.g. a corrupt `gol:schema`) that is not a
+  `NewerFormatVersionError`; `importFailureMessage` has no branch for it, so the fallback says "This
+  file could not be imported", and the user retries with other files that all fail the same way.
+  The claim "workspace not changed" is still true. Store-corruption UX is Story 5.11's — give it a
+  "your saved workspace could not be read; nothing was imported" branch there.
+- **No file-size cap before `file.text()`** (`ImportWorkspaceRow.tsx`). `accept` is only a hint; a
+  very large file is read and `JSON.parse`d in full before the write fails on quota (reported
+  truthfully as `write-failed` + quota). No story specifies a limit; a pre-read
+  `file.size > ~5 MB` rejection would save the parse.
+- **A failed stats reload after a successful import hides the success message.** `onImported` →
+  `statsResource.reload()`; if that load rejects, `useAsyncResource` sets `status: 'error'`,
+  `<SettingsPage>` swaps to its error state and unmounts `<DataManagement>`, taking "Import
+  complete" with it. Pre-existing reload-error shape of `useAsyncResource` (Story 4.16); only
+  reachable if `list()` rejects on the data the import itself just wrote.
+- **Export and Import rows can run concurrently on a pristine workspace.** Their `pendingRef`s are
+  independent; with no warning dialog to make the flow modal, an Export click followed at once by a
+  file pick runs `exportWorkspace` and `importWorkspace` together, so the export may capture the
+  imported data. Same single-writer stance as Story 5.9 FD5; a shared card-level in-flight flag is
+  the fix if it is ever wanted.
+- **`settings.spec.ts` parses `IMPORT_ENVELOPE` with `WorkspaceExportSchema.parse` at
+  describe-collection time**, so a schema drift fails every test in the file (Story 5.5's included)
+  with an opaque collection error rather than one failing test. Move the parse into the tests (or a
+  `beforeAll`) the next time that spec is touched.
+
+## Deferred from: code review of 5-9-import-ui-destructive-warning, owner-decision pass (2026-09-27)
+
+- **`exportInFlightRef` is not scoped to the dialog that started the export**
+  (`ImportWorkspaceRow.tsx`). Cancel stays live during Export First (it must, per AC3), so Export
+  First → Cancel → pick another file while that export is still pending opens a new dialog whose
+  Import Anyway (Decision 1's no-op guard) and Export First are silently ignored until the old
+  export settles, and the old export's outcome then shows as the new dialog's status. Needs a
+  multi-second export to reach (today's localStorage export settles in microseconds). Fix if ever
+  needed: a dialog-generation ref bumped on open (which also resets `exportInFlightRef`), captured
+  by `handleExportFirst`, gating its `setExportState` and the ref release.

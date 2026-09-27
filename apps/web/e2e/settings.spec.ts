@@ -218,43 +218,44 @@ test.describe('settings route (Story 5.1)', () => {
   });
 });
 
+// Copied from e2e/createBattle.spec.ts's `seedWorkspace`, not shared through a new module — the
+// story's file list scopes this story to this one spec file. e2e/ is exempt from the
+// @gol/test-utils import boundary (eslint.config.mjs). Module-scoped (not a describe-local
+// helper) since Story 5.9's `import` block, below, reuses it too (task 6.4).
+async function seedWorkspace(page: Page) {
+  const { battles, organisms } = createMockWorkspace();
+  const battlesRecord = Object.fromEntries(battles.map((b) => [b.id, b]));
+  const organismsRecord = Object.fromEntries(organisms.map((o) => [o.id, o]));
+  const payload = JSON.parse(
+    JSON.stringify({ battles: battlesRecord, organisms: organismsRecord }),
+  ) as { battles: unknown; organisms: unknown };
+
+  await page.addInitScript(
+    ([keys, formatVersion, data]) => {
+      // Stamps gol:schema so isFreshWorkspace() is false and the default seed does not append
+      // Conway's Classic to the roster mid-test.
+      localStorage.setItem(
+        (keys as Record<string, string>).schema,
+        JSON.stringify({ formatVersion }),
+      );
+      localStorage.setItem(
+        (keys as Record<string, string>).battles,
+        JSON.stringify((data as { battles: unknown }).battles),
+      );
+      localStorage.setItem(
+        (keys as Record<string, string>).organisms,
+        JSON.stringify((data as { organisms: unknown }).organisms),
+      );
+    },
+    [STORAGE_KEYS, CURRENT_FORMAT_VERSION, payload] as const,
+  );
+
+  return { battles, organisms };
+}
+
 // AC4's e2e level: the round trip proven against the REAL downloaded file, on the served
 // production static export — jsdom cannot give this, only a real browser download can.
 test.describe('export workspace (Story 5.5)', () => {
-  // Copied from e2e/createBattle.spec.ts's `seedWorkspace`, not shared through a new module — the
-  // story's file list scopes this story to this one spec file. e2e/ is exempt from the
-  // @gol/test-utils import boundary (eslint.config.mjs).
-  async function seedWorkspace(page: Page) {
-    const { battles, organisms } = createMockWorkspace();
-    const battlesRecord = Object.fromEntries(battles.map((b) => [b.id, b]));
-    const organismsRecord = Object.fromEntries(organisms.map((o) => [o.id, o]));
-    const payload = JSON.parse(
-      JSON.stringify({ battles: battlesRecord, organisms: organismsRecord }),
-    ) as { battles: unknown; organisms: unknown };
-
-    await page.addInitScript(
-      ([keys, formatVersion, data]) => {
-        // Stamps gol:schema so isFreshWorkspace() is false and the default seed does not append
-        // Conway's Classic to the roster mid-test.
-        localStorage.setItem(
-          (keys as Record<string, string>).schema,
-          JSON.stringify({ formatVersion }),
-        );
-        localStorage.setItem(
-          (keys as Record<string, string>).battles,
-          JSON.stringify((data as { battles: unknown }).battles),
-        );
-        localStorage.setItem(
-          (keys as Record<string, string>).organisms,
-          JSON.stringify((data as { organisms: unknown }).organisms),
-        );
-      },
-      [STORAGE_KEYS, CURRENT_FORMAT_VERSION, payload] as const,
-    );
-
-    return { battles, organisms };
-  }
-
   test('clicking Export downloads a WorkspaceExportSchema-valid file named by AC3, holding exactly the seeded battles and organisms', async ({
     page,
   }) => {
@@ -289,6 +290,163 @@ test.describe('export workspace (Story 5.5)', () => {
     await seedWorkspace(page);
     await page.goto('/settings');
     await expect(page.getByRole('heading', { level: 2, name: 'Data Management' })).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});
+
+// AC1-AC8's e2e level, kept thin (RFC-008 Decision 2) — the branch matrix (pristine skip, every
+// FD4 copy variant, re-entrancy) lives in `ImportWorkspaceRow.test.tsx`; this only proves the flow
+// against the REAL served static export and REAL localStorage.
+test.describe('import (Story 5.9)', () => {
+  // A hand-built, `WorkspaceExportSchema`-valid file (checked below) rather than the output of an
+  // Export click on `seedWorkspace`'s fixture: that fixture's second battle places Conway's
+  // Classic cells without carrying a Conway's Classic ORGANISM record (a gap in the fixture, not a
+  // product bug — the real app's seed always keeps one), so exporting and re-importing it would
+  // trip `'dangling-reference'` for a reason unrelated to what this suite is testing.
+  const IMPORT_ENVELOPE = {
+    formatVersion: CURRENT_FORMAT_VERSION,
+    appVersion: '9.9.9',
+    exportedAt: '2026-01-05T12:00:00.000Z',
+    kind: 'workspace',
+    organisms: [
+      {
+        schemaVersion: 1,
+        id: 'e2e-import-organism',
+        name: 'E2E Import Organism',
+        colorToken: 'sky-blue',
+        dominance: 50,
+        agingEnabled: false,
+        survivalRules: [
+          {
+            id: 'e2e-rule-born',
+            contentHash: 'e2e-rule-born-hash',
+            conditions: [
+              { property: 'cellState', operator: 'eq', pattern: 'empty' },
+              { property: 'neighborCount', operator: 'eq', pattern: 3 },
+            ],
+            payload: { summary: 'Born with 3 neighbors', action: 'born' },
+          },
+        ],
+      },
+    ],
+    battles: [
+      {
+        id: '9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f',
+        name: 'E2E Import Battle',
+        gridDimensions: { cols: 50, rows: 30 },
+        cells: [{ x: 0, y: 0, organismId: 'e2e-import-organism' }],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ],
+  };
+  // Sanity: keeps the fixture honest against schema changes rather than trusting it by hand.
+  WorkspaceExportSchema.parse(IMPORT_ENVELOPE);
+  const IMPORT_FILE_BUFFER = Buffer.from(JSON.stringify(IMPORT_ENVELOPE));
+
+  async function pickImportFile(page: Page, buffer: Buffer, name = 'workspace.json') {
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles({ name, mimeType: 'application/json', buffer });
+  }
+
+  test('a non-pristine workspace warns, Import Anyway imports, counts refresh, and gol:settings stays byte-identical', async ({
+    page,
+  }) => {
+    const seededSettings = JSON.stringify({ theme: 'biotech-terminal', gridLines: false });
+    await page.addInitScript((value) => {
+      localStorage.setItem('gol:settings', value);
+    }, seededSettings);
+
+    await seedWorkspace(page); // non-pristine: two seeded battles
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { level: 2, name: 'Data Management' })).toBeVisible();
+
+    await pickImportFile(page, IMPORT_FILE_BUFFER);
+
+    const dialog = page.getByRole('dialog', { name: 'Replace Your Workspace?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Import Anyway' }).click();
+
+    await expect(page.getByRole('status')).toContainText('Import complete');
+    // 1 battle from the file; 1 organism from the file + Conway's Classic, re-ensured (M9).
+    await expect(statValue(page, 'Saved Battles')).toHaveText('1');
+    await expect(statValue(page, 'Organisms')).toHaveText('2');
+
+    const settingsAfter = await page.evaluate(() => localStorage.getItem('gol:settings'));
+    expect(settingsAfter).toBe(seededSettings);
+  });
+
+  test("an invalid file ('{') shows the alert and leaves gol:battles / gol:organisms byte-identical", async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/settings');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('2');
+
+    const before = await page.evaluate(
+      (keys: Record<string, string>) => ({
+        battles: localStorage.getItem(keys.battles),
+        organisms: localStorage.getItem(keys.organisms),
+      }),
+      STORAGE_KEYS,
+    );
+
+    await pickImportFile(page, Buffer.from('{'), 'bad.json');
+
+    // `page.getByRole('alert')` alone is a strict-mode violation on every route: Next's own
+    // `#__next-route-announcer__` carries `role="alert"` permanently (organisms.spec.ts's `dialog`/
+    // `card`-scoped alert queries are the same fix for the same reason) — filtered by text instead.
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'not a valid Game of Life Studio' }),
+    ).toBeVisible();
+    // No dialog for an invalid file (AC2) — validation runs before the pristine check or the
+    // warning.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    const after = await page.evaluate(
+      (keys: Record<string, string>) => ({
+        battles: localStorage.getItem(keys.battles),
+        organisms: localStorage.getItem(keys.organisms),
+      }),
+      STORAGE_KEYS,
+    );
+    expect(after).toEqual(before);
+  });
+
+  test('Export First downloads the current workspace and the dialog stays open', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/settings');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('2');
+
+    await pickImportFile(page, IMPORT_FILE_BUFFER);
+    const dialog = page.getByRole('dialog', { name: 'Replace Your Workspace?' });
+    await expect(dialog).toBeVisible();
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      dialog.getByRole('button', { name: 'Export Current Workspace First' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(
+      /^game-of-life-workspace-\d{4}-\d{2}-\d{2}\.json$/,
+    );
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('status')).toHaveText('Your current workspace was downloaded.');
+  });
+
+  test('has no axe accessibility violations with the import warning dialog open', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/settings');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('2');
+
+    await pickImportFile(page, IMPORT_FILE_BUFFER);
+    await expect(page.getByRole('dialog', { name: 'Replace Your Workspace?' })).toBeVisible();
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
