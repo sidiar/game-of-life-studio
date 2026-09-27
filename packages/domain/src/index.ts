@@ -132,3 +132,8 @@ export type {
 // turns a non-empty list into its typed rejection before anything is written.
 export { findDanglingReferences } from './referentialClosure';
 export type { DanglingReference } from './referentialClosure';
+
+// FR-8.4's "unmodified default workspace" predicate (Story 5.9) — lets import skip its
+// destructive-replace warning only when there is nothing to lose. Appended as one contiguous
+// block at the end of the barrel (project-context's two-lane `[[sync.rules]]`).
+export { isPristineWorkspace } from './pristineWorkspace';

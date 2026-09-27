@@ -26,10 +26,11 @@ export interface SettingsPageProps {
   // harmless today (neither implementation uses `this`) and a `this` trap the day one does.
   workspace: Pick<AppRepositories, 'storageUsage'>;
   // The same `Pick` shape as `workspace` above, for the same reason (FD7, Story 5.2): this page
-  // hands `<DataManagement>` exactly the one serializer method it calls, never the whole
-  // `WorkspaceSerializer` interface — `exportBattle` is Story 5.6's, not something this page or
-  // its children call (AC7, Story 5.5).
-  serializer: Pick<WorkspaceSerializer, 'exportWorkspace'>;
+  // hands `<DataManagement>` exactly the serializer methods it (and its Story 5.9 `<ImportWorkspaceRow>`
+  // child) call, never the whole `WorkspaceSerializer` interface — `exportBattle` is Story 5.6's,
+  // not something this page or its children call (AC7, Story 5.5; widened for `importWorkspace`,
+  // Story 5.9 Task 5.2).
+  serializer: Pick<WorkspaceSerializer, 'exportWorkspace' | 'importWorkspace'>;
 }
 
 const HEADING_ID = 'settings-heading';
@@ -149,7 +150,12 @@ export default function SettingsPage({
               organismCount={organismCount}
               storageBytes={storageBytes}
             />
-            <DataManagement serializer={serializer} />
+            <DataManagement
+              serializer={serializer}
+              battles={battles}
+              organisms={organisms}
+              onImported={statsResource.reload}
+            />
           </Container>
         )}
       </div>

@@ -3553,6 +3553,40 @@ full reasoning; the owner rules on each flagged one).
   multi-await window is merely the widest, and the only one that rewrites both collections at
   workspace scale. No UI caller exists until Story 5.9 — its wiring is the place to decide (e.g.
   block saves while an import is in flight, or accept and document the single-writer assumption).
+  **↪ Ruled by Story 5.9's wiring (FD5, 2026-09-27): accept and document the single-writer
+  assumption.** `<ImportWorkspaceRow>` adds no cross-tab locking; see "Deferred from:
+  Story 5-9-import-ui-destructive-warning" below for the accepted mitigation and its bound.
+
+## Deferred from: Story 5-9-import-ui-destructive-warning (2026-09-27)
+
+- **FD5 ruling applied: single-writer assumption accepted and documented, not fixed.** The entry
+  above ("Concurrent-writer race in the import's snapshot→restore window", code review of 5-8)
+  asked this story's wiring to decide. `<ImportWorkspaceRow>` does none of: blocking other writes
+  while an import is in flight, `navigator.locks`, or a `storage`-event guard. What it DOES do,
+  which is the accepted mitigation: `pendingRef` makes the row's own flow non-reentrant end to end
+  (pick → outcome, spanning the whole warning-dialog window), the warning dialog is modal (nothing
+  else on `/settings` writes `gol:battles`/`gol:organisms` while it is open), and no other surface
+  on this route writes either collection. A SECOND TAB can still race an import — that remains the
+  codebase-wide norm for every `save()`, not a gap specific to this path, and cross-tab locking is
+  out of scope here (Story 5.9 Dev Notes FD5).
+- **Accepted limit: the pristine check (AC4) reads through `battles.list()` / `organisms.list()`,
+  which SKIP a per-record-corrupt entry** (the same fault-isolation stance `exportWorkspace()`
+  already accepts, `workspaceSerializer.ts`'s own note). A workspace whose only battle is an
+  unreadable record therefore reads as `battleCount === 0` — indistinguishable from a genuinely
+  empty workspace for this predicate — so a corrupt-but-nonempty workspace could suppress the
+  warning it should show. Store-corruption UX (a caller learning about a skipped record at all) is
+  Story 5.11's; `isPristineWorkspace` itself has no seam for "count included an unreadable entry".
+- **Surfaced, not resolved: the M8/FR-8.4 "always warns" vs "suppressed for pristine" wording
+  conflict.** Architecture M8 (`architecture.md:354`), RFC-006 Decision 5 ("The confirmation
+  always warns") and the mockup's Import row description ("You are always warned first",
+  `settings.html:409`) all read as an unconditional warning; FR-8.4 (`prd.md:512`) and this
+  story's own epic AC (`epics.md:1430`) suppress it for a pristine workspace (AC4). This story
+  followed the AC/FR-8.4 (narrower, more specific, and FR-8.4 sits above M8 only via the
+  "Architecture Decisions win cross-cutting" rule being read the OTHER way for a feature-level FR)
+  — flagged rather than silently picked, per Story 5.9 Dev Notes' Open Flags. If the owner later
+  rules "always", AC4 and `isPristineWorkspace`'s only call site drop, and
+  `<ImportWorkspaceRow>`'s dialog shows unconditionally; `isPristineWorkspace` itself would become
+  dead code to remove, not to keep unused.
 
 ## Deferred from: code review of 4-23-editor-unsaved-changes-scope, owner-decision pass (2026-09-26)
 
