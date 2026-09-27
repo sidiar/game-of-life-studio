@@ -604,3 +604,18 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
 Proposed lane gate: { story: 5-11-load-time-corruption-handling, requires: 4-25-create-organism-from-battle, why: "5.11 owns BattlePage's library-load / unknown-id path and inherits the 4-24 duty to clear or reconcile the savedOrganisms overlay on any reload; 4.25 widens that overlay to hold created records absent from the loaded list" }
 
 Dev Model: sonnet   # follows 4.24's established hook, overlay (append branch pre-built) and modal mount; the one new seam (a selection continuation) is small and fully specified here
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 53s | 53s | 32 | 4,293 | 23,493 | 955,059 | 982,877 |
+| Step 1 — create | opus-5-5 | 1 | 5m 04s | 5m 04s | 98 | 6,055 | 320,712 | 5,044,297 | 5,371,162 |
+| Step 2 — implement | sonnet-5 | 1 | 36m 29s | 36m 29s | 816 | 22,401 | 1,390,408 | 95,442,566 | 96,856,191 |
+| Step 3 — review + PR | opus-5-5 | 4 | 27m 13s | 27m 13s | 308 | 18,570 | 897,571 | 11,934,361 | 12,850,810 |
+| _of which the orchestrator_ | fable-5 | — | — | — | 86 | 22,270 | 56,799 | 2,892,080 | 2,971,235 |
+| **Total (create → PR ready)** | | 6 | **1h 09m** | 1h 09m | 1,254 | 51,319 | 2,632,184 | 113,376,283 | **116,061,040** |
+
+Run started 2026-09-27 09:39 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
