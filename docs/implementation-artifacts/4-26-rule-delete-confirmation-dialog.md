@@ -4,7 +4,7 @@ baseline_commit: 10947c5
 
 # Story 4.26: Rule-Delete Confirmation Dialog
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -23,6 +23,8 @@ so that a stray double-click never wipes out rules I meant to keep.
    `<DeleteBattleDialog>` pattern, restyled for the editor: 440px paper, Cancel first and
    autoFocused, `disableRestoreFocus`, `onTransitionExited`, `aria-labelledby` and
    `aria-describedby` (UX-DR15 vocabulary). (FR-2.5, UX-DR10)
+   *Exception (review decision (a), 2026-09-27):* while a Save is in flight, ✕ does nothing and
+   opens no dialog, so the confirmation's inert background can never swallow the Save outcome.
 2. **Confirm removes exactly that rule.** The rule is removed only after the dialog's exit
    transition has finished, never in the click's own commit (FD3). The remaining cards renumber.
    Focus lands per Story 4.10 AC5: the Summary of the card now at the removed index, else the new
@@ -203,6 +205,17 @@ Acceptance Auditor. 1 decision-needed, 8 patch (all applied), 2 deferred, 7 dism
 - [x] [Review][Patch] The FD6 list-diff effect's drag branch lost its only test when the old test was re-pointed at `handleDelete`'s `updateDrag(null)`; a parent-driven-removal-mid-drag test restores it, and the branch's stale "deleted from the keyboard" comment is corrected. Also added AC1's Space activation of ✕, which no test exercised [`RulesEditor.test.tsx`, `RulesEditor.tsx`]
 - [x] [Review][Defer] A parent-driven removal while the confirmation is open leaves `handleDeleteExited`'s `rules.length === 1` announcement check stale and the cancel-path focus restore with no ✕ to land on [`apps/web/components/organisms/editor/RulesEditor.tsx`] — deferred, unreachable today (the background is inert for the whole window)
 - [x] [Review][Defer] Story 4.23's editor unsaved-changes confirmation has the same last-writer-wins outcome shape during its exit fade [`apps/web/components/organisms/editor/OrganismEditorModal.tsx:930-941`] — deferred, pre-existing, outside this diff
+
+Second review pass 2026-09-27 (Opus), scoped to the ruling commit `b4a8064`: Blind Hunter + Edge
+Case Hunter + Acceptance Auditor. 0 decision-needed, 3 patch (all applied), 1 deferred, 10
+dismissed (among them: an `isSaving`-state vs `savingRef` race and a save starting while the
+confirmation is open, both refuted — the two are set in the same Save click handler, and every
+save entry point is inert while the confirmation is mounted).
+
+- [x] [Review][Patch] The `isSaving` prop doc (and the Completion Note) called the guard "the same lock the modal's other close paths (`savingRef`) gate on" — the code reads the `isSaving` state, which is what disables Save/Back/✕/Delete Organism; `savingRef` is a separate ref set in the same block. Wording corrected [`apps/web/components/organisms/editor/RulesEditor.tsx:153`]
+- [x] [Review][Patch] AC1 read "activating ✕ opens a confirmation dialog" with no condition; after ruling (a) it does nothing mid-Save. Inline exception added to AC1 so a later reviewer does not read it as a regression [`4-26-rule-delete-confirmation-dialog.md` AC1]
+- [x] [Review][Patch] The integration test asserted the refusal before checking its premise (the pending `save` was really called); the `saveSpy` check now runs before the ✕ click, so a Save disabled for another reason cannot make the refusal pass vacuously [`apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:3055`]
+- [x] [Review][Defer] The refused ✕ gives no feedback — it stays enabled and focusable and a click silently does nothing, while the modal's Save/Back/✕/Delete Organism show `disabled={isSaving}` [`apps/web/components/organisms/editor/RulesEditor.tsx:242`] — deferred, invisible with localStorage (millisecond window) and the rest of the rules surface is deliberately editable mid-Save (4.23 FD2); revisit (`aria-disabled` on the card's ✕) with the API repository
 
 ## Dev Notes
 
@@ -401,8 +414,9 @@ Sonnet 5 (claude-sonnet-5)
 - Applied Sidiar's review ruling (a), 2026-09-27: `isSaving: boolean` is now a required prop on
   `<RulesEditor>`, threaded from `<OrganismEditorModal>`'s own `isSaving` state. `handleDelete`
   refuses the request (returns before the confirming-ref latch check) while `isSaving` is true —
-  the same lock `handleRequestClose`'s `savingRef.current` check already gives the modal's own
-  close paths (Story 4.16 Task 12/13). This keeps the confirmation's `inert`/`aria-hidden`
+  the same `isSaving` state that disables the modal's Save, Back, ✕ and Delete Organism
+  (`handleRequestClose` reads `savingRef` instead; both are set together before Save's first
+  `await`). This keeps the confirmation's `inert`/`aria-hidden`
   background from ever being up during a write, so a Save outcome is always announced. Three tests
   added: two in `RulesEditor.test.tsx` (no dialog opens and `onBeforeDeleteConfirm` is not called
   while `isSaving`; the same ✕ opens the confirmation again once `isSaving` settles to `false`) and
@@ -433,6 +447,8 @@ Sonnet 5 (claude-sonnet-5)
 - 2026-09-27: Applied Sidiar's review ruling (a) — `isSaving` threaded into `<RulesEditor>`,
   `handleDelete` refuses the request while a write is in flight; three tests added; `npm run ci:dev`
   green end to end; status set to review.
+- 2026-09-27: Second review pass (Opus) on the ruling commit: 3 patches applied (doc accuracy,
+  AC1 exception note, integration-test premise order), 1 deferred, 10 dismissed; status done.
 
 Proposed lane gate: none
 

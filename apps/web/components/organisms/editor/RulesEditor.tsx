@@ -153,8 +153,9 @@ export interface RulesEditorProps {
   /**
    * Story 4.26, second review decision (a), 2026-09-27: `<OrganismEditorModal>`'s own `isSaving`
    * state, true for the duration of a write. `handleDelete` refuses the request while true — the
-   * same lock the modal's other close paths (`savingRef`, Story 4.16 Task 12/13) already gate on.
-   * Reason: a Save outcome that lands while the confirmation is open would insert its
+   * same state that disables the modal's Save, Back, ✕ and Delete Organism. (The modal's close
+   * handler reads `savingRef` instead; both are set together in Save's own click handler, before
+   * its first `await`, so no later ✕ click can see a stale `false` here.) Reason: a Save outcome that lands while the confirmation is open would insert its
    * `role="alert"`/`role="status"` line inside the subtree `useInertBackground` has just marked
    * `inert`/`aria-hidden` — dropped for assistive tech, and never re-announced once the background
    * goes live again (the project-context live-region trap). Refusing the delete while a write is

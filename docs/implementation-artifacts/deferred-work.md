@@ -3720,3 +3720,12 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   Discard) overwrites the outcome ref. Story 4.26's review fixed its own dialog with a
   first-outcome-wins guard (`if (confirmOutcomeRef.current !== null) return;`); the 4.23 handlers
   take the same one-line guard plus a test.
+
+## Deferred from: code review of 4-26-rule-delete-confirmation-dialog.md, second pass (2026-09-27)
+
+- **The rule ✕ refused mid-Save gives no feedback.** Ruling (a) makes `handleDelete`
+  (`RulesEditor.tsx`) return early while `isSaving`, but the card's ✕ stays enabled and focusable,
+  so a click silently does nothing, while the modal's Save/Back/✕/Delete Organism show
+  `disabled={isSaving}`. Invisible with localStorage (millisecond window), and the rest of the rules
+  surface is deliberately editable mid-Save (4.23 FD2). With the API repository, thread the flag to
+  `RuleCard` and mark its ✕ `aria-disabled` (not `disabled` — that drops focus to `<body>`).

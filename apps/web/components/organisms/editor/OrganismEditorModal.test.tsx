@@ -3051,12 +3051,14 @@ describe('OrganismEditorModal', () => {
       await waitFor(() =>
         expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled(),
       );
+      // The premise first: Save is disabled because the write is in flight (the pending `save`
+      // was really called), not for some other reason — so the refusal below is the lock's doing.
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
 
       await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
       expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument();
       expect(within(rules).getByRole('group', { name: 'Rule 1' })).toBeInTheDocument();
 
-      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
       await act(async () => resolveSave());
       await waitFor(() =>
         expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled(),
