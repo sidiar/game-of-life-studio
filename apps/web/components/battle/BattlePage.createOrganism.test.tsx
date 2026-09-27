@@ -278,7 +278,14 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     expect(within(editor).queryByText(/Used in [1-9]/)).toBeNull();
   });
 
-  it('focus returns to the create button on both the saved and the cancelled path (AC6)', async () => {
+  // Review ruling (D1 a, 2026-09-27): AC6's "both paths" land on the create button ONLY when the
+  // create session never saved. A saved create retargets to the new row's OWN ✎ instead — the fix
+  // for the roster-cap regression the review found (a saved create landing the roster AT 255 would
+  // otherwise unmount the create button before this restore ran, dropping focus to `<body>`). The
+  // hook-level test in `useOrganismEditorModal.test.tsx` proves the retarget is cap-agnostic (it
+  // fires on every battle-origin save, not only at the cap); this pins the two paths' OUTCOME
+  // through the real page.
+  it('focus returns to the create button when a create never saves, and to the new row’s ✎ when it does (AC6)', async () => {
     const user = userEvent.setup();
     await openSkirmish();
 
@@ -296,7 +303,8 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     await within(editor).findByText(/saved/i);
     await user.click(within(editor).getByRole('button', { name: /Back to Battle/ }));
     await waitForNoDialog();
-    await waitFor(() => expect(createButton()).toHaveFocus());
+    await waitFor(() => expect(pencil('Second Organism')).toHaveFocus());
+    expect(createButton()).not.toHaveFocus();
   });
 
   it('a create press while a 4.24 pencil fetch is pending is a no-op (AC3)', async () => {
@@ -346,6 +354,39 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
       release?.();
     });
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // Review ruling (D2 a, 2026-09-27): both presses above already no-op under `savingRef` — this
+  // pins the VISIBLE half NFR-4.1 requires: neither control may look live while it silently does
+  // nothing.
+  it('disables the create button and the 4.24 ✎ while a battle save is in flight, re-enabling both once it settles (D2 a)', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    let release: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(repositories.battles, 'save').mockReturnValue(pending);
+    await openSkirmish(repositories);
+    await user.click(screen.getByRole('button', { name: /clear petri dish/i }));
+    expect(createButton()).toBeEnabled();
+    expect(pencil('Aggressive Colonizer')).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+
+    expect(createButton()).toBeDisabled();
+    expect(pencil('Aggressive Colonizer')).toBeDisabled();
+
+    await act(async () => {
+      release?.();
+    });
+    // Not `saveButton()`: a SUCCESSFUL save also clears `isDirty`, so SAVE stays disabled for that
+    // separate reason (FR-7.8, `EditorStatusBar`'s "enabled exactly when there is something to
+    // save") — the fact under test here is `isSaving` clearing, which the create button and the
+    // pencil read directly.
+    await waitFor(() => expect(createButton()).toBeEnabled());
+    expect(pencil('Aggressive Colonizer')).toBeEnabled();
   });
 
   it('renders no create button in Run mode, and a Lab → Run → Lab round trip renders it again (AC8)', async () => {

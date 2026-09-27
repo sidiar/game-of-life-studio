@@ -998,7 +998,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   rather than this story's: every `disabled={isSaving}` control on `/battle` explains nothing at
   all, and the story's AC7 prescribed `title`. **Pick this up in Story 6.11** with the rest of the
   route's disabled-state a11y (the `aria-disabled` + `aria-describedby` shape keeps the control
-  focusable and the reason reachable, at the cost of a click that must refuse by hand).
+  focusable and the reason reachable, at the cost of a click that must refuse by hand). **↪ Story
+  4.25 review ruling (D2 a, 2026-09-27):** joins the list, not an exception to it — the create
+  button and the 4.24 ✎ both gained `disabled={isSaving}` with no `title`, matching every other
+  control this entry already names. No new gap; the count grows by two.
 - **A rejected `import()` of the Run chunk has no boundary nearer than `GlobalError`.** Offline,
   or a deploy that rotated chunk hashes under an open tab, makes `next/dynamic`'s promise reject
   after the editor has already unmounted — the whole page goes to Next's error surface with Lab

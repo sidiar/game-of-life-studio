@@ -4,7 +4,7 @@ baseline_commit: 3917ab49d6a9a2ddb3d0980bad052d6380e92f49
 
 # Story 4.25: Create Organism from Battle
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -249,7 +249,7 @@ story does.
 
 Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor).
 
-- [ ] [Review][Decision] Focus is lost when a create fills the roster to the cap (254 → 255) — AC6
+- [x] [Review][Decision] Focus is lost when a create fills the roster to the cap (254 → 255) — AC6
       says focus returns to `+ Create New Organism` on both paths, but the append that lands in the
       editor's exit commit sets `atCap`, which unmounts the button (FD2) before the hook's restore
       effect runs; `[data-create-organism]` resolves to nothing and focus drops to `<body>`
@@ -260,7 +260,19 @@ Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
       and fall back to the new row's ✎ only when the create button is gone; (c) fall back to the
       cap message / Organisms section heading (needs a focusable target); (d) accept — a
       one-in-255 boundary, record it in `deferred-work.md`.
-- [ ] [Review][Decision] The create button stays enabled during a battle save and silently
+      **Sidiar ruled (a), 2026-09-27:** on a saved create, restore focus to the new row's ✎
+      (`[data-edit-organism-id="<newId>"]`) on both paths — the non-cap path's restore target
+      deliberately moves off AC6's create button.
+      **Applied:** `useOrganismEditorModal`'s `handleSaved` now rewrites a `{ kind: 'create' }`
+      restore intent to `{ kind: 'edit', organismId: saved.id }` the moment a save lands, scoped to
+      `origin === 'battle'` (the Library keeps its own create-button target — pinned by two new
+      tests in that file). A create that never saves is untouched. Tested at the hook level
+      (cap-agnostic — the fix fires on every battle-origin save) and at the page level (the two
+      paths' outcome through the real roster)
+      [apps/web/lib/organisms/useOrganismEditorModal.ts,
+      apps/web/lib/organisms/useOrganismEditorModal.test.tsx,
+      apps/web/components/battle/BattlePage.createOrganism.test.tsx]
+- [x] [Review][Decision] The create button stays enabled during a battle save and silently
       no-ops — `handleCreateOrganism` bails on `savingRef.current` (AC3), but `CreateButton` has no
       `disabled`, unlike SAVE / UNDO / the name field (`disabled={isSaving}`); NFR-4.1 forbids an
       inert-looking control that does nothing. The 4.24 ✎ has the identical shape (guarded, not
@@ -268,6 +280,20 @@ Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
       both the create button and the ✎ during a save; (b) disable the create button only, leaving
       the ✎ as 4.24 shipped it; (c) accept — the save window is milliseconds on localStorage, and
       record the ✎ + create pair in `deferred-work.md`.
+      **Sidiar ruled (a), 2026-09-27:** thread `isSaving` down (the `exportDisabled` pattern) and
+      disable both the create button and the 4.24 ✎ during a save.
+      **Applied:** `OrganismRosterProps` gains `isSaving?: boolean` (default `false`), already
+      available in `<BattleEditorView>`'s own scope (it was already a required prop there since
+      Story 2.13) — no new plumbing needed through `<BattlePage>`. Both `<CreateButton>` and
+      `<EditButton>` get a real `disabled` attribute and the same pre-validated disabled trio every
+      other sidebar control on this route uses (`--gol-action-disabled` /
+      `--gol-action-disabled-bg`); row SELECTION is untouched. Tested at all three layers (roster,
+      wrapper, page)
+      [apps/web/components/battle/editor/OrganismRoster.tsx,
+      apps/web/components/battle/editor/OrganismRoster.test.tsx,
+      apps/web/components/battle/editor/BattleEditorView.tsx,
+      apps/web/components/battle/editor/BattleEditorView.test.tsx,
+      apps/web/components/battle/BattlePage.createOrganism.test.tsx]
 - [x] [Review][Patch] `onCreatedRef`'s comment claims it is `null` on every path except an open,
       un-adopted create — false after a cancelled create (no `onSaved`, so the dead continuation
       lingers until the next press); comment corrected to the real invariant
@@ -549,6 +575,21 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
   - One runtime fixup mid-run: `OrganismRoster.tsx`'s create button initially wired
     `onClick={onCreateOrganism}` directly, which passed the click `SyntheticEvent` as the
     callback's argument instead of calling it with none — wrapped in `() => onCreateOrganism()`.
+- `npm run ci:dev` (2026-09-27, rulings-application pass — D1 a, D2 a): typecheck, lint,
+  format:check, spec:check, boundary:check, test:coverage (all workspaces), build:standalone,
+  bundle:check, bench, bench:check, e2e:chromium — all green, unpiped.
+  - Test files/tests: `@gol/domain` 14/252, `@gol/simulation` 23/408, `@gol/persistence` 9/159,
+    `@gol/test-utils` 6/99, `apps/web` 141/2449 — all passed, no regressions.
+  - Coverage unchanged from the prior run: `@gol/domain` 100%, `@gol/simulation` 100%,
+    `@gol/persistence` ~99.25%, `@gol/test-utils` ~95.78%, `apps/web` ~97.26% (no gate).
+  - Bundle: all five routes within the 8 KB allowance, same deltas as the prior run (`/battle`
+    +3.0 KB, `/battle/new` +3.0 KB, `/organisms` +1.1 KB, `/settings` +0.1 KB, `/` −0.3 KB) — the
+    ruling's changes reuse existing `--gol-*` tokens and an already-threaded `isSaving` prop, so no
+    baseline refresh was needed.
+  - Bench: 9.564 ms headroom (57.4% of the 16.667 ms frame budget) — unaffected by this pass.
+  - e2e:chromium: 297 passed, 1 pre-existing skip — unchanged from the prior run; this pass added
+    no e2e coverage (Playwright specs untouched), only unit/component tests (Vitest + RTL).
+  - No fixups needed this pass — typecheck, lint and format:check were all clean on the first try.
 
 ### Completion Notes List
 
@@ -571,6 +612,38 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
 - `npm run ci:dev` is green (see Debug Log References). All three Questions for Sidiar were
   answered by the story's own written defaults (FD1 yes / FD3 joins the roster / FD2 withheld at
   cap) — no runtime behavior deviates from them.
+- **Rulings-application pass (2026-09-27):** applied Sidiar's two decisions on the review's
+  remaining open items.
+  - **D1 (a), focus at the cap:** `useOrganismEditorModal`'s `handleSaved` now rewrites a
+    `{ kind: 'create' }` restore intent to `{ kind: 'edit', organismId: saved.id }` the instant a
+    save lands, scoped to `origin === 'battle'`. This is the mechanism review option (a) proposed
+    verbatim, placed where the review named it (the hook, not the page): it fixes the cap
+    regression (the create button unmounts before the restore runs) by construction, because the
+    fix never reads `atCap` — it retargets on every battle-origin save regardless. The Library's
+    own create-button target (its own AC) is untouched, proven by two new hook-level tests using a
+    same-id Edit button to rule out "no matching node" as the reason. A create that never saves
+    still restores to the create button, on both origins.
+  - **D2 (a), disabled during save:** `OrganismRosterProps` gains `isSaving?: boolean` (default
+    `false`). `<BattleEditorView>` already receives `isSaving` as a required prop (Story 2.13) and
+    already threads it to every other sidebar control the same way (`<BattleNameField>`,
+    `<GridSettingsSection>`, `<EditorToolsSection>`, `<SidebarFooter>`) — this is the same pattern,
+    one more consumer, no new plumbing through `<BattlePage>`. Both `<CreateButton>` and
+    `<EditButton>` get a real `disabled` attribute plus the route's own pre-validated disabled trio
+    (`--gol-action-disabled` / `--gol-action-disabled-bg`, matching `EditorToolsSection`,
+    `BattleNameField`, `SidebarFooter`); row SELECTION is untouched, since painting a tool mutates
+    nothing the save lock protects. `deferred-work.md`'s existing "every `disabled={isSaving}`
+    control on `/battle` explains nothing" entry is amended to note the two new controls join that
+    list rather than being a new gap.
+  - Both review checklist items are checked off in place, with an **Applied** note recording the
+    mechanism and the files touched, immediately under Sidiar's ruling.
+  - Tested at every layer the change touches: `useOrganismEditorModal.test.tsx` (hook, 3 new
+    tests), `OrganismRoster.test.tsx` (5 new tests: pencil + create button disabled/enabled,
+    selection untouched, axe with a disabled control), `BattleEditorView.test.tsx` (1 new wiring
+    test), `BattlePage.createOrganism.test.tsx` (the existing AC6 focus test rewritten for the new
+    per-path outcome, plus 1 new test for the disable/re-enable window across a real battle save).
+  - `npm run ci:dev` is green (see the second Debug Log entry) — no bundle baseline refresh needed
+    (both changes reuse existing tokens and an already-threaded prop), no bench or coverage
+    regression.
 
 ### File List
 
@@ -585,6 +658,7 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
 - `apps/web/lib/battle/applySavedOrganisms.test.ts`
 - `apps/web/lib/organisms/organismDraft.ts`
 - `apps/web/lib/organisms/useOrganismEditorModal.ts`
+- `apps/web/lib/organisms/useOrganismEditorModal.test.tsx`
 - `apps/web/lib/battle/useSimulationHotkeys.ts`
 - `apps/web/components/organisms/editor/OrganismEditorModal.test.tsx`
 - `apps/web/e2e/createOrganismFromBattle.spec.ts` (new)
@@ -600,6 +674,9 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
   `npm run ci:dev` green. Status → review.
 - 2026-09-27: Code review (opus) — 11 patches applied (one comment, one deferred-work correction,
   nine test pins), 4 deferred, 2 decision-needed left open for Sidiar. Status → in-progress.
+- 2026-09-27: Applied Sidiar's rulings on both decision-needed review items — D1 (a): focus
+  restores to the new row's ✎ on both paths once a create saves; D2 (a): the create button and the
+  4.24 ✎ are disabled while a battle save is in flight. `npm run ci:dev` green. Status → review.
 
 Proposed lane gate: { story: 5-11-load-time-corruption-handling, requires: 4-25-create-organism-from-battle, why: "5.11 owns BattlePage's library-load / unknown-id path and inherits the 4-24 duty to clear or reconcile the savedOrganisms overlay on any reload; 4.25 widens that overlay to hold created records absent from the loaded list" }
 

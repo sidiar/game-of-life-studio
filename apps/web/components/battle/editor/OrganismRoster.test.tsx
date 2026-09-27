@@ -403,6 +403,50 @@ describe('OrganismRoster — the edit pencil (Story 4.24, FR-3.3)', () => {
 
     expect((await axe(container)).violations).toEqual([]);
   });
+
+  // Review ruling (D2 a, 2026-09-27): `<BattlePage>`'s `handleEditOrganism` already bails under
+  // `savingRef` (AC3) — this pins the VISIBLE half NFR-4.1 requires, mirroring the same-pattern
+  // test in "the create button" below.
+  it('disables every pencil while `isSaving`, and re-enables them once it clears', async () => {
+    const user = userEvent.setup();
+    const onEditOrganism = vi.fn();
+    const { rerender } = renderRoster({ onEditOrganism, isSaving: true });
+
+    for (const entry of ROSTER) {
+      expect(screen.getByRole('button', { name: `Edit ${entry.name}` })).toBeDisabled();
+    }
+    await user.click(screen.getByRole('button', { name: 'Edit Patient Defender' }));
+    expect(onEditOrganism).not.toHaveBeenCalled();
+
+    rerender(
+      <OrganismRoster
+        roster={ROSTER}
+        selectedTool={ORGANISM_TOOL}
+        onSelectTool={() => {}}
+        library={[]}
+        onAddToRoster={() => {}}
+        onEditOrganism={onEditOrganism}
+        isSaving={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Edit Patient Defender' })).toBeEnabled();
+  });
+
+  it('leaves row SELECTION enabled while `isSaving` — only the pencil is disabled', async () => {
+    const user = userEvent.setup();
+    const onSelectTool = vi.fn();
+    renderRoster({ onEditOrganism: () => {}, onSelectTool, isSaving: true });
+
+    await user.click(screen.getByRole('button', { name: 'Patient Defender' }));
+
+    expect(onSelectTool).toHaveBeenCalledWith({ kind: 'organism', organismId: 'org-p' });
+  });
+
+  it('has no axe violations with a disabled pencil (isSaving)', async () => {
+    const { container } = renderRoster({ onEditOrganism: () => {}, isSaving: true });
+
+    expect((await axe(container)).violations).toEqual([]);
+  });
 });
 
 describe('OrganismRoster — the create button (Story 4.25, FR-1.2, AC1)', () => {
@@ -510,6 +554,47 @@ describe('OrganismRoster — the create button (Story 4.25, FR-1.2, AC1)', () =>
 
     const atCap = renderRoster({ library: LIBRARY, atCap: true, onCreateOrganism: () => {} });
     expect((await axe(atCap.container)).violations).toEqual([]);
+  });
+
+  // Review ruling (D2 a, 2026-09-27): `<BattlePage>`'s `handleCreateOrganism` already bails under
+  // `savingRef` (AC3) — this pins the VISIBLE half NFR-4.1 requires, mirroring the pencil's test
+  // above.
+  it('disables itself while `isSaving`, and re-enables once it clears', async () => {
+    const user = userEvent.setup();
+    const onCreateOrganism = vi.fn();
+    const { rerender } = renderRoster({
+      library: LIBRARY,
+      onCreateOrganism,
+      isSaving: true,
+    });
+
+    const button = screen.getByRole('button', { name: /create new organism/i });
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(onCreateOrganism).not.toHaveBeenCalled();
+
+    rerender(
+      <OrganismRoster
+        roster={ROSTER}
+        selectedTool={ORGANISM_TOOL}
+        onSelectTool={() => {}}
+        library={LIBRARY}
+        onAddToRoster={() => {}}
+        onCreateOrganism={onCreateOrganism}
+        isSaving={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeEnabled();
+  });
+
+  it('has no axe violations with a disabled create button (isSaving)', async () => {
+    const { container } = renderRoster({
+      library: LIBRARY,
+      onCreateOrganism: () => {},
+      isSaving: true,
+    });
+
+    expect((await axe(container)).violations).toEqual([]);
   });
 });
 

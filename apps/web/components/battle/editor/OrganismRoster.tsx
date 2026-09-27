@@ -123,13 +123,23 @@ const EditButton = styled('button')({
   fontSize: '12px',
   cursor: 'pointer',
   transition: 'border-color 0.2s, color 0.2s',
-  '&:hover, &:focus-visible': {
+  '&:hover:not(:disabled), &:focus-visible': {
     borderColor: 'var(--gol-accent)',
     color: 'var(--gol-accent)',
   },
   '&:focus-visible': {
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '2px',
+  },
+  // Story 4.25 review ruling (D2 a, 2026-09-27): the same pre-validated disabled trio every other
+  // control on this route uses (`<EditorToolsSection>`, `<BattleNameField>`, `<SidebarFooter>`).
+  // `<BattlePage>`'s `handleEditOrganism` already bails under `savingRef` (AC3), but NFR-4.1
+  // forbids a live-looking control that silently does nothing while a battle save is in flight.
+  '&:disabled': {
+    background: 'var(--gol-action-disabled-bg)',
+    borderColor: 'var(--gol-border)',
+    color: 'var(--gol-action-disabled)',
+    cursor: 'not-allowed',
   },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
@@ -358,12 +368,22 @@ const CreateButton = styled('button')({
   letterSpacing: '0.5px',
   cursor: 'pointer',
   transition: 'background-color 0.2s',
-  '&:hover': {
+  '&:hover:not(:disabled)': {
     background: 'var(--gol-bg-hover)',
   },
   '&:focus-visible': {
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '2px',
+  },
+  // Story 4.25 review ruling (D2 a, 2026-09-27): the same pre-validated disabled trio the roster's
+  // own `<EditButton>` (above) and every other sidebar control on this route uses.
+  // `<BattlePage>`'s `handleCreateOrganism` already bails under `savingRef` (AC3), but NFR-4.1
+  // forbids a live-looking control that silently does nothing while a battle save is in flight.
+  '&:disabled': {
+    background: 'var(--gol-action-disabled-bg)',
+    borderColor: 'var(--gol-border)',
+    color: 'var(--gol-action-disabled)',
+    cursor: 'not-allowed',
   },
   '@media (prefers-reduced-motion: reduce)': {
     transition: 'none',
@@ -406,12 +426,15 @@ function OrganismSearchAdd({
   onAddToRoster,
   atCap,
   onCreateOrganism,
+  isSaving,
 }: {
   library: readonly DisplayOrganism[];
   workspaceEmpty: boolean;
   onAddToRoster(organismId: string): void;
   atCap: boolean;
   onCreateOrganism?(): void;
+  /** Story 4.25 review ruling (D2 a, 2026-09-27): see `OrganismRosterProps.isSaving`. */
+  isSaving: boolean;
 }) {
   const [searchText, setSearchText] = useState('');
 
@@ -419,7 +442,12 @@ function OrganismSearchAdd({
   // `onCreateOrganism` → `null`, so an absent prop still means no button (NFR-4.1).
   const createButton =
     onCreateOrganism === undefined ? null : (
-      <CreateButton type="button" onClick={() => onCreateOrganism()} data-create-organism="">
+      <CreateButton
+        type="button"
+        onClick={() => onCreateOrganism()}
+        data-create-organism=""
+        disabled={isSaving}
+      >
         + Create New Organism
       </CreateButton>
     );
@@ -569,6 +597,15 @@ export interface OrganismRosterProps {
    * component's own signature stays spec-exact.
    */
   onCreateOrganism?(): void;
+  /**
+   * Story 4.25 review ruling (D2 a, 2026-09-27): a battle save in flight (the `exportDisabled`
+   * pattern, threaded the same way). Disables the create button AND every row's 4.24 ✎ — both
+   * press-handlers already bail under `<BattlePage>`'s `savingRef` (AC3), but NFR-4.1 forbids a
+   * live-looking control that silently does nothing. Row SELECTION (`<Row>`) is untouched:
+   * painting a tool mutates nothing the save lock protects. Defaults to `false`, matching every
+   * other optional boolean on this interface.
+   */
+  isSaving?: boolean;
 }
 
 /**
@@ -593,6 +630,7 @@ export default function OrganismRoster({
   atCap = false,
   onEditOrganism,
   onCreateOrganism,
+  isSaving = false,
 }: OrganismRosterProps) {
   const eraserSelected = selectedTool.kind === 'eraser';
 
@@ -653,6 +691,7 @@ export default function OrganismRoster({
                           title="Edit organism"
                           data-edit-organism-id={organism.id}
                           onClick={() => onEditOrganism(organism.id)}
+                          disabled={isSaving}
                         >
                           <span aria-hidden="true">✎</span>
                         </EditButton>
@@ -673,6 +712,7 @@ export default function OrganismRoster({
             onAddToRoster={onAddToRoster}
             atCap={atCap}
             onCreateOrganism={onCreateOrganism}
+            isSaving={isSaving}
           />
         </>
       )}

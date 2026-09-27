@@ -899,6 +899,9 @@ export default function BattleEditorView({
               atCap={atCap}
               onEditOrganism={onEditOrganism}
               onCreateOrganism={onCreateOrganism === undefined ? undefined : handleCreateOrganism}
+              /* Story 4.25 review ruling (D2 a, 2026-09-27): the same `isSaving` every other
+                 sidebar control in this component already ties its own `disabled` to. */
+              isSaving={isSaving}
             />
           </SidebarSection>
           {/* AC7: the mockup's order is Organisms, then Battle Name — this story's own second

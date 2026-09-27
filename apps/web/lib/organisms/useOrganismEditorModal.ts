@@ -156,8 +156,20 @@ export function useOrganismEditorModal(
    *
    * Story 4.24: the battle roster's ✎ carries the same `data-edit-organism-id`, so the lookup is
    * unchanged. Story 4.25 gives `/battle` its own `[data-create-organism]` button (the roster's
-   * `+ Create New Organism`), so the fallback now finds a real target there too, on both paths —
-   * saved and cancelled (Story 4.25 AC6).
+   * `+ Create New Organism`), which AC6 originally named as the restore target on BOTH the saved
+   * and the cancelled path.
+   *
+   * ⚠️ Review 2026-09-27, ruling (a): AC6's "both paths" broke at the roster's 255-organism cap — a
+   * saved create's append can land the roster AT the cap, which unmounts the create button (FD2)
+   * before this restore runs, so `[data-create-organism]` resolves to nothing and focus drops to
+   * `<body>`. Fixed by moving the SAVED path's target off the create button entirely: `handleSaved`
+   * below rewrites a `'create'` intent to `{ kind: 'edit', organismId: saved.id }` the moment a
+   * save lands, for the `'battle'` origin only. The new organism's own ✎ always exists once it has
+   * joined the roster (it is never `unresolved`), so this fixes the cap AND changes the non-cap
+   * path's target on purpose, per the ruling. A create that never saves is untouched: the intent
+   * stays `{ kind: 'create' }` and still restores to the create button. Scoped to `'battle'`: the
+   * Library's own create button is the correct target for its own create (this file's own
+   * `useOrganismEditorModal.test.tsx` pins the Library staying put).
    */
   const restoreFocusRef = useRef<{ kind: 'create' } | { kind: 'edit'; organismId: string } | null>(
     null,
@@ -377,9 +389,23 @@ export function useOrganismEditorModal(
   // so the earlier "report at once if already unmounted" branch is dead code and has been removed
   // along with its test. The one remaining path — the whole Library unmounting mid-write (a route
   // change) — lands the write and reports nothing; `deferred-work.md` records it.
-  const handleSaved = useCallback((organism: Organism) => {
-    pendingSavedRef.current = organism;
-  }, []);
+  const handleSaved = useCallback(
+    (organism: Organism) => {
+      pendingSavedRef.current = organism;
+      // Story 4.25 review, ruling (D1 a), 2026-09-27: a create that just saved retargets its OWN
+      // focus restore from the create button to its new row's ✎ — see `restoreFocusRef`'s comment
+      // above for the cap this closes. `kind === 'create'` filters out every pencil-edit session
+      // (`requestEdit` already sets `{ kind: 'edit', organismId }` at OPEN time, unaffected here),
+      // and `origin === 'battle'` filters out the Library, whose own create button is still correct
+      // for its own create. Safe to overwrite on every save in the session: `saveStamp` mints the id
+      // on the FIRST save and every later save upserts under it, so `organism.id` never changes
+      // mid-session — a second save just repeats the same assignment.
+      if (origin === 'battle' && restoreFocusRef.current?.kind === 'create') {
+        restoreFocusRef.current = { kind: 'edit', organismId: organism.id };
+      }
+    },
+    [origin],
+  );
 
   // Only once the fade has finished is it safe to unmount the modal, release `inert` and schedule
   // the focus restore. Clearing `mounted` does all three — and, when the close followed a save

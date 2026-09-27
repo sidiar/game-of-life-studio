@@ -1012,6 +1012,19 @@ describe('BattleEditorView — the create button wrapper (Story 4.25, FD1)', () 
     );
     expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'false');
   });
+
+  // Review ruling (D2 a, 2026-09-27): `isSaving` reaches `<OrganismRoster>` the same way it already
+  // reaches every other sidebar control in this component (`<BattleNameField>`,
+  // `<GridSettingsSection>`, `<EditorToolsSection>`, `<SidebarFooter>`) — no new prop threading
+  // through `<BattlePage>`, since `isSaving` was already required here (Story 2.13).
+  it('threads isSaving to the roster, disabling the create button and the 4.24 ✎', () => {
+    renderEditor({ onCreateOrganism: () => {}, onEditOrganism: () => {}, isSaving: true });
+
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeDisabled();
+    for (const entry of ROSTER) {
+      expect(screen.getByRole('button', { name: `Edit ${entry.name}` })).toBeDisabled();
+    }
+  });
 });
 
 // Story 2.11 (AC1, AC7, Task 5). The heading-order claim (Organisms THEN Battle Name) is pinned
