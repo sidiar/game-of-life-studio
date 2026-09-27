@@ -358,7 +358,8 @@ to the ruling pass `d5410f3..6383547`.
 - [x] [Review][Patch] The 254 → 255 cap regression D1 (a) was ruled to fix had no test (the page
       test ran below the cap; the hook test rendered the new row up front) — page-level test added:
       a create from a 254-row roster unmounts the create button and lands focus on the new ✎
-      (verified red with the retarget removed)
+      (verified red with the retarget removed; a per-test 20 s timeout, since the 254-row fixture
+      exceeded Vitest's 5 s default on CI's coverage run)
       [apps/web/components/battle/BattlePage.createOrganism.test.tsx]
 - [x] [Review][Patch] AC6 and Task 5's test bullet still named the create button as the saved
       path's target — both annotated with the D1 (a) amendment [this file]

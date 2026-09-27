@@ -339,13 +339,24 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     );
     await screen.findByRole('heading', { level: 1, name: 'Nearly Full Roster' });
 
-    const editor = await createAndSave(user, 'Cap Filler');
+    // `fireEvent.change`, not `createAndSave`'s `user.type`: a 254-row roster makes every
+    // keystroke's re-render expensive, and this test is about the exit commit, not typing.
+    await user.click(createButton());
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    fireEvent.change(within(editor).getByRole('textbox', { name: 'Organism Name' }), {
+      target: { value: 'Cap Filler' },
+    });
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await within(editor).findByText(/saved/i);
     await user.click(within(editor).getByRole('button', { name: /Back to Battle/ }));
     await waitForNoDialog();
 
     expect(screen.queryByRole('button', { name: /create new organism/i })).toBeNull();
     await waitFor(() => expect(pencil('Cap Filler')).toHaveFocus());
-  });
+    // A 254-row roster re-rendered through open, save and exit costs ~3× a plain create test
+    // (~2 s locally under coverage) and exceeded Vitest's 5 s default on CI's instrumented run;
+    // the budget is widened for this one fixture, not for the file.
+  }, 20_000);
 
   it('a create press while a 4.24 pencil fetch is pending is a no-op (AC3)', async () => {
     const repositories = seeded();
