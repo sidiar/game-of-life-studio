@@ -7,7 +7,11 @@ import type {
   OrganismEditorOrigin,
 } from '@/components/organisms/editor/OrganismEditorModal';
 import type { OrganismInUseDialogProps } from '@/components/organisms/OrganismInUseDialog';
+import type { OrganismGateUsage } from '@/lib/organisms/usageLabels';
 import { useInertBackground } from '@/lib/useInertBackground';
+
+// The closed gate's usage: a stable empty triple so `gateProps` never carries `undefined` fields.
+const NO_GATE_USAGE: OrganismGateUsage = { battleNames: [], ruleCount: 0, referencingNames: [] };
 
 /**
  * The Organism Editor modal's parent-side lifecycle (Story 4.3): the three-phase open / exiting /
@@ -52,17 +56,25 @@ import { useInertBackground } from '@/lib/useInertBackground';
  * starting and `proceedRef` being stashed — the only window in which a Cancel could strand a
  * written clone behind no editor — and a failed clone resolves to `null`, degenerating the
  * handoff to a plain Cancel.
+ *
+ * Story 4.24 is the `'battle'` origin's first caller: `<BattlePage>` calls this hook with
+ * `origin: 'battle'` and no `onCloneAndEdit` (M5 — no clone from the Battle Editor), and the gate
+ * it opens renders Cancel / Edit Anyway only. `requestEdit` now takes the RESOLVED usage — names,
+ * rule count, referencing names — rather than a bare count, so the gate can render FR-1.3's
+ * "expandable [N]" through the same `<UsageIndicator>` the editor footer uses (AC6).
  */
 export interface UseOrganismEditorModalResult {
   /** Wire to the create button. */
   requestCreate(): void;
   /**
-   * Wire to a card's Edit button (Story 4.17). `usedInBattles` is the caller's `buildUsageIndex`
-   * count for the organism — `0` opens the editor directly; `≥ 1` opens the FR-1.3 warning first,
-   * and the editor only if the user proceeds. The caller must take the count from a settled battle
-   * list: a `0` read while that list is still loading opens a placed organism unwarned.
+   * Wire to a card's Edit button (Story 4.17) or a battle roster row's ✎ (Story 4.24). `usage` is
+   * the caller's resolved usage for the organism (`resolveOrganismUsage` → `usageBattleNames`, the
+   * rule count, `referencingOrganismNames` — the editor footer's derivations): no battle names opens
+   * the editor directly; `≥ 1` opens the FR-1.3 warning first, and the editor only if the user
+   * proceeds. The caller must take it from a settled battle list: an empty list read while that
+   * list is still loading opens a placed organism unwarned.
    */
-  requestEdit(organism: Organism, usedInBattles: number): void;
+  requestEdit(organism: Organism, usage: OrganismGateUsage): void;
   /**
    * "The editor is on screen in some form" — open OR still fading out. Gates the caller's
    * conditional mount so the lazy chunk is never requested until the first open (the
@@ -122,8 +134,8 @@ export function useOrganismEditorModal(
   const [editing, setEditing] = useState<Organism | null>(null);
 
   // Story 4.17: the in-use gate, in the same two-cell shape as the editor — `gate` is the mounted
-  // window (the organism and its count, held through the exit fade), `gateOpen` drives the fade.
-  const [gate, setGate] = useState<{ organism: Organism; usedInBattles: number } | null>(null);
+  // window (the organism and its usage, held through the exit fade), `gateOpen` drives the fade.
+  const [gate, setGate] = useState<{ organism: Organism; usage: OrganismGateUsage } | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
 
   // Edit Anyway stashes the organism here; the gate's `onExited` consumes it and opens the editor.
@@ -141,6 +153,12 @@ export function useOrganismEditorModal(
    * idiom `<DeleteBattleDialog>` and `useLeaveGuard` both already use. The edit target is looked
    * up by id through `CSS.escape` (ids are arbitrary non-empty strings — `'conways-classic'`, the
    * mock ids — not uuids), falling back to the create button when the card is gone.
+   *
+   * Story 4.24: the battle roster's ✎ carries the same `data-edit-organism-id`, so the lookup is
+   * unchanged. The `[data-create-organism]` fallback finds nothing on `/battle` until Story 4.25
+   * ships a create control there — acceptable, because the pencil cannot disappear during an edit
+   * session from the battle: the roster changes only through the page, which is inert throughout,
+   * and no Delete is offered from that origin (FD6).
    */
   const restoreFocusRef = useRef<{ kind: 'create' } | { kind: 'edit'; organismId: string } | null>(
     null,
@@ -226,7 +244,7 @@ export function useOrganismEditorModal(
   // landed while A's editor was still fading would re-open A's draft under B's record, and a Save
   // would then write A's fields under A's id while the user believes B is open. The inert
   // background already makes that click impossible for a user; this guard makes it impossible for
-  // a programmatic caller (Story 4.24's battle-origin entry, a test) too. (Review 2026-09-22.)
+  // a programmatic caller (the battle page's pencil handler, a test) too. (Review 2026-09-22.)
   const requestCreate = useCallback(() => {
     if (anyMounted) return;
     restoreFocusRef.current = { kind: 'create' };
@@ -234,20 +252,21 @@ export function useOrganismEditorModal(
     setDialogOpen(true);
   }, [anyMounted]);
 
-  // Story 4.17, AC1: the FR-1.3 gate. `usedInBattles === 0` opens the editor directly on the
+  // Story 4.17, AC1: the FR-1.3 gate. No battle names (N = 0) opens the editor directly on the
   // record; otherwise the warning opens FIRST and the editor follows only through
-  // `handleGateEditAnyway` → `handleGateExited`.
+  // `handleGateEditAnyway` → `handleGateExited`. Story 4.24: the gate holds the whole resolved usage
+  // so it can render the names behind N (AC6); N is still just `battleNames.length`.
   const requestEdit = useCallback(
-    (organism: Organism, usedInBattles: number) => {
+    (organism: Organism, usage: OrganismGateUsage) => {
       if (anyMounted) return;
       restoreFocusRef.current = { kind: 'edit', organismId: organism.id };
-      if (usedInBattles === 0) {
+      if (usage.battleNames.length === 0) {
         setEditing(organism);
         setMounted(true);
         setDialogOpen(true);
         return;
       }
-      setGate({ organism, usedInBattles });
+      setGate({ organism, usage });
       setGateOpen(true);
     },
     [anyMounted],
@@ -261,8 +280,8 @@ export function useOrganismEditorModal(
   // Story 4.18, review 2026-09-22: both close paths bail while a Clone & Edit handoff is running.
   // The dialog's `disabled={pending}` and its guarded `onClose` already stop every USER route in,
   // so this is the same "hold the invariant in the hook, not only in the markup" guard the 4.17
-  // review added to `requestEdit`/`requestCreate` — it covers a programmatic caller (Story 4.24's
-  // entry, a test) for which the disabled attribute means nothing. Without it a Cancel could set
+  // review added to `requestEdit`/`requestCreate` — it covers a programmatic caller (the battle
+  // page's entry, a test) for which the disabled attribute means nothing. Without it a Cancel could set
   // `proceedRef` to null AFTER a clone had already been written to localStorage and drawn on the
   // grid: the record exists, the user performed a Cancel, and no editor ever opens.
   const handleGateCancel = useCallback(() => {
@@ -300,9 +319,13 @@ export function useOrganismEditorModal(
   //      already in localStorage and already on the grid. The 4.17 "last action before the fade
   //      ends wins" rule is safe for Edit Anyway, which writes nothing, and is not safe here.
   //      `handleGateExited` clears both, so the guard spans write AND fade.
+  //
+  // Story 4.24 (M5): unreachable from the battle origin — the dialog renders no Clone & Edit for
+  // `'battle'`, and this bails on `origin` too, so a programmatic caller cannot start a clone
+  // (and no writer is injected there anyway). The same "hold the invariant in the hook" rule.
   const handleGateCloneAndEdit = useCallback(() => {
     const source = gate?.organism;
-    if (source === undefined || gatePendingRef.current) return;
+    if (origin === 'battle' || source === undefined || gatePendingRef.current) return;
     gatePendingRef.current = true;
     setGatePending(true);
     void (async () => {
@@ -315,7 +338,7 @@ export function useOrganismEditorModal(
       }
       setGateOpen(false);
     })();
-  }, [gate]);
+  }, [gate, origin]);
 
   // The handoff. All four `setState`s in ONE handler — React batches them into one commit, so
   // `anyMounted` goes gate → editor without a `false` in between (the inert window never
@@ -388,7 +411,8 @@ export function useOrganismEditorModal(
   const gateProps = useMemo<OrganismInUseDialogProps>(
     () => ({
       open: gateOpen,
-      usedInBattles: gate?.usedInBattles ?? 0,
+      origin,
+      usage: gate?.usage ?? NO_GATE_USAGE,
       pending: gatePending,
       onCancel: handleGateCancel,
       onCloneAndEdit: handleGateCloneAndEdit,
@@ -397,6 +421,7 @@ export function useOrganismEditorModal(
     }),
     [
       gateOpen,
+      origin,
       gate,
       gatePending,
       handleGateCancel,

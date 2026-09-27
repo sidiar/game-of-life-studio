@@ -77,7 +77,8 @@ export type OrganismEditorOrigin = 'library' | 'battle';
 /** The lifecycle half — what `useOrganismEditorModal` assembles and nothing more. */
 export interface OrganismEditorLifecycleProps {
   open: boolean;
-  /** Drives the contextual back label (UX-DR5). 'battle' is Story 4.24's entry point. */
+  /** Drives the contextual back label (UX-DR5). `'battle'` is the battle roster's ✎ (Story 4.24),
+   * mounted over `<BattlePage>`. */
   origin: OrganismEditorOrigin;
   /**
    * `null` is a create; a record is an edit session on THAT organism (Story 4.17). Held by
@@ -139,8 +140,8 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
    * surfaces' counts one derivation rather than two agreeing by coincidence (FD8). This answers
    * the `battles`-on-the-modal half of `deferred-work.md`'s FR-1.3 entry (its original wording:
    * "Story 4.20 … will need `battles` on the modal too") — the modal needs the battle LIST, which
-   * is not the same claim. The entry's other half, the edit-warning dialog's own click-through, is
-   * still open and stands on Story 4.24.
+   * is not the same claim. The entry's other half, the edit-warning dialog's own click-through,
+   * landed in Story 4.24: the gate renders the same `<UsageIndicator>` over the same derivation.
    *
    * `Pick<…>` because that is all the footer reads — the ids the index is keyed on, `organismIds`
    * for the placed set (Decision H.1) and `name` for the panel. A full `BattleSummary[]` still
@@ -164,7 +165,8 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
    * `organisms.save` stays this modal's only side effect. The button renders iff this prop is passed
    * AND `organism !== null` (an edit session; the card's "renders iff present" contract), so a
    * create session — even after its first Save — shows none, and so does a caller that passes none
-   * (Story 4.24's battle-origin editor decides for itself). The click decides nothing: the Library
+   * (Story 4.24's battle-origin editor passes none, FD6: a delete there could strand a roster id
+   * behind a live grid). The click decides nothing: the Library
    * re-derives the verdict at click time and opens the confirmation or the block dialog over this
    * editor.
    */
@@ -179,12 +181,27 @@ export interface OrganismEditorModalProps extends OrganismEditorLifecycleProps {
    * dialog has exited; `null`/absent is "nothing to report".
    */
   deleteError?: string | null;
+  /**
+   * Story 4.24 (M7, RFC-005 Decision 8, FD4): the battle open UNDER this editor — its id (`null`
+   * until its first save), its LIVE name, and its LIVE placed set (never the roster union; see
+   * `OpenBattleUsage`). Forwarded to `resolveOrganismUsage` so the footer counts that battle before
+   * it is ever saved, and to `usageBattleNames` so it lists as `Current Battle (unsaved)` or by its
+   * live name. The Library passes none, so its footer is unchanged.
+   *
+   * An OPEN-TIME snapshot, which is safe: the page behind is `inert` for this editor's whole
+   * window, so the grid and the name cannot change under it.
+   */
+  openBattle?: {
+    readonly id: string | null;
+    readonly name: string;
+    readonly organismIds: readonly string[];
+  } | null;
 }
 
 /**
  * The contextual back label, a pure function of where the editor was opened from (UX-DR5).
- * Exported so the test pins both values without having to reach the `'battle'` origin through UI
- * — nothing renders it until Story 4.24 mounts this modal over `<BattlePage>` (M5).
+ * Exported so the test pins both values directly; the `'battle'` value renders from Story 4.24,
+ * which mounts this modal over `<BattlePage>` (M5).
  */
 export function backLabelFor(origin: OrganismEditorOrigin): string {
   return origin === 'battle' ? 'Back to Battle' : 'Back to Library';
@@ -422,8 +439,8 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
  * NOT move into the header, so the divergence above stands as recorded, for the next UX touch.
  *
  * The `'battle'` origin (M5 — the editor opens as a modal over the mounted battle, never a route)
- * changes only the back label; Story 4.24 is its first caller. Reached from the Library via the
- * "+ Create New Organism" control (FR-1.2).
+ * changes only the back label; Story 4.24's roster ✎ is its first caller, and passes `openBattle`
+ * for the footer. Reached from the Library via the "+ Create New Organism" control (FR-1.2).
  *
  * Story 4.13's gate (`validateOrganismDraft`, `saveAttempted`, focus-to-first-invalid): Save runs
  * `validateOrganismDraft(draft)`; an invalid draft flips `saveAttempted` (sticky across value
@@ -459,6 +476,7 @@ export default function OrganismEditorModal({
   organisms,
   onRequestDelete,
   deleteError = null,
+  openBattle = null,
 }: OrganismEditorModalProps) {
   // The lazy-initialiser form, so the factory runs once per mount, not once per render — reading
   // `library` exactly once, at mount, for the M6 default-colour seed (FD9). One typed object that
@@ -555,13 +573,13 @@ export default function OrganismEditorModal({
   // already accepts on the same measurement (Story 3.7's `library-filter` bench).
   const usageIndex = useMemo(() => buildUsageIndex(battleSummaries), [battleSummaries]);
   const ruleIndex = useMemo(() => buildRuleReferenceIndex(library), [library]);
-  // ⚠️ `resolveOrganismUsage(...).length`, never `usageIndex.get(id)?.length` (AC5, FD8). The two
-  // return the same number for exactly as long as no caller passes an `openBattle`; Story 4.24 will
-  // pass one, and whichever surface was left on the raw map read starts disagreeing with the others
-  // at that moment. No `openBattle` argument here: nothing that mounts this editor has a live grid
-  // until 4.24 opens it over `<BattlePage>`, and a prop every caller passes as `undefined` is the
-  // unread prop this repo already refused once (FD9).
-  const usageEntries = subjectId === null ? [] : resolveOrganismUsage(usageIndex, subjectId);
+  // ⚠️ `resolveOrganismUsage(...).length`, never `usageIndex.get(id)?.length` (AC5, FD8): the two
+  // differ as soon as an `openBattle` is passed. Story 4.24's battle origin passes one — the open
+  // battle's `{ id, organismIds }` — so the footer counts it (M7); the Library passes none. It is an
+  // open-time snapshot, safe because the page behind stays `inert` for this whole window (FD4), so
+  // no count can move while a panel is open either.
+  const usageEntries =
+    subjectId === null ? [] : resolveOrganismUsage(usageIndex, subjectId, openBattle);
   // ⚠️ M counts RULES (the index's value array is per rule) while the panel below lists ORGANISMS
   // (`referencingOrganismIds` de-duplicates). One organism targeting this one from two rules is
   // M = 2 with ONE name — the two numbers `ruleReferenceIndex.ts`'s head comment separates (FD13).
@@ -1163,7 +1181,7 @@ export default function OrganismEditorModal({
           <EditorFooter>
             <UsageIndicator
               ref={usageIndicatorRef}
-              battleNames={usageBattleNames(usageEntries, battleSummaries)}
+              battleNames={usageBattleNames(usageEntries, battleSummaries, openBattle)}
               ruleCount={ruleCount}
               referencingNames={referencingNames}
             />

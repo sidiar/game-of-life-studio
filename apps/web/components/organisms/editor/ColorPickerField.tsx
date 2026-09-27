@@ -70,8 +70,9 @@ import { colorReuseWarning } from '@/lib/organisms/colorReuse';
  * (Story 4.17) seeds `value` and `seedValue` from the record, and the modal hands this field a
  * `usersByToken` built from the library MINUS the organism under edit — which is why a re-pick of
  * the record's own colour is silent by the same `seedValue` comparison.
- * `useId()` for every id — the field is not a singleton (Story 4.24's battle-origin editor is a
- * second instance, and two groups sharing a `name` would deselect each other).
+ * `useId()` for every id — the field is not a singleton (the editor mounts from the Library and,
+ * since Story 4.24, from the battle page, and two groups sharing a `name` would deselect each
+ * other).
  *
  * (Story 4.9) (Story 4.8) (Story 4.7) (Story 4.6) (Story 4.2) (Story 1.7) (FR-2.3) (M6) (RFC-007)
  * (AR-46) (NFR-2.1)

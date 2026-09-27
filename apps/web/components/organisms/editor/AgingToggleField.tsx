@@ -156,7 +156,7 @@ export interface AgingToggleFieldProps {
  * the way Story 4.6 copied Story 3.13's slider.
  *
  * `useId()` for all three ids (`labelId`, `switchId`, `descriptionId`) — the field is not a
- * singleton (Story 4.24's battle-origin editor is a second instance). Colours are `--gol-*` tokens
+ * singleton (the editor mounts from the Library and, since Story 4.24, from the battle page). Colours are `--gol-*` tokens
  * throughout (AR-46). (Story 4.7) (Story 4.6) (Story 4.5) (Story 3.9) (FR-2.4) (FR-5.7)
  * (Decision B) (AR-46)
  */

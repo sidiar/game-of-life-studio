@@ -284,14 +284,17 @@ describe('OrganismRoster — the degraded roster (AC7)', () => {
 });
 
 describe('OrganismRoster — what this story does NOT build (AC5)', () => {
-  it('renders no per-row edit pencil or create button, with an empty library (AC8)', () => {
+  it('renders no per-row edit pencil without `onEditOrganism`, and no create button, with an empty library (AC8)', () => {
     renderRoster();
 
-    // ✎ and the create button are Story 4.24/Epic 4. The search box and the "+ ADD ORGANISM"
-    // dropdown are THIS story — see "the add control" describe block below — but with the default
-    // EMPTY library there is nothing to search or add, so neither renders here either (AC8's
-    // stated-empty-state, not a dead affordance).
+    // Story 4.24 inverted the pencil half of this: the ✎ now EXISTS, but only when a caller passes
+    // `onEditOrganism` (NFR-4.1 — see "the edit pencil" block below). Without it, still none. The
+    // create button is Story 4.25. The search box and the "+ ADD ORGANISM" dropdown are THIS
+    // story — see "the add control" describe block below — but with the default EMPTY library there
+    // is nothing to search or add, so neither renders here either (AC8's stated-empty-state, not a
+    // dead affordance).
     expect(screen.queryByText('✎')).toBeNull();
+    expect(document.querySelector('[data-edit-organism-id]')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(screen.queryByRole('button', { name: /add organism/i })).toBeNull();
@@ -304,6 +307,100 @@ describe('OrganismRoster — what this story does NOT build (AC5)', () => {
     renderRoster();
 
     expect(screen.queryByRole('button', { name: /remove|delete/i })).toBeNull();
+  });
+});
+
+describe('OrganismRoster — the edit pencil (Story 4.24, FR-3.3)', () => {
+  it('renders one pencil per roster row when `onEditOrganism` is passed, named for its organism', () => {
+    renderRoster({ onEditOrganism: () => {} });
+
+    for (const entry of ROSTER) {
+      const pencil = screen.getByRole('button', { name: `Edit ${entry.name}` });
+      expect(pencil).toHaveAttribute('title', 'Edit organism');
+      expect(pencil).toHaveAttribute('data-edit-organism-id', entry.id);
+      // The glyph is decorative — the accessible name is the words above.
+      expect(within(pencil).getByText('✎')).toHaveAttribute('aria-hidden', 'true');
+    }
+    expect(screen.getAllByText('✎')).toHaveLength(ROSTER.length);
+  });
+
+  it('is a sibling of the row button inside the same list item, never nested in it', () => {
+    renderRoster({ onEditOrganism: () => {} });
+
+    const row = screen.getByRole('button', { name: 'Chaotic Spreader' });
+    const pencil = screen.getByRole('button', { name: 'Edit Chaotic Spreader' });
+    expect(row.contains(pencil)).toBe(false);
+    expect(pencil.closest('li')).toBe(row.closest('li'));
+  });
+
+  it("calls `onEditOrganism` with its OWN row's id and leaves selection alone (FD1)", async () => {
+    const user = userEvent.setup();
+    const onEditOrganism = vi.fn();
+    const onSelectTool = vi.fn();
+    renderRoster({ onEditOrganism, onSelectTool });
+
+    await user.click(screen.getByRole('button', { name: 'Edit Patient Defender' }));
+
+    expect(onEditOrganism).toHaveBeenCalledTimes(1);
+    expect(onEditOrganism).toHaveBeenCalledWith('org-p');
+    expect(onSelectTool).not.toHaveBeenCalled();
+    // The selected row is still the one it was (org-c), and org-p is still not pressed.
+    expect(screen.getByRole('button', { name: 'Chaotic Spreader' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Patient Defender' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('is reachable and activatable by keyboard', async () => {
+    const user = userEvent.setup();
+    const onEditOrganism = vi.fn();
+    renderRoster({ onEditOrganism });
+
+    screen.getByRole('button', { name: 'Edit Aggressive Colonizer' }).focus();
+    await user.keyboard('{Enter}');
+
+    expect(onEditOrganism).toHaveBeenCalledWith('org-a');
+  });
+
+  it('renders no pencil beside the eraser', () => {
+    renderRoster({ onEditOrganism: () => {} });
+
+    const pencils = document.querySelectorAll('[data-edit-organism-id]');
+    expect(pencils).toHaveLength(ROSTER.length);
+    // Every pencil sits inside the roster list; the eraser is outside it, so none is its.
+    const list = screen.getByRole('list');
+    for (const pencil of pencils) expect(list.contains(pencil)).toBe(true);
+    expect(list.contains(screen.getByRole('button', { name: 'Eraser' }))).toBe(false);
+  });
+
+  it('renders no pencil in the degraded branch (AC7)', () => {
+    renderRoster({ onEditOrganism: () => {}, libraryUnavailable: true, selectedTool: ERASER_TOOL });
+
+    expect(screen.queryByText('✎')).toBeNull();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  // Review 2026-09-26: an "Unknown organism" row has no record behind it, so a pencil there is
+  // the NFR-4.1 dead affordance — the page's handler would find nothing and silently no-op.
+  it('renders no pencil on an unresolved row, while resolved rows keep theirs', () => {
+    renderRoster({
+      onEditOrganism: () => {},
+      roster: [...ROSTER, organism({ id: 'org-gone', name: 'Unknown organism', unresolved: true })],
+    });
+
+    expect(screen.getByRole('button', { name: 'Unknown organism' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Unknown organism' })).toBeNull();
+    expect(document.querySelectorAll('[data-edit-organism-id]')).toHaveLength(ROSTER.length);
+  });
+
+  it('has no axe violations with pencils rendered', async () => {
+    const { container } = renderRoster({ onEditOrganism: () => {} });
+
+    expect((await axe(container)).violations).toEqual([]);
   });
 });
 

@@ -39,9 +39,32 @@ export function battleCountLabel(usedInBattles: number): string {
   return `Used in ${battleCount(usedInBattles)}`;
 }
 
-/** FR-1.3's sentence, verbatim from the PRD (`prd.md:125`), with the count interpolated. */
+/** FR-1.3's sentence, verbatim from the PRD (`prd.md:125`), with the count interpolated. The
+ * LIBRARY variant's — its question is answered by that variant's Clone & Edit button. */
 export function organismInUseMessage(usedInBattles: number): string {
   return `This organism is used in ${battleCount(usedInBattles)}. Editing it will affect all Battles that use it. Clone this organism first to create a Battle-specific variant?`;
+}
+
+/**
+ * Story 4.24, FD3: the BATTLE variant's sentence. The PRD's library sentence ends by offering a
+ * clone, and the battle variant has no Clone & Edit (M5, FR-1.3's battle bullet, `prd.md:127`) —
+ * so the question becomes the instruction that bullet gives: clone in the Library, select the clone
+ * here.
+ */
+export function organismInUseBattleMessage(usedInBattles: number): string {
+  return `This organism is used in ${battleCount(usedInBattles)}. Editing it will affect all Battles that use it. To make a variant for this Battle only, clone it in the Organism Library and select the clone here.`;
+}
+
+/**
+ * What the FR-1.3 gate shows (Story 4.24, AC6): the SAME resolved triple the editor footer's
+ * `<UsageIndicator>` renders — the battle names behind N (their length IS N, so the title and the
+ * disclosure cannot disagree), M, and the distinct referencing names behind M. Resolved by the
+ * caller from its own settled data; neither the gate nor the hook derives anything.
+ */
+export interface OrganismGateUsage {
+  readonly battleNames: readonly string[];
+  readonly ruleCount: number;
+  readonly referencingNames: readonly string[];
 }
 
 /**
@@ -60,9 +83,9 @@ export function ruleTargetCountLabel(ruleCount: number): string {
  * RFC-005 Decision 8's label for a battle that has never been saved: there is no id to resolve a
  * name against, so the entry names itself.
  *
- * Unreachable until Story 4.24 passes an `openBattle` to `resolveOrganismUsage` — `battleId` is
- * `null` for that battle alone. Kept here, unit-tested, rather than guessed at when 4.24 lands:
- * it is forced by `OrganismUsageEntry`'s own type, which every caller of this resolver must total.
+ * Reachable from the battle origin (Story 4.24): `<BattlePage>` passes an `openBattle` whose `id`
+ * is `null` on `/battle/new` until the first save, and `resolveOrganismUsage` returns
+ * `battleId: null` for that battle alone. The Library passes no `openBattle`, so it never sees one.
  */
 export const UNSAVED_BATTLE_LABEL = 'Current Battle (unsaved)';
 
@@ -73,17 +96,26 @@ export const UNSAVED_BATTLE_LABEL = 'Current Battle (unsaved)';
  * Every name goes through `battleDisplayName`: `BattleSummarySchema.name` has no lower bound, so
  * `''` — and a name built only from invisible characters, which `trim()` does not strip — parses,
  * lists, and would render as an empty `<li>` that axe does not flag (Story 4.20, AC7 / FD10).
+ *
+ * Story 4.24 (RFC-005 Decision 8): `openBattle` is the battle open under the editor, with its LIVE
+ * name. Its entry is labelled from that live name, not the stored summary's — a battle renamed in
+ * this unsaved session lists as what its header shows. Matched by `entry.battleId ===
+ * openBattle.id`, the comparison `OrganismUsageEntry`'s doc names (NOT `placedOnLiveGrid`); a
+ * never-saved open battle is the `null` id, labelled `UNSAVED_BATTLE_LABEL` above.
  */
 export function usageBattleNames(
   entries: readonly OrganismUsageEntry[],
   summaries: readonly Pick<BattleSummary, 'id' | 'name'>[],
+  openBattle?: { readonly id: string | null; readonly name: string } | null,
 ): readonly string[] {
   const names = new Map(summaries.map((summary) => [summary.id, summary.name] as const));
-  return entries.map((entry) =>
-    entry.battleId === null
-      ? UNSAVED_BATTLE_LABEL
-      : battleDisplayName(names.get(entry.battleId) ?? ''),
-  );
+  return entries.map((entry) => {
+    if (entry.battleId === null) return UNSAVED_BATTLE_LABEL;
+    if (openBattle != null && entry.battleId === openBattle.id) {
+      return battleDisplayName(openBattle.name);
+    }
+    return battleDisplayName(names.get(entry.battleId) ?? '');
+  });
 }
 
 /**

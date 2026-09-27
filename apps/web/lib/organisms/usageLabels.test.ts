@@ -4,6 +4,7 @@ import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
 import {
   battleCount,
   battleCountLabel,
+  organismInUseBattleMessage,
   organismInUseMessage,
   referencingOrganismNames,
   ruleTargetCountLabel,
@@ -38,6 +39,18 @@ describe('battleCountLabel / organismInUseMessage (moved verbatim, Story 4.20 FD
       'This organism is used in 1 Battle. Editing it will affect all Battles that use it. Clone this organism first to create a Battle-specific variant?',
     );
     expect(organismInUseMessage(3)).toContain('used in 3 Battles.');
+  });
+});
+
+// Story 4.24, FD3: the battle variant's sentence — no clone question, since that variant has no
+// Clone & Edit; the instruction FR-1.3's battle bullet gives instead.
+describe('organismInUseBattleMessage (Story 4.24, FD3)', () => {
+  it('interpolates the count and points at the Library instead of offering a clone', () => {
+    expect(organismInUseBattleMessage(1)).toBe(
+      'This organism is used in 1 Battle. Editing it will affect all Battles that use it. To make a variant for this Battle only, clone it in the Organism Library and select the clone here.',
+    );
+    expect(organismInUseBattleMessage(2)).toContain('used in 2 Battles.');
+    expect(organismInUseBattleMessage(2)).not.toContain('?');
   });
 });
 
@@ -83,11 +96,36 @@ describe('usageBattleNames (AC7)', () => {
     ]);
   });
 
-  // FD9: forced by `OrganismUsageEntry.battleId: string | null` (RFC-005 Decision 8) and
-  // unreachable until Story 4.24 passes an `openBattle` — unit-tested here, not through the UI.
+  // FD9: forced by `OrganismUsageEntry.battleId: string | null` (RFC-005 Decision 8), reachable
+  // from the battle origin since Story 4.24 (asserted through the UI by its e2e too).
   it('labels a never-saved open battle "Current Battle (unsaved)"', () => {
     expect(usageBattleNames([entry(null, true)], summaries)).toEqual([UNSAVED_BATTLE_LABEL]);
+    expect(
+      usageBattleNames([entry('b1'), entry(null, true)], summaries, { id: null, name: 'Live' }),
+    ).toEqual(['Glider Wars', UNSAVED_BATTLE_LABEL]);
     expect(UNSAVED_BATTLE_LABEL).toBe('Current Battle (unsaved)');
+  });
+
+  // Story 4.24 (RFC-005 Decision 8): the open battle is labelled from its LIVE name — a rename in
+  // this unsaved session shows as the header does, not as the stored summary.
+  it("labels the open battle's entry by its LIVE name, through battleDisplayName", () => {
+    expect(
+      usageBattleNames([entry('b1', true), entry('b2')], summaries, {
+        id: 'b1',
+        name: 'Renamed Live',
+      }),
+    ).toEqual(['Renamed Live', 'Untitled Battle']);
+    // Matched by id, not by `placedOnLiveGrid` — an erased-but-saved entry is still the open one.
+    expect(usageBattleNames([entry('b1', false)], summaries, { id: 'b1', name: '' })).toEqual([
+      'Untitled Battle',
+    ]);
+  });
+
+  it('leaves every other entry on its stored summary name', () => {
+    expect(usageBattleNames([entry('b1')], summaries, { id: 'other', name: 'Live' })).toEqual([
+      'Glider Wars',
+    ]);
+    expect(usageBattleNames([entry('b1')], summaries, null)).toEqual(['Glider Wars']);
   });
 
   // A battle the summaries no longer carry cannot reach the footer today (both come from one

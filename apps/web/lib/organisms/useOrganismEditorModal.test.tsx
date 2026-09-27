@@ -6,6 +6,8 @@ import type { Organism } from '@gol/domain';
 import { CONWAYS_CLASSIC, createFakeRepositories, createMockOrganisms } from '@gol/test-utils';
 import OrganismEditorModal from '@/components/organisms/editor/OrganismEditorModal';
 import OrganismInUseDialog from '@/components/organisms/OrganismInUseDialog';
+import type { OrganismEditorOrigin } from '@/components/organisms/editor/OrganismEditorModal';
+import type { OrganismGateUsage } from './usageLabels';
 import {
   useOrganismEditorModal,
   type UseOrganismEditorModalResult,
@@ -59,13 +61,22 @@ function hook(): UseOrganismEditorModalResult {
 }
 
 // Story 4.17: a small library for the edit entry. The usage counts are the PROBE's, not derived —
-// this file pins the hook's gate on the number it is handed, `OrganismLibrary.test.tsx` pins that
-// the number comes from `buildUsageIndex`.
+// this file pins the hook's gate on the usage it is handed, `OrganismLibrary.test.tsx` pins that
+// the usage comes from `resolveOrganismUsage`. Story 4.24: the hook takes the RESOLVED usage (names,
+// rule count, referencing names), so `usageOf(n)` builds `n` battle names.
 const LIBRARY: readonly Organism[] = [CONWAYS_CLASSIC, ...createMockOrganisms()];
 const USED_IN: Readonly<Record<string, number>> = {
   [CONWAYS_CLASSIC.id]: 0,
   [LIBRARY[1].id]: 2,
 };
+
+function usageOf(battles: number): OrganismGateUsage {
+  return {
+    battleNames: Array.from({ length: battles }, (_, i) => `Battle ${i + 1}`),
+    ruleCount: 0,
+    referencingNames: [],
+  };
+}
 
 /**
  * Stands in for `<OrganismLibrary>`: the create trigger carries the `[data-create-organism]` hook
@@ -78,14 +89,19 @@ function Probe({
   onSaved,
   cloneResult,
   cards = LIBRARY,
+  origin = 'library',
+  usageFor = (organism) => usageOf(USED_IN[organism.id] ?? 0),
 }: {
   onSaved?: (organism: Organism) => void;
   /** Story 4.18: the injected `onCloneAndEdit` option, controlled per-test — the `Probe` gains a
    * `cloneResult` the test controls, per the story's Task 4 test rig. */
   cloneResult?: (source: Organism) => Promise<Organism | null>;
   cards?: readonly Organism[];
+  /** Story 4.24: the battle origin, called with NO clone writer — the battle page's shape. */
+  origin?: OrganismEditorOrigin;
+  usageFor?: (organism: Organism) => OrganismGateUsage;
 } = {}) {
-  const result = useOrganismEditorModal('library', { onSaved, onCloneAndEdit: cloneResult });
+  const result = useOrganismEditorModal(origin, { onSaved, onCloneAndEdit: cloneResult });
   useEffect(() => {
     latest = result;
   });
@@ -104,7 +120,7 @@ function Probe({
           key={organism.id}
           type="button"
           data-edit-organism-id={organism.id}
-          onClick={() => result.requestEdit(organism, USED_IN[organism.id] ?? 0)}
+          onClick={() => result.requestEdit(organism, usageFor(organism))}
         >
           Edit {organism.name}
         </button>
@@ -419,7 +435,7 @@ describe('useOrganismEditorModal', () => {
     const unused = LIBRARY[0];
     const used = LIBRARY[1];
 
-    it('(a) requestEdit with usedInBattles 0 mounts and opens the editor on the organism, with no gate', async () => {
+    it('(a) requestEdit with no battle names mounts and opens the editor on the organism, with no gate', async () => {
       const user = userEvent.setup();
       render(<Probe />);
 
@@ -434,7 +450,7 @@ describe('useOrganismEditorModal', () => {
       expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue(unused.name);
     });
 
-    it('(b) requestEdit with usedInBattles 2 mounts and opens the gate with that count, and NOT the editor', async () => {
+    it('(b) requestEdit with two battle names mounts and opens the gate with that count, and NOT the editor', async () => {
       const user = userEvent.setup();
       render(<Probe />);
 
@@ -442,7 +458,8 @@ describe('useOrganismEditorModal', () => {
 
       expect(hook().gateMounted).toBe(true);
       expect(hook().gateProps.open).toBe(true);
-      expect(hook().gateProps.usedInBattles).toBe(2);
+      expect(hook().gateProps.usage.battleNames).toHaveLength(2);
+      expect(hook().gateProps.origin).toBe('library');
       expect(hook().mounted).toBe(false);
       expect(editorDialog()).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Used in 2 Battles' })).toBeInTheDocument();
@@ -635,7 +652,7 @@ describe('useOrganismEditorModal', () => {
       expect(hook().modalProps.organism).toBe(unused);
 
       // Editor open: an edit request for ANOTHER organism and a create request both bounce.
-      act(() => hook().requestEdit(used, 0));
+      act(() => hook().requestEdit(used, usageOf(0)));
       expect(hook().modalProps.organism).toBe(unused);
       expect(hook().gateMounted).toBe(false);
       act(() => hook().requestCreate());
@@ -645,7 +662,7 @@ describe('useOrganismEditorModal', () => {
       // Editor closed but still fading: the same.
       act(() => hook().modalProps.onClose());
       expect(hook().modalProps.open).toBe(false);
-      act(() => hook().requestEdit(used, 2));
+      act(() => hook().requestEdit(used, usageOf(2)));
       expect(hook().gateMounted).toBe(false);
       expect(hook().modalProps.open).toBe(false);
       expect(hook().modalProps.organism).toBe(unused);
@@ -654,12 +671,12 @@ describe('useOrganismEditorModal', () => {
       await act(async () => {
         hook().modalProps.onExited?.();
       });
-      act(() => hook().requestEdit(used, 2));
+      act(() => hook().requestEdit(used, usageOf(2)));
       expect(hook().gateMounted).toBe(true);
-      act(() => hook().requestEdit(unused, 0));
+      act(() => hook().requestEdit(unused, usageOf(0)));
       expect(hook().mounted).toBe(false);
       expect(hook().modalProps.organism).toBeNull();
-      expect(hook().gateProps.usedInBattles).toBe(2);
+      expect(hook().gateProps.usage.battleNames).toHaveLength(2);
     });
   });
 
@@ -847,8 +864,8 @@ describe('useOrganismEditorModal', () => {
       // landing in one tick both saw `false` and both called the writer. The ref latch is what
       // makes this assertion real.
       act(() => {
-        hook().gateProps.onCloneAndEdit();
-        hook().gateProps.onCloneAndEdit();
+        hook().gateProps.onCloneAndEdit?.();
+        hook().gateProps.onCloneAndEdit?.();
       });
 
       expect(cloneResult).toHaveBeenCalledTimes(1);
@@ -857,7 +874,7 @@ describe('useOrganismEditorModal', () => {
       // The gate's own `disabled={pending}` is the user-facing affordance; the hook's guard is
       // the authority, exercised directly (the re-entrancy shape every latch test in this repo
       // uses).
-      act(() => hook().gateProps.onCloneAndEdit());
+      act(() => hook().gateProps.onCloneAndEdit?.());
 
       expect(cloneResult).toHaveBeenCalledTimes(1);
 
@@ -883,7 +900,7 @@ describe('useOrganismEditorModal', () => {
       // three buttons for that whole window. A second Clone & Edit then passed the guard (`gate`
       // is cleared only in `handleGateExited`) and wrote a SECOND, orphaned clone.
       expect(hook().gateProps.pending).toBe(true);
-      act(() => hook().gateProps.onCloneAndEdit());
+      act(() => hook().gateProps.onCloneAndEdit?.());
       expect(cloneResult).toHaveBeenCalledTimes(1);
 
       // ...and a Cancel in that same window must not discard the clone that is already written.
@@ -935,6 +952,87 @@ describe('useOrganismEditorModal', () => {
       expect(hook().gateMounted).toBe(false);
       expect(hook().mounted).toBe(false);
       expect(editorDialog()).toBeNull();
+      expect(document.activeElement).toBe(editButton(used));
+    });
+  });
+
+  // Story 4.24: the battle origin. `<BattlePage>` calls the hook with `'battle'` and no clone
+  // writer (M5); the gate it opens is Cancel / Edit Anyway only, and the hook holds that invariant
+  // itself rather than trusting the markup.
+  describe('battle origin (Story 4.24)', () => {
+    const used = LIBRARY[1];
+    const unused = LIBRARY[0];
+
+    it('forwards the RESOLVED usage and the origin to gateProps', async () => {
+      const user = userEvent.setup();
+      const usage: OrganismGateUsage = {
+        battleNames: ['Glider Wars', 'Current Battle (unsaved)'],
+        ruleCount: 3,
+        referencingNames: ['Aggressive Colonizer'],
+      };
+      render(<Probe origin="battle" usageFor={() => usage} />);
+
+      await user.click(editButton(used));
+
+      expect(hook().gateProps.usage).toBe(usage);
+      expect(hook().gateProps.origin).toBe('battle');
+      expect(screen.getByRole('dialog', { name: 'Used in 2 Battles' })).toBeInTheDocument();
+    });
+
+    it('opens the editor directly on an empty usage, with the battle back label', async () => {
+      const user = userEvent.setup();
+      render(<Probe origin="battle" />);
+
+      await user.click(editButton(unused));
+
+      expect(hook().gateMounted).toBe(false);
+      expect(hook().modalProps.origin).toBe('battle');
+      expect(screen.getByRole('button', { name: /Back to Battle/ })).toBeInTheDocument();
+    });
+
+    it('renders no Clone & Edit, and a programmatic clone call starts nothing', async () => {
+      const user = userEvent.setup();
+      // Even with a writer injected, the battle origin must not reach it.
+      const cloneResult = vi.fn(() => Promise.resolve<Organism | null>(used));
+      render(<Probe origin="battle" cloneResult={cloneResult} />);
+      await user.click(editButton(used));
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+
+      expect(within(gate).queryByRole('button', { name: 'Clone & Edit' })).toBeNull();
+      // The action row only — the usage disclosure above it is a button too (AC6).
+      const actions = gate.querySelector<HTMLElement>('.MuiDialogActions-root');
+      if (actions === null) throw new Error('no action row');
+      expect(
+        within(actions)
+          .getAllByRole('button')
+          .map((b) => b.textContent),
+      ).toEqual(['Cancel', 'Edit Anyway']);
+
+      act(() => hook().gateProps.onCloneAndEdit?.());
+
+      expect(cloneResult).not.toHaveBeenCalled();
+      expect(hook().gateProps.pending).toBe(false);
+      expect(hook().gateProps.open).toBe(true);
+    });
+
+    it('Edit Anyway hands off to the editor after the gate exits; Back restores focus to the trigger', async () => {
+      const user = userEvent.setup();
+      render(<Probe origin="battle" />);
+      await user.click(editButton(used));
+      const gate = screen.getByRole('dialog', { name: 'Used in 2 Battles' });
+
+      await user.click(within(gate).getByRole('button', { name: 'Edit Anyway' }));
+      await act(async () => {
+        hook().gateProps.onExited?.();
+      });
+      expect(hook().modalProps.organism).toBe(used);
+      expect(hook().modalProps.origin).toBe('battle');
+
+      screen.getByRole('button', { name: 'Close' }).focus();
+      act(() => hook().modalProps.onClose());
+      await act(async () => {
+        hook().modalProps.onExited?.();
+      });
       expect(document.activeElement).toBe(editButton(used));
     });
   });

@@ -336,7 +336,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 - **The AC5 cap test is over-determined** — `BattlePage.test.tsx`'s cap test builds a 255-entry roster but passes `organisms: []`, so the addable library is empty for a second, independent reason and `queryByRole('combobox')` would be null even with the cap logic removed. Only the `/roster is full/` text assertion discriminates, and the cap-beats-empty priority is pinned at the unit level instead (`OrganismRoster.test.tsx`). Seeding 256 organisms — 255 placed plus one spare that WOULD otherwise be offered — is what would make the page-level test mean what its name says. **Pick this up in whichever story next touches this describe block.**
 
-- **Two library organisms with the same name are indistinguishable in the add dropdown** — `OrganismSchema.name` is `z.string().max(50)` with no uniqueness constraint, and an empty name resolves to the shared "Unnamed organism" fallback, so duplicates are reachable. `<option>` renders `organism.name` alone; the `DisplayOrganism`'s `color`/`colorToken` are resolved for the dropdown and then never used, and an `<option>` cannot carry the `<ColorChip>` a roster row uses. The user cannot tell which one they are adding, and the roster then shows two identically-named rows, possibly with an immediate "Shared colour" warning they had no forewarning of. **Pick this up in Epic 4** (Stories 4.24/4.25 own organism identity in the UI), or sooner if the `<select>` decision above replaces it with a custom listbox, which could carry a chip.
+- **Two library organisms with the same name are indistinguishable in the add dropdown** — `OrganismSchema.name` is `z.string().max(50)` with no uniqueness constraint, and an empty name resolves to the shared "Unnamed organism" fallback, so duplicates are reachable. `<option>` renders `organism.name` alone; the `DisplayOrganism`'s `color`/`colorToken` are resolved for the dropdown and then never used, and an `<option>` cannot carry the `<ColorChip>` a roster row uses. The user cannot tell which one they are adding, and the roster then shows two identically-named rows, possibly with an immediate "Shared colour" warning they had no forewarning of. **Pick this up in Epic 4** (Stories 4.24/4.25 own organism identity in the UI), or sooner if the `<select>` decision above replaces it with a custom listbox, which could carry a chip. **↪ Not addressed by Story 4.24 (2026-09-26):** 4.24 identifies the organism to edit by its ROW (one ✎ per roster row, `data-edit-organism-id`), not by name, so two same-named rows each edit the right record — but the add dropdown and the rows themselves are still indistinguishable by name. Re-pointed to **Story 4.25** (create-from-battle touches the add path) or the Epic 4 UX reconciliation.
 
 - ~~**The search predicate does no Unicode normalisation and uses `toLowerCase`, not `toLocaleLowerCase`** — the review trimmed the query (the whitespace half was a live defect) but left these two. A decomposed "é" (NFD) never matches a precomposed one (NFC), and locale-sensitive casing (Turkish dotted/dotless i) is wrong under `toLowerCase`. Organism names are free user text, so both are reachable, just narrowly. `searchText.trim().normalize('NFC').toLocaleLowerCase()` against a likewise-normalised name is the whole fix. **Pick this up in whichever story next touches the search predicate**, or with Epic 6's i18n pass if one materialises.~~ **✅ Resolved in Story 4.2** — `lib/organisms/organismNameMatches.ts` (NFC + `toLocaleLowerCase`), consumed by `<OrganismLibrary>` and `<OrganismRoster>`.
 
@@ -980,7 +980,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   `react-hooks/set-state-in-effect` and no painted frame of the empty branch. It is written to
   cover BOTH readers: this story's mount-time entry, and 4.24/4.25's still-open case of the
   library changing under an already-mounted page — those stories inherit the guard rather than
-  writing their own. Tests: `BattlePage.test.tsx`'s "Run from Gallery (Story 3.17)" describe
+  writing their own. **↪ Story 4.24 (2026-09-26): unreachable under 4.24 by construction** (FD8) —
+  its editor opens from Lab only and changes the library only at the editor's exit, by replacing a
+  record in place (same id), so `runOrganisms` never turns `null` from it. The residual stays with
+  **Story 4.25**. Tests: `BattlePage.test.tsx`'s "Run from Gallery (Story 3.17)" describe
   (dangling roster and failed-library cases, both asserting `[data-status]` never mounts) and
   `battleRoute.spec.ts`'s AC8(b) e2e.
 - **The disabled RUN button states its reason only through `title`.** A `disabled` `<button>` is
@@ -1564,7 +1567,11 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   there is nothing to lose; under 4.24/4.25 there may be a cycle count and a population the user
   was watching. Unreachable today (nothing re-lists the library while `<BattlePage>` is mounted).
   **Stories 4.24/4.25 decide** whether the flip should stop-and-explain (a notice in the Lab
-  sidebar, the AC7 shape) rather than inherit the silent guard as written.
+  sidebar, the AC7 shape) rather than inherit the silent guard as written. **↪ Story 4.24
+  (2026-09-26, FD8): unreachable under 4.24, not built.** The battle-origin editor opens from Lab
+  only (the pencil exists only in the Lab roster), so no run is live when the library changes, and
+  the change is an in-place replace by id, so `runOrganisms` never goes `null`. Re-pointed to
+  **Story 4.25**, the next story that could change the library under a mounted page.
 
 ## Deferred from: Story 4-10-rule-cards-empty-state (2026-09-17)
 
@@ -1810,7 +1817,9 @@ deferred:
   the stage's Exit button (which holds focus via its mount effect) unmounts with the view and focus
   lands on `<body>`. Unreachable today: the roster can only go dangling under a MOUNTED page once a
   library change can happen beneath it — the 3-11 review's Stories 4.24/4.25 case this adjust was
-  written for. **Owner: whichever of 4.24/4.25 first makes the adjust reachable** — in that branch
+  written for. **Owner: whichever of 4.24/4.25 first makes the adjust reachable** (**↪ not 4.24**,
+  2026-09-26, FD8: its edits happen in Lab only and replace records in place, so the adjust is not
+  exercised — re-pointed to **Story 4.25**) — in that branch
   also set a restore flag whose target is the Mode group's `Lab` button (a `data-*` handle on
   `ModeButton`) rather than the fullscreen entry.
 - **A held `Enter` toggles the stage at key-repeat rate.** `Enter` dispatches `click` on every
@@ -2329,7 +2338,10 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   who presses Play/Pause quickly at 1 gen/s.
 - **4.24/4.25 will mount this panel over `<BattlePage>`** — in Lab mode only (the pencils and
   "+ Create" are Lab-side), so two `Simulation controls` groups never coexist; the modal's `inert`
-  on the page behind is the second guard. Say so in 4.24's story.
+  on the page behind is the second guard. Say so in 4.24's story. **✅ Honoured by Story 4.24
+  (2026-09-26, AC11):** the ✎ renders only in the Lab roster (Run has no roster), the editor's
+  preview is the only `useSimulation` on screen while it is open, and the page behind is `inert`
+  for its whole window. 4.25's "+ Create" inherits the same rule.
 - **The editor chunk's growth landed mostly OUTSIDE the single `grep -rl "Organism Color"` chunk.**
   Turbopack split the newly-shared `@gol/simulation` session/loop/strategy graph (already shipped
   by `/battle`) into two NEW chunk files rather than folding it into the modal's own chunk: the
@@ -2474,7 +2486,12 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   already owns its `Current Battle (unsaved)` case; `<UsageIndicator>` + `usageLabels.ts` make the
   click-through cheap there (the dialog takes the resolved names, or `battleSummaries`, and M as
   props). Until then the PRD requirement is **unmet, deliberately and visibly** rather than behind a
-  false tick.
+  false tick. **✅ Closed in Story 4.24 (2026-09-26, AC6):** `<OrganismInUseDialog>` renders the
+  footer's own `<UsageIndicator>` below its sentence, in BOTH variants — the battle names behind N
+  and, when M > 0, the "Targeted by [M]" disclosure, read-only. `requestEdit` now takes the resolved
+  usage (`resolveOrganismGateUsage`: the footer's three derivations), and the Library and the battle
+  page both pass it. Escape layering follows 4.20 D5 (one press, one layer), pinned in
+  `OrganismInUseDialog.test.tsx`.
 - **A corrupt `gol:battles` now blanks the Library with the organism-worded error copy** (FD2) —
   `battles.list()` is uncaught inside the one `Promise.all`, so whole-key corruption of the battle
   collection lands in the existing `'error'` state ("Something went wrong loading your
@@ -2560,7 +2577,9 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   which Story 4.16 Task 11 replaced with "Save keeps the editor open; Back returns". Those
   planning lines were not amended here (out of the story's scope); Stories 4.24/4.25 need to read
   them as "Save, then Back to Battle" and say so in their own ACs — deferred, resume review
-  2026-09-22.
+  2026-09-22. **✅ Closed for Story 4.24 (2026-09-26):** its story file reads the epics line as
+  "Save, then Back to Battle" and its e2e runs exactly that flow. `epics.md`/`prd.md` themselves are
+  still unamended; Story 4.25 must read its own line the same way.
 - **The WebKit branch of the save-close focus e2e is satisfied by NO element being focused** —
   `expect(page.locator(':focus').locator('xpath=ancestor-or-self::*[@role="dialog"]')).toHaveCount(0)`
   passes trivially when `:focus` matches nothing, which is exactly the "focus dropped to body"
@@ -2842,9 +2861,12 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   undismissable modal. Not reachable against localStorage (sub-millisecond, and a rejection is
   caught); it becomes reachable behind the AR-2 seam when RFC-001's API repository lands, which is
   the story that owns the general fix.
-- **No `origin`/`cloneable` prop on `<OrganismInUseDialog>` yet** — Story 4.24's battle-origin
+- ~~**No `origin`/`cloneable` prop on `<OrganismInUseDialog>` yet**~~ — Story 4.24's battle-origin
   warning must NOT show Clone & Edit (M5, PRD `:127`); the dialog's head comment flags where that
-  prop lands, and this entry is the paper trail for it.
+  prop lands, and this entry is the paper trail for it. **✅ Closed in Story 4.24 (2026-09-26):**
+  the dialog takes `origin: OrganismEditorOrigin`; `'battle'` renders Cancel / Edit Anyway only
+  (Clone & Edit is absent, not disabled) with the battle sentence (FD3), and
+  `useOrganismEditorModal`'s `handleGateCloneAndEdit` bails on `origin === 'battle'` too.
 - **The Library's live regions live INSIDE the subtree `useInertBackground` hides, so every dialog
   can swallow an announcement** — the root cause behind the 2026-09-23 owner decision on Story
   4.18's Clone & Edit failure. That decision fixes the clone alert by queueing it until no dialog
@@ -2929,7 +2951,10 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   over `<BattlePage>`. Covered by a unit test rather than by a rendered affordance, and deliberately
   NOT wired with an `openBattle` prop every caller would pass as `undefined` (the unread prop this
   repo already refused once, `:2431`). **Story 4.24** is where the branch becomes reachable, and it
-  should assert it through the UI then.
+  should assert it through the UI then. **✅ Closed in Story 4.24 (2026-09-26):** `<BattlePage>`
+  passes the open battle (`id: null` until the first save) to the gate's usage and to the editor's
+  new `openBattle` prop; `editOrganismFromBattle.spec.ts` asserts `Current Battle (unsaved)` in the
+  gate's disclosure on `/battle/new`, and `OrganismEditorModal.test.tsx` (48c) in the footer.
 - **The footer diverges from the UX doc's single-popover phrasing** (FD12).
   `organism-editor-design.md:120` says "the popover gains a second read-only section", which reads as
   ONE panel with two sections; the editor ships TWO independent disclosures, one per label. Written
@@ -3030,12 +3055,18 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   with no console error for the e2e gate to see. The obvious derived fix (void `openPanel` when its
   count is 0) reopens the panel spontaneously when the count returns, and an effect-based reset is
   the `react-hooks/set-state-in-effect` lint error — 4.24 owns the shape, with a live count to test
-  it against.
-- **A saved-but-renamed open battle would list its stored name, not the one on screen**
+  it against. **↪ Still unreachable after Story 4.24 (2026-09-26, FD4):** the `openBattle` 4.24
+  passes is an OPEN-TIME snapshot — computed at the pencil press, under a page that stays `inert`
+  for the gate's and the editor's whole window — so no count can move while a panel is open. Stays
+  open for whichever story first feeds a count that changes mid-window.
+- ~~**A saved-but-renamed open battle would list its stored name, not the one on screen**~~
   (`usageLabels.ts:usageBattleNames`). The `battleId: null` path is handled (`UNSAVED_BATTLE_LABEL`),
   but a `battleId !== null` entry with `placedOnLiveGrid: true` resolves through `summaries` only,
   while RFC-005 Decision 8 labels the open battle from the live name. **Story 4.24** grows the
-  signature an input for it; the unit test pins only `entry(null, true)`.
+  signature an input for it; the unit test pins only `entry(null, true)`. **✅ Closed in Story 4.24
+  (2026-09-26, AC7):** `usageBattleNames` takes an optional open-battle `{ id, name }` and labels
+  the entry whose `battleId === openBattle.id` by the live name (through `battleDisplayName`);
+  pinned in `usageLabels.test.ts` and through the gate in `BattlePage.editOrganism.test.tsx`.
 
 ## Deferred from: Story 5-5-export-workspace implementation (2026-09-24)
 
@@ -3085,7 +3116,11 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   (`prd.md:134` — "erase it from this grid…", "save this Battle to persist the removal…") are not
   written here: the entry type does not force them, and unreachable copy is untested guesswork.
   **Story 4.24** is where `openBattle` becomes reachable and where those two remedy sentences
-  belong, in `deleteBlockCopy.ts` alongside the two already there.
+  belong, in `deleteBlockCopy.ts` alongside the two already there. **↪ Re-pointed by Story 4.24
+  (2026-09-26, FD6):** the battle-origin editor offers NO Delete (M5 scopes the battle entry to
+  editing; a delete there could leave `rosterIds` holding a dangling id), so the verdict's
+  `openBattle` argument and the two current-grid remedy sentences stay unwritten. Open for
+  whichever story first offers Delete over a live grid.
 - **Story 4.22 must re-derive the verdict from a fresh read immediately before any delete write
   (FD12).** This story only reads, so a stale verdict costs at most a wrong dialog message — the
   guarantee holds because nothing here calls `organisms.delete`. Story 4.22's confirm path
@@ -3187,7 +3222,10 @@ been answered yet:
   renders Delete iff the prop is passed (the card's "renders iff present" contract, FD11), so a
   battle-origin mount that passes none shows no Delete. If 4.24 does pass it, the `openBattle`
   verdict argument and FR-1.4's current-grid remedy copy land together — joining Story 4.21's
-  FD11 entry above (→ **Story 4.24**).
+  FD11 entry above (→ **Story 4.24**). **↪ Decided by Story 4.24 (2026-09-26, FD6): no.** The
+  battle-origin editor passes no `onRequestDelete`, so it renders no Delete (pinned in
+  `BattlePage.editOrganism.test.tsx`). The verdict argument and remedy copy stay open with 4.21's
+  FD11 entry, for whichever story first offers Delete over a live grid.
 - **FD11 residuals, recorded, not built.** (1) A create session that has saved once has a stored
   record, but the editor's `organism` prop is still `null`, so Delete stays hidden for the rest of
   that session — making it appear mid-session is a mode change the design doc does not describe.
@@ -3529,3 +3567,62 @@ revisit open.
   `keyup`, using a `document`-scoped disarm (the `UsageIndicator` D5 shape, which fits here because
   the listener must outlive the unmounted editor). Pick it up if a repeat ever lands on a control
   that writes.
+
+## Deferred from: Story 4-24-edit-organism-from-battle implementation (2026-09-26)
+
+- **The selected row's background stops at the pencil's cell.** `<Row>` paints the
+  `aria-pressed` / hover background and the accent edge; the ✎ sits in a sibling `EditCell` that
+  carries only the row rule, so a selected row's tint ends 38px short of the column's edge. The
+  mockup draws the pencil INSIDE the row, which a button-in-a-button cannot do. A `:has()` rule on
+  the `<li>` would extend it; left for the Epic 4 UX reconciliation rather than guessed at.
+- **The pencil press is not locked against a concurrent Export / Back opening in the same tick.**
+  `handleEditOrganism` awaits one `battles.list()` (a localStorage read — a microtask on the
+  shipped repository) before `requestEdit`; a Back or Export dispatched inside that window could
+  mount its own dialog and then have the gate stack over it. Unreachable by a human at localStorage
+  speed; it becomes reachable behind the AR-2 seam when an API repository lands, which is the story
+  that owns a page-wide "one window at a time" latch.
+
+## Deferred from: code review of 4-24-edit-organism-from-battle (2026-09-26)
+
+Reviewed on **Fable** against an **Opus** implementation, via three parallel adversarial layers.
+
+- **The gate's open-battle snapshot can be stale if the page changes during the pencil's fetch
+  window.** `battleName`, `persistedId` and `rosterIds` are click-time closure values, `summaries`
+  is post-await, and the page is NOT inert until `requestEdit` mounts a window — a rename, save or
+  paint landing during the await produces a gate whose title/names disagree with the page behind
+  it. The stale-snapshot sibling of the entry above ("not locked against a concurrent Export /
+  Back"): unreachable by a human at localStorage speed, real behind the AR-2 seam, owned by the
+  same API-repository story (a page-wide latch, or snapshot-at-mount).
+- **The `savedOrganisms` overlay is never cleared and would mask any future library reload.** If
+  anything ever calls `organismsResource.reload()` on `<BattlePage>`, records edited earlier in the
+  session silently overwrite the freshly loaded truth by id (`applySavedOrganisms` replaces
+  loaded-by-id unconditionally). Latent today — nothing re-lists the library while the page is
+  mounted (that absence is FD5's own premise) — but Story 5.11 touches the library-load path near
+  `organismsResource`, so whichever story first adds a reload must also clear (or reconcile) the
+  overlay in the same change.
+- **The gate's dialog title and its disclosure trigger carry the identical accessible name.**
+  `DialogTitle` renders `battleCountLabel(n)` ("Used in 2 Battles") and the `<UsageIndicator>`
+  trigger button is named the same string, so a screen-reader user hears the same name for the
+  dialog and for a button inside it, and every test disambiguates via `.MuiDialogActions-root`
+  scoping. Harmless to axe; confusing to ears. A distinct trigger phrasing (or an `aria-label`
+  variant on the indicator for the gate context) belongs to the Epic 4 UX reconciliation — the
+  indicator is shared with the editor footer, where no clash exists.
+- **`origin='library'` with `onCloneAndEdit` undefined renders the PRD's clone question with no
+  Clone & Edit button.** `cloneable = origin === 'library' && onCloneAndEdit !== undefined`
+  withholds the button, but the body copy branches on `origin` alone, so that combination asks
+  "Clone this organism first…?" with no way to say yes. Unreachable through `useOrganismEditorModal`
+  today (its `gateProps` always supplies the handler); the prop went optional in Story 4.24 and
+  nothing couples copy to capability. Pick it up if the dialog ever gains a second library-side
+  caller.
+
+## Deferred from: code review of 4-24-edit-organism-from-battle, second pass on the ruling (2026-09-27)
+
+Reviewed on **Fable** against an **Opus** ruling-implementation commit (`9efe708`, Sidiar's ruling
+(c): sole-open-battle usage does not gate), via three parallel adversarial layers.
+
+- **FR-1.3's battle-origin exception lives only in Story 4.24's ACs.** Ruling (c) carved a
+  battle-origin exception out of FR-1.3's "warn when used in N Battles" — sole-open-battle usage
+  opens the editor directly — and the amendment landed in the story file's AC3/AC5 only; the PRD's
+  FR-1.3 text still reads unconditional. Consistent with project practice (story ACs are the
+  review contract), but the exception risks being rediscovered as a "bug" by anyone reading the
+  PRD alone. Carry it into the PRD (or the FR-1.3 gloss) during the Epic 4 UX reconciliation.

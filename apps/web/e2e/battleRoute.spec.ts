@@ -73,6 +73,10 @@ async function seedConwaysClassic(page: Page) {
   );
 }
 
+/** The roster's selection rows (Story 4.24: each `<li>` also holds the row's ✎, so the items'
+ * text is no longer just the names). */
+const rosterRows = (sidebar: Locator) => sidebar.getByRole('list').locator('button[aria-pressed]');
+
 /** Distinct RGBA values actually rasterised on a canvas — the AR-42-permitted smoke check. */
 async function distinctColorCount(canvas: Locator): Promise<number> {
   return canvas.evaluate((el) => {
@@ -347,31 +351,35 @@ test.describe('battle route (Story 2.1)', () => {
     ]);
     // Roster ORDER, not merely presence: the dense encoding is `cell = roster index + 1`, so a
     // sidebar that sorted for display would be the first visible symptom of a reordering bug.
-    await expect(sidebar.getByRole('listitem')).toHaveText([
+    // Story 4.24: the rows' selection buttons, not the `<li>`s — each item also holds its ✎.
+    await expect(rosterRows(sidebar)).toHaveText([
       'Aggressive Colonizer',
       'Patient Defender',
       'Chaotic Spreader',
     ]);
     // Decision H.1: Conway's Classic is in the LIBRARY (seedConwaysClassic) but placed in no cell
     // of this battle, so it must not appear in its roster.
-    await expect(sidebar.getByRole('button', { name: "Conway's Classic" })).toHaveCount(0);
+    await expect(
+      sidebar.getByRole('button', { name: "Conway's Classic", exact: true }),
+    ).toHaveCount(0);
     // AC3: the provisional toggle is gone, not merely hidden. ⚠️ `exact: true` — Playwright's
     // accessible-name option is a case-insensitive SUBSTRING match by default, so a bare 'Erase'
     // matches the eraser row's own "Eraser" and this assertion would fail against correct code.
     await expect(page.getByRole('button', { name: 'Draw', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Erase', exact: true })).toHaveCount(0);
     // AC5/AC8: this story's own search + add control DOES render now — Conway's Classic is in
-    // the seeded library but not placed here, so it is the add control's one option. Epic 4's
-    // per-row pencil and CREATE button remain the only later-story controls still absent.
+    // the seeded library but not placed here, so it is the add control's one option. Story 4.24's
+    // per-row pencil now renders, one per row (inverted from "absent"); the CREATE button (Story
+    // 4.25) remains the only later-story control still absent.
     await expect(sidebar.getByRole('textbox', { name: /search organisms/i })).toHaveCount(1);
     await expect(sidebar.getByRole('combobox', { name: /add organism/i })).toHaveCount(1);
-    await expect(page.getByText('✎')).toHaveCount(0);
+    await expect(page.getByText('✎')).toHaveCount(3);
+    await expect(sidebar.getByRole('button', { name: /^Edit / })).toHaveText(['✎', '✎', '✎']);
     await expect(page.getByRole('button', { name: /create/i })).toHaveCount(0);
     // AC2: exactly one row selected, and it is the first.
-    await expect(sidebar.getByRole('button', { name: 'Aggressive Colonizer' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(
+      sidebar.getByRole('button', { name: 'Aggressive Colonizer', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
 
     // ⚠️ The clean-console assertion trap 6 is about: a `rosterSettled` gate keyed on the wrong
     // resource prints buildRefToFillGroup's dangling-id warning on every load, and only an e2e
@@ -443,7 +451,8 @@ test.describe('battle route (Story 2.1)', () => {
 
     // AC3: choosing it puts a FOURTH row in the sidebar, under its real name.
     await addSelect.selectOption({ label: "Conway's Classic" });
-    await expect(sidebar.getByRole('listitem')).toHaveText([
+    // Story 4.24: the rows' selection buttons, not the `<li>`s — each item also holds its ✎.
+    await expect(rosterRows(sidebar)).toHaveText([
       'Aggressive Colonizer',
       'Patient Defender',
       'Chaotic Spreader',
@@ -451,7 +460,7 @@ test.describe('battle route (Story 2.1)', () => {
     ]);
 
     // Forced decision 1: the add also SELECTS — no further click needed.
-    const newRow = sidebar.getByRole('button', { name: "Conway's Classic" });
+    const newRow = sidebar.getByRole('button', { name: "Conway's Classic", exact: true });
     await expect(newRow).toHaveAttribute('aria-pressed', 'true');
 
     // AC6: painting with it produces its OWN colour on the dish, not the empty background — the
@@ -474,13 +483,15 @@ test.describe('battle route (Story 2.1)', () => {
     // roster again, with the added organism gone.
     await page.reload();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Three-Way Skirmish');
-    await expect(page.getByRole('complementary').getByRole('listitem')).toHaveText([
+    await expect(rosterRows(page.getByRole('complementary'))).toHaveText([
       'Aggressive Colonizer',
       'Patient Defender',
       'Chaotic Spreader',
     ]);
     await expect(
-      page.getByRole('complementary').getByRole('button', { name: "Conway's Classic" }),
+      page
+        .getByRole('complementary')
+        .getByRole('button', { name: "Conway's Classic", exact: true }),
     ).toHaveCount(0);
 
     expect(errors).toEqual([]);
@@ -521,7 +532,9 @@ test.describe('battle route (Story 2.1)', () => {
       .getByRole('combobox', { name: /add organism/i })
       .selectOption({ label: "Conway's Classic" });
     await expect(
-      page.getByRole('complementary').getByRole('button', { name: "Conway's Classic" }),
+      page
+        .getByRole('complementary')
+        .getByRole('button', { name: "Conway's Classic", exact: true }),
     ).toHaveAttribute('aria-pressed', 'true');
 
     const { violations } = await new AxeBuilder({ page }).analyze();
@@ -1576,10 +1589,9 @@ test.describe('Clear Petri Dish (Story 2.15)', () => {
     // call (2026-08-31): Conway is the project's inspiration, so a cleared dish hands it back
     // rather than leaving a dead-empty roster. The eraser is NOT selected here.
     await expect(page.getByRole('list')).toHaveCount(1);
-    await expect(page.getByRole('button', { name: "Conway's Classic" })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(
+      page.getByRole('button', { name: "Conway's Classic", exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: 'Eraser' })).toHaveAttribute(
       'aria-pressed',
       'false',

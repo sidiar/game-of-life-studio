@@ -28,9 +28,10 @@ import {
  *
  * Consumers: Story 4.21's block dialog (`OrganismDeleteBlockedDialog` via `<OrganismLibrary>`),
  * Story 4.22's confirmation and disabled-button paths (the SAME verdict decides `allowed` vs.
- * `protected` there), and Story 4.24's `openBattle` argument — already threaded through to
- * `resolveOrganismUsage` here so that story adds one argument in one place rather than a second
- * verdict.
+ * `protected` there). The `openBattle` argument is threaded through to `resolveOrganismUsage` so
+ * a delete offered over a live grid adds one argument in one place rather than a second verdict —
+ * still unpassed: Story 4.24's battle-origin editor offers no Delete (its FD6), so whichever story
+ * first does is its first caller.
  */
 export type OrganismDeleteVerdict =
   | { readonly kind: 'protected' }

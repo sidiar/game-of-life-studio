@@ -157,6 +157,13 @@ function click(canvas: HTMLCanvasElement, at: ReturnType<typeof centreOfCell>): 
 
 // Always the real factory from @gol/test-utils — a hand-rolled fake in a test file is what the
 // shared fixtures exist to prevent (project-context, Testing rules).
+/** The roster's selection rows, in order — the per-row ✎ siblings (Story 4.24) excluded. */
+function rosterRows(): HTMLElement[] {
+  return within(screen.getByRole('list'))
+    .getAllByRole('button')
+    .filter((button) => !button.hasAttribute('data-edit-organism-id'));
+}
+
 function seeded(overrides: readonly Battle[] = battles): AppRepositories {
   return createFakeRepositories({ battles: overrides, organisms });
 }
@@ -390,7 +397,9 @@ describe('BattlePage', () => {
     // Story 5.6: converted from 8 — EXPORT BATTLE now renders below Clear Petri Dish (AC1); an
     // empty battle is exportable (FD10), so it is enabled here, not disabled like CLEAR.
     expect(screen.getByRole('button', { name: 'Export Battle' })).toBeEnabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(9);
+    // Story 4.24: converted from 9 — the seeded row's ✎ (FR-3.3) is the tenth.
+    expect(screen.getByRole('button', { name: `Edit ${CONWAYS_CLASSIC.name}` })).toBeEnabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(10);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -542,13 +551,15 @@ describe('BattlePage', () => {
     expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeEnabled();
     // Story 2.16: converted from this test's own "2.16's Back" prediction — the eighth button IS
     // Back to Battles. Story 3.11: LAB and RUN make ten. Story 3.18's Fullscreen button is
-    // RUN-ONLY, so this LAB-mode count holds; an eleventh Lab control (Epic 4's per-row pencil)
-    // still fails here.
+    // RUN-ONLY, so this LAB-mode count holds. Story 4.24: one ✎ per roster row joins it.
     expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeEnabled();
     // Story 5.6: converted from `+ 7` — EXPORT BATTLE renders below Clear Petri Dish (AC1),
     // enabled (`exportDisabled` is `isSaving` alone, not tied to living-cell count).
     expect(screen.getByRole('button', { name: 'Export Battle' })).toBeEnabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length + 8);
+    for (const organism of organisms) {
+      expect(screen.getByRole('button', { name: `Edit ${organism.name}` })).toBeInTheDocument();
+    }
+    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length * 2 + 8);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
@@ -570,7 +581,7 @@ describe('BattlePage', () => {
     );
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
 
-    const rows = within(screen.getByRole('list')).getAllByRole('button');
+    const rows = rosterRows();
     // Decision H.1: "used by a battle" means PLACED — and in roster order, which is the dense
     // encoding's own (RFC-006 Decision 2), never sorted for display.
     expect(rows.map((row) => row.textContent)).toEqual(organisms.map((organism) => organism.name));
@@ -1153,7 +1164,7 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
 
     await user.selectOptions(select, CONWAYS_CLASSIC.id);
 
-    const rows = within(screen.getByRole('list')).getAllByRole('button');
+    const rows = rosterRows();
     expect(rows.map((row) => row.textContent)).toEqual([
       ...organisms.map((organism) => organism.name),
       CONWAYS_CLASSIC.name,
@@ -1285,11 +1296,7 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
     await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' });
 
     // The seed, before the add: one row, and it is the default tool's organism.
-    expect(
-      within(screen.getByRole('list'))
-        .getAllByRole('button')
-        .map((row) => row.textContent),
-    ).toEqual([CONWAYS_CLASSIC.name]);
+    expect(rosterRows().map((row) => row.textContent)).toEqual([CONWAYS_CLASSIC.name]);
 
     await user.selectOptions(
       within(screen.getByRole('complementary')).getByRole('combobox', { name: /add organism/i }),
@@ -1298,11 +1305,10 @@ describe('BattlePage — adding organisms from the library (Story 2.10)', () => 
 
     // APPENDED, never substituted: the seed keeps index 0, so every cell already painted as ref 1
     // still means the seeded organism.
-    expect(
-      within(screen.getByRole('list'))
-        .getAllByRole('button')
-        .map((row) => row.textContent),
-    ).toEqual([CONWAYS_CLASSIC.name, organisms[0].name]);
+    expect(rosterRows().map((row) => row.textContent)).toEqual([
+      CONWAYS_CLASSIC.name,
+      organisms[0].name,
+    ]);
     // And the seeded organism is still NOT offered again (AC1's exclusion is the same union).
     expect(
       within(screen.getByRole('complementary'))

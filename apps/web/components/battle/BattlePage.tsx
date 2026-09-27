@@ -4,11 +4,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { styled } from '@mui/material/styles';
-import { DEFAULT_SETTINGS, type Organism, type Settings } from '@gol/domain';
+import {
+  buildRuleReferenceIndex,
+  buildUsageIndex,
+  DEFAULT_SETTINGS,
+  type BattleSummary,
+  type Organism,
+  type Settings,
+} from '@gol/domain';
 import type { AppRepositories } from '@gol/persistence';
 import { appTitle } from '@/lib/appTitle';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { projectBattleForSave } from '@/lib/battle/battleRecord';
+import { adoptSavedOrganism, applySavedOrganisms } from '@/lib/battle/applySavedOrganisms';
+import { computeEditorGridStats } from '@/lib/battle/gridStats';
+import {
+  resolveOrganismGateUsage,
+  type OpenBattleContext,
+} from '@/lib/organisms/organismGateUsage';
+import { sortLibrary } from '@/lib/organisms/sortLibrary';
+import { useOrganismEditorModal } from '@/lib/organisms/useOrganismEditorModal';
 import { saveFailureMessage } from '@/lib/saveFailureMessage';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import { useBattleDraft } from '@/lib/battle/useBattleDraft';
@@ -59,6 +74,35 @@ const UnsavedChangesDialog = dynamic(() => import('./UnsavedChangesDialog'), { s
  * inside `<BattlePage>`'s post-choice handler (FD1's other half; see `handleExportExited`).
  */
 const ExportBattleDialog = dynamic(() => import('./editor/ExportBattleDialog'), { ssr: false });
+
+/**
+ * Story 4.24 (FR-3.12, M5, AR-35): the Organism Editor and its FR-1.3 in-use gate, mounted as
+ * modals over this page — never a route. Both ON DEMAND, the `<OrganismLibrary>` shape: the
+ * editor's chunk is the heaviest in the app (the rules editor, the preview and its engine), and
+ * neither belongs in `/battle`'s first load. `useOrganismEditorModal` is imported statically — it
+ * is a hook, and imports both modules as TYPES only.
+ *
+ * Not an `editor/` ↔ `simulation/` reach (project-context): the editor lives in
+ * `components/organisms/editor/`, and spec §2 hangs `<OrganismEditorModal>` off `<BattlePage>`.
+ */
+const OrganismEditorModal = dynamic(
+  () => import('@/components/organisms/editor/OrganismEditorModal'),
+  { ssr: false },
+);
+const OrganismInUseDialog = dynamic(() => import('@/components/organisms/OrganismInUseDialog'), {
+  ssr: false,
+});
+
+// Story 4.24: stable empties for the battle-origin editor's state, so a closed editor never hands
+// its (unmounted) modal a fresh array per render.
+const NO_SAVED: readonly Organism[] = [];
+const NO_SUMMARIES: readonly BattleSummary[] = [];
+
+// Story 4.24, AC3/FD2: the refusal when the battle list — the count the FR-1.3 warning needs —
+// cannot be read. Refused rather than opened unwarned (`useOrganismEditorModal.requestEdit`'s own
+// warning about a `0` read from an unsettled list).
+const EDIT_USAGE_FAILURE =
+  "Couldn't check where this organism is used, so it can't be edited right now.";
 
 /**
  * FD8's focus-restore check, run by the one post-commit restore effect for every close path
@@ -457,7 +501,27 @@ export default function BattlePage({
     [],
   );
 
-  const organisms = organismsResource.data;
+  // Story 4.24 (FR-3.12, FD5): records the battle-origin editor saved this session, laid over the
+  // LOADED library by id — see `applySavedOrganisms` for why this is an overlay and never a
+  // `organismsResource.reload()`. Adopted in the editor hook's close-time `onSaved`, never from an
+  // effect. ❌ Never persisted, never cleared: it only ever holds what `organisms.save` wrote.
+  const [savedOrganisms, setSavedOrganisms] = useState<readonly Organism[]>(NO_SAVED);
+  const adoptSaved = useCallback((record: Organism) => {
+    setSavedOrganisms((previous) => adoptSavedOrganism(previous, record));
+  }, []);
+
+  // ⚠️ Memo-stable (Story 4.24): `palette`, `runOrganisms`, `rosterIds` and `roster` all key on this
+  // identity (see their comments — a churning one is a renderer teardown or a "Too many re-renders"
+  // crash). It changes only on a load or an adoption; `applySavedOrganisms` returns the loaded list
+  // itself until the first adoption. An adoption changes `rosterIds`' identity once (its contents
+  // stay equal — the adopted record keeps its id), which a colour change needs anyway for `palette`.
+  const organisms = useMemo(
+    () =>
+      organismsResource.data === undefined
+        ? undefined
+        : applySavedOrganisms(organismsResource.data, savedOrganisms),
+    [organismsResource.data, savedOrganisms],
+  );
   // AC7 (deferred-work.md, owned by this story): the library genuinely failed. Distinct from
   // `organisms === undefined`, which is also true while it is still in flight — collapsing the two
   // is what let `/battle/new` render a fully successful page over a resource in the `error` state,
@@ -669,9 +733,12 @@ export default function BattlePage({
 
   // Story 3.17 (AC6, FD3(a)): a Run entry whose roster cannot run lands in Lab with RUN disabled
   // and its reason — never a header over nothing. Serves TWO readers: this story's Gallery Run
-  // link, reachable on MOUNT for the first time, and the 3-11 review's future case (a library that
-  // changes under an already-mounted page, Stories 4.24/4.25 — deferred-work.md, "renders a header
-  // over nothing", closed by this story). The in-render `nameState` shape (the seed-compare adjust
+  // link, reachable on MOUNT for the first time, and the 3-11 review's case of a library that
+  // changes under an already-mounted page (deferred-work.md, "renders a header over nothing",
+  // closed by this story). Story 4.24 does not make that second case reachable: its editor opens
+  // from Lab only and changes the library only at its exit, by replacing a record in place (the
+  // adopted record keeps its id), so `runOrganisms` never turns `null` from it (FD8). Story 4.25
+  // is the next story that could. The in-render `nameState` shape (the seed-compare adjust
   // above), not an effect: `react-hooks/set-state-in-effect`
   // is live, and an effect would still paint one frame of the empty Run branch first — the exact
   // flash this AC forbids. Not a derived `effectiveMode` either: state and `data-mode` would then
@@ -795,6 +862,13 @@ export default function BattlePage({
   // `<BattleEditorView>` rather than adding a second surface — see that prop below.
   const [exportError, setExportError] = useState<string | null>(null);
 
+  // Story 4.24 (AC3, FD2): the pencil's own failure slot — the battle list could not be read, so the
+  // edit was refused. Declared here, before `persistBattle`, for the same forward-reference reason
+  // as `exportError` above; shares the same `role="alert"` slot, and every writer to that slot
+  // clears all three (the Story 5.6 FD9 lesson — a stale message would otherwise win the slot and
+  // keep a newer one from ever being announced).
+  const [editOrganismError, setEditOrganismError] = useState<string | null>(null);
+
   // AC2, AC3, AC4, AC5 — the whole save. Declared before the four early returns below like every
   // other hook here.
   //
@@ -840,8 +914,10 @@ export default function BattlePage({
     // Unmounting the line first makes every attempt's outcome audible.
     setSaveError(null);
     // Story 5.6 (FD9): a save attempt clears a stale EXPORT message too, so a later save can never
-    // leave yesterday's export failure sitting on screen next to today's outcome.
+    // leave yesterday's export failure sitting on screen next to today's outcome. Story 4.24: and a
+    // stale edit refusal, for the same reason.
     setExportError(null);
+    setEditOrganismError(null);
 
     const now = new Date();
     // The loaded record is the fallback SOURCE for both fields, never a thing to write back to.
@@ -937,7 +1013,8 @@ export default function BattlePage({
   // Unmount safety for the post-await `setExportError` in `handleExportExited` below, following
   // `useAsyncResource.ts`'s closure-flag reasoning adapted for an event handler rather than an
   // effect — the same shape `<DataManagement>`'s `mountedRef` uses, re-armed on every setup so
-  // StrictMode's setup→cleanup→setup does not leave it permanently false.
+  // StrictMode's setup→cleanup→setup does not leave it permanently false. Its lifetime is the
+  // component's, so Story 4.24's pencil handler reuses it for its own post-await writes.
   const exportMountedRef = useRef(true);
   useEffect(() => {
     exportMountedRef.current = true;
@@ -960,6 +1037,131 @@ export default function BattlePage({
   // can change out from under it).
   const persistedId = saveStamp?.id ?? loadedIdentity?.id ?? null;
   const exportNeedsSave = isDirty || persistedId === null;
+
+  /**
+   * Story 4.24 (FR-3.12, M5, AR-33): edit an organism from the battle — the editor as a modal over
+   * THIS mounted page, never a route. The same hook the Library uses (FD7), with `'battle'` for the
+   * back label and the gate's two-button variant, and NO `onCloneAndEdit` (M5). Called here, the
+   * component that renders both modals, for the hook's placement rule (its effects must be the
+   * modals' PARENT effects). `onSaved` is its close-time hand-off: the last saved record, once the
+   * editor has fully exited — adopted into the overlay above, which re-renders the roster, the
+   * dish's colours and the add dropdown with no battle save and no dirty-flag change.
+   *
+   * ❌ Nothing here touches `isDirty`, `useDirtyGuard`, `useLeaveGuard` or the undo ring: the page
+   * behind is `inert` for the gate's and the editor's whole window (the hook's
+   * `useInertBackground`), so no edit can land on it, and the editor's own unsaved-changes guard is
+   * entirely inside the modal and independent of this battle's (Story 4.23, FD9).
+   */
+  const {
+    requestEdit,
+    mounted: organismEditorMounted,
+    modalProps: organismEditorProps,
+    gateMounted: organismGateMounted,
+    gateProps: organismGateProps,
+  } = useOrganismEditorModal('battle', { onSaved: adoptSaved });
+
+  // Open-time snapshots for the editor's footer (FD2/FD4): the battle list fetched by the pencil
+  // press, and the open battle it was resolved against. Safe as snapshots because the page is
+  // inert for the whole window — no paint, no rename, no save can move them.
+  const [editSummaries, setEditSummaries] = useState<readonly BattleSummary[]>(NO_SUMMARIES);
+  const [editOpenBattle, setEditOpenBattle] = useState<OpenBattleContext | null>(null);
+
+  // Re-entrancy (AC3): set synchronously on the press, released in `finally` — a second press
+  // while the list is being fetched is a no-op. Once a window is mounted the hook's own flags (and
+  // its `requestEdit` guard) take over.
+  const editPendingRef = useRef(false);
+
+  /**
+   * AC3 (M5, M7, Decision H, FD2): usage is counted at CLICK time, from a fresh `battles.list()` —
+   * never a page-lifetime resource, which this battle's own save (the H.1 prune rewriting its
+   * summary) would make stale, and `resolveOrganismUsage`'s "the open battle adds, never removes"
+   * rule would then over-report from it. The open battle is ADDED: its id is `persistedId` (null
+   * until the first save → "Current Battle (unsaved)") and its organisms are the LIVE PLACED set —
+   * `count > 0` in `computeEditorGridStats`, ❌ never `rosterIds`, whose unpainted session adds are
+   * not usage (Decision H.2; the `OpenBattleUsage` doc).
+   *
+   * A SYNCHRONOUS callback that `void`s its async run (React 19 / project-context). A rejection
+   * opens NOTHING and reports into the shared alert slot: published from this call site with no
+   * dialog mounted, so the live-region trap (`project-context.md`) does not apply.
+   */
+  const handleEditOrganism = useCallback(
+    (organismId: string) => {
+      if (
+        editPendingRef.current ||
+        organismEditorMounted ||
+        organismGateMounted ||
+        savingRef.current ||
+        grid === null ||
+        organisms === undefined
+      ) {
+        return;
+      }
+      editPendingRef.current = true;
+      // Every message sharing the slot, so this attempt's outcome is the one on screen.
+      setSaveError(null);
+      setExportError(null);
+      setEditOrganismError(null);
+      void (async () => {
+        try {
+          // The refusal copy covers exactly the read it names: only `battles.list()` may resolve
+          // to EDIT_USAGE_FAILURE (the export path's catch-around-the-repository-call shape). A
+          // throw from the compute stage below is a programming error, not "couldn't check" — it
+          // propagates as an unhandled rejection so the console (and the e2e clean-console gate)
+          // sees the real failure instead of a misattributed refusal (review 2026-09-26).
+          let summaries: readonly BattleSummary[];
+          try {
+            summaries = await repositories.battles.list();
+          } catch {
+            if (exportMountedRef.current) setEditOrganismError(EDIT_USAGE_FAILURE);
+            return;
+          }
+          if (!exportMountedRef.current) return;
+          const organism = organisms.find((entry) => entry.id === organismId);
+          if (organism === undefined) return;
+          const openBattle: OpenBattleContext = {
+            id: persistedId,
+            name: battleName,
+            organismIds: computeEditorGridStats(grid, rosterIds)
+              .perOrganism.filter((entry) => entry.count > 0)
+              .map((entry) => entry.organismId),
+          };
+          // ⚠️ The SORTED list, not `organisms`: the editor footer builds its own rule index from
+          // the sorted `library` prop (`editorLibrary` below), and `referencingOrganismIds`
+          // dedupes in input order — an index built over the unsorted loaded list would show the
+          // gate's "Targeted by [M]" names in a different order from the footer's in the same
+          // gate → Edit Anyway → footer flow (review 2026-09-26; AC6 "the footer's derivations").
+          const sortedLibrary = sortLibrary(organisms);
+          const usage = resolveOrganismGateUsage(organismId, {
+            usageIndex: buildUsageIndex(summaries),
+            ruleIndex: buildRuleReferenceIndex(sortedLibrary),
+            summaries,
+            library: sortedLibrary,
+            openBattle,
+          });
+          setEditSummaries(summaries);
+          setEditOpenBattle(openBattle);
+          requestEdit(organism, usage);
+        } finally {
+          editPendingRef.current = false;
+        }
+      })();
+    },
+    [
+      organismEditorMounted,
+      organismGateMounted,
+      grid,
+      organisms,
+      repositories,
+      persistedId,
+      battleName,
+      rosterIds,
+      requestEdit,
+    ],
+  );
+
+  // The editor's library: the same overlay-applied list the roster renders from, in the Library's
+  // display order (its colour seed and organism-type dropdown read it — Story 4.8/4.11).
+  const editorLibrary = useMemo(() => sortLibrary(organisms ?? []), [organisms]);
 
   /**
    * FD8's DOM-lookup restore, mirroring `useLeaveGuard`'s own effect and for the identical reasons:
@@ -992,6 +1194,7 @@ export default function BattlePage({
     // announced.
     setSaveError(null);
     setExportError(null);
+    setEditOrganismError(null);
     exportFocusOwedRef.current = true;
     setExportConfirming(true);
     setExportDialogOpen(true);
@@ -1210,10 +1413,11 @@ export default function BattlePage({
           onSave={handleSave}
           isSaving={isSaving}
           /* Story 5.6 (FD9): shares ONE `role="alert"` slot with the save failure rather than
-             adding a second surface. The two cannot both be non-null in practice (a save attempt
-             clears `exportError` and `handleExport` clears both), and if they ever were, the save
-             message wins — it is the more actionable one. */
-          saveError={saveError ?? exportError}
+             adding a second surface. Story 4.24 adds the third member. No two can be non-null in
+             practice — every writer to the slot (save, export, the pencil) clears all three
+             before writing — and if they ever were, the save message wins: it is the most
+             actionable one. */
+          saveError={saveError ?? exportError ?? editOrganismError}
           /* Story 2.16 (FR-7.10, spec §3.3): the ONLY new prop on this interface. The guard itself
              runs here — `<BattleEditorView>` forwards the press and interprets nothing. */
           onBack={handleBack}
@@ -1221,6 +1425,8 @@ export default function BattlePage({
              here, `<BattleEditorView>` forwards the press. */
           onExport={handleExport}
           exportDisabled={isSaving}
+          /* Story 4.24 (FR-3.3/FR-3.12): the roster's ✎ — Lab only, since this whole view is. */
+          onEditOrganism={handleEditOrganism}
         />
       )}
       {/* Story 3.11 (AC3, AC6): the Run chassis, MOUNTED in place of the editor — not beside it,
@@ -1278,6 +1484,21 @@ export default function BattlePage({
           onChooseBattle={() => handleChoose('battle')}
           onChooseWorkspace={() => handleChoose('workspace')}
           onExited={handleExportExited}
+        />
+      )}
+      {/* Story 4.24: the in-use gate and the editor, each mounted on the hook's window (open OR
+          fading) so its lazy chunk is requested on first use only — the Library's shape. Both
+          portal to `document.body`. No `onRequestDelete` / `deleteError` / `onSaveSucceeded`: no
+          Delete from the battle origin (FD6), so there is no delete state to clear either. The
+          repository is the injected one (AR-2/AR-27). */}
+      {organismGateMounted && <OrganismInUseDialog {...organismGateProps} />}
+      {organismEditorMounted && (
+        <OrganismEditorModal
+          {...organismEditorProps}
+          library={editorLibrary}
+          battleSummaries={editSummaries}
+          organisms={repositories.organisms}
+          openBattle={editOpenBattle}
         />
       )}
     </Root>

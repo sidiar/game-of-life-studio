@@ -115,7 +115,8 @@ export interface OrganismNameFieldProps {
  * Enter, which under `output: 'export'` is a full page reload that discards the draft.
  *
  * Ids: `useId()` for both, because unlike the dialog title this is not a singleton — Story 4.11's
- * condition rows and Story 4.24's battle-origin editor make a second instance plausible. The modal
+ * condition rows and the editor's second mount site (the battle page, Story 4.24) make a second
+ * instance plausible. The modal
  * test and the e2e locate the field by its accessible name and follow `aria-describedby`, never a
  * literal id. Colours are `--gol-*` tokens throughout (AR-46).
  */
