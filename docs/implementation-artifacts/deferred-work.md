@@ -3681,3 +3681,17 @@ Reviewed on **Fable** against an **Opus** ruling-implementation commit (`9efe708
 - **A third hand-synced copy of the e2e seed helper.** `createOrganismFromBattle.spec.ts` copies
   the `buildSeedPayload`/`seedWorkspace` shape again; extract a shared `e2e/` helper before a
   seed-format change has to be made three times.
+
+## Deferred from: code review of 4-25-create-organism-from-battle, second pass on the rulings (2026-09-27)
+
+Reviewed on **Opus** against a **Sonnet** ruling-implementation commit (`6383547`, Sidiar's rulings
+D1 (a) and D2 (a)), via three parallel adversarial layers.
+
+- **The organism-editor focus restore can target a disabled ✎ and skip its fallback.**
+  `useOrganismEditorModal`'s restore effect resolves `[data-edit-organism-id]` and only falls back
+  to `[data-create-organism]` when that lookup is `null`. Since D2 (a) the battle roster's ✎ is
+  `disabled={isSaving}`, so a restore that ran mid-battle-save would find it, `.focus()` a disabled
+  button (a no-op) and leave focus on `<body>`. Unreachable today: both entry handlers bail under
+  `savingRef`, the page is `inert` while the editor is open, and no hotkey saves. If a future route
+  can start a battle save while the editor is open, skip disabled targets
+  (`trigger?.matches(':disabled')`) — and note the create button is disabled then too.

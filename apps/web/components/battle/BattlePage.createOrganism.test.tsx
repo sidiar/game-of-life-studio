@@ -307,6 +307,46 @@ describe('BattlePage — create organism from battle (Story 4.25)', () => {
     expect(createButton()).not.toHaveFocus();
   });
 
+  // Second-pass review (2026-09-27): the regression D1 (a) was ruled to fix, pinned end to end. A
+  // create from a 254-organism roster lands the 255th row, which sets `atCap` and unmounts the
+  // create button (FD2) in the same commit the editor exits — before D1 (a), focus fell to
+  // `<body>`. The 254 are synthetic, unresolved ids on an empty library (the `BattlePage.test.tsx`
+  // AC5 cap fixture's approach), so the only ✎ on the page is the new organism's own.
+  it('a create that fills the roster to the 255 cap restores focus to the new row’s ✎, not <body> (AC6, D1 a)', async () => {
+    const user = userEvent.setup();
+    const CAP_SIZE = { cols: 50, rows: 30 } as const;
+    const organismIds = Array.from({ length: 254 }, (_, i) => `cap-organism-${i}`);
+    const gridState: number[][] = Array.from({ length: CAP_SIZE.rows }, () =>
+      new Array(CAP_SIZE.cols).fill(0),
+    );
+    organismIds.forEach((_, i) => {
+      gridState[Math.floor(i / CAP_SIZE.cols)][i % CAP_SIZE.cols] = i + 1;
+    });
+    const nearlyFull: Battle = {
+      id: SKIRMISH.id,
+      name: 'Nearly Full Roster',
+      organismIds,
+      gridSize: CAP_SIZE,
+      gridState,
+      createdAt: SKIRMISH.createdAt,
+      updatedAt: SKIRMISH.updatedAt,
+    };
+    render(
+      <BattlePage
+        repositories={createFakeRepositories({ battles: [nearlyFull], organisms: [] })}
+        battleId={nearlyFull.id}
+      />,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Nearly Full Roster' });
+
+    const editor = await createAndSave(user, 'Cap Filler');
+    await user.click(within(editor).getByRole('button', { name: /Back to Battle/ }));
+    await waitForNoDialog();
+
+    expect(screen.queryByRole('button', { name: /create new organism/i })).toBeNull();
+    await waitFor(() => expect(pencil('Cap Filler')).toHaveFocus());
+  });
+
   it('a create press while a 4.24 pencil fetch is pending is a no-op (AC3)', async () => {
     const repositories = seeded();
     let resolveList: (value: BattleSummary[]) => void = () => {};

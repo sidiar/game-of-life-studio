@@ -4,7 +4,7 @@ baseline_commit: 3917ab49d6a9a2ddb3d0980bad052d6380e92f49
 
 # Story 4.25: Create Organism from Battle
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -97,6 +97,10 @@ story does.
    close-time contract hands over the last save (FD3).
 6. **Focus.** On close, focus returns to the `+ Create New Organism` button through the hook's
    existing `[data-create-organism]` restore. This holds on both paths, saved and cancelled.
+   **Amended by Sidiar's review ruling D1 (a), 2026-09-27:** the cancelled path (a session that
+   never saved) still restores to the create button; a session that saved restores to the new
+   row's own ✎ (`[data-edit-organism-id="<newId>"]`) instead — including at the 255 cap, where the
+   create button is gone by restore time. See Review Findings.
 7. **The editor footer on a create session.** The footer shows `Used in 0 Battles`, both before and
    after the first save. The create handler sets `editSummaries` to `NO_SUMMARIES` and
    `editOpenBattle` to a fresh open-battle snapshot, so neither the gate's nor the footer's inputs
@@ -198,7 +202,8 @@ story does.
         - Cancel on a clean draft adds no row and leaves the selection unchanged;
         - save then Discard-later-edits still adds the saved record;
         - no Delete button;
-        - focus lands on the create button after close;
+        - focus lands on the create button after close (after a save, on the new row's ✎ —
+          AC6 as amended by ruling D1 a);
         - a create press while the pencil fetch is pending is a no-op;
         - on a workspace-empty `/battle/new` (empty library), create → save → the row appears and
           is selected, and the empty-library copy is replaced by the "every library organism is
@@ -265,8 +270,8 @@ Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
       deliberately moves off AC6's create button.
       **Applied:** `useOrganismEditorModal`'s `handleSaved` now rewrites a `{ kind: 'create' }`
       restore intent to `{ kind: 'edit', organismId: saved.id }` the moment a save lands, scoped to
-      `origin === 'battle'` (the Library keeps its own create-button target — pinned by two new
-      tests in that file). A create that never saves is untouched. Tested at the hook level
+      `origin === 'battle'` (the Library keeps its own create-button target — pinned by one new
+      test in that file plus an existing one). A create that never saves is untouched. Tested at the hook level
       (cap-agnostic — the fix fires on every battle-origin save) and at the page level (the two
       paths' outcome through the real roster)
       [apps/web/lib/organisms/useOrganismEditorModal.ts,
@@ -346,6 +351,33 @@ Code review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
       pre-existing
 - [x] [Review][Defer] `createOrganismFromBattle.spec.ts` adds a third hand-synced copy of the e2e
       seed helper [apps/web/e2e/createOrganismFromBattle.spec.ts] — deferred, pre-existing
+
+Second-pass review 2026-09-27 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor), scoped
+to the ruling pass `d5410f3..6383547`.
+
+- [x] [Review][Patch] The 254 → 255 cap regression D1 (a) was ruled to fix had no test (the page
+      test ran below the cap; the hook test rendered the new row up front) — page-level test added:
+      a create from a 254-row roster unmounts the create button and lands focus on the new ✎
+      (verified red with the retarget removed)
+      [apps/web/components/battle/BattlePage.createOrganism.test.tsx]
+- [x] [Review][Patch] AC6 and Task 5's test bullet still named the create button as the saved
+      path's target — both annotated with the D1 (a) amendment [this file]
+- [x] [Review][Patch] `handleSaved`'s comment said a second save "repeats the same assignment" —
+      it skips the branch (the intent is already `'edit'`); comment corrected
+      [apps/web/lib/organisms/useOrganismEditorModal.ts]
+- [x] [Review][Patch] A Library-origin test comment claimed to prove the "no matching Edit button"
+      fallback, which that path never reaches — comment corrected
+      [apps/web/lib/organisms/useOrganismEditorModal.test.tsx]
+- [x] [Review][Patch] `OrganismRosterProps.isSaving`'s JSDoc called it "the `exportDisabled`
+      pattern"; the code passes `isSaving` itself, as `<BattleNameField>`/`<SidebarFooter>` get it
+      [apps/web/components/battle/editor/OrganismRoster.tsx]
+- [x] [Review][Patch] The Dev Agent Record overcounted the Library tests ("two new") and
+      undercounted the hook tests ("3 new"; it is 4) — corrected [this file]
+- [x] [Review][Defer] The restore effect resolves `[data-edit-organism-id]` even when that ✎ is
+      now `disabled` (D2), so `?? [data-create-organism]` never falls back and `.focus()` no-ops —
+      unreachable today (no battle save can start while the editor is open: both entry handlers
+      bail under `savingRef`, the page is inert, no save hotkey) [apps/web/lib/organisms/useOrganismEditorModal.ts:244]
+      — deferred, latent
 
 ## Dev Notes
 
@@ -620,8 +652,9 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
     verbatim, placed where the review named it (the hook, not the page): it fixes the cap
     regression (the create button unmounts before the restore runs) by construction, because the
     fix never reads `atCap` — it retargets on every battle-origin save regardless. The Library's
-    own create-button target (its own AC) is untouched, proven by two new hook-level tests using a
-    same-id Edit button to rule out "no matching node" as the reason. A create that never saves
+    own create-button target (its own AC) is untouched, proven by one new hook-level test using a
+    same-id Edit button to rule out "no matching node" as the reason (alongside the existing
+    saved-then-Back test). A create that never saves
     still restores to the create button, on both origins.
   - **D2 (a), disabled during save:** `OrganismRosterProps` gains `isSaving?: boolean` (default
     `false`). `<BattleEditorView>` already receives `isSaving` as a required prop (Story 2.13) and
@@ -636,7 +669,7 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
     list rather than being a new gap.
   - Both review checklist items are checked off in place, with an **Applied** note recording the
     mechanism and the files touched, immediately under Sidiar's ruling.
-  - Tested at every layer the change touches: `useOrganismEditorModal.test.tsx` (hook, 3 new
+  - Tested at every layer the change touches: `useOrganismEditorModal.test.tsx` (hook, 4 new
     tests), `OrganismRoster.test.tsx` (5 new tests: pencil + create button disabled/enabled,
     selection untouched, axe with a disabled control), `BattleEditorView.test.tsx` (1 new wiring
     test), `BattlePage.createOrganism.test.tsx` (the existing AC6 focus test rewritten for the new
@@ -677,6 +710,9 @@ Sonnet (claude-sonnet-5), per the story's own Dev Model line.
 - 2026-09-27: Applied Sidiar's rulings on both decision-needed review items — D1 (a): focus
   restores to the new row's ✎ on both paths once a create saves; D2 (a): the create button and the
   4.24 ✎ are disabled while a battle save is in flight. `npm run ci:dev` green. Status → review.
+- 2026-09-27: Second-pass review (opus) of the ruling pass — 6 patches applied (the 255-cap focus
+  test, AC6 / Task 5 amendment notes, three comment corrections, record test counts), 1 deferred,
+  0 decision-needed. Status → done.
 
 Proposed lane gate: { story: 5-11-load-time-corruption-handling, requires: 4-25-create-organism-from-battle, why: "5.11 owns BattlePage's library-load / unknown-id path and inherits the 4-24 duty to clear or reconcile the savedOrganisms overlay on any reload; 4.25 widens that overlay to hold created records absent from the loaded list" }
 

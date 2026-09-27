@@ -381,9 +381,8 @@ describe('useOrganismEditorModal', () => {
 
     // The Library origin (the Probe's default) keeps AC6's original target after a save — Story
     // 4.25's review ruling (D1 a, 2026-09-27, see the battle-origin describe block below) only
-    // retargets the BATTLE origin's create. `record.id` ('saved-1') matches no card in `LIBRARY`
-    // either, so this also proves the "no matching Edit button" fallback still lands on the create
-    // button for a saved id with no rendered row.
+    // retargets the BATTLE origin's create. The intent stays `{ kind: 'create' }` here, so no Edit
+    // button lookup ever runs; the next test rules out "no matching node" as the reason.
     it('restores focus to the create button after Back following a save, exactly like a plain Close', async () => {
       const onSaved = vi.fn();
       const user = userEvent.setup();

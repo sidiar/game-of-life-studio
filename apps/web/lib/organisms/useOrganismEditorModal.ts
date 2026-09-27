@@ -397,9 +397,10 @@ export function useOrganismEditorModal(
       // above for the cap this closes. `kind === 'create'` filters out every pencil-edit session
       // (`requestEdit` already sets `{ kind: 'edit', organismId }` at OPEN time, unaffected here),
       // and `origin === 'battle'` filters out the Library, whose own create button is still correct
-      // for its own create. Safe to overwrite on every save in the session: `saveStamp` mints the id
-      // on the FIRST save and every later save upserts under it, so `organism.id` never changes
-      // mid-session — a second save just repeats the same assignment.
+      // for its own create. Only the FIRST save in the session retargets: it flips the intent to
+      // `'edit'`, so a later save fails the `kind === 'create'` test and leaves it alone. That is
+      // still correct because `saveStamp` mints the id on the first save and every later save
+      // upserts under it — `organism.id` never changes mid-session.
       if (origin === 'battle' && restoreFocusRef.current?.kind === 'create') {
         restoreFocusRef.current = { kind: 'edit', organismId: organism.id };
       }

@@ -598,8 +598,8 @@ export interface OrganismRosterProps {
    */
   onCreateOrganism?(): void;
   /**
-   * Story 4.25 review ruling (D2 a, 2026-09-27): a battle save in flight (the `exportDisabled`
-   * pattern, threaded the same way). Disables the create button AND every row's 4.24 ✎ — both
+   * Story 4.25 review ruling (D2 a, 2026-09-27): a battle save in flight — `isSaving` itself,
+   * passed straight through the way `<BattleNameField>` and `<SidebarFooter>` receive it. Disables the create button AND every row's 4.24 ✎ — both
    * press-handlers already bail under `<BattlePage>`'s `savingRef` (AC3), but NFR-4.1 forbids a
    * live-looking control that silently does nothing. Row SELECTION (`<Row>`) is untouched:
    * painting a tool mutates nothing the save lock protects. Defaults to `false`, matching every
