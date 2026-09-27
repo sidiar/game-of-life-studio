@@ -4,7 +4,7 @@ baseline_commit: d61aec5e76ad0ef1e1e215bde4c8da434582c7c1
 
 # Story 4.24: Edit Organism from Battle
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -55,6 +55,10 @@ Back / ✕ / Escape returning to the entry context (`organism-editor-design.md` 
    - `organismIds`: the ids with `count > 0` in `computeEditorGridStats(grid, rosterIds).perOrganism`
      (the placed set, never `rosterIds`; see the `OpenBattleUsage` doc).
    - **N ≥ 1:** the in-use warning opens first.
+   - **Sole-open-battle usage counts as N = 0** (Sidiar's review ruling (c), 2026-09-27): when the
+     open battle is the only battle using the organism (`entries` is exactly the one entry with
+     `battleId === openBattle.id`, saved or never-saved), no warning shows and the editor opens
+     directly. The editor footer still lists the open battle (AC7).
    - **N = 0:** the editor opens directly. This is the case of an organism added to the session
      roster but never painted and used nowhere else (Decision H.2), and matches the Library's 4.17
      rule.
@@ -80,7 +84,9 @@ Back / ✕ / Escape returning to the entry context (`organism-editor-design.md` 
      the battle origin (`useOrganismEditorModal('battle', …)` receives no `onCloneAndEdit`). The body
      sentence is the battle-variant copy (FD3).
    - **`'library'`:** unchanged: three actions and the verbatim PRD sentence.
-   - The title stays `Used in N Battle(s)` (`battleCountLabel`), counting the open battle.
+   - The title stays `Used in N Battle(s)` (`battleCountLabel`). The open battle counts toward N
+     wherever other battles also use the organism; when it is the **only** battle using it, the
+     gate does not open at all (AC3, ruling (c) — sole-open-battle usage does not gate).
    - **Edit Anyway** opens the editor only after the gate's exit (the existing `proceedRef` handoff).
      **Cancel**, Escape and backdrop change nothing, and focus returns to the pencil.
 6. **The warning's count is expandable (FR-1.3 "expandable to reveal which Battles per FR-1.7", M7;
@@ -322,7 +328,7 @@ Back / ✕ / Escape returning to the entry context (`organism-editor-design.md` 
 Review 2026-09-26 (Fable, three parallel layers: Blind Hunter / Edge Case Hunter / Acceptance
 Auditor, full mode against this story file).
 
-- [ ] [Review][Decision] **The gate fires with circular copy when the only battle using the
+- [x] [Review][Decision] **The gate fires with circular copy when the only battle using the
       organism is the open battle itself.** On `/battle/new`, paint the seeded organism (used in no
       saved battle) and press its ✎: the gate reads "Used in 1 Battle. Editing it will affect all
       Battles that use it. To make a variant for this Battle only, clone it in the Organism Library
@@ -335,6 +341,13 @@ Auditor, full mode against this story file).
       (e.g. "used only in this Battle"), keeping the gate;
       **(c)** treat sole-open-battle usage like N = 0 and open the editor directly — diverges from
       AC5's "counting the open battle" and needs its own AC wording.
+      **Sidiar's ruling (2026-09-27): (c).** When the open battle is the only battle using the
+      organism, show no warning — open the editor directly, as for N = 0. Amend AC5's wording
+      accordingly: the open battle still counts toward usage wherever other battles also use the
+      organism, but sole-open-battle usage does not gate.
+      **Resolved 2026-09-27:** `resolveOrganismGateUsage` returns no battle names when the open
+      battle is the sole user, so `requestEdit` opens the editor directly; AC3/AC5 amended
+      [apps/web/lib/organisms/organismGateUsage.ts]
 - [x] [Review][Patch] The gate's usage panel is top-clipped by the Dialog Paper once the battle
       list outgrows the small gate dialog — `overflowY: 'visible'` was set on `DialogContent` only,
       while MUI's Paper keeps `overflowY: 'auto'`, and the panel opens UPWARD (`bottom: 150%`), so
@@ -632,6 +645,12 @@ Claude Opus 5.5 (bmad-dev-story, implement-next-story lane epic-4)
   same-tick Export/Back behind a slow repository).
 - **Owner questions (defaults applied):** Q1 FD1 pencil does not select; Q2 FD3 battle copy; Q3 AC6
   built here, Library gate included.
+- ✅ Resolved review finding [Decision]: circular gate when the open battle is the sole user —
+  implemented Sidiar's ruling (c) in `resolveOrganismGateUsage` (sole-open-battle usage → no
+  battle names → no gate; the Library passes no open battle, so it is unaffected; the editor
+  footer still lists the open battle). Unit tests for the never-saved and saved (placed and
+  erased) sole-user cases, and a `BattlePage` test opening the editor directly with the footer
+  still reading "Used in 1 Battle". AC3/AC5 wording amended per the ruling.
 - **Gate.** `npm run ci:dev` green: typecheck, lint, format, spec, boundary, coverage (web 2410
   tests), build, bundle, bench (9.682 ms headroom, 58.1% of frame), e2e Chromium 295 passed.
 
@@ -686,6 +705,8 @@ Modified:
   deferred (4 recorded in `deferred-work.md`, 1 pre-recorded by the dev); 3 dismissed; 1 decision
   left open for Sidiar (circular gate copy when the sole using battle is the open one — see
   Review Findings). Status → in-progress pending that decision.
+- 2026-09-27: Addressed code review findings - 1 item resolved (Sidiar's ruling (c):
+  sole-open-battle usage does not gate; AC3/AC5 amended). Status → review.
 
 Proposed lane gate: none   # 4.24 needs nothing from lane 5; 5.11 may touch <BattlePage>'s library-load path (textual overlap only, no dependency either way)
 

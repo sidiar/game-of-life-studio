@@ -41,6 +41,18 @@ describe('resolveOrganismGateUsage (Story 4.24)', () => {
   });
 
   it('adds a never-saved open battle that places the organism, as "Current Battle (unsaved)"', () => {
+    const usage = resolveOrganismGateUsage(first.id, {
+      usageIndex,
+      ruleIndex,
+      summaries,
+      library,
+      openBattle: { id: null, name: 'Draft', organismIds: [first.id] },
+    });
+    expect(usage.battleNames).toEqual(['Glider Wars', 'Three-Way Skirmish', UNSAVED_BATTLE_LABEL]);
+  });
+
+  // Sidiar's review ruling (c), 2026-09-27: usage by the open battle alone does not gate.
+  it('a never-saved open battle as the SOLE user resolves to N = 0 (ruling c)', () => {
     const usage = resolveOrganismGateUsage(CONWAYS_CLASSIC.id, {
       usageIndex,
       ruleIndex,
@@ -48,8 +60,23 @@ describe('resolveOrganismGateUsage (Story 4.24)', () => {
       library,
       openBattle: { id: null, name: 'Draft', organismIds: [CONWAYS_CLASSIC.id] },
     });
-    expect(usage.battleNames).toEqual([UNSAVED_BATTLE_LABEL]);
+    expect(usage.battleNames).toEqual([]);
     expect(usage.ruleCount).toBe(0);
+  });
+
+  it('a saved open battle as the SOLE user resolves to N = 0, placed or erased (ruling c)', () => {
+    const solo = [{ id: 'b9', name: 'Solo', organismIds: [second.id] }];
+    const data = { usageIndex: buildUsageIndex(solo), ruleIndex, summaries: solo, library };
+    for (const organismIds of [[second.id], []]) {
+      expect(
+        resolveOrganismGateUsage(second.id, {
+          ...data,
+          openBattle: { id: 'b9', name: 'Solo live', organismIds },
+        }).battleNames,
+      ).toEqual([]);
+    }
+    // Without an open battle (the Library) the same saved usage still gates.
+    expect(resolveOrganismGateUsage(second.id, data).battleNames).toEqual(['Solo']);
   });
 
   it('labels the saved open battle by its LIVE name and does not double-count it', () => {

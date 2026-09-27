@@ -30,6 +30,10 @@ export interface OpenBattleContext extends OpenBattleUsage {
  * organisms behind M. One function so the Library's card Edit and the battle roster's ✎ cannot
  * drift apart from each other.
  *
+ * With an `openBattle`, usage by the open battle ALONE resolves to no battle names (N = 0, no
+ * gate — the owner's ruling (c) on the 2026-09-26 review); the Library passes none, so it is
+ * unaffected.
+ *
  * ⚠️ `openBattle.organismIds` must be the LIVE placed set, never the roster union (the
  * `OpenBattleUsage` doc) — this function trusts it as given.
  */
@@ -45,8 +49,17 @@ export function resolveOrganismGateUsage(
 ): OrganismGateUsage {
   const { usageIndex, ruleIndex, summaries, library, openBattle = null } = data;
   const entries = resolveOrganismUsage(usageIndex, organismId, openBattle);
+  // Sidiar's review ruling (c), 2026-09-27: when the open battle is the ONLY battle using the
+  // organism, the gate would warn about editing the very battle the user is in and point at a
+  // circular "clone it" remedy — so sole-open-battle usage counts as N = 0 and the editor opens
+  // directly. `battleId === openBattle.id` is the domain's "is this the open battle" test (the
+  // `OrganismUsageEntry` doc; `null === null` covers the never-saved battle). Wherever another
+  // battle also uses the organism, the open battle still counts toward N. The editor footer is
+  // unaffected: it resolves its own usage and still lists the open battle (AC7).
+  const soleOpenBattle =
+    openBattle !== null && entries.length === 1 && entries[0]?.battleId === openBattle.id;
   return {
-    battleNames: usageBattleNames(entries, summaries, openBattle),
+    battleNames: soleOpenBattle ? [] : usageBattleNames(entries, summaries, openBattle),
     ruleCount: ruleIndex.get(organismId)?.length ?? 0,
     referencingNames: referencingOrganismNames(
       referencingOrganismIds(ruleIndex, organismId),

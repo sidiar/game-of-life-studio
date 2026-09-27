@@ -134,6 +134,31 @@ describe('BattlePage — edit organism from battle (Story 4.24)', () => {
     expect(screen.queryByRole('dialog', { name: /^Used in/ })).toBeNull();
   });
 
+  // Sidiar's review ruling (c), 2026-09-27: when the open battle is the only battle using the
+  // organism, the gate would warn about the battle the user is already in — treat it as N = 0.
+  it('the open battle as the SOLE user opens the editor directly, footer still counting it (AC5, ruling c)', async () => {
+    const user = userEvent.setup();
+    await openSkirmish(
+      createFakeRepositories({
+        battles: [SKIRMISH],
+        organisms: [CONWAYS_CLASSIC, ...workspace.organisms, LONELY],
+      }),
+    );
+
+    await user.click(pencil('Aggressive Colonizer'));
+
+    const editor = await screen.findByRole('dialog', { name: 'Organism Editor' });
+    expect(within(editor).getByRole('textbox', { name: 'Organism Name' })).toHaveValue(
+      'Aggressive Colonizer',
+    );
+    expect(screen.queryByRole('dialog', { name: /^Used in/ })).toBeNull();
+    expect(
+      within(within(editor).getByRole('contentinfo')).getByRole('button', {
+        name: 'Used in 1 Battle',
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('after Edit Anyway the editor opens on the organism, reads "Back to Battle", and offers no Delete (AC4, AC9)', async () => {
     const user = userEvent.setup();
     await openSkirmish();
