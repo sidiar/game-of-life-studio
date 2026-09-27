@@ -10,8 +10,11 @@ import {
   updateRulePayload,
   type RuleDraft,
 } from '@/lib/organisms/ruleDraft';
+import { ruleDeleteLabel } from '@/lib/organisms/ruleDeleteCopy';
+import { useInertBackground } from '@/lib/useInertBackground';
 import AddRuleButton from './AddRuleButton';
 import RuleCard from './RuleCard';
+import RuleDeleteConfirmDialog from './RuleDeleteConfirmDialog';
 
 /**
  * The Survival Rules column's list — or, with zero rules, the centred empty state (Story 4.10,
@@ -47,6 +50,27 @@ import RuleCard from './RuleCard';
  * listener runs before both the modal's and this handle's own `onKeyDown` on every engine, which
  * matters because WebKit does not focus a `<button>` on `pointerdown`, so the handle's own
  * `onKeyDown` cannot be the cancel path there. (Story 4.12) (FR-2.6) (UX-DR11) (UX-DR17)
+ *
+ * **Story 4.26 — the delete confirmation.** `handleDelete` no longer removes a rule; it REQUESTS
+ * one (FD1: the confirmation lives here, the owner of the list, the FD6 focus effect, the drag
+ * state and the `cardControl` lookup). `confirming` (`{ id, label } | null`) is the mounted window,
+ * mirrored in a ref (the `dragRef` idiom) so a second request — a `dblClick`'s second click, or a
+ * held Enter's auto-repeat reopening the request before this render has committed — reads the
+ * LATCH synchronously and is refused, rather than racing `confirming` state that has not yet
+ * flushed. `confirmOpen` drives the fade alone (the `useLeaveGuard` / `useOrganismEditorModal`
+ * three-phase shape). The outcome (`'confirm' | 'cancel'`) is read ONLY in the dialog's `onExited`
+ * (FD3 — no stacked unwinding: removing the rule in the same commit as closing the dialog would run
+ * the FD6 focus move while the confirmation still holds the focus trap, and `focus()` into a still
+ * -inert subtree is a silent no-op). On `'confirm'` the removal runs there and the FD6 effect below
+ * — unmodified — performs AC2's focus move, because the confirmation has already unmounted and
+ * focus has fallen to `<body>`, which reads as loose. On `'cancel'` nothing in `rules` changes, so
+ * FD6 (keyed on `rules`) never re-fires; a dedicated effect keyed on `confirming` clearing restores
+ * focus to the ✕ that opened the dialog instead — always, with no "is focus loose" check (unlike
+ * the modal's own restore effect): the confirmation's background is `inert` for the whole fade, so
+ * the user cannot have placed focus anywhere real. `useInertBackground(confirming !== null)` makes
+ * the rest of the editor honestly non-interactive while the confirmation is up, over the module
+ * -level claims registry that already makes this safe nested inside the editor's own inert window
+ * (Story 4.22).
  */
 
 // `.rules-header` reasoning aside, the list itself has no mockup chrome of its own beyond
@@ -116,6 +140,17 @@ export interface RulesEditorProps {
   onAddRule(): void;
   /** Story 4.13's Save-time override, threaded through to every `<RuleCard>`. */
   showAllErrors: boolean;
+  /** Story 4.26, FD6: an imperative escape hatch the caller can use to close something of its own
+   * (`<OrganismEditorModal>`'s usage panel) before the confirmation mounts — must not move focus
+   * itself. Optional: a caller with nothing to close passes none. */
+  onBeforeDeleteConfirm?(): void;
+}
+
+/** The delete confirmation's mounted window (Story 4.26, FD1) — open OR still fading. `null` means
+ * unmounted. */
+interface DeleteConfirming {
+  id: string;
+  label: string;
 }
 
 /** The reorder gesture in progress: `fromIndex` is where the drag started, `toIndex` is the
@@ -132,6 +167,7 @@ export default function RulesEditor({
   onRulesChange,
   onAddRule,
   showAllErrors,
+  onBeforeDeleteConfirm,
 }: RulesEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const prevIdsRef = useRef<readonly string[] | null>(null);
@@ -149,21 +185,103 @@ export default function RulesEditor({
     setDrag(next);
   }, []);
 
+  // Story 4.26 (FD1, FD3): the delete confirmation's three-phase state, the `useLeaveGuard` /
+  // `useOrganismEditorModal` shape. `confirmingRef` is the REQUEST LATCH `handleDelete` reads
+  // (never `confirming` itself — a second request arriving before this render commits, the
+  // `dblClick`'s second click or a held Enter's auto-repeat, must see the mount synchronously, the
+  // same reason `dragRef` exists beside `drag`). `confirmOutcomeRef` is read only from the dialog's
+  // `onExited` (FD3), never from `onConfirm`/`onCancel` themselves.
+  const [confirming, setConfirming] = useState<DeleteConfirming | null>(null);
+  const confirmingRef = useRef<DeleteConfirming | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const confirmOutcomeRef = useRef<'confirm' | 'cancel' | null>(null);
+  // Story 4.26: the id to restore focus to once a CANCELLED confirmation's exit fade has finished
+  // (the effect below, keyed on `confirming` clearing). Set only on the cancel outcome — the
+  // confirm outcome hands its focus move to the pre-existing FD6 list-diff effect instead.
+  const cancelFocusIdRef = useRef<string | null>(null);
+
+  // The rest of the editor is genuinely non-interactive for the whole confirmation window (open OR
+  // fading) — the module-level claims registry (`useInertBackground.ts`, since Story 4.22) makes
+  // this safe nested inside the editor's own inert window. Placed ABOVE the focus effects below:
+  // its cleanup (lifting `inert`) must run before any of them call `.focus()`, and React runs every
+  // effect's cleanup for a commit before any effect's setup (the `<OrganismEditorModal>` FD7
+  // placement rule, copied).
+  useInertBackground(confirming !== null);
+
   const handleChange = useCallback(
     (id: string, patch: Partial<RuleDraft['payload']>) =>
       onRulesChange((current) => updateRulePayload(current, id, patch)),
     [onRulesChange],
   );
 
+  // Story 4.26: a REQUEST, not a removal (FD1). Refused while a confirmation is already mounted
+  // (the ref latch) or the id no longer exists (a stale event from an already-removed card).
   const handleDelete = useCallback(
     (id: string) => {
+      if (confirmingRef.current !== null) return;
+      const index = rules.findIndex((rule) => rule.id === id);
+      if (index === -1) return;
+      // A drag's document-capture Escape listener (Story 4.12) would otherwise eat the
+      // confirmation's own Escape — closed before the dialog ever mounts.
+      updateDrag(null);
+      // FD6: closes something of the caller's (the usage panel) before the confirmation mounts, so
+      // its own Escape/outside-pointerdown listener can never intercept the confirmation's Escape.
+      onBeforeDeleteConfirm?.();
+      const label = ruleDeleteLabel(rules[index].payload.summary, index);
+      const next: DeleteConfirming = { id, label };
+      confirmingRef.current = next;
+      setConfirming(next);
+      setConfirmOpen(true);
+    },
+    [rules, updateDrag, onBeforeDeleteConfirm],
+  );
+
+  const handleDeleteCancel = useCallback(() => {
+    confirmOutcomeRef.current = 'cancel';
+    setConfirmOpen(false);
+  }, []);
+
+  const handleDeleteConfirm = useCallback(() => {
+    confirmOutcomeRef.current = 'confirm';
+    setConfirmOpen(false);
+  }, []);
+
+  // FD3: the ONE place either outcome takes effect, always AFTER the confirmation's own fade has
+  // finished — never stacked in the same commit as the click (the Story 4.22 FD9 / 4.23 FD6 rule).
+  const handleDeleteExited = useCallback(() => {
+    const outcome = confirmOutcomeRef.current;
+    confirmOutcomeRef.current = null;
+    const closed = confirmingRef.current;
+    confirmingRef.current = null;
+    setConfirming(null);
+    if (closed === null) return;
+    if (outcome === 'confirm') {
       // The status region unmounts with the list (Story 4.12); a sentence left in state would
       // remount with the next list, verbatim, describing rules that no longer exist.
       if (rules.length === 1) setAnnouncement(null);
-      onRulesChange((current) => removeRule(current, id));
-    },
-    [onRulesChange, rules.length],
-  );
+      onRulesChange((current) => removeRule(current, closed.id));
+      // AC2's focus move is the pre-existing FD6 list-diff effect's — the confirmation has already
+      // unmounted, and focus is on `<body>`, which that effect reads as loose.
+    } else {
+      // AC3: the confirmation's background was inert for the whole fade, so the user cannot have
+      // placed focus anywhere real — restore unconditionally, no "is focus loose" check (unlike
+      // the modal's own restore effect; there is no other dialog stacked to consider here).
+      cancelFocusIdRef.current = closed.id;
+    }
+  }, [onRulesChange, rules.length]);
+
+  // Story 4.26, AC3: the cancel-outcome focus restore, an effect keyed on `confirming` clearing —
+  // FD6 (below) is keyed on `rules`, which a cancel never changes, so it would never re-fire for
+  // this path.
+  useEffect(() => {
+    if (confirming !== null) return;
+    const id = cancelFocusIdRef.current;
+    cancelFocusIdRef.current = null;
+    if (id === null) return;
+    rootRef.current
+      ?.querySelector<HTMLElement>(`[data-rule-id="${CSS.escape(id)}"] [data-rule-delete]`)
+      ?.focus();
+  }, [confirming]);
 
   const handleConditionsChange = useCallback(
     (id: string, update: (conditions: readonly ConditionDraft[]) => readonly ConditionDraft[]) =>
@@ -409,6 +527,18 @@ export default function RulesEditor({
             {announcement !== null && <span key={announcement.seq}>{announcement.text}</span>}
           </VisuallyHidden>
         </>
+      )}
+      {/* Story 4.26: rendered iff a delete is requested — the empty-state branch never opens one
+          (only a card's ✕ does). Imported statically above; this file is already inside the
+          editor's own lazy chunk. */}
+      {confirming !== null && (
+        <RuleDeleteConfirmDialog
+          open={confirmOpen}
+          ruleLabel={confirming.label}
+          onCancel={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+          onExited={handleDeleteExited}
+        />
       )}
     </div>
   );

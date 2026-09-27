@@ -1649,7 +1649,7 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   drift, not a code defect. Pre-existing in the story spec. **Pick this up in the next UX
   reconciliation touch** (the one Stories 4.3 and 4.10 both asked for over the 2026-06-01 accordion
   revision) — decide whether the delete button's paint follows the story or the mockup, in one place.
-- **A pointer double-click on a rule card's ✕ still cascades deletions** — every card has the same
+- ~~**A pointer double-click on a rule card's ✕ still cascades deletions** — every card has the same
   geometry, so when card N is deleted the card below slides synchronously into the same slot before
   the next click is dispatched, and the second click of a double-click (or any rapid re-click)
   hit-tests against the *new* ✕ at the same coordinates and deletes the neighbour too, with no
@@ -1667,7 +1667,14 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   on whatever the opening dialog has put under the pointer — MUI's backdrop during the Fade means
   an instant dismiss, so the dialog must not close on a click that arrives during its enter
   transition (or the second click must be otherwise inert); (2) the story that closes the cascade
-  should prove it — a unit or e2e test that a pointer double-click on ✕ removes at most one rule.
+  should prove it — a unit or e2e test that a pointer double-click on ✕ removes at most one rule.~~
+  **✅ Resolved in Story 4.26.** `<RuleDeleteConfirmDialog>` asks first (FD2), the removal lands only
+  in the dialog's `onExited` (FD3, never the click's own commit), and the enter guard (FD4, an
+  `entered` flag from the `Fade`'s own `onEntered`) makes both the backdrop and Delete Rule inert
+  until the dialog has actually finished opening — so a double-click's second click is a no-op
+  either way it lands. A real `dblclick()` e2e proves it (note (1)); `RulesEditor.test.tsx` proves
+  the request latch note (2) asked for. The condition-row entry below is untouched — the owner's
+  call, not in scope here.
 
 ## Deferred from: Story 4-11-condition-builder (2026-09-17)
 

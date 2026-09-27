@@ -220,6 +220,9 @@ export interface RuleCardProps {
   index: number;
   organisms: readonly OrganismOption[];
   onChange(id: string, patch: Partial<RuleDraft['payload']>): void;
+  /** Story 4.26: REQUESTS a delete — it no longer removes the rule itself. `<RulesEditor>` opens
+   * `<RuleDeleteConfirmDialog>` over the request and removes the rule only once the user confirms
+   * and the dialog's exit transition has finished (FD3). */
   onDelete(id: string): void;
   onConditionsChange(
     id: string,

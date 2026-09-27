@@ -1567,6 +1567,22 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     return rules.getByRole('group', { name: `Rule ${n}`, exact: true });
   }
 
+  /**
+   * Story 4.26: confirms a rule delete through `<RuleDeleteConfirmDialog>`, which portals to
+   * `<body>` — outside `rules` — so it is looked up on `page`, never `rules`. Waits for the
+   * dialog's own `data-entered` (FD4's real enter transition; MUI puts `role="dialog"` directly on
+   * the Paper, so `data-entered` lands on that SAME node — `dialog.locator('[data-entered]')` would
+   * search its descendants and never find it) before clicking `Delete Rule`, `exact: true` since
+   * Playwright names are case-insensitive substrings and a bare `'Delete Rule'` would also match
+   * `Delete rule N`.
+   */
+  async function confirmRuleDelete(page: Page) {
+    const dialog = page.getByRole('dialog', { name: 'Delete Rule?' });
+    await expect(dialog).toHaveAttribute('data-entered', '');
+    await dialog.getByRole('button', { name: 'Delete Rule', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+  }
+
   test('opens in the empty state, both add controls visible, header action beside the heading, zero console errors', async ({
     page,
   }) => {
@@ -1626,6 +1642,7 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await expect(cardGroup(rules, 3).locator('[data-rule-badge]')).toHaveText('Die');
 
     await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).click();
+    await confirmRuleDelete(page);
 
     await expect(cardGroup(rules, 1).locator('[data-rule-badge]')).toHaveText('Survive');
     await expect(cardGroup(rules, 2).locator('[data-rule-badge]')).toHaveText('Die');
@@ -1671,7 +1688,15 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await page.keyboard.press(tabKey);
     await expect(rules.getByRole('button', { name: 'Delete rule 2', exact: true })).toBeFocused();
 
+    // Story 4.26: Enter on ✕ opens the confirmation (Cancel autoFocused); Tab -> Delete Rule once
+    // entered, then Enter confirms.
     await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Delete Rule?' });
+    await expect(dialog).toHaveAttribute('data-entered', '');
+    await page.keyboard.press(tabKey);
+    await expect(dialog.getByRole('button', { name: 'Delete Rule', exact: true })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(dialog).toHaveCount(0);
 
     await expect(cardGroup(rules, 2)).toHaveCount(0);
     // The neighbour's Summary, not another Delete button (AC5): a held Enter on a `<button>` would
@@ -1684,6 +1709,67 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await emptyAdd.click();
 
     await expect(rules.getByRole('button', { name: 'Reorder rule 1', exact: true })).toBeEnabled();
+  });
+
+  // Story 4.26 (deferred-work.md's cascade entry, note (1)): the real hit-testing browser proof
+  // FD4's guard exists for — jsdom's `dblClick` targets the same node twice with no hit-testing,
+  // which only proves the request latch (`RulesEditor.test.tsx`), not that the SECOND click,
+  // landing on the now-opened dialog, is inert.
+  test.describe('the delete confirmation (Story 4.26)', () => {
+    test('a real dblclick() on ✕ opens the confirmation once and removes nothing', async ({
+      page,
+    }) => {
+      const { rules, headerAdd } = await openRules(page);
+      await headerAdd.click();
+      await headerAdd.click();
+      await headerAdd.click();
+
+      await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).dblclick();
+
+      await expect(page.getByRole('dialog', { name: 'Delete Rule?' })).toHaveCount(1);
+      // A raw `page`-rooted locator, not `rules.locator(...)` — MUI marks the whole editor
+      // (`rules`'s own ancestor chain, itself reached through `getByRole`) `aria-hidden` while the
+      // stacked confirmation is open (`useInertBackground.ts`'s own comment), so ANY role-based
+      // lookup through it resolves to nothing even though the cards are still mounted underneath.
+      await expect(page.locator('[data-rule-id]')).toHaveCount(3);
+
+      await page
+        .getByRole('dialog', { name: 'Delete Rule?' })
+        .getByRole('button', { name: 'Cancel' })
+        .click();
+      await expect(
+        rules.getByRole('list', { name: 'Survival rules' }).getByRole('listitem'),
+      ).toHaveCount(3);
+    });
+
+    test('Escape cancels and ✕ is focused', async ({ page }) => {
+      const { rules, headerAdd } = await openRules(page);
+      await headerAdd.click();
+      const deleteButton = rules.getByRole('button', { name: 'Delete rule 1', exact: true });
+
+      await deleteButton.click();
+      const dialog = page.getByRole('dialog', { name: 'Delete Rule?' });
+      await expect(dialog).toHaveAttribute('data-entered', '');
+
+      await page.keyboard.press('Escape');
+
+      await expect(dialog).toHaveCount(0);
+      await expect(deleteButton).toBeFocused();
+      await expect(
+        rules.getByRole('list', { name: 'Survival rules' }).getByRole('listitem'),
+      ).toHaveCount(1);
+    });
+
+    test('axe with the dialog open', async ({ page }) => {
+      const { rules, headerAdd } = await openRules(page);
+      await headerAdd.click();
+      await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Delete Rule?' });
+      await expect(dialog).toHaveAttribute('data-entered', '');
+
+      const { violations } = await new AxeBuilder({ page }).analyze();
+      expect(violations).toEqual([]);
+    });
   });
 
   test('axe in the empty state', async ({ page }) => {
