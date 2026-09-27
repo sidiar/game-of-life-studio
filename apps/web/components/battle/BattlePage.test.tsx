@@ -399,7 +399,10 @@ describe('BattlePage', () => {
     expect(screen.getByRole('button', { name: 'Export Battle' })).toBeEnabled();
     // Story 4.24: converted from 9 — the seeded row's ✎ (FR-3.3) is the tenth.
     expect(screen.getByRole('button', { name: `Edit ${CONWAYS_CLASSIC.name}` })).toBeEnabled();
-    expect(screen.queryAllByRole('button')).toHaveLength(10);
+    // Story 4.25: converted from 10 — the roster's "+ Create New Organism" (FR-1.2) is the
+    // eleventh.
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeEnabled();
+    expect(screen.queryAllByRole('button')).toHaveLength(11);
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -525,7 +528,8 @@ describe('BattlePage', () => {
   // Story 2.9 replaced the provisional Draw/Erase pair with the real roster; 2.13 adds SAVE, 2.15
   // adds CLEAR, 2.16 adds BACK TO BATTLES, and 3.11 adds the header's LAB + RUN toggle, so the
   // claim is now "this battle's three organisms, the eraser, UNDO, SAVE, CLEAR, BACK, LAB and RUN
-  // — nothing else". An ELEVENTH button (fullscreen, or Epic 4's per-row pencil) still fails here.
+  // — nothing else" — widened by Story 4.24's per-row ✎ and Story 4.25's create button (both
+  // counted explicitly below). A button beyond that full set still fails here.
   it('renders exactly the roster, UNDO, SAVE, CLEAR, BACK and the Lab/Run toggle on the loaded route — no fullscreen', async () => {
     render(<BattlePage repositories={seeded()} battleId={SKIRMISH.id} />);
     await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
@@ -551,7 +555,8 @@ describe('BattlePage', () => {
     expect(screen.getByRole('button', { name: /clear petri dish/i })).toBeEnabled();
     // Story 2.16: converted from this test's own "2.16's Back" prediction — the eighth button IS
     // Back to Battles. Story 3.11: LAB and RUN make ten. Story 3.18's Fullscreen button is
-    // RUN-ONLY, so this LAB-mode count holds. Story 4.24: one ✎ per roster row joins it.
+    // RUN-ONLY, so this LAB-mode count holds. Story 4.24: one ✎ per roster row joins it. Story
+    // 4.25: the roster's "+ Create New Organism" joins it too.
     expect(screen.getByRole('button', { name: 'Back to Battles' })).toBeEnabled();
     // Story 5.6: converted from `+ 7` — EXPORT BATTLE renders below Clear Petri Dish (AC1),
     // enabled (`exportDisabled` is `isSaving` alone, not tied to living-cell count).
@@ -559,7 +564,9 @@ describe('BattlePage', () => {
     for (const organism of organisms) {
       expect(screen.getByRole('button', { name: `Edit ${organism.name}` })).toBeInTheDocument();
     }
-    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length * 2 + 8);
+    // Story 4.25: one more — the roster's "+ Create New Organism" (FR-1.2).
+    expect(screen.getByRole('button', { name: /create new organism/i })).toBeInTheDocument();
+    expect(screen.queryAllByRole('button')).toHaveLength(organisms.length * 2 + 9);
     // Exactly one <h1>: the battle title. The battle route drops AppShell, so nothing else on it
     // competes for the document heading, and nothing automated enforces that but this line.
     expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(1);

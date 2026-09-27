@@ -64,8 +64,8 @@ const SPACE_ACTIVATOR_SELECTOR = [
 
 // AC3 (v) / FD10 (a): a dialog anywhere on the page, or the event coming from inside one. A DOM
 // query rather than a prop — it holds for ANY modal without touching this hook, including Story
-// 4.24's battle-origin `<OrganismEditorModal>` (`lane-gates.yaml`'s 4.24 row), which opens from Lab
-// only and so never coexists with this Run-only hook anyway (and Story 4.25's, when it lands). MUI keeps
+// 4.24's and 4.25's battle-origin `<OrganismEditorModal>` (`lane-gates.yaml`'s 4.24/4.25 rows),
+// both of which open from Lab only and so never coexist with this Run-only hook anyway. MUI keeps
 // the `role="dialog"` Paper mounted through its exit transition, so the query still matches a
 // beat after Cancel (trap 6).
 const DIALOG_SELECTOR = '[role="dialog"], [aria-modal="true"]';

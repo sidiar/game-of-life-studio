@@ -115,8 +115,9 @@ describe('OrganismEditorModal', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Organism Editor' })).toBeInTheDocument();
   });
 
-  // The prop is the seam Story 4.24 plugged into (and 4.25 will reuse) — both branches pinned here;
-  // `BattlePage.editOrganism.test.tsx` reaches 'battle' through the battle page's own pencil.
+  // The prop is the seam Story 4.24 plugged into and Story 4.25 reuses — both branches pinned here;
+  // `BattlePage.editOrganism.test.tsx` and `BattlePage.createOrganism.test.tsx` reach 'battle'
+  // through the battle page's own pencil and create button, respectively.
   it.each([
     ['library', 'Back to Library'],
     ['battle', 'Back to Battle'],

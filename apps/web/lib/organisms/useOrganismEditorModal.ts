@@ -155,10 +155,9 @@ export function useOrganismEditorModal(
    * mock ids — not uuids), falling back to the create button when the card is gone.
    *
    * Story 4.24: the battle roster's ✎ carries the same `data-edit-organism-id`, so the lookup is
-   * unchanged. The `[data-create-organism]` fallback finds nothing on `/battle` until Story 4.25
-   * ships a create control there — acceptable, because the pencil cannot disappear during an edit
-   * session from the battle: the roster changes only through the page, which is inert throughout,
-   * and no Delete is offered from that origin (FD6).
+   * unchanged. Story 4.25 gives `/battle` its own `[data-create-organism]` button (the roster's
+   * `+ Create New Organism`), so the fallback now finds a real target there too, on both paths —
+   * saved and cancelled (Story 4.25 AC6).
    */
   const restoreFocusRef = useRef<{ kind: 'create' } | { kind: 'edit'; organismId: string } | null>(
     null,

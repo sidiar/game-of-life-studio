@@ -24,7 +24,7 @@ describe('applySavedOrganisms (Story 4.24, FD5)', () => {
     expect(LIST[1]).toBe(first);
   });
 
-  it('appends a saved record the list does not hold (the Story 4.25 branch)', () => {
+  it('appends a saved record the list does not hold (Story 4.25: a created organism)', () => {
     const created: Organism = { ...first, id: 'created-in-battle', name: 'New' };
 
     expect(applySavedOrganisms(LIST, [created]).map((organism) => organism.id)).toEqual([

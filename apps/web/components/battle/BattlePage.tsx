@@ -735,11 +735,14 @@ export default function BattlePage({
   // and its reason — never a header over nothing. Serves TWO readers: this story's Gallery Run
   // link, reachable on MOUNT for the first time, and the 3-11 review's case of a library that
   // changes under an already-mounted page (deferred-work.md, "renders a header over nothing",
-  // closed by this story). Story 4.24 does not make that second case reachable: its editor opens
-  // from Lab only and changes the library only at its exit, by replacing a record in place (the
-  // adopted record keeps its id), so `runOrganisms` never turns `null` from it (FD8). Story 4.25
-  // is the next story that could. The in-render `nameState` shape (the seed-compare adjust
-  // above), not an effect: `react-hooks/set-state-in-effect`
+  // closed by this story). Neither 4.24 nor 4.25 makes that second case reachable: both editors
+  // open from Lab only and change the library only at exit — 4.24 by replacing a record in place
+  // (the adopted record keeps its id) and 4.25 by an APPEND whose id reaches `organisms` and
+  // `rosterIds` in the same batched commit (`handleEditorSaved`) — so `runOrganisms` never turns
+  // `null` from either (FD8, Story 4.25's FD5). After 4.25 no Epic 4 story changes the library
+  // under a mounted page (4.26 is editor-internal), so this stays unreachable through the epic. The
+  // in-render `nameState` shape (the seed-compare adjust above), not an effect:
+  // `react-hooks/set-state-in-effect`
   // is live, and an effect would still paint one frame of the empty Run branch first — the exact
   // flash this AC forbids. Not a derived `effectiveMode` either: state and `data-mode` would then
   // disagree, and `handleModeToggle` / the header's `aria-pressed` both read `mode` directly.
@@ -1052,13 +1055,48 @@ export default function BattlePage({
    * `useInertBackground`), so no edit can land on it, and the editor's own unsaved-changes guard is
    * entirely inside the modal and independent of this battle's (Story 4.23, FD9).
    */
+  // Story 4.25 (FD1): the create session's selection continuation. Stashed by
+  // `handleCreateOrganism`, consumed by `handleEditorSaved` once the new organism's id has actually
+  // joined `roster` (never before — `resolveSelectedTool` discards a `chosen` id that is not in
+  // `roster` and falls back to the first row). `null` on every path except "a create session is
+  // open and has not yet been adopted" — cleared on adoption AND on a pencil press (defence in
+  // depth: `isNew` below already makes a stale call unreachable, since a pencil session's id is
+  // always already in the library).
+  const onCreatedRef = useRef<((organismId: string) => void) | null>(null);
+
+  /**
+   * Story 4.24/4.25's shared close-time hand-off: the last saved record, once the editor has fully
+   * exited (`onSaved`, invoked from the hook's `handleExited`). `isNew` is DERIVED, never a tracked
+   * mode flag (FD6) — "not in the library before adoption" is exactly "created this session",
+   * true for a create and false for every pencil edit (whose id the library already knows).
+   *
+   * All three effects — the overlay adoption, the roster append and the selection — run in this
+   * ONE callback, which React batches into ONE commit (Story 4.25 AC4): the new row never renders
+   * as "Unknown organism" for a frame, and `runOrganisms` never observes the id without its record
+   * (❌ splitting these across callbacks or ticks is exactly the anti-pattern the story's Dev Notes
+   * name).
+   */
+  const handleEditorSaved = useCallback(
+    (record: Organism) => {
+      const isNew = !(organisms ?? []).some((organism) => organism.id === record.id);
+      adoptSaved(record);
+      if (isNew) {
+        onAddToRoster(record.id);
+        onCreatedRef.current?.(record.id);
+      }
+      onCreatedRef.current = null;
+    },
+    [organisms, adoptSaved, onAddToRoster],
+  );
+
   const {
+    requestCreate,
     requestEdit,
     mounted: organismEditorMounted,
     modalProps: organismEditorProps,
     gateMounted: organismGateMounted,
     gateProps: organismGateProps,
-  } = useOrganismEditorModal('battle', { onSaved: adoptSaved });
+  } = useOrganismEditorModal('battle', { onSaved: handleEditorSaved });
 
   // Open-time snapshots for the editor's footer (FD2/FD4): the battle list fetched by the pencil
   // press, and the open battle it was resolved against. Safe as snapshots because the page is
@@ -1070,6 +1108,20 @@ export default function BattlePage({
   // while the list is being fetched is a no-op. Once a window is mounted the hook's own flags (and
   // its `requestEdit` guard) take over.
   const editPendingRef = useRef(false);
+
+  // Story 4.25: factored out of the pencil handler so the create handler builds a BYTE-IDENTICAL
+  // snapshot (Task 3) — pure over its one new argument, everything else read from this closure the
+  // same way both callers already do.
+  const buildOpenBattleSnapshot = useCallback(
+    (currentGrid: RenderableGrid): OpenBattleContext => ({
+      id: persistedId,
+      name: battleName,
+      organismIds: computeEditorGridStats(currentGrid, rosterIds)
+        .perOrganism.filter((entry) => entry.count > 0)
+        .map((entry) => entry.organismId),
+    }),
+    [persistedId, battleName, rosterIds],
+  );
 
   /**
    * AC3 (M5, M7, Decision H, FD2): usage is counted at CLICK time, from a fresh `battles.list()` —
@@ -1097,6 +1149,10 @@ export default function BattlePage({
         return;
       }
       editPendingRef.current = true;
+      // Story 4.25: a pencil press cannot itself reach a stale create continuation (`isNew` in
+      // `handleEditorSaved` already makes that unreachable — a pencil's organism is always already
+      // in the library), but clearing here is defence in depth against a future caller of this ref.
+      onCreatedRef.current = null;
       // Every message sharing the slot, so this attempt's outcome is the one on screen.
       setSaveError(null);
       setExportError(null);
@@ -1118,13 +1174,7 @@ export default function BattlePage({
           if (!exportMountedRef.current) return;
           const organism = organisms.find((entry) => entry.id === organismId);
           if (organism === undefined) return;
-          const openBattle: OpenBattleContext = {
-            id: persistedId,
-            name: battleName,
-            organismIds: computeEditorGridStats(grid, rosterIds)
-              .perOrganism.filter((entry) => entry.count > 0)
-              .map((entry) => entry.organismId),
-          };
+          const openBattle = buildOpenBattleSnapshot(grid);
           // ⚠️ The SORTED list, not `organisms`: the editor footer builds its own rule index from
           // the sorted `library` prop (`editorLibrary` below), and `referencingOrganismIds`
           // dedupes in input order — an index built over the unsorted loaded list would show the
@@ -1152,9 +1202,7 @@ export default function BattlePage({
       grid,
       organisms,
       repositories,
-      persistedId,
-      battleName,
-      rosterIds,
+      buildOpenBattleSnapshot,
       requestEdit,
     ],
   );
@@ -1162,6 +1210,62 @@ export default function BattlePage({
   // The editor's library: the same overlay-applied list the roster renders from, in the Library's
   // display order (its colour seed and organism-type dropdown read it — Story 4.8/4.11).
   const editorLibrary = useMemo(() => sortLibrary(organisms ?? []), [organisms]);
+
+  /**
+   * Story 4.25 (AC2, AC3, AC7, FD4): "+ Create New Organism" — the editor as a create-mode modal
+   * over THIS mounted page, exactly like the pencil's edit-mode modal above, and through the SAME
+   * hook call (no second `useOrganismEditorModal`, no second `useInertBackground`). No usage fetch
+   * and no gate: a new organism is used nowhere, so `requestCreate()` runs synchronously with no
+   * `battles.list()` call.
+   *
+   * `onCreated` is stashed for `handleEditorSaved` to call once the new organism has actually
+   * joined the roster (FD1) — this handler never selects anything itself.
+   *
+   * AC3's guards, in the ACs' own order: the editor or the gate is mounted (`organismEditorMounted
+   * || organismGateMounted`, both covered by the hook's own `requestCreate` re-entrancy guard, held
+   * here too so a disabled control never even calls in); a 4.24 pencil fetch is pending
+   * (`editPendingRef`); a battle save is in flight (`savingRef`); `organisms` is `undefined`. `grid
+   * === null` is added for the same reason `handleEditOrganism` carries it: this handler is
+   * unreachable before `grid` exists (the button renders only inside the `grid !== null` Lab
+   * branch), so the guard is unreachable in practice and exists only so `buildOpenBattleSnapshot`
+   * receives a narrowed `RenderableGrid`.
+   *
+   * FD4: `editSummaries`/`editOpenBattle` are RESET here, never left holding a previous pencil
+   * press's values — harmless for a brand-new id today (nothing can reference one that does not
+   * exist yet), but a latent lie if a create ever opened with a stale snapshot. No `battles.list()`
+   * is needed to make that true: an id with no record cannot appear in any summary or placed set.
+   */
+  const handleCreateOrganism = useCallback(
+    (onCreated: (organismId: string) => void) => {
+      if (
+        organismEditorMounted ||
+        organismGateMounted ||
+        editPendingRef.current ||
+        savingRef.current ||
+        grid === null ||
+        organisms === undefined
+      ) {
+        return;
+      }
+      onCreatedRef.current = onCreated;
+      setEditSummaries(NO_SUMMARIES);
+      setEditOpenBattle(buildOpenBattleSnapshot(grid));
+      // Every message sharing the slot (the 5.6 FD9 rule) — this attempt's outcome is the one on
+      // screen.
+      setSaveError(null);
+      setExportError(null);
+      setEditOrganismError(null);
+      requestCreate();
+    },
+    [
+      organismEditorMounted,
+      organismGateMounted,
+      grid,
+      organisms,
+      buildOpenBattleSnapshot,
+      requestCreate,
+    ],
+  );
 
   /**
    * FD8's DOM-lookup restore, mirroring `useLeaveGuard`'s own effect and for the identical reasons:
@@ -1427,6 +1531,8 @@ export default function BattlePage({
           exportDisabled={isSaving}
           /* Story 4.24 (FR-3.3/FR-3.12): the roster's ✎ — Lab only, since this whole view is. */
           onEditOrganism={handleEditOrganism}
+          /* Story 4.25 (FR-1.2): the roster's create button — Lab only, beside the pencil above. */
+          onCreateOrganism={handleCreateOrganism}
         />
       )}
       {/* Story 3.11 (AC3, AC6): the Run chassis, MOUNTED in place of the editor — not beside it,

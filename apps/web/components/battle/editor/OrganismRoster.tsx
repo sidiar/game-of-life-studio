@@ -334,21 +334,66 @@ const AddMessage = styled('p')({
 });
 
 /**
+ * Story 4.25 (AC1, spec §3.4, mockup `.create-organism-btn`, `petri-dish-lab-mode.html:260-278`).
+ * Forced decision 6 (bundle): `styled('button')`, not a MUI primitive — the same reason every
+ * other control in this file is one.
+ *
+ * Dashed border + accent text is the mockup's own way of distinguishing "create" from "add" (the
+ * filled `<AddSelect>` beside it) without a second colour. Enumerated transitions and a
+ * reduced-motion escape, never the mockup's `transition: all` (the house style's mid-fade axe
+ * trap), and `--gol-border-control`-free — this border is decorative AND labelled by adjacent
+ * accent text, unlike `SearchInput`/`AddSelect`'s boundary-identifying border.
+ */
+const CreateButton = styled('button')({
+  width: '100%',
+  marginTop: '8px',
+  background: 'transparent',
+  border: '1px dashed var(--gol-accent)',
+  color: 'var(--gol-accent)',
+  padding: '10px 12px',
+  fontSize: '11px',
+  fontWeight: 600,
+  fontFamily: 'inherit',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  cursor: 'pointer',
+  transition: 'background-color 0.2s',
+  '&:hover': {
+    background: 'var(--gol-bg-hover)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
+  },
+});
+
+/**
  * Story 2.10: `<OrganismSearchAdd>` (component-tree-battle-page.md §2) — built PRIVATE here rather
  * than extracted to its own file, the same call Story 2.9 made for `SidebarSection` (forced
  * decision 5 there): one consumer, and a file move is cheap later if a second one arrives.
  *
  * Four states, in priority order:
  * 1. **At the cap** (AC5, Decision G.3) — the roster identity array is full. No search, no
- *    select: typing would filter a list nothing can be added from.
+ *    select: typing would filter a list nothing can be added from. Story 4.25 (FD2): no create
+ *    button here either — a creation could be saved to the library but could never join this
+ *    roster, and the cap message already explains the state (NFR-4.1 forbids inert controls, not
+ *    explained absences).
  * 2. **Library empty** (AC8, NFR-4.1) — nothing to add, and nothing to search. Two sentences, not
  *    one: `library` is a difference, so it reads empty both when the roster has consumed the
  *    workspace and when the workspace itself is empty (`workspaceEmpty`), and only one of those
- *    is "every library organism is already in this battle" (code review, trap 7).
+ *    is "every library organism is already in this battle" (code review, trap 7). Story 4.25: the
+ *    create button renders in BOTH sentences — the workspace-empty one gains an action for the
+ *    copy it already states, and the roster-consumed one is exactly where "create" is the only way
+ *    to add anything new.
  * 3. **Search matches nothing** (AC8) — a DIFFERENT fact from #2, and stated differently: the
  *    library has organisms, this search text just does not match any of them. The search input
- *    stays rendered so the user can see and clear what they typed.
- * 4. **Normal** — the search input plus a `<select>` of whatever it currently filters to.
+ *    stays rendered so the user can see and clear what they typed. Story 4.25: the create button
+ *    still renders below it.
+ * 4. **Normal** — the search input plus a `<select>` of whatever it currently filters to, then
+ *    Story 4.25's create button, in that order (mockup `petri-dish-lab-mode.html:682-694`).
  *
  * The search text is this component's OWN state (spec §6: "roster search filter | ephemeral |
  * OrganismRoster | itself") — it is never read by anything outside this function, and it never
@@ -360,13 +405,24 @@ function OrganismSearchAdd({
   workspaceEmpty,
   onAddToRoster,
   atCap,
+  onCreateOrganism,
 }: {
   library: readonly DisplayOrganism[];
   workspaceEmpty: boolean;
   onAddToRoster(organismId: string): void;
   atCap: boolean;
+  onCreateOrganism?(): void;
 }) {
   const [searchText, setSearchText] = useState('');
+
+  // Story 4.25 (AC1): one element, not duplicated across the three non-cap returns below. Absent
+  // `onCreateOrganism` → `null`, so an absent prop still means no button (NFR-4.1).
+  const createButton =
+    onCreateOrganism === undefined ? null : (
+      <CreateButton type="button" onClick={() => onCreateOrganism()} data-create-organism="">
+        + Create New Organism
+      </CreateButton>
+    );
 
   if (atCap) {
     return (
@@ -392,6 +448,7 @@ function OrganismSearchAdd({
             ? 'Your organism library is empty — create an organism to place it in a battle.'
             : 'Every library organism is already in this battle.'}
         </AddMessage>
+        {createButton}
       </AddContainer>
     );
   }
@@ -443,6 +500,7 @@ function OrganismSearchAdd({
           ))}
         </AddSelect>
       )}
+      {createButton}
     </AddContainer>
   );
 }
@@ -469,9 +527,9 @@ const DegradedNotice = styled('p')({
  * Story 2.9 wired, plus THIS story's `library` / `onAddToRoster` / `atCap`. The same discipline
  * `<BattleEditorView>` and `<EditorStatusBar>` each applied to their own oversized spec interfaces.
  *
- * Story 4.24 adds `onEditOrganism` — the per-row ✎ renders iff it is passed. ❌ Still no
- * `onCreateOrganism` (Story 4.25): declaring it now would be an unverifiable claim, and rendering
- * its control would be the dead affordance NFR-4.1 forbids.
+ * Story 4.24 adds `onEditOrganism` — the per-row ✎ renders iff it is passed. Story 4.25 adds
+ * `onCreateOrganism` (spec §3.4's exact `(): void` signature) — the `+ Create New Organism` button
+ * renders iff it is passed, in every add-container state except the cap (FD2).
  */
 export interface OrganismRosterProps {
   /**
@@ -504,6 +562,13 @@ export interface OrganismRosterProps {
    * (NFR-4.1), which is also how Run mode, with no roster at all, stays pencil-free.
    */
   onEditOrganism?(organismId: string): void;
+  /**
+   * Story 4.25 (FR-1.2, spec §3.4): "+ Create New Organism" was pressed. Absent → no button
+   * (NFR-4.1) — also how Run mode, with no roster at all, stays button-free. `<BattleEditorView>`
+   * wraps this with its own selection continuation (FD1) before handing it down further; this
+   * component's own signature stays spec-exact.
+   */
+  onCreateOrganism?(): void;
 }
 
 /**
@@ -527,6 +592,7 @@ export default function OrganismRoster({
   onAddToRoster,
   atCap = false,
   onEditOrganism,
+  onCreateOrganism,
 }: OrganismRosterProps) {
   const eraserSelected = selectedTool.kind === 'eraser';
 
@@ -606,6 +672,7 @@ export default function OrganismRoster({
             workspaceEmpty={workspaceEmpty}
             onAddToRoster={onAddToRoster}
             atCap={atCap}
+            onCreateOrganism={onCreateOrganism}
           />
         </>
       )}
