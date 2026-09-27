@@ -654,3 +654,18 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
 
 Dev Model: sonnet   # follows existing patterns (5.6's dialog idiom + act-on-exit, 5.5's Pick props/refs/export seam, 4.18's queued outcome, saveFailureMessage's copy function); the pipeline contract it consumes is 5.8's, and every structural choice is pre-decided in FD1–FD7
 Proposed lane gate: none   # touches components/settings, a new lib/import, one appended @gol/domain barrel block and settings.spec.ts; Epic 4's only open story (4-26, rule-delete dialog in components/organisms/editor) neither uses nor reshapes any of these
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 1m 23s | 1m 23s | 34 | 6,367 | 10,080 | 993,916 | 1,010,397 |
+| Step 1 — create | opus-5-5 | 1 | 5m 44s | 5m 44s | 116 | 6,237 | 286,157 | 5,614,336 | 5,906,846 |
+| Step 2 — implement | sonnet-5 | 1 | 39m 14s | 39m 14s | 652 | 22,530 | 1,948,666 | 77,183,658 | 79,155,506 |
+| Step 3 — review + PR | opus-5-5 | 4 | 16m 32s | 16m 32s | 330 | 20,088 | 785,646 | 12,540,748 | 13,346,812 |
+| _of which the orchestrator_ | fable-5 | — | — | — | 94 | 24,953 | 50,768 | 3,093,197 | 3,169,012 |
+| **Total (create → PR ready)** | | 6 | **1h 02m** | 1h 02m | 1,132 | 55,222 | 3,030,549 | 96,332,658 | **99,419,561** |
+
+Run started 2026-09-27 14:42 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
