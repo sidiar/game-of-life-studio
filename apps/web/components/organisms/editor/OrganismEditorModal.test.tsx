@@ -508,6 +508,28 @@ describe('OrganismEditorModal', () => {
     return header;
   }
 
+  /**
+   * Story 4.26: routes a rule delete through `<RuleDeleteConfirmDialog>` — test helpers are per
+   * -file here (`RulesEditor.test.tsx` has its own copy). Waits for the paper's `data-entered`
+   * (FD4's real ~225ms jsdom `Fade` timer — MUI puts `role="dialog"` directly on the Paper, so the
+   * accessible dialog node IS the one the guard's `data-entered` lands on), clicks `Delete Rule`
+   * (RTL's `getByRole` name match is exact, unlike Playwright's case-insensitive substring — no
+   * `Delete rule N` collision to guard against here, unlike the e2e's `exact: true`), then waits
+   * for the confirmation to leave the DOM (`onExited`, FD3 — the removal itself lands there).
+   */
+  async function confirmRuleDelete(user: ReturnType<typeof userEvent.setup>) {
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toHaveAttribute(
+        'data-entered',
+        '',
+      ),
+    );
+    await user.click(screen.getByRole('button', { name: 'Delete Rule' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument(),
+    );
+  }
+
   it('opens in the empty state with the header action', () => {
     mountModal();
 
@@ -565,6 +587,7 @@ describe('OrganismEditorModal', () => {
     expect(rule2.querySelector('[data-rule-badge]')).toHaveTextContent(ruleActionLabel('born'));
 
     await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+    await confirmRuleDelete(user);
 
     const survivor = within(rules).getByRole('group', { name: 'Rule 1' });
     expect(within(survivor).getByRole('textbox', { name: 'Summary' })).toHaveValue('hello');
@@ -660,6 +683,7 @@ describe('OrganismEditorModal', () => {
     expect(within(rule1).queryByRole('alert')).not.toBeInTheDocument();
 
     await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+    await confirmRuleDelete(user);
     expect(within(rules).queryByRole('alert')).not.toBeInTheDocument();
     expect(rules.querySelector('[data-rules-empty-state]')).not.toBeNull();
   });
@@ -1000,8 +1024,10 @@ describe('OrganismEditorModal', () => {
       // the size below the count at the last Save, and the next add must still un-stick: the ref
       // follows the shrink, it is not "the size at Save".
       await user.click(within(rules).getByRole('button', { name: 'Delete rule 1' }));
+      await confirmRuleDelete(user);
       expect(within(dialog).getAllByRole('alert')).toHaveLength(1);
       await user.click(within(rules).getByRole('button', { name: 'Delete rule 2' }));
+      await confirmRuleDelete(user);
       expect(within(dialog).getAllByRole('alert')).toHaveLength(1);
       await user.click(headerAdd);
       expect(within(dialog).queryAllByRole('alert')).toHaveLength(0);
@@ -3000,6 +3026,48 @@ describe('OrganismEditorModal', () => {
       await act(async () => resolveSave());
     });
 
+    // Second review decision (a), 2026-09-27 (Story 4.26): a rule delete is refused while a write
+    // is in flight, the same `isSaving` lock the test above pins for the unsaved-changes
+    // confirmation — `<RulesEditor>` never opens its own confirmation mid-Save, so a Save outcome
+    // is never announced inside a subtree the confirmation has made `inert`/`aria-hidden`.
+    it('a rule delete opens no confirmation while a write is in flight, and works again once it settles', async () => {
+      const user = userEvent.setup();
+      const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+      let resolveSave!: () => void;
+      const saveSpy = vi.spyOn(organisms, 'save').mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave = resolve;
+          }),
+      );
+      mountModal({ organisms });
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      await user.click(headerAddButton(rules));
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      await user.click(within(rule1).getByRole('button', { name: '+ Add Condition' }));
+      await dirtyTheDraft(user, dialog);
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled(),
+      );
+      // The premise first: Save is disabled because the write is in flight (the pending `save`
+      // was really called), not for some other reason — so the refusal below is the lock's doing.
+      await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+
+      await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument();
+      expect(within(rules).getByRole('group', { name: 'Rule 1' })).toBeInTheDocument();
+
+      await act(async () => resolveSave());
+      await waitFor(() =>
+        expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled(),
+      );
+
+      await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toBeInTheDocument();
+    });
+
     it('the GONE exemption closes directly through Back, ✕ and Escape even on a dirty draft (Story 4.22 fourth-pass decision (a))', async () => {
       for (const trigger of ['Back to Library', 'Close', null] as const) {
         const user = userEvent.setup();
@@ -3058,6 +3126,66 @@ describe('OrganismEditorModal', () => {
       await waitFor(() => expect(confirm).not.toBeInTheDocument());
       expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBeInTheDocument();
       expect(screen.getByRole('textbox', { name: 'Organism Name' })).toHaveValue(nameBefore);
+    });
+
+    // Story 4.26: the rule-delete confirmation is a SECOND dialog stacked over this editor, the
+    // same relationship the unsaved-changes confirmation above has — rendered INSIDE the editor's
+    // own React tree (via `<RulesEditor>`), but the topmost MODAL as far as MUI's own modal
+    // manager is concerned, so its Escape never reaches the editor's own close guard underneath.
+    it('with a dirty draft, Escape on the rule confirmation closes it only (editor stays open, no Unsaved Changes)', async () => {
+      const user = userEvent.setup();
+      const { onClose } = mountModal({ organism: createMockOrganisms()[1] });
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+      await dirtyTheDraft(user, dialog);
+
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      await user.click(within(rule1).getByRole('button', { name: 'Delete rule 1' }));
+      await waitFor(() =>
+        expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toHaveAttribute(
+          'data-entered',
+          '',
+        ),
+      );
+
+      await user.keyboard('{Escape}');
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Delete Rule?' })).not.toBeInTheDocument(),
+      );
+      expect(screen.queryByRole('dialog', { name: 'Unsaved Changes' })).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Organism Editor' })).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+      // Cancelled — the rule is still there.
+      expect(within(rules).getByRole('group', { name: 'Rule 1' })).toBeInTheDocument();
+    });
+
+    // The FD11 pattern's own test above is the template: a usage panel left open by Tab (D1) arms
+    // a document-capture Escape listener that would otherwise take a stacked confirmation's Escape
+    // — true for the rule-delete confirmation exactly as it is for this editor's own.
+    it('a usage panel opened then left open closes when the rule confirmation opens (FD11)', async () => {
+      const user = userEvent.setup();
+      const edited = createMockOrganisms()[1];
+      const battleSummaries: BattleSummaries = [
+        { id: 'b1', name: 'Glider Wars', organismIds: [edited.id] },
+      ];
+      mountModal({ organism: edited, library: [CONWAYS_CLASSIC, edited], battleSummaries });
+      const dialog = screen.getByRole('dialog', { name: 'Organism Editor' });
+
+      const trigger = within(dialog).getByRole('button', { name: 'Used in 1 Battle' });
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      const rules = within(dialog).getByRole('region', { name: 'Survival Rules' });
+      const rule1 = within(rules).getByRole('group', { name: 'Rule 1' });
+      // KEYBOARD only — a pointer click on ✕ would close the panel through D1's outside
+      // `pointerdown` first and prove nothing about `closePanel()`.
+      within(rule1).getByRole('button', { name: 'Delete rule 1' }).focus();
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await user.keyboard('{Enter}');
+
+      expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toBeInTheDocument();
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('a repeat-carrying Escape does not open the confirmation (FD10) — a genuine keydown does', async () => {

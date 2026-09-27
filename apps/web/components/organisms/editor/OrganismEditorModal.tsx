@@ -1161,6 +1161,15 @@ export default function OrganismEditorModal({
                   onRulesChange={setSurvivalRules}
                   onAddRule={addRule}
                   showAllErrors={saveAttempted}
+                  // Story 4.26, FD6: a usage panel left open by Tab (D1) arms a document-capture
+                  // Escape listener that would otherwise take the rule confirmation's Escape and
+                  // focus a trigger behind the inert layer — the same FD11 reason this modal
+                  // already closes the panel before its OWN unsaved-changes confirmation opens.
+                  onBeforeDeleteConfirm={() => usageIndicatorRef.current?.closePanel()}
+                  // Story 4.26, second review decision (a), 2026-09-27: refuse a rule delete
+                  // request while THIS write is in flight — the same `isSaving` lock the Save
+                  // button, Back, ✕ and Delete Organism already gate on above.
+                  isSaving={isSaving}
                 />
               }
               preview={
