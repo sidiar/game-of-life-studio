@@ -236,12 +236,18 @@ export default function RulesEditor({
     [rules, updateDrag, onBeforeDeleteConfirm],
   );
 
+  // The FIRST outcome wins. MUI's Dialog (`closeAfterTransition`) stays the top modal for its whole
+  // exit fade — Escape, the backdrop and both buttons all still reach these handlers, and `entered`
+  // is still true — so without the latch a Cancel followed by a stray Delete Rule click inside the
+  // fade would delete a rule the user had just declined to delete (and the reverse would keep one).
   const handleDeleteCancel = useCallback(() => {
+    if (confirmOutcomeRef.current !== null) return;
     confirmOutcomeRef.current = 'cancel';
     setConfirmOpen(false);
   }, []);
 
   const handleDeleteConfirm = useCallback(() => {
+    if (confirmOutcomeRef.current !== null) return;
     confirmOutcomeRef.current = 'confirm';
     setConfirmOpen(false);
   }, []);
@@ -390,7 +396,8 @@ export default function RulesEditor({
     const prev = prevIdsRef.current;
     const root = rootRef.current;
 
-    // The dragged card left the list mid-drag (deleted from the keyboard, or by the parent): its
+    // The dragged card left the list mid-drag (removed by the parent — a user delete already closed
+    // the drag when it opened the confirmation, Story 4.26): its
     // `<li>` is gone, so `lostpointercapture` fires on a detached node React never hears, and
     // without this the drag would stay open — every new drag refused, the Escape listener live.
     const d = dragRef.current;

@@ -4,7 +4,7 @@ baseline_commit: 10947c5
 
 # Story 4.26: Rule-Delete Confirmation Dialog
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -186,6 +186,23 @@ so that a stray double-click never wipes out rules I meant to keep.
         refresh the baseline in this story (`npm run build:standalone` then
         `npm run bundle:baseline`). The dialog is expected to add nothing to first load, because it
         lives in the editor's lazy chunk.
+
+### Review Findings
+
+Code review 2026-09-27 (Opus, against a Sonnet implementation): Blind Hunter + Edge Case Hunter +
+Acceptance Auditor. 1 decision-needed, 8 patch (all applied), 2 deferred, 7 dismissed.
+
+- [ ] [Review][Decision] A Save result that lands while the rule confirmation is open is never announced — `useInertBackground(confirming !== null)` (`RulesEditor.tsx`) makes the editor `inert`/`aria-hidden`, and fields stay editable during an in-flight write (Story 4.23 FD2), so a user can click ✕ mid-Save. If the write then resolves/rejects, the editor's `role="alert"`/`role="status"` line is inserted inside the hidden subtree and is never announced (the project-context live-region trap). With localStorage the window is milliseconds; with an API repository it is real. Options: **(a)** refuse the delete request while a write is in flight — thread `isSaving` into `<RulesEditor>` and return early in `handleDelete` (the lock the editor's other close paths already use); **(b)** accept for the MVP and record it in `deferred-work.md` beside the other API-repository residuals and the live-region-host class fix; **(c)** leave it to the portalled live-region host already proposed in `deferred-work.md` (fixes every surface at once, no 4.26 change).
+- [x] [Review][Patch] The confirm/cancel outcome was last-writer-wins during the exit fade — the Dialog stays the top modal (`closeAfterTransition`) with `entered` still true, so Cancel followed by a stray Delete Rule click inside the fade deleted a declined rule (and the reverse kept a confirmed one). First outcome now wins; two tests pin both orders [`apps/web/components/organisms/editor/RulesEditor.tsx`]
+- [x] [Review][Patch] `deferred-work.md`'s resolution note (and the e2e comment) swapped notes (1) and (2) — note (1) is the inert second click (FD4), note (2) the dblclick proof [`docs/implementation-artifacts/deferred-work.md`, `apps/web/e2e/organisms.spec.ts`]
+- [x] [Review][Patch] The e2e `dblclick()` proof could not fail on an FD4 regression — a dismissed/confirmed dialog is still in the DOM for its exit fade. It now waits for `data-entered` and asserts the dialog is still visible before counting rules [`apps/web/e2e/organisms.spec.ts`]
+- [x] [Review][Patch] The `RulesEditor` "before entered do nothing" test could not fail (asserted while an exit fade would still show the dialog) and was timing-dependent (async `user.click`s racing the real Fade timer). Now synchronous `fireEvent`s, then a wait for `data-entered` on the same dialog node; the dialog-level twin also moved to `fireEvent` [`RulesEditor.test.tsx`, `RuleDeleteConfirmDialog.test.tsx`]
+- [x] [Review][Patch] The request-latch test was vacuous (a second `setConfirming` with the same id renders the same one dialog). It now asserts `onBeforeDeleteConfirm` ran once; mutation-checked [`RulesEditor.test.tsx`]
+- [x] [Review][Patch] "Cancel and Escape are live BEFORE entered" exercised only Escape and never asserted "before" — now `it.each` over both, asserting no `data-entered` first [`RuleDeleteConfirmDialog.test.tsx`]
+- [x] [Review][Patch] The FD5 repeat-Escape filter had no test — added [`RuleDeleteConfirmDialog.test.tsx`]
+- [x] [Review][Patch] The FD6 list-diff effect's drag branch lost its only test when the old test was re-pointed at `handleDelete`'s `updateDrag(null)`; a parent-driven-removal-mid-drag test restores it, and the branch's stale "deleted from the keyboard" comment is corrected. Also added AC1's Space activation of ✕, which no test exercised [`RulesEditor.test.tsx`, `RulesEditor.tsx`]
+- [x] [Review][Defer] A parent-driven removal while the confirmation is open leaves `handleDeleteExited`'s `rules.length === 1` announcement check stale and the cancel-path focus restore with no ✕ to land on [`apps/web/components/organisms/editor/RulesEditor.tsx`] — deferred, unreachable today (the background is inert for the whole window)
+- [x] [Review][Defer] Story 4.23's editor unsaved-changes confirmation has the same last-writer-wins outcome shape during its exit fade [`apps/web/components/organisms/editor/OrganismEditorModal.tsx:930-941`] — deferred, pre-existing, outside this diff
 
 ## Dev Notes
 
@@ -383,6 +400,7 @@ Sonnet 5 (claude-sonnet-5)
 
 - 2026-09-27: Story created (ready-for-dev).
 - 2026-09-27: Implemented (Tasks 1-8); status set to review.
+- 2026-09-27: Code review (Opus): 8 patches applied, 2 deferred, 1 decision left open; status in-progress.
 
 Proposed lane gate: none
 

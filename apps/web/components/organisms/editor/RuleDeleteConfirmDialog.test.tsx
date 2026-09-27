@@ -103,13 +103,34 @@ describe('RuleDeleteConfirmDialog', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('Cancel and Escape are live BEFORE entered too — only the backdrop and Delete Rule are guarded', async () => {
+  // `fireEvent`, not `user-event`: synchronous, so the action provably lands before the real
+  // ~225ms `Fade` timer can set `entered` — the "before" is asserted, not assumed.
+  it.each(['Cancel', 'Escape'] as const)(
+    '%s is live BEFORE entered too — only the backdrop and Delete Rule are guarded',
+    (mode) => {
+      const onCancel = vi.fn();
+      render(<RuleDeleteConfirmDialog {...props({ onCancel })} />);
+      const dialog = screen.getByRole('dialog', { name: 'Delete Rule?' });
+      expect(dialog).not.toHaveAttribute('data-entered');
+
+      if (mode === 'Cancel') fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      else fireEvent.keyDown(dialog, { key: 'Escape' });
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  // FD5: a held Escape's auto-repeat is ignored; a genuine press still cancels.
+  it('a repeat-carrying Escape is ignored (FD5); a genuine one cancels', async () => {
     const onCancel = vi.fn();
     render(<RuleDeleteConfirmDialog {...props({ onCancel })} />);
+    await waitForEntered();
+    const dialog = screen.getByRole('dialog', { name: 'Delete Rule?' });
 
-    // No wait for `data-entered` — Cancel and Escape fire immediately.
-    const user = userEvent.setup();
-    await user.keyboard('{Escape}');
+    fireEvent.keyDown(dialog, { key: 'Escape', repeat: true });
+    expect(onCancel).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(dialog, { key: 'Escape', repeat: false });
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
@@ -128,8 +149,9 @@ describe('RuleDeleteConfirmDialog', () => {
 
   // FD4's own proof in jsdom: a backdrop click and a Delete Rule click fired BEFORE `data-entered`
   // do nothing — the real double-click cascade proof (a genuine `dblclick()`) is the e2e's.
+  // `fireEvent` (synchronous) so both clicks provably land before the ~225ms `Fade` timer sets
+  // `entered` — with `user-event`'s async clicks a slow runner could cross it mid-test.
   it('a backdrop click and a Delete Rule click fired before entered do nothing', async () => {
-    const user = userEvent.setup();
     const onCancel = vi.fn();
     const onConfirm = vi.fn();
     render(<RuleDeleteConfirmDialog {...props({ onCancel, onConfirm })} />);
@@ -138,14 +160,13 @@ describe('RuleDeleteConfirmDialog', () => {
       'data-entered',
     );
 
-    await user.click(screen.getByRole('button', { name: 'Delete Rule' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Rule' }));
     const backdrop = document.querySelector('.MuiBackdrop-root') as HTMLElement;
-    await user.click(backdrop);
+    fireEvent.mouseDown(backdrop);
+    fireEvent.click(backdrop);
 
     expect(onConfirm).not.toHaveBeenCalled();
     expect(onCancel).not.toHaveBeenCalled();
-    // Still open — neither dismissal took effect.
-    expect(screen.getByRole('dialog', { name: 'Delete Rule?' })).toBeInTheDocument();
   });
 
   // Enter's activation of a focused button is the browser's own default action, not this dialog's

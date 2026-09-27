@@ -1711,7 +1711,7 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
     await expect(rules.getByRole('button', { name: 'Reorder rule 1', exact: true })).toBeEnabled();
   });
 
-  // Story 4.26 (deferred-work.md's cascade entry, note (1)): the real hit-testing browser proof
+  // Story 4.26 (deferred-work.md's cascade entry, note (2)): the real hit-testing browser proof
   // FD4's guard exists for — jsdom's `dblClick` targets the same node twice with no hit-testing,
   // which only proves the request latch (`RulesEditor.test.tsx`), not that the SECOND click,
   // landing on the now-opened dialog, is inert.
@@ -1726,7 +1726,13 @@ test.describe('rule cards & empty state (Story 4.10)', () => {
 
       await rules.getByRole('button', { name: 'Delete rule 1', exact: true }).dblclick();
 
-      await expect(page.getByRole('dialog', { name: 'Delete Rule?' })).toHaveCount(1);
+      const dialog = page.getByRole('dialog', { name: 'Delete Rule?' });
+      // Wait for `data-entered` BEFORE asserting it is still up: a second click that got past the
+      // guard would leave the dialog in the DOM for its ~225ms exit fade anyway, so a bare
+      // count check right after the dblclick() cannot tell a guarded click from a dismissal.
+      await expect(dialog).toHaveAttribute('data-entered', '');
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveCount(1);
       // A raw `page`-rooted locator, not `rules.locator(...)` — MUI marks the whole editor
       // (`rules`'s own ancestor chain, itself reached through `getByRole`) `aria-hidden` while the
       // stacked confirmation is open (`useInertBackground.ts`'s own comment), so ANY role-based

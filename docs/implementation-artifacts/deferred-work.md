@@ -1672,8 +1672,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   in the dialog's `onExited` (FD3, never the click's own commit), and the enter guard (FD4, an
   `entered` flag from the `Fade`'s own `onEntered`) makes both the backdrop and Delete Rule inert
   until the dialog has actually finished opening — so a double-click's second click is a no-op
-  either way it lands. A real `dblclick()` e2e proves it (note (1)); `RulesEditor.test.tsx` proves
-  the request latch note (2) asked for. The condition-row entry below is untouched — the owner's
+  either way it lands (note (1)). A real `dblclick()` e2e proves at most one rule is removed
+  (note (2)); `RulesEditor.test.tsx` separately pins the request latch (jsdom's `dblClick` has no
+  hit-testing, so it cannot prove note (1)). The condition-row entry below is untouched — the owner's
   call, not in scope here.
 
 ## Deferred from: Story 4-11-condition-builder (2026-09-17)
@@ -3702,3 +3703,20 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   `savingRef`, the page is `inert` while the editor is open, and no hotkey saves. If a future route
   can start a battle save while the editor is open, skip disabled targets
   (`trigger?.matches(':disabled')`) — and note the create button is disabled then too.
+
+## Deferred from: code review of 4-26-rule-delete-confirmation-dialog (2026-09-27)
+
+- **A parent-driven rule removal while the rule-delete confirmation is open is not handled.**
+  `handleDeleteExited` (`RulesEditor.tsx`) decides whether to clear the reorder announcement from
+  `rules.length === 1` as of its own render, not from what `removeRule` leaves, and the cancel-path
+  restore looks up `[data-rule-id="<id>"] [data-rule-delete]` with no fallback, so a card removed
+  underneath the dialog would leave a stale announcement or focus on `<body>`. Unreachable today:
+  the whole editor is `inert` for the confirmation window and nothing parent-side edits `rules`
+  then. If a parent-driven edit ever lands (battle-side bulk edit, undo), decide the announcement
+  from the updater's result and fall back to the FD6 loose-focus target.
+- **Story 4.23's editor unsaved-changes confirmation has the same last-writer-wins outcome shape**
+  (`OrganismEditorModal.tsx`, ~`:930-941`). MUI's Dialog stays the top modal through its exit fade
+  (`closeAfterTransition`), so a second, contrary action inside the fade (Keep Editing then a stray
+  Discard) overwrites the outcome ref. Story 4.26's review fixed its own dialog with a
+  first-outcome-wins guard (`if (confirmOutcomeRef.current !== null) return;`); the 4.23 handlers
+  take the same one-line guard plus a test.
