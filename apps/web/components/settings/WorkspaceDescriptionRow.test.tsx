@@ -86,6 +86,32 @@ describe('WorkspaceDescriptionRow (Story 7.2, FR-9.5)', () => {
     );
   });
 
+  it('a Save click before the initial load settles is a no-op — it cannot overwrite the stored value with the empty initial state (review finding, Story 7.2)', async () => {
+    let resolveLoad: (meta: { description?: string }) => void = () => {};
+    const loadGate = new Promise<{ description?: string }>((resolve) => {
+      resolveLoad = resolve;
+    });
+    const save = vi.fn().mockResolvedValue(undefined);
+    const onMessage = vi.fn();
+    render(
+      <WorkspaceDescriptionRow
+        workspaceMeta={{ load: vi.fn(() => loadGate), save }}
+        onMessage={onMessage}
+      />,
+    );
+
+    // Fired before `load()` has resolved: `value` is still the initial `''`.
+    fireEvent.click(saveButton());
+    expect(save).not.toHaveBeenCalled();
+    expect(onMessage).not.toHaveBeenCalled();
+
+    resolveLoad({ description: 'Stored notes.' });
+    await waitFor(() => expect(field()).toHaveValue('Stored notes.'));
+
+    await userEvent.setup().click(saveButton());
+    expect(save).toHaveBeenCalledWith({ description: 'Stored notes.' });
+  });
+
   it('a failed save reports an alert', async () => {
     const onMessage = vi.fn();
     render(

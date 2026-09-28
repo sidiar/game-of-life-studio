@@ -111,6 +111,13 @@ export default function WorkspaceDescriptionRow({
   const mountedRef = useRef(true);
   // An edit made before the initial load settles wins over the loaded text.
   const editedRef = useRef(false);
+  // Review finding (Story 7.2): Save fires from the current `value` state, which starts as `''`.
+  // Without this, a Save that lands before the mount effect's `load()` resolves writes `''` over
+  // whatever was actually stored, and the load's own `.then` (unaware a save just ran) then
+  // repaints the field with the PRE-save text — storage and UI disagree, silently. Save is a
+  // no-op (matching `pendingRef`'s existing no-op-not-disabled pattern, FD8) until the initial
+  // read has settled, success or failure alike.
+  const loadedRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -128,6 +135,9 @@ export default function WorkspaceDescriptionRow({
       })
       .catch(() => {
         // Degrade to empty (FD4): the row stays usable, and a save overwrites the bad record.
+      })
+      .finally(() => {
+        if (active) loadedRef.current = true;
       });
     return () => {
       active = false;
@@ -135,7 +145,7 @@ export default function WorkspaceDescriptionRow({
   }, [workspaceMeta]);
 
   async function handleSave() {
-    if (pendingRef.current) return;
+    if (pendingRef.current || !loadedRef.current) return;
     pendingRef.current = true;
     onMessage(null);
     try {

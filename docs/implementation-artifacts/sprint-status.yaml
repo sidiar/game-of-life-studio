@@ -188,7 +188,7 @@ development_status:
   # (reference material for create-story; the story lands it properly).
   epic-7: in-progress
   7-1-preset-workspace-foundations: done
-  7-2-descriptions-at-every-level: review
+  7-2-descriptions-at-every-level: in-progress
   7-3-showcase-preset-content: backlog
   7-4-first-visit-default-preset-auto-load: backlog
   7-5-load-preset-from-settings: backlog

@@ -68,8 +68,9 @@ export function isPristineWorkspace(
   if (
     workspaceDescription !== undefined &&
     normalizeDescription(workspaceDescription) !== undefined
-  )
+  ) {
     return false;
+  }
   if (battleCount !== 0) return false;
   if (organisms.length !== 1) return false;
   return deepEqual(organisms[0], CONWAYS_CLASSIC);

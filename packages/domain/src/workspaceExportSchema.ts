@@ -185,6 +185,18 @@ export const WorkspaceExportSchema = z
         message: `kind: 'battle' must carry exactly one battle`,
       });
     }
+    // Review finding (Story 7.2): the comment on `description` above documents this as a writer
+    // invariant ("a `kind: 'battle'` file never carries one") but nothing enforced it on parse — a
+    // hand-edited or corrupted single-battle file could carry a top-level `description` and
+    // silently set the importer's WORKSPACE description (`fromEnvelope` branches on presence, not
+    // `kind`). Enforced here, at the same cardinality-checking site, rather than in the reader.
+    if (envelope.kind === 'battle' && envelope.description !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['description'],
+        message: `kind: 'battle' must not carry a workspace description`,
+      });
+    }
   });
 
 /** Parsed shapes — timestamps are hydrated `Date`s, as everywhere else in this package. */

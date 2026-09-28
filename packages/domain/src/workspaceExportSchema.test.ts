@@ -168,6 +168,22 @@ describe('kind: "battle" carries exactly one battle (AC4, Story 5.4)', () => {
     ).toBe(true);
   });
 
+  it('rejects a "battle" envelope carrying a top-level workspace description, at the description path (review finding, Story 7.2)', () => {
+    const result = WorkspaceExportSchema.safeParse(
+      envelope({ kind: 'battle', description: 'Should never appear on a single-battle file.' }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.path.join('.') === 'description')).toBe(true);
+  });
+
+  it('does not constrain "workspace" envelopes carrying a description', () => {
+    expect(
+      WorkspaceExportSchema.safeParse(envelope({ kind: 'workspace', description: 'Notes.' }))
+        .success,
+    ).toBe(true);
+  });
+
   it('still fires the duplicate-organism-id refinement independently, at the organisms path, for a valid single-battle envelope', () => {
     const result = WorkspaceExportSchema.safeParse(
       envelope({

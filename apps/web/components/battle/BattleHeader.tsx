@@ -40,8 +40,9 @@ const Title = styled('h1')({
   overflowWrap: 'anywhere',
 });
 
-// Story 7.2: the title + description column. `minWidth: 0` moves here from being only the h1's
-// concern — the column is now the flex item that must be allowed to shrink.
+// Story 7.2: the title + description column. `minWidth: 0` is ALSO needed here, not only on the
+// h1 above — the column itself is now the flex item that must be allowed to shrink, since it also
+// wraps the description paragraph below.
 const TitleColumn = styled('div')({
   minWidth: 0,
 });

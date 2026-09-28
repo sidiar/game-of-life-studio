@@ -4,7 +4,7 @@ baseline_commit: 0ab2e3b
 
 # Story 7.2: Descriptions at Every Level
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -81,6 +81,25 @@ so that what I'm observing explains itself — the guide layer the no-tutorial r
   - [x] 7.1 One Chromium-meaningful e2e in `apps/web/e2e/settings.spec.ts` (or `gallery.spec.ts`): import an envelope carrying all three descriptions (extend the organism literal at `settings.spec.ts:314-330`) → gallery shows the workspace description and the tile description → organisms page shows the card description → open the battle and see the description in the header in Run mode. Plus: an organism/battle without a description renders no description element.
   - [x] 7.2 `deferred-work.md`: a **variance entry** — `gol:workspace` extends RFC-006 Decision 7's closed four-key list and Decision 1's `AppRepositories`; Decision F.2 / FR-8.5 "clearAll clears battles + organisms" now also clears workspace meta (still never settings). Plus the at-rest-migration blind spot from 2.3. Do not edit the RFC or architecture doc (surface, don't silently amend — CLAUDE.md).
   - [x] 7.3 `npm run ci:dev` green (never four-browser `npm run ci`). If `bundle:check` shows route growth, refresh the baseline in the same change (`npm run build:standalone` → `npm run bundle:baseline`) and commit the JSON — never hand-edit it.
+
+### Review Findings
+
+_Code review 2026-09-28 (Sonnet; Blind Hunter + Edge Case Hunter + Acceptance Auditor, full diff `0ab2e3b..e0faec9`): 6 decision-needed, 4 patch, 0 defer, 5 dismissed._
+
+- [ ] [Review][Decision] `gol:workspace` + `AppRepositories.workspaceMeta` extends RFC-006's closed key/port shapes (FD4) — already disclosed as a variance in `deferred-work.md`, surfaced here per CLAUDE.md's "surface, don't silently pick one." Options: **(a)** fold the extension into RFC-006 Decision 7 (key list) and Decision 1 (`AppRepositories` shape) now; **(b)** leave it as a disclosed variance and revisit when a second story needs the pattern; **(c)** rule the addition invalid and redesign the seam. [docs/implementation-artifacts/deferred-work.md:3960-3972]
+- [ ] [Review][Decision] `WorkspaceDescriptionRow` adds a brand-new Settings **authoring** surface (FD7) — the ACs only require a *display* home for the workspace description; import already made one settable. Options: **(a)** keep the authoring row as shipped; **(b)** cut it from this story (import-only, non-editable workspace description) and give Story 7.3+ the authoring UI once export/preset needs are clearer. [apps/web/components/settings/WorkspaceDescriptionRow.tsx]
+- [ ] [Review][Decision] `isPristineWorkspace` now treats a workspace holding only a description (zero battles, stock Conway's Classic) as **not pristine** (FD6), so Import's destructive-replace warning fires solely because someone typed a workspace description. Options: **(a)** keep as shipped (a description is user content the replace would destroy); **(b)** exclude the description from the pristine check so only battles/organisms gate the warning. [packages/domain/src/pristineWorkspace.ts:63-77]
+- [ ] [Review][Decision] Clear All's dialog body (`CLEAR_ALL_WARNING_TEXT`, documented as "FR-8.5's warning sentence, verbatim" from Story 5.10's AC2) and the Clear button's accessible name (`"Clear data (all battles and organisms)"`) were left unchanged even though Clear All now also deletes the workspace description, and `ClearAllDataRow`'s own row blurb was updated to say so — Task 5.3 asked to "keep the Clear All dialog copy truthful." Already flagged as open drift in `deferred-work.md`. Options: **(a)** update both strings now to name the workspace description (a wording change beyond Story 5.10's pinned AC2 text, pending unless FR-8.5 itself is reworded); **(b)** leave as disclosed drift until the FD4 decision above is resolved, since folding `gol:workspace` into FR-8.5 formally is what would license the wording change; **(c)** other. [apps/web/lib/clearAll/clearAllMessages.ts:8-9, apps/web/components/settings/ClearAllDataRow.tsx:213]
+- [ ] [Review][Decision] `WorkspaceDescriptionRow`'s in-flight `save()` is not cancelled, awaited, or ordered against Import/Clear All's replace/clear of the same `gol:workspace` key — FD6's "no cross-row locking" precedent was written for the read-only pristine check and for which row's *status message* wins (`DataManagement`'s `ownerRef`/`publish`), not for two writers of the same storage key. If a description Save is in flight when Import or Clear All completes, the save can land after the destructive operation and either resurrect a stale description post-Clear-All or clobber the freshly imported one. Options: **(a)** have Import/Clear All await or cancel a pending description save before proceeding; **(b)** disable/ignore the description Save while an Import or Clear All is in flight; **(c)** accept as an extension of the existing FD6 "no cross-row locking" stance and document it explicitly there. [apps/web/components/settings/WorkspaceDescriptionRow.tsx:137-151, apps/web/components/settings/DataManagement.tsx:237-250]
+- [ ] [Review][Decision] `WorkspaceDescriptionRow` has no dirty-tracking or leave-guard, unlike the Organism/Battle editors' full dirty-tracking + `useLeaveGuard` (AC4 for those editors) — a user who edits the workspace description and navigates away without pressing the always-enabled Save button loses the edit silently, with no `useLeaveGuard`-style warning and no `data-dirty` hook for e2e verification. Options: **(a)** add a lightweight leave-guard/beforeunload warning matching the editors' pattern; **(b)** accept as an intentionally lighter-weight Settings row (no other Settings field carries such a guard either) and document the gap; **(c)** auto-save on blur instead of a manual Save button, removing the loss window. [apps/web/components/settings/WorkspaceDescriptionRow.tsx:153-186]
+- [x] [Review][Patch] `WorkspaceExportSchema`'s `superRefine` enforced battle-count cardinality for `kind: 'battle'` but never enforced the schema's own documented invariant "a `kind: 'battle'` file never carries [a `description`]" — a hand-edited/corrupted single-battle file carrying a top-level `description` parsed successfully and `applyImport` would silently set the importer's workspace description from it (it branches on presence, not `kind`). Added a matching refinement issue at the `description` path, alongside the existing cardinality check; covered by two new tests. [packages/domain/src/workspaceExportSchema.ts, packages/domain/src/workspaceExportSchema.test.ts]
+- [x] [Review][Patch] `WorkspaceDescriptionRow`'s Save fired from `value` (initial `''`) even before the mount effect's `load()` resolved: a Save click that landed first wrote `''` over the real stored description, and the load's own `.then` (unaware a save had just run) then repainted the field with the pre-save text — storage and UI silently disagreed. Added a `loadedRef` guard so Save is a no-op (matching the existing `pendingRef` no-op-not-disabled pattern, FD8) until the initial read has settled, success or failure alike. Covered by a new regression test. [apps/web/components/settings/WorkspaceDescriptionRow.tsx]
+- [x] [Review][Patch] `isPristineWorkspace`'s new guard clause was a braceless multi-line `if` — a latent trap for a future edit adding a second statement to the branch without adding braces. Reformatted with braces (Prettier-applied); behaviour unchanged. [packages/domain/src/pristineWorkspace.ts:68-73]
+- [x] [Review][Patch] `BattleHeader.tsx`'s `TitleColumn` comment claimed `minWidth: 0` "moves here from being only the h1's concern," but the `Title` (`<h1>`) styled block still independently keeps its own `minWidth: 0` a few lines above — the rule was duplicated, not moved, and the comment misdescribed it for the next reader. Corrected the wording. [apps/web/components/battle/BattleHeader.tsx:32-47]
+
+Dismissed as noise (5): `OrganismDescriptionField`'s unused `showAllErrors` prop (documented intentional parity — the description's only error is immediate regardless of the prop, verified against `OrganismNameField`'s actual Save-time-override use of it); `WorkspaceMetaRepository.save()` / the fake repository's `workspaceMeta.save()` not re-validating the cap before writing (matches `LocalStorageSettingsRepository.save()`'s identical no-validation-on-write pattern — not a new deviation); `WorkspaceDescriptionRow`'s Save button giving no in-flight affordance (documented FD8 design, matching `ExportButton`'s identical precedent); `exportBattle` never carrying the workspace description (flagged and accepted as intentional per M8 in the story's own Dev Notes, not a new defect).
+
+`npm run ci:dev` after patches: see Dev Agent Record.
 
 ## Dev Notes
 
@@ -315,6 +334,19 @@ Modified:
   workspace (new `gol:workspace` key + `AppRepositories.workspaceMeta` port); editor fields,
   read-only display surfaces, Settings authoring row, preset manifest projection; variance recorded
   in `deferred-work.md`. Status → review.
+- 2026-09-28 — Code review (Sonnet; Blind Hunter + Edge Case Hunter + Acceptance Auditor, full diff
+  `0ab2e3b..e0faec9`): 4 patches applied (schema refinement closing a `kind: 'battle'` +
+  `description` gap; a `WorkspaceDescriptionRow` Save-before-load race guard; a braceless `if` in
+  `isPristineWorkspace`; a misleading comment in `BattleHeader.tsx`), each with a new/extended test;
+  6 decision-needed items left unresolved in Review Findings (FD4's RFC-006 extension, FD7's new
+  Settings authoring surface, FD6's pristine-check widening, the Clear All dialog copy vs. its
+  pinned Story 5.10 text, a workspaceMeta write race between the description row and Import/Clear
+  All, and the description row's missing leave-guard); 5 findings dismissed as consistent with
+  existing patterns or already-accepted intent. `npm run ci:dev` green after patches (typecheck,
+  lint, format:check, spec:check, boundary:check, coverage, build, bundle:check — 0 KB growth on
+  every route, bench, bench:check, e2e:chromium 314 passed/1 skipped). Status → in-progress
+  (decision-needed items pending owner ruling).
 
 Dev Model: opus   # architecture-shaping (FD4: new gol:workspace key + AppRepositories.workspaceMeta that 7.4–7.6 build on); owner chose opus dev + sonnet review because Fable is unavailable (2026-09-28)
-Proposed lane gate: none
+Review Model: sonnet-5   # second pair of eyes per project convention; ran full review (Blind Hunter + Edge Case Hunter + Acceptance Auditor) against 0ab2e3b..e0faec9 (2026-09-28)
+Proposed lane gate: none — only epic 7 is in progress; the diff touches no epic-6 surface
