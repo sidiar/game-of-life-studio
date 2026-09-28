@@ -7,6 +7,12 @@ export type AsyncResourceStatus = 'loading' | 'ready' | 'error';
 export interface AsyncResource<T> {
   data: T | undefined;
   status: AsyncResourceStatus;
+  /**
+   * The rejection, held ONLY in `status: 'error'`; `undefined` otherwise (and cleared exactly when
+   * `data` is — by a deps change, and by a reload that settles). Callers classify it (Story 5.11:
+   * a newer-format store is recovered differently from corrupt data); it is never for display.
+   */
+  error: unknown;
   /** Re-runs `load` — stale-while-revalidate: `status` stays `'ready'` and `data` stays the
    * PREVIOUS value until the new promise settles (Story 4.16, FD6). Stable identity across
    * renders. See the hook's own docblock for the full contract. */
@@ -62,9 +68,14 @@ function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
  * Consumers who need "a refetch is in flight" as a state do not get one — nothing here needs it.
  */
 export function useAsyncResource<T>(load: () => Promise<T>, deps: unknown[]): AsyncResource<T> {
-  const [resource, setResource] = useState<{ data: T | undefined; status: AsyncResourceStatus }>({
+  const [resource, setResource] = useState<{
+    data: T | undefined;
+    status: AsyncResourceStatus;
+    error: unknown;
+  }>({
     data: undefined,
     status: 'loading',
+    error: undefined,
   });
   const [settledDeps, setSettledDeps] = useState<unknown[]>(deps);
   // Bumped by `reload()`. An EFFECT dep only (see below) — never compared by `sameDeps`, so a
@@ -83,7 +94,7 @@ export function useAsyncResource<T>(load: () => Promise<T>, deps: unknown[]): As
   // renders and commits first) and is a lint error under react-hooks/set-state-in-effect.
   if (!sameDeps(settledDeps, deps)) {
     setSettledDeps(deps);
-    setResource({ data: undefined, status: 'loading' });
+    setResource({ data: undefined, status: 'loading', error: undefined });
   }
 
   useEffect(() => {
@@ -98,13 +109,13 @@ export function useAsyncResource<T>(load: () => Promise<T>, deps: unknown[]): As
       .then(load)
       .then((value) => {
         if (!alive) return;
-        setResource({ data: value, status: 'ready' });
+        setResource({ data: value, status: 'ready', error: undefined });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         // `data` stays undefined: a failed load must not hand the caller a half-built resource
         // alongside an error status.
         if (!alive) return;
-        setResource({ data: undefined, status: 'error' });
+        setResource({ data: undefined, status: 'error', error });
       });
 
     return () => {

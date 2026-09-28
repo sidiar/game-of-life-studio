@@ -1,4 +1,9 @@
-import { ImportError, NewerFormatVersionError, QuotaExceededError } from '@gol/persistence';
+import {
+  CorruptDataError,
+  ImportError,
+  NewerFormatVersionError,
+  QuotaExceededError,
+} from '@gol/persistence';
 
 /**
  * Story 5.9's copy table (Dev Notes FD4) — plain, non-technical, no story IDs, no `error.message`.
@@ -74,6 +79,13 @@ export function importFailureMessage(error: unknown): string {
       'Your saved workspace is from a newer version of the app. Reload the page — nothing was ' +
       'imported.'
     );
+  }
+
+  // After the subclass above (Story 5.11): the snapshot read hit a store this build cannot read at
+  // all — an unusable `gol:schema` stamp — and threw before any write. The file is not the
+  // problem, so the file-blaming fallback below would mislead.
+  if (error instanceof CorruptDataError) {
+    return 'Your saved workspace could not be read, so nothing was imported.';
   }
 
   // The one fallback branch (Task 2.1): a step's programming error, a rejected `File.text()`

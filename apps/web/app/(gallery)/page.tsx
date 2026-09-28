@@ -16,7 +16,7 @@ export default function HomePage() {
   // constructing repositories touches no storage, only the repository METHODS do, so calling it
   // here is safe for a statically exported route.
   const repositories = useMemo(() => createRepositories(), []);
-  const { status } = useWorkspaceSeed(repositories);
+  const { status, error } = useWorkspaceSeed(repositories);
 
   // No <main> here — AppShell (Story 1.9) owns the single <main> landmark; this page renders only
   // its own content into it. BattleGallery owns the document's only <h1> ("Battle Gallery").
@@ -26,6 +26,8 @@ export default function HomePage() {
       organisms={repositories.organisms}
       settings={repositories.settings}
       seedStatus={status}
+      seedError={error}
+      workspace={repositories}
     />
   );
 }

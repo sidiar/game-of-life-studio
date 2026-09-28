@@ -7,6 +7,17 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/domain';
 import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
+import {
+  CorruptDataError,
+  NewerFormatVersionError,
+  QuotaExceededError,
+  STORAGE_KEYS,
+} from '@gol/persistence';
+import {
+  CORRUPT_WORKSPACE_MESSAGE,
+  NEWER_VERSION_MESSAGE,
+  STORAGE_FULL_MESSAGE,
+} from '@/lib/storage/storageFailureMessages';
 import BattleGallery from './BattleGallery';
 
 // Two tests below stub IntersectionObserver and write the --gol-* token layer onto <html>. Undoing
@@ -114,6 +125,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -168,6 +180,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -192,6 +205,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="seeding"
       />,
     );
@@ -209,6 +223,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="error"
       />,
     );
@@ -225,6 +240,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -243,6 +259,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -276,6 +293,7 @@ describe('BattleGallery', () => {
         battles={populated.battles}
         organisms={populated.organisms}
         settings={populated.settings}
+        workspace={populated}
         seedStatus="ready"
       />,
     );
@@ -298,6 +316,7 @@ describe('BattleGallery', () => {
         battles={empty.battles}
         organisms={empty.organisms}
         settings={empty.settings}
+        workspace={empty}
         seedStatus="ready"
       />,
     );
@@ -318,6 +337,7 @@ describe('BattleGallery', () => {
         battles={populated.battles}
         organisms={populated.organisms}
         settings={populated.settings}
+        workspace={populated}
         seedStatus="ready"
       />,
     );
@@ -332,6 +352,7 @@ describe('BattleGallery', () => {
         battles={empty.battles}
         organisms={empty.organisms}
         settings={empty.settings}
+        workspace={empty}
         seedStatus="ready"
       />,
     );
@@ -344,6 +365,7 @@ describe('BattleGallery', () => {
         battles={errored.battles}
         organisms={errored.organisms}
         settings={errored.settings}
+        workspace={errored}
         seedStatus="error"
       />,
     );
@@ -362,6 +384,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -374,30 +397,87 @@ describe('BattleGallery', () => {
     expect(screen.getByRole('img', { name: 'Chaotic Spreader' })).toBeInTheDocument();
   });
 
-  // A corrupt gol:organisms throws CorruptDataError for the whole key. Battles that parse fine
-  // must still list — the dots degrade to the dangling-id fallback rather than the page going to
-  // the error body (Story 1.4's "one bad record must not blank the view").
-  it('still renders tiles when organisms.list() rejects, degrading the dots', async () => {
-    const repos = createFakeRepositories({
-      battles: createMockBattles(),
-      organisms: createMockOrganisms(),
-    });
-    vi.spyOn(repos.organisms, 'list').mockRejectedValue(new Error('corrupt'));
+  // Story 5.11 (retargeted from "still renders tiles when organisms.list() rejects"): `list()`
+  // already skips a per-record failure, so a rejection is a WHOLE-namespace failure — NFR-7.3's
+  // case — and the Gallery now reports it with a recovery instead of degrading to an empty roster.
+  describe('storage-failure notice (Story 5.11, one test per namespace)', () => {
+    function renderGallery(repos: ReturnType<typeof createFakeRepositories>, seedError?: unknown) {
+      return render(
+        <BattleGallery
+          battles={repos.battles}
+          organisms={repos.organisms}
+          settings={repos.settings}
+          workspace={repos}
+          seedStatus={seedError === undefined ? 'ready' : 'error'}
+          seedError={seedError}
+        />,
+      );
+    }
+    const buttonLabels = () => screen.getAllByRole('button').map((b) => b.textContent);
 
-    render(
-      <BattleGallery
-        battles={repos.battles}
-        organisms={repos.organisms}
-        settings={repos.settings}
-        seedStatus="ready"
-      />,
-    );
+    it.each([
+      ['gol:battles', 'battles' as const, new CorruptDataError(STORAGE_KEYS.battles, 'x')],
+      ['gol:schema', 'battles' as const, new CorruptDataError(STORAGE_KEYS.schema, 'x')],
+      ['gol:organisms', 'organisms' as const, new CorruptDataError(STORAGE_KEYS.organisms, 'x')],
+    ])('a corrupt %s shows the notice with Reset Workspace', async (_ns, repo, error) => {
+      const repos = createFakeRepositories({
+        battles: createMockBattles(),
+        organisms: createMockOrganisms(),
+      });
+      vi.spyOn(repos[repo], 'list').mockRejectedValue(error);
+      renderGallery(repos);
 
-    await waitFor(() => {
-      expect(screen.getAllByRole('article')).toHaveLength(2);
+      expect(await screen.findByRole('alert')).toHaveTextContent(CORRUPT_WORKSPACE_MESSAGE);
+      expect(screen.queryAllByRole('article')).toHaveLength(0);
+      expect(buttonLabels()).toContain('Reset Workspace');
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     });
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('img', { name: 'Unknown organism' }).length).toBeGreaterThan(0);
+
+    it('a newer-format store shows Reload and never Reset Workspace', async () => {
+      const repos = createFakeRepositories({ battles: createMockBattles() });
+      vi.spyOn(repos.battles, 'list').mockRejectedValue(
+        new NewerFormatVersionError(STORAGE_KEYS.schema, 2, 1, 'x'),
+      );
+      renderGallery(repos);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(NEWER_VERSION_MESSAGE);
+      expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Reset Workspace' })).toBeNull();
+    });
+
+    it('a seed refused for lack of space reads storage-full, never "damaged"', () => {
+      const repos = createFakeRepositories();
+      renderGallery(repos, new QuotaExceededError(STORAGE_KEYS.organisms));
+
+      expect(screen.getByRole('alert')).toHaveTextContent(STORAGE_FULL_MESSAGE);
+      expect(screen.getByRole('alert').textContent).not.toMatch(/damaged/iu);
+      expect(screen.queryByRole('button', { name: 'Reset Workspace' })).toBeNull();
+    });
+
+    it('a corrupt gol:settings does not blank the Gallery (FD5 — read-only degrade)', async () => {
+      const repos = createFakeRepositories({
+        battles: createMockBattles(),
+        organisms: createMockOrganisms(),
+      });
+      vi.spyOn(repos.settings, 'load').mockRejectedValue(
+        new CorruptDataError(STORAGE_KEYS.settings, 'x'),
+      );
+      renderGallery(repos);
+
+      await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    // FD8 / epic AC3: an unknown organism id is a fallback, never a load failure.
+    it('a battle naming an organism the library does not hold renders with the fallback dot', async () => {
+      const [battle] = createMockBattles();
+      const repos = createFakeRepositories({ battles: [battle], organisms: [] });
+      renderGallery(repos);
+
+      await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(1));
+      expect(screen.getAllByRole('img', { name: 'Unknown organism' }).length).toBeGreaterThan(0);
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
   });
 
   // list() reads Object.values() and returns each record's own `id`, never the collection key, so
@@ -423,6 +503,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -469,6 +550,7 @@ describe('BattleGallery', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -515,6 +597,7 @@ describe('BattleGallery', () => {
           battles={repos.battles}
           organisms={repos.organisms}
           settings={repos.settings}
+          workspace={repos}
           seedStatus="ready"
         />,
       );
@@ -560,6 +643,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -581,6 +665,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -605,6 +690,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         battles={seeding.battles}
         organisms={seeding.organisms}
         settings={seeding.settings}
+        workspace={seeding}
         seedStatus="seeding"
       />,
     );
@@ -617,6 +703,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         battles={errored.battles}
         organisms={errored.organisms}
         settings={errored.settings}
+        workspace={errored}
         seedStatus="error"
       />,
     );
@@ -630,6 +717,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -657,6 +745,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -687,6 +776,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -716,6 +806,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -743,6 +834,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -768,6 +860,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -798,6 +891,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -836,6 +930,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -869,6 +964,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -918,6 +1014,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -950,6 +1047,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );
@@ -978,6 +1076,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         battles={repos.battles}
         organisms={repos.organisms}
         settings={repos.settings}
+        workspace={repos}
         seedStatus="ready"
       />,
     );

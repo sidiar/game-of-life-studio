@@ -24,7 +24,7 @@ import { APP_VERSION } from '@/lib/appVersion';
 // is mounted at a time.
 export default function SettingsRoute() {
   const repositories = useMemo(() => createRepositories(), []);
-  const { status } = useWorkspaceSeed(repositories);
+  const { status, error } = useWorkspaceSeed(repositories);
   // AC7 (Story 5.5): built once here, at the page boundary, exactly like `repositories` above —
   // never inside <SettingsPage> or <DataManagement>, and never imported by either (AR-2/27). A
   // second useMemo keyed on `repositories` rather than folding into the one above: the two are
@@ -49,6 +49,7 @@ export default function SettingsRoute() {
       battles={repositories.battles}
       organisms={repositories.organisms}
       seedStatus={status}
+      seedError={error}
       workspace={repositories}
       serializer={serializer}
     />

@@ -31,15 +31,26 @@ export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
  * import of it from non-test app code, and because Next's build-time NODE_ENV inlining is what
  * makes this whole branch — including the import — dead-code-eliminated from the production
  * bundle (AC3's "mock data is unreachable in production").
+ *
+ * `error` is the seed's rejection, kept (not discarded) so the page can classify it (Story 5.11):
+ * a first-run write refused for lack of space is not "your data is damaged", and a newer-format
+ * store must never be offered a reset. `undefined` unless `status === 'error'`. Never logged — the
+ * e2e specs assert a clean console on the happy path.
  */
-export function useWorkspaceSeed(repos: AppRepositories): { status: WorkspaceSeedStatus } {
-  const [status, setStatus] = useState<WorkspaceSeedStatus>('seeding');
+export function useWorkspaceSeed(repos: AppRepositories): {
+  status: WorkspaceSeedStatus;
+  error: unknown;
+} {
+  const [state, setState] = useState<{ status: WorkspaceSeedStatus; error: unknown }>({
+    status: 'seeding',
+    error: undefined,
+  });
   const hasRun = useRef(false);
   // Liveness must be a REF, not a per-invocation `let cancelled` (Review 2026-08-05). The two
   // guards have different lifetimes: hasRun deliberately survives StrictMode's setup -> cleanup ->
   // setup so the seed runs once, which means the SECOND setup skips and the FIRST setup owns the
   // in-flight promise — while that first setup's cleanup has already fired. A closure flag is dead
-  // by then, so `setStatus('ready')` was discarded and the page read "workspace: seeding" forever
+  // by then, so the 'ready' update was discarded and the page read "workspace: seeding" forever
   // in `npm run dev` (App Router enables StrictMode by default). A ref is re-armed by setup #2.
   const mounted = useRef(true);
 
@@ -64,10 +75,10 @@ export function useWorkspaceSeed(repos: AppRepositories): { status: WorkspaceSee
           return undefined;
         })
         .then(() => {
-          if (mounted.current) setStatus('ready');
+          if (mounted.current) setState({ status: 'ready', error: undefined });
         })
-        .catch(() => {
-          if (mounted.current) setStatus('error');
+        .catch((error: unknown) => {
+          if (mounted.current) setState({ status: 'error', error });
         });
     }
 
@@ -82,5 +93,5 @@ export function useWorkspaceSeed(repos: AppRepositories): { status: WorkspaceSee
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { status };
+  return state;
 }

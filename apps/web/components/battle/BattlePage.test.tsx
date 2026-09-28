@@ -11,7 +11,18 @@ import {
   type Battle,
   type Organism,
 } from '@gol/domain';
-import { CorruptDataError, QuotaExceededError, type AppRepositories } from '@gol/persistence';
+import {
+  CorruptDataError,
+  NewerFormatVersionError,
+  QuotaExceededError,
+  STORAGE_KEYS,
+  type AppRepositories,
+} from '@gol/persistence';
+import {
+  BATTLE_CORRUPT_MESSAGE,
+  NEWER_VERSION_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+} from '@/lib/storage/storageFailureMessages';
 import { createFakeRepositories, createMockWorkspace, MOCK_BATTLE_IDS } from '@gol/test-utils';
 import { RecordingContext2D } from '@/test-support/recordingContext2d';
 import { installFrameDriver } from '@/test-support/frameDriver';
@@ -252,6 +263,57 @@ describe('BattlePage', () => {
     expect(screen.getByRole('link', { name: 'Back to Gallery' })).toHaveAttribute('href', '/');
   });
 
+  // Story 5.11 (FD10): the failure body is classified, but /battle never offers a reset.
+  describe('classified load failure (Story 5.11)', () => {
+    function withBattleLoadRejecting(error: unknown): AppRepositories {
+      const repositories = seeded();
+      return {
+        ...repositories,
+        battles: { ...repositories.battles, load: vi.fn().mockRejectedValue(error) },
+      };
+    }
+
+    it.each([
+      ['gol:battles', new CorruptDataError(STORAGE_KEYS.battles, 'x')],
+      ['gol:schema', new CorruptDataError(STORAGE_KEYS.schema, 'x')],
+    ])('a corrupt %s points back to the Gallery, where the reset lives', async (_ns, error) => {
+      render(<BattlePage repositories={withBattleLoadRejecting(error)} battleId={SKIRMISH.id} />);
+
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Something Went Wrong' }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(BATTLE_CORRUPT_MESSAGE)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Back to Gallery' })).toHaveAttribute('href', '/');
+      expect(screen.queryByRole('button', { name: /reset/iu })).toBeNull();
+    });
+
+    it('a newer-format store shows the newer body with Reload, and no reset', async () => {
+      render(
+        <BattlePage
+          repositories={withBattleLoadRejecting(
+            new NewerFormatVersionError(STORAGE_KEYS.schema, 2, 1, 'x'),
+          )}
+          battleId={SKIRMISH.id}
+        />,
+      );
+
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Newer Version Required' }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(NEWER_VERSION_MESSAGE)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /reset/iu })).toBeNull();
+    });
+
+    it('an unclassifiable failure never calls the data damaged', async () => {
+      render(<BattlePage repositories={withFailingBattleLoad()} battleId={SKIRMISH.id} />);
+
+      await screen.findByRole('heading', { level: 1, name: 'Something Went Wrong' });
+      expect(screen.getByText(UNAVAILABLE_MESSAGE)).toBeInTheDocument();
+      expect(screen.queryByText(/damaged/iu)).toBeNull();
+    });
+  });
+
   // The third terminal state. A `ready` resource holding `null` is NOT "still loading" — the
   // intuitive `if (!data) return <Loading/>` spins here forever, silently, on every stale link.
   it('renders a not-found body — never the spinner — for an id no battle matches', async () => {
@@ -342,7 +404,9 @@ describe('BattlePage', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/stored data may be damaged/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/this battle could not be loaded|could not be accessed/i),
+    ).not.toBeInTheDocument();
   });
 
   // Branch ORDER regression (Story 2.1 review). /battle/new describes no stored battle, yet it
@@ -357,7 +421,9 @@ describe('BattlePage', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Untitled Battle' }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/stored data may be damaged/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/this battle could not be loaded|could not be accessed/i),
+    ).not.toBeInTheDocument();
   });
 
   // AC2/NFR-4.1 on the create route specifically, mirroring the loaded-route assertion below.
@@ -482,7 +548,7 @@ describe('BattlePage', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/stored data may be damaged/i)).toBeNull();
+    expect(screen.queryByText(/this battle could not be loaded|could not be accessed/i)).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Something Went Wrong' })).toBeNull();
   });
 

@@ -10,6 +10,8 @@ import type {
 } from '@gol/persistence';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
+import { pickStorageFailure } from '@/lib/storage/storageFailure';
+import StorageFailureNotice from '@/components/storage/StorageFailureNotice';
 import WorkspaceStatistics from './WorkspaceStatistics';
 import DataManagement from './DataManagement';
 
@@ -18,6 +20,8 @@ export interface SettingsPageProps {
   battles: BattleRepository;
   organisms: OrganismRepository;
   seedStatus: WorkspaceSeedStatus;
+  /** The seed's rejection (`useWorkspaceSeed`'s `error`), classified beside the reads' own. */
+  seedError?: unknown;
   // A `Pick`, not the whole aggregate and not a bare function (FD7, Story 5.2). Story 4.1 refused
   // "the unused prop that lies about what the component reads" — `repositories: AppRepositories`
   // would hand this component `isFreshWorkspace` it does not call. Story 5.10 widens this to
@@ -25,7 +29,9 @@ export interface SettingsPageProps {
   // `settings` (Decision F makes the settings repository unreachable from this path). A bare
   // `storageUsage={repositories.storageUsage}` function prop detaches the method from its object —
   // harmless today (neither implementation uses `this`) and a `this` trap the day one does.
-  workspace: Pick<AppRepositories, 'storageUsage' | 'clearAll'>;
+  // Story 5.11 widens it by `discardUnreadableStamp` — the storage-failure notice's Reset
+  // Workspace (`recoverWorkspace()`), still never `settings`.
+  workspace: Pick<AppRepositories, 'storageUsage' | 'clearAll' | 'discardUnreadableStamp'>;
   // The same `Pick` shape as `workspace` above, for the same reason (FD7, Story 5.2): this page
   // hands `<DataManagement>` exactly the serializer methods it (and its Story 5.9 `<ImportWorkspaceRow>`
   // child) call, never the whole `WorkspaceSerializer` interface — `exportBattle` is Story 5.6's,
@@ -84,15 +90,19 @@ const Container = styled('div')({
  *
  * FD3: the settings load is the page's readiness gate, and it never degrades to
  * DEFAULT_SETTINGS on a rejection — unlike BattleGallery/<BattlePage>, which only ever READ a
- * preference. A rejecting settings.load() renders an alert with no sections, because writing
- * defaults back over a corrupt record on the FIRST Epic 6 save would erase whatever Story 5.11's
- * rescue path could have recovered.
+ * preference. A rejecting settings.load() renders the storage-failure notice with no sections,
+ * because writing defaults back over a corrupt record IMPLICITLY — on the first Epic 6 save —
+ * would erase it without the user ever choosing to. Story 5.11's rescue path is that notice's
+ * Restore Default Settings: the same write, but only on an explicit click (FD5), and it touches no
+ * battle or organism. This page is the only one that reads settings strictly, so it is the only
+ * one that can show the corrupt-settings kind.
  */
 export default function SettingsPage({
   settings,
   battles,
   organisms,
   seedStatus,
+  seedError,
   workspace,
   serializer,
 }: SettingsPageProps) {
@@ -143,8 +153,22 @@ export default function SettingsPage({
           (FD6) — not outside it. */}
       <div aria-busy={status === 'loading'}>
         {status === 'loading' && <StatusText>Loading settings…</StatusText>}
+        {/* Story 5.11: one notice for up to three failed sources, at FD2's priority — so a
+            seed-write quota failure reads storage-full, never "damaged" (the one-alert-string
+            problem the deferred-work entry recorded). No heading: the page's <h1> stays the only one. */}
         {status === 'error' && (
-          <StatusText role="alert">Something went wrong loading your settings.</StatusText>
+          <StorageFailureNotice
+            kind={
+              pickStorageFailure([
+                seedStatus === 'error' ? seedError : undefined,
+                statsResource.error,
+                settingsResource.error,
+              ]) ?? 'unavailable'
+            }
+            workspace={workspace}
+            organisms={organisms}
+            settings={settings}
+          />
         )}
         {status === 'ready' && (
           <Container>

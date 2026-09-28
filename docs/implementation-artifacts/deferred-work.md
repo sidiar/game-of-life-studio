@@ -42,7 +42,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
   - **Story 4.10 mints rule `id`s only** (`crypto.randomUUID()`, matching the persisted format's shape) **and computes no `contentHash`** — `RuleDraft` (`lib/organisms/ruleDraft.ts`) omits the field entirely, so there is nothing here for a partial hasher to fork.
   - **✅ Closed in Story 4.16.** `apps/web/lib/organisms/ruleContentHash.ts` implements the real hasher (`ruleContentHash` / `canonicalRuleContent`) against the pinned scheme, WebCrypto (`crypto.subtle.digest`), lives in `apps/web` rather than `@gol/domain` (FD1 — the undeclared `@types/node` reach and the DOM-free, synchronous character of the domain package). Its test reproduces all ten pinned literals (Conway's two, the eight AR-45 mocks) byte-for-byte — a red result there means the hasher is wrong, never that a literal should be regenerated.
 
-- **`useWorkspaceSeed`'s error path discards the error object** — **still open.** The *user-facing surface* landed in Story 1.10 (2026-08-07) and that half is done, but the defect this entry is named for is not: `useWorkspaceSeed.ts` still throws the underlying `QuotaExceededError`/`CorruptDataError` away, so a quota failure terminates with zero diagnostic anywhere. Struck through and marked closed on 2026-08-07, which removed a live defect from every scan of open debt — reopened in the 2026-08-08 review. What shipped: `BattleGallery` now renders `<p role="alert">Something went wrong loading your battles.</p>` for both `seedStatus === 'error'` and a rejecting `list()` — the "somewhere meaningful to surface it" this entry was waiting for. Scope stayed deliberately narrow: no retry, no reset-offer, no storage diagnostics, and `useWorkspaceSeed.ts` itself still discards the underlying `QuotaExceededError`/`CorruptDataError` object rather than logging it (the e2e asserts zero console errors on the happy path, so any such logging would have to sit on the failure branch only). Story 5.11 owns the richer corruption/storage-failure UX and the diagnostic itself.
+- **`useWorkspaceSeed`'s error path discards the error object** — **still open.** The *user-facing surface* landed in Story 1.10 (2026-08-07) and that half is done, but the defect this entry is named for is not: `useWorkspaceSeed.ts` still throws the underlying `QuotaExceededError`/`CorruptDataError` away, so a quota failure terminates with zero diagnostic anywhere. Struck through and marked closed on 2026-08-07, which removed a live defect from every scan of open debt — reopened in the 2026-08-08 review. What shipped: `BattleGallery` now renders `<p role="alert">Something went wrong loading your battles.</p>` for both `seedStatus === 'error'` and a rejecting `list()` — the "somewhere meaningful to surface it" this entry was waiting for. Scope stayed deliberately narrow: no retry, no reset-offer, no storage diagnostics, and `useWorkspaceSeed.ts` itself still discards the underlying `QuotaExceededError`/`CorruptDataError` object rather than logging it (the e2e asserts zero console errors on the happy path, so any such logging would have to sit on the failure branch only). Story 5.11 owns the richer corruption/storage-failure UX and the diagnostic itself. **✅ Discharged (Story 5.11):** `useWorkspaceSeed` now returns `{ status, error }`, keeping the rejection, and every route classifies it into the storage-failure notice (`lib/storage/storageFailure.ts`) — a seed quota failure reads storage-full. Still no console logging, by design (the happy-path e2e).
 
 ## Deferred from: code review of 1-6-test-utilities-dev-fixture-workspace (2026-08-05)
 
@@ -118,7 +118,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - ~~**`<PetriDishCanvas>`'s contract permits a resize feedback loop for any caller that does not size the element in CSS**~~ — `paint()` writes `canvas.width`/`canvas.height` (the *intrinsic* dimensions) while the `ResizeObserver` watches the same canvas (`PetriDishCanvas.tsx:84-90`). `BattleTile` neutralises this because `DishCanvas` sets `width:100%; height:100%`, so the content box is parent-driven — but `className` is optional and the component's own comment delegates box styling to the caller. A consumer that renders it without a size-fixing class gets intrinsic change → content-box change → observer → 150 ms → repaint → intrinsic change, forever. The two `ResizeObserver` tests use a `FakeResizeObserver` whose `observe` is a no-op `vi.fn()`, so they can never surface it. ~~**Pick this up in Story 2.4/3.11** when the second and third variants land: either make the sizing contract mandatory (required `className`, or a size prop) or observe the parent element rather than the canvas.~~ **✅ Resolved in Story 2.4** (2026-08-26). Both variants now observe `canvas.parentElement ?? canvas` instead of the canvas itself — the parent's box is never written by `paint()`/`drawFull()`/`resize()`, so the loop is broken by construction rather than by a styling convention the caller has to remember. `BattleTile`'s `PetriDish` div was already a correctly-sized parent, so the Gallery's behaviour is unchanged; `PetriDishCanvas.test.tsx`'s edit-variant suite pins the observed target directly ("observes the parent element, not the canvas").
 
-- **Three of `BattleTile`'s four thumbnail states render identical DOM, and there is no edge out of `'unavailable'`** — `'idle'`, `'loading'` and `'unavailable'` all produce the same empty `PetriDish`; only `'ready'` differs (`BattleTile.tsx`'s thumbnail effect). So `setThumbnail({ kind: 'loading' })` (`:316`) is a synchronous set-state from a passive effect — the pattern `BattleGallery.tsx:20-23` explicitly declines for its own error case, citing `react-hooks/set-state-in-effect` — that produces byte-identical DOM, costing ~50 extra render passes on one commit at NFR-7.2 scale, on the interactivity budget AC4 exists to protect. Separately, a tile whose load fails once is blank for the page's lifetime: no retry edge, no user-visible signal, and by AC design no console output. **Revisit with Story 5.11** (user-facing corruption reporting), which owns whether `'unavailable'` should be distinguishable at all; drop or justify `'loading'` at the same time.
+- **Three of `BattleTile`'s four thumbnail states render identical DOM, and there is no edge out of `'unavailable'`** — `'idle'`, `'loading'` and `'unavailable'` all produce the same empty `PetriDish`; only `'ready'` differs (`BattleTile.tsx`'s thumbnail effect). So `setThumbnail({ kind: 'loading' })` (`:316`) is a synchronous set-state from a passive effect — the pattern `BattleGallery.tsx:20-23` explicitly declines for its own error case, citing `react-hooks/set-state-in-effect` — that produces byte-identical DOM, costing ~50 extra render passes on one commit at NFR-7.2 scale, on the interactivity budget AC4 exists to protect. Separately, a tile whose load fails once is blank for the page's lifetime: no retry edge, no user-visible signal, and by AC design no console output. **Revisit with Story 5.11** (user-facing corruption reporting), which owns whether `'unavailable'` should be distinguishable at all; drop or justify `'loading'` at the same time. **↪ Re-pointed (Story 5.11):** still open. 5.11 changed nothing in `BattleTile.tsx` (its FD1: a per-record failure keeps its existing surfaces); a whole-key or newer-stamp failure no longer reaches the tiles at all, since the Gallery's own `list()` rejects first and shows the notice. Waits on the "N records could not be read" follow-up (see the Story 5-11 section).
 
 ## Deferred from: code review of 1-12-gallery-empty-state (2026-08-13)
 
@@ -140,7 +140,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 ## Deferred from: code review of 1-13-delete-battle-with-confirmation (2026-08-14)
 
-- **A successful delete whose re-list rejects wipes the entire Gallery into a terminal error** — `confirmDelete` awaits `battles.delete(id)`, then `reload()` re-enters the load effect; if `battles.list()` rejects on that pass, `setLoadState({ kind: 'error' })` wins over everything at `BattleGallery.tsx:209` and, per the still-open terminal-`loadState` entry above, nothing user-facing can re-invoke `reload()`. Every surviving tile is replaced by "Something went wrong loading your battles." with no retry, immediately after an operation the user was told succeeded — reachable when a second tab writes a corrupt `gol:battles`, or on a quota/serialization fault mid-write. This is not a new defect so much as a **new and much worse entry point** into the one already recorded: before Story 1.13 the terminal error could only be reached on mount, where no work is lost. **Pick it up with the retry affordance** in Epic 5's user-facing status/reporting work — the same fix closes both, and no AC in this story covered it.
+- **A successful delete whose re-list rejects wipes the entire Gallery into a terminal error** — `confirmDelete` awaits `battles.delete(id)`, then `reload()` re-enters the load effect; if `battles.list()` rejects on that pass, `setLoadState({ kind: 'error' })` wins over everything at `BattleGallery.tsx:209` and, per the still-open terminal-`loadState` entry above, nothing user-facing can re-invoke `reload()`. Every surviving tile is replaced by "Something went wrong loading your battles." with no retry, immediately after an operation the user was told succeeded — reachable when a second tab writes a corrupt `gol:battles`, or on a quota/serialization fault mid-write. This is not a new defect so much as a **new and much worse entry point** into the one already recorded: before Story 1.13 the terminal error could only be reached on mount, where no work is lost. **Pick it up with the retry affordance** in Epic 5's user-facing status/reporting work — the same fix closes both, and no AC in this story covered it. **✅ Discharged (Story 5.11):** the Gallery's error branch is now `<StorageFailureNotice>`, whose Reload (or Reset Workspace, for corrupt data) is the way out of the terminal state.
 
 - **`delete(id)` is keyed on the collection key while `list()` returns each record's own `id` field, so a divergent workspace makes delete a silent no-op** — `localStorageBattleRepository.ts:69-74` does `if (!(id in collection)) return;` against the object key; `list()` (`:48-53`) maps `Object.values()` and returns `record.id`. `BattleGallery.tsx:222-232` already documents that these can diverge ("two entries can carry the same id in an imported or hand-edited workspace") and de-duplicates for rendering — but the delete path does not check. On such a workspace the confirm resolves successfully, the dialog closes, `reload()` runs, and the tile reappears unchanged: no error, no message, "delete does nothing". Pre-existing repository semantics, not introduced here, but Story 1.13 is the first flow that makes it user-visible. **Pick it up with the import/export work (M8)**, which is where key/id divergence is actually minted — an `exists()` check or a post-delete verification is the cheap guard.
 
@@ -160,7 +160,7 @@ Items surfaced during reviews that were consciously deferred rather than fixed a
 
 - **Prototype-inherited keys make an arbitrary `?id=` render "damaged data" instead of "not found"** — `LocalStorageBattleRepository.load()` (`packages/persistence/src/localStorageBattleRepository.ts:25-26`) does `readCollection(...)[id]; if (record === undefined) return null`. `readCollection` returns a plain `JSON.parse`d object, so `collection['constructor']` — and `toString`, `valueOf`, `hasOwnProperty`, `isPrototypeOf`, `__proto__` — resolve up the prototype chain and are **not** `undefined`. `BattleSchema.safeParse(Function)` then fails and `load()` throws `CorruptDataError`, so `/battle?id=constructor` renders "Something Went Wrong / Its stored data may be damaged" for a link that names nothing. That swaps the two facts `BattlePage.tsx` deliberately keeps apart ("gone" vs "broken"). `exists()` (`:72`, `id in collection`) returns **true** for all six, and `delete()` (`:66`) passes its guard, deletes nothing, and still rewrites the entire collection. **The unit tests structurally cannot catch it:** the fake (`packages/test-utils/src/fakeRepositories.ts:124`) is a `Map`, which has no prototype chain, so `BattlePage.test.tsx`'s `battleId="missing"` asserts Not Found and passes forever while production shows the corruption notice. Pre-existing in the persistence layer, but **Story 2.1 is what makes it reachable from the URL bar** — before this story no route accepted a user-supplied id. Fix is `Object.hasOwn(collection, id)` in `load`/`exists`/`delete`, for the organism repository as well, with tests — deliberately not done here, because that is a `packages/persistence` change (with its own ~80% coverage floor) inside a story scoped to `apps/web` UI wiring. **Pick this up in the next story that touches `packages/persistence`.**
 
-- **Blocked storage is reported to the user as corrupt storage** — `localStorageAccess.ts:69` calls `localStorage.getItem(key)` with no `try`/`catch`. Where site data is blocked (Safari/Firefox "block all cookies", a third-party iframe, some enterprise policies) the access throws a `SecurityError` `DOMException`, which is neither `CorruptDataError` nor `QuotaExceededError`. It propagates through `readCollection` → `load`/`list` → `useAsyncResource`'s catch → "This battle could not be loaded. Its stored data may be damaged." The user's data is intact and merely unreachable, and the offered next move ("Back to Gallery") leads to a Gallery that fails identically. `writeKey` (`:57-64`) has the symmetric hole: a `SecurityError` on `setItem` is re-thrown past the quota classifier. **Pick this up with the prototype-key fix above** — same file, same "classify the failure before showing copy about it" problem.
+- **Blocked storage is reported to the user as corrupt storage** — `localStorageAccess.ts:69` calls `localStorage.getItem(key)` with no `try`/`catch`. Where site data is blocked (Safari/Firefox "block all cookies", a third-party iframe, some enterprise policies) the access throws a `SecurityError` `DOMException`, which is neither `CorruptDataError` nor `QuotaExceededError`. It propagates through `readCollection` → `load`/`list` → `useAsyncResource`'s catch → "This battle could not be loaded. Its stored data may be damaged." The user's data is intact and merely unreachable, and the offered next move ("Back to Gallery") leads to a Gallery that fails identically. `writeKey` (`:57-64`) has the symmetric hole: a `SecurityError` on `setItem` is re-thrown past the quota classifier. **Pick this up with the prototype-key fix above** — same file, same "classify the failure before showing copy about it" problem. **✅ Discharged (Story 5.11):** for the copy: a `SecurityError` now classifies as `'unavailable'` ("could not be accessed… may be blocking storage… Nothing was changed"), never "damaged", on every route including `/battle`. The `getItem` call itself is still unguarded — the classifier does the work at the UI boundary.
 
 - **The loading→settled transition is never announced, and `/battle` mounts two competing live regions** — `BattlePage.tsx`'s `<BattleLoading>` is `<Body role="status" aria-live="polite">` whose text is already present when the region mounts. A polite live region announces *mutations to itself*; a region that arrives pre-populated generally announces nothing, and every terminal branch then *replaces* the region wholesale with a subtree carrying no `role="status"` and taking no focus. A screen-reader user gets silence on arrival and silence on completion — for all four outcomes, including "Battle Not Found" and "Something Went Wrong". On `/battle` it doubles up: the `<Suspense>` fallback (`app/(battle)/battle/page.tsx:34`) mounts one `role="status"` and the hook's own `BattleLoading` mounts a second after the CSR bailout. Task 5 asked for an "announced" state and AC4 only asked for *distinct* states, which is satisfied — so this is a gap against the task wording, not the AC. The fix is a design call (move focus to the resolved heading? keep one persistent live region and swap only its text?) with no mockup behind it. ~~**Pick this up with the first story that adds real chrome to the battle route (Story 2.4), or any accessibility pass.**~~ **Re-pointed by Story 2.4** (2026-08-26): this story adds the editor canvas and the Lab chassis, not a design decision about live-region announcement, and the underlying mechanics (`<BattleLoading>`, the Suspense fallback, the terminal branches replacing the region wholesale) are all unchanged by it. **Pick this up in Story 6.11** (the accessibility validation pass), the design call this entry has always actually needed.
 
@@ -366,9 +366,9 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
 
 - **`role="group"` with every child `aria-hidden` may never be announced in browse mode** — Generation, Living Cells and the empty-Population placeholder (`EditorStatusBar.tsx`) are each a `<div role="group" aria-label="Label: value">` whose label and value spans are BOTH `aria-hidden="true"`. The combined name is correct in the accessibility tree (Playwright's `getByRole('group', { name })` and `vitest-axe` both see it, and the e2e asserts it), but a `group` is a container role: several screen readers surface a container's name when entering it around real content, and a container with no exposed content at all can be skipped — in which case the number is conveyed by nothing, since the visible text was hidden. The Population ENTRIES do not have this problem (`role="img"` is a leaf naming role), and that inconsistency between two constructions in the same row is the tell. Not changed here because the fix needs a real AT sweep (VoiceOver + NVDA) to choose between exposing the children, using `role="img"` throughout for symmetry, or dropping the groups for a single labelled summary string — and axe cannot referee it. **Pick this up in Story 6.11** (the accessibility re-confirmation pass), or sooner if any AT testing happens first.
 
-- **A failed organism library renders N identical "Unknown organism" population entries** — when `organisms.list()` rejects, `resolveDisplayOrganisms` falls every roster id back to `FALLBACK_NAME` + `DEFAULT_COLOR_TOKEN`, so the stats row shows one entry per id, all named "Unknown organism: <count>" and all wearing the same sky-blue chip. The sidebar has an explicit AC7 message for this degraded state; the stats row has none, so a screen reader hears the same name repeated with different numbers and the one visual differentiator (colour) is identical too. Playwright's `getByRole('img', { name })` also becomes strict-mode ambiguous there. The same shape is reachable without a failure by two organisms that merely SHARE a name — `OrganismSchema.name` carries no uniqueness constraint. Left as-is because the honest fix is a disambiguator the design has not specified (an index? the id's first octet? suppressing Population entirely in the degraded state, matching the sidebar's message). **Pick this up with Story 5.11** (the user-facing corruption story), which already owns what a degraded workspace should say.
+- **A failed organism library renders N identical "Unknown organism" population entries** — when `organisms.list()` rejects, `resolveDisplayOrganisms` falls every roster id back to `FALLBACK_NAME` + `DEFAULT_COLOR_TOKEN`, so the stats row shows one entry per id, all named "Unknown organism: <count>" and all wearing the same sky-blue chip. The sidebar has an explicit AC7 message for this degraded state; the stats row has none, so a screen reader hears the same name repeated with different numbers and the one visual differentiator (colour) is identical too. Playwright's `getByRole('img', { name })` also becomes strict-mode ambiguous there. The same shape is reachable without a failure by two organisms that merely SHARE a name — `OrganismSchema.name` carries no uniqueness constraint. Left as-is because the honest fix is a disambiguator the design has not specified (an index? the id's first octet? suppressing Population entirely in the degraded state, matching the sidebar's message). **Pick this up with Story 5.11** (the user-facing corruption story), which already owns what a degraded workspace should say. **↪ Re-pointed (Story 5.11):** still open — FD8 pinned the fallbacks without redesigning this copy, which needs a disambiguator the specs do not give. See the Story 5-11 section.
 
-- **`Living Cells` can exceed the sum of Population with nothing surfacing the gap** — `computeEditorGridStats` counts an out-of-range ref (Decision I.4's dangling-ref case, reachable via an imported or hand-edited `gridState`) into `livingCells` and attributes it to no organism, which is the documented and correct invariant (`sum(perOrganism.count) <= livingCells`). But the bar then shows two numbers that visibly disagree — `Living Cells: 12` beside a Population row summing to 8, or beside `Population: —` on an empty roster — with no marker and, deliberately, no console warning at this call site. Fine as engineering, confusing as UI. **Pick this up with Story 5.11** alongside the entry above; both are "what the editor should say about a corrupt record".
+- **`Living Cells` can exceed the sum of Population with nothing surfacing the gap** — `computeEditorGridStats` counts an out-of-range ref (Decision I.4's dangling-ref case, reachable via an imported or hand-edited `gridState`) into `livingCells` and attributes it to no organism, which is the documented and correct invariant (`sum(perOrganism.count) <= livingCells`). But the bar then shows two numbers that visibly disagree — `Living Cells: 12` beside a Population row summing to 8, or beside `Population: —` on an empty roster — with no marker and, deliberately, no console warning at this call site. Fine as engineering, confusing as UI. **Pick this up with Story 5.11** alongside the entry above; both are "what the editor should say about a corrupt record". **↪ Re-pointed (Story 5.11):** still open, with the entry above (FD8).
 
 - ~~**`computeEditorGridStats` iterates `occupant.length` rather than `grid.width * grid.height`**~~ — **✅ Closed in Story 2.14 (2026-08-29), fixed.** — every current producer allocates or slices the buffer to exactly `width * height` (`toRenderableGrid`, `restore()`, `PetriDishCanvas`'s working grid), so the two agree today and no test exercises a mismatch. `RenderableGrid` does not GUARANTEE it, though, and `useUndoableGrid.ts` already names Stories 2.14/2.15 as new commit sources — a resize that pools or over-allocates a buffer would silently count cells outside the visible grid into both `livingCells` and a per-organism total. ~~One-line fix (`const cells = grid.width * grid.height`) whenever a commit source stops slicing exactly. **Pick this up in Story 2.14** (edit-mode grid resize), which is the story that introduces the first resize.~~ Taken as the one-line fix rather than re-deferred, even though `resizeGrid` allocates exactly `cols * rows` and the mismatch is therefore still unreachable: the loop bound is now a property of the GRID rather than of whatever buffer happens to be attached to it, which is what makes it safe for Story 3.3's typed-array `Grid` and any pooling it brings. Pinned by `gridStats.test.ts`'s "counts only the cells inside width * height, never a trailing over-allocation", which builds the deliberately over-allocated grid `RenderableGrid` cannot promise does not exist.
 
@@ -2308,6 +2308,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   as a read failure. FD3 hands the copy and the reset offer to **Story 5.11** — carry the
   three-source distinction there (at minimum a different sentence for the seed-write case), so the
   rescue path does not offer to reset a settings record that was never the problem.
+  **✅ Discharged (Story 5.11):** `/settings` now shows one notice at FD2's priority — a seed-write quota failure reads
+  storage-full, a corrupt `gol:settings` offers Restore Default Settings (never the workspace reset).
 
 - **"Seeds `gol:organisms` exactly once" is proven by the final key set, not a write count** — the
   StrictMode test in `app/(gallery)/settings/page.test.tsx` (and its two siblings,
@@ -2529,6 +2531,8 @@ Reviewed on **Opus** against a **Sonnet** implementation, via three parallel adv
   organisms."). The graceful alternative — `battles.list().catch(() => null)` and the Edit buttons
   withheld with an explanation — needs copy nobody has written and a test for a state
   **Story 5.11** (load-time corruption UX) will redesign anyway; that story owns the copy.
+  **✅ Discharged (Story 5.11):** a corrupt `gol:battles` on `/organisms` now shows the storage-failure notice (corrupt
+  workspace copy + Reset Workspace), not the organism-worded line.
 - **`e2e/organisms.spec.ts` carries the FIFTH hand-synced copy of `buildSeedPayload`/`seedWorkspace`**
   (after `gallery.spec.ts`, `battleRoute.spec.ts`, `deleteBattle.spec.ts`, `createBattle.spec.ts`),
   plus a layered `seedExtraOrganisms` init script (the `battleRoute.spec.ts` precedent). The
@@ -2698,6 +2702,9 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   whole collection that is not an object keyed by id throws `CorruptDataError` from
   `readCollection`, and `exportWorkspace()` rejects with it rather than exporting an empty
   collection. 5.11 should decide both together.
+  **↪ Re-pointed (Story 5.11):** still open. 5.11's FD1 keeps the per-record skip, and a whole-key failure now blocks the
+  whole `/settings` page (the notice) before Export is reachable. Waits on the skipped-count follow-up
+  (see the Story 5-11 section).
 
 - **The `cells` emission order is a contract of the FORMAT, and a later "simplification" would break
   it silently.** `toBattleExport` emits cells grouped by ascending roster ref (row-major within each
@@ -2833,6 +2840,8 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   repository contract, not introduced by 5.3; **Story 5.11** owns load-time corruption handling and
   should decide whether an export over a corrupt collection refuses (today) or exports what parses
   with a warning — the same choice as the per-record entry above.
+  **↪ Re-pointed (Story 5.11):** the whole-key half is now unreachable from the UI (the notice replaces `/settings` before
+  the Export row mounts); the refusal stays as the contract. See the Story 5-11 section.
 
 ## Deferred from: Story 4-18-clone-organism (2026-09-22)
 
@@ -2964,6 +2973,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   import will reject** (Story 5.4 FD5, already an owner open flag in that story). Only reachable
   through a corrupt, skipped organism record; same stance as `exportWorkspace`. Telling the user is
   **Story 5.11**'s; a loud failure at export would need an error type and UI copy (5.6/5.11).
+  **↪ Re-pointed (Story 5.11):** still open, with the export entries above (FD1).
 
 ## Deferred from: code review of 5-4-rule-aware-organism-closure, round 2 (2026-09-24)
 
@@ -3211,6 +3221,8 @@ been answered yet:
   `await persistBattle()` before `exporter.exportWorkspace()` in `<BattlePage>`'s `handleExportExited`.
   The two related gaps FD6 itself already named — `useWorkspaceSeed` not mounted on `/battle`, and
   a partly-corrupt store yielding a partial file — stay with Story 5.11, unchanged by this story.
+  **↪ Re-pointed (Story 5.11):** `/battle` still mounts no seed (FD10 — it classifies and points at the Gallery), and
+  the partial-file half waits on the skipped-count follow-up. See the Story 5-11 section.
 - **`EditorToolsSection`'s `:not(:last-child)` margin rule assumes exactly two `ToolButton`s.** It
   reproduces the mockup's `.tool-btn { margin-bottom: 8px }` without a wrapper element (so the DOM
   stays byte-for-byte identical to before this story when `onExport` is absent), but a THIRD tool
@@ -3439,6 +3451,9 @@ full reasoning; the owner rules on each).
   is testable by constructing the class from the barrel; add a seam only if that proves awkward.
   `epics.md`'s 5.11 AC carries the same exception inline, since `create-story` reads `epics.md`, not
   this file.
+  **✅ Discharged (Story 5.11):** `classifyStorageFailure` tests the subclass first; a newer store gets Reload only on
+  every route; `recoverWorkspace()` / `discardUnreadableStamp()` refuse it at the persistence layer;
+  `saveFailureMessage` has its own newer branch; the Gallery's `organisms.list()` catch is gone.
 
 ## Deferred from: code review of 5-7-migration-registry (2026-09-25)
 
@@ -3481,10 +3496,15 @@ owner decisions. Both items are Story 5.11's and are also listed in the FD9 hand
   a plain `CorruptDataError`); the copy is 5.11's by the owner decision and `apps/web` is outside
   5.7. Pick up with Story 5.11: branch on `instanceof NewerFormatVersionError` before
   `instanceof CorruptDataError` in each.
+  **✅ Discharged (Story 5.11):** see the hand-off entry above. `BattleTile`'s degrade is no longer reachable for a
+  newer store (the Gallery's `list()` rejects first).
 - **`@gol/test-utils` fakes have no seam that produces a `NewerFormatVersionError`** —
   `FakeSeed.stamped` is a boolean, not a version, so 5.11's reload branch is testable only by
   constructing the class (barrel-exported) or mocking a repository method. Add a seam in 5.11 only
   if that proves awkward.
+  **✅ Discharged (Story 5.11):** it did not prove awkward — every newer-version test constructs the class from the
+  barrel and rejects through a `vi.fn` wrapper. No seam added; the fake's `discardUnreadableStamp` is a
+  documented no-op.
 
 ## Deferred from: Story 5-8-atomic-import-pipeline (2026-09-25)
 
@@ -3584,6 +3604,7 @@ full reasoning; the owner rules on each flagged one).
   empty workspace for this predicate — so a corrupt-but-nonempty workspace could suppress the
   warning it should show. Store-corruption UX (a caller learning about a skipped record at all) is
   Story 5.11's; `isPristineWorkspace` itself has no seam for "count included an unreadable entry".
+  **↪ Re-pointed (Story 5.11):** still open (FD1). See the Story 5-11 section.
 - **Surfaced, not resolved: the M8/FR-8.4 "always warns" vs "suppressed for pristine" wording
   conflict.** Architecture M8 (`architecture.md:354`), RFC-006 Decision 5 ("The confirmation
   always warns") and the mockup's Import row description ("You are always warned first",
@@ -3679,6 +3700,9 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
   id and would render it as an unknown organism. Story 4.25 proposes a
   `5-11-load-time-corruption-handling → 4-25-create-organism-from-battle` `lane-gates.yaml` row for
   Sidiar's approval (its own story file, bottom); not added here unapproved.
+  **↪ Re-pointed (Story 5.11):** still latent. 5.11 adds no library reload on `/battle` (FD10 — the
+  route classifies a battle-load failure and points at the Gallery; `organismsResource` is untouched),
+  so the overlay constraint carries to whichever story first adds one.
 - **The gate's dialog title and its disclosure trigger carry the identical accessible name.**
   `DialogTitle` renders `battleCountLabel(n)` ("Used in 2 Battles") and the `<UsageIndicator>`
   trigger button is named the same string, so a screen-reader user hears the same name for the
@@ -3772,6 +3796,7 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   file could not be imported", and the user retries with other files that all fail the same way.
   The claim "workspace not changed" is still true. Store-corruption UX is Story 5.11's — give it a
   "your saved workspace could not be read; nothing was imported" branch there.
+  **✅ Discharged (Story 5.11):** `importFailureMessage` has a plain-`CorruptDataError` branch after the newer one.
 - **No file-size cap before `file.text()`** (`ImportWorkspaceRow.tsx`). `accept` is only a hint; a
   very large file is read and `JSON.parse`d in full before the write fails on quota (reported
   truthfully as `write-failed` + quota). No story specifies a limit; a pre-read
@@ -3821,6 +3846,8 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   keeps the newer stamp anyway, so a reset would leave the identical error over an empty store. For
   a plain corrupt stamp, 5.11's own reset path needs to resolve the stamp before
   `ensureDefaultOrganism` runs — this function's contract does not change to accommodate it.
+  **✅ Discharged (Story 5.11):** `recoverWorkspace()` discards an unusable stamp first (`AppRepositories.discardUnreadableStamp()`),
+  then calls `resetWorkspace()` unchanged; a newer stamp is refused before anything is written.
 - **FD6 — no cross-row locking on `/settings`' Data Management card.** Export, Import
   (`ImportWorkspaceRow.tsx`) and Clear All Data (`ClearAllDataRow.tsx`) each keep an independent
   `pendingRef` — there is no card-level in-flight flag serialising the three. In practice every
@@ -3859,3 +3886,36 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   pre-existing: before D2 the row's own message sat inside `<DataManagement>` as well. It is
   untested. A fix would keep the failure copy outside the card that unmounts, for example by
   showing it in the page-level error state.
+
+## Deferred from: Story 5-11 (Load-Time Corruption Handling)
+
+Open owner flags from the story (not blockers — the story proceeded on its forced decisions):
+
+- **FD4 widens `AppRepositories` by one method, `discardUnreadableStamp()`** (mirrored as a documented
+  no-op in `@gol/test-utils`' fake). It is the only AR-2-clean way to make the reset work over an
+  unusable `gol:schema` stamp; rejecting it means either a corrupt stamp gets no reset offer or
+  `clearAll()` / `resetWorkspace()` change their contracts. A connected-mode repository will need its
+  own answer to "discard an unreadable format marker".
+- **FD5: corrupt `gol:settings` gets "Restore Default Settings", not "the 5.10 path".** The epic AC
+  names one recovery ("reset to the default workspace") for every namespace; for settings that
+  recovery cannot work by construction (Decision F — the reset never touches settings), and offering
+  it would destroy battles over a record it never reads. Only `/settings` reads settings strictly, so
+  only `/settings` shows this kind; `/` and `/battle` keep their read-only degrade to defaults.
+- **FD1: per-record corruption stays silent at the list level.** `list()` / `listFull()` still skip an
+  unreadable record (Story 1.4). Four open entries wait on a user-facing "N records could not be
+  read" design, which needs a repository contract change (skipped counts): BattleTile's
+  `'unavailable'`; export of a partly-corrupt store (and a skipped organism producing a file import
+  then rejects); the pristine check miscounting; `/battle`'s partial-file export. **Recommend a
+  follow-up story.** Each entry above carries a "Re-pointed (Story 5.11)" line.
+- **FD7: success is shown by the reloaded page, with no success message.** FR-8.5's "display success
+  confirmation" governs Clear All on `/settings` (still true there). The notice's reset is a recovery,
+  and the healthy page it reloads into (on `/`, the empty Gallery) is its confirmation.
+- **The Gallery's delete-failure alert (`handleDeleteFailed`) now renders the storage-failure notice,
+  and it is inserted while the delete dialog is still exiting** — the same live-region timing the old
+  generic alert already had (pre-existing, not introduced here: `onDeleteFailed` fires right after
+  `setDialogOpen(false)`). The notice now receives the delete's rejection (`onDeleteFailed(error)`) so
+  it can classify it. Moving the publish to the dialog's exit is the Story 4.18 queued-outcome fix,
+  left for the live-region host class fix recorded earlier in this file.
+- **Unknown-organism copy (FD8).** The "N identical Unknown organism entries" and "Living Cells vs
+  Population" entries stay open: they need a disambiguator design the specs do not give. The
+  fallbacks themselves are pinned (a Gallery test with a roster id the library lacks).

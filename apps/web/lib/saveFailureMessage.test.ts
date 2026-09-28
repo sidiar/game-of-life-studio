@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CorruptDataError, QuotaExceededError } from '@gol/persistence';
+import { CorruptDataError, NewerFormatVersionError, QuotaExceededError } from '@gol/persistence';
 import { saveFailureMessage } from './saveFailureMessage';
 
 // Story 4.16 Task 4: the six sentences by class × subject. The 'battle' three stay
@@ -63,4 +63,20 @@ describe('saveFailureMessage', () => {
         'still here — try again.',
     );
   });
+
+  // Story 5.11: tested before the CorruptDataError branch (a subclass) — reload, never "try again".
+  it.each(['battle', 'organism'] as const)(
+    'newer format / %s says reload, never try again',
+    (subject) => {
+      const message = saveFailureMessage(
+        new NewerFormatVersionError('gol:schema', 2, 1, 'x'),
+        subject,
+      );
+      expect(message).toBe(
+        `This ${subject} was not saved because your workspace was saved by a newer version of the ` +
+          'app. Nothing already stored was changed. Reload the page to continue.',
+      );
+      expect(message).not.toMatch(/try again/iu);
+    },
+  );
 });

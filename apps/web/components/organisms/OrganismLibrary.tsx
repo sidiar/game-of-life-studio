@@ -9,7 +9,7 @@ import {
   organismDeleteVerdict,
   type Organism,
 } from '@gol/domain';
-import type { BattleRepository, OrganismRepository } from '@gol/persistence';
+import type { AppRepositories, BattleRepository, OrganismRepository } from '@gol/persistence';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { cloneOrganismRecord } from '@/lib/organisms/organismClone';
 import { resolveOrganismGateUsage } from '@/lib/organisms/organismGateUsage';
@@ -20,6 +20,8 @@ import { useOrganismDelete } from '@/lib/organisms/useOrganismDelete';
 import { useOrganismEditorModal } from '@/lib/organisms/useOrganismEditorModal';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
+import { pickStorageFailure } from '@/lib/storage/storageFailure';
+import StorageFailureNotice from '@/components/storage/StorageFailureNotice';
 import OrganismCard from './OrganismCard';
 
 /**
@@ -72,6 +74,10 @@ export interface OrganismLibraryProps {
    */
   battles: BattleRepository;
   seedStatus: WorkspaceSeedStatus;
+  /** The seed's rejection (`useWorkspaceSeed`'s `error`), classified beside the load's own. */
+  seedError?: unknown;
+  /** Story 5.11: offered to the storage-failure notice's Reset Workspace, and nothing else. */
+  workspace: Pick<AppRepositories, 'discardUnreadableStamp' | 'clearAll'>;
 }
 
 const HEADING_ID = 'organism-library-heading';
@@ -266,7 +272,13 @@ function organismCountLabel(shown: number, total: number, filtering: boolean): s
  * The outcome is published into this component's own `[data-delete-status]` region (so the
  * editor-era note above, "no live region of its own", no longer holds for delete).
  */
-export default function OrganismLibrary({ organisms, battles, seedStatus }: OrganismLibraryProps) {
+export default function OrganismLibrary({
+  organisms,
+  battles,
+  seedStatus,
+  seedError,
+  workspace,
+}: OrganismLibraryProps) {
   // Deps: `organisms`/`battles` are useMemo-stable from the page boundary; `seedStatus` is a
   // string — all satisfy useAsyncResource's stable/fixed-length precondition. Re-running the
   // reads on the seedStatus flip is deliberate (Story 4.1): while seeding, the first read hits a
@@ -662,8 +674,19 @@ export default function OrganismLibrary({ organisms, battles, seedStatus }: Orga
       )}
       <div aria-busy={status === 'loading'}>
         {status === 'loading' && <StatusText>Loading organisms…</StatusText>}
+        {/* Story 5.11: one alert region — the notice's explanation — and no heading of its own
+            (the page's <h1> stays the only one). */}
         {status === 'error' && (
-          <StatusText role="alert">Something went wrong loading your organisms.</StatusText>
+          <StorageFailureNotice
+            kind={
+              pickStorageFailure([
+                seedStatus === 'error' ? seedError : undefined,
+                resource.status === 'error' ? resource.error : undefined,
+              ]) ?? 'unavailable'
+            }
+            workspace={workspace}
+            organisms={organisms}
+          />
         )}
         {status === 'ready' &&
           (visible.length === 0 && query !== '' ? (

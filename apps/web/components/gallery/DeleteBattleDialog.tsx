@@ -158,9 +158,10 @@ export interface UseDeleteBattleDialogOptions {
   /**
    * Fired when `battles.delete()` rejects (forced decision 3 — a CorruptDataError from an
    * unparseable gol:battles). The dialog has already been closed by the time this runs; the caller
-   * owns whatever error surface it wants to show.
+   * owns whatever error surface it wants to show. The rejection is handed over so that surface can
+   * classify it (Story 5.11's storage-failure notice).
    */
-  onDeleteFailed(): void;
+  onDeleteFailed(error: unknown): void;
 }
 
 export interface UseDeleteBattleDialogResult {
@@ -291,12 +292,12 @@ export function useDeleteBattleDialog({
       focusAfterExitRef.current = { kind: 'fallback' };
       setDialogOpen(false);
       onDeleted();
-    } catch {
+    } catch (error) {
       // Forced decision 3: a rejecting delete closes the dialog and hands the failure to the
       // caller. No retry control, no new copy — see Task 1's "out of scope" note.
       focusAfterExitRef.current = { kind: 'fallback' };
       setDialogOpen(false);
-      onDeleteFailed();
+      onDeleteFailed(error);
     } finally {
       deleteInFlightRef.current = false;
       setPending(false);

@@ -35,6 +35,9 @@ export interface UseBattleDraftResult {
   /** The BATTLE resource's status, verbatim. The caller's loading gate and its "Something Went
    * Wrong" vs "Battle Not Found" split are its only two consumers. */
   status: AsyncResourceStatus;
+  /** The battle load's rejection when `status === 'error'`, else `undefined` — classified by the
+   * caller's error body (Story 5.11: newer format vs corrupt vs storage failure), never shown. */
+  error: unknown;
   /**
    * The loaded record's IDENTITY — the exact complement of what `NewBattleDraft` deliberately
    * leaves out (`newBattleDraft.ts`: minting `id`/`createdAt` before a save "would be a lie the
@@ -138,9 +141,9 @@ export function useBattleDraft(
   );
 
   // Memoised so a render that changed none of them hands the caller back the same object. The
-  // three fields are read together and must never be observed a tick out of step.
+  // fields are read together and must never be observed a tick out of step.
   return useMemo(
-    () => ({ draft, status: battleResource.status, loadedIdentity }),
-    [draft, battleResource.status, loadedIdentity],
+    () => ({ draft, status: battleResource.status, error: battleResource.error, loadedIdentity }),
+    [draft, battleResource.status, battleResource.error, loadedIdentity],
   );
 }

@@ -328,4 +328,65 @@ describe('useAsyncResource', () => {
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
     expect(screen.getByTestId('data')).toHaveTextContent('recovered');
   });
+
+  // Story 5.11: the rejection is exposed so a caller can classify it. It exists only in 'error',
+  // and is cleared exactly as `data` is — by a reload that settles, and by a deps change.
+  describe('error (Story 5.11)', () => {
+    function ErrorProbe({ load, deps }: { load: () => Promise<string>; deps: unknown[] }) {
+      const resource = useAsyncResource<string>(load, deps);
+      return (
+        <div>
+          <span data-testid="status">{resource.status}</span>
+          <span data-testid="error">
+            {resource.error instanceof Error ? resource.error.message : String(resource.error)}
+          </span>
+          <button type="button" onClick={resource.reload}>
+            reload
+          </button>
+        </div>
+      );
+    }
+
+    it('holds the rejection in error status, and is undefined while loading or ready', async () => {
+      const { promise, reject } = deferred<string>();
+      render(<ErrorProbe load={() => promise} deps={[]} />);
+      expect(screen.getByTestId('error')).toHaveTextContent('undefined');
+
+      const failure = new Error('storage exploded');
+      reject(failure);
+
+      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('error'));
+      expect(screen.getByTestId('error')).toHaveTextContent('storage exploded');
+    });
+
+    it('is cleared by a reload that succeeds', async () => {
+      const load = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(new Error('first failure'))
+        .mockResolvedValueOnce('ok');
+      render(<ErrorProbe load={load} deps={[]} />);
+      await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent('first failure'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'reload' }));
+
+      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+      expect(screen.getByTestId('error')).toHaveTextContent('undefined');
+    });
+
+    it('is cleared the moment deps change', async () => {
+      const pending = deferred<string>();
+      const load = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(new Error('old failure'))
+        .mockReturnValueOnce(pending.promise);
+      const { rerender } = render(<ErrorProbe load={load} deps={['a']} />);
+      await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent('old failure'));
+
+      rerender(<ErrorProbe load={load} deps={['b']} />);
+
+      expect(screen.getByTestId('status')).toHaveTextContent('loading');
+      expect(screen.getByTestId('error')).toHaveTextContent('undefined');
+      await act(async () => pending.resolve('new'));
+    });
+  });
 });
