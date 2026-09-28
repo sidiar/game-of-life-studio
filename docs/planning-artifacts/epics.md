@@ -122,6 +122,14 @@ Requirement IDs below preserve the PRD's canonical numbering (FR-1.1 … FR-8.12
 - FR-8.11: Auto-Save — Edit-Mode-only toggle, default Disabled; inert until first manual save; never runs during Play Mode
 - FR-8.12: Default Simulation Speed — same ladder as FR-4.2 (default 10 gen/sec); sets starting speed; persists
 
+**FR-9: Preset Workspace Library** _(added 2026-09-28, PRD changelog `CHANGELOG-preset-workspace-library.md`)_
+
+- FR-9.1: Repo-Bundled Preset Workspaces — static export-envelope JSONs + manifest (id, name, description, file, default designation); always loaded through the FR-8.4 import pipeline, never a second format; CI lockstep gate
+- FR-9.2: First-Visit Default Preset — fresh workspace auto-loads the default preset on any entry page, no dialog (pristine = FR-8.4 suppression); any failure falls back to FR-1.5 seeding; FR-8.5 clear does not re-trigger
+- FR-9.3: Load Preset from Settings — manifest-driven list; FR-8.4 destructive warning + export-first; row-pattern feedback
+- FR-9.4: Preset Link — shareable static-export-compatible URL by manifest id; FR-8.4 pipeline on arrival; unknown id degrades gracefully
+- FR-9.5: Descriptions at Every Level — optional, length-capped open text on Battle, Organism, and workspace/envelope; round-trips export/import; formatVersion stays 1 (owner ruling 2026-09-28, older builds strip silently); manifest description = projection of envelope description (lockstep-gated)
+
 ### NonFunctional Requirements
 
 - NFR-1.1: 60 FPS guaranteed at 100×60 grid with up to 20 co-placed organisms (baseline); graceful degradation beyond (reduce gen/sec first, then render FPS)
@@ -316,6 +324,11 @@ Extracted from `ux-design-complete.md` and `organism-editor-design.md`.
 - FR-8.10: Epic 6 — Default grid size
 - FR-8.11: Epic 6 — Auto-save toggle
 - FR-8.12: Epic 6 — Default simulation speed
+- FR-9.1: Epic 7 — Preset workspace foundations (folder, manifest, lockstep gate)
+- FR-9.2: Epic 7 — First-visit default preset auto-load
+- FR-9.3: Epic 7 — Load preset from Settings
+- FR-9.4: Epic 7 — Preset link
+- FR-9.5: Epic 7 — Descriptions at every level (Battle, Organism, workspace)
 
 ## Epic List
 
@@ -342,6 +355,13 @@ Users can export Battles to share, import shared files safely, and manage their 
 ### Epic 6: Theming & Personalization
 Users can switch to the Biotech Terminal aesthetic and tune the studio to their preferences. Second theme (token block, scan-lines, glows), theme-selector cards, FOUC-free loading, display preferences (grid lines, cell animation), simulation preferences (default grid size, default speed, auto-save), plus the accessibility **validation** pass (WCAG AA audit, axe-core, CVD palette verification) — validation, not remediation: a11y criteria are baked into every epic's stories from Epic 1.
 **FRs covered:** FR-8.6–8.8, FR-8.10–8.12
+
+### Epic 7: Preset Workspace Library
+
+**⚠️ Executes BEFORE Epic 6 (owner decision, 2026-09-28).** Epic numbers are identities, not order — Epic 6 keeps its ids and its ~50 deferred-work references; this epic simply opens first once Epic 5 closes.
+
+First-time visitors land in a populated, runnable studio with zero clicks — a hiring manager at the root URL is watching battles within seconds, and the content explains itself. Curated workspaces ship with the app as static export-envelope JSONs plus a manifest (foundations proven on branch `poc/preset-workspace-library`), every load runs through Epic 5's import pipeline (no new format, no new parser), and delivery arrives in order: foundations, descriptions at every level (Battle/Organism/workspace — the self-explanation layer), showcase-quality default content, automatic first-visit load with Conway fallback, a Settings loader, a shareable preset link, and a curated preset catalog.
+**FRs covered:** FR-9.1–9.5
 
 ## Epic 1: Project Foundation & Battle Gallery
 
@@ -1596,3 +1616,106 @@ So that the studio genuinely works for me.
 **And** axe-core passes on all key screens: Gallery, Battle Editor, Play Mode, Organism Library, Organism Editor, Settings — wired into CI's e2e stage (AR-44)
 **And** the organism palette's CVD distinguishability verification (4.9) is re-confirmed against final rendered output, documented (NFR-8.3, AR-26)
 **And** Biotech Terminal is explicitly out of AA scope as stylistic (NFR-8.3); any genuine defects found become fixes in this story, not deferred tickets
+
+## Epic 7: Preset Workspace Library
+
+**⚠️ Executes BEFORE Epic 6** (owner decision, 2026-09-28; see the Epic List entry). First-time visitors land in a populated, runnable studio with zero clicks. Presets are static export-envelope JSONs + a manifest, loaded exclusively through Epic 5's import pipeline — no new format, no new parser, ever. A proof-of-concept of Story 7.1 lives on branch `poc/preset-workspace-library` (reference material; the story lands it properly).
+
+### Story 7.1: Preset Workspace Foundations
+
+As a developer,
+I want repo-bundled preset workspaces with a manifest and a CI lockstep gate,
+So that presets can be authored, improved, and consumed over time without ever growing a second format.
+
+**Acceptance Criteria:**
+
+**Given** the deployed static export, **When** built, **Then** `apps/web/public/workspaces/` ships every preset as a full workspace export envelope (`WorkspaceExportSchema`, `kind: 'workspace'`) plus an `index.json` manifest listing each preset's stable id, name, description, and file, and designating the default preset (FR-9.1)
+**And** a typed manifest contract module exists in `apps/web` for future consumers (no runtime consumer yet, by design)
+**And** a test validates every bundled preset through the production import gate (`validateImportFile`) and keeps folder ↔ manifest in exact lockstep — orphans in either direction fail CI (FR-9.1)
+**And** the first preset is generated through the real serializer (never handwritten), and the authoring path — build in app → Export Workspace → drop file + manifest entry — is documented at the contract module (FR-9.1)
+
+### Story 7.2: Descriptions at Every Level
+
+As a user,
+I want battles, organisms, and whole workspaces to carry open-text descriptions,
+So that what I'm observing explains itself — the guide layer the no-tutorial rule allows.
+
+**Acceptance Criteria:**
+
+**Given** `OrganismSchema` and `BattleSchema`, **When** extended, **Then** each gains an optional, length-capped `description` (constants following the `MAX_*_NAME_LENGTH` precedent); every existing stored record parses unchanged, absent ≡ none (FR-9.5)
+**And** the export envelope gains an optional workspace-level `description`; **`formatVersion` stays 1** (owner ruling 2026-09-28 — no backward-compat obligation; an older build importing a newer file strips descriptions silently, accepted) and all three levels round-trip export → import (FR-9.5)
+**And** the 7.1 manifest's per-preset description becomes a projection: the lockstep test asserts manifest description ≡ envelope description (FR-9.1, FR-9.5)
+**Given** the Organism Editor and the Battle Editor, **When** editing, **Then** each offers a description field near the name, participating in the existing dirty tracking, validation, and save paths (FR-9.5)
+**Given** display surfaces, **When** a description exists, **Then** it is shown read-only where the entity is observed — organism cards, battle surfaces (visible from Play Mode's vicinity, not buried in Edit), and a home for the workspace description (gallery header is the candidate; placement per the UX notes) — and an absent description renders nothing, no placeholder chrome (FR-9.5)
+
+### Story 7.3: Showcase Preset Content
+
+As a first-time visitor,
+I want the default preset to look alive the moment I press play,
+So that I taste the essence of the game in seconds and want to stay.
+
+**Acceptance Criteria:**
+
+**Given** the default preset's battles, **When** run, **Then** visible multi-organism competition — colonies colliding, spreading, trading territory — develops within the first ~5 seconds at default speed, on both bundled battles' grids (FR-9.2 rationale; this story gates 7.4's ship)
+**And** the preset carries Conway's Classic plus at least three distinct, well-named organisms whose colors are CVD-distinct (AR-26 palette), each battle satisfying Decision H.1
+**And** gallery thumbnails of the preset battles read as intriguing, not sparse (the tiles are the first thing a visitor sees before pressing anything)
+**And** the content passes the 7.1 lockstep gate and replaces (or demotes from default) the dev-fixture starter preset
+**And** the workspace, every battle, and every organism carry authored descriptions (FR-9.5) — the preset explains what the visitor is watching
+
+### Story 7.4: First-Visit Default Preset Auto-Load
+
+As a first-time visitor at any entry page (including the root URL),
+I want the default preset loaded for me automatically,
+So that I see a populated, runnable studio with zero clicks and no dialogs.
+
+**Acceptance Criteria:**
+
+**Given** a fresh workspace (the existing `isFreshWorkspace()` gate) in a production build, **When** any seeding page boundary runs (`useWorkspaceSeed`), **Then** the app fetches the manifest's default preset and imports it through the FR-8.4 pipeline with no dialog — pristine workspace, the FR-8.4 suppression case (FR-9.2)
+**And** any failure — fetch, validation, quota — falls back to FR-1.5 default seeding (Conway's Classic) and reaches `status: 'ready'`; the app never blocks or errors on preset availability (FR-9.2)
+**And** returning users (non-fresh workspace) are never touched, and Clear All Data (FR-8.5 / `resetWorkspace()`) does not re-trigger the preset — clearing returns to the FR-8.5 default state, asserted explicitly (FR-9.2)
+**And** dev builds keep the AR-45 mock-fixture branch unchanged (its coverage duty is orthogonal to preset content)
+
+### Story 7.5: Load Preset from Settings
+
+As a user,
+I want to load any bundled preset from the Settings page,
+So that I can start over from curated content whenever I choose.
+
+**Acceptance Criteria:**
+
+**Given** the Settings Data Management area, **When** rendered, **Then** a preset row lists the manifest's presets (name + description) using the established SettingsCard row patterns (FR-9.3)
+**And** loading replaces the whole workspace through the FR-8.4 pipeline including its destructive warning with export-first option, suppressed only for a pristine workspace (FR-9.3)
+**And** success/failure feedback uses the shared 5.10 row-outcome slot, and a load in flight follows the established concurrent-action guards (FR-9.3)
+
+### Story 7.6: Preset Link
+
+As a visitor following a shared link,
+I want a URL that loads a specific preset on arrival,
+So that someone can hand me a ready-made experience in one click.
+
+**Acceptance Criteria:**
+
+**Given** a static-export-compatible URL form addressing a preset by manifest id (exact form — query param or hash on an existing route — decided in-story; no server routing may be required), **When** visited, **Then** the preset is fetched and imported through the FR-8.4 pipeline, behind its destructive warning — suppressed for a pristine workspace, so a first-time visitor lands directly in the loaded workspace (FR-9.4)
+**And** an unknown or invalid preset id degrades gracefully to the normal app with a clear message — never a broken or blank page (FR-9.4)
+**And** the loaded-or-declined outcome leaves the URL in a state where reload does not re-prompt (decided in-story)
+
+### Story 7.7: Preset Catalog
+
+As a visitor exploring beyond the default,
+I want a set of curated preset workspaces,
+So that the Settings loader and preset links have somewhere interesting to go.
+
+Deliberately **last**: it needs 7.2's descriptions to author against and 7.5/7.6 to be reachable at all — and content curation is open-ended, so it must not block the pipeline stories. Candidate presets (owner + agent brainstorm, 2026-09-28; final selection, grouping into workspaces, and naming are in-story — quality over quantity):
+
+- **Conway's Menagerie** — the classic patterns: a grand collision battle uniting the most interesting ones where feasible (glider gun vs eater, R-pentomino chaos, pulsar field), plus standalone showpieces as separate battles for the ones that need quiet (Gosper gun, LWSS fleet, methuselahs)
+- **Mirror Match** — Conway's Classic vs an aging-enabled clone of itself: identical rules, one mortal, one immortal; symmetric opening so aging is the only difference the visitor watches play out
+- **Stress Test** — the performance flex: a battle derived from the AR-43 benchmark roster's shape (dozens-to-255 organisms at once) that must still hold the NFR-1.1 frame budget — the gallery tile alone advertises the engine
+- **Rock–Paper–Scissors** — three organisms in cyclic predation via `organismType` born-rules (A eats B eats C eats A): the classic spatial-RPS spiral waves, endless and mesmerizing, and a showcase of the rule system no plain Conway variant can produce
+- **The Worm** — a "worm digging through ground" terrarium: a static ground organism (survives always, born never) tunneled through by a spreader whose born-rule targets ground cells; timeboxed as experimental — rule-crafted movement may not read as intended
+- **Dominance Ladder** — identical rules at different dominance values, colonies visibly absorbing each other at contact lines: the cleanest possible demonstration of what the dominance slider means
+
+**Acceptance Criteria:**
+
+**Given** the preset folder, **When** this story completes, **Then** at least three presets beyond the default ship, each authored through the app (export path), each passing the 7.1 lockstep gate, each fully described at workspace, battle, and organism level (FR-9.1, FR-9.5)
+**And** every preset is reachable through the Settings loader and by preset link (FR-9.3, FR-9.4), and the default preset designation is unchanged unless deliberately re-pointed
+**And** any preset built for scale holds the NFR-1.1 frame budget on its shipped grid, verified before inclusion

@@ -160,6 +160,8 @@ development_status:
   epic-5-retrospective: optional
 
   # Epic 6: Theming & Personalization
+  # ⚠️ PRIORITY: epic-7 executes BEFORE epic-6 (Sidiar, 2026-09-28). Do not open an epic-6 lane
+  # while epic-7 has stories in backlog — epic numbers are identities, not order.
   epic-6: backlog
   6-1-biotech-terminal-token-block: backlog
   6-2-biotech-effects: backlog
@@ -173,3 +175,17 @@ development_status:
   6-10-auto-save-toggle: backlog
   6-11-accessibility-validation-pass: backlog
   epic-6-retrospective: optional
+
+  # Epic 7: Preset Workspace Library (added 2026-09-28; FR-9, PRD changelog
+  # CHANGELOG-preset-workspace-library.md). ⚠️ Executes BEFORE epic-6 — open this lane once
+  # epic-5 closes. Story 7.1's proof-of-concept lives on branch poc/preset-workspace-library
+  # (reference material for create-story; the story lands it properly).
+  epic-7: backlog
+  7-1-preset-workspace-foundations: backlog
+  7-2-descriptions-at-every-level: backlog
+  7-3-showcase-preset-content: backlog
+  7-4-first-visit-default-preset-auto-load: backlog
+  7-5-load-preset-from-settings: backlog
+  7-6-preset-link: backlog
+  7-7-preset-catalog: backlog
+  epic-7-retrospective: optional
