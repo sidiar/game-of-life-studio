@@ -94,7 +94,7 @@ interface BattleRepository {
 }
 
 // OrganismRepository / SettingsRepository mirror this CRUD shape (with `replaceAll` where applicable).
-// A DATA-ONLY `clearAll()` (FR-8.5: battles + organisms — it never touches settings, which are
+// A DATA-ONLY `clearAll()` (FR-8.5: battles + organisms + workspace meta, arch M16 — it never touches settings, which are
 // device-local and excluded from every export; RFC-006 Decision 6 / arch Decision F) is exposed on
 // AppRepositories and consumed by the WorkspaceSerializer (RFC-006). These bulk methods were added
 // to reconcile RFC-001 with RFC-006.

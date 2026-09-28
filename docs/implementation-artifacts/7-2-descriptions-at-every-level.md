@@ -4,7 +4,7 @@ baseline_commit: 0ab2e3b
 
 # Story 7.2: Descriptions at Every Level
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -104,6 +104,10 @@ _Code review 2026-09-28 (Sonnet; Blind Hunter + Edge Case Hunter + Acceptance Au
 - [x] [Review][Patch] `BattleHeader.tsx`'s `TitleColumn` comment claimed `minWidth: 0` "moves here from being only the h1's concern," but the `Title` (`<h1>`) styled block still independently keeps its own `minWidth: 0` a few lines above — the rule was duplicated, not moved, and the comment misdescribed it for the next reader. Corrected the wording. [apps/web/components/battle/BattleHeader.tsx:32-47]
 
 Dismissed as noise (5): `OrganismDescriptionField`'s unused `showAllErrors` prop (documented intentional parity — the description's only error is immediate regardless of the prop, verified against `OrganismNameField`'s actual Save-time-override use of it); `WorkspaceMetaRepository.save()` / the fake repository's `workspaceMeta.save()` not re-validating the cap before writing (matches `LocalStorageSettingsRepository.save()`'s identical no-validation-on-write pattern — not a new deviation); `WorkspaceDescriptionRow`'s Save button giving no in-flight affordance (documented FD8 design, matching `ExportButton`'s identical precedent); `exportBattle` never carrying the workspace description (flagged and accepted as intentional per M8 in the story's own Dev Notes, not a new defect).
+
+_Second review 2026-09-28 (Sonnet; diff `93069be..fb578f5`, the owner-rulings commit): 0 decision-needed, 1 patch, 0 defer. All six rulings applied faithfully; M16 matches M14/M15 style; `check-spec-ids` resolves all ids (M16 widened in both places)._
+
+- [x] [Review][Patch] M16 left stale wording behind: `CLAUDE.md` and `docs/project-context.md` (3 places) still said "M1–M15"; `project-context.md`'s `clearAll()` rule said "battles and organisms only"; RFC-001's `clearAll()` comment omitted workspace meta (M16 names RFC-001 as owner). All updated. (PRD FR-8.5 and the Clear All UI strings intentionally untouched per ruling.)
 
 `npm run ci:dev` after patches: see Dev Agent Record.
 
