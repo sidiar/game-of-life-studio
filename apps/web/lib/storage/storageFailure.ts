@@ -42,9 +42,42 @@ const PRIORITY: readonly StorageFailureKind[] = [
   'unavailable',
 ];
 
+/**
+ * What a page shows for a storage failure: the kind, plus — for the corrupt kinds — WHICH stored
+ * keys failed (`CorruptDataError.key`, distinct, in first-seen order). The keys let the
+ * corrupt-workspace line name the namespace that actually failed instead of claiming both
+ * collections are unreadable (Story 5.11 review, owner ruling D2 (b)). Empty for every other kind.
+ */
+export interface StorageFailure {
+  kind: StorageFailureKind;
+  corruptKeys: readonly string[];
+}
+
+/**
+ * The fallback when a page is in its error state with no classifiable rejection (e.g. a seed that
+ * failed with no value): the non-destructive Reload, never a reset.
+ */
+export const UNCLASSIFIED_STORAGE_FAILURE: StorageFailure = Object.freeze({
+  kind: 'unavailable',
+  corruptKeys: Object.freeze([]),
+});
+
 /** The one failure a page shows when several reads failed at once (FD2's priority). `undefined`
  * entries — reads that did not fail — are skipped; `null` when none failed. */
-export function pickStorageFailure(errors: readonly unknown[]): StorageFailureKind | null {
-  const kinds = new Set(errors.filter((e) => e !== undefined).map(classifyStorageFailure));
-  return PRIORITY.find((kind) => kinds.has(kind)) ?? null;
+export function pickStorageFailure(errors: readonly unknown[]): StorageFailure | null {
+  const failed = errors.filter((e) => e !== undefined);
+  const kinds = new Set(failed.map(classifyStorageFailure));
+  const kind = PRIORITY.find((k) => kinds.has(k));
+  if (kind === undefined) return null;
+  const corruptKeys =
+    kind === 'corrupt-workspace' || kind === 'corrupt-settings'
+      ? [
+          ...new Set(
+            failed
+              .filter((e): e is CorruptDataError => classifyStorageFailure(e) === kind)
+              .map((e) => e.key),
+          ),
+        ]
+      : [];
+  return { kind, corruptKeys };
 }

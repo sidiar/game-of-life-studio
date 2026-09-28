@@ -8,6 +8,9 @@ import { NewerFormatVersionError, STORAGE_KEYS } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace } from '@gol/test-utils';
 import type { StorageFailureKind } from '@/lib/storage/storageFailure';
 import {
+  CORRUPT_BATTLES_MESSAGE,
+  CORRUPT_FORMAT_MESSAGE,
+  CORRUPT_ORGANISMS_MESSAGE,
   CORRUPT_SETTINGS_MESSAGE,
   CORRUPT_WORKSPACE_MESSAGE,
   NEWER_VERSION_MESSAGE,
@@ -76,6 +79,26 @@ describe('StorageFailureNotice (Story 5.11)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(text);
     expect(buttonLabels()).toEqual(actions);
     expect(screen.queryByRole('heading')).toBeNull();
+  });
+
+  // Owner ruling D2 (b): the corrupt-workspace line names only the namespace that failed.
+  it.each([
+    [[STORAGE_KEYS.battles], CORRUPT_BATTLES_MESSAGE],
+    [[STORAGE_KEYS.organisms], CORRUPT_ORGANISMS_MESSAGE],
+    [[STORAGE_KEYS.schema], CORRUPT_FORMAT_MESSAGE],
+  ])('corrupt-workspace with keys %j names only that namespace', async (keys, text) => {
+    const repos = await populatedRepos();
+    render(
+      <StorageFailureNotice
+        kind="corrupt-workspace"
+        corruptKeys={keys}
+        workspace={repos}
+        organisms={repos.organisms}
+        reload={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(text);
+    expect(buttonLabels()).toEqual(['Reset Workspace']);
   });
 
   it('newer-version never renders a reset or restore, even with every port given (owner ruling)', async () => {

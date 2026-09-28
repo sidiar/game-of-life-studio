@@ -157,9 +157,10 @@ export interface UseDeleteBattleDialogOptions {
   onDeleted(): void;
   /**
    * Fired when `battles.delete()` rejects (forced decision 3 — a CorruptDataError from an
-   * unparseable gol:battles). The dialog has already been closed by the time this runs; the caller
-   * owns whatever error surface it wants to show. The rejection is handed over so that surface can
-   * classify it (Story 5.11's storage-failure notice).
+   * unparseable gol:battles). The dialog has been told to close, but is still EXITING when this
+   * runs — the background is still inert, so the caller must QUEUE its error surface and publish it
+   * from the dialog's `onExited` (project-context live-region rule; `<BattleGallery>` does). The
+   * rejection is handed over so that surface can classify it (Story 5.11's storage-failure notice).
    */
   onDeleteFailed(error: unknown): void;
 }

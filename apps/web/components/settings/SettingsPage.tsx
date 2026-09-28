@@ -10,7 +10,7 @@ import type {
 } from '@gol/persistence';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
-import { pickStorageFailure } from '@/lib/storage/storageFailure';
+import { pickStorageFailure, UNCLASSIFIED_STORAGE_FAILURE } from '@/lib/storage/storageFailure';
 import StorageFailureNotice from '@/components/storage/StorageFailureNotice';
 import WorkspaceStatistics from './WorkspaceStatistics';
 import DataManagement from './DataManagement';
@@ -158,13 +158,11 @@ export default function SettingsPage({
             problem the deferred-work entry recorded). No heading: the page's <h1> stays the only one. */}
         {status === 'error' && (
           <StorageFailureNotice
-            kind={
-              pickStorageFailure([
-                seedStatus === 'error' ? seedError : undefined,
-                statsResource.error,
-                settingsResource.error,
-              ]) ?? 'unavailable'
-            }
+            {...(pickStorageFailure([
+              seedStatus === 'error' ? seedError : undefined,
+              statsResource.error,
+              settingsResource.error,
+            ]) ?? UNCLASSIFIED_STORAGE_FAILURE)}
             workspace={workspace}
             organisms={organisms}
             settings={settings}

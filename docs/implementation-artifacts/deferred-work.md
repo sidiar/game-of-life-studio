@@ -3916,6 +3916,15 @@ Open owner flags from the story (not blockers — the story proceeded on its for
   `setDialogOpen(false)`). The notice now receives the delete's rejection (`onDeleteFailed(error)`) so
   it can classify it. Moving the publish to the dialog's exit is the Story 4.18 queued-outcome fix,
   left for the live-region host class fix recorded earlier in this file.
+  **✅ Resolved in Story 5.11 (review ruling D1 (b), Sidiar, 2026-09-28).** `<BattleGallery>` now
+  queues the rejection (`queuedDeleteErrorRef`) and publishes it from its composed
+  `onDeleteDialogExited` — the Story 4.18 queued-outcome shape — so the classified notice is created
+  in the commit that releases `inert`. `BattleGallery.test.tsx` pins the copy/action per class
+  (`CorruptDataError(gol:battles)` → Reset Workspace; plain `Error` → Reload) and the ordering (no
+  dialog at the alert's first appearance; mutation-checked). Still open under this heading: a
+  successful delete's RE-LIST (`onDeleted` → `reload()`) resolves inside the same exit window, so a
+  rejection there (`:143`'s path) still dispatches its notice while the dialog is exiting — outside
+  the ruling's scope; the live-region host class fix covers it.
 - **Unknown-organism copy (FD8).** The "N identical Unknown organism entries" and "Living Cells vs
   Population" entries stay open: they need a disambiguator design the specs do not give. The
   fallbacks themselves are pinned (a Gallery test with a roster id the library lacks).

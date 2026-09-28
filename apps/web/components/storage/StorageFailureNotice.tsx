@@ -14,11 +14,11 @@ import { CLEAR_ALL_FAILURE_MESSAGE } from '@/lib/clearAll/clearAllMessages';
 import { classifyStorageFailure, type StorageFailureKind } from '@/lib/storage/storageFailure';
 import {
   CORRUPT_SETTINGS_MESSAGE,
-  CORRUPT_WORKSPACE_MESSAGE,
   NEWER_VERSION_MESSAGE,
   RESTORE_SETTINGS_FAILURE_MESSAGE,
   STORAGE_FULL_MESSAGE,
   UNAVAILABLE_MESSAGE,
+  corruptWorkspaceMessage,
 } from '@/lib/storage/storageFailureMessages';
 import { useInertBackground } from '@/lib/useInertBackground';
 
@@ -30,6 +30,11 @@ const ClearAllDataDialog = dynamic(() => import('@/components/settings/ClearAllD
 
 export interface StorageFailureNoticeProps {
   kind: StorageFailureKind;
+  /**
+   * The keys that failed (`StorageFailure.corruptKeys`), so the corrupt-workspace line names only
+   * the namespace that did (owner ruling D2 (b)). Omitted → the both-collections line.
+   */
+  corruptKeys?: readonly string[];
   // `Pick`s, never the aggregate (FD9, the Story 5.2 FD7 house rule).
   /** Needed only to offer Reset Workspace; omit it and the action is not rendered. */
   workspace?: Pick<AppRepositories, 'discardUnreadableStamp' | 'clearAll'>;
@@ -40,13 +45,16 @@ export interface StorageFailureNoticeProps {
   reload?: () => void;
 }
 
-const MESSAGES: Readonly<Record<StorageFailureKind, string>> = {
+const MESSAGES: Readonly<Record<Exclude<StorageFailureKind, 'corrupt-workspace'>, string>> = {
   'newer-version': NEWER_VERSION_MESSAGE,
-  'corrupt-workspace': CORRUPT_WORKSPACE_MESSAGE,
   'corrupt-settings': CORRUPT_SETTINGS_MESSAGE,
   'storage-full': STORAGE_FULL_MESSAGE,
   unavailable: UNAVAILABLE_MESSAGE,
 };
+
+function messageFor(kind: StorageFailureKind, corruptKeys: readonly string[]): string {
+  return kind === 'corrupt-workspace' ? corruptWorkspaceMessage(corruptKeys) : MESSAGES[kind];
+}
 
 function reloadPage(): void {
   window.location.reload();
@@ -133,6 +141,7 @@ const DangerButton = styled(ActionButton)({
  */
 export default function StorageFailureNotice({
   kind,
+  corruptKeys = [],
   workspace,
   organisms,
   settings,
@@ -267,7 +276,7 @@ export default function StorageFailureNotice({
 
   return (
     <Root>
-      <Explanation role="alert">{MESSAGES[kind]}</Explanation>
+      <Explanation role="alert">{messageFor(kind, corruptKeys)}</Explanation>
       {canReset ? (
         <DangerButton type="button" ref={resetButtonRef} onClick={handleResetClick}>
           Reset Workspace

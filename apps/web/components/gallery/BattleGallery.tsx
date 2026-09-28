@@ -14,7 +14,7 @@ import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallery/gallerySort';
 import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
 import { readGridColors } from '@/lib/canvas/themeColors';
-import { pickStorageFailure } from '@/lib/storage/storageFailure';
+import { pickStorageFailure, UNCLASSIFIED_STORAGE_FAILURE } from '@/lib/storage/storageFailure';
 import StorageFailureNotice from '@/components/storage/StorageFailureNotice';
 import BattleTile from './BattleTile';
 import CreateBattleLink from './CreateBattleLink';
@@ -163,11 +163,17 @@ export default function BattleGallery({
   // restoration depends on. See useDeleteBattleDialog's own comments.
   const reload = useCallback(() => setReloadToken((n) => n + 1), []);
 
-  // Forced decision 3: a rejecting delete (CorruptDataError from an unparseable gol:battles)
-  // reuses the shipped alert body. No retry control, no new copy — see Task 1's "out of scope"
-  // note. The dialog is already closed by the time the hook calls this.
+  // Forced decision 3: a rejecting delete (CorruptDataError from an unparseable gol:battles) is
+  // reported through the load's error state — since Story 5.11, the classified storage-failure
+  // notice. QUEUED here, never published: the hook calls this right after `setDialogOpen(false)`,
+  // while the dialog is still EXITING and `useInertBackground` still holds this subtree inert. A
+  // notice inserted then is never announced — and it carries a Reset Workspace button (project-
+  // context live-region rule; Story 5.11 review, owner ruling D1 (b)). A ref, not state: nothing
+  // renders from the queue. Published from `onDeleteDialogExited` below — the Story 4.18
+  // queued-outcome shape (`<OrganismLibrary>`'s `queuedCloneErrorRef`).
+  const queuedDeleteErrorRef = useRef<{ error: unknown } | null>(null);
   const handleDeleteFailed = useCallback((error: unknown) => {
-    dispatchLoad({ type: 'invalidate', error });
+    queuedDeleteErrorRef.current = { error };
   }, []);
 
   // Forced decision 4: focus-restoration target after a successful delete. The tile's Delete
@@ -187,6 +193,19 @@ export default function BattleGallery({
     onDeleted: reload,
     onDeleteFailed: handleDeleteFailed,
   });
+
+  // The dialog's call site. The hook's own `onExited` FIRST — it clears the confirmation, which
+  // releases `inert` — then the publish, in the same event handler so React batches both into ONE
+  // commit: the notice is created in the very commit that makes the page live again, never before
+  // it (the `onGateExited` reasoning in `<OrganismLibrary>`). Every close path runs this; only a
+  // failed delete has queued anything.
+  const onDeleteDialogExited = useCallback(() => {
+    dialogProps.onExited?.();
+    const queued = queuedDeleteErrorRef.current;
+    if (queued === null) return;
+    queuedDeleteErrorRef.current = null;
+    dispatchLoad({ type: 'invalidate', error: queued.error });
+  }, [dialogProps]);
 
   // Resolved ONCE, not per tile: getComputedStyle forces a style recalculation, and at NFR-7.2's
   // 50 tiles that is 50 forced recalcs on one commit if done per-canvas (themeColors.ts).
@@ -318,10 +337,8 @@ export default function BattleGallery({
           that failed with no rejection value) still gets the non-destructive 'unavailable'. */}
       {state.kind === 'error' && (
         <StorageFailureNotice
-          kind={
-            pickStorageFailure([seedStatus === 'error' ? seedError : undefined, state.error]) ??
-            'unavailable'
-          }
+          {...(pickStorageFailure([seedStatus === 'error' ? seedError : undefined, state.error]) ??
+            UNCLASSIFIED_STORAGE_FAILURE)}
           workspace={workspace}
           organisms={organisms}
         />
@@ -346,7 +363,7 @@ export default function BattleGallery({
           ))}
         </TileGrid>
       )}
-      <DeleteBattleDialog {...dialogProps} />
+      <DeleteBattleDialog {...dialogProps} onExited={onDeleteDialogExited} />
     </section>
   );
 }

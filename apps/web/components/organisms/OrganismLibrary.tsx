@@ -20,7 +20,7 @@ import { useOrganismDelete } from '@/lib/organisms/useOrganismDelete';
 import { useOrganismEditorModal } from '@/lib/organisms/useOrganismEditorModal';
 import { useAsyncResource } from '@/lib/useAsyncResource';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
-import { pickStorageFailure } from '@/lib/storage/storageFailure';
+import { pickStorageFailure, UNCLASSIFIED_STORAGE_FAILURE } from '@/lib/storage/storageFailure';
 import StorageFailureNotice from '@/components/storage/StorageFailureNotice';
 import OrganismCard from './OrganismCard';
 
@@ -678,12 +678,10 @@ export default function OrganismLibrary({
             (the page's <h1> stays the only one). */}
         {status === 'error' && (
           <StorageFailureNotice
-            kind={
-              pickStorageFailure([
-                seedStatus === 'error' ? seedError : undefined,
-                resource.status === 'error' ? resource.error : undefined,
-              ]) ?? 'unavailable'
-            }
+            {...(pickStorageFailure([
+              seedStatus === 'error' ? seedError : undefined,
+              resource.status === 'error' ? resource.error : undefined,
+            ]) ?? UNCLASSIFIED_STORAGE_FAILURE)}
             workspace={workspace}
             organisms={organisms}
           />

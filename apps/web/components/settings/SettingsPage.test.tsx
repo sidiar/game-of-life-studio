@@ -12,7 +12,9 @@ import {
 } from '@gol/persistence';
 import {
   CORRUPT_SETTINGS_MESSAGE,
-  CORRUPT_WORKSPACE_MESSAGE,
+  CORRUPT_BATTLES_MESSAGE,
+  CORRUPT_FORMAT_MESSAGE,
+  CORRUPT_ORGANISMS_MESSAGE,
   NEWER_VERSION_MESSAGE,
   STORAGE_FULL_MESSAGE,
   UNAVAILABLE_MESSAGE,
@@ -241,18 +243,36 @@ describe('SettingsPage', () => {
     const buttonLabels = () => screen.getAllByRole('button').map((b) => b.textContent);
 
     it.each([
-      ['gol:battles', 'battles' as const, new CorruptDataError(STORAGE_KEYS.battles, 'x')],
-      ['gol:organisms', 'organisms' as const, new CorruptDataError(STORAGE_KEYS.organisms, 'x')],
-      ['gol:schema', 'battles' as const, new CorruptDataError(STORAGE_KEYS.schema, 'x')],
-    ])('a corrupt %s offers Reset Workspace only', async (_ns, repo, error) => {
-      const repos = createFakeRepositories({ organisms: createMockOrganisms() });
-      vi.spyOn(repos[repo], 'list').mockRejectedValue(error);
-      renderWith(repos);
+      [
+        'gol:battles',
+        'battles' as const,
+        new CorruptDataError(STORAGE_KEYS.battles, 'x'),
+        CORRUPT_BATTLES_MESSAGE,
+      ],
+      [
+        'gol:organisms',
+        'organisms' as const,
+        new CorruptDataError(STORAGE_KEYS.organisms, 'x'),
+        CORRUPT_ORGANISMS_MESSAGE,
+      ],
+      [
+        'gol:schema',
+        'battles' as const,
+        new CorruptDataError(STORAGE_KEYS.schema, 'x'),
+        CORRUPT_FORMAT_MESSAGE,
+      ],
+    ])(
+      'a corrupt %s offers Reset Workspace only, naming only that namespace',
+      async (_ns, repo, error, text) => {
+        const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+        vi.spyOn(repos[repo], 'list').mockRejectedValue(error);
+        renderWith(repos);
 
-      expect(await screen.findByRole('alert')).toHaveTextContent(CORRUPT_WORKSPACE_MESSAGE);
-      expect(buttonLabels()).toEqual(['Reset Workspace']);
-      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    });
+        expect(await screen.findByRole('alert')).toHaveTextContent(text);
+        expect(buttonLabels()).toEqual(['Reset Workspace']);
+        expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+      },
+    );
 
     it('a corrupt gol:settings offers Restore Default Settings only', async () => {
       const repos = createFakeRepositories({ organisms: createMockOrganisms() });

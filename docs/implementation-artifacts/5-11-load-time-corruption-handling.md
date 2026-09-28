@@ -4,7 +4,7 @@ baseline_commit: e3fcd0e56d26a8cdc01e3fec30c80a510cefd2c3
 
 # Story 5.11: Load-Time Corruption Handling
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -331,7 +331,7 @@ The epic's four ACs are split so each can be checked on its own.
 Code review 2026-09-28 (Claude Fable 5.1, `bmad-code-review` full mode: Blind Hunter + Edge Case
 Hunter + Acceptance Auditor). 2 decision-needed, 11 patch, 2 defer, 2 dismissed.
 
-- [ ] [Review][Decision] **A rejected `battles.delete()` now renders the load-time notice, with a
+- [x] [Review][Decision] **A rejected `battles.delete()` now renders the load-time notice, with a
   destructive control, while the delete dialog is still exiting** — Dev-record deviation 1
   (`onDeleteFailed(error)` → `dispatchLoad({ type: 'invalidate', error })`) routes a delete-time
   failure into `<StorageFailureNotice>`: a `CorruptDataError(gol:battles)` from the delete's
@@ -351,7 +351,9 @@ Hunter + Acceptance Auditor). 2 decision-needed, 11 patch, 2 defer, 2 dismissed.
   delete failures to a non-destructive surface (the `'unavailable'` copy with Reload only, or the old
   generic alert) and re-open `:143`. [`apps/web/components/gallery/BattleGallery.tsx:169-171,314-323`,
   `apps/web/components/gallery/DeleteBattleDialog.tsx:295-300`]
-- [ ] [Review][Decision] **The corrupt-workspace and storage-full copy over-claim the scope of the
+  - **Ruling (Sidiar, 2026-09-28): (b)** — keep the classification, but hold the delete-failure
+    publish until the delete dialog's `onExited` (Story 4.18 queued-outcome shape). Pin it with tests.
+- [x] [Review][Decision] **The corrupt-workspace and storage-full copy over-claim the scope of the
   fault** — FD6 fixes the *claims*, so this is the owner's to change. `CORRUPT_WORKSPACE_MESSAGE`
   says "Your saved battles and organisms could not be read" whenever any one of `gol:battles`,
   `gol:organisms` or `gol:schema` fails — on `/organisms` with only `gol:battles` corrupt the
@@ -366,6 +368,9 @@ Hunter + Acceptance Auditor). 2 decision-needed, 11 patch, 2 defer, 2 dismissed.
   storage-full and restore-failure lines cause-neutral wording ("…so the app could not write to it").
   [`apps/web/lib/storage/storageFailureMessages.ts:22-29,39-40`, `apps/web/lib/storage/storageFailure.ts:23-28`,
   `apps/web/components/storage/StorageFailureNotice.tsx:241-252`]
+  - **Ruling (Sidiar, 2026-09-28): (b)** — make the corrupt-workspace line namespace-aware by carrying
+    `CorruptDataError.key` through the classifier. Storage-full and restore-failure copy stay as FD6
+    has them (option (c) was not chosen).
 - [x] [Review][Patch] `recoverWorkspace.ts` header claims "never the stamped-but-empty store" for every
   branch; on a healthy stamp `resetWorkspace()` keeps it and a Conway write failing after the clear
   leaves exactly that shape (5.10's contract) [`packages/persistence/src/recoverWorkspace.ts:8-17`]
@@ -694,6 +699,9 @@ Claude Opus 5.5 (`claude-opus-5-5`), via `bmad-dev-story` under `implement-next-
   `BattleSimulationView`, `ColorPickerField`, `OrganismEditorModal`); all 323 tests in those five
   files pass in isolation. Second full `npm run ci:dev` on the patched tree → **0** (web 149 test
   files green, e2e Chromium 313 passed, bundle within baseline — no refresh needed).
+- Rulings D1+D2 (2026-09-28): `npm run ci:dev` → **0** (e2e Chromium 313 passed; bundle +0.2–0.3 KB
+  gzip per route, within the allowance, baselined via `npm run bundle:baseline` per the ratchet).
+  D1 timing test mutation-checked (publish from the hook's catch → both rows red); restored.
 
 ### Completion Notes List
 
@@ -740,6 +748,30 @@ Claude Opus 5.5 (`claude-opus-5-5`), via `bmad-dev-story` under `implement-next-
   dialog open (three-wait pattern).
 - **Task 8.** `deferred-work.md`: discharge / re-point lines appended to every entry the story names
   (none deleted or rewritten) + a "Deferred from: Story 5-11" section with the owner flags.
+
+- ✅ Resolved review finding [Decision D1, ruling (b)]: a rejected `battles.delete()` keeps its
+  classified notice, but `<BattleGallery>` now QUEUES the rejection (`queuedDeleteErrorRef`) and
+  publishes it from a composed `onDeleteDialogExited` (the hook's `onExited` first, then the
+  dispatch, one commit) — the Story 4.18 queued-outcome shape. `useDeleteBattleDialog`'s
+  `onDeleteFailed` doc now says the dialog is still exiting and the caller must queue. The old
+  "renders the alert body" test is replaced by a two-row test pinning copy/action
+  (`CorruptDataError(gol:battles)` → battles line + Reset Workspace, no Reload; plain `Error` →
+  unavailable line + Reload, no Reset) and the timing (MutationObserver: no dialog at the alert's
+  first appearance). Mutation-checked: dispatching from the hook's catch turns both rows red.
+  `deferred-work.md`'s pre-existing-timing entry is marked resolved; it notes the one path the
+  ruling did not cover (a successful delete's re-list rejecting inside the same exit window).
+- ✅ Resolved review finding [Decision D2, ruling (b)]: `pickStorageFailure` now returns
+  `StorageFailure = { kind, corruptKeys }` (the distinct `CorruptDataError.key`s of the picked
+  corrupt kind; empty otherwise — a newer stamp's key never leaks) plus
+  `UNCLASSIFIED_STORAGE_FAILURE` for the no-rejection fallback. The notice takes an optional
+  `corruptKeys` prop; `corruptWorkspaceMessage(keys)` picks the first sentence — battles only,
+  organisms only, a damaged format stamp (wins: every read fails through it), or both/unknown (the
+  FD6 line) — and every variant keeps the shared second half naming what the reset deletes ("all
+  battles and organisms") and "nothing has been changed". Storage-full and restore-failure copy
+  unchanged. The three gallery-branch pages spread the picked failure into the notice. Tests:
+  classifier key-carrying + priority, message selection, copy guard (strings only), notice per key,
+  and each route's per-namespace test now asserts its own line; the e2e spec matches the
+  namespace-specific line per scenario. `classifyStorageFailure` and `/battle` are unchanged.
 
 **Deviations from the story text (each small, each forced by the code):**
 
@@ -811,6 +843,10 @@ Modified:
 - `apps/web/app/(gallery)/organisms/page.tsx`
 - `apps/web/app/(gallery)/settings/page.tsx`
 - `apps/web/app/not-found.test.tsx` (comment only: the quoted battle-route copy)
+- `apps/web/components/gallery/DeleteBattleDialog.tsx` (D1: `onDeleteFailed` doc — queue, publish on exit)
+- `apps/web/lib/storage/storageFailure.ts` / `.test.ts`, `storageFailureMessages.ts` (D2)
+- `apps/web/components/storage/StorageFailureNotice.tsx` / `.test.tsx` (D2: `corruptKeys`)
+- `apps/web/e2e/storageCorruption.spec.ts` (D2: per-namespace line)
 - `scripts/bundle-baselines.json` (tool-written)
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
@@ -825,6 +861,9 @@ Modified:
   the try and mount-gated, `NoticeButton` UA resets, e2e byte-identity against the seeded strings,
   exact action-set assertions, comment corrections, dead attribute); 2 deferred to `deferred-work.md`;
   2 decisions left for the owner under Review Findings. Status → in-progress.
+- 2026-09-28 — Addressed code review findings - 2 items resolved: owner rulings D1 (b) (delete-failure
+  notice published on the delete dialog's exit, copy/action/timing pinned) and D2 (b)
+  (namespace-aware corrupt-workspace line via `CorruptDataError.key`). Status → review.
 
 Dev Model: opus   # architecture-shaping: widens the AppRepositories seam (discardUnreadableStamp) and sets the app-wide storage-failure classification + notice pattern every route and Epic 7 build on
 Proposed lane gate: none

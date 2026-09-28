@@ -10,7 +10,9 @@ import {
   STORAGE_KEYS,
 } from '@gol/persistence';
 import {
-  CORRUPT_WORKSPACE_MESSAGE,
+  CORRUPT_BATTLES_MESSAGE,
+  CORRUPT_FORMAT_MESSAGE,
+  CORRUPT_ORGANISMS_MESSAGE,
   NEWER_VERSION_MESSAGE,
   STORAGE_FULL_MESSAGE,
   UNAVAILABLE_MESSAGE,
@@ -207,12 +209,27 @@ describe('OrganismLibrary', () => {
   // Story 5.11: the error branch is the storage-failure notice, one test per namespace.
   describe('storage-failure notice (Story 5.11)', () => {
     it.each([
-      ['gol:organisms', 'organisms' as const, new CorruptDataError(STORAGE_KEYS.organisms, 'x')],
-      ['gol:battles', 'battles' as const, new CorruptDataError(STORAGE_KEYS.battles, 'x')],
-      ['gol:schema', 'organisms' as const, new CorruptDataError(STORAGE_KEYS.schema, 'x')],
+      [
+        'gol:organisms',
+        'organisms' as const,
+        new CorruptDataError(STORAGE_KEYS.organisms, 'x'),
+        CORRUPT_ORGANISMS_MESSAGE,
+      ],
+      [
+        'gol:battles',
+        'battles' as const,
+        new CorruptDataError(STORAGE_KEYS.battles, 'x'),
+        CORRUPT_BATTLES_MESSAGE,
+      ],
+      [
+        'gol:schema',
+        'organisms' as const,
+        new CorruptDataError(STORAGE_KEYS.schema, 'x'),
+        CORRUPT_FORMAT_MESSAGE,
+      ],
     ])(
-      'a corrupt %s shows Reset Workspace, and rendering writes nothing',
-      async (_ns, repo, error) => {
+      'a corrupt %s shows Reset Workspace, names only that namespace, and rendering writes nothing',
+      async (_ns, repo, error, text) => {
         const repos = createFakeRepositories({ organisms: createMockOrganisms() });
         const { organisms, battles, ...store } = repos;
         vi.spyOn(repos[repo], 'list').mockRejectedValue(error);
@@ -226,7 +243,7 @@ describe('OrganismLibrary', () => {
           />,
         );
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(CORRUPT_WORKSPACE_MESSAGE);
+        expect(await screen.findByRole('alert')).toHaveTextContent(text);
         // The exact action set (AC7): Reset Workspace, and neither of the other two recoveries.
         expect(screen.getByRole('button', { name: 'Reset Workspace' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
@@ -1358,7 +1375,7 @@ describe('OrganismLibrary — edit organism from library (Story 4.17)', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent(CORRUPT_WORKSPACE_MESSAGE),
+      expect(screen.getByRole('alert')).toHaveTextContent(CORRUPT_BATTLES_MESSAGE),
     );
     expect(screen.queryAllByRole('listitem')).toHaveLength(0);
     expect(screen.queryAllByRole('button', { name: /^Edit / })).toHaveLength(0);

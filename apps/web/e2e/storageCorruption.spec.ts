@@ -13,7 +13,10 @@ import { createMockWorkspace } from '@gol/test-utils';
 // (FD7) — an init script would re-corrupt the store and the test would prove nothing.
 
 const NON_DEFAULT_SETTINGS = JSON.stringify({ theme: 'biotech-terminal', gridLines: false });
-const CORRUPT_WORKSPACE = /stored data appears to be damaged/;
+// The corrupt-workspace line names only the namespace that failed (owner ruling D2 (b)).
+const CORRUPT_BATTLES = /Your saved battles could not be read/;
+const CORRUPT_ORGANISMS = /Your saved organisms could not be read/;
+const CORRUPT_FORMAT = /Your saved workspace could not be read — its format information/;
 
 type RawKeys = Record<string, string | null>;
 
@@ -70,7 +73,7 @@ test.describe('load-time corruption handling (Story 5.11)', () => {
       [STORAGE_KEYS.battles]: '{not json',
       [STORAGE_KEYS.settings]: NON_DEFAULT_SETTINGS,
     });
-    await expect(alertWith(page, CORRUPT_WORKSPACE)).toBeVisible();
+    await expect(alertWith(page, CORRUPT_BATTLES)).toBeVisible();
 
     await confirmReset(page);
 
@@ -87,7 +90,7 @@ test.describe('load-time corruption handling (Story 5.11)', () => {
   }) => {
     await page.goto('/organisms');
     await writeRawAndReload(page, { ...workspaceRaw(), [STORAGE_KEYS.schema]: '{not json' });
-    await expect(alertWith(page, CORRUPT_WORKSPACE)).toBeVisible();
+    await expect(alertWith(page, CORRUPT_FORMAT)).toBeVisible();
 
     await confirmReset(page);
 
@@ -156,7 +159,7 @@ test.describe('load-time corruption handling (Story 5.11)', () => {
     };
     await page.goto('/');
     await writeRawAndReload(page, seeded);
-    await expect(alertWith(page, CORRUPT_WORKSPACE)).toBeVisible();
+    await expect(alertWith(page, CORRUPT_ORGANISMS)).toBeVisible();
 
     await page.getByRole('button', { name: 'Reset Workspace' }).click();
     const dialog = page.getByRole('dialog', { name: 'Clear All Data?' });
@@ -172,7 +175,7 @@ test.describe('load-time corruption handling (Story 5.11)', () => {
   test('the notice and its reset dialog have no axe violations', async ({ page }) => {
     await page.goto('/');
     await writeRawAndReload(page, { ...workspaceRaw(), [STORAGE_KEYS.battles]: '[]' });
-    await expect(alertWith(page, CORRUPT_WORKSPACE)).toBeVisible();
+    await expect(alertWith(page, CORRUPT_BATTLES)).toBeVisible();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
     await page.getByRole('button', { name: 'Reset Workspace' }).click();

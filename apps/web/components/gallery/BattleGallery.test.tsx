@@ -14,9 +14,12 @@ import {
   STORAGE_KEYS,
 } from '@gol/persistence';
 import {
-  CORRUPT_WORKSPACE_MESSAGE,
+  CORRUPT_BATTLES_MESSAGE,
+  CORRUPT_FORMAT_MESSAGE,
+  CORRUPT_ORGANISMS_MESSAGE,
   NEWER_VERSION_MESSAGE,
   STORAGE_FULL_MESSAGE,
+  UNAVAILABLE_MESSAGE,
 } from '@/lib/storage/storageFailureMessages';
 import BattleGallery from './BattleGallery';
 
@@ -415,25 +418,43 @@ describe('BattleGallery', () => {
     }
 
     it.each([
-      ['gol:battles', 'battles' as const, new CorruptDataError(STORAGE_KEYS.battles, 'x')],
-      ['gol:schema', 'battles' as const, new CorruptDataError(STORAGE_KEYS.schema, 'x')],
-      ['gol:organisms', 'organisms' as const, new CorruptDataError(STORAGE_KEYS.organisms, 'x')],
-    ])('a corrupt %s shows the notice with Reset Workspace', async (_ns, repo, error) => {
-      const repos = createFakeRepositories({
-        battles: createMockBattles(),
-        organisms: createMockOrganisms(),
-      });
-      vi.spyOn(repos[repo], 'list').mockRejectedValue(error);
-      renderGallery(repos);
+      [
+        'gol:battles',
+        'battles' as const,
+        new CorruptDataError(STORAGE_KEYS.battles, 'x'),
+        CORRUPT_BATTLES_MESSAGE,
+      ],
+      [
+        'gol:schema',
+        'battles' as const,
+        new CorruptDataError(STORAGE_KEYS.schema, 'x'),
+        CORRUPT_FORMAT_MESSAGE,
+      ],
+      [
+        'gol:organisms',
+        'organisms' as const,
+        new CorruptDataError(STORAGE_KEYS.organisms, 'x'),
+        CORRUPT_ORGANISMS_MESSAGE,
+      ],
+    ])(
+      'a corrupt %s shows the notice with Reset Workspace, naming only that namespace',
+      async (_ns, repo, error, text) => {
+        const repos = createFakeRepositories({
+          battles: createMockBattles(),
+          organisms: createMockOrganisms(),
+        });
+        vi.spyOn(repos[repo], 'list').mockRejectedValue(error);
+        renderGallery(repos);
 
-      expect(await screen.findByRole('alert')).toHaveTextContent(CORRUPT_WORKSPACE_MESSAGE);
-      expect(screen.queryAllByRole('article')).toHaveLength(0);
-      // The exact action set (AC7): Reset Workspace, and neither of the other two recoveries.
-      expect(screen.getByRole('button', { name: 'Reset Workspace' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Restore Default Settings' })).toBeNull();
-      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    });
+        expect(await screen.findByRole('alert')).toHaveTextContent(text);
+        expect(screen.queryAllByRole('article')).toHaveLength(0);
+        // The exact action set (AC7): Reset Workspace, and neither of the other two recoveries.
+        expect(screen.getByRole('button', { name: 'Reset Workspace' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Restore Default Settings' })).toBeNull();
+        expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+      },
+    );
 
     it('a newer-format store shows Reload and never Reset Workspace', async () => {
       const repos = createFakeRepositories({ battles: createMockBattles() });
@@ -1065,29 +1086,63 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
     expect(screen.getAllByRole('article')).toHaveLength(2);
   });
 
-  it('a rejecting delete closes the dialog and renders the alert body', async () => {
-    const user = userEvent.setup();
-    const repos = createFakeRepositories({
-      battles: createMockBattles(),
-      organisms: createMockOrganisms(),
-    });
-    vi.spyOn(repos.battles, 'delete').mockRejectedValue(new Error('boom'));
+  // Story 5.11 review, owner ruling D1 (b): a failed delete keeps the classified notice, but the
+  // notice is published only once the delete dialog has EXITED — the hook reports the rejection
+  // while the dialog is still fading and the page behind it is still inert, and a live region (with
+  // a Reset Workspace button) inserted there is never announced. Pins both the copy/action per
+  // rejection class and the timing: at the first moment the alert exists, the dialog is gone
+  // (mutation-checked: dispatching from the hook's catch turns both cases red).
+  it.each([
+    [
+      'a CorruptDataError(gol:battles)',
+      new CorruptDataError(STORAGE_KEYS.battles, 'x'),
+      CORRUPT_BATTLES_MESSAGE,
+      'Reset Workspace',
+      'Reload',
+    ],
+    ['a plain Error', new Error('boom'), UNAVAILABLE_MESSAGE, 'Reload', 'Reset Workspace'],
+  ])(
+    'a delete rejecting with %s publishes its notice only after the dialog has exited',
+    async (_label, error, text, action, absent) => {
+      const user = userEvent.setup();
+      const repos = createFakeRepositories({
+        battles: createMockBattles(),
+        organisms: createMockOrganisms(),
+      });
+      vi.spyOn(repos.battles, 'delete').mockRejectedValue(error);
 
-    render(
-      <BattleGallery
-        battles={repos.battles}
-        organisms={repos.organisms}
-        settings={repos.settings}
-        workspace={repos}
-        seedStatus="ready"
-      />,
-    );
+      render(
+        <BattleGallery
+          battles={repos.battles}
+          organisms={repos.organisms}
+          settings={repos.settings}
+          workspace={repos}
+          seedStatus="ready"
+        />,
+      );
 
-    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
-    await user.click(screen.getAllByRole('button', { name: /^Delete /u })[0]);
-    await user.click(screen.getByRole('button', { name: 'Delete Battle' }));
+      await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+      await user.click(screen.getAllByRole('button', { name: /^Delete /u })[0]);
+      await screen.findByRole('dialog');
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-  });
+      const seen: { dialogPresent: boolean }[] = [];
+      const observer = new MutationObserver(() => {
+        if (seen.length === 0 && document.querySelector('[role="alert"]') !== null) {
+          seen.push({ dialogPresent: document.querySelector('[role="dialog"]') !== null });
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      try {
+        await user.click(screen.getByRole('button', { name: 'Delete Battle' }));
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(text));
+      } finally {
+        observer.disconnect();
+      }
+
+      expect(seen).toEqual([{ dialogPresent: false }]);
+      expect(screen.getByRole('button', { name: action })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: absent })).toBeNull();
+      expect(screen.queryAllByRole('article')).toHaveLength(0);
+    },
+  );
 });
