@@ -144,6 +144,14 @@ export default function WorkspaceDescriptionRow({
     };
   }, [workspaceMeta]);
 
+  // Not ordered against Import / Clear All, which replace or clear the same `gol:workspace` key —
+  // the FD6 "no cross-row locking" stance, extended to this row by owner ruling (Story 7.2 review,
+  // 2026-09-28). The race is unreachable in localStorage mode: `LocalStorageWorkspaceMetaRepository
+  // .save()` writes synchronously before any `await`, so the write lands at click time and only the
+  // status message is pending; Import and Clear All run behind modal dialogs; and `DataManagement`
+  // remounts this row (`descriptionKey`) after both, so no stale text survives in the field.
+  // ⚠️ A connected-mode (truly async) `WorkspaceMetaRepository` must order this save against
+  // Import / Clear All — see `deferred-work.md`.
   async function handleSave() {
     if (pendingRef.current || !loadedRef.current) return;
     pendingRef.current = true;

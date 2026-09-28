@@ -60,6 +60,7 @@ Plain text only — no markdown, no links; the description is ambience, not docu
   Edit) — exact placement in-story, but the principle is: readable while watching the run.
 - **Workspace description:** one home surface — the gallery header is the candidate — shown
   quietly (supporting text, not a hero banner). It carries the preset's "what you are looking
-  at" voice after a preset load.
+  at" voice after a preset load. It is edited in Settings → Data Management (Story 7.2); the
+  gallery header stays display-only.
 - **Absent description:** nothing renders. No placeholder, no empty region, no "add a
   description" nudge — a described workspace and an undescribed one both look intentional.

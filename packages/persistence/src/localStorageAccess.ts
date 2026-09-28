@@ -11,8 +11,8 @@ export const STORAGE_KEYS = Object.freeze({
   organisms: 'gol:organisms',
   settings: 'gol:settings',
   // Workspace-level metadata (FR-9.5, Story 7.2) — the workspace description. DATA, not a setting:
-  // it travels with export, is replaced by import and cleared by Clear All. An extension of RFC-006
-  // Decision 7's key list, recorded as a variance in `deferred-work.md`.
+  // it travels with export, is replaced by import and cleared by Clear All. Extends RFC-006
+  // Decision 7's key list — M16 (owner ruling, 2026-09-28).
   workspace: 'gol:workspace',
 } as const);
 

@@ -55,7 +55,7 @@ export interface SettingsRepository {
 /**
  * Workspace-level metadata — the workspace description (FR-9.5, Story 7.2). The `SettingsRepository`
  * shape (never null) but DATA semantics: it travels with export, is replaced by import and cleared
- * by `clearAll()`. An extension of RFC-006 Decision 1's `AppRepositories`, recorded as a variance.
+ * by `clearAll()`. Extends RFC-006 Decision 1's `AppRepositories` — M16 (owner ruling, 2026-09-28).
  */
 export interface WorkspaceMetaRepository {
   /**
