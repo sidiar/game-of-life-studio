@@ -1,0 +1,419 @@
+{
+  "formatVersion": 1,
+  "appVersion": "0.0.0",
+  "exportedAt": "2026-09-28T13:33:36.232Z",
+  "kind": "workspace",
+  "organisms": [
+    {
+      "schemaVersion": 1,
+      "id": "conways-classic",
+      "name": "Conway's Classic",
+      "colorToken": "sky-blue",
+      "dominance": 50,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "1fcc1002-5f8a-4cf0-9fab-2c0c20492d51",
+          "contentHash": "d9b3d443a42e63c10526023503302a87b0676110bf7e5c146625a5237026d93d",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Born on an empty cell with exactly 3 neighbors",
+            "action": "born"
+          }
+        },
+        {
+          "id": "27855506-28f8-46c2-a85b-1464557a121d",
+          "contentHash": "1a7f0de8227e3031c7000336705781a2df139b445be381f351a4df1cb67c0918",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [2, 3]
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2-3 neighbors",
+            "action": "survive"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "mock-aggressive-colonizer",
+      "name": "Aggressive Colonizer",
+      "colorToken": "vermillion",
+      "dominance": 80,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "36ce2873-46de-4c0a-9ce1-7dfd10011878",
+          "contentHash": "d25fbc29473be175af89f5a21f11db375e3f43dd90d7900d292769e4be6f35ae",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Aggressively colonizes any empty cell with exactly 3 neighbors",
+            "action": "born"
+          }
+        },
+        {
+          "id": "0b6b6a7a-540f-4197-879b-f75d7828fd17",
+          "contentHash": "01636e9e1bb09e45f14883376f00fc2f89ef3529fd6fb9d329a599d84bfd4b7b",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "gte",
+              "pattern": 2
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2 or more neighbors",
+            "action": "survive"
+          }
+        },
+        {
+          "id": "54e733da-a7d6-4ed7-b9e6-359f938d7512",
+          "contentHash": "2638698b1afa7fe03f4a3aa903399d0caa364efa3b626d76a04fc79a1064e38c",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "gt",
+              "pattern": 5
+            }
+          ],
+          "payload": {
+            "summary": "Dies of overcrowding with more than 5 neighbors",
+            "action": "die"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "mock-patient-defender",
+      "name": "Patient Defender",
+      "colorToken": "azure",
+      "dominance": 45,
+      "agingEnabled": true,
+      "survivalRules": [
+        {
+          "id": "c40eca37-e599-44ec-8d8c-ba25f4e553c5",
+          "contentHash": "69edada77dce00c91195e8ec0aee47c930c2fb515116078df108e16a2a2ca90c",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [3, 4]
+            }
+          ],
+          "payload": {
+            "summary": "Patiently born on an empty cell with 3 to 4 neighbors",
+            "action": "born"
+          }
+        },
+        {
+          "id": "86724b66-18db-44d8-8c39-b495ddc20e75",
+          "contentHash": "928c86413eaff4b78e1bbe70e61a517046cb621dd8ddba615e5b2bab514ac5c1",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "occupantNeighborCount",
+              "operator": "lt",
+              "pattern": 2
+            }
+          ],
+          "payload": {
+            "summary": "Defends and survives with fewer than 2 occupant neighbors",
+            "action": "survive"
+          }
+        },
+        {
+          "id": "1a1ca582-697e-4eba-b2bd-b15563cf3aa9",
+          "contentHash": "0643c2a1c6fafb45e5b12e91211ed7007cabd066db26d13ebc03646582d4b53d",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "age",
+              "operator": "gte",
+              "pattern": 8
+            }
+          ],
+          "payload": {
+            "summary": "Dies of old age at 8 cycles or more",
+            "action": "die"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "mock-chaotic-spreader",
+      "name": "Chaotic Spreader",
+      "colorToken": "bluish-green",
+      "dominance": 20,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "347e01d7-bbb2-4132-be6f-18069207109a",
+          "contentHash": "26349dd7666eb087e6616d2448ee5782ef99863a86b1ed39bb68bd6aa879d944",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "occupied"
+            },
+            {
+              "property": "organismType",
+              "operator": "eq",
+              "pattern": "mock-aggressive-colonizer"
+            }
+          ],
+          "payload": {
+            "summary": "Chaotically spreads by colonizing an Aggressive Colonizer cell",
+            "action": "born"
+          }
+        },
+        {
+          "id": "5014a589-a10d-4312-8c6b-b7af52394324",
+          "contentHash": "f1456a613eb905692d47aa0dd14e1cda149c13e3cc22517cead55bb5221f3c17",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "lte",
+              "pattern": 4
+            }
+          ],
+          "payload": {
+            "summary": "Survives chaotically with 4 or fewer neighbors",
+            "action": "survive"
+          }
+        }
+      ]
+    }
+  ],
+  "battles": [
+    {
+      "id": "a3f1c2d4-5b6e-4f7a-8c9d-0e1f2a3b4c5d",
+      "name": "Three-Way Skirmish",
+      "gridDimensions": {
+        "cols": 50,
+        "rows": 30
+      },
+      "cells": [
+        {
+          "x": 2,
+          "y": 2,
+          "organismId": "mock-aggressive-colonizer"
+        },
+        {
+          "x": 3,
+          "y": 2,
+          "organismId": "mock-aggressive-colonizer"
+        },
+        {
+          "x": 2,
+          "y": 3,
+          "organismId": "mock-aggressive-colonizer"
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "organismId": "mock-aggressive-colonizer"
+        },
+        {
+          "x": 10,
+          "y": 2,
+          "organismId": "mock-patient-defender"
+        },
+        {
+          "x": 11,
+          "y": 2,
+          "organismId": "mock-patient-defender"
+        },
+        {
+          "x": 10,
+          "y": 3,
+          "organismId": "mock-patient-defender"
+        },
+        {
+          "x": 11,
+          "y": 3,
+          "organismId": "mock-patient-defender"
+        },
+        {
+          "x": 18,
+          "y": 2,
+          "organismId": "mock-chaotic-spreader"
+        },
+        {
+          "x": 19,
+          "y": 2,
+          "organismId": "mock-chaotic-spreader"
+        },
+        {
+          "x": 18,
+          "y": 3,
+          "organismId": "mock-chaotic-spreader"
+        },
+        {
+          "x": 19,
+          "y": 3,
+          "organismId": "mock-chaotic-spreader"
+        }
+      ],
+      "createdAt": "2026-07-20T09:00:00.000Z",
+      "updatedAt": "2026-07-20T09:00:00.000Z"
+    },
+    {
+      "id": "b4a2d3e5-6c7f-4a8b-9d0e-1f2a3b4c5d6e",
+      "name": "Grand Colony War",
+      "gridDimensions": {
+        "cols": 100,
+        "rows": 60
+      },
+      "cells": [
+        {
+          "x": 2,
+          "y": 2,
+          "organismId": "mock-aggressive-colonizer"
+        },
+        {
+          "x": 3,
+          "y": 2,
+          "organismId": "mock-aggressive-colonizer"
+        },
+        {
+          "x": 2,
+          "y": 3,
+          "organismId": "mock-aggressive-colonizer"
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "organismId": "mock-aggressive-colonizer"
+        },
+        {
+          "x": 10,
+          "y": 2,
+          "organismId": "mock-patient-defender"
+        },
+        {
+          "x": 11,
+          "y": 2,
+          "organismId": "mock-patient-defender"
+        },
+        {
+          "x": 10,
+          "y": 3,
+          "organismId": "mock-patient-defender"
+        },
+        {
+          "x": 11,
+          "y": 3,
+          "organismId": "mock-patient-defender"
+        },
+        {
+          "x": 18,
+          "y": 2,
+          "organismId": "mock-chaotic-spreader"
+        },
+        {
+          "x": 19,
+          "y": 2,
+          "organismId": "mock-chaotic-spreader"
+        },
+        {
+          "x": 18,
+          "y": 3,
+          "organismId": "mock-chaotic-spreader"
+        },
+        {
+          "x": 19,
+          "y": 3,
+          "organismId": "mock-chaotic-spreader"
+        },
+        {
+          "x": 27,
+          "y": 2,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 28,
+          "y": 3,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 26,
+          "y": 4,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 27,
+          "y": 4,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 28,
+          "y": 4,
+          "organismId": "conways-classic"
+        }
+      ],
+      "createdAt": "2026-07-22T14:30:00.000Z",
+      "updatedAt": "2026-07-25T18:15:00.000Z"
+    }
+  ]
+}
