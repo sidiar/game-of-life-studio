@@ -20,11 +20,12 @@ export interface SettingsPageProps {
   seedStatus: WorkspaceSeedStatus;
   // A `Pick`, not the whole aggregate and not a bare function (FD7, Story 5.2). Story 4.1 refused
   // "the unused prop that lies about what the component reads" — `repositories: AppRepositories`
-  // would hand this component `clearAll`/`isFreshWorkspace` it does not call (yet; Story 5.10
-  // widens this to `'storageUsage' | 'clearAll'` in one token). A bare
+  // would hand this component `isFreshWorkspace` it does not call. Story 5.10 widens this to
+  // `'storageUsage' | 'clearAll'` — Clear All needs `organisms` and this one token, never
+  // `settings` (Decision F makes the settings repository unreachable from this path). A bare
   // `storageUsage={repositories.storageUsage}` function prop detaches the method from its object —
   // harmless today (neither implementation uses `this`) and a `this` trap the day one does.
-  workspace: Pick<AppRepositories, 'storageUsage'>;
+  workspace: Pick<AppRepositories, 'storageUsage' | 'clearAll'>;
   // The same `Pick` shape as `workspace` above, for the same reason (FD7, Story 5.2): this page
   // hands `<DataManagement>` exactly the serializer methods it (and its Story 5.9 `<ImportWorkspaceRow>`
   // child) call, never the whole `WorkspaceSerializer` interface — `exportBattle` is Story 5.6's,
@@ -76,8 +77,10 @@ const Container = styled('div')({
  * The page-boundary body for `/settings` (Story 5.1). All three repositories are injected,
  * interface-typed (AR-2/AR-27) — this component never imports a concrete repository or calls
  * createRepositories(). All three are READ here (FD3/FD4): battles and organisms feed the
- * Workspace Statistics counts, settings establishes the read-only load this story proves (AC5),
- * and Story 5.10's Clear All needs all three at this same boundary.
+ * Workspace Statistics counts, and settings establishes the read-only load this story proves
+ * (AC5). Story 5.10's Clear All needs `organisms` and the `workspace` aggregate at this same
+ * boundary — NOT `settings`: Decision F makes the settings repository unreachable from that path,
+ * and this component never passes it down to `<DataManagement>`'s Clear All row.
  *
  * FD3: the settings load is the page's readiness gate, and it never degrades to
  * DEFAULT_SETTINGS on a rejection — unlike BattleGallery/<BattlePage>, which only ever READ a
@@ -152,9 +155,11 @@ export default function SettingsPage({
             />
             <DataManagement
               serializer={serializer}
+              workspace={workspace}
               battles={battles}
               organisms={organisms}
               onImported={statsResource.reload}
+              onCleared={statsResource.reload}
             />
           </Container>
         )}

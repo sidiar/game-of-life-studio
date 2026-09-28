@@ -3801,3 +3801,33 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   multi-second export to reach (today's localStorage export settles in microseconds). Fix if ever
   needed: a dialog-generation ref bumped on open (which also resets `exportInFlightRef`), captured
   by `handleExportFirst`, gating its `setExportState` and the ref release.
+
+## Deferred from: Story 5-10 (Clear All Data)
+
+- **FD4 — Story 5.11 hand-off: `resetWorkspace()` over a corrupt or newer-format `gol:schema`
+  stamp.** `resetWorkspace()` (`packages/persistence/src/resetWorkspace.ts`) does not run the
+  at-rest format check itself — `clearAll()` is a raw key removal — but `ensureDefaultOrganism`'s
+  `exists()` read does (`readCollection` → `ensureCurrentAtRestFormat`). Over a store with a
+  **corrupt** or **newer-format** stamp, calling `resetWorkspace()` therefore deletes
+  `gol:battles`/`gol:organisms` and *then* throws, leaving no Conway's Classic behind the same bad
+  stamp. Unreachable through Story 5.10's own UI: on such a store every `list()` on `/settings`
+  already throws, the page renders its error state, and the Data Management card (inside the
+  `ready` gate) never mounts — so the Clear Data button is never reachable to trigger it. This
+  becomes reachable the moment Story 5.11 wires "the 5.10 path" into its corruption screen
+  (`epics.md:1456`), which is why Story 5.11 must deal with the stamp BEFORE calling
+  `resetWorkspace()`, not lean on it to. Per the owner ruling already recorded above (2026-09-25,
+  the `NewerFormatVersionError` hand-off): Story 5.11 must NOT offer a reset for
+  `NewerFormatVersionError` at all — the data is intact, a reset would destroy it, and `clearAll()`
+  keeps the newer stamp anyway, so a reset would leave the identical error over an empty store. For
+  a plain corrupt stamp, 5.11's own reset path needs to resolve the stamp before
+  `ensureDefaultOrganism` runs — this function's contract does not change to accommodate it.
+- **FD6 — no cross-row locking on `/settings`' Data Management card.** Export, Import
+  (`ImportWorkspaceRow.tsx`) and Clear All Data (`ClearAllDataRow.tsx`) each keep an independent
+  `pendingRef` — there is no card-level in-flight flag serialising the three. In practice every
+  destructive path is behind a modal dialog, so a second row's control is unreachable (`inert`)
+  for as long as one is open; Export has no dialog, so it can still race a concurrent
+  Import/Clear All in the same window the prior "Export and Import rows can run concurrently on a
+  pristine workspace" entry above already accepts for Import. A second browser tab racing this
+  page is the same codebase-wide single-writer stance Story 5.9's FD5 already accepts. Fix if ever
+  needed: a single card-level `pendingRef` (or `useReducer`) shared by all three rows' click
+  handlers, replacing each row's own ref.

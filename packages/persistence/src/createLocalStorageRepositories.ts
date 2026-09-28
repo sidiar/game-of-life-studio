@@ -27,8 +27,8 @@ export function createLocalStorageRepositories(): AppRepositories {
      * import path (Story 5.8) reuses this, which is precisely what makes importing a friend's
      * battle unable to destroy the importer's theme — no snapshot-and-restore needed.
      *
-     * Re-seeding DEFAULT_WORKSPACE afterwards is Story 1.5's helper, invoked by the caller
-     * (Story 5.10) rather than buried here.
+     * Re-seeding DEFAULT_WORKSPACE afterwards is Story 1.5's helper (`ensureDefaultOrganism`),
+     * invoked by the caller — Story 5.10's `resetWorkspace()` composition — rather than buried here.
      */
     async clearAll(): Promise<void> {
       removeDataKeys();

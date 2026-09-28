@@ -2,10 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
-import type { BattleRepository, OrganismRepository, WorkspaceSerializer } from '@gol/persistence';
+import type {
+  AppRepositories,
+  BattleRepository,
+  OrganismRepository,
+  WorkspaceSerializer,
+} from '@gol/persistence';
 import { exportWorkspaceToFile } from '@/lib/export/exportWorkspaceToFile';
 import { Card, CardTitle, Row, RowDescription, RowInfo, RowLabel } from './SettingsCard';
 import ImportWorkspaceRow from './ImportWorkspaceRow';
+import ClearAllDataRow from './ClearAllDataRow';
 
 export interface DataManagementProps {
   // A `Pick`, not the whole interface (FD7 of Story 5.2, AR-2/27) — this card's subtree needs
@@ -13,19 +19,25 @@ export interface DataManagementProps {
   // directly: `exportWorkspaceToFile` calls `exportWorkspace`, and `importWorkspace` is passed
   // through to `<ImportWorkspaceRow>`, Story 5.9's second row.
   serializer: Pick<WorkspaceSerializer, 'exportWorkspace' | 'importWorkspace'>;
+  // Story 5.10's Clear All row needs `clearAll` alongside the serializer above (AR-2/27 — never
+  // the whole aggregate).
+  workspace: Pick<AppRepositories, 'clearAll'>;
   /** Story 5.9: the pristine-workspace check's `battleCount` half (AC4). */
   battles: Pick<BattleRepository, 'list'>;
-  /** Story 5.9: the pristine-workspace check's organism-library half (AC4). */
-  organisms: Pick<OrganismRepository, 'list'>;
+  // Story 5.9's pristine check needs `list`; Story 5.10's reset needs `exists`/`save` — widened to
+  // the union both rows require (FD2, still never the whole `OrganismRepository`).
+  organisms: Pick<OrganismRepository, 'list' | 'exists' | 'save'>;
   /** Story 5.9 AC6: fired after a successful import so `<SettingsPage>` can refresh its counts. */
   onImported(): void;
+  /** Story 5.10 AC5: fired after Clear All settles (success or failure, FD3) for the same reload. */
+  onCleared(): void;
 }
 
 const DATA_MANAGEMENT_HEADING_ID = 'data-management-heading';
 
-// Mockup: .settings-group / .settings-item (settings.html:139-157, 392-403). Export and Import
-// (Story 5.9) — Auto-Save/Clear All arrive in 6.10/5.10 (FD7 — no dead affordance, and no
-// card-level description paragraph promising them either).
+// Mockup: .settings-group / .settings-item (settings.html:139-157, 392-403). Export, Import
+// (Story 5.9) and Clear All Data (Story 5.10) — Auto-Save arrives in 6.10 (FD7 — no dead
+// affordance, and no card-level description paragraph promising it either).
 
 // Mockup: .btn (settings.html:181-198), plus .settings-item-control's `flex-shrink: 0` (:176-178)
 // so the button never shrinks at narrow widths — the house primary-button idiom
@@ -75,9 +87,9 @@ const EXPORT_ERROR_MESSAGE =
 
 /**
  * The Data Management card (AC1, Story 5.5) — the first control this page renders, alongside
- * Workspace Statistics. Two rows: Export Workspace, and Import (Story 5.9's
- * `<ImportWorkspaceRow>`, its own component rather than folded in here — Story 5.10 is about to
- * grow this file with Clear All, and a third row's worth of state does not belong in Export's).
+ * Workspace Statistics. Three rows: Export Workspace, Import (Story 5.9's `<ImportWorkspaceRow>`)
+ * and Clear All Data (Story 5.10's `<ClearAllDataRow>`) — each its own component rather than
+ * folded in here, since a third row's worth of state does not belong in Export's.
  *
  * FD8: re-entrancy without self-disabling. A `useRef<boolean>` in-flight flag makes a second click
  * while an export is running a no-op, WITHOUT `disabled` on the focused button — `deferred-work.md`
@@ -91,9 +103,11 @@ const EXPORT_ERROR_MESSAGE =
  */
 export default function DataManagement({
   serializer,
+  workspace,
   battles,
   organisms,
   onImported,
+  onCleared,
 }: DataManagementProps) {
   const [hasError, setHasError] = useState(false);
   const pendingRef = useRef(false);
@@ -150,6 +164,7 @@ export default function DataManagement({
         organisms={organisms}
         onImported={onImported}
       />
+      <ClearAllDataRow workspace={workspace} organisms={organisms} onCleared={onCleared} />
     </Card>
   );
 }

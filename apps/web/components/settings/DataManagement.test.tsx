@@ -33,15 +33,23 @@ const ENVELOPE = {
 
 /**
  * Story 5.9: `<DataManagement>` now requires `battles`/`organisms`/`onImported` for its second row
- * (`<ImportWorkspaceRow>`), and `serializer` widens to `importWorkspace`. This file's Export
- * assertions stay exactly as Story 5.5 wrote them — only the props each render call needs are new;
- * `<ImportWorkspaceRow>`'s own behaviour is `ImportWorkspaceRow.test.tsx`'s job.
+ * (`<ImportWorkspaceRow>`), and `serializer` widens to `importWorkspace`. Story 5.10 adds
+ * `workspace`/`onCleared` for its third row (`<ClearAllDataRow>`), and widens `organisms` to
+ * `exists`/`save`. This file's Export assertions stay exactly as Story 5.5 wrote them — only the
+ * props each render call needs are new; `<ImportWorkspaceRow>`'s and `<ClearAllDataRow>`'s own
+ * behaviour are `ImportWorkspaceRow.test.tsx`'s and `ClearAllDataRow.test.tsx`'s jobs.
  */
 function baseProps() {
   return {
+    workspace: { clearAll: vi.fn().mockResolvedValue(undefined) },
     battles: { list: vi.fn().mockResolvedValue([]) },
-    organisms: { list: vi.fn().mockResolvedValue([]) },
+    organisms: {
+      list: vi.fn().mockResolvedValue([]),
+      exists: vi.fn().mockResolvedValue(true),
+      save: vi.fn().mockResolvedValue(undefined),
+    },
     onImported: vi.fn(),
+    onCleared: vi.fn(),
   };
 }
 
@@ -73,6 +81,20 @@ describe('DataManagement', () => {
 
     expect(screen.getByRole('heading', { level: 3, name: 'Import' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /import workspace/i })).toBeInTheDocument();
+  });
+
+  it('also renders the Clear All Data row (Story 5.10) as the last row in the card', () => {
+    const serializer = {
+      exportWorkspace: vi.fn().mockResolvedValue(ENVELOPE),
+      importWorkspace: vi.fn(),
+    };
+    render(<DataManagement serializer={serializer} {...baseProps()} />);
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Clear All Data' })).toBeInTheDocument();
+    const clearButton = screen.getByRole('button', { name: /clear all data/i });
+    expect(clearButton).toBeInTheDocument();
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(['Export Workspace', 'Import', 'Clear All Data']);
   });
 
   it('clicking Export calls exportWorkspace exactly once and hands the download seam the AC3 filename and the envelope', async () => {

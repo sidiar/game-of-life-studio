@@ -1,5 +1,5 @@
 # generated: 2026-07-16
-# last_updated: 2026-09-27
+# last_updated: 2026-09-28
 # project: GameOfLife
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-07-16
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 project: GameOfLife
 project_key: NOKEY
 tracking_system: file-system
@@ -155,7 +155,7 @@ development_status:
   5-7-migration-registry: done
   5-8-atomic-import-pipeline: done
   5-9-import-ui-destructive-warning: done
-  5-10-clear-all-data: backlog
+  5-10-clear-all-data: review
   5-11-load-time-corruption-handling: backlog
   epic-5-retrospective: optional
 
