@@ -46,7 +46,7 @@ describe('NotFound', () => {
   });
 
   // "Gone" and "broken" are different facts. This copy must not read as data corruption — the
-  // battle route's error notice ("Its stored data may be damaged") is the one that means that,
+  // battle route's error notice ("its saved data is damaged") is the one that means that,
   // and a mistyped URL is not evidence of it.
   it('explains a mistyped address, not damaged data', () => {
     render(<NotFound />);

@@ -104,10 +104,18 @@ function asCollection(key: StorageKey, value: unknown): Record<string, unknown> 
   return value as Record<string, unknown>;
 }
 
+// The one "is this a usable format version?" rule on this side of the boundary, shared by the
+// write-back guard below and `discardUnreadableStamp`. It mirrors `migrate`'s own floor (an integer
+// >= 1 — the chain counts upward from the first published format); two copies here would be free
+// to drift from each other as well as from it.
+function isUsableFormatVersion(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
 // `migrate` stamps `currentVersion` after every step, so this only guards an injected migrator —
 // but a stamp of `{}` or `"2"` would make every later read throw, which is worth one comparison.
 function asFormatVersion(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+  if (!isUsableFormatVersion(value)) {
     throw new CorruptDataError(STORAGE_KEYS.schema, 'a format migration did not produce a version');
   }
   return value;
@@ -116,6 +124,18 @@ function asFormatVersion(value: unknown): number {
 function memoize<T>(read: () => T): () => T {
   let cached: { value: T } | undefined;
   return () => (cached ??= { value: read() }).value;
+}
+
+// The stamp's record-shape reading, shared by the format check and `discardUnreadableStamp` so the
+// two can never disagree on what "a readable stamp" is. `undefined` ⇔ absent; a stamp that is not
+// JSON, or not a `{ formatVersion }` record, throws `CorruptDataError(gol:schema)`.
+function readStampRecord(): { formatVersion?: unknown } | undefined {
+  const stamp = readStoredValue(STORAGE_KEYS.schema);
+  if (stamp === undefined) return undefined;
+  if (typeof stamp !== 'object' || stamp === null || Array.isArray(stamp)) {
+    throw new CorruptDataError(STORAGE_KEYS.schema, 'expected a { formatVersion } record');
+  }
+  return stamp as { formatVersion?: unknown };
 }
 
 /*
@@ -148,11 +168,8 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
   const lazyOrganisms = memoize(() => readRawCollection(STORAGE_KEYS.organisms));
 
   // Absent ⇒ fresh store, or only settings were ever written (settings never stamp).
-  const stamp = readStoredValue(STORAGE_KEYS.schema);
+  const stamp = readStampRecord();
   if (stamp === undefined) return;
-  if (typeof stamp !== 'object' || stamp === null || Array.isArray(stamp)) {
-    throw new CorruptDataError(STORAGE_KEYS.schema, 'expected a { formatVersion } record');
-  }
 
   // Raw JSON, no Zod parse — migration runs BEFORE validation here too. The envelope's own
   // top-level names, so a step reads the same keys at either boundary. The collections are LAZY:
@@ -160,7 +177,7 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
   // corrupt `gol:battles` cannot make an organism read fail. A step that does read one gets the
   // same CorruptDataError `readCollection` would have thrown.
   const doc = {
-    formatVersion: (stamp as { formatVersion?: unknown }).formatVersion,
+    formatVersion: stamp.formatVersion,
     get battles() {
       return lazyBattles();
     },
@@ -200,6 +217,49 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
     asCollection(STORAGE_KEYS.organisms, migrated['organisms']),
     asFormatVersion(migrated['formatVersion']),
   );
+}
+
+/**
+ * The storage half of `AppRepositories.discardUnreadableStamp()` (Story 5.11): removes `gol:schema`
+ * only when it is unusable — not JSON, not a `{ formatVersion }` record, or no integer version
+ * >= 1 — the exact cases the format check reports as plain `CorruptDataError(gol:schema)`.
+ *
+ * It READS the stamp only: no migration, no write-back (a usable older stamp is left for the next
+ * read's format check to migrate), no collection read — so a corrupt `gol:battles` cannot make it
+ * fail — and never `gol:settings`. A NEWER stamp is refused with `NewerFormatVersionError` before
+ * anything is written: that store is intact and a newer build reads it (the Story 5.7 owner ruling),
+ * so no caller can reset it through here. Removal, never an overwrite with a guessed version: the
+ * store is then unstamped, which the seeding-hole comment on `stampSchemaVersion` shows is the
+ * recoverable shape.
+ */
+export function discardUnreadableStamp(): void {
+  let stamp: { formatVersion?: unknown } | undefined;
+  try {
+    stamp = readStampRecord();
+  } catch (error) {
+    // Only the shape failures are "unusable"; a storage access error (e.g. a SecurityError from
+    // blocked storage) is not the stamp's fault and must not look like a successful discard.
+    if (!(error instanceof CorruptDataError)) throw error;
+    localStorage.removeItem(STORAGE_KEYS.schema);
+    return;
+  }
+  if (stamp === undefined) return;
+  const version = stamp.formatVersion;
+  if (!isUsableFormatVersion(version)) {
+    localStorage.removeItem(STORAGE_KEYS.schema);
+    return;
+  }
+  // The same ceiling `migrate` applies (`found > currentVersion` → 'newer-version', which the format
+  // check surfaces as `NewerFormatVersionError`): the verdict on one stamp is then the same from both
+  // sides — what a read reports as newer, this refuses to discard. Keep the two comparisons in step.
+  if (version > CURRENT_FORMAT_VERSION) {
+    throw new NewerFormatVersionError(
+      STORAGE_KEYS.schema,
+      version,
+      CURRENT_FORMAT_VERSION,
+      `the stored format ${version} is newer than this build's ${CURRENT_FORMAT_VERSION}; refusing to discard it`,
+    );
+  }
 }
 
 /*

@@ -1,4 +1,4 @@
-import { CorruptDataError, QuotaExceededError } from '@gol/persistence';
+import { CorruptDataError, NewerFormatVersionError, QuotaExceededError } from '@gol/persistence';
 
 /**
  * AC5 / NFR-7.2 / RFC-006 Decision 7: a refused save is reported, non-destructively, and never
@@ -34,6 +34,16 @@ export function saveFailureMessage(error: unknown, subject: 'battle' | 'organism
           'delete a battle from the Gallery to free space, then save again.'
       : 'Storage is full, so this organism was not saved. Everything already saved is unchanged — ' +
           'delete a battle from the Gallery to free space, then save again.';
+  }
+  if (error instanceof NewerFormatVersionError) {
+    // Tested BEFORE `CorruptDataError` — it is a subclass (Story 5.7). A newer build's store: the
+    // write was refused before anything was touched (AR-11), and no retry in this build can
+    // succeed, so the copy says reload, never "try again" (Story 5.11).
+    return subject === 'battle'
+      ? 'This battle was not saved because your workspace was saved by a newer version of the ' +
+          'app. Nothing already stored was changed. Reload the page to continue.'
+      : 'This organism was not saved because your workspace was saved by a newer version of the ' +
+          'app. Nothing already stored was changed. Reload the page to continue.';
   }
   if (error instanceof CorruptDataError) {
     // `battles.save()` / `organisms.save()` each read their whole collection before writing it

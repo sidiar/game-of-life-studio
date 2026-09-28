@@ -38,7 +38,20 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useInertBackground } from '@/lib/useInertBackground';
 import { useLeaveGuard } from '@/lib/battle/useLeaveGuard';
 import { useUndoableGrid } from '@/lib/battle/useUndoableGrid';
-import { BackLink, Notice, NoticeText, NoticeTitle } from '@/components/layout/Notice';
+import {
+  BackLink,
+  Notice,
+  NoticeButton,
+  NoticeText,
+  NoticeTitle,
+} from '@/components/layout/Notice';
+import { classifyStorageFailure } from '@/lib/storage/storageFailure';
+import {
+  BATTLE_CORRUPT_MESSAGE,
+  NEWER_VERSION_MESSAGE,
+  STORAGE_FULL_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+} from '@/lib/storage/storageFailureMessages';
 import BattleHeader, { type BattleMode } from './BattleHeader';
 import BattleEditorView from './editor/BattleEditorView';
 
@@ -382,6 +395,7 @@ export default function BattlePage({
   const {
     draft,
     status: battleStatus,
+    error: battleError,
     loadedIdentity,
   } = useBattleDraft(repositories, battleId, settings);
 
@@ -1428,10 +1442,34 @@ export default function BattlePage({
     // and "broken" are different facts and offer the user different next moves, so the copy must
     // differ.
     if (battleStatus === 'error') {
+      // Story 5.11 (FD10): classified, but never a reset here. A per-record corrupt battle and a
+      // whole-key failure both surface as `CorruptDataError(gol:battles)` — indistinguishable by
+      // class or key — so this route points at the Gallery, which can tell (its `list()` rejects
+      // only on a whole-key failure) and holds the reset. A newer-format store gets Reload: its
+      // data is intact (Story 5.7 owner ruling). `window.location.reload()` is a reload, not the
+      // navigation the router rule above forbids.
+      const kind = classifyStorageFailure(battleError);
+      if (kind === 'newer-version') {
+        return (
+          <Notice>
+            <NoticeTitle>Newer Version Required</NoticeTitle>
+            <NoticeText>{NEWER_VERSION_MESSAGE}</NoticeText>
+            <NoticeButton type="button" onClick={() => window.location.reload()}>
+              Reload
+            </NoticeButton>
+          </Notice>
+        );
+      }
       return (
         <Notice>
           <NoticeTitle>Something Went Wrong</NoticeTitle>
-          <NoticeText>This battle could not be loaded. Its stored data may be damaged.</NoticeText>
+          <NoticeText>
+            {kind === 'storage-full'
+              ? STORAGE_FULL_MESSAGE
+              : kind === 'unavailable'
+                ? UNAVAILABLE_MESSAGE
+                : BATTLE_CORRUPT_MESSAGE}
+          </NoticeText>
           <BackLink href="/">Back to Gallery</BackLink>
         </Notice>
       );

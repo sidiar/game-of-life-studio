@@ -3,6 +3,7 @@ import { createMigrator, CURRENT_FORMAT_VERSION, isFormatMigrationError } from '
 import type { FormatMigration } from '@gol/domain';
 import { CorruptDataError, NewerFormatVersionError } from './errors';
 import {
+  discardUnreadableStamp,
   ensureCurrentAtRestFormat,
   hasSchemaStamp,
   measureStorageUsage,
@@ -529,5 +530,66 @@ describe('the at-rest format check (Story 5.7, AR-11)', () => {
       expect(() => ensureCurrentAtRestFormat(unstamped)).toThrow(CorruptDataError);
       expect(snapshot()).toEqual(before);
     });
+  });
+});
+
+describe('discardUnreadableStamp (Story 5.11)', () => {
+  const rawKeys = () =>
+    Object.values(STORAGE_KEYS).map((key) => [key, localStorage.getItem(key)] as const);
+
+  it('is a no-op on an absent stamp', () => {
+    localStorage.setItem(STORAGE_KEYS.settings, '{"theme":"x"}');
+    const before = rawKeys();
+    discardUnreadableStamp();
+    expect(rawKeys()).toEqual(before);
+  });
+
+  it('keeps a current stamp byte-identical, and never reads a corrupt collection', () => {
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION }),
+    );
+    localStorage.setItem(STORAGE_KEYS.battles, '{not json');
+    const before = rawKeys();
+    discardUnreadableStamp();
+    expect(rawKeys()).toEqual(before);
+  });
+
+  it.each([
+    ['not JSON', '{not json'],
+    ['an array', '[]'],
+    ['a string version', '{"formatVersion":"2"}'],
+    ['no version', '{}'],
+    ['version 0', '{"formatVersion":0}'],
+    ['a fractional version', '{"formatVersion":1.5}'],
+  ])('removes an unusable stamp (%s) and touches nothing else', (_label, raw) => {
+    localStorage.setItem(STORAGE_KEYS.schema, raw);
+    localStorage.setItem(STORAGE_KEYS.battles, '{}');
+    localStorage.setItem(STORAGE_KEYS.settings, '{"theme":"x"}');
+    discardUnreadableStamp();
+    expect(localStorage.getItem(STORAGE_KEYS.schema)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.battles)).toBe('{}');
+    expect(localStorage.getItem(STORAGE_KEYS.settings)).toBe('{"theme":"x"}');
+  });
+
+  it('refuses a newer stamp with NewerFormatVersionError and writes nothing', () => {
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
+    );
+    localStorage.setItem(STORAGE_KEYS.battles, '{}');
+    const before = rawKeys();
+    expect(() => discardUnreadableStamp()).toThrow(NewerFormatVersionError);
+    expect(rawKeys()).toEqual(before);
+  });
+
+  it('rethrows a storage access failure instead of treating it as an unusable stamp', () => {
+    localStorage.setItem(STORAGE_KEYS.schema, '{not json');
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
+    expect(() => discardUnreadableStamp()).toThrow('blocked');
+    vi.restoreAllMocks();
+    expect(localStorage.getItem(STORAGE_KEYS.schema)).toBe('{not json');
   });
 });

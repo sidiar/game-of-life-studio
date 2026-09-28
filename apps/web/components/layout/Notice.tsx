@@ -40,7 +40,7 @@ export const NoticeText = styled('p')({
 
 // Same hover/focus-visible parity the Story 1.9 review established on AppNav: textDecoration is
 // kept here rather than removed, so the link is identifiable without relying on colour alone.
-export const BackLink = styled(Link)({
+const WAY_OUT_STYLE = {
   fontSize: '14px',
   fontWeight: 500,
   textTransform: 'uppercase',
@@ -56,4 +56,21 @@ export const BackLink = styled(Link)({
     outline: '2px solid var(--gol-accent)',
     outlineOffset: '2px',
   },
+} as const;
+
+export const BackLink = styled(Link)(WAY_OUT_STYLE);
+
+// The same way out as a BUTTON, for an action that is not a navigation — Story 5.11's Reload on
+// `/battle` for a newer-format store. The resets are what a <button>'s UA stylesheet brings that a
+// link does not, and each one changes the box next to a `BackLink`: `font-family` (buttons do not
+// inherit), `line-height: normal`, Safari's `margin: 0 2px`, and `appearance`. `WAY_OUT_STYLE`'s
+// own `padding`/`border` already override the UA's.
+export const NoticeButton = styled('button')({
+  ...WAY_OUT_STYLE,
+  fontFamily: 'inherit',
+  lineHeight: 'inherit',
+  margin: 0,
+  appearance: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
 });

@@ -80,14 +80,19 @@ describe('importFailureMessage', () => {
     expect(newerMessage).toMatch(/reload/i);
     expect(newerMessage).toMatch(/nothing was imported/i);
 
-    // A plain CorruptDataError is NOT a NewerFormatVersionError, so it must fall through to the
-    // one fallback branch rather than reuse the "newer version" copy — proving the ordering rule
-    // (NewerFormatVersionError checked before any CorruptDataError branch) actually matters.
+    // A plain CorruptDataError is NOT a NewerFormatVersionError, so it must reach its own branch
+    // (Story 5.11) rather than reuse the "newer version" copy — proving the ordering rule
+    // (NewerFormatVersionError checked before the CorruptDataError branch) actually matters.
     const corrupt = new CorruptDataError(STORAGE_KEYS.battles, SENTINEL);
     const corruptMessage = importFailureMessage(corrupt);
     expect(corruptMessage).not.toMatch(/newer version/);
-    expect(corruptMessage).toMatch(/could not be imported/);
-    expect(corruptMessage).toMatch(/workspace was not changed/);
+    expect(corruptMessage).not.toContain(SENTINEL);
+  });
+
+  // Story 5.11: an unusable stamp fails the snapshot read — the store, not the file, is unreadable.
+  it('a plain CorruptDataError from the snapshot read says the saved workspace could not be read', () => {
+    const message = importFailureMessage(new CorruptDataError(STORAGE_KEYS.schema, SENTINEL));
+    expect(message).toBe('Your saved workspace could not be read, so nothing was imported.');
   });
 
   it('a non-Error rejection falls to the one fallback branch', () => {

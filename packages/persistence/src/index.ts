@@ -70,3 +70,9 @@ export type { ImportSummary } from './workspaceImport';
 // rather than being reached for via a UI component, so a future caller (5.11's corruption screen)
 // has one function to import, never `createRepositories()` or a concrete repository (AR-2/27).
 export { resetWorkspace } from './resetWorkspace';
+
+// Story 5.11's recovery composition: discard an unusable `gol:schema` stamp, then the 5.10 path
+// (`resetWorkspace`). The one function the corruption notice's Reset Workspace calls — a newer
+// stamp makes it throw `NewerFormatVersionError` before anything is written, so the owner ruling
+// "never a reset for a newer format" holds at this layer too, not only in the UI.
+export { recoverWorkspace } from './recoverWorkspace';

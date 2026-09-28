@@ -319,6 +319,13 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
       stamped = data.stamped;
     },
 
+    // A documented no-op. This fake's stamp is a boolean, so it can never be UNUSABLE, and it has
+    // no newer-format seam either (a test wanting `NewerFormatVersionError` constructs the class
+    // from the `@gol/persistence` barrel and rejects through a `vi.fn` wrapper). The real
+    // behaviour — remove an unusable stamp, refuse a newer one — is pinned against real
+    // localStorage in `@gol/persistence`'s own tests.
+    async discardUnreadableStamp() {},
+
     // Mirrors the real meter through the SAME exported helper (storageBytesOf) rather than
     // re-stating the arithmetic — the assertSafeCollectionId precedent (FD8): a fake that
     // re-derives a formula is free to drift from it. Builds the entries the real localStorage

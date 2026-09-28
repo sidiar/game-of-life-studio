@@ -17,9 +17,10 @@ import type { AppRepositories, OrganismRepository } from './repositories';
  * function to call rather than a UI component to reach into. It does NOT handle a corrupt or
  * newer-format `gol:schema` stamp: `ensureDefaultOrganism`'s `exists()` read runs the at-rest format
  * check, so calling this over a bad stamp deletes the data keys and then throws, leaving no Conway's
- * Classic behind the same bad stamp. Unreachable through this story's UI (a bad stamp fails
- * `/settings`'s own `list()` reads before the Clear Data button ever mounts) — Story 5.11 must deal
- * with the stamp before calling this, not lean on it to.
+ * Classic behind the same bad stamp. Unreachable through Story 5.10's UI (a bad stamp fails
+ * `/settings`'s own `list()` reads before the Clear Data button ever mounts). Story 5.11's
+ * `recoverWorkspace()` is the caller that handles the stamp: it discards an unusable one (and
+ * refuses a newer one) before calling this, so this function's contract stays as it is.
  *
  * Retry is idempotent: `clearAll()` is safe to call again on an already-cleared store, and
  * `ensureDefaultOrganism` is a no-op once Conway's Classic exists — so a second call after a

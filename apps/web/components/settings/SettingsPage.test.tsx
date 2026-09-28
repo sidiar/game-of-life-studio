@@ -3,7 +3,22 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/domain';
-import { createWorkspaceSerializer } from '@gol/persistence';
+import {
+  CorruptDataError,
+  createWorkspaceSerializer,
+  NewerFormatVersionError,
+  QuotaExceededError,
+  STORAGE_KEYS,
+} from '@gol/persistence';
+import {
+  CORRUPT_SETTINGS_MESSAGE,
+  CORRUPT_BATTLES_MESSAGE,
+  CORRUPT_FORMAT_MESSAGE,
+  CORRUPT_ORGANISMS_MESSAGE,
+  NEWER_VERSION_MESSAGE,
+  STORAGE_FULL_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+} from '@/lib/storage/storageFailureMessages';
 import {
   createFakeRepositories,
   createMockBattles,
@@ -141,11 +156,12 @@ describe('SettingsPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Something went wrong loading your settings.',
-      );
+      expect(screen.getByRole('alert')).toHaveTextContent(CORRUPT_SETTINGS_MESSAGE);
     });
     expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+    // FD5: the settings recovery, never the workspace reset.
+    expect(screen.getByRole('button', { name: 'Restore Default Settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reset Workspace' })).toBeNull();
   });
 
   it('a rejecting battles.list() renders an alert', async () => {
@@ -164,9 +180,7 @@ describe('SettingsPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Something went wrong loading your settings.',
-      );
+      expect(screen.getByRole('alert')).toHaveTextContent(UNAVAILABLE_MESSAGE);
     });
   });
 
@@ -175,6 +189,7 @@ describe('SettingsPage', () => {
     const workspace = {
       storageUsage: vi.fn().mockRejectedValue(new Error('boom')),
       clearAll: vi.fn().mockResolvedValue(undefined),
+      discardUnreadableStamp: vi.fn().mockResolvedValue(undefined),
     };
 
     render(
@@ -189,9 +204,7 @@ describe('SettingsPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Something went wrong loading your settings.',
-      );
+      expect(screen.getByRole('alert')).toHaveTextContent(UNAVAILABLE_MESSAGE);
     });
   });
 
@@ -209,9 +222,101 @@ describe('SettingsPage', () => {
       />,
     );
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Something went wrong loading your settings.',
+    expect(screen.getByRole('alert')).toHaveTextContent(UNAVAILABLE_MESSAGE);
+  });
+
+  // Story 5.11: the error branch is the storage-failure notice, one test per namespace.
+  describe('storage-failure notice (Story 5.11)', () => {
+    function renderWith(repos: ReturnType<typeof createFakeRepositories>, seedError?: unknown) {
+      return render(
+        <SettingsPage
+          settings={repos.settings}
+          battles={repos.battles}
+          organisms={repos.organisms}
+          seedStatus={seedError === undefined ? 'ready' : 'error'}
+          seedError={seedError}
+          workspace={repos}
+          serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
+        />,
+      );
+    }
+    const buttonLabels = () => screen.getAllByRole('button').map((b) => b.textContent);
+
+    it.each([
+      [
+        'gol:battles',
+        'battles' as const,
+        new CorruptDataError(STORAGE_KEYS.battles, 'x'),
+        CORRUPT_BATTLES_MESSAGE,
+      ],
+      [
+        'gol:organisms',
+        'organisms' as const,
+        new CorruptDataError(STORAGE_KEYS.organisms, 'x'),
+        CORRUPT_ORGANISMS_MESSAGE,
+      ],
+      [
+        'gol:schema',
+        'battles' as const,
+        new CorruptDataError(STORAGE_KEYS.schema, 'x'),
+        CORRUPT_FORMAT_MESSAGE,
+      ],
+    ])(
+      'a corrupt %s offers Reset Workspace only, naming only that namespace',
+      async (_ns, repo, error, text) => {
+        const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+        vi.spyOn(repos[repo], 'list').mockRejectedValue(error);
+        renderWith(repos);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(text);
+        expect(buttonLabels()).toEqual(['Reset Workspace']);
+        expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+      },
     );
+
+    it('a corrupt gol:settings offers Restore Default Settings only', async () => {
+      const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+      vi.spyOn(repos.settings, 'load').mockRejectedValue(
+        new CorruptDataError(STORAGE_KEYS.settings, 'x'),
+      );
+      renderWith(repos);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(CORRUPT_SETTINGS_MESSAGE);
+      expect(buttonLabels()).toEqual(['Restore Default Settings']);
+    });
+
+    it('corrupt data AND corrupt settings: the workspace reset shows first (FD2 priority)', async () => {
+      const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+      vi.spyOn(repos.battles, 'list').mockRejectedValue(
+        new CorruptDataError(STORAGE_KEYS.battles, 'x'),
+      );
+      vi.spyOn(repos.settings, 'load').mockRejectedValue(
+        new CorruptDataError(STORAGE_KEYS.settings, 'x'),
+      );
+      renderWith(repos);
+
+      await waitFor(() => expect(buttonLabels()).toEqual(['Reset Workspace']));
+    });
+
+    it('a newer-format store offers Reload only — no reset, no restore', async () => {
+      const repos = createFakeRepositories({ organisms: createMockOrganisms() });
+      vi.spyOn(repos.organisms, 'list').mockRejectedValue(
+        new NewerFormatVersionError(STORAGE_KEYS.schema, 2, 1, 'x'),
+      );
+      renderWith(repos);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(NEWER_VERSION_MESSAGE);
+      expect(buttonLabels()).toEqual(['Reload']);
+    });
+
+    it('a seed refused for lack of space reads storage-full, never damaged', () => {
+      const repos = createFakeRepositories();
+      renderWith(repos, new QuotaExceededError(STORAGE_KEYS.organisms));
+
+      expect(screen.getByRole('alert')).toHaveTextContent(STORAGE_FULL_MESSAGE);
+      expect(screen.getByRole('alert').textContent).not.toMatch(/damaged/iu);
+      expect(buttonLabels()).toEqual(['Reload']);
+    });
   });
 
   it('the seeding → ready flip re-runs the counts and the storage meter (Story 5.2 FD6)', async () => {

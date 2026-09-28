@@ -215,3 +215,17 @@ describe('snapshotWorkspace / restoreWorkspace (Story 5.8 owner ruling)', () => 
     ]);
   });
 });
+
+describe('discardUnreadableStamp (Story 5.11 — the seam wiring)', () => {
+  it('removes an unusable stamp through the aggregate, and resolves on a healthy one', async () => {
+    const repos = createLocalStorageRepositories();
+    localStorage.setItem(STORAGE_KEYS.schema, '{not json');
+    await repos.discardUnreadableStamp();
+    expect(localStorage.getItem(STORAGE_KEYS.schema)).toBeNull();
+
+    await repos.battles.save(battle());
+    const stamp = localStorage.getItem(STORAGE_KEYS.schema);
+    await expect(repos.discardUnreadableStamp()).resolves.toBeUndefined();
+    expect(localStorage.getItem(STORAGE_KEYS.schema)).toBe(stamp);
+  });
+});

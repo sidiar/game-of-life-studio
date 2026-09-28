@@ -120,4 +120,18 @@ export interface AppRepositories {
    * that was absent then — and leaves settings untouched (Decision F / AR-12).
    */
   restoreWorkspace(snapshot: WorkspaceSnapshot): Promise<void>;
+  /**
+   * Removes the format stamp ONLY when it is unusable (not JSON, not a `{ formatVersion }` record,
+   * or no integer version >= 1). A NEWER stamp is refused with `NewerFormatVersionError` and nothing
+   * is written. A usable current/older stamp, or no stamp, is a no-op.
+   *
+   * Why a seam method (Story 5.11): an unusable stamp makes every collection read and data write
+   * throw (the at-rest check runs first), and `clearAll()` keeps the stamp on purpose (Story 1.5),
+   * so the reset offer for corrupt data cannot work until something that holds the store removes
+   * it. A free function reading `localStorage` from the UI would break AR-2/27 exactly as
+   * `isFreshWorkspace()`'s comment describes. "Unusable only" is what makes it safe to expose: it
+   * cannot be turned against a newer build's intact data (the Story 5.7 owner ruling). It removes,
+   * never rewrites: a guessed version could mask the seeding hole `stampSchemaVersion` guards.
+   */
+  discardUnreadableStamp(): Promise<void>;
 }

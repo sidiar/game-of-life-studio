@@ -4,6 +4,7 @@ import { LocalStorageSettingsRepository } from './localStorageSettingsRepository
 import type { AppRepositories, WorkspaceSnapshot } from './repositories';
 import {
   captureDataKeys,
+  discardUnreadableStamp,
   hasSchemaStamp,
   measureStorageUsage,
   removeDataKeys,
@@ -59,6 +60,11 @@ export function createLocalStorageRepositories(): AppRepositories {
 
     async restoreWorkspace(snapshot) {
       restoreDataKeys(snapshot as unknown as RawDataKeys);
+    },
+
+    // Story 5.11's recovery seam. Reads `gol:schema` only; a newer stamp throws before any write.
+    async discardUnreadableStamp() {
+      discardUnreadableStamp();
     },
   };
 }

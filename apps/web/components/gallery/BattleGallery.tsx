@@ -3,12 +3,19 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
 import { DEFAULT_SETTINGS, type BattleSummary, type Organism, type Settings } from '@gol/domain';
-import type { BattleRepository, OrganismRepository, SettingsRepository } from '@gol/persistence';
+import type {
+  AppRepositories,
+  BattleRepository,
+  OrganismRepository,
+  SettingsRepository,
+} from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallery/gallerySort';
 import { resolveDisplayOrganisms } from '@/lib/displayOrganisms';
 import { readGridColors } from '@/lib/canvas/themeColors';
+import { pickStorageFailure, UNCLASSIFIED_STORAGE_FAILURE } from '@/lib/storage/storageFailure';
+import StorageFailureNotice from '@/components/storage/StorageFailureNotice';
 import BattleTile from './BattleTile';
 import CreateBattleLink from './CreateBattleLink';
 import DeleteBattleDialog, { useDeleteBattleDialog } from './DeleteBattleDialog';
@@ -19,6 +26,11 @@ export interface BattleGalleryProps {
   organisms: OrganismRepository;
   settings: SettingsRepository;
   seedStatus: WorkspaceSeedStatus;
+  /** The seed's rejection (`useWorkspaceSeed`'s `error`), classified beside the load's own. */
+  seedError?: unknown;
+  /** Story 5.11: offered to the storage-failure notice's Reset Workspace, and nothing else. A
+   * `Pick`, never the aggregate (the Story 5.2 FD7 house rule). */
+  workspace: Pick<AppRepositories, 'discardUnreadableStamp' | 'clearAll'>;
 }
 
 // The load effect's OWN outcome — seedStatus === 'error' is folded in at render time (below)
@@ -28,7 +40,7 @@ export interface BattleGalleryProps {
 type LoadState =
   | { kind: 'idle' }
   | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[]; settings: Settings }
-  | { kind: 'error' };
+  | { kind: 'error'; error: unknown };
 
 // requestId identifies one load ATTEMPT, not one load — a fresh object per attempt, not a counter.
 // The reducer only ever compares it for identity (===), so "which attempt is newer" never has to
@@ -47,9 +59,9 @@ type LoadAction =
       roster: Organism[];
       settings: Settings;
     }
-  | { type: 'error'; requestId: object }
+  | { type: 'error'; requestId: object; error: unknown }
   // A delete failure discovered OUTSIDE the load flow (handleDeleteFailed) — see its call site.
-  | { type: 'invalidate' };
+  | { type: 'invalidate'; error: unknown };
 
 // Centralises the race the ref-based version used to enforce at each call site by convention: a
 // resolution only lands if its requestId still matches the reducer's own, so a refresh() left over
@@ -61,7 +73,7 @@ function loadReducer(state: LoadReducerState, action: LoadAction): LoadReducerSt
   if (action.type === 'invalidate') {
     // Fresh, unmatchable requestId: no in-flight 'success'/'error' can ever satisfy the identity
     // check below again, so this error state is safe from being overwritten by a stale resolution.
-    return { status: { kind: 'error' }, requestId: {} };
+    return { status: { kind: 'error', error: action.error }, requestId: {} };
   }
   if (action.type === 'start') {
     // status is deliberately left untouched — see the effect's own comment for why the previous
@@ -78,7 +90,7 @@ function loadReducer(state: LoadReducerState, action: LoadAction): LoadReducerSt
             roster: action.roster,
             settings: action.settings,
           }
-        : { kind: 'error' },
+        : { kind: 'error', error: action.error },
     requestId: state.requestId,
   };
 }
@@ -87,7 +99,7 @@ const initialLoadState: LoadReducerState = { status: { kind: 'idle' }, requestId
 
 type GalleryState =
   | { kind: 'loading' }
-  | { kind: 'error' }
+  | { kind: 'error'; error: unknown }
   | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[]; settings: Settings };
 
 const HEADING_ID = 'battle-gallery-heading';
@@ -136,6 +148,8 @@ export default function BattleGallery({
   organisms,
   settings,
   seedStatus,
+  seedError,
+  workspace,
 }: BattleGalleryProps) {
   const [loadState, dispatchLoad] = useReducer(loadReducer, initialLoadState);
 
@@ -149,11 +163,17 @@ export default function BattleGallery({
   // restoration depends on. See useDeleteBattleDialog's own comments.
   const reload = useCallback(() => setReloadToken((n) => n + 1), []);
 
-  // Forced decision 3: a rejecting delete (CorruptDataError from an unparseable gol:battles)
-  // reuses the shipped alert body. No retry control, no new copy — see Task 1's "out of scope"
-  // note. The dialog is already closed by the time the hook calls this.
-  const handleDeleteFailed = useCallback(() => {
-    dispatchLoad({ type: 'invalidate' });
+  // Forced decision 3: a rejecting delete (CorruptDataError from an unparseable gol:battles) is
+  // reported through the load's error state — since Story 5.11, the classified storage-failure
+  // notice. QUEUED here, never published: the hook calls this right after `setDialogOpen(false)`,
+  // while the dialog is still EXITING and `useInertBackground` still holds this subtree inert. A
+  // notice inserted then is never announced — and it carries a Reset Workspace button (project-
+  // context live-region rule; Story 5.11 review, owner ruling D1 (b)). A ref, not state: nothing
+  // renders from the queue. Published from `onDeleteDialogExited` below — the Story 4.18
+  // queued-outcome shape (`<OrganismLibrary>`'s `queuedCloneErrorRef`).
+  const queuedDeleteErrorRef = useRef<{ error: unknown } | null>(null);
+  const handleDeleteFailed = useCallback((error: unknown) => {
+    queuedDeleteErrorRef.current = { error };
   }, []);
 
   // Forced decision 4: focus-restoration target after a successful delete. The tile's Delete
@@ -173,6 +193,19 @@ export default function BattleGallery({
     onDeleted: reload,
     onDeleteFailed: handleDeleteFailed,
   });
+
+  // The dialog's call site. The hook's own `onExited` FIRST — it clears the confirmation, which
+  // releases `inert` — then the publish, in the same event handler so React batches both into ONE
+  // commit: the notice is created in the very commit that makes the page live again, never before
+  // it (the `onGateExited` reasoning in `<OrganismLibrary>`). Every close path runs this; only a
+  // failed delete has queued anything.
+  const onDeleteDialogExited = useCallback(() => {
+    dialogProps.onExited?.();
+    const queued = queuedDeleteErrorRef.current;
+    if (queued === null) return;
+    queuedDeleteErrorRef.current = null;
+    dispatchLoad({ type: 'invalidate', error: queued.error });
+  }, [dialogProps]);
 
   // Resolved ONCE, not per tile: getComputedStyle forces a style recalculation, and at NFR-7.2's
   // 50 tiles that is 50 forced recalcs on one commit if done per-canvas (themeColors.ts).
@@ -211,24 +244,24 @@ export default function BattleGallery({
       // localStorage latency budget (NFR-1.4) for no gain.
       Promise.all([
         battles.list(),
-        // A corrupt gol:organisms must not blank a Gallery whose battles are all readable —
-        // readCollection throws CorruptDataError for the whole key, and resolveDisplayOrganisms
-        // already degrades an unresolved id to a neutral fallback dot. Without this catch the
-        // Promise.all couples the two and discards the persistence layer's deliberate "one bad
-        // record must not blank the view" stance (Story 1.4 review). Only battles.list() rejecting
-        // is a real error state.
-        organisms.list().catch(() => [] as Organism[]),
+        // NOT caught (Story 5.11): `list()` already SKIPS a per-record failure (Story 1.4 fault
+        // isolation), and an unknown id already degrades to a neutral fallback dot — so a
+        // rejection here is only ever a WHOLE-namespace failure (the key is not JSON, not an
+        // object, or the stamp is unusable or newer). That is exactly what NFR-7.3 says must be
+        // reported with a recovery, not papered over with an empty roster.
+        organisms.list(),
         // SettingsRepository.load() never returns null (an absent record resolves to
-        // DEFAULT_SETTINGS, repositories.ts:48-51), so the catch is only for a corrupt record — a
-        // corrupt gol:settings must not blank the Gallery either, for the same reason a corrupt
-        // gol:organisms does not.
+        // DEFAULT_SETTINGS, repositories.ts:48-51), so the catch is only for a corrupt record. KEPT,
+        // unlike the organisms catch above, because the Gallery only READS a preference here:
+        // blanking every battle over a theme value would be the worse outcome. Only /settings reads
+        // settings strictly, and it is where Restore Default Settings lives (Story 5.11 FD5).
         settings.load().catch(() => DEFAULT_SETTINGS),
       ])
         .then(([summaries, roster, loadedSettings]) => {
           dispatchLoad({ type: 'success', requestId, summaries, roster, settings: loadedSettings });
         })
-        .catch(() => {
-          dispatchLoad({ type: 'error', requestId });
+        .catch((error: unknown) => {
+          dispatchLoad({ type: 'error', requestId, error });
         });
     }
     refresh();
@@ -247,7 +280,10 @@ export default function BattleGallery({
   // the reducer from the effect) is what avoids the synchronous cascading setState.
   const state: GalleryState =
     seedStatus === 'error' || loadState.status.kind === 'error'
-      ? { kind: 'error' }
+      ? {
+          kind: 'error',
+          error: loadState.status.kind === 'error' ? loadState.status.error : undefined,
+        }
       : loadState.status.kind === 'idle'
         ? { kind: 'loading' }
         : loadState.status;
@@ -296,8 +332,16 @@ export default function BattleGallery({
         <CreateBattleLink href="/battle/new">+ Create New Battle</CreateBattleLink>
       </Toolbar>
       {state.kind === 'loading' && <StatusText>Loading battles…</StatusText>}
+      {/* One alert region for the failure — the notice's own explanation. No heading: the
+          page's <h1> stays the only one. An unclassifiable pair (both undefined — e.g. a seed
+          that failed with no rejection value) still gets the non-destructive 'unavailable'. */}
       {state.kind === 'error' && (
-        <StatusText role="alert">Something went wrong loading your battles.</StatusText>
+        <StorageFailureNotice
+          {...(pickStorageFailure([seedStatus === 'error' ? seedError : undefined, state.error]) ??
+            UNCLASSIFIED_STORAGE_FAILURE)}
+          workspace={workspace}
+          organisms={organisms}
+        />
       )}
       {state.kind === 'ready' && state.summaries.length === 0 && <GalleryEmptyState />}
       {state.kind === 'ready' && state.summaries.length > 0 && (
@@ -319,7 +363,7 @@ export default function BattleGallery({
           ))}
         </TileGrid>
       )}
-      <DeleteBattleDialog {...dialogProps} />
+      <DeleteBattleDialog {...dialogProps} onExited={onDeleteDialogExited} />
     </section>
   );
 }

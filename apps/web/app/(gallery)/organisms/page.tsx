@@ -17,7 +17,7 @@ import { useWorkspaceSeed } from '@/lib/gallery/useWorkspaceSeed';
 // Decision K unmounts routes hard, so at most one boundary is mounted at a time.
 export default function OrganismsPage() {
   const repositories = useMemo(() => createRepositories(), []);
-  const { status } = useWorkspaceSeed(repositories);
+  const { status, error } = useWorkspaceSeed(repositories);
 
   // No <main> here — AppShell owns the single <main> landmark for the (gallery) branch; this page
   // renders only its own content into it. No useDocumentTitle either (FD4): the Library claims no
@@ -29,6 +29,8 @@ export default function OrganismsPage() {
       organisms={repositories.organisms}
       battles={repositories.battles}
       seedStatus={status}
+      seedError={error}
+      workspace={repositories}
     />
   );
 }
