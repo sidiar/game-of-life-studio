@@ -24,7 +24,7 @@
  * description — set that in Settings → Data Management → Workspace description before exporting),
  * and `git add` it — the lockstep compares the manifest
  * against git-tracked files, so an untracked new preset fails as missing. The same serializer composition may be run
- * headlessly instead of through the UI — that is how the first preset was produced — but the file
+ * headlessly instead of through the UI — that is how the default preset was produced — but the file
  * is always the serializer's output, never hand-edited. To improve an existing preset, import it in
  * the app, edit it in the editors (and the workspace description in Settings), and export again.
  *

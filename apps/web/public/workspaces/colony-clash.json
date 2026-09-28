@@ -1,9 +1,9 @@
 {
   "formatVersion": 1,
   "appVersion": "0.0.0",
-  "exportedAt": "2026-09-28T21:48:42.197Z",
+  "exportedAt": "2026-09-28T22:04:50.218Z",
   "kind": "workspace",
-  "description": "A small ecosystem to watch. Conway's Classic and three new organisms (Ember Raiders, Moss Weavers, Amber Tide) fight over one dish, each with its own dominance and invasion habits. Press play on Four Corners to see a chain of conquest unfold, or on Tug of War for a compact skirmish, then open an organism to read the rules behind what you saw.",
+  "description": "A small ecosystem to watch. Conway's Classic and three new organisms (Ember Raiders, Moss Weavers, Amber Tide) fight over one dish, each with its own dominance and invasion habits. Four Corners plays out a chain of conquest across a wide dish; Tug of War is a compact, fast skirmish.",
   "organisms": [
     {
       "schemaVersion": 1,
@@ -59,7 +59,7 @@
       "schemaVersion": 1,
       "id": "72bf89de-fa48-434e-a2ee-f2a03953e297",
       "name": "Ember Raiders",
-      "description": "A hard-hitting colony that grows like Conway's Life and raids any Amber Tide cell it touches on two sides. Dominance 70 beats Amber Tide and Conway's Classic in a fight, but Moss Weavers outrank it.",
+      "description": "A hard-hitting colony that grows like Conway's Life and raids any Amber Tide cell with 2 or more Raiders around it. Dominance 70 beats Amber Tide and Conway's Classic in a fight, but Moss Weavers outrank it.",
       "colorToken": "vermillion",
       "dominance": 70,
       "agingEnabled": false,
@@ -135,7 +135,7 @@
       "schemaVersion": 1,
       "id": "3aa3ee0b-d6a0-47a8-b7fe-00984856be48",
       "name": "Moss Weavers",
-      "description": "The top-ranked organism: nobody outranks dominance 75. It sprouts in lively bursts (3 or 6 neighbors) and overgrows any Ember Raiders cell it touches on two sides, so watch the green front push into red.",
+      "description": "The top-ranked organism: nobody outranks dominance 75. It sprouts in lively bursts (3 or 6 neighbors) and overgrows any Ember Raiders cell with 2 or more Weavers around it, so watch the green front push into red.",
       "colorToken": "bluish-green",
       "dominance": 75,
       "agingEnabled": false,
@@ -231,7 +231,7 @@
       "schemaVersion": 1,
       "id": "a99c525d-fa4c-40c2-bd6c-38e7779bca41",
       "name": "Amber Tide",
-      "description": "A tide that never stops renewing: cells die of old age after 30 cycles, and the shade shows how old each one is. It floods any Conway's Classic cell it touches on two sides. Dominance 60.",
+      "description": "A tide that never stops renewing: cells die of old age after 30 cycles, and the shade shows how old each one is. It floods any Conway's Classic cell with 2 or more Tide cells around it. Dominance 60.",
       "colorToken": "amber",
       "dominance": 60,
       "agingEnabled": true,

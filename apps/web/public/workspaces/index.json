@@ -4,7 +4,7 @@
     {
       "id": "colony-clash",
       "name": "Colony Clash",
-      "description": "A small ecosystem to watch. Conway's Classic and three new organisms (Ember Raiders, Moss Weavers, Amber Tide) fight over one dish, each with its own dominance and invasion habits. Press play on Four Corners to see a chain of conquest unfold, or on Tug of War for a compact skirmish, then open an organism to read the rules behind what you saw.",
+      "description": "A small ecosystem to watch. Conway's Classic and three new organisms (Ember Raiders, Moss Weavers, Amber Tide) fight over one dish, each with its own dominance and invasion habits. Four Corners plays out a chain of conquest across a wide dish; Tug of War is a compact, fast skirmish.",
       "file": "colony-clash.json"
     }
   ]

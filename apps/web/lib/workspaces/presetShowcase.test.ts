@@ -37,7 +37,8 @@ const PRESETS_DIR = join(
 const SHOWCASE_CYCLES = 5 * DEFAULT_SETTINGS.defaultSpeed;
 
 /** A fixed set. The tie-break RNG only draws on equal dominance, which the roster rules out
- * (asserted below), so the set proves determinism rather than sampling variety. */
+ * (asserted below), so every seed must produce the same run: the per-battle "seed-independent"
+ * test compares them, which is what proves the showcase looks the same on every visit. */
 const SEEDS = [1, 2, 3] as const;
 
 /**
@@ -115,6 +116,20 @@ describe('default preset showcase (FR-9.2, Story 7.3)', () => {
     expect(sizes).toEqual(['100x60', '50x30']);
   });
 
+  // FD2: the gallery sorts by last modified (FR-7.3), so the 100x60 flagship must be the newest
+  // battle to be the first tile a visitor sees. A re-export through the app could reorder them.
+  it('makes the 100x60 flagship the most recently modified battle, so it sorts first', () => {
+    const flagship = preset.battles.find((b) => b.gridSize.cols === 100 && b.gridSize.rows === 60);
+    if (!flagship) throw new Error('the preset has no 100x60 battle');
+    for (const battle of preset.battles) {
+      if (battle === flagship) continue;
+      expect(
+        flagship.updatedAt.getTime(),
+        `flagship "${flagship.name}" must be newer than "${battle.name}"`,
+      ).toBeGreaterThan(battle.updatedAt.getTime());
+    }
+  });
+
   describe('content', () => {
     const others = preset.organisms.filter((o) => o.id !== CONWAYS_CLASSIC.id);
 
@@ -160,6 +175,17 @@ describe('default preset showcase (FR-9.2, Story 7.3)', () => {
       for (const organism of preset.organisms) {
         expect(placed.has(organism.id), `"${organism.name}" is in no battle`).toBe(true);
       }
+      expect(placed.has(CONWAYS_CLASSIC.id), "Conway's Classic is in no battle").toBe(true);
+    });
+
+    // FD3: a multi-organism contest needs at least three colonies on every dish.
+    it('places at least three organisms in every battle', () => {
+      for (const battle of preset.battles) {
+        expect(
+          battle.organismIds.length,
+          `battle "${battle.name}" places too few organisms`,
+        ).toBeGreaterThanOrEqual(3);
+      }
     });
   });
 
@@ -167,9 +193,29 @@ describe('default preset showcase (FR-9.2, Story 7.3)', () => {
   // loop must not pass.
   for (const battle of preset.battles) {
     describe(`battle "${battle.name}" over ${SHOWCASE_CYCLES} cycles`, () => {
+      const runs = new Map<number, Measurement>();
+      const measure = (seed: number): Measurement => {
+        let run = runs.get(seed);
+        if (!run) {
+          run = runBattle(battle, seed);
+          runs.set(seed, run);
+        }
+        return run;
+      };
+
+      it('is seed-independent: no cycle draws on the tie-break RNG', () => {
+        const [first, ...rest] = SEEDS;
+        for (const seed of rest) {
+          expect(
+            measure(seed),
+            `battle "${battle.name}": seed ${seed} differs from seed ${first}`,
+          ).toEqual(measure(first));
+        }
+      });
+
       for (const seed of SEEDS) {
         it(`shows a live contest (seed ${seed})`, () => {
-          const { counts, transfers } = runBattle(battle, seed);
+          const { counts, transfers } = measure(seed);
           const where = `battle "${battle.name}", seed ${seed}`;
           const total = counts.reduce((a, b) => a + b, 0);
           expect(total, `${where}: the grid emptied`).toBeGreaterThan(0);
