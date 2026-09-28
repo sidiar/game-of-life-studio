@@ -4,7 +4,7 @@ baseline_commit: e3fcd0e56d26a8cdc01e3fec30c80a510cefd2c3
 
 # Story 5.11: Load-Time Corruption Handling
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -326,6 +326,89 @@ The epic's four ACs are split so each can be checked on its own.
     itself ships on four routes.
   - [x] 8.3 Fill in the Dev Agent Record, including any forced decision you deviated from and why.
 
+### Review Findings
+
+Code review 2026-09-28 (Claude Fable 5.1, `bmad-code-review` full mode: Blind Hunter + Edge Case
+Hunter + Acceptance Auditor). 2 decision-needed, 11 patch, 2 defer, 2 dismissed.
+
+- [ ] [Review][Decision] **A rejected `battles.delete()` now renders the load-time notice, with a
+  destructive control, while the delete dialog is still exiting** — Dev-record deviation 1
+  (`onDeleteFailed(error)` → `dispatchLoad({ type: 'invalidate', error })`) routes a delete-time
+  failure into `<StorageFailureNotice>`: a `CorruptDataError(gol:battles)` from the delete's
+  read-back shows "nothing has been changed" + **Reset Workspace**; a `QuotaExceededError` on its
+  write-back reads "your workspace could not be set up"; a plain `Error` reads the blocked-storage
+  copy. The `:143` entry (delete succeeded, re-list rejected) is marked discharged, yet that path now
+  says "nothing has been changed" right after a write that did change the store. `useDeleteBattleDialog`
+  calls `onDeleteFailed(error)` right after `setDialogOpen(false)`, so the alert and its button mount
+  inside the still-inert background (project-context live-region rule; recorded in `deferred-work.md`
+  as pre-existing — true for the old plain alert, but this story is what puts a destructive control
+  there). No test pins which copy or action a failed delete produces (the only delete-failure test
+  rejects with `new Error('boom')` and asserts an alert exists). AC1 governs load-time reads, so this
+  is not an AC breach — it is an owner call. Options: **(a)** keep the classified notice on the delete
+  path and add a test pinning it (`CorruptDataError` → Reset Workspace; plain `Error` → Reload), and
+  keep `:143` discharged; **(b)** keep classification but hold the publish until the delete dialog's
+  `onExited` (the Story 4.18 queued-outcome shape) — closes the live-region gap too; **(c)** route
+  delete failures to a non-destructive surface (the `'unavailable'` copy with Reload only, or the old
+  generic alert) and re-open `:143`. [`apps/web/components/gallery/BattleGallery.tsx:169-171,314-323`,
+  `apps/web/components/gallery/DeleteBattleDialog.tsx:295-300`]
+- [ ] [Review][Decision] **The corrupt-workspace and storage-full copy over-claim the scope of the
+  fault** — FD6 fixes the *claims*, so this is the owner's to change. `CORRUPT_WORKSPACE_MESSAGE`
+  says "Your saved battles and organisms could not be read" whenever any one of `gol:battles`,
+  `gol:organisms` or `gol:schema` fails — on `/organisms` with only `gol:battles` corrupt the
+  organisms read fine, and the one action offered deletes them. `STORAGE_FULL_MESSAGE` says "so your
+  workspace could not be set up", but a `QuotaExceededError` also comes from the at-rest migration
+  write-back on a collection *read* and from a failed Restore Default Settings (the latter currently
+  shows `RESTORE_SETTINGS_FAILURE_MESSAGE`'s "try again", which cannot succeed on a full store).
+  `CorruptDataError.key` is in hand at classification time. Options: **(a)** keep FD6's table verbatim
+  (the reset is whole-workspace regardless, and the sentence names what the reset deletes); **(b)**
+  make the corrupt-workspace line namespace-aware ("Your saved battles could not be read…" /
+  "…organisms…" / "…workspace format…") by carrying `key` through the classifier; **(c)** also give the
+  storage-full and restore-failure lines cause-neutral wording ("…so the app could not write to it").
+  [`apps/web/lib/storage/storageFailureMessages.ts:22-29,39-40`, `apps/web/lib/storage/storageFailure.ts:23-28`,
+  `apps/web/components/storage/StorageFailureNotice.tsx:241-252`]
+- [x] [Review][Patch] `recoverWorkspace.ts` header claims "never the stamped-but-empty store" for every
+  branch; on a healthy stamp `resetWorkspace()` keeps it and a Conway write failing after the clear
+  leaves exactly that shape (5.10's contract) [`packages/persistence/src/recoverWorkspace.ts:8-17`]
+- [x] [Review][Patch] A `NewerFormatVersionError` thrown mid-recovery (stamp turned newer since the
+  notice classified it) is reported as "Some data may already have been deleted — try again": nothing
+  was written and no retry can succeed [`apps/web/components/storage/StorageFailureNotice.tsx:225-236`]
+- [x] [Review][Patch] `reload()` sits inside the `try` after a successful recovery / restore, so a
+  throwing reload reports the store as not recovered [`apps/web/components/storage/StorageFailureNotice.tsx:226-228,246-247`]
+- [x] [Review][Patch] Post-await `reload()` ignores `mountedRef` (unlike every other post-await effect
+  here and in `ClearAllDataRow`): navigating away during the recovery reloads whatever route the user
+  is on now [`apps/web/components/storage/StorageFailureNotice.tsx:228,247`]
+- [x] [Review][Patch] `NoticeButton` leaves the UA `<button>` box partly in place (`line-height:
+  normal`, Safari's `margin: 0 2px`, `appearance`), so `/battle`'s Reload does not box like the
+  `BackLink` it is meant to match [`apps/web/components/layout/Notice.tsx:63-71`]
+- [x] [Review][Patch] The "newer" ceiling is decided twice — `discardUnreadableStamp`'s `version >
+  CURRENT_FORMAT_VERSION` and `migrate`'s `found > currentVersion` — with nothing naming the coupling
+  (they agree today; the floor already cites `migrate`) [`packages/persistence/src/localStorageAccess.ts:252`]
+- [x] [Review][Patch] Stale comment: the retained `settings.load().catch` is justified "for the same
+  reason a corrupt gol:organisms does not" blank the Gallery — the reason the rewritten comment just
+  above reverses [`apps/web/components/gallery/BattleGallery.tsx:234-237`]
+- [x] [Review][Patch] e2e "byte-identical" `before` maps are read *after* the page loaded and rendered
+  the notice, so they prove only that the click wrote nothing, not that loading did (AC4 first
+  sentence / M9); the seeded strings are in hand [`apps/web/e2e/storageCorruption.spec.ts:113,135,154`]
+- [x] [Review][Patch] AC7's "right action set" is asserted loosely on `/` (`toContain('Reset
+  Workspace')`) and `/organisms` (presence only); a stray Reload/Restore beside Reset would pass
+  [`apps/web/components/gallery/BattleGallery.test.tsx:432`, `apps/web/components/organisms/OrganismLibrary.test.tsx:230`]
+- [x] [Review][Patch] Dead attribute `data-reset-workspace=""` — nothing reads it (focus restore goes
+  through `resetButtonRef`) [`apps/web/components/storage/StorageFailureNotice.tsx:262`]
+- [x] [Review][Patch] Test comment narrates history ("retargeted from …") rather than why
+  [`apps/web/components/gallery/BattleGallery.test.tsx:400`]
+- [x] [Review][Defer] A Conway's Classic write failing after `clearAll()` over a *healthy* stamp
+  leaves a stamped-but-empty store that no plain load re-seeds (M9); only the failure alert's retry
+  recovers it [`packages/persistence/src/resetWorkspace.ts:38-39`] — deferred, pre-existing (Story
+  5.10 FD3's contract; the story forbids changing `resetWorkspace()`)
+- [x] [Review][Defer] The Gallery's `state` fold shows the notice over a battle list that loaded fine
+  when only the seed failed (e.g. a `QuotaExceededError` on the first-run Conway write), and Reload
+  re-runs the same seed [`apps/web/components/gallery/BattleGallery.tsx:262-270`] — deferred,
+  pre-existing (the fold predates this story; the copy is new)
+
+Dismissed (2): `/battle`'s newer-version body dropping Back to Gallery (Task 5.4 says "no Back link
+needed"); Task 4.1's "omit `workspace` and the action is not rendered" vs. the Reload fallback
+(documented deviation 3, non-destructive).
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -605,6 +688,12 @@ Claude Opus 5.5 (`claude-opus-5-5`), via `bmad-dev-story` under `implement-next-
 - Mutation check of the notice's ordering tests: running `recoverWorkspace` from the confirm handler
   (instead of on exit) turned both the success-ordering and failure-ordering tests red; restored.
 - No flake hit this run (the known coverage-contention files passed in the full run).
+- Review 2026-09-28: `npm run ci:dev` → **0** on the dev commit (e2e Chromium 313 passed). On the
+  patched tree the first run hit the known coverage-run contention flake — five 5 s test timeouts
+  in files the review did not touch (`BattlePage.export`, `OrganismLibrary` 4.21 guard,
+  `BattleSimulationView`, `ColorPickerField`, `OrganismEditorModal`); all 323 tests in those five
+  files pass in isolation. Second full `npm run ci:dev` on the patched tree → **0** (web 149 test
+  files green, e2e Chromium 313 passed, bundle within baseline — no refresh needed).
 
 ### Completion Notes List
 
@@ -732,6 +821,10 @@ Modified:
 - 2026-09-28 — Story 5.11 implemented: `discardUnreadableStamp` seam + `recoverWorkspace`; the
   storage-failure classifier, copy and notice on every route; newer-version branches on save and
   import; per-namespace unit, integration and e2e tests; deferred-work records. Status → review.
+- 2026-09-28 — Code review (Fable 5.1): 11 patches applied (newer-mid-recovery copy, reload outside
+  the try and mount-gated, `NoticeButton` UA resets, e2e byte-identity against the seeded strings,
+  exact action-set assertions, comment corrections, dead attribute); 2 deferred to `deferred-work.md`;
+  2 decisions left for the owner under Review Findings. Status → in-progress.
 
 Dev Model: opus   # architecture-shaping: widens the AppRepositories seam (discardUnreadableStamp) and sets the app-wide storage-failure classification + notice pattern every route and Epic 7 build on
 Proposed lane gate: none

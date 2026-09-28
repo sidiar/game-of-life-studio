@@ -11,7 +11,7 @@ import {
   type SettingsRepository,
 } from '@gol/persistence';
 import { CLEAR_ALL_FAILURE_MESSAGE } from '@/lib/clearAll/clearAllMessages';
-import type { StorageFailureKind } from '@/lib/storage/storageFailure';
+import { classifyStorageFailure, type StorageFailureKind } from '@/lib/storage/storageFailure';
 import {
   CORRUPT_SETTINGS_MESSAGE,
   CORRUPT_WORKSPACE_MESSAGE,
@@ -224,16 +224,27 @@ export default function StorageFailureNotice({
 
     try {
       await recoverWorkspace(workspace, organisms);
-      // `pendingRef` stays set: the page is reloading, and a second reset must not start.
-      reload();
-    } catch {
-      // Never "unchanged": a failure can land mid-reset, after the clear (Story 5.10 FD3).
+    } catch (error) {
+      // Never "unchanged": a failure can land mid-reset, after the clear (Story 5.10 FD3). The one
+      // exception is a stamp that turned NEWER since the notice classified it (another tab, a
+      // newer build): `recoverWorkspace` refuses it before any write, and no retry in this build
+      // can succeed, so "try again" would be the wrong instruction — it gets the newer copy.
       pendingRef.current = false;
       if (mountedRef.current) {
-        setFailure(CLEAR_ALL_FAILURE_MESSAGE);
+        setFailure(
+          classifyStorageFailure(error) === 'newer-version'
+            ? NEWER_VERSION_MESSAGE
+            : CLEAR_ALL_FAILURE_MESSAGE,
+        );
         setFocusTick((tick) => tick + 1);
       }
+      return;
     }
+    // Outside the try: the store IS recovered by now, so a reload that throws must not report the
+    // recovery as failed. `pendingRef` stays set — the page is reloading, and a second reset must
+    // not start. Gated on mount like every other post-await effect here: the user may have
+    // navigated away while the recovery ran, and the route they are on now is not ours to reload.
+    if (mountedRef.current) reload();
   }
 
   // No dialog: this overwrites only a record that already cannot be read, and touches no battle or
@@ -244,23 +255,21 @@ export default function StorageFailureNotice({
     setFailure(null);
     try {
       await settings.save(DEFAULT_SETTINGS);
-      reload();
     } catch {
       pendingRef.current = false;
       if (mountedRef.current) setFailure(RESTORE_SETTINGS_FAILURE_MESSAGE);
+      return;
     }
+    // Same shape as the reset above: the record is restored by now, so the reload sits outside the
+    // try and runs only while this notice is still the page the user is on.
+    if (mountedRef.current) reload();
   }
 
   return (
     <Root>
       <Explanation role="alert">{MESSAGES[kind]}</Explanation>
       {canReset ? (
-        <DangerButton
-          type="button"
-          ref={resetButtonRef}
-          onClick={handleResetClick}
-          data-reset-workspace=""
-        >
+        <DangerButton type="button" ref={resetButtonRef} onClick={handleResetClick}>
           Reset Workspace
         </DangerButton>
       ) : canRestore ? (

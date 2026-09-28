@@ -232,9 +232,10 @@ export default function BattleGallery({
         // reported with a recovery, not papered over with an empty roster.
         organisms.list(),
         // SettingsRepository.load() never returns null (an absent record resolves to
-        // DEFAULT_SETTINGS, repositories.ts:48-51), so the catch is only for a corrupt record — a
-        // corrupt gol:settings must not blank the Gallery either, for the same reason a corrupt
-        // gol:organisms does not.
+        // DEFAULT_SETTINGS, repositories.ts:48-51), so the catch is only for a corrupt record. KEPT,
+        // unlike the organisms catch above, because the Gallery only READS a preference here:
+        // blanking every battle over a theme value would be the worse outcome. Only /settings reads
+        // settings strictly, and it is where Restore Default Settings lives (Story 5.11 FD5).
         settings.load().catch(() => DEFAULT_SETTINGS),
       ])
         .then(([summaries, roster, loadedSettings]) => {

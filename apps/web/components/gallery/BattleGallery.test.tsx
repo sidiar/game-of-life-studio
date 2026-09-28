@@ -397,9 +397,9 @@ describe('BattleGallery', () => {
     expect(screen.getByRole('img', { name: 'Chaotic Spreader' })).toBeInTheDocument();
   });
 
-  // Story 5.11 (retargeted from "still renders tiles when organisms.list() rejects"): `list()`
-  // already skips a per-record failure, so a rejection is a WHOLE-namespace failure — NFR-7.3's
-  // case — and the Gallery now reports it with a recovery instead of degrading to an empty roster.
+  // Story 5.11: `list()` already skips a per-record failure, so a rejection is a WHOLE-namespace
+  // failure — NFR-7.3's case — and the Gallery reports it with a recovery instead of degrading to
+  // an empty roster.
   describe('storage-failure notice (Story 5.11, one test per namespace)', () => {
     function renderGallery(repos: ReturnType<typeof createFakeRepositories>, seedError?: unknown) {
       return render(
@@ -413,7 +413,6 @@ describe('BattleGallery', () => {
         />,
       );
     }
-    const buttonLabels = () => screen.getAllByRole('button').map((b) => b.textContent);
 
     it.each([
       ['gol:battles', 'battles' as const, new CorruptDataError(STORAGE_KEYS.battles, 'x')],
@@ -429,7 +428,10 @@ describe('BattleGallery', () => {
 
       expect(await screen.findByRole('alert')).toHaveTextContent(CORRUPT_WORKSPACE_MESSAGE);
       expect(screen.queryAllByRole('article')).toHaveLength(0);
-      expect(buttonLabels()).toContain('Reset Workspace');
+      // The exact action set (AC7): Reset Workspace, and neither of the other two recoveries.
+      expect(screen.getByRole('button', { name: 'Reset Workspace' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Restore Default Settings' })).toBeNull();
       expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     });
 

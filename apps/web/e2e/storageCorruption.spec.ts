@@ -104,54 +104,59 @@ test.describe('load-time corruption handling (Story 5.11)', () => {
     page,
   }) => {
     const { battles } = createMockWorkspace();
-    await page.goto('/');
-    await writeRawAndReload(page, {
+    // Byte-identity is checked against the SEEDED strings, never a post-load read: a read taken
+    // after the page rendered would prove only that the click wrote nothing, not that loading and
+    // rendering the notice wrote nothing (AC4 / M9 — no self-heal on a plain load).
+    const seeded: RawKeys = {
       ...workspaceRaw(),
       [STORAGE_KEYS.schema]: JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
       [STORAGE_KEYS.settings]: NON_DEFAULT_SETTINGS,
-    });
-    const before = await readRawKeys(page);
+    };
+    await page.goto('/');
+    await writeRawAndReload(page, seeded);
 
     await expect(alertWith(page, /newer version of Game of Life Studio/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Reset Workspace' })).toHaveCount(0);
-    expect(await readRawKeys(page)).toEqual(before);
+    expect(await readRawKeys(page)).toEqual(seeded);
 
     await page.goto(`/battle?id=${battles[0].id}`);
     await expect(
       page.getByRole('heading', { level: 1, name: 'Newer Version Required' }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: /reset/i })).toHaveCount(0);
-    expect(await readRawKeys(page)).toEqual(before);
+    expect(await readRawKeys(page)).toEqual(seeded);
   });
 
   test('corrupt gol:settings on /settings → Restore Default Settings → the page renders; data byte-identical', async ({
     page,
   }) => {
+    const seeded: RawKeys = { ...workspaceRaw(), [STORAGE_KEYS.settings]: '{not json' };
     await page.goto('/settings');
-    await writeRawAndReload(page, { ...workspaceRaw(), [STORAGE_KEYS.settings]: '{not json' });
+    await writeRawAndReload(page, seeded);
     await expect(alertWith(page, /stored settings appear to be damaged/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Reset Workspace' })).toHaveCount(0);
-    const before = await readRawKeys(page);
+    // Rendering the notice wrote nothing (AC4) — compared against the seeded strings.
+    expect(await readRawKeys(page)).toEqual(seeded);
 
     await page.getByRole('button', { name: 'Restore Default Settings' }).click();
 
     await expect(page.getByRole('heading', { name: 'Workspace Statistics' })).toBeVisible();
     const after = await readRawKeys(page);
-    expect(after[STORAGE_KEYS.battles]).toBe(before[STORAGE_KEYS.battles]);
-    expect(after[STORAGE_KEYS.organisms]).toBe(before[STORAGE_KEYS.organisms]);
+    expect(after[STORAGE_KEYS.battles]).toBe(seeded[STORAGE_KEYS.battles]);
+    expect(after[STORAGE_KEYS.organisms]).toBe(seeded[STORAGE_KEYS.organisms]);
     expect(after[STORAGE_KEYS.settings]).not.toBe('{not json');
   });
 
   test('declining the reset leaves every key byte-identical', async ({ page }) => {
-    await page.goto('/');
-    await writeRawAndReload(page, {
+    const seeded: RawKeys = {
       ...workspaceRaw(),
       [STORAGE_KEYS.organisms]: '{not json',
       [STORAGE_KEYS.settings]: NON_DEFAULT_SETTINGS,
-    });
+    };
+    await page.goto('/');
+    await writeRawAndReload(page, seeded);
     await expect(alertWith(page, CORRUPT_WORKSPACE)).toBeVisible();
-    const before = await readRawKeys(page);
 
     await page.getByRole('button', { name: 'Reset Workspace' }).click();
     const dialog = page.getByRole('dialog', { name: 'Clear All Data?' });
@@ -159,7 +164,8 @@ test.describe('load-time corruption handling (Story 5.11)', () => {
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toBeHidden();
 
-    expect(await readRawKeys(page)).toEqual(before);
+    // Against the seeded strings: neither the load, the notice, the dialog nor the decline wrote.
+    expect(await readRawKeys(page)).toEqual(seeded);
     await expect(page.getByRole('button', { name: 'Reset Workspace' })).toBeFocused();
   });
 

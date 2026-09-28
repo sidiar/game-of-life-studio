@@ -227,7 +227,10 @@ describe('OrganismLibrary', () => {
         );
 
         expect(await screen.findByRole('alert')).toHaveTextContent(CORRUPT_WORKSPACE_MESSAGE);
+        // The exact action set (AC7): Reset Workspace, and neither of the other two recoveries.
         expect(screen.getByRole('button', { name: 'Reset Workspace' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Restore Default Settings' })).toBeNull();
         expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
         expect(clearAll).not.toHaveBeenCalled();
       },

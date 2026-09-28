@@ -61,11 +61,16 @@ const WAY_OUT_STYLE = {
 export const BackLink = styled(Link)(WAY_OUT_STYLE);
 
 // The same way out as a BUTTON, for an action that is not a navigation — Story 5.11's Reload on
-// `/battle` for a newer-format store. `fontFamily`/`background`/`cursor` reset what a <button>
-// brings that a link does not.
+// `/battle` for a newer-format store. The resets are what a <button>'s UA stylesheet brings that a
+// link does not, and each one changes the box next to a `BackLink`: `font-family` (buttons do not
+// inherit), `line-height: normal`, Safari's `margin: 0 2px`, and `appearance`. `WAY_OUT_STYLE`'s
+// own `padding`/`border` already override the UA's.
 export const NoticeButton = styled('button')({
   ...WAY_OUT_STYLE,
   fontFamily: 'inherit',
+  lineHeight: 'inherit',
+  margin: 0,
+  appearance: 'none',
   background: 'transparent',
   cursor: 'pointer',
 });

@@ -3919,3 +3919,21 @@ Open owner flags from the story (not blockers — the story proceeded on its for
 - **Unknown-organism copy (FD8).** The "N identical Unknown organism entries" and "Living Cells vs
   Population" entries stay open: they need a disambiguator design the specs do not give. The
   fallbacks themselves are pinned (a Gallery test with a roster id the library lacks).
+
+## Deferred from: code review of 5-11-load-time-corruption-handling (2026-09-28)
+
+- **A Conway's Classic write that fails after `clearAll()` over a healthy stamp leaves a
+  stamped-but-empty store that no plain load re-seeds (M9)** — `resetWorkspace()` keeps the stamp
+  through `clearAll()` (Story 5.10's contract), so the shape `clearAll` succeeded / `organisms.save`
+  rejected (quota, Safari private mode) is stamped, empty, and `isFreshWorkspace()` is `false`. The
+  failure alert's retry (5.10 FD3, idempotent) is the only way back; a user who reloads instead gets a
+  healthy-looking empty workspace with no Conway's Classic. `recoverWorkspace()` only closes this on
+  its *discarded-stamp* branch (stamp removed first). Pre-existing from 5.10; Story 5.11 was told not
+  to change `resetWorkspace()`'s contract. A fix is "remove the stamp before `clearAll()`" (the
+  Conway save re-stamps), which is a 5.10-contract change and needs its own decision.
+- **The Gallery's `state` fold renders the storage-failure notice over a battle list that loaded
+  fine when only the seed failed** — `seedStatus === 'error' || loadState.status.kind === 'error'`
+  collapses both into `'error'`; with a `QuotaExceededError` from the first-run Conway write and a
+  readable `gol:battles`, the user now reads "your workspace could not be set up … then reload" over
+  data that is present, and Reload re-runs the same failing seed. The fold predates 5.11; the
+  specific instruction in the copy is new.

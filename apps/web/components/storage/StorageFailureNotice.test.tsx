@@ -4,6 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC, DEFAULT_SETTINGS } from '@gol/domain';
+import { NewerFormatVersionError, STORAGE_KEYS } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace } from '@gol/test-utils';
 import type { StorageFailureKind } from '@/lib/storage/storageFailure';
 import {
@@ -237,6 +238,71 @@ describe('StorageFailureNotice (Story 5.11)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
     await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     expect(await repos.organisms.list()).toEqual([CONWAYS_CLASSIC]);
+  });
+
+  it('a stamp that turned newer mid-recovery gets the newer copy, never "try again", and no reload', async () => {
+    const repos = await populatedRepos();
+    const workspace = {
+      discardUnreadableStamp: vi
+        .fn()
+        .mockRejectedValue(new NewerFormatVersionError(STORAGE_KEYS.schema, 2, 1, 'x')),
+      clearAll: vi.fn(() => repos.clearAll()),
+    };
+    const reload = vi.fn();
+    render(
+      <StorageFailureNotice
+        kind="corrupt-workspace"
+        workspace={workspace}
+        organisms={repos.organisms}
+        reload={reload}
+      />,
+    );
+    const { user, dialog } = await openResetDialog();
+    await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText(NEWER_VERSION_MESSAGE, { selector: '[role="alert"]' }),
+      ).not.toBeNull(),
+    );
+    expect(screen.queryByText(CLEAR_ALL_FAILURE_MESSAGE)).toBeNull();
+    expect(workspace.clearAll).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('a notice unmounted while the recovery runs does not reload the route the user moved to', async () => {
+    const repos = await populatedRepos();
+    let finishClear: (() => void) | undefined;
+    const workspace = {
+      discardUnreadableStamp: vi.fn(() => repos.discardUnreadableStamp()),
+      clearAll: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finishClear = () => {
+              void repos.clearAll().then(resolve);
+            };
+          }),
+      ),
+    };
+    const reload = vi.fn();
+    const { unmount } = render(
+      <StorageFailureNotice
+        kind="corrupt-workspace"
+        workspace={workspace}
+        organisms={repos.organisms}
+        reload={reload}
+      />,
+    );
+    const { user, dialog } = await openResetDialog();
+    await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
+    await waitFor(() => expect(workspace.clearAll).toHaveBeenCalledTimes(1));
+
+    unmount();
+    finishClear?.();
+
+    // The recovery itself completes — it was already running when the user left.
+    await waitFor(async () => expect(await repos.organisms.list()).toEqual([CONWAYS_CLASSIC]));
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('a second Reset Workspace click during the exit is a no-op (one dialog, one reset)', async () => {

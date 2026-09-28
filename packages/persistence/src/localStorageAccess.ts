@@ -249,6 +249,9 @@ export function discardUnreadableStamp(): void {
     localStorage.removeItem(STORAGE_KEYS.schema);
     return;
   }
+  // The same ceiling `migrate` applies (`found > currentVersion` → 'newer-version', which the format
+  // check surfaces as `NewerFormatVersionError`): the verdict on one stamp is then the same from both
+  // sides — what a read reports as newer, this refuses to discard. Keep the two comparisons in step.
   if (version > CURRENT_FORMAT_VERSION) {
     throw new NewerFormatVersionError(
       STORAGE_KEYS.schema,
