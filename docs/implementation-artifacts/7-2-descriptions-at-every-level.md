@@ -350,3 +350,18 @@ Modified:
 Dev Model: opus   # architecture-shaping (FD4: new gol:workspace key + AppRepositories.workspaceMeta that 7.4–7.6 build on); owner chose opus dev + sonnet review because Fable is unavailable (2026-09-28)
 Review Model: sonnet-5   # second pair of eyes per project convention; ran full review (Blind Hunter + Edge Case Hunter + Acceptance Auditor) against 0ab2e3b..e0faec9 (2026-09-28)
 Proposed lane gate: none — only epic 7 is in progress; the diff touches no epic-6 surface
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 20s | 20s | 12 | 2,463 | 8,749 | 335,214 | 346,438 |
+| Step 1 — create | opus-5-5 | 4 | 10m 11s | 10m 11s | 384 | 8,369 | 990,595 | 15,897,909 | 16,897,257 |
+| Step 2 — implement | opus-5-5 | 1 | 35m 34s | 35m 34s | 432 | 5,223 | 607,219 | 50,838,561 | 51,451,435 |
+| Step 3 — review + PR | sonnet-5 | 4 | 22m 32s | 22m 32s | 664 | 41,459 | 1,865,921 | 41,749,033 | 43,657,077 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 56 | 18,628 | 37,414 | 1,794,224 | 1,850,322 |
+| **Total (create → PR ready)** | | 9 | **1h 08m** | 1h 08m | 1,492 | 57,514 | 3,472,484 | 108,820,717 | **112,352,207** |
+
+Run started 2026-09-28 18:16 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
