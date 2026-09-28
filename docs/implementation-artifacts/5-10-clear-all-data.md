@@ -621,3 +621,18 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
   `@gol/persistence` (`clearAll()` then `ensureDefaultOrganism()`), truthful non-rollback failure
   copy with idempotent retry (FD3), and the full act-on-exit/focus-restore/re-entrancy shape
   mirroring Story 5.9's Import row. Status → review.
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 1m 10s | 1m 10s | 42 | 7,696 | 27,807 | 1,261,118 | 1,296,663 |
+| Step 1 — create | opus-5-5 | 1 | 5m 45s | 5m 45s | 98 | 5,913 | 296,727 | 5,079,043 | 5,381,781 |
+| Step 2 — implement | sonnet-5 | 1 | 22m 29s | 22m 29s | 466 | 13,278 | 606,253 | 40,823,368 | 41,443,365 |
+| Step 3 — review + PR | opus-5-5 | 4 | 12m 29s | 12m 29s | 244 | 24,072 | 563,650 | 8,842,596 | 9,430,562 |
+| _of which the orchestrator_ | fable-5 | — | — | — | 108 | 34,543 | 69,293 | 3,704,373 | 3,808,317 |
+| **Total (create → PR ready)** | | 6 | **41m 53s** | 41m 53s | 850 | 50,959 | 1,494,437 | 56,006,125 | **57,552,371** |
+
+Run started 2026-09-28 09:04 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
