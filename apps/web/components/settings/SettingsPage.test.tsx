@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/domain';
@@ -172,7 +172,10 @@ describe('SettingsPage', () => {
 
   it('a rejecting workspace.storageUsage() renders an alert — same fold as the list rejection', async () => {
     const repos = createFakeRepositories({ organisms: createMockOrganisms() });
-    const workspace = { storageUsage: vi.fn().mockRejectedValue(new Error('boom')) };
+    const workspace = {
+      storageUsage: vi.fn().mockRejectedValue(new Error('boom')),
+      clearAll: vi.fn().mockResolvedValue(undefined),
+    };
 
     render(
       <SettingsPage
@@ -317,7 +320,7 @@ describe('SettingsPage', () => {
     expect(saveSpy).not.toHaveBeenCalled();
   });
 
-  it('renders exactly one h1, exactly two h2s (Statistics + Data Management), and no Epic 6/6.10/5.10 dead-section text (the no-dead-section guard, updated by Story 5.9)', async () => {
+  it('renders exactly one h1, exactly two h2s (Statistics + Data Management), and no Epic 6/6.10 dead-section text (the no-dead-section guard, updated by Story 5.10)', async () => {
     const repos = createFakeRepositories({ organisms: createMockOrganisms() });
 
     render(
@@ -338,10 +341,10 @@ describe('SettingsPage', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
     expect(screen.getByRole('heading', { level: 2, name: 'Data Management' })).toBeInTheDocument();
-    // "Export" (Story 5.5) and "Import" (Story 5.9) are now real, live affordances — no longer in
-    // the forbidden list. Auto-Save/Clear All are still dead sections (6.10/5.10), as are Epic 6's
-    // rows.
-    expect(screen.queryByText(/display|simulation|theme|auto-save|clear/i)).not.toBeInTheDocument();
+    // "Export" (Story 5.5), "Import" (Story 5.9) and "Clear" All Data (Story 5.10) are now real,
+    // live affordances — no longer in the forbidden list. Auto-Save is still a dead section
+    // (6.10), as are Epic 6's rows. The row adds no heading beyond the existing two h2s.
+    expect(screen.queryByText(/display|simulation|theme|auto-save/i)).not.toBeInTheDocument();
   });
 
   it('has no axe accessibility violations once ready', async () => {
@@ -449,5 +452,41 @@ describe('SettingsPage', () => {
       expect(readStats()['Saved Battles']).toBe('1');
     });
     expect(readStats().Organisms).toBe('4');
+  });
+
+  // Story 5.10 AC5: `onCleared={statsResource.reload}` (`<SettingsPage>`'s own wiring) — this is
+  // the ONE place that wiring is exercised; `ClearAllDataRow.test.tsx` owns the flow's own
+  // branches (dialog, ordering, failures).
+  it('a confirmed Clear All refreshes the statistics counts to 0 battles / 1 organism (AC5)', async () => {
+    const mockWorkspace = createMockWorkspace();
+    const repos = createFakeRepositories(mockWorkspace);
+
+    render(
+      <SettingsPage
+        settings={repos.settings}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        seedStatus="ready"
+        workspace={repos}
+        serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('term')).toHaveLength(3);
+    });
+    expect(readStats()['Saved Battles']).toBe(String(mockWorkspace.battles.length));
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Clear All Data?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
+
+    await waitFor(() => {
+      expect(readStats()['Saved Battles']).toBe('0');
+    });
+    expect(readStats().Organisms).toBe('1');
   });
 });

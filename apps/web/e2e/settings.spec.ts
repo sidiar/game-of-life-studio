@@ -452,3 +452,97 @@ test.describe('import (Story 5.9)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+// AC1-AC9's e2e level, kept thin (RFC-008 Decision 2): the real served static export, real
+// localStorage, and the Gallery's post-reset empty state (AC7) — the branch matrix (ordering,
+// idempotent retry, StrictMode) lives in `ClearAllDataRow.test.tsx`.
+test.describe('clear all data (Story 5.10)', () => {
+  test('confirming Clear Data resets to the default workspace, gol:settings survives byte-identical, and the Gallery shows its empty state (AC2/AC3/AC4/AC5/AC7)', async ({
+    page,
+  }) => {
+    const seededSettings = JSON.stringify({ theme: 'biotech-terminal', gridLines: false });
+    await page.addInitScript((value) => {
+      localStorage.setItem('gol:settings', value);
+    }, seededSettings);
+    await seedWorkspace(page);
+
+    await page.goto('/settings');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('2');
+
+    await page.getByRole('button', { name: 'Clear data (all battles and organisms)' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Clear All Data?' });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByText('This will delete all battles and organisms. This cannot be undone.'),
+    ).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Clear All Data' }).click();
+
+    await expect(page.getByRole('status')).toContainText('All data cleared');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('0');
+    await expect(statValue(page, 'Organisms')).toHaveText('1');
+
+    const settingsAfter = await page.evaluate(() => localStorage.getItem('gol:settings'));
+    expect(settingsAfter).toBe(seededSettings);
+
+    // Client-side navigation only — a goto() re-runs the init script and would prove a reload,
+    // not the actual post-reset Gallery (settings.spec.ts:64-65's precedent).
+    const nav = page.getByRole('navigation', { name: 'Main' });
+    await nav.getByRole('link', { name: 'Battles' }).click();
+    await expect(page).toHaveURL('/');
+    await expect(page.getByRole('link', { name: 'Create Your First Battle' })).toBeVisible();
+  });
+
+  test('Cancel leaves gol:battles / gol:organisms byte-identical', async ({ page }) => {
+    await seedWorkspace(page);
+    await page.goto('/settings');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('2');
+
+    const before = await page.evaluate(
+      (keys: Record<string, string>) => ({
+        battles: localStorage.getItem(keys.battles),
+        organisms: localStorage.getItem(keys.organisms),
+      }),
+      STORAGE_KEYS,
+    );
+
+    await page.getByRole('button', { name: 'Clear data (all battles and organisms)' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Clear All Data?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+
+    const after = await page.evaluate(
+      (keys: Record<string, string>) => ({
+        battles: localStorage.getItem(keys.battles),
+        organisms: localStorage.getItem(keys.organisms),
+      }),
+      STORAGE_KEYS,
+    );
+    expect(after).toEqual(before);
+  });
+
+  test('has no axe accessibility violations with the Clear All Data dialog open', async ({
+    page,
+  }) => {
+    await seedWorkspace(page);
+    await page.goto('/settings');
+    await expect(statValue(page, 'Saved Battles')).toHaveText('2');
+
+    await page.getByRole('button', { name: 'Clear data (all battles and organisms)' }).click();
+    // Three waits, not one — the `deleteBattle.spec.ts` "has no axe accessibility violations with
+    // the delete dialog open" precedent: `toBeVisible()` alone races the Dialog's Fade transition,
+    // and even the Fade settling is not enough on its own — `Button`'s OWN root
+    // background-color/color transition (`duration.short`, 250ms) is unsynchronised with it, so a
+    // scan between those two settle points measures the CONFIRM button's blended, transitional
+    // colours. Reproduces the exact same class of failure this story's button (contained, color
+    // error) would otherwise trip.
+    const dialog = page.getByRole('dialog', { name: 'Clear All Data?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveCSS('opacity', '1');
+    await page.waitForTimeout(300);
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

@@ -271,8 +271,9 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
       // Data-only: battles + organisms, never settings (Decision F / AR-12).
       battleStore.clear();
       organismStore.clear();
-      // The stamp survives Clear All by design — Story 5.10 re-seeds DEFAULT_WORKSPACE against an
-      // already-stamped store, never a fresh one.
+      // The stamp survives Clear All by design — Story 5.10's `resetWorkspace()` re-seeds
+      // DEFAULT_WORKSPACE (via `ensureDefaultOrganism`) against an already-stamped store, never a
+      // fresh one.
     },
 
     async isFreshWorkspace() {

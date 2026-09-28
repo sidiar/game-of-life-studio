@@ -15,7 +15,9 @@ import type { OrganismRepository } from './repositories';
  * overwrites) and would still be wrong — it silently reverts a user's edits to their own organism
  * on every app load. Conway's Classic is protected from DELETION (M9), not from editing.
  */
-export async function ensureDefaultOrganism(organisms: OrganismRepository): Promise<void> {
+export async function ensureDefaultOrganism(
+  organisms: Pick<OrganismRepository, 'exists' | 'save'>,
+): Promise<void> {
   if (await organisms.exists(CONWAYS_CLASSIC_ID)) return;
   await organisms.save(CONWAYS_CLASSIC);
 }

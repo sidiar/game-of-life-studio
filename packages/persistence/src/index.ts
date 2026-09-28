@@ -64,3 +64,9 @@ export type { ImportErrorCode, ImportErrorDetails } from './errors';
 // is reached only through `WorkspaceSerializer.importWorkspace`.
 export { validateImportFile } from './workspaceImport';
 export type { ImportSummary } from './workspaceImport';
+
+// Story 5.10's Clear All composition (FD1): `clearAll()` then `ensureDefaultOrganism()` — the "5.10
+// path" Story 5.11's reset offer also calls. Lives beside the other seeding compositions above
+// rather than being reached for via a UI component, so a future caller (5.11's corruption screen)
+// has one function to import, never `createRepositories()` or a concrete repository (AR-2/27).
+export { resetWorkspace } from './resetWorkspace';
