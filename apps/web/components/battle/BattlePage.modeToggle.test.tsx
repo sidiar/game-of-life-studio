@@ -313,8 +313,10 @@ describe('BattlePage — the fullscreen cell through the mocked view (Story 3.18
       expect((runRenders.at(-1) as BattleSimulationViewProps).fullscreen).toBe(false),
     );
     // Focus was loose on entry, so the restore effect moves it to the Fullscreen button — the
-    // same "loose focus" branch a pointer-driven exit exercises.
-    expect(screen.getByRole('button', { name: 'Fullscreen' })).toHaveFocus();
+    // same "loose focus" branch a pointer-driven exit exercises. Polled, not sampled: the
+    // `fullscreen: false` render above precedes the restore's PASSIVE effect — see the note on
+    // the "when focus is loose" case at the end of this block.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Fullscreen' })).toHaveFocus());
   });
 
   // AC6, the "loose focus" guard: when a control the user focused SURVIVES the exit (only a mock
@@ -354,6 +356,12 @@ describe('BattlePage — the fullscreen cell through the mocked view (Story 3.18
     (runRenders.at(-1) as BattleSimulationViewProps).onExitFullscreen();
     await screen.findByRole('group', { name: 'Mode' });
 
-    expect(screen.getByRole('button', { name: 'Fullscreen' })).toHaveFocus();
+    // ⚠️ Poll, do not sample. `onExitFullscreen` runs outside `act`, so the restore lives in a
+    // PASSIVE effect flushed after the commit that remounts the header — and `findByRole`
+    // resolves off that commit's DOM mutation, which can land before the flush. Sampling focus
+    // there reads `<body>` and reddens CI intermittently (the coverage run, on PRs that never
+    // touched `BattlePage`) — the same race as `BattlePage.test.tsx`'s tab-title note (#79).
+    // A real failure still fails: `waitFor` times out.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Fullscreen' })).toHaveFocus());
   });
 });
