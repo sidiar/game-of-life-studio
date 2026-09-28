@@ -156,7 +156,7 @@ development_status:
   5-8-atomic-import-pipeline: done
   5-9-import-ui-destructive-warning: done
   5-10-clear-all-data: done
-  5-11-load-time-corruption-handling: review
+  5-11-load-time-corruption-handling: done
   epic-5-retrospective: optional
 
   # Epic 6: Theming & Personalization

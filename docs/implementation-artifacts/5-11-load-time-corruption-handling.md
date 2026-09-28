@@ -4,7 +4,7 @@ baseline_commit: e3fcd0e56d26a8cdc01e3fec30c80a510cefd2c3
 
 # Story 5.11: Load-Time Corruption Handling
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -413,6 +413,66 @@ Hunter + Acceptance Auditor). 2 decision-needed, 11 patch, 2 defer, 2 dismissed.
 Dismissed (2): `/battle`'s newer-version body dropping Back to Gallery (Task 5.4 says "no Back link
 needed"); Task 4.1's "omit `workspace` and the action is not rendered" vs. the Reload fallback
 (documented deviation 3, non-destructive).
+
+**Second-pass code review 2026-09-28** (Claude Sonnet 5, standing in for Fable — Fable's usage limit
+was exhausted for this pass; `bmad-code-review` full mode: Blind Hunter + Edge Case Hunter +
+Acceptance Auditor), scoped to commit `5751dc4` (the D1(b)/D2(b) ruling patch above) only — earlier
+commits were reviewed in the pass above. 0 decision-needed, 1 patch, 1 defer, 10 dismissed.
+Acceptance Auditor: clean — both rulings independently verified as faithfully implemented and pinned
+with tests, no AC/constraint violations.
+
+- [x] [Review][Patch] `File List`'s `Modified` block listed
+  `apps/web/components/gallery/DeleteBattleDialog.tsx` twice — once bare (pre-existing entry), once
+  annotated `(D1: ...)` — from this round's addition landing beside the earlier entry instead of
+  merging into it. Merged into the one, annotated entry. [this file's `File List` / `Modified`]
+- [x] [Review][Defer] `storageFailureMessages.ts`'s header comment ("plain strings, no story IDs, no
+  storage keys, never `error.message`") describes the exported message *text*, but the file now also
+  imports `STORAGE_KEYS` as a value and branches `corruptWorkspaceMessage()` on it — true today (no
+  key literal appears in any rendered string) but easy to misread as a broken FD6 guarantee at a
+  glance; the key-to-message mapping could also arguably live beside the classifier in
+  `storageFailure.ts` instead. Cosmetic/organizational, not a correctness issue — no test depends on
+  either placement. [`apps/web/lib/storage/storageFailureMessages.ts:1-11,58-70`] — deferred,
+  pre-existing pattern, no functional impact.
+
+Dismissed (10, all verified against the code, not just the diff, before being dropped):
+`storageFailure.ts`'s `(e): e is CorruptDataError` predicate keyed on `classifyStorageFailure(e) ===
+kind` rather than `instanceof` — sound, because `classifyStorageFailure` can only return
+`'corrupt-workspace'`/`'corrupt-settings'` via its own `instanceof CorruptDataError` branch, and
+`CorruptDataError.key` is a required constructor field, never `undefined`; `corruptKeys` collected
+but unread for `'corrupt-settings'` — deliberate per the `StorageFailure` doc comment ("for the
+corrupt kinds"), harmless, pinned by `storageFailure.test.ts`; `onDeleteDialogExited`'s
+`useCallback([dialogProps])` "fresh object every render" — `dialogProps` is itself memoized, and
+`<DeleteBattleDialog>` isn't `React.memo`'d, so no functional effect either way; `dialogProps.onExited
+?.()`'s optional chaining vs. its comment — `onExited` is in fact always set by
+`useDeleteBattleDialog`, so the `?.` is harmless defensive code, not a contradiction; **the
+`queuedDeleteErrorRef` "publishes on the next unrelated close" concern (raised independently by both
+Blind Hunter and Edge Case Hunter, and the likeliest-looking finding going in)** — verified
+unreachable: `useInertBackground(confirming !== null)` keeps the entire tile grid — the only path to
+`requestDelete()` — genuinely non-interactive (pointer, keyboard and AT) for the whole span from a
+failed delete through the synchronous ref-read-clear-and-dispatch inside the very same
+`onDeleteDialogExited` call that finally releases `confirming`, so a second `requestDelete()` cannot
+fire in the gap; the re-baselined `/battle` bundle size read as contradicting "Dev Record says
+/battle unchanged" — misreads an unrelated *functional*-unchanged bullet from the original Dev Notes
+(Task 9) as a bundle claim; this round's own Dev Agent Record entry explicitly says "bundle
++0.2–0.3 KB gzip **per route**", and `/battle`'s +205 B matches that range (it pulls in
+`storageFailureMessages.ts` for `BATTLE_CORRUPT_MESSAGE`, so the module's new exports/strings ride
+along); `corruptKeys = []` default minting a fresh array per render — never used as a dependency
+anywhere, only read synchronously in the same render pass; `StorageFailure` not being a discriminated
+union — a deliberate, documented, fully-tested shape, not a defect; `classifyStorageFailure` being
+called twice inside `pickStorageFailure` — correct, and the input list is at most 2–3 elements (one
+load's worth of rejections), not a real cost; the "no test for an unrecognised key" / "no
+both-battles-and-organisms-keys test" gap — the `[]` case in `storageFailureMessages.ts`'s test
+exercises the same fallback branch as any unrecognised key, and the both-keys case IS pinned
+directly (`storageFailure.test.ts`'s `corruptWorkspaceMessage` table); `deferred-work.md`'s new
+resolution note "relying on a line number and an unwritten fix" — that is deferred-work.md's normal
+form (a forward pointer to known, explicitly out-of-scope work — the re-list race, already recorded
+there this round), not an omission. Edge Case Hunter's second finding (a successful delete's re-list
+rejecting inside the same exit window) maps onto that same already-tracked, already-out-of-ruling-
+scope item — confirmed, not a new gap.
+
+`npm run ci:dev` — 0 (typecheck/lint/format/spec/boundary/coverage/build/bundle/bench all green;
+e2e Chromium 313 passed, 1 skipped). PR #95 checks (`gh pr checks 95`) also green (quality + all four
+e2e browsers).
 
 ## Dev Notes
 
@@ -831,7 +891,7 @@ Modified:
 - `apps/web/components/gallery/BattleGallery.tsx`
 - `apps/web/components/gallery/BattleGallery.test.tsx`
 - `apps/web/components/gallery/BattleGallery.gridLines.test.tsx`
-- `apps/web/components/gallery/DeleteBattleDialog.tsx`
+- `apps/web/components/gallery/DeleteBattleDialog.tsx` (D1: `onDeleteFailed` doc — queue, publish on exit)
 - `apps/web/components/organisms/OrganismLibrary.tsx`
 - `apps/web/components/organisms/OrganismLibrary.test.tsx`
 - `apps/web/components/settings/SettingsPage.tsx`
@@ -843,7 +903,6 @@ Modified:
 - `apps/web/app/(gallery)/organisms/page.tsx`
 - `apps/web/app/(gallery)/settings/page.tsx`
 - `apps/web/app/not-found.test.tsx` (comment only: the quoted battle-route copy)
-- `apps/web/components/gallery/DeleteBattleDialog.tsx` (D1: `onDeleteFailed` doc — queue, publish on exit)
 - `apps/web/lib/storage/storageFailure.ts` / `.test.ts`, `storageFailureMessages.ts` (D2)
 - `apps/web/components/storage/StorageFailureNotice.tsx` / `.test.tsx` (D2: `corruptKeys`)
 - `apps/web/e2e/storageCorruption.spec.ts` (D2: per-namespace line)
@@ -864,6 +923,12 @@ Modified:
 - 2026-09-28 — Addressed code review findings - 2 items resolved: owner rulings D1 (b) (delete-failure
   notice published on the delete dialog's exit, copy/action/timing pinned) and D2 (b)
   (namespace-aware corrupt-workspace line via `CorruptDataError.key`). Status → review.
+- 2026-09-28 — Second-pass code review on Claude Sonnet 5 (Fable rate-limited), scoped to commit
+  `5751dc4` only: 1 patch applied (duplicate `File List` entry), 1 deferred (`storageFailureMessages.ts`
+  header/placement nit), 10 dismissed as verified false positives or already-ruled/already-tracked
+  (including the `queuedDeleteErrorRef` timing concern both Blind Hunter and Edge Case Hunter raised
+  independently — confirmed unreachable via `useInertBackground`). Acceptance Auditor: clean, both
+  rulings faithfully implemented. `npm run ci:dev` green; PR #95 checks green. Status → done.
 
 Dev Model: opus   # architecture-shaping: widens the AppRepositories seam (discardUnreadableStamp) and sets the app-wide storage-failure classification + notice pattern every route and Epic 7 build on
 Proposed lane gate: none

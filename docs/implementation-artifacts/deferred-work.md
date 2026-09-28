@@ -3946,3 +3946,11 @@ Open owner flags from the story (not blockers — the story proceeded on its for
   readable `gol:battles`, the user now reads "your workspace could not be set up … then reload" over
   data that is present, and Reload re-runs the same failing seed. The fold predates 5.11; the
   specific instruction in the copy is new.
+- **`storageFailureMessages.ts`'s header ("plain strings, no story IDs, no storage keys, never
+  `error.message`") only ever meant the exported message *text*** (second-pass review of commit
+  `5751dc4`, 2026-09-28) — the D2(b) ruling's `corruptWorkspaceMessage()` now imports `STORAGE_KEYS`
+  as a value and branches on it, and no key literal leaks into a rendered string, so FD6 still holds;
+  but a future reader skimming the header alone could misread the guarantee as broken. The
+  key-to-message mapping could also arguably live beside the classifier in `storageFailure.ts`
+  instead of the copy-only module. Cosmetic/organizational — no test depends on either placement,
+  left for a future pass rather than an unattended rename/move.
