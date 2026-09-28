@@ -1,7 +1,7 @@
 /**
  * The contract for `public/workspaces/` — the repo-bundled preset workspace library.
  *
- * Every file in that folder except `index.json` is a full export ENVELOPE
+ * Every git-tracked file in that folder except `index.json` is a full export ENVELOPE
  * (`WorkspaceExportSchema`, `kind: 'workspace'`) — never a second format. That choice is the whole
  * design: a preset is loaded by fetching its static JSON and handing the text to the existing
  * import pipeline (`WorkspaceSerializer.importWorkspace`), which brings validation, format
@@ -11,15 +11,17 @@
  *
  * `index.json` is the manifest a future Settings dropdown reads. It exists because the app is a
  * static export — there is no server to enumerate a directory, so the folder must describe itself.
- * `presetWorkspaces.test.ts` beside this file keeps folder and manifest in lockstep and runs every
+ * `presetWorkspaces.test.ts` beside this file keeps the folder's git-tracked files and the manifest
+ * in lockstep (owner ruling D1c) and runs every
  * preset through the production import gate (`validateImportFile`), so a formatVersion bump or a
  * schema change surfaces as a test failure, not as a broken preset in production.
  *
  * Authoring a preset never means writing JSON by hand: build the workspace in the app, use
- * Settings → Export Workspace (Story 5.5), drop the downloaded file here under its preset file
- * name, run `npx prettier --write apps/web/public/workspaces/` (the raw export is
+ * Settings → Export Workspace (Story 5.5), drop the downloaded file here named exactly
+ * `<id>.json` for its preset id (owner ruling D2a), run `npx prettier --write apps/web/public/workspaces/` (the raw export is
  * `JSON.stringify(v, null, 2)`, which `format:check` rejects; formatting is the only edit
- * allowed), and add a manifest entry naming it. The same serializer composition may be run
+ * allowed), add a manifest entry naming it, and `git add` it — the lockstep compares the manifest
+ * against git-tracked files, so an untracked new preset fails as missing. The same serializer composition may be run
  * headlessly instead of through the UI — that is how the first preset was produced — but the file
  * is always the serializer's output, never hand-edited.
  *
@@ -33,8 +35,8 @@
  *
  * This module never imports anything from `public/` (FD5, Story 7.1) — importing preset JSON into
  * app code would pull every preset into the JS bundle (AR-3 growth gate) and defeat the "drop a
- * file to author" model. Only `presetWorkspaces.test.ts` reads the folder, off disk with
- * `node:fs`.
+ * file to author" model. Only `presetWorkspaces.test.ts` reads the folder: the presets off disk
+ * with `node:fs`, the tracked file list through `git ls-files`.
  */
 
 /**

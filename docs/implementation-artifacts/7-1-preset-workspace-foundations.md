@@ -4,7 +4,7 @@ baseline_commit: 9f3d28794491c7af8874527bc7b671993ec3c0e4
 
 # Story 7.1: Preset Workspace Foundations
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -43,8 +43,8 @@ so that presets can be authored, improved, and consumed over time without ever g
     - no duplicate `id` or `file` (PoC)
     - every `id` matches `PRESET_ID_PATTERN` (new, FD3)
     - `defaultPresetId` equals exactly one entry's `id` (new, FD2)
-    - every `file` ends in `.json`, is not `index.json`, and contains no `/`, `\` or `..` (new — the file name is later concatenated into a fetch URL)
-    - **folder ↔ manifest lockstep:** the set of folder entries other than `index.json` — **any extension**, not only `.json` (FD6) — equals the set of manifest `file`s, compared sorted with `toEqual` (so the failure message names the orphan)
+    - every `file` ends in `.json`, is not `index.json`, and contains no `/`, `\` or `..` (new — the file name is later concatenated into a fetch URL) — *superseded by owner ruling D2a: every `file` must equal `${id}.json` (plus an explicit not-`index.json` guard, since the slug pattern admits `index`)*
+    - **folder ↔ manifest lockstep:** the set of folder entries other than `index.json` — **any extension**, not only `.json` (FD6) — equals the set of manifest `file`s, compared sorted with `toEqual` (so the failure message names the orphan) — *narrowed by owner ruling D1c: "folder entries" means git-tracked files (`git ls-files -z`), so untracked local files are out of scope*
     - every preset passes `validateImportFile(text)` and yields `kind === 'workspace'` (PoC) — a static loop over `manifest.workspaces`, never `it.each` over the folder (the PoC comment explains why: an empty folder must fail, not be a green run over zero cases)
   - [x] 4.2 Parse the manifest in the test **structurally** (assert the shape before trusting it — `typeof`, `Array.isArray`), not by a bare `as PresetWorkspaceManifest` cast alone; a hand-edited manifest missing `defaultPresetId` must fail with a readable message, not a `TypeError`.
   - [x] 4.3 Resolve the folder path with the idiom that already works in this workspace: `dirname(fileURLToPath(import.meta.url))` (`apps/web/app/routes.test.ts:6-10` explains it) or `__dirname` (`apps/web/lib/themeTokens.test.ts:9`), then `join(…, '..', '..', 'public', 'workspaces')`. The PoC used `process.cwd()` and claims `fileURLToPath` throws under jsdom — `routes.test.ts` shows the `dirname(fileURLToPath(...))` form works; pick one, make it pass, and keep the comment truthful.
@@ -70,6 +70,17 @@ _Code review 2026-09-28 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Audi
 - [x] [Review][Patch] Runtime-parse ownership is softened to "whichever story first fetches it"; FD7 assigns it to Story 7.4 explicitly. The mutable interfaces also invite an `as PresetWorkspaceManifest` cast on fetched JSON, which the gate itself refuses [apps/web/lib/workspaces/presetManifest.ts:21-28,51-71]
 - [x] [Review][Patch] `PRESET_WORKSPACES_PATH = '/workspaces'` silently assumes no `basePath`; nothing records that [apps/web/lib/workspaces/presetManifest.ts:37]
 
+_Second review 2026-09-28 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor), scoped to the owner-ruling diff `7a47fe4..a6143cb`: 0 decision-needed, 8 patch, 0 defer, 8 dismissed._
+
+- [x] [Review][Patch] `git ls-files` output parsed without `-z`: under the default `core.quotePath` a non-ASCII name comes back C-quoted, so the orphan message names a string no author can match [apps/web/lib/workspaces/presetWorkspaces.test.ts:trackedFolderEntries]
+- [x] [Review][Patch] An unresolved merge conflict on a preset lists it once per stage (3×), reading as a triple orphan — dedupe the listing [apps/web/lib/workspaces/presetWorkspaces.test.ts:trackedFolderEntries]
+- [x] [Review][Patch] D2a dropped the "not `index.json`" guard; `PRESET_ID_PATTERN` admits `index`, so `{id: "index", file: "index.json"}` passed the D2a test and only failed indirectly — restore an explicit named check [apps/web/lib/workspaces/presetWorkspaces.test.ts:D2a test]
+- [x] [Review][Patch] `trackedFolderEntries()` ran at module scope, so any git failure failed collection of the whole file (every test "not run") instead of the one lockstep test — resolve it inside the test [apps/web/lib/workspaces/presetWorkspaces.test.ts:lockstep test]
+- [x] [Review][Patch] A missing presets folder surfaced as the same spawn ENOENT as "git not installed" and got the git message; git's stderr leaked to test output — check the folder first, pipe stderr into the error [apps/web/lib/workspaces/presetWorkspaces.test.ts:trackedFolderEntries]
+- [x] [Review][Patch] Lockstep comment still claimed a stray `notes.txt` "must fail" (untracked, it is now invisible), and the failure message gave no hint that a new preset needs `git add` / a stray tracked file needs `git rm` [apps/web/lib/workspaces/presetWorkspaces.test.ts:lockstep test]
+- [x] [Review][Patch] Stale code comments after D1c/D2a: test header says it reads the folder off disk for the mismatch check; `presetManifest.ts` head comment says "every file in that folder", and its authoring steps omit `<id>.json` naming and `git add` [apps/web/lib/workspaces/presetWorkspaces.test.ts:1-8, apps/web/lib/workspaces/presetManifest.ts:1-37]
+- [x] [Review][Patch] Story text the rulings made untrue: Task 4.1 `file` + lockstep bullets, FD6, Library notes (`node:child_process` + git), Testing standards, Completion Notes — annotated with D1c/D2a [docs/implementation-artifacts/7-1-preset-workspace-foundations.md]
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -83,7 +94,7 @@ _Code review 2026-09-28 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Audi
 - **FD3 — Preset ids are lowercase kebab slugs**, `^[a-z0-9]+(?:-[a-z0-9]+)*$`, exported as `PRESET_ID_PATTERN`. 7.6 addresses a preset by id inside a URL; a slug needs no encoding and cannot smuggle a path. Ids are **stable forever** once shipped (a shared link names them) — say so in the doc comment.
 - **FD4 — Regenerate the envelope; don't copy the PoC file.** The PoC file's `exportedAt` is `2026-09-28T00:00:00.000Z` — midnight to the millisecond, almost certainly hand-normalised — so its "never handwritten" provenance is not clean. The content is the AR-45 dev fixtures (`seedDefaultWorkspace` + `seedDevFixtures` — Conway's Classic, Aggressive Colonizer, Patient Defender, Chaotic Spreader; battles "Three-Way Skirmish" and "Grand Colony War"), and regenerating it through either Task 2.1 route reproduces the same content with honest provenance. Mock ids (`mock-aggressive-colonizer`, …) in a shipped file are accepted: 7.3 replaces this preset with showcase content (its AC: "replaces (or demotes from default) the dev-fixture starter preset").
 - **FD5 — Presets are fetched at runtime, never imported.** No `import … from '@/public/workspaces/…'` / `import manifest from '…/index.json'` anywhere in app code: it would pull every preset into the JS bundle (AR-3 growth gate) and defeat the "drop a file to author" model. Only the **test** reads the folder, off disk with `node:fs`. The contract module holds types + constants only.
-- **FD6 — Lockstep compares every folder entry, not just `*.json`.** The PoC filtered `f.endsWith('.json')`, so a stray `notes.txt` or a mis-extensioned `preset.JSON` would ship silently. Everything in `public/workspaces/` except `index.json` must be listed.
+- **FD6 — Lockstep compares every folder entry, not just `*.json`.** The PoC filtered `f.endsWith('.json')`, so a stray `notes.txt` or a mis-extensioned `preset.JSON` would ship silently. Everything in `public/workspaces/` except `index.json` must be listed. *Owner ruling D1c (2026-09-28) narrows this to everything **git-tracked** there: untracked local files (`.DS_Store`, a preset not yet `git add`ed) are invisible to the gate by design.*
 - **FD7 — No runtime parser/schema for the manifest in this story.** Zod parses at boundaries; the manifest's boundary is 7.4's runtime `fetch`, so 7.4 owns the runtime parse (and whether `apps/web` takes a direct `zod` dependency — it has none today; `package.json` lists only `@gol/*`, MUI, Next, React). Do not add `zod` to `apps/web` here. The test does its own structural assertions (Task 4.2).
 
 ### What exists: read these before writing a line
@@ -108,11 +119,11 @@ _Code review 2026-09-28 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Audi
 
 ### Library / framework notes
 
-No new dependencies. Vitest 4, Node `node:fs`/`node:path`/`node:url`, `@gol/persistence` (already an `apps/web` dependency). No web research needed — nothing version-sensitive is introduced.
+No new dependencies. Vitest 4, Node `node:fs`/`node:path`/`node:url` (plus `node:child_process` and a `git` binary at test time, for the D1c tracked-file listing), `@gol/persistence` (already an `apps/web` dependency). No web research needed — nothing version-sensitive is introduced.
 
 ### Testing standards
 
-- The lockstep test reads the **real** folder — no fixtures, no mocks (that is the gate's entire value).
+- The lockstep test reads the **real** presets and the **real** git-tracked file list (D1c) — no fixtures, no mocks (that is the gate's entire value).
 - Assertion messages must name the offending entry/file (`expect(x, \`…${entry.file}…\`)`), so a CI failure is actionable without re-running locally.
 - Don't write a test for Next copying `public/` (framework behaviour) — verify it once manually (Task 5.1).
 - Local gate: `npm run ci:dev`. Don't pipe it through `tail` (swallows the exit code).
@@ -171,7 +182,7 @@ claude-sonnet-5
 
 ### Completion Notes List
 
-- Landed the PoC's four files (`origin/poc/preset-workspace-library` @ `6707203`) per FD1, adding FD2 (`defaultPresetId`), FD3 (`PRESET_ID_PATTERN` slug constant), and FD6 (lockstep over every folder entry, not just `*.json`) on top.
+- Landed the PoC's four files (`origin/poc/preset-workspace-library` @ `6707203`) per FD1, adding FD2 (`defaultPresetId`), FD3 (`PRESET_ID_PATTERN` slug constant), and FD6 (lockstep over every folder entry, not just `*.json` — narrowed to git-tracked entries by owner ruling D1c) on top.
 - `starter-workspace.json` was regenerated through the real serializer (FD4), never copied from the PoC — see Debug Log for the route and confirmed content.
 - Lockstep test resolves the folder with `dirname(fileURLToPath(import.meta.url))` (Task 4.3) — this jsdom-environment suite does not hit the PoC's claimed `fileURLToPath` throw; the comment says so.
 - Manifest is parsed structurally in the test (`typeof`/`Array.isArray` checks) before being trusted, per Task 4.2.
@@ -208,6 +219,13 @@ claude-sonnet-5
   URL-safe for free (no separate character-blocklist check needed). Negative-proved both (untracked
   junk does not fail; staged-but-uncommitted orphan fails; `file` ≠ `id.json` fails naming the
   entry), all reverted with no index/working-tree residue. `npm run ci:dev` green. Status → review.
+- 2026-09-28 — Second code review (Opus) of the ruling diff `7a47fe4..a6143cb`: 8 patches applied
+  (`git ls-files -z` + dedupe, explicit not-`index.json` guard, git listing moved inside the lockstep
+  test, missing-folder check + captured stderr, `git add`/`git rm` hint in the lockstep message,
+  stale comments and story text annotated with D1c/D2a). Negative-proved: untracked `.DS_Store` and
+  `notes.txt` pass; staged `notes.txt` fails naming it with the hint; `id: "index"` fails with
+  "must not be the manifest itself"; all reverted. CI checkout (`actions/checkout@v4`, depth 1) has
+  `.git`, and no job runs unit tests outside a checkout. Status → done.
 
 Dev Model: sonnet   # lands an existing PoC (4 files) with every open choice pinned in FD1–FD7 (default designation, id slug, regeneration route, no runtime parser); nothing left to architect
 Proposed lane gate: none

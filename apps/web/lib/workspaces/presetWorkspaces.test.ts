@@ -1,13 +1,14 @@
 /**
  * The lockstep gate for `public/workspaces/` (see presetManifest.ts for the folder's contract).
  *
- * Reads the REAL folder off disk — no fixtures — so a preset that rots (schema change,
- * formatVersion bump, hand-edited JSON) or a folder/manifest mismatch fails CI here rather than
+ * Reads the REAL presets off disk and the REAL git-tracked file list — no fixtures — so a preset
+ * that rots (schema change, formatVersion bump, hand-edited JSON) or a tracked-files/manifest
+ * mismatch (owner ruling D1c) fails CI here rather than
  * shipping as a preset that explodes at import time in production. `validateImportFile` is the
  * exact gate `importWorkspace` runs (parse → migrate → schema → unsafe-id guard → referential
  * closure), so passing here IS passing the production import, minus only the repository writes.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -31,15 +32,27 @@ const PRESETS_DIR = join(LIB_DIR, '..', '..', 'public', 'workspaces');
  * folder, which is what actually ships, and returns bare filenames (no directory prefix) since the
  * cwd already is the folder. It also lists staged-but-uncommitted additions (`git ls-files` reads
  * the index, not just HEAD), so a preset just `git add`ed — not yet committed — still counts as
- * present; only fully untracked files are excluded. CI checkouts always have `.git`, so this holds
+ * present; only fully untracked files are excluded. Conversely a preset deleted from disk without
+ * `git rm` is still listed — the lockstep passes, and the envelope test then fails with "cannot
+ * read" naming the file. `-z` keeps names unquoted whatever `core.quotePath` says, and the
+ * dedupe collapses the one-line-per-stage listing git prints for an unresolved merge conflict
+ * (otherwise a conflicted preset reads as a triple orphan). CI checkouts always have `.git`, so this holds
  * there; if git itself is unavailable (or this ever runs outside a git checkout), fail with a
  * message that says so rather than silently falling back to `readdirSync`, which would reintroduce
  * exactly the local-junk problem this exists to avoid.
  */
 function trackedFolderEntries(): string[] {
+  // A missing folder would surface as the same spawn ENOENT as a missing git — name it instead.
+  if (!existsSync(PRESETS_DIR)) {
+    throw new Error(`presets folder not found: ${PRESETS_DIR}`);
+  }
   let output: string;
   try {
-    output = execFileSync('git', ['ls-files'], { cwd: PRESETS_DIR, encoding: 'utf8' });
+    output = execFileSync('git', ['ls-files', '-z'], {
+      cwd: PRESETS_DIR,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
   } catch (cause) {
     throw new Error(
       `cannot list git-tracked files under ${PRESETS_DIR} — this test requires a git checkout ` +
@@ -47,10 +60,11 @@ function trackedFolderEntries(): string[] {
       { cause },
     );
   }
-  return output
-    .split('\n')
-    .filter((line) => line.length > 0)
+  const names = output
+    .split('\0')
+    .filter((name) => name.length > 0)
     .filter((name) => name !== PRESET_MANIFEST_FILE);
+  return [...new Set(names)];
 }
 
 type ManifestEntry = { id: string; name: string; description: string; file: string };
@@ -106,8 +120,6 @@ function duplicates(values: string[]): string[] {
 
 const manifest = readManifest();
 
-const folderEntries = trackedFolderEntries();
-
 describe('preset workspace manifest', () => {
   it('has at least one preset, each with a non-empty id, name, description and file', () => {
     expect(manifest.workspaces.length).toBeGreaterThan(0);
@@ -146,6 +158,10 @@ describe('preset workspace manifest', () => {
     // character a URL would need to escape. Tying `file` to `id` this way makes `file` URL-safe
     // for free — no separate character-blocklist check is needed once this holds.
     for (const entry of manifest.workspaces) {
+      // PRESET_ID_PATTERN admits `index`, whose `${id}.json` would be the manifest itself.
+      expect(entry.file, `manifest entry "${entry.id}" must not be the manifest itself`).not.toBe(
+        PRESET_MANIFEST_FILE,
+      );
       const expected = `${entry.id}.json`;
       expect(
         entry.file,
@@ -156,15 +172,22 @@ describe('preset workspace manifest', () => {
 
   it('lists exactly the git-tracked entries present in the folder — no orphans in either direction', () => {
     const listed = manifest.workspaces.map((w) => w.file).sort();
-    // Every git-tracked folder entry other than index.json, any extension — a stray notes.txt or
-    // a mis-extensioned preset.JSON must fail here, not ship silently (FD6). Untracked local junk
-    // (.DS_Store, swap files) is excluded by trackedFolderEntries() itself (owner ruling D1c).
-    expect([...folderEntries].sort()).toEqual(listed);
+    // Every git-tracked folder entry other than index.json, any extension — a tracked stray
+    // notes.txt or a mis-extensioned preset.JSON must fail here, not ship silently (FD6 as
+    // narrowed by owner ruling D1c). Untracked files (.DS_Store, swap files, and also a new
+    // preset not yet `git add`ed) are invisible to trackedFolderEntries() by design. Resolved
+    // here, inside the test, so a git failure fails this one test, not the whole file.
+    const tracked = trackedFolderEntries().sort();
+    expect(
+      tracked,
+      `git-tracked files in ${PRESETS_DIR} vs manifest files — a new preset must be \`git add\`ed ` +
+        `before it counts; a stray tracked file must be listed or \`git rm\`ed`,
+    ).toEqual(listed);
   });
 });
 
 describe('preset workspace envelopes', () => {
-  // Static, not it.each over folderEntries: an empty folder must fail the manifest test above,
+  // Static, not it.each over the folder's files: an empty folder must fail the manifest test above,
   // and a per-file loop over zero files would be a green run over nothing.
   it('every preset passes the production import gate (validateImportFile)', () => {
     const failures: string[] = [];
