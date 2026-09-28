@@ -4,7 +4,7 @@ baseline_commit: ef01179a56fe0f51b9064349b67021cd5f054094
 
 # Story 5.10: Clear All Data
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -160,6 +160,8 @@ The epic's four ACs are split here so a reviewer can check each one on its own.
       `transition: all`, reduced-motion guard, no `disabled` — the `ExportButton` idiom in
       `DataManagement.tsx:35-58`;
     - `aria-label="Clear all data"` and a `data-clear-all-data=""` attribute for the focus restore.
+      *(Superseded by Review Finding D1, ruling (a): the aria-label is
+      `"Clear data (all battles and organisms)"`.)*
     Props (FD2):
     - `workspace: Pick<AppRepositories, 'clearAll'>`;
     - `organisms: Pick<OrganismRepository, 'exists' | 'save'>`;
@@ -302,7 +304,19 @@ Code review 2026-09-28 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
 - [x] [Review][Patch] The AC6 ordering test could pass vacuously: MUI `aria-hidden`s the row's container while the modal is open, so a default role query could not see an early status. It now queries `{ hidden: true }` and asserts `clearAll` has not run at confirm time. Mutation-checked: running the reset from `handleDialogConfirm` fails it [apps/web/components/settings/ClearAllDataRow.test.tsx]
 - [x] [Review][Patch] The keyboard path was untested (AC8): added a test for Tab reaching Clear Data, Enter opening the dialog, Cancel autofocused, Tab staying trapped in the dialog, and Escape cancelling with focus restored and the store untouched [apps/web/components/settings/ClearAllDataRow.test.tsx]
 - [x] [Review][Patch] The `resetWorkspace` partial-failure test described "cleared but without Conway's Classic" but asserted only battles: added `organisms.list()` → `[]` [packages/persistence/src/resetWorkspace.test.ts:102]
-- [x] [Review][Defer] The outcome live region mounts already filled, so some screen readers may not announce it [apps/web/components/settings/ClearAllDataRow.tsx:221-222] — deferred, pre-existing (Story 5.9's row shape; fix it for all three rows at once)
+- [x] [Review][Defer] The outcome live region mounts already filled, so some screen readers may not announce it [apps/web/components/settings/DataManagement.tsx, the slot's `status`/`alert` pair at the card's end — moved there by D2; was `ClearAllDataRow.tsx:221-222`] — deferred, pre-existing (Story 5.9's row shape; after D2 there is one render site to fix, not three)
+
+Second-pass code review 2026-09-28 (Blind Hunter + Edge Case Hunter + Acceptance Auditor), scoped
+to the D1+D2 ruling diff `90c4ae1..30af918`. D1 is clean. 0 decision-needed, 6 patch, 1 defer,
+3 dismissed.
+
+- [x] [Review][Patch] The shared slot is last-to-SETTLE wins, not last-to-START: a flow still in flight in one row (a pristine Import with no dialog, an Export awaiting the serializer, a reset after its dialog exited) writes its outcome over a newer flow another row has since started — including into the `inert` card while that row's dialog is open, where the region is never announced (project-context live-region rule). A late Import success after a confirmed Clear All re-creates the very false line D2 removed. Fix: `<DataManagement>` records which row last started a flow and drops an outcome from any other row [apps/web/components/settings/DataManagement.tsx:195-207]
+- [x] [Review][Patch] The D2 regression test's "cleared the moment Clear All's flow starts" step is vacuous: it runs a default role query while MUI's modal `aria-hidden`s the card, so it passes whether or not the slot was cleared — the same trap the first review fixed in the AC6 ordering test. Use `{ hidden: true }` [apps/web/components/settings/DataManagement.test.tsx:317]
+- [x] [Review][Patch] Only Import→Clear is tested; the reverse order (Clear→Import), Export clearing another row's outcome, and the stale-flow drop are not [apps/web/components/settings/DataManagement.test.tsx]
+- [x] [Review][Patch] Ruling D2 moves the Export and Import outcome lines from under their own rows to the card's end, and adds a required `onMessage` prop to `<ImportWorkspaceRow>` — a deviation from AC9 ("Unchanged: … the Export and Import rows' behaviour") and the Dev Notes' "Preserve its behaviour and props" that no record states [docs/implementation-artifacts/5-10-clear-all-data.md]
+- [x] [Review][Patch] Task 3.1 still prescribes `aria-label="Clear all data"`, superseded by D1(a); the Change Log line says "Status stays at review" though that commit moved it from in-progress [docs/implementation-artifacts/5-10-clear-all-data.md:162,670]
+- [x] [Review][Patch] The deferred "live region mounts already filled" item still points at `ClearAllDataRow.tsx:221-222` and "all three rows"; after D2 there is one render site [docs/implementation-artifacts/5-10-clear-all-data.md, docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Defer] A Clear failure alert can be unmounted straight away when broken storage also fails the stats reload `onCleared()` triggers: `<SettingsPage>` swaps the whole card, slot included, for its generic load-error alert [apps/web/components/settings/ClearAllDataRow.tsx:186-190] — deferred, pre-existing (the row's own message lived inside `<DataManagement>` before D2 too)
 
 ## Dev Notes
 
@@ -667,7 +681,18 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
 - 2026-09-28 — Review Findings D1 + D2 applied (Sidiar's rulings, both option (a)): the Clear Data
   row button's `aria-label` is now `"Clear data (all battles and organisms)"` (WCAG 2.5.3), and
   `<DataManagement>` now owns the single "last outcome" message slot every row (Export, Import,
-  Clear All) writes to, replacing each row's own stale-message copy. Status stays at review.
+  Clear All) writes to, replacing each row's own stale-message copy. Status in-progress → review.
+  Deliberate consequence of D2(a), a recorded deviation from AC9's "Unchanged: … the Export and
+  Import rows' behaviour" and the Dev Notes' "Preserve its behaviour and props" for
+  `ImportWorkspaceRow.tsx`: the Export and Import outcome lines now render once at the card's end
+  (below the Clear All row), not under their own rows, and `<ImportWorkspaceRow>` gains the
+  required `onMessage` prop.
+- 2026-09-28 — Second-pass review of the D1+D2 ruling diff: `<DataManagement>` now tracks which
+  row started the most recent flow and drops an outcome from any other row, so the slot is
+  last-to-start wins rather than last-to-settle (and a late outcome can no longer be inserted
+  into the `inert` card under another row's dialog). The D2 regression test's flow-start check
+  queries `{ hidden: true }`; added reverse-order, Export-clears-slot and stale-flow-drop tests.
+  Status → done.
 
 ---
 

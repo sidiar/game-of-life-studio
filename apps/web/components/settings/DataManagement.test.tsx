@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC } from '@gol/domain';
@@ -314,7 +314,9 @@ describe('DataManagement', () => {
     await user.click(
       screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
     );
-    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    // `{ hidden: true }`: MUI `aria-hidden`s the card while the modal is up, so a default role
+    // query would find no status whether or not the slot was actually cleared.
+    await waitFor(() => expect(screen.queryByRole('status', { hidden: true })).toBeNull());
 
     const dialog = await screen.findByRole('dialog', { name: 'Clear All Data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
@@ -324,5 +326,132 @@ describe('DataManagement', () => {
       'All data cleared. Your workspace is back to its default state.',
     );
     expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
+  // The pristine-Import-and-Clear setup the D2 tests below share: a pristine target (Import runs
+  // with no dialog) and a one-battle source envelope to import from.
+  async function pristineSetup() {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC] });
+    const serializer = createWorkspaceSerializer({
+      repos,
+      appVersion: '0.0.0',
+      now: () => new Date('2026-01-05T12:00:00.000Z'),
+    });
+    const sourceSerializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({
+        organisms: createMockOrganisms(),
+        battles: [createMockBattles()[0]],
+      }),
+      appVersion: '0.0.0',
+      now: () => new Date('2026-01-05T12:00:00.000Z'),
+    });
+    const envelope = await sourceSerializer.exportWorkspace();
+    const file = new File([JSON.stringify(envelope)], 'workspace.json', {
+      type: 'application/json',
+    });
+    return { repos, serializer, file };
+  }
+
+  function importInput(): HTMLInputElement {
+    const input = document.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('import file input not found');
+    return input;
+  }
+
+  async function confirmClearAll(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Clear All Data?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
+  }
+
+  it('the reverse order holds too: an Import after a confirmed Clear All replaces its status (Review Finding D2)', async () => {
+    const { repos, serializer, file } = await pristineSetup();
+    render(
+      <DataManagement
+        serializer={serializer}
+        workspace={repos}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        onImported={vi.fn()}
+        onCleared={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await confirmClearAll(user);
+    expect(await screen.findByRole('status')).toHaveTextContent(/all data cleared/i);
+
+    // Clearing left the store pristine, so this Import also runs with no dialog.
+    await user.upload(importInput(), file);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/import complete/i));
+    expect(screen.getAllByRole('status', { hidden: true })).toHaveLength(1);
+  });
+
+  it("an Export click clears another row's outcome from the shared slot (Review Finding D2)", async () => {
+    const { repos, serializer, file } = await pristineSetup();
+    render(
+      <DataManagement
+        serializer={serializer}
+        workspace={repos}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        onImported={vi.fn()}
+        onCleared={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.upload(importInput(), file);
+    expect(await screen.findByRole('status')).toHaveTextContent(/import complete/i);
+
+    await user.click(screen.getByRole('button', { name: /export workspace/i }));
+    await waitFor(() => expect(downloadJsonFile).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('status', { hidden: true })).toBeNull();
+    expect(screen.queryByRole('alert', { hidden: true })).toBeNull();
+  });
+
+  it('an outcome from a flow started BEFORE the newest one is dropped: a late Import never overwrites a later Clear All (Review Finding D2)', async () => {
+    const { repos, serializer, file } = await pristineSetup();
+    let releaseImport: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseImport = resolve;
+    });
+    const importWorkspace = vi.fn(async (text: string) => {
+      await gate;
+      return serializer.importWorkspace(text);
+    });
+    render(
+      <DataManagement
+        serializer={{ exportWorkspace: serializer.exportWorkspace, importWorkspace }}
+        workspace={repos}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        onImported={vi.fn()}
+        onCleared={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+
+    // Pristine: no dialog, so the Import is in flight and nothing is inert.
+    await user.upload(importInput(), file);
+    await waitFor(() => expect(importWorkspace).toHaveBeenCalledTimes(1));
+
+    await confirmClearAll(user);
+    expect(await screen.findByRole('status')).toHaveTextContent(/all data cleared/i);
+
+    // Settle the stale Import, and let its row's continuation (the `onMessage` it would publish)
+    // run before asserting.
+    await act(async () => {
+      releaseImport();
+      await importWorkspace.mock.results[0]?.value;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const statuses = screen.getAllByRole('status', { hidden: true });
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toHaveTextContent(/all data cleared/i);
+    expect(screen.queryByText(/import complete/i)).toBeNull();
   });
 });

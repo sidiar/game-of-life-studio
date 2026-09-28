@@ -80,7 +80,9 @@ export const RowDescription = styled('p')({
  * message slot for the whole card, written to by Export, Import and Clear All alike. A row never
  * renders its own status/alert any more — it reports through an `onMessage` callback shaped by
  * this type, and starting a new flow in any row calls `onMessage(null)` to replace whatever the
- * slot held, from any row. This is what keeps an unscoped `getByRole('status')` unambiguous once
+ * slot held, from any row. That `null` is also how a row CLAIMS the slot: `<DataManagement>` drops
+ * an outcome from any row whose flow is no longer the most recently started, so send it only at a
+ * flow's start, never as a later "clear". This is what keeps an unscoped `getByRole('status')` unambiguous once
  * more than one row can produce an outcome.
  */
 export interface RowOutcome {

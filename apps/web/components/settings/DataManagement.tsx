@@ -51,6 +51,9 @@ export interface DataManagementProps {
  */
 type DataManagementMessage = RowOutcome | null;
 
+/** Which of the card's three flows an outcome belongs to — the slot's owner. */
+type OutcomeSource = 'export' | 'import' | 'clear';
+
 const DATA_MANAGEMENT_HEADING_ID = 'data-management-heading';
 
 // Mockup: .settings-group / .settings-item (settings.html:139-157, 392-403). Export, Import
@@ -144,6 +147,12 @@ export default function DataManagement({
   onCleared,
 }: DataManagementProps) {
   const [message, setMessage] = useState<DataManagementMessage>(null);
+  // The row whose flow started most recently. Rows run concurrently (FD6: no cross-row locking),
+  // so without an owner the slot is last-to-SETTLE wins: a pristine Import still awaiting the
+  // serializer would land "Imported N battles…" over a Clear All the user confirmed after it —
+  // the false line D2 exists to remove — and would do so into the `inert` card while that row's
+  // dialog is open, where a live region inserted is never announced. Only the owner may publish.
+  const ownerRef = useRef<OutcomeSource | null>(null);
   const pendingRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -158,6 +167,18 @@ export default function DataManagement({
     };
   }, []);
 
+  // `null` is only ever sent at the START of a flow (every row's contract), so it both claims the
+  // slot and clears it; an outcome from any row that no longer owns the slot is dropped.
+  function publish(source: OutcomeSource, next: DataManagementMessage) {
+    if (next === null) {
+      ownerRef.current = source;
+      setMessage(null);
+      return;
+    }
+    if (ownerRef.current !== source) return;
+    setMessage(next);
+  }
+
   async function handleExportClick() {
     // A second click while an export is in flight does nothing — no second exportWorkspace()
     // call, and the pending export's own outcome (success or the alert) still lands normally.
@@ -165,14 +186,14 @@ export default function DataManagement({
 
     pendingRef.current = true;
     // Clears whatever any row (Export, Import or Clear All) last left in the shared slot (D2).
-    setMessage(null);
+    publish('export', null);
 
     try {
       await exportWorkspaceToFile(serializer);
     } catch {
       // No `error.message`, no stack trace — plain, non-technical copy only (AC8). Export is
       // read-only, so "nothing was changed" is simply true, not a hedge.
-      if (mountedRef.current) setMessage({ role: 'alert', text: EXPORT_ERROR_MESSAGE });
+      if (mountedRef.current) publish('export', { role: 'alert', text: EXPORT_ERROR_MESSAGE });
     } finally {
       pendingRef.current = false;
     }
@@ -197,13 +218,13 @@ export default function DataManagement({
         battles={battles}
         organisms={organisms}
         onImported={onImported}
-        onMessage={setMessage}
+        onMessage={(next) => publish('import', next)}
       />
       <ClearAllDataRow
         workspace={workspace}
         organisms={organisms}
         onCleared={onCleared}
-        onMessage={setMessage}
+        onMessage={(next) => publish('clear', next)}
       />
       {/* D2: the ONE outcome slot for the whole card, wherever it was last written from. */}
       {message?.role === 'status' && <SuccessText role="status">{message.text}</SuccessText>}

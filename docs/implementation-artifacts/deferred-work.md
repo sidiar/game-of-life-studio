@@ -3842,4 +3842,20 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   `ImportWorkspaceRow.tsx:337-338` shape, and the Export row's `ErrorText` has the same shape. Fix
   it once for all three rows, not only this one: keep an always-mounted, empty `role="status"` /
   `role="alert"` container per row and swap only its text. No test covers real announcement; axe
-  doesn't check it.
+  doesn't check it. **Update (second-pass review, same day):** ruling D2 lifted every row's outcome
+  into `<DataManagement>`'s single slot, so there is now ONE render site to fix, not three —
+  `DataManagement.tsx`'s `{message?.role === 'status' && …}` / `'alert'` pair at the end of the
+  card: keep one always-mounted, empty `role="status"` and one `role="alert"` there and swap only
+  their text.
+
+## Deferred from: second-pass code review of 5-10-clear-all-data (2026-09-28)
+
+- **A Clear All failure alert can vanish at once when the stats reload fails too.**
+  `ClearAllDataRow` publishes `CLEAR_ALL_FAILURE_MESSAGE` and then calls `onCleared()`, which
+  `<SettingsPage>` wires to `statsResource.reload()`. When storage itself is broken, that reload
+  rejects too. Its `status` becomes `'error'`, and `<SettingsPage>` swaps the whole Data Management
+  card, which holds the outcome slot, for its generic "Something went wrong loading your settings"
+  alert. The specific, truthful non-rollback copy is gone before it can be read. This is
+  pre-existing: before D2 the row's own message sat inside `<DataManagement>` as well. It is
+  untested. A fix would keep the failure copy outside the card that unmounts, for example by
+  showing it in the page-level error state.
