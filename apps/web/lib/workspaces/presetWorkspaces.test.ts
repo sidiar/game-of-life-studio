@@ -7,7 +7,8 @@
  * exact gate `importWorkspace` runs (parse → migrate → schema → unsafe-id guard → referential
  * closure), so passing here IS passing the production import, minus only the repository writes.
  */
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -19,6 +20,38 @@ import { PRESET_ID_PATTERN, PRESET_MANIFEST_FILE } from './presetManifest';
 // throw under Vitest's module loader when import.meta.url is not yet a file:// URL.
 const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 const PRESETS_DIR = join(LIB_DIR, '..', '..', 'public', 'workspaces');
+
+/**
+ * Lists the files the lockstep gate checks the manifest against — **git-tracked** entries of
+ * `PRESETS_DIR`, not `readdirSync`'s raw directory listing (owner ruling D1c, story 7.1 review).
+ * `readdirSync` picks up local, untracked junk (`.DS_Store`, editor swap files) that never leaves
+ * a developer's machine but is real content sitting in the folder; that made `ci:dev` fail on a
+ * Mac while the identical CI checkout — which never has that junk — passed. `git ls-files` run
+ * with `cwd: PRESETS_DIR` lists exactly what a checkout of this ref would materialise into that
+ * folder, which is what actually ships, and returns bare filenames (no directory prefix) since the
+ * cwd already is the folder. It also lists staged-but-uncommitted additions (`git ls-files` reads
+ * the index, not just HEAD), so a preset just `git add`ed — not yet committed — still counts as
+ * present; only fully untracked files are excluded. CI checkouts always have `.git`, so this holds
+ * there; if git itself is unavailable (or this ever runs outside a git checkout), fail with a
+ * message that says so rather than silently falling back to `readdirSync`, which would reintroduce
+ * exactly the local-junk problem this exists to avoid.
+ */
+function trackedFolderEntries(): string[] {
+  let output: string;
+  try {
+    output = execFileSync('git', ['ls-files'], { cwd: PRESETS_DIR, encoding: 'utf8' });
+  } catch (cause) {
+    throw new Error(
+      `cannot list git-tracked files under ${PRESETS_DIR} — this test requires a git checkout ` +
+        `(git ls-files); is git installed and is this running inside a git working tree?`,
+      { cause },
+    );
+  }
+  return output
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .filter((name) => name !== PRESET_MANIFEST_FILE);
+}
 
 type ManifestEntry = { id: string; name: string; description: string; file: string };
 
@@ -73,7 +106,7 @@ function duplicates(values: string[]): string[] {
 
 const manifest = readManifest();
 
-const folderEntries = readdirSync(PRESETS_DIR).filter((f) => f !== PRESET_MANIFEST_FILE);
+const folderEntries = trackedFolderEntries();
 
 describe('preset workspace manifest', () => {
   it('has at least one preset, each with a non-empty id, name, description and file', () => {
@@ -108,24 +141,24 @@ describe('preset workspace manifest', () => {
     ).toHaveLength(1);
   });
 
-  it('every file ends in .json, is not index.json, and carries no path segment', () => {
+  it("every entry's file equals `${id}.json` — one name per preset (owner ruling D2a, story 7.1 review)", () => {
+    // `id` already matches PRESET_ID_PATTERN (checked above), which bans "/", "\", ".." and any
+    // character a URL would need to escape. Tying `file` to `id` this way makes `file` URL-safe
+    // for free — no separate character-blocklist check is needed once this holds.
     for (const entry of manifest.workspaces) {
-      const file = entry.file;
-      expect(file, `manifest entry file "${file}" must end in .json`).toMatch(/\.json$/);
-      expect(file, `manifest entry file "${file}" must not be the manifest itself`).not.toBe(
-        PRESET_MANIFEST_FILE,
-      );
+      const expected = `${entry.id}.json`;
       expect(
-        file,
-        `manifest entry file "${file}" must contain no "/", "\\" or ".." — it is concatenated into a fetch URL`,
-      ).not.toMatch(/\/|\\|\.\./);
+        entry.file,
+        `manifest entry "${entry.id}" has file "${entry.file}", expected "${expected}"`,
+      ).toBe(expected);
     }
   });
 
-  it('lists exactly the entries present in the folder — no orphans in either direction', () => {
+  it('lists exactly the git-tracked entries present in the folder — no orphans in either direction', () => {
     const listed = manifest.workspaces.map((w) => w.file).sort();
-    // Every folder entry other than index.json, any extension — a stray notes.txt or a
-    // mis-extensioned preset.JSON must fail here, not ship silently (FD6).
+    // Every git-tracked folder entry other than index.json, any extension — a stray notes.txt or
+    // a mis-extensioned preset.JSON must fail here, not ship silently (FD6). Untracked local junk
+    // (.DS_Store, swap files) is excluded by trackedFolderEntries() itself (owner ruling D1c).
     expect([...folderEntries].sort()).toEqual(listed);
   });
 });

@@ -52,7 +52,8 @@ export const PRESET_MANIFEST_FILE = 'index.json';
  * single hyphens, no leading/trailing/double hyphen. A slug needs no URL-encoding and cannot
  * smuggle a path segment, which matters because Story 7.6 addresses a preset by id inside a URL.
  * Ids are stable forever once shipped — a shared link names them, so renaming one breaks every
- * link already handed out.
+ * link already handed out. Since {@link PresetWorkspaceEntry.file} is required to equal
+ * `${id}.json` (owner ruling D2a), this pattern is also what keeps `file` URL-safe.
  */
 export const PRESET_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -63,7 +64,13 @@ export interface PresetWorkspaceEntry {
   name: string;
   /** One or two sentences for the dropdown / confirmation copy. */
   description: string;
-  /** The envelope's filename inside {@link PRESET_WORKSPACES_PATH}. */
+  /**
+   * The envelope's filename inside {@link PRESET_WORKSPACES_PATH} — always exactly `${id}.json`
+   * (Story 7.1 owner ruling D2a: one file name per preset, not a free-form string). Because `id`
+   * already matches {@link PRESET_ID_PATTERN}, tying `file` to it this way makes `file` URL-safe
+   * for free — no separate character-blocklist check is needed. Enforced by
+   * `presetWorkspaces.test.ts`.
+   */
   file: string;
 }
 

@@ -4,7 +4,7 @@ baseline_commit: 9f3d28794491c7af8874527bc7b671993ec3c0e4
 
 # Story 7.1: Preset Workspace Foundations
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -57,8 +57,8 @@ so that presets can be authored, improved, and consumed over time without ever g
 
 _Code review 2026-09-28 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor): 2 decision-needed, 10 patch, 0 defer, 9 dismissed._
 
-- [ ] [Review][Decision] Lockstep counts OS/editor junk (`.DS_Store`, `*.swp`) — `readdirSync(PRESETS_DIR).filter((f) => f !== 'index.json')` keeps a Finder-written `.DS_Store` (gitignored, so CI stays green), so local `ci:dev` fails on a Mac while CI passes; a local `build:standalone` would also copy it into `out/workspaces/`. FD6 says "everything in `public/workspaces/` except `index.json` must be listed", so exempting anything changes the spec. Options: **(a)** keep strict as FD6 says, and add a comment saying a local `.DS_Store` fails on purpose (delete it); **(b)** exempt dotfiles (`!f.startsWith('.')`), which still catches `notes.txt` / `preset.JSON`; **(c)** compare the manifest against git-tracked files (`git ls-files apps/web/public/workspaces`) instead of `readdirSync`, so it checks what ships from CI, not what is on disk. [apps/web/lib/workspaces/presetWorkspaces.test.ts:39]
-- [ ] [Review][Decision] Manifest `file` isn't constrained to be URL-safe or tied to its `id` — the gate bans only `/`, `\` and `..`, but its own message says the file "is concatenated into a fetch URL"; `a#b.json`, `my preset?.json` and `%2e%2e.json` all pass, and `file` can drift from `id`. That is a contract change beyond Task 4.1's list. Options: **(a)** require `file === \`${id}.json\`` (one name per preset, slug-safe for free); **(b)** require `file` to match the slug pattern plus `.json` on its own, independent of `id`; **(c)** keep as spec'd and leave URL-encoding to the 7.4/7.5 fetch site. [apps/web/lib/workspaces/presetWorkspaces.test.ts:77-84]
+- [x] [Review][Decision] Lockstep counts OS/editor junk (`.DS_Store`, `*.swp`) — `readdirSync(PRESETS_DIR).filter((f) => f !== 'index.json')` keeps a Finder-written `.DS_Store` (gitignored, so CI stays green), so local `ci:dev` fails on a Mac while CI passes; a local `build:standalone` would also copy it into `out/workspaces/`. FD6 says "everything in `public/workspaces/` except `index.json` must be listed", so exempting anything changes the spec. Options: **(a)** keep strict as FD6 says, and add a comment saying a local `.DS_Store` fails on purpose (delete it); **(b)** exempt dotfiles (`!f.startsWith('.')`), which still catches `notes.txt` / `preset.JSON`; **(c)** compare the manifest against git-tracked files (`git ls-files apps/web/public/workspaces`) instead of `readdirSync`, so it checks what ships from CI, not what is on disk. [apps/web/lib/workspaces/presetWorkspaces.test.ts:39] — **Owner ruling (Sidiar, 2026-09-28): (c)** — compare the manifest against git-tracked files, not the folder on disk.
+- [x] [Review][Decision] Manifest `file` isn't constrained to be URL-safe or tied to its `id` — the gate bans only `/`, `\` and `..`, but its own message says the file "is concatenated into a fetch URL"; `a#b.json`, `my preset?.json` and `%2e%2e.json` all pass, and `file` can drift from `id`. That is a contract change beyond Task 4.1's list. Options: **(a)** require `file === \`${id}.json\`` (one name per preset, slug-safe for free); **(b)** require `file` to match the slug pattern plus `.json` on its own, independent of `id`; **(c)** keep as spec'd and leave URL-encoding to the 7.4/7.5 fetch site. [apps/web/lib/workspaces/presetWorkspaces.test.ts:77-84] — **Owner ruling (Sidiar, 2026-09-28): (a)** — require every manifest entry's `file` to equal `<id>.json`.
 - [x] [Review][Patch] Test comment falsely says `lib/themeTokens.test.ts` uses `dirname(fileURLToPath(...))` (it uses `__dirname`; Task 4.3 "keep the comment truthful"), and it argues with the never-merged PoC instead of saying why the idiom was chosen [apps/web/lib/workspaces/presetWorkspaces.test.ts:17-20]
 - [x] [Review][Patch] Duplicate id/file assertion doesn't name the duplicate (Testing standards: messages must name the offending entry) [apps/web/lib/workspaces/presetWorkspaces.test.ts:52-57]
 - [x] [Review][Patch] Structural parse stops at the top level: a `null`/non-object entry throws a `TypeError`, and a non-string field fails `toMatch` with a type error instead of the named-field message (Task 4.2 intent) [apps/web/lib/workspaces/presetWorkspaces.test.ts:24-48]
@@ -163,6 +163,11 @@ claude-sonnet-5
   2. Emptied `index.json`'s `workspaces` array → 3 tests failed: "has at least one preset…" (`expected 0 to be greater than 0`), "defaultPresetId names exactly one listed entry" (`expected [] to have a length of 1 but got +0`), and the lockstep test (`expected [ 'starter-workspace.json' ] to deeply equal []`). Reverted (`index.json` restored to its committed content, re-verified with `npx vitest run lib/workspaces/presetWorkspaces.test.ts` → 7/7 passing).
 - Task 5.1: `npm run build:standalone` → confirmed `apps/web/out/workspaces/index.json` and `apps/web/out/workspaces/starter-workspace.json` both exist (Next copies `public/` verbatim).
 - Task 5.2: `npm run ci:dev` green end-to-end (typecheck → lint [0 errors, 1 pre-existing unrelated warning in `BattleGallery.tsx`] → format:check → spec:check → boundary:check → coverage → build:standalone → bundle:check → bench → bench:check → e2e:chromium). `bundle:check`: all five routes show **negative** growth (-0.1 KB each vs. baseline) — no route grew, confirming FD5 (nothing imports preset JSON into app code). `bench:check`: 7.465 ms vs. 16.667 ms budget (55.2% headroom). `e2e:chromium`: 313 passed, 1 skipped.
+- Owner ruling pass (D1c, D2a) negative proof (manual, reverted, not committed):
+  1. Wrote a junk `public/workspaces/.DS_Store` (untracked) → all 7 tests still passed, confirming `trackedFolderEntries()` (git-tracked-only comparison) ignores untracked local junk. Reverted (`rm .DS_Store`).
+  2. Added `public/workspaces/stray-preset.json` and `git add`ed it (staged, not committed) → the lockstep test failed naming the orphan: `expected [ 'starter-workspace.json', 'stray-preset.json' ] to deeply equal [ 'starter-workspace.json' ]`, proving a tracked-but-unlisted file (via the index) still fails. Reverted with `git reset -- apps/web/public/workspaces/stray-preset.json && rm apps/web/public/workspaces/stray-preset.json`; `git status --porcelain` confirmed no index/working-tree residue.
+  3. Edited `index.json`'s only entry to `"file": "starter.json"` (id left as `starter-workspace`) → the new `every entry's file equals \`${id}.json\`` test failed by itself with `manifest entry "starter-workspace" has file "starter.json", expected "starter-workspace.json"`, naming the entry as required by D2a. Reverted (`mv index.json.bak index.json`); re-verified 7/7 passing.
+- `npm run ci:dev` re-run green after the ruling-pass changes (single browser, `e2e:chromium`).
 
 ### Completion Notes List
 
@@ -175,8 +180,8 @@ claude-sonnet-5
 
 ### File List
 
-- `apps/web/lib/workspaces/presetManifest.ts` (new)
-- `apps/web/lib/workspaces/presetWorkspaces.test.ts` (new)
+- `apps/web/lib/workspaces/presetManifest.ts` (new; modified — owner ruling D2a)
+- `apps/web/lib/workspaces/presetWorkspaces.test.ts` (new; modified — owner rulings D1c, D2a)
 - `apps/web/public/workspaces/index.json` (new)
 - `apps/web/public/workspaces/starter-workspace.json` (new)
 
@@ -192,6 +197,17 @@ claude-sonnet-5
   ownership, 7.4 parse ownership, no-cast note, basePath assumption). Negative-proved the new checks
   (null entry, duplicate id, bad slug + unknown default, formatVersion 99, malformed index.json), all
   reverted. 2 decisions left open under Review Findings. Status → in-progress.
+- 2026-09-28 — Owner rulings applied: D1c — lockstep now compares the manifest against
+  git-tracked files (`git ls-files`, run with `cwd` set to the presets folder) instead of
+  `readdirSync`, so untracked local junk (`.DS_Store`, swap files) no longer fails `ci:dev` on a
+  Mac while a tracked-but-uncommitted (staged) preset still counts and a tracked-but-unlisted file
+  still fails; a missing/unavailable git surfaces a readable error instead of silently falling back
+  to `readdirSync`. D2a — added a lockstep check requiring every manifest entry's `file` to equal
+  `` `${id}.json` ``, with a message naming the offending entry; documented on
+  `PresetWorkspaceEntry.file` and `PRESET_ID_PATTERN` in `presetManifest.ts` that this makes `file`
+  URL-safe for free (no separate character-blocklist check needed). Negative-proved both (untracked
+  junk does not fail; staged-but-uncommitted orphan fails; `file` ≠ `id.json` fails naming the
+  entry), all reverted with no index/working-tree residue. `npm run ci:dev` green. Status → review.
 
 Dev Model: sonnet   # lands an existing PoC (4 files) with every open choice pinned in FD1–FD7 (default designation, id slug, regeneration route, no runtime parser); nothing left to architect
 Proposed lane gate: none
