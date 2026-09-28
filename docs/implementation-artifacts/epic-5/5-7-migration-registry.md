@@ -804,7 +804,7 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 - `docs/planning-artifacts/epics.md` (Story 5.11 AC: the `NewerFormatVersionError` exception)
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/5-7-migration-registry.md`
+- `docs/implementation-artifacts/epic-5/5-7-migration-registry.md`
 
 
 Dev Model: opus   # architecture-shaping: fixes the step contract (FD2), the error type and the at-rest wiring that 5.8's import pipeline and 5.11's corruption handling build on

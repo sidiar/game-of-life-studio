@@ -316,7 +316,7 @@ adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 0 `deci
 - [x] [Review][Patch] Stale citation `deferred-work.md:187` (blank line) — the `aria-busy` trap entry is at `:192` [apps/web/components/settings/SettingsPage.tsx:107]
 - [x] [Review][Patch] Stray `"` after the closing backtick in the new FD6 entry [docs/implementation-artifacts/deferred-work.md:2162]
 - [x] [Review][Patch] `aria-busy` scoping is documented at length and asserted nowhere — pin `true` while loading and `false` once ready in the unit tests [apps/web/components/settings/SettingsPage.tsx:110]
-- [x] [Review][Patch] Dev Agent Record: Task 6's before-measurement was not taken ("no separate before/after build") yet the ≤0.5 KB claim is asserted — the actual evidence is Story 4.14's record (`4-14-*.md:880-883`: 333.8/309.3/309.1/295.6, byte-identical, delta 0.0 KB); also "6 new/edited files" lists five, and the `deferred-work.md:722` `error.tsx` third surface the spec asked to note is not noted [docs/implementation-artifacts/5-1-settings-page-shell.md:530-541]
+- [x] [Review][Patch] Dev Agent Record: Task 6's before-measurement was not taken ("no separate before/after build") yet the ≤0.5 KB claim is asserted — the actual evidence is Story 4.14's record (`4-14-*.md:880-883`: 333.8/309.3/309.1/295.6, byte-identical, delta 0.0 KB); also "6 new/edited files" lists five, and the `deferred-work.md:722` `error.tsx` third surface the spec asked to note is not noted [docs/implementation-artifacts/epic-5/5-1-settings-page-shell.md:530-541]
 - [x] [Review][Defer] Route-set guard does not cover `route.ts` handlers or `page.{js,jsx,mdx}` — Next serves those too and a `route.ts` fails `output: 'export'` only at build [apps/web/app/routes.test.ts:24-46] — deferred, pre-existing gap shape (the guard is new but the repo is TS-only; widen when a second route-defining basename ever appears)
 - [x] [Review][Defer] One alert string for three failure sources — a corrupt `gol:settings`, a rejecting `list()`, and a failed seed WRITE all read "Something went wrong loading your settings." [apps/web/components/settings/SettingsPage.tsx:113] — deferred, pre-existing (FD3 assigns copy and the reset offer to Story 5.11; carry the three-source distinction there)
 - [x] [Review][Defer] "Seeds gol:organisms exactly once" is proven by the final key set, which a double write of the same key also satisfies — a `setItem` spy count would prove it [apps/web/app/(gallery)/settings/page.test.tsx:88-104] — deferred, pre-existing (identical shape in `app/(gallery)/page.test.tsx` and `organisms/page.test.tsx`; strengthen all three together)
@@ -658,7 +658,7 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `scripts/check-bundle-size.mjs`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml` (status transitions)
-- `docs/implementation-artifacts/5-1-settings-page-shell.md` (this file — tasks checked, status,
+- `docs/implementation-artifacts/epic-5/5-1-settings-page-shell.md` (this file — tasks checked, status,
   Dev Agent Record)
 
 ### Change Log
