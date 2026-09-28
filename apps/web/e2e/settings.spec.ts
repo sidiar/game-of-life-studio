@@ -469,7 +469,7 @@ test.describe('clear all data (Story 5.10)', () => {
     await page.goto('/settings');
     await expect(statValue(page, 'Saved Battles')).toHaveText('2');
 
-    await page.getByRole('button', { name: 'Clear all data' }).click();
+    await page.getByRole('button', { name: 'Clear data (all battles and organisms)' }).click();
     const dialog = page.getByRole('dialog', { name: 'Clear All Data?' });
     await expect(dialog).toBeVisible();
     await expect(
@@ -506,7 +506,7 @@ test.describe('clear all data (Story 5.10)', () => {
       STORAGE_KEYS,
     );
 
-    await page.getByRole('button', { name: 'Clear all data' }).click();
+    await page.getByRole('button', { name: 'Clear data (all battles and organisms)' }).click();
     const dialog = page.getByRole('dialog', { name: 'Clear All Data?' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -529,7 +529,7 @@ test.describe('clear all data (Story 5.10)', () => {
     await page.goto('/settings');
     await expect(statValue(page, 'Saved Battles')).toHaveText('2');
 
-    await page.getByRole('button', { name: 'Clear all data' }).click();
+    await page.getByRole('button', { name: 'Clear data (all battles and organisms)' }).click();
     // Three waits, not one — the `deleteBattle.spec.ts` "has no axe accessibility violations with
     // the delete dialog open" precedent: `toBeVisible()` alone races the Dialog's Fade transition,
     // and even the Fade settling is not enough on its own — `Button`'s OWN root

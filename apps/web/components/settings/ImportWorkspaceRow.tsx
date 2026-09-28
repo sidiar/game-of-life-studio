@@ -15,7 +15,7 @@ import { importFailureMessage } from '@/lib/import/importFailureMessage';
 import { FILE_READ_FAILURE_MESSAGE, importSuccessMessage } from '@/lib/import/importMessages';
 import { exportWorkspaceToFile } from '@/lib/export/exportWorkspaceToFile';
 import { useInertBackground } from '@/lib/useInertBackground';
-import { Row, RowDescription, RowInfo, RowLabel } from './SettingsCard';
+import { Row, RowDescription, RowInfo, RowLabel, type RowOutcome } from './SettingsCard';
 
 // Task 3.4 / AR-35: `/settings` carries no MUI `Dialog` in its first load today (Story 5.5/5.6's
 // precedent — `<BattlePage>`'s `<ExportBattleDialog>`), and this dialog is rarely shown. The chunk
@@ -30,6 +30,11 @@ export interface ImportWorkspaceRowProps {
   organisms: Pick<OrganismRepository, 'list'>;
   /** AC6: `<SettingsPage>` wires this to `statsResource.reload()`. Called on success only. */
   onImported(): void;
+  /** Review Finding D2 (owner ruling a): reports this row's outcome to `<DataManagement>`'s single
+   * shared message slot, rather than rendering a status/alert of its own. Called with `null` at
+   * the start of a flow (clearing whatever ANY row last left in the slot) and with the outcome
+   * once the import settles. */
+  onMessage(message: RowOutcome | null): void;
 }
 
 // Mockup: `.btn-secondary` (`settings.html:200-210`), `--gol-*` tokens only (AR-46). Copies
@@ -64,23 +69,6 @@ const ImportButton = styled('button')({
   },
 });
 
-// Same gated pair `<DataManagement>`'s `ErrorText` uses (`--gol-danger` on this card's
-// `--gol-bg-secondary`, >=4.5:1, `themeTokens.test.ts`).
-const FailureText = styled('p')({
-  margin: '15px 0 0',
-  fontSize: '13px',
-  lineHeight: 1.5,
-  color: 'var(--gol-danger)',
-});
-
-// `--gol-text-secondary` — an existing gated pair (task 4.6), never a new, ungated one.
-const SuccessText = styled('p')({
-  margin: '15px 0 0',
-  fontSize: '13px',
-  lineHeight: 1.5,
-  color: 'var(--gol-text-secondary)',
-});
-
 /**
  * FD8's DOM-lookup restore, mirroring `<BattlePage>`'s `focusExportButtonIfLoose` for the
  * identical reason: `disableRestoreFocus` on `<ImportWarningDialog>` turns off MUI's own restore
@@ -113,12 +101,12 @@ export default function ImportWorkspaceRow({
   battles,
   organisms,
   onImported,
+  onMessage,
 }: ImportWorkspaceRowProps) {
   const [dialogMounted, setDialogMounted] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogKind, setDialogKind] = useState<ExportKind>('workspace');
   const [exportState, setExportState] = useState<'idle' | 'exported' | 'failed'>('idle');
-  const [message, setMessage] = useState<{ role: 'status' | 'alert'; text: string } | null>(null);
   // Bumped whenever a post-exit focus restore is owed, so the effect below re-fires even though
   // `dialogMounted` itself did not change again (mirrors `<BattlePage>`'s `exportFocusTick`).
   const [focusTick, setFocusTick] = useState(0);
@@ -160,12 +148,12 @@ export default function ImportWorkspaceRow({
     try {
       const summary: ImportSummary = await serializer.importWorkspace(text);
       if (mountedRef.current) {
-        setMessage({ role: 'status', text: importSuccessMessage(summary) });
+        onMessage({ role: 'status', text: importSuccessMessage(summary) });
         onImported();
       }
     } catch (error) {
       if (mountedRef.current) {
-        setMessage({ role: 'alert', text: importFailureMessage(error) });
+        onMessage({ role: 'alert', text: importFailureMessage(error) });
       }
     }
   }
@@ -185,7 +173,7 @@ export default function ImportWorkspaceRow({
       return;
     }
     pendingRef.current = true;
-    setMessage(null); // a new pick clears any previous outcome message (Task 4.4)
+    onMessage(null); // a new pick clears whatever any row last left in the shared slot (D2)
 
     let text: string;
     try {
@@ -193,7 +181,7 @@ export default function ImportWorkspaceRow({
     } catch {
       input.value = '';
       pendingRef.current = false;
-      if (mountedRef.current) setMessage({ role: 'alert', text: FILE_READ_FAILURE_MESSAGE });
+      if (mountedRef.current) onMessage({ role: 'alert', text: FILE_READ_FAILURE_MESSAGE });
       return;
     }
     input.value = ''; // reset AFTER the read, so picking the same file again fires again (AC1)
@@ -203,7 +191,7 @@ export default function ImportWorkspaceRow({
       envelopeKind = validateImportFile(text).kind;
     } catch (error) {
       pendingRef.current = false;
-      if (mountedRef.current) setMessage({ role: 'alert', text: importFailureMessage(error) });
+      if (mountedRef.current) onMessage({ role: 'alert', text: importFailureMessage(error) });
       return;
     }
 
@@ -334,8 +322,6 @@ export default function ImportWorkspaceRow({
           }}
         />
       </Row>
-      {message?.role === 'status' && <SuccessText role="status">{message.text}</SuccessText>}
-      {message?.role === 'alert' && <FailureText role="alert">{message.text}</FailureText>}
       {dialogMounted && (
         <ImportWarningDialog
           open={dialogOpen}

@@ -4,7 +4,7 @@ baseline_commit: ef01179a56fe0f51b9064349b67021cd5f054094
 
 # Story 5.10: Clear All Data
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -268,8 +268,33 @@ The epic's four ACs are split here so a reviewer can check each one on its own.
 Code review 2026-09-28 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `ef01179..33daf28`).
 2 decision-needed, 7 patch (all applied), 1 defer, 9 dismissed.
 
-- [ ] [Review][Decision] The Clear Data button's accessible name does not contain its visible label (WCAG 2.5.3 Label in Name) — The visible text is "Clear Data" but Task 3.1 prescribes `aria-label="Clear all data"`, and "Clear Data" is not a contiguous substring of that. A voice-control user saying "click Clear Data" may not hit the button. The Export ("Export" / "Export workspace") and Import rows keep the visible text inside the name; this row breaks that pattern. axe does not catch it (`label-content-name-mismatch` is experimental). The dev followed the spec, so this is a spec-versus-a11y conflict. Options: (a) aria-label "Clear data (all battles and organisms)": the visible label becomes the name's prefix, the mockup's "Clear Data" text stays, and the name stays distinct from the dialog's "Clear All Data" confirm; (b) change the visible text to "Clear All Data" and keep the aria-label (departs from the mockup's `settings.html:432-442` button text, and the name then equals the dialog's confirm button, so tests must scope by dialog); (c) drop the aria-label so the name is "Clear Data" (loses the "all"); (d) accept as is. Every option except (d) changes the RTL/e2e `name: /clear all data/i` locators. [apps/web/components/settings/ClearAllDataRow.tsx:212-218]
-- [ ] [Review][Decision] Outcome messages from sibling rows go stale and contradict each other — Each row clears only its own `message` on a new flow (`ClearAllDataRow.tsx:144`, `ImportWorkspaceRow.tsx:188`). A successful Import ("Imported N battles…") followed by a confirmed Clear All shows both `role="status"` lines at once, and the Import line is now false for the current store. The reverse order does the same. It also makes any unscoped `getByRole('status')` ambiguous, so a Playwright flow that chained Import then Clear would hit a strict-mode violation. FD6 rules out cross-row locking but says nothing about cross-row messages, so the fix needs the owner's intent. Options: (a) `<DataManagement>` owns a single "last outcome" slot that every row writes to, and a new flow in any row replaces it; (b) `<DataManagement>` passes each row an `onFlowStart` that clears the other rows' messages, so each row keeps its own slot; (c) only a *successful Clear All* clears the siblings' messages, because it is the one outcome that falsifies them; (d) accept it and record it in `deferred-work.md` beside FD6. [apps/web/components/settings/ClearAllDataRow.tsx:144,221-222]
+- [x] [Review][Decision] The Clear Data button's accessible name does not contain its visible label (WCAG 2.5.3 Label in Name) — The visible text is "Clear Data" but Task 3.1 prescribes `aria-label="Clear all data"`, and "Clear Data" is not a contiguous substring of that. A voice-control user saying "click Clear Data" may not hit the button. The Export ("Export" / "Export workspace") and Import rows keep the visible text inside the name; this row breaks that pattern. axe does not catch it (`label-content-name-mismatch` is experimental). The dev followed the spec, so this is a spec-versus-a11y conflict. Options: (a) aria-label "Clear data (all battles and organisms)": the visible label becomes the name's prefix, the mockup's "Clear Data" text stays, and the name stays distinct from the dialog's "Clear All Data" confirm; (b) change the visible text to "Clear All Data" and keep the aria-label (departs from the mockup's `settings.html:432-442` button text, and the name then equals the dialog's confirm button, so tests must scope by dialog); (c) drop the aria-label so the name is "Clear Data" (loses the "all"); (d) accept as is. Every option except (d) changes the RTL/e2e `name: /clear all data/i` locators. [apps/web/components/settings/ClearAllDataRow.tsx:212-218] **Sidiar ruled (a), 2026-09-28:** aria-label becomes "Clear data (all battles and organisms)" — visible label is the name's prefix, mockup text stays, name stays distinct from the dialog's confirm.
+  - Applied: `aria-label` on `ClearButton` changed to `"Clear data (all battles and organisms)"`
+    [apps/web/components/settings/ClearAllDataRow.tsx]. Every ROW-button locator that matched
+    `name: /clear all data/i` updated to `name: /clear data \(all battles and organisms\)/i` (RTL)
+    or the exact string `'Clear data (all battles and organisms)'` (e2e); every dialog-confirm
+    locator (`within(dialog).getByRole('button', { name: 'Clear All Data' })`,
+    `page.getByRole('dialog', ...)`) left untouched, since the ruling keeps that name distinct
+    [apps/web/components/settings/ClearAllDataRow.test.tsx,
+    apps/web/components/settings/DataManagement.test.tsx,
+    apps/web/components/settings/SettingsPage.test.tsx, apps/web/e2e/settings.spec.ts].
+- [x] [Review][Decision] Outcome messages from sibling rows go stale and contradict each other — Each row clears only its own `message` on a new flow (`ClearAllDataRow.tsx:144`, `ImportWorkspaceRow.tsx:188`). A successful Import ("Imported N battles…") followed by a confirmed Clear All shows both `role="status"` lines at once, and the Import line is now false for the current store. The reverse order does the same. It also makes any unscoped `getByRole('status')` ambiguous, so a Playwright flow that chained Import then Clear would hit a strict-mode violation. FD6 rules out cross-row locking but says nothing about cross-row messages, so the fix needs the owner's intent. Options: (a) `<DataManagement>` owns a single "last outcome" slot that every row writes to, and a new flow in any row replaces it; (b) `<DataManagement>` passes each row an `onFlowStart` that clears the other rows' messages, so each row keeps its own slot; (c) only a *successful Clear All* clears the siblings' messages, because it is the one outcome that falsifies them; (d) accept it and record it in `deferred-work.md` beside FD6. [apps/web/components/settings/ClearAllDataRow.tsx:144,221-222] **Sidiar ruled (a), 2026-09-28:** `<DataManagement>` owns a single "last outcome" slot that every row writes to; a new flow in any row replaces it.
+  - Applied: added `RowOutcome` (`{ role: 'status' | 'alert'; text: string }`) to `SettingsCard.tsx`.
+    `<DataManagement>` now owns the ONE `message` slot (`useState<RowOutcome | null>`), rendered
+    once at the end of the card. Its own Export handler writes to it directly; `ImportWorkspaceRow`
+    and `ClearAllDataRow` no longer hold local message state or render their own status/alert —
+    they report through a new required `onMessage(message: RowOutcome | null): void` prop, calling
+    it with `null` at the start of their own flow (clearing whatever ANY row last left in the
+    slot) and with the outcome once their flow settles
+    [apps/web/components/settings/SettingsCard.tsx, DataManagement.tsx, ImportWorkspaceRow.tsx,
+    ClearAllDataRow.tsx]. `ImportWorkspaceRow.test.tsx` and `ClearAllDataRow.test.tsx` (unit tests
+    that render each row standalone) gained a small `MessageOutlet`/`Harness` wrapper standing in
+    for `<DataManagement>`'s slot, so every existing status/alert assertion keeps working unchanged.
+    Added a regression test, `DataManagement.test.tsx`'s "a confirmed Clear All replaces a prior
+    Import status — one outcome line, not two (Review Finding D2)": a successful pristine Import
+    followed by a confirmed Clear All shows exactly one `status` line at any time — the Import
+    line disappears the moment Clear All's OWN flow starts (before the dialog even confirms), and
+    `getAllByRole('status')` never returns more than one element.
 - [x] [Review][Patch] Focus return after a confirmed Clear All was untested (AC6): added `toHaveFocus` assertions on the success and `clearAll`-failure confirm paths [apps/web/components/settings/ClearAllDataRow.test.tsx]
 - [x] [Review][Patch] The RTL settings-preservation check never seeded a non-default record (Task 5.1 / AC4): now saves a non-default `Settings` and deep-compares `settings.load()` before and after [apps/web/components/settings/ClearAllDataRow.test.tsx]
 - [x] [Review][Patch] The backdrop-click test never checked the store (Task 5.1): added before/after snapshots of battles and organisms [apps/web/components/settings/ClearAllDataRow.test.tsx]
@@ -503,6 +528,18 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
   project-context). First run failed `format:check` on three files (unformatted new/edited
   TypeScript); fixed with `npx prettier --write` on the affected files and re-run clean. Result and
   the deviation caught along the way are recorded in Completion Notes below.
+- Review Findings D1+D2 patch (2026-09-28): `npm run ci:dev` — redirected to `<scratchpad>/ci2.log`,
+  `echo $?` captured. Failed `web#test:coverage` with 9 timeouts across 5 unrelated test files
+  (`BattlePage.editOrganism.test.tsx`, `BattlePage.export.test.tsx`, `BattlePage.test.tsx`,
+  `OrganismLibrary.test.tsx`, `OrganismEditorModal.test.tsx` — none touch Settings/Data
+  Management). This is the exact coverage-run CPU-contention flake this story's own Dev Notes
+  already named ("Previous story intelligence", Story 5.9) — re-ran the five files in isolation
+  (`npx vitest run <files>`) and all 383 tests passed. Re-ran the full `npm run ci:dev` end to end
+  (`<scratchpad>/ci3.log`) and it was clean: typecheck, lint (the same 1 pre-existing
+  `BattleGallery.tsx` warning), format:check, spec:check, boundary:check, `test:coverage` (2550/2550
+  across all four packages, 0 failures), `build:standalone`, `bundle:check`, `bench`/`bench:check`,
+  and `e2e:chromium` (307 passed / 1 skipped, including every renamed `settings.spec.ts` locator
+  and the "clear all data" describe block). `EXIT:0`.
 
 ### Completion Notes List
 
@@ -613,6 +650,12 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
 - `apps/web/e2e/settings.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
+- `apps/web/components/settings/SettingsCard.tsx` (Review Findings D1/D2 patch: added the
+  `RowOutcome` type)
+- `apps/web/components/settings/ImportWorkspaceRow.tsx` (D2: dropped local message state/render,
+  added the `onMessage` prop)
+- `apps/web/components/settings/ImportWorkspaceRow.test.tsx` (D2: `renderRow` wraps a
+  `MessageOutlet` harness standing in for `<DataManagement>`'s slot)
 
 ### Change Log
 
@@ -621,6 +664,10 @@ Sonnet (claude-sonnet-5), running as the Implement phase of `implement-next-stor
   `@gol/persistence` (`clearAll()` then `ensureDefaultOrganism()`), truthful non-rollback failure
   copy with idempotent retry (FD3), and the full act-on-exit/focus-restore/re-entrancy shape
   mirroring Story 5.9's Import row. Status → review.
+- 2026-09-28 — Review Findings D1 + D2 applied (Sidiar's rulings, both option (a)): the Clear Data
+  row button's `aria-label` is now `"Clear data (all battles and organisms)"` (WCAG 2.5.3), and
+  `<DataManagement>` now owns the single "last outcome" message slot every row (Export, Import,
+  Clear All) writes to, replacing each row's own stale-message copy. Status stays at review.
 
 ---
 

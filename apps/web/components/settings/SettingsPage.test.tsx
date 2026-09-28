@@ -478,7 +478,9 @@ describe('SettingsPage', () => {
     expect(readStats()['Saved Battles']).toBe(String(mockWorkspace.battles.length));
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     const dialog = await screen.findByRole('dialog', { name: 'Clear All Data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
 

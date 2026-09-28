@@ -1,8 +1,11 @@
 import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
+import { CONWAYS_CLASSIC } from '@gol/domain';
+import { createWorkspaceSerializer } from '@gol/persistence';
+import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
 import { downloadJsonFile } from '@/lib/export/downloadJsonFile';
 import { workspaceExportFilename } from '@/lib/export/workspaceExportFilename';
 import DataManagement from './DataManagement';
@@ -91,7 +94,9 @@ describe('DataManagement', () => {
     render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     expect(screen.getByRole('heading', { level: 3, name: 'Clear All Data' })).toBeInTheDocument();
-    const clearButton = screen.getByRole('button', { name: /clear all data/i });
+    const clearButton = screen.getByRole('button', {
+      name: /clear data \(all battles and organisms\)/i,
+    });
     expect(clearButton).toBeInTheDocument();
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(headings).toEqual(['Export Workspace', 'Import', 'Clear All Data']);
@@ -258,5 +263,66 @@ describe('DataManagement', () => {
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
+  });
+
+  // Review Finding D2 (owner ruling a): before this fix, Import and Clear All each kept their OWN
+  // outcome message, so a successful Import's status line stayed on screen — stale and now false
+  // — after a later confirmed Clear All. `<DataManagement>` owning a single slot fixes both the
+  // false claim and the `getByRole('status')` ambiguity a chained Import-then-Clear flow hit.
+  it('a confirmed Clear All replaces a prior Import status — one outcome line, not two (Review Finding D2)', async () => {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC] }); // pristine: Import runs with no dialog
+    const serializer = createWorkspaceSerializer({
+      repos,
+      appVersion: '0.0.0',
+      now: () => new Date('2026-01-05T12:00:00.000Z'),
+    });
+    const sourceRepos = createFakeRepositories({
+      organisms: createMockOrganisms(),
+      battles: [createMockBattles()[0]],
+    });
+    const sourceSerializer = createWorkspaceSerializer({
+      repos: sourceRepos,
+      appVersion: '0.0.0',
+      now: () => new Date('2026-01-05T12:00:00.000Z'),
+    });
+    const envelope = await sourceSerializer.exportWorkspace();
+    const file = new File([JSON.stringify(envelope)], 'workspace.json', {
+      type: 'application/json',
+    });
+
+    render(
+      <DataManagement
+        serializer={serializer}
+        workspace={repos}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        onImported={vi.fn()}
+        onCleared={vi.fn()}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const input = document.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error('import file input not found');
+    await user.upload(input, file);
+
+    const importStatus = await screen.findByRole('status');
+    expect(importStatus).toHaveTextContent(/import complete/i);
+
+    // Starting Clear All's flow (the click that opens its dialog) already clears the slot, from
+    // a DIFFERENT row than the one that wrote it — the exact cross-row replace the ruling asks for.
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+
+    const dialog = await screen.findByRole('dialog', { name: 'Clear All Data?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent(
+      'All data cleared. Your workspace is back to its default state.',
+    );
+    expect(screen.getAllByRole('status')).toHaveLength(1);
   });
 });

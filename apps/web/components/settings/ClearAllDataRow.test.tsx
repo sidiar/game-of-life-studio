@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -6,20 +6,41 @@ import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC, DEFAULT_SETTINGS } from '@gol/domain';
 import type { AppRepositories, OrganismRepository } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace } from '@gol/test-utils';
+import type { RowOutcome } from './SettingsCard';
 import ClearAllDataRow from './ClearAllDataRow';
+
+/**
+ * Review Finding D2 (owner ruling a): `<ClearAllDataRow>` no longer renders its own status/alert
+ * — it reports through `onMessage`, and `<DataManagement>` owns the single shared slot in
+ * production. This stands in for that slot so the row's own tests can still assert on the
+ * outcome it reports.
+ */
+function MessageOutlet({ message }: { message: RowOutcome | null }) {
+  if (message?.role === 'status') return <p role="status">{message.text}</p>;
+  if (message?.role === 'alert') return <p role="alert">{message.text}</p>;
+  return null;
+}
 
 function renderRow(props: {
   workspace: Pick<AppRepositories, 'clearAll'>;
   organisms: Pick<OrganismRepository, 'exists' | 'save'>;
 }) {
   const onCleared = vi.fn();
-  const result = render(
-    <ClearAllDataRow
-      workspace={props.workspace}
-      organisms={props.organisms}
-      onCleared={onCleared}
-    />,
-  );
+  function Harness() {
+    const [message, setMessage] = useState<RowOutcome | null>(null);
+    return (
+      <>
+        <ClearAllDataRow
+          workspace={props.workspace}
+          organisms={props.organisms}
+          onCleared={onCleared}
+          onMessage={setMessage}
+        />
+        <MessageOutlet message={message} />
+      </>
+    );
+  }
+  const result = render(<Harness />);
   return { ...result, onCleared };
 }
 
@@ -32,7 +53,9 @@ describe('ClearAllDataRow', () => {
     expect(
       screen.getByText('Delete all battles and organisms from local storage (cannot be undone)'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /clear all data/i })).toHaveTextContent('Clear Data');
+    expect(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    ).toHaveTextContent('Clear Data');
   });
 
   it("clicking Clear Data opens the dialog with FR-8.5's sentence and writes nothing (AC2)", async () => {
@@ -44,7 +67,9 @@ describe('ClearAllDataRow', () => {
     renderRow({ workspace: repos, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
 
     const dialog = await screen.findByRole('dialog', { name: 'Clear All Data?' });
     expect(
@@ -66,7 +91,9 @@ describe('ClearAllDataRow', () => {
     renderRow({ workspace: repos, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
 
     expect(await screen.findByRole('dialog', { name: 'Clear All Data?' })).toBeInTheDocument();
   });
@@ -80,7 +107,9 @@ describe('ClearAllDataRow', () => {
     renderRow({ workspace: repos, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
@@ -88,7 +117,9 @@ describe('ClearAllDataRow', () => {
     expect(await repos.battles.list()).toEqual(before.battles);
     expect(await repos.organisms.list()).toEqual(before.organisms);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /clear all data/i })).toHaveFocus(),
+      expect(
+        screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+      ).toHaveFocus(),
     );
   });
 
@@ -101,7 +132,9 @@ describe('ClearAllDataRow', () => {
     renderRow({ workspace: repos, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     await screen.findByRole('dialog');
     await user.keyboard('{Escape}');
 
@@ -109,7 +142,9 @@ describe('ClearAllDataRow', () => {
     expect(await repos.battles.list()).toEqual(before.battles);
     expect(await repos.organisms.list()).toEqual(before.organisms);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /clear all data/i })).toHaveFocus(),
+      expect(
+        screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+      ).toHaveFocus(),
     );
   });
 
@@ -122,7 +157,9 @@ describe('ClearAllDataRow', () => {
     renderRow({ workspace: repos, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     await screen.findByRole('dialog');
 
     const container = document.querySelector('.MuiDialog-container');
@@ -133,7 +170,9 @@ describe('ClearAllDataRow', () => {
     expect(await repos.battles.list()).toEqual(before.battles);
     expect(await repos.organisms.list()).toEqual(before.organisms);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /clear all data/i })).toHaveFocus(),
+      expect(
+        screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+      ).toHaveFocus(),
     );
   });
 
@@ -152,7 +191,9 @@ describe('ClearAllDataRow', () => {
     const { onCleared } = renderRow({ workspace: repos, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
 
@@ -168,7 +209,9 @@ describe('ClearAllDataRow', () => {
     // AC6: focus returns to Clear Data once the outcome is published (the `pendingRef` hold +
     // `focusTick` bump path, distinct from the Cancel/Escape/backdrop restore).
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /clear all data/i })).toHaveFocus(),
+      expect(
+        screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+      ).toHaveFocus(),
     );
   });
 
@@ -178,7 +221,9 @@ describe('ClearAllDataRow', () => {
     renderRow({ workspace, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
     // The confirm only records the choice: the reset has not started while the dialog exits.
@@ -199,7 +244,9 @@ describe('ClearAllDataRow', () => {
     const { onCleared } = renderRow({ workspace, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
 
@@ -208,7 +255,9 @@ describe('ClearAllDataRow', () => {
     expect(alert.textContent).not.toMatch(/not changed/i);
     expect(onCleared).toHaveBeenCalledTimes(1);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /clear all data/i })).toHaveFocus(),
+      expect(
+        screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+      ).toHaveFocus(),
     );
   });
 
@@ -225,13 +274,17 @@ describe('ClearAllDataRow', () => {
     renderRow({ workspace: repos, organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     let dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
     await screen.findByRole('alert');
 
     shouldFail = false;
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
 
@@ -248,7 +301,9 @@ describe('ClearAllDataRow', () => {
     renderRow({ workspace, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    const button = screen.getByRole('button', { name: /clear all data/i });
+    const button = screen.getByRole('button', {
+      name: /clear data \(all battles and organisms\)/i,
+    });
     await user.click(button);
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
@@ -269,7 +324,9 @@ describe('ClearAllDataRow', () => {
 
     const user = userEvent.setup();
     await user.tab();
-    const button = screen.getByRole('button', { name: /clear all data/i });
+    const button = screen.getByRole('button', {
+      name: /clear data \(all battles and organisms\)/i,
+    });
     expect(button).toHaveFocus();
 
     await user.keyboard('{Enter}');
@@ -292,14 +349,30 @@ describe('ClearAllDataRow', () => {
 
   it('under StrictMode, a confirmed reset still publishes its status (the mounted-ref re-arm)', async () => {
     const repos = createFakeRepositories(createMockWorkspace());
+    function Harness() {
+      const [message, setMessage] = useState<RowOutcome | null>(null);
+      return (
+        <>
+          <ClearAllDataRow
+            workspace={repos}
+            organisms={repos.organisms}
+            onCleared={vi.fn()}
+            onMessage={setMessage}
+          />
+          <MessageOutlet message={message} />
+        </>
+      );
+    }
     render(
       <StrictMode>
-        <ClearAllDataRow workspace={repos} organisms={repos.organisms} onCleared={vi.fn()} />
+        <Harness />
       </StrictMode>,
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
 
@@ -312,7 +385,9 @@ describe('ClearAllDataRow', () => {
     expect((await axe(container)).violations).toEqual([]);
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     const dialog = await screen.findByRole('dialog');
     expect((await axe(document.body)).violations).toEqual([]);
 
@@ -327,7 +402,9 @@ describe('ClearAllDataRow', () => {
     const { container } = renderRow({ workspace, organisms: repos.organisms });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /clear all data/i }));
+    await user.click(
+      screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),
+    );
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
     await screen.findByRole('alert');

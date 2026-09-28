@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,6 +13,7 @@ import {
 } from '@gol/persistence';
 import { createFakeRepositories, createMockBattles, createMockOrganisms } from '@gol/test-utils';
 import { downloadJsonFile } from '@/lib/export/downloadJsonFile';
+import type { RowOutcome } from './SettingsCard';
 import ImportWorkspaceRow from './ImportWorkspaceRow';
 
 // Same seam DataManagement.test.tsx mocks, for the same reason: Export First's own DOM mechanism
@@ -42,19 +44,39 @@ function buildSerializer(repos: AppRepositories): WorkspaceSerializer {
   });
 }
 
+/**
+ * Review Finding D2 (owner ruling a): `<ImportWorkspaceRow>` no longer renders its own
+ * status/alert — it reports through `onMessage`, and `<DataManagement>` owns the single shared
+ * slot in production. This stands in for that slot so the row's own tests can still assert on
+ * the outcome it reports.
+ */
+function MessageOutlet({ message }: { message: RowOutcome | null }) {
+  if (message?.role === 'status') return <p role="status">{message.text}</p>;
+  if (message?.role === 'alert') return <p role="alert">{message.text}</p>;
+  return null;
+}
+
 function renderRow(props: {
   repos: Pick<AppRepositories, 'battles' | 'organisms'>;
   serializer: Pick<WorkspaceSerializer, 'exportWorkspace' | 'importWorkspace'>;
 }) {
   const onImported = vi.fn();
-  const result = render(
-    <ImportWorkspaceRow
-      serializer={props.serializer}
-      battles={props.repos.battles}
-      organisms={props.repos.organisms}
-      onImported={onImported}
-    />,
-  );
+  function Harness() {
+    const [message, setMessage] = useState<RowOutcome | null>(null);
+    return (
+      <>
+        <ImportWorkspaceRow
+          serializer={props.serializer}
+          battles={props.repos.battles}
+          organisms={props.repos.organisms}
+          onImported={onImported}
+          onMessage={setMessage}
+        />
+        <MessageOutlet message={message} />
+      </>
+    );
+  }
+  const result = render(<Harness />);
   return { ...result, onImported };
 }
 
@@ -444,6 +466,7 @@ describe('ImportWorkspaceRow', () => {
         battles={{ list: vi.fn().mockRejectedValue(new Error('read boom')) }}
         organisms={repos.organisms}
         onImported={vi.fn()}
+        onMessage={vi.fn()}
       />,
     );
 

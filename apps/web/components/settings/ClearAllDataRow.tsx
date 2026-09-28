@@ -9,7 +9,7 @@ import {
   CLEAR_ALL_SUCCESS_MESSAGE,
 } from '@/lib/clearAll/clearAllMessages';
 import { useInertBackground } from '@/lib/useInertBackground';
-import { Row, RowDescription, RowInfo, RowLabel } from './SettingsCard';
+import { Row, RowDescription, RowInfo, RowLabel, type RowOutcome } from './SettingsCard';
 
 // AR-35: rarely shown, so its chunk is requested only on the first Clear Data click — the
 // `<ImportWorkspaceRow>` / `<ImportWarningDialog>` precedent (Task 3.4's other lazy dialog).
@@ -24,6 +24,11 @@ export interface ClearAllDataRowProps {
   /** AC5: `<SettingsPage>` wires this to `statsResource.reload()`. Runs after success AND failure
    * (FD3) — a failed reset can still have changed the store, and the counts must show the truth. */
   onCleared(): void;
+  /** Review Finding D2 (owner ruling a): reports this row's outcome to `<DataManagement>`'s single
+   * shared message slot, rather than rendering a status/alert of its own. Called with `null` at
+   * the start of a flow (clearing whatever ANY row last left in the slot) and with the outcome
+   * once the reset settles. */
+  onMessage(message: RowOutcome | null): void;
 }
 
 // Mockup: `.btn` + `.btn-warning` (`settings.html:181-198,212-219`), tokens only (AR-46).
@@ -55,22 +60,6 @@ const ClearButton = styled('button')({
   },
 });
 
-// Same gated pair `<DataManagement>`'s `ErrorText` / `<ImportWorkspaceRow>`'s `FailureText` use.
-const FailureText = styled('p')({
-  margin: '15px 0 0',
-  fontSize: '13px',
-  lineHeight: 1.5,
-  color: 'var(--gol-danger)',
-});
-
-// `--gol-text-secondary` — an existing gated pair, never a new, ungated one.
-const SuccessText = styled('p')({
-  margin: '15px 0 0',
-  fontSize: '13px',
-  lineHeight: 1.5,
-  color: 'var(--gol-text-secondary)',
-});
-
 /**
  * FD8-style DOM-lookup restore, mirroring `<ImportWorkspaceRow>`'s `focusImportButtonIfLoose` for
  * the identical reason: `disableRestoreFocus` on `<ClearAllDataDialog>` turns off MUI's own
@@ -100,10 +89,14 @@ function focusClearButtonIfLoose(): void {
  * lesson, gates running the reset at all: if the row unmounted while the dialog was exiting,
  * nobody is left to read its outcome.
  */
-export default function ClearAllDataRow({ workspace, organisms, onCleared }: ClearAllDataRowProps) {
+export default function ClearAllDataRow({
+  workspace,
+  organisms,
+  onCleared,
+  onMessage,
+}: ClearAllDataRowProps) {
   const [dialogMounted, setDialogMounted] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [message, setMessage] = useState<{ role: 'status' | 'alert'; text: string } | null>(null);
   // Bumped whenever a post-exit focus restore is owed, so the effect below re-fires even though
   // `dialogMounted` itself did not change again (mirrors `<ImportWorkspaceRow>`'s `focusTick`).
   const [focusTick, setFocusTick] = useState(0);
@@ -141,7 +134,7 @@ export default function ClearAllDataRow({ workspace, organisms, onCleared }: Cle
   function handleClearButtonClick() {
     if (pendingRef.current) return;
     pendingRef.current = true;
-    setMessage(null); // a new attempt clears any previous outcome message
+    onMessage(null); // a new attempt clears whatever any row last left in the shared slot (D2)
     choiceRef.current = null;
     focusOwedRef.current = true;
     setDialogMounted(true);
@@ -188,9 +181,9 @@ export default function ClearAllDataRow({ workspace, organisms, onCleared }: Cle
 
     try {
       await resetWorkspace(workspace, organisms);
-      if (mountedRef.current) setMessage({ role: 'status', text: CLEAR_ALL_SUCCESS_MESSAGE });
+      if (mountedRef.current) onMessage({ role: 'status', text: CLEAR_ALL_SUCCESS_MESSAGE });
     } catch {
-      if (mountedRef.current) setMessage({ role: 'alert', text: CLEAR_ALL_FAILURE_MESSAGE });
+      if (mountedRef.current) onMessage({ role: 'alert', text: CLEAR_ALL_FAILURE_MESSAGE });
     } finally {
       // FD3: runs after success AND after failure — the store may have changed either way, and
       // the counts must show the truth.
@@ -211,15 +204,18 @@ export default function ClearAllDataRow({ workspace, organisms, onCleared }: Cle
         </RowInfo>
         <ClearButton
           type="button"
-          aria-label="Clear all data"
+          // Review Finding D1 (owner ruling a): the visible "Clear Data" text is the accessible
+          // name's PREFIX (WCAG 2.5.3 Label in Name), and the name stays distinct from the
+          // dialog's "Clear All Data" confirm button — "Clear all data" alone collided with it
+          // case-insensitively whenever both were mounted at once (the exact ambiguity the review
+          // flagged).
+          aria-label="Clear data (all battles and organisms)"
           onClick={handleClearButtonClick}
           data-clear-all-data=""
         >
           Clear Data
         </ClearButton>
       </Row>
-      {message?.role === 'status' && <SuccessText role="status">{message.text}</SuccessText>}
-      {message?.role === 'alert' && <FailureText role="alert">{message.text}</FailureText>}
       {dialogMounted && (
         <ClearAllDataDialog
           open={dialogOpen}

@@ -9,7 +9,15 @@ import type {
   WorkspaceSerializer,
 } from '@gol/persistence';
 import { exportWorkspaceToFile } from '@/lib/export/exportWorkspaceToFile';
-import { Card, CardTitle, Row, RowDescription, RowInfo, RowLabel } from './SettingsCard';
+import {
+  Card,
+  CardTitle,
+  Row,
+  RowDescription,
+  RowInfo,
+  RowLabel,
+  type RowOutcome,
+} from './SettingsCard';
 import ImportWorkspaceRow from './ImportWorkspaceRow';
 import ClearAllDataRow from './ClearAllDataRow';
 
@@ -32,6 +40,16 @@ export interface DataManagementProps {
   /** Story 5.10 AC5: fired after Clear All settles (success or failure, FD3) for the same reload. */
   onCleared(): void;
 }
+
+/**
+ * Review Finding D2 (owner ruling a): the single outcome slot for the whole card. Every row
+ * writes here instead of rendering its own status/alert, so a new flow started in ANY row
+ * (including this component's own Export handler) replaces whatever the previous row left behind
+ * — the bug the finding described was a successful Import's status line still on screen,
+ * unchanged and now false, after a later Clear All. It also means an unscoped
+ * `getByRole('status')` is unambiguous again once more than one row can produce an outcome.
+ */
+type DataManagementMessage = RowOutcome | null;
 
 const DATA_MANAGEMENT_HEADING_ID = 'data-management-heading';
 
@@ -74,12 +92,23 @@ const ExportButton = styled('button')({
 
 // `--gol-danger` on `--gol-bg-secondary` (this card's own background) is one of the pairs
 // `themeTokens.test.ts` gates at >=4.5:1 — the same pair `<BattleEditorView>`'s `SaveErrorLine`
-// uses for a refused save.
+// uses for a refused save. Review Finding D2 (owner ruling a): this is now the CARD's one shared
+// alert style, rendered once for whichever row last wrote to `message` — Export, Import or Clear
+// All alike — rather than a copy each row owned.
 const ErrorText = styled('p')({
   margin: '15px 0 0',
   fontSize: '13px',
   lineHeight: 1.5,
   color: 'var(--gol-danger)',
+});
+
+// `--gol-text-secondary` — the same gated pair Import's and Clear All's own success text used
+// before D2 lifted it here as the card's one shared status style.
+const SuccessText = styled('p')({
+  margin: '15px 0 0',
+  fontSize: '13px',
+  lineHeight: 1.5,
+  color: 'var(--gol-text-secondary)',
 });
 
 const EXPORT_ERROR_MESSAGE =
@@ -100,6 +129,11 @@ const EXPORT_ERROR_MESSAGE =
  * handler rather than an effect: a mounted ref (not a closure variable — the promise here is
  * started by a click, not synced to an effect's own lifecycle) is flipped false in a cleanup-only
  * effect, and the click handler checks it before calling `setState` on the settled promise.
+ *
+ * Review Finding D2 (owner ruling a): this component, not any one row, owns `message` — the
+ * card's single "last outcome" slot. Export's own handler and both child rows all write through
+ * it (the rows via `onMessage`), so starting a new flow anywhere replaces whatever a previous row
+ * left behind, and the card never shows two outcome lines that disagree.
  */
 export default function DataManagement({
   serializer,
@@ -109,7 +143,7 @@ export default function DataManagement({
   onImported,
   onCleared,
 }: DataManagementProps) {
-  const [hasError, setHasError] = useState(false);
+  const [message, setMessage] = useState<DataManagementMessage>(null);
   const pendingRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -130,14 +164,15 @@ export default function DataManagement({
     if (pendingRef.current) return;
 
     pendingRef.current = true;
-    setHasError(false); // clears any alert from a previous, now-superseded attempt
+    // Clears whatever any row (Export, Import or Clear All) last left in the shared slot (D2).
+    setMessage(null);
 
     try {
       await exportWorkspaceToFile(serializer);
     } catch {
       // No `error.message`, no stack trace — plain, non-technical copy only (AC8). Export is
       // read-only, so "nothing was changed" is simply true, not a hedge.
-      if (mountedRef.current) setHasError(true);
+      if (mountedRef.current) setMessage({ role: 'alert', text: EXPORT_ERROR_MESSAGE });
     } finally {
       pendingRef.current = false;
     }
@@ -157,14 +192,22 @@ export default function DataManagement({
           Export
         </ExportButton>
       </Row>
-      {hasError && <ErrorText role="alert">{EXPORT_ERROR_MESSAGE}</ErrorText>}
       <ImportWorkspaceRow
         serializer={serializer}
         battles={battles}
         organisms={organisms}
         onImported={onImported}
+        onMessage={setMessage}
       />
-      <ClearAllDataRow workspace={workspace} organisms={organisms} onCleared={onCleared} />
+      <ClearAllDataRow
+        workspace={workspace}
+        organisms={organisms}
+        onCleared={onCleared}
+        onMessage={setMessage}
+      />
+      {/* D2: the ONE outcome slot for the whole card, wherever it was last written from. */}
+      {message?.role === 'status' && <SuccessText role="status">{message.text}</SuccessText>}
+      {message?.role === 'alert' && <ErrorText role="alert">{message.text}</ErrorText>}
     </Card>
   );
 }
