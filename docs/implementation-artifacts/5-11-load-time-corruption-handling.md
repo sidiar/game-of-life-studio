@@ -828,3 +828,18 @@ Modified:
 
 Dev Model: opus   # architecture-shaping: widens the AppRepositories seam (discardUnreadableStamp) and sets the app-wide storage-failure classification + notice pattern every route and Epic 7 build on
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 20s | 20s | 12 | 2,026 | 4,118 | 338,631 | 344,787 |
+| Step 1 — create | opus-5-5 | 3 | 9m 06s | 9m 06s | 236 | 6,215 | 725,927 | 11,153,915 | 11,886,293 |
+| Step 2 — implement | opus-5-5 | 1 | 26m 42s | 26m 42s | 378 | 5,782 | 797,973 | 34,232,611 | 35,036,744 |
+| Step 3 — review + PR | fable-5-1 | 4 | 24m 53s | 24m 53s | 5,772 | 24,004 | 2,286,358 | 27,270,334 | 29,586,468 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 56 | 18,740 | 35,602 | 1,811,593 | 1,865,991 |
+| **Total (create → PR ready)** | | 8 | **1h 01m** | 1h 01m | 6,398 | 38,027 | 3,814,376 | 72,995,491 | **76,854,292** |
+
+Run started 2026-09-28 12:01 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
