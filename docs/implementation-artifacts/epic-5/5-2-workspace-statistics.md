@@ -289,7 +289,7 @@ applied below), 0 `decision-needed`, 0 `defer`, 22 dismissed.
       packages/persistence/src/createLocalStorageRepositories.ts:41-42]
 - [x] [Review][Patch] Dev Agent Record miscounts — "all six `toHaveLength(2)` sites" (baseline had
       four; the spec's six was never measured) and "8 tests in `localStorageAccess.test.ts`" (seven)
-      [docs/implementation-artifacts/5-2-workspace-statistics.md:559,580]
+      [docs/implementation-artifacts/epic-5/5-2-workspace-statistics.md:559,580]
 - [x] [Review][Patch] The appended RFC-005 sentence said "two props short" — the RFC types one
       repository and the page now takes four, so three [docs/implementation-artifacts/deferred-work.md:2175]
 - [x] [Review][Patch] Stale `readStats()` comment named two tiles ("Saved Battles, then Organisms")
@@ -553,7 +553,7 @@ lane-gate line at the end.
   `useAsyncResource`), `:95` ("page-scoped data, no real-time cross-page sharing"), `:338`.
 - `docs/planning-artifacts/architecture.md:238-249` — Decision F; `:302-330` Decision K.
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/settings.html:282-314,377-390`.
-- `docs/implementation-artifacts/5-1-settings-page-shell.md` — FD3/FD4/FD7, review findings,
+- `docs/implementation-artifacts/epic-5/5-1-settings-page-shell.md` — FD3/FD4/FD7, review findings,
   the `<dd>` role note, the five bundle figures (`:552-558`).
 - `docs/implementation-artifacts/deferred-work.md:198` (seed-helper fork — do not add a fourth),
   `:397` (bundle gate: mechanism, never a raise), `:429` (locale pin), `:2146-2175` (5.1's three

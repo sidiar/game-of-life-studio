@@ -589,7 +589,7 @@ stories (4.23–4.26) are editor and battle UI in `apps/web` over the existing r
 - `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md`: Decision 3 (`migrate`,
   `ImportError`), Decision 5 (the import pipeline), Decision 6 (settings), Decision 7 (post-import
   `ensureDefaultOrganism`), Alternative 1 (no per-repository bulk ops).
-- `docs/implementation-artifacts/5-7-migration-registry.md`: FD4, FD9 and the review findings.
+- `docs/implementation-artifacts/epic-5/5-7-migration-registry.md`: FD4, FD9 and the review findings.
 - `docs/implementation-artifacts/deferred-work.md`: `:27`, `:33`, `:55`, `:107`, `:235`, `:2622-2638`
   (the partly-corrupt export, which is unimportable by design), and the 5.7 sections.
 - `docs/project-context.md`: repositories are injected, `clearAll()` never touches settings,
@@ -704,7 +704,7 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`, via `/bmad-dev-story` un
 - `packages/test-utils/src/fakeRepositories.test.ts` (owner decision)
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/5-8-atomic-import-pipeline.md`
+- `docs/implementation-artifacts/epic-5/5-8-atomic-import-pipeline.md`
 
 
 Dev Model: opus   # architecture-shaping: fixes the import pipeline's snapshot/rollback shape (FD2), the ImportError contract Story 5.9 words, and the pure/writing split 5.9 may call at file-pick time

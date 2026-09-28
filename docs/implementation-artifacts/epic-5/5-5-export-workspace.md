@@ -535,7 +535,7 @@ collision.
 - `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md`: Decision 4
   (`:185-212`).
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/settings.html:104-217,369-403`.
-- `docs/implementation-artifacts/5-1-settings-page-shell.md` (AC4, FD4, FD6),
+- `docs/implementation-artifacts/epic-5/5-1-settings-page-shell.md` (AC4, FD4, FD6),
   `5-2-workspace-statistics.md` (FD7 `Pick`), `5-3-export-envelope-serializer.md` (FD5 injected
   deps), `5-4-rule-aware-organism-closure.md` (review lessons).
 - `docs/implementation-artifacts/deferred-work.md:2192` (Data Management), `:2556-2567`
@@ -613,7 +613,7 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `packages/domain/src/workspaceExportProjection.ts` (comment-only, AC10)
 - `docs/implementation-artifacts/deferred-work.md` (two entries struck/closed, one new entry)
 - `docs/implementation-artifacts/sprint-status.yaml` (status → in-progress, then review)
-- `docs/implementation-artifacts/5-5-export-workspace.md` (this file)
+- `docs/implementation-artifacts/epic-5/5-5-export-workspace.md` (this file)
 
 Dev Model: sonnet   # follows existing patterns (5.3's injected serializer, 5.2's Pick prop, 5.1's card chrome); the reusable pieces 5.6/5.9 build on (lib/export seam, APP_VERSION source, download mechanism) are pre-decided in FD2–FD4, so nothing is left to architect.
 

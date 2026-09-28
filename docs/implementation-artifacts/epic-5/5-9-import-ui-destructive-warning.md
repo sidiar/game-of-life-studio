@@ -518,10 +518,10 @@ story touches the domain barrel (one appended block, resolved by `[[sync.rules]]
 - `docs/planning-artifacts/architecture.md:354` (M8), Decision F.
 - `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md:246` (Decision 5, the
   import warning).
-- `docs/implementation-artifacts/5-8-atomic-import-pipeline.md`: FD1, FD5, the review rulings.
-- `docs/implementation-artifacts/5-6-battle-export-dialog.md`: FD1 (lazy), FD2 (act-on-exit), FD8
+- `docs/implementation-artifacts/epic-5/5-8-atomic-import-pipeline.md`: FD1, FD5, the review rulings.
+- `docs/implementation-artifacts/epic-5/5-6-battle-export-dialog.md`: FD1 (lazy), FD2 (act-on-exit), FD8
   (focus).
-- `docs/implementation-artifacts/5-5-export-workspace.md`: FD7 (no dead affordance), FD8 (no
+- `docs/implementation-artifacts/epic-5/5-5-export-workspace.md`: FD7 (no dead affordance), FD8 (no
   `disabled`).
 - `docs/implementation-artifacts/deferred-work.md`: "Deferred from: Story 5-8", "code review of
   5-8" (the race), `:2901` (the live-region class fix).

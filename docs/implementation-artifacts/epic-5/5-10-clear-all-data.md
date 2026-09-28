@@ -313,9 +313,9 @@ to the D1+D2 ruling diff `90c4ae1..30af918`. D1 is clean. 0 decision-needed, 6 p
 - [x] [Review][Patch] The shared slot is last-to-SETTLE wins, not last-to-START: a flow still in flight in one row (a pristine Import with no dialog, an Export awaiting the serializer, a reset after its dialog exited) writes its outcome over a newer flow another row has since started — including into the `inert` card while that row's dialog is open, where the region is never announced (project-context live-region rule). A late Import success after a confirmed Clear All re-creates the very false line D2 removed. Fix: `<DataManagement>` records which row last started a flow and drops an outcome from any other row [apps/web/components/settings/DataManagement.tsx:195-207]
 - [x] [Review][Patch] The D2 regression test's "cleared the moment Clear All's flow starts" step is vacuous: it runs a default role query while MUI's modal `aria-hidden`s the card, so it passes whether or not the slot was cleared — the same trap the first review fixed in the AC6 ordering test. Use `{ hidden: true }` [apps/web/components/settings/DataManagement.test.tsx:317]
 - [x] [Review][Patch] Only Import→Clear is tested; the reverse order (Clear→Import), Export clearing another row's outcome, and the stale-flow drop are not [apps/web/components/settings/DataManagement.test.tsx]
-- [x] [Review][Patch] Ruling D2 moves the Export and Import outcome lines from under their own rows to the card's end, and adds a required `onMessage` prop to `<ImportWorkspaceRow>` — a deviation from AC9 ("Unchanged: … the Export and Import rows' behaviour") and the Dev Notes' "Preserve its behaviour and props" that no record states [docs/implementation-artifacts/5-10-clear-all-data.md]
-- [x] [Review][Patch] Task 3.1 still prescribes `aria-label="Clear all data"`, superseded by D1(a); the Change Log line says "Status stays at review" though that commit moved it from in-progress [docs/implementation-artifacts/5-10-clear-all-data.md:162,670]
-- [x] [Review][Patch] The deferred "live region mounts already filled" item still points at `ClearAllDataRow.tsx:221-222` and "all three rows"; after D2 there is one render site [docs/implementation-artifacts/5-10-clear-all-data.md, docs/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] Ruling D2 moves the Export and Import outcome lines from under their own rows to the card's end, and adds a required `onMessage` prop to `<ImportWorkspaceRow>` — a deviation from AC9 ("Unchanged: … the Export and Import rows' behaviour") and the Dev Notes' "Preserve its behaviour and props" that no record states [docs/implementation-artifacts/epic-5/5-10-clear-all-data.md]
+- [x] [Review][Patch] Task 3.1 still prescribes `aria-label="Clear all data"`, superseded by D1(a); the Change Log line says "Status stays at review" though that commit moved it from in-progress [docs/implementation-artifacts/epic-5/5-10-clear-all-data.md:162,670]
+- [x] [Review][Patch] The deferred "live region mounts already filled" item still points at `ClearAllDataRow.tsx:221-222` and "all three rows"; after D2 there is one render site [docs/implementation-artifacts/epic-5/5-10-clear-all-data.md, docs/implementation-artifacts/deferred-work.md]
 - [x] [Review][Defer] A Clear failure alert can be unmounted straight away when broken storage also fails the stats reload `onCleared()` triggers: `<SettingsPage>` swaps the whole card, slot included, for its generic load-error alert [apps/web/components/settings/ClearAllDataRow.tsx:186-190] — deferred, pre-existing (the row's own message lived inside `<DataManagement>` before D2 too)
 
 ## Dev Notes
@@ -523,7 +523,7 @@ Epic 4 story.
   (FR-1.5).
 - `docs/planning-artifacts/architecture.md:238-248` (Decision F), `:347` (M1), `:355` (M9).
 - `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md:250,271`.
-- `docs/implementation-artifacts/5-9-import-ui-destructive-warning.md`: the row/dialog template,
+- `docs/implementation-artifacts/epic-5/5-9-import-ui-destructive-warning.md`: the row/dialog template,
   review findings.
 - `docs/implementation-artifacts/deferred-work.md:3425-3433` (the 5.11 no-reset-on-newer ruling).
 - `docs/project-context.md`: repositories are injected; `clearAll()` never touches settings; the

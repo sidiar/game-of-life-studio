@@ -148,7 +148,7 @@ development_status:
   # files back up beside this file first (CLAUDE.md).
 
   # Epic 5: Sharing, Backup & Workspace Management
-  epic-5: in-progress
+  epic-5: done
   5-1-settings-page-shell: done
   5-2-workspace-statistics: done
   5-3-export-envelope-serializer: done
@@ -160,7 +160,10 @@ development_status:
   5-9-import-ui-destructive-warning: done
   5-10-clear-all-data: done
   5-11-load-time-corruption-handling: done
-  epic-5-retrospective: optional
+  # No epic-5-retrospective key: the retrospective was deliberately skipped (Sidiar, 2026-09-28),
+  # the same call as Epics 1–4. Epic 5's stories are archived into epic-5/, and the retrospective
+  # skill globs story files NON-recursively — it would find zero there. To run one, move the story
+  # files back up beside this file first (CLAUDE.md).
 
   # Epic 6: Theming & Personalization
   # ⚠️ PRIORITY: epic-7 executes BEFORE epic-6 (Sidiar, 2026-09-28). Do not open an epic-6 lane

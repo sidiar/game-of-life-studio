@@ -432,16 +432,16 @@ verifiable). Every AC (1–9, AC7 as amended) and all four owner decisions were 
 code and hold; the residue is documentation that stopped at Decision 2's "reopened" state, plus
 test-coverage gaps the first round did not name.
 
-- [x] [Review][Patch] Completion Notes still describe Decision 2 as "three of four implemented, one blocked" / "reverted, item reopened" though the item is closed as (b) [docs/implementation-artifacts/5-3-export-envelope-serializer.md:699-721]
-- [x] [Review][Patch] Completion Notes' reviewer bullet repeats the disproven "turbo 2.10.5 warns rather than failing" measurement and names a different trigger for the clean fix than the owner's decision [docs/implementation-artifacts/5-3-export-envelope-serializer.md:750-757]
+- [x] [Review][Patch] Completion Notes still describe Decision 2 as "three of four implemented, one blocked" / "reverted, item reopened" though the item is closed as (b) [docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md:699-721]
+- [x] [Review][Patch] Completion Notes' reviewer bullet repeats the disproven "turbo 2.10.5 warns rather than failing" measurement and names a different trigger for the clean fix than the owner's decision [docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md:750-757]
 - [x] [Review][Patch] `deferred-work.md`'s `@gol/test-utils` entry ends at "the decision item reopened on the story" and never records the final (b) decision or that it is (c)'s trigger [docs/implementation-artifacts/deferred-work.md:2648]
-- [x] [Review][Patch] Change Log has no row for the final Decision 2 outcome, and it and the File List count "seven entries" where the section holds eight [docs/implementation-artifacts/5-3-export-envelope-serializer.md:801-804,820]
+- [x] [Review][Patch] Change Log has no row for the final Decision 2 outcome, and it and the File List count "seven entries" where the section holds eight [docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md:801-804,820]
 - [x] [Review][Patch] "Four RFC-006 variances" heading enumerates six; echoed as "four" in Completion Notes and File List [docs/implementation-artifacts/deferred-work.md:2601; 5-3-export-envelope-serializer.md:776,804]
-- [x] [Review][Patch] File List misstates the sprint-status transition — `ready-for-dev` never occurs; the branch's net change is `backlog → review` [docs/implementation-artifacts/5-3-export-envelope-serializer.md:805-806]
-- [x] [Review][Patch] The "Review-decision resume" paragraph is spliced into the Debug Log list without a blank line and renders inside the preceding bullet [docs/implementation-artifacts/5-3-export-envelope-serializer.md:682]
-- [x] [Review][Patch] FD10 is cited by AC7, Task 6 and the first round's Decision 1 but the Forced decisions list stops at FD9 — FD10 is defined only inside Completion Notes [docs/implementation-artifacts/5-3-export-envelope-serializer.md:504]
-- [x] [Review][Patch] AC8(a) says "1.7's entry is marked resolved" while Task 5 forbids editing the archived file and the discharge lives in `deferred-work.md` [docs/implementation-artifacts/5-3-export-envelope-serializer.md:88]
-- [x] [Review][Patch] First round's header counts "3 `decision-needed`" while four items follow — the CI-red decision was added in `c4f8ef5` after the count was written [docs/implementation-artifacts/5-3-export-envelope-serializer.md:260]
+- [x] [Review][Patch] File List misstates the sprint-status transition — `ready-for-dev` never occurs; the branch's net change is `backlog → review` [docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md:805-806]
+- [x] [Review][Patch] The "Review-decision resume" paragraph is spliced into the Debug Log list without a blank line and renders inside the preceding bullet [docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md:682]
+- [x] [Review][Patch] FD10 is cited by AC7, Task 6 and the first round's Decision 1 but the Forced decisions list stops at FD9 — FD10 is defined only inside Completion Notes [docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md:504]
+- [x] [Review][Patch] AC8(a) says "1.7's entry is marked resolved" while Task 5 forbids editing the archived file and the discharge lives in `deferred-work.md` [docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md:88]
+- [x] [Review][Patch] First round's header counts "3 `decision-needed`" while four items follow — the CI-red decision was added in `c4f8ef5` after the count was written [docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md:260]
 - [x] [Review][Patch] `index.ts` header says module-level work is "limited to defining and freezing values" while `DEFAULT_SETTINGS` runs `SettingsSchema.parse({})` at import time — the header is the flag's only guard and understates what already runs [packages/domain/src/index.ts:4]
 - [x] [Review][Patch] Schema comment says this story "forbade a `kind: 'battle'` code path outright" while `toEnvelope('battle', …)` is exported and tested — what is absent is the producer (`exportBattle`), not the kind [packages/domain/src/workspaceExportSchema.ts:152-154]
 - [x] [Review][Patch] `toEnvelope` / `fromEnvelope` copy the `organisms` array but share each `Organism`, while the test title says "never aliases the caller's arrays" and the file's own `gridDimensions` rationale argues against sharing — the actual contract (array copied, elements shared, why that is safe) is stated nowhere [packages/domain/src/workspaceExportProjection.ts:154,170; packages/domain/src/workspaceExportProjection.test.ts:248]
@@ -703,7 +703,7 @@ see the lane-gate line at the end.
   raise).
 - `docs/implementation-artifacts/epic-1/1-7-palette-token-registry-display-color-lut.md:271` —
   the `PALETTE_VERSION` forward-reference FD7 discharges.
-- `docs/implementation-artifacts/5-2-workspace-statistics.md` — FD1, FD4, FD9 and the five bundle
+- `docs/implementation-artifacts/epic-5/5-2-workspace-statistics.md` — FD1, FD4, FD9 and the five bundle
   figures AC7 compares against.
 - `docs/implementation-artifacts/lane-gates.yaml` — the 5-vs-4 analysis (2026-09-21) and 5.4's
   existing row; this story has none.
@@ -862,7 +862,7 @@ bullet, as Task 5 predicted.
 - `docs/implementation-artifacts/sprint-status.yaml` — `5-3-export-envelope-serializer`:
   `backlog` → `review` net of the branch (the review round moved it through `in-progress` and
   back); the final review sets `done`.
-- `docs/implementation-artifacts/5-3-export-envelope-serializer.md` — this record.
+- `docs/implementation-artifacts/epic-5/5-3-export-envelope-serializer.md` — this record.
 
 ### Change Log
 

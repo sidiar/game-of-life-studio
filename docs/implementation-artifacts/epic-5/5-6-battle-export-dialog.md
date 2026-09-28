@@ -372,7 +372,7 @@ _Second code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptan
 - [x] [Review][Patch] Orphan combining marks survive the `\p{M}` exemption — a mark not on a letter (VS16 U+FE0F, keycap U+20E3, a spacing accent's NFKD mark after a space, a mark after a digit/hyphen/at the start) is kept: `'❤️'` → `️.json` (invisible, skips the `untitled-battle` fallback AC5 promises for emoji), `'Battle ❤️ Royale'` → `battle-️-royale.json`, `'Rock´n´Roll'` → `rock-́n-́roll.json`, `'́'` → `́.json`; strip every mark run not attached to a letter before the collapse [apps/web/lib/export/battleExportFilename.ts:kebabCase]
 - [x] [Review][Patch] The 60-code-point cut can split a base+mark cluster — 59×`क` + `कि` keeps the 60th `क` and drops its vowel sign ि, silently changing the word (the garbling decision 1 set out to prevent); when the cut lands before a mark, drop the partial cluster (base + marks) instead [apps/web/lib/export/battleExportFilename.ts:truncateSlug]
 - [x] [Review][Patch] The "Café Duel … without an NFC precomposed form nearby" test uses precomposed U+00E9 like "Café Wars", so the decomposed-input path is never exercised; use `'Café Duel'` [apps/web/lib/export/battleExportFilename.test.ts]
-- [x] [Review][Patch] Story records: AC5's original bullets and the Debug Log's "pre-existing drift from `main`" sentence were deleted rather than struck (history is struck, never deleted); the "2225, up from 2212 … normal suite variance" explanation omits the review commit's +5 tests; Completion Notes item 4 points to the Debug Log "below" (it is above); Agent Model Used omits the Opus review sessions [docs/implementation-artifacts/5-6-battle-export-dialog.md]
+- [x] [Review][Patch] Story records: AC5's original bullets and the Debug Log's "pre-existing drift from `main`" sentence were deleted rather than struck (history is struck, never deleted); the "2225, up from 2212 … normal suite variance" explanation omits the review commit's +5 tests; Completion Notes item 4 points to the Debug Log "below" (it is above); Agent Model Used omits the Opus review sessions [docs/implementation-artifacts/epic-5/5-6-battle-export-dialog.md]
 
 _Third code review 2026-09-25 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `744a83b..8451e7d`, the ZWNJ/ZWJ owner-decision commit)._
 
@@ -835,7 +835,7 @@ gate below. This story adds **no** `@gol/domain` barrel export.
 - `docs/implementation-artifacts/deferred-work.md:2680-2700` (variance (7) withdrawn),
   `:2863-2870` (the 5.4 → 5.6 hand-off), `:3013-3019` (5.5 revoke-timing defer, same seam),
   `:398` (growth-ratchet gate).
-- `docs/implementation-artifacts/5-5-export-workspace.md` (FD3/FD4/FD8, AC6/AC7, review findings),
+- `docs/implementation-artifacts/epic-5/5-5-export-workspace.md` (FD3/FD4/FD8, AC6/AC7, review findings),
   `5-4-rule-aware-organism-closure.md` (owner ruling (b)).
 - `docs/project-context.md`: repositories injected; the live-region-while-dialog rule; `ci:dev`
   never piped; `spec:check` IDs; no raw hex; the Playwright viewport note.
@@ -1226,7 +1226,7 @@ answered the third code review's Hangul-filler `[Review][Decision]` item with op
   story's measured first-load gzip sizes — see Change Log)
 - `docs/implementation-artifacts/deferred-work.md` (5.4 hand-off entry closed; new "Deferred from:
   Story 5-6-battle-export-dialog" section)
-- `docs/implementation-artifacts/5-6-battle-export-dialog.md` (this file: frontmatter
+- `docs/implementation-artifacts/epic-5/5-6-battle-export-dialog.md` (this file: frontmatter
   `baseline_commit`, Status, Tasks/Subtasks, Dev Agent Record, AC5/FD7 dated owner-decision
   annotations, `[Review][Decision]` items ticked)
 - `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog: in-progress` →
@@ -1248,7 +1248,7 @@ answered the third code review's Hangul-filler `[Review][Decision]` item with op
   Indic ZWJ conjunct kept, a soft hyphen dropped, RLM/LRM dropped, a ZWNJ next to
   space/punctuation/start/end dropped, a ZWNJ trimmed at the 60-code-point cut; all `\u`-escaped,
   matching the file's existing `'\u0301\u0302'` convention)
-- `docs/implementation-artifacts/5-6-battle-export-dialog.md` (this file: the ZWNJ/ZWJ
+- `docs/implementation-artifacts/epic-5/5-6-battle-export-dialog.md` (this file: the ZWNJ/ZWJ
   `[Review][Decision]` item ticked; AC5/FD7 annotated with a third dated owner-decision note, not
   silently rewritten; Dev Agent Record, File List, Change Log, Status)
 - `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog` → `review`)
@@ -1257,7 +1257,7 @@ answered the third code review's Hangul-filler `[Review][Decision]` item with op
 - `apps/web/lib/export/battleExportFilename.ts` (format-character/joiner handling moved right after
   NFKD, judged by code point; regex constants hoisted, `\u`-escaped; no literal joiner in comments)
 - `apps/web/lib/export/battleExportFilename.test.ts` (6 new cases, 34 total; comment literal removed)
-- `docs/implementation-artifacts/5-6-battle-export-dialog.md` (review findings, record fixes, Status)
+- `docs/implementation-artifacts/epic-5/5-6-battle-export-dialog.md` (review findings, record fixes, Status)
 - `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog` → `in-progress`)
 - `docs/implementation-artifacts/deferred-work.md` (the virama-conjunct cut)
 
@@ -1267,7 +1267,7 @@ answered the third code review's Hangul-filler `[Review][Decision]` item with op
   existing format-character drop; new `HANGUL_FILLERS` constant, `\u`-escaped; doc comment updated)
 - `apps/web/lib/export/battleExportFilename.test.ts` (4 new cases, 38 total: one per filler,
   a mix of all four, a filler inside a Hangul name, a filler mid-word in a Latin name)
-- `docs/implementation-artifacts/5-6-battle-export-dialog.md` (this file: the Hangul-filler
+- `docs/implementation-artifacts/epic-5/5-6-battle-export-dialog.md` (this file: the Hangul-filler
   `[Review][Decision]` item ticked; AC5/FD7 annotated with a fourth dated owner-decision note, not
   silently rewritten; Dev Agent Record, File List, Change Log, Status)
 - `docs/implementation-artifacts/sprint-status.yaml` (`5-6-battle-export-dialog` → `review`)

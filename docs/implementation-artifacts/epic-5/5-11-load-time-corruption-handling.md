@@ -728,7 +728,7 @@ story's `{ status, error }` seed shape and the notice, so keep both small and do
 - `docs/implementation-artifacts/deferred-work.md`: `:45`, `:121`, `:143`, `:163`, `:369`, `:371`,
   `:2304-2310`, `:2526-2531`, `:2683-2700`, `:2826-2834`, `:2966`, `:3213`, `:3413-3442`,
   `:3470-3486`, `:3580-3586`, `:3664-3667`, `:3767-3775`, `:3807-3825`.
-- `docs/implementation-artifacts/5-10-clear-all-data.md` (FD1, FD3, FD4, review findings).
+- `docs/implementation-artifacts/epic-5/5-10-clear-all-data.md` (FD1, FD3, FD4, review findings).
 - `docs/project-context.md`: injected repositories; no global store; live-region rule; `clearAll()` never
   touches settings; coverage tiers; `ci:dev` never piped; bundle growth ratchet.
 
@@ -909,7 +909,7 @@ Modified:
 - `scripts/bundle-baselines.json` (tool-written)
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/5-11-load-time-corruption-handling.md`
+- `docs/implementation-artifacts/epic-5/5-11-load-time-corruption-handling.md`
 
 ### Change Log
 
