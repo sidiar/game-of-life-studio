@@ -582,6 +582,52 @@ _Rationale:_ lets a user set a preferred starting pace once, so they don't re-ad
   - Users can adjust speed during playback (per FR-4.2)
   - Preference persists across sessions
 
+### FR-9: Preset Workspace Library
+
+_Added 2026-09-28 (see CHANGELOG-preset-workspace-library.md). Prioritized ahead of FR-8.6–8.12 delivery (Epic 7 before Epic 6)._
+
+**FR-9.1: Repo-Bundled Preset Workspaces**
+The system shall bundle curated, ready-to-run workspaces with the deployed app, served as static files and self-described by a manifest.
+_Rationale:_ the app is a static export with no backend; a folder of workspace files plus a manifest is the only enumerable "server side" available, and it doubles as the content-authoring surface (improve or add presets by dropping in files).
+- **Acceptance Criteria:**
+  - Every preset is a full workspace export envelope (FR-8.3's format) — loading a preset always runs through the FR-8.4 import pipeline; no second format or parser exists
+  - A manifest lists each preset's stable id, display name, description, and file, and designates the default preset
+  - Presets are authored through the app itself (build → Export Workspace → add file + manifest entry), never handwritten
+  - CI validates every bundled preset against the production import gate and keeps folder and manifest in lockstep
+
+**FR-9.2: First-Visit Default Preset**
+The system shall populate a first-time visitor's workspace with the default preset automatically, on whichever page they enter (including the root URL), with no dialog.
+_Rationale:_ a visitor who may leave within a minute — a hiring manager, a curious passer-by — must taste running battles immediately, not an empty gallery.
+- **Acceptance Criteria:**
+  - Triggers only on a fresh workspace (same gate as FR-1.5 seeding); returning users are never touched
+  - No warning dialog: the workspace is pristine, the FR-8.4 suppression case
+  - Any fetch or validation failure falls back to FR-1.5 default seeding (Conway's Classic) — the app never blocks or breaks on preset availability
+  - Clear All Data (FR-8.5) does not re-trigger the preset: clearing returns to the FR-8.5 default state
+
+**FR-9.3: Load Preset from Settings**
+The system shall let users load any bundled preset from the Settings page.
+- **Acceptance Criteria:**
+  - Presets are listed from the manifest (name + description)
+  - Loading replaces the whole workspace through the FR-8.4 pipeline, including its destructive warning (suppressed only for pristine workspaces) and export-first option
+  - Success and failure feedback follow the existing data-management row patterns
+
+**FR-9.4: Preset Link**
+The system shall support a shareable URL that addresses a specific preset by its manifest id and loads it on arrival.
+- **Acceptance Criteria:**
+  - The URL form is static-export compatible (no server routing required)
+  - Arrival fetches and imports the preset through the FR-8.4 pipeline, behind its destructive warning (suppressed for pristine workspaces — a first-time visitor following the link lands directly in the loaded workspace)
+  - An unknown or invalid preset id degrades gracefully to the normal app with a clear message, never a broken page
+
+**FR-9.5: Descriptions at Every Level**
+The system shall support optional open-text descriptions on Battles, Organisms, and whole workspaces (and therefore workspace presets), editable in the app and carried through export/import.
+_Rationale:_ rule-level summaries already explain a single rule; battle, organism, and workspace descriptions explain *what the user is observing* — the only guide layer the no-tutorial rule (NFR-4.1) allows, and what makes a preset self-explanatory.
+- **Acceptance Criteria:**
+  - Optional and length-capped at each level (caps follow the `MAX_*_NAME_LENGTH` precedent; exact values decided in-story); an absent description renders nothing — no placeholder chrome
+  - Carried in the export envelope and round-tripped by import at all three levels
+  - `formatVersion` remains **1** — owner decision 2026-09-28: no backward-compatibility obligation; an older build importing a newer file silently strips descriptions (Zod unknown-key strip), accepted for purely explanatory text
+  - The preset manifest's per-preset description is a projection of the envelope's workspace description, kept in lockstep by the FR-9.1 CI gate
+  - Editable where the entity is edited (Organism Editor, Battle Editor); displayed where the entity is observed
+
 ## Non-Functional Requirements
 
 ### NFR-1: Performance
