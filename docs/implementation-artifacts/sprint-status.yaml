@@ -187,7 +187,7 @@ development_status:
   # epic-5 closes. Story 7.1's proof-of-concept lives on branch poc/preset-workspace-library
   # (reference material for create-story; the story lands it properly).
   epic-7: in-progress
-  7-1-preset-workspace-foundations: review
+  7-1-preset-workspace-foundations: in-progress
   7-2-descriptions-at-every-level: backlog
   7-3-showcase-preset-content: backlog
   7-4-first-visit-default-preset-auto-load: backlog

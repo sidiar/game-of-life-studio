@@ -5,8 +5,9 @@
  * (`WorkspaceExportSchema`, `kind: 'workspace'`) — never a second format. That choice is the whole
  * design: a preset is loaded by fetching its static JSON and handing the text to the existing
  * import pipeline (`WorkspaceSerializer.importWorkspace`), which brings validation, format
- * migration (Story 5.7) and the atomic destructive replace with its warning (Stories 5.8/5.9)
- * along for free. No preset-specific parser may ever exist (FR-9.1).
+ * migration (Story 5.7) and the atomic destructive replace (Story 5.8) along for free. The
+ * replace WARNING is not part of that pipeline: it is Story 5.9's UI, so each preset caller
+ * supplies (or deliberately skips) its own. No preset-specific parser may ever exist (FR-9.1).
  *
  * `index.json` is the manifest a future Settings dropdown reads. It exists because the app is a
  * static export — there is no server to enumerate a directory, so the folder must describe itself.
@@ -15,15 +16,18 @@
  * schema change surfaces as a test failure, not as a broken preset in production.
  *
  * Authoring a preset never means writing JSON by hand: build the workspace in the app, use
- * Settings → Export Workspace (Story 5.5), drop the downloaded file here and add a manifest entry
- * naming it (and, for the first preset, generate it via Story 7.1's Task 2 route instead of a
- * hand save).
+ * Settings → Export Workspace (Story 5.5), drop the downloaded file here under its preset file
+ * name, run `npx prettier --write apps/web/public/workspaces/` (the raw export is
+ * `JSON.stringify(v, null, 2)`, which `format:check` rejects; formatting is the only edit
+ * allowed), and add a manifest entry naming it. The same serializer composition may be run
+ * headlessly instead of through the UI — that is how the first preset was produced — but the file
+ * is always the serializer's output, never hand-edited.
  *
  * No runtime consumer exists yet: Story 7.4 is the first reader of `defaultPresetId` (first-visit
  * auto-load), Story 7.5 reads the manifest for the Settings loader, and Story 7.6 addresses a
  * preset by `id` from a shareable link. This module is deliberately just the folder's location and
  * the manifest's shape — no fetch, no loader, no hook, no UI, and no `zod` dependency: the
- * manifest's runtime parse boundary belongs to whichever of those stories first fetches it. Story
+ * manifest's runtime parse boundary belongs to Story 7.4, the first story that fetches it. Story
  * 7.2 later turns each entry's `description` into a projection of its envelope's own workspace
  * description; nothing here anticipates that.
  *
@@ -33,7 +37,11 @@
  * `node:fs`.
  */
 
-/** Where the presets are served from, relative to the site root (statically, from `public/`). */
+/**
+ * Where the presets are served from, relative to the site root (statically, from `public/`).
+ * Root-absolute on purpose: `next.config.mjs` sets no `basePath` (the site is served from a
+ * custom domain via `public/CNAME`). Adding a `basePath` means prefixing this too.
+ */
 export const PRESET_WORKSPACES_PATH = '/workspaces';
 
 /** The manifest filename inside {@link PRESET_WORKSPACES_PATH}. */
@@ -59,6 +67,11 @@ export interface PresetWorkspaceEntry {
   file: string;
 }
 
+/**
+ * The manifest's shape. These types describe data that arrives over the network: never
+ * `as PresetWorkspaceManifest` a fetched body. Parse it at the fetch boundary (Story 7.4), as
+ * `presetWorkspaces.test.ts` does with its structural checks.
+ */
 export interface PresetWorkspaceManifest {
   /**
    * Names the entry (by `id`) that loads on first visit (Story 7.1 FD2). A per-entry `default:

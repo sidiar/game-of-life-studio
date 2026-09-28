@@ -4,7 +4,7 @@ baseline_commit: 9f3d28794491c7af8874527bc7b671993ec3c0e4
 
 # Story 7.1: Preset Workspace Foundations
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -52,6 +52,23 @@ so that presets can be authored, improved, and consumed over time without ever g
 - [x] **Task 5 — Verify** (AC: 1–4)
   - [x] 5.1 `npm run build:standalone`, then confirm `apps/web/out/workspaces/index.json` and `apps/web/out/workspaces/starter-workspace.json` exist (Next copies `public/` verbatim into the static export). Record it; no test for this (FD7).
   - [x] 5.2 `npm run ci:dev` green (never four-browser `npm run ci` in the dev step). `bundle:check` must show **no route growth** — if any route grew, something imported preset JSON into app code (FD5).
+
+### Review Findings
+
+_Code review 2026-09-28 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor): 2 decision-needed, 10 patch, 0 defer, 9 dismissed._
+
+- [ ] [Review][Decision] Lockstep counts OS/editor junk (`.DS_Store`, `*.swp`) — `readdirSync(PRESETS_DIR).filter((f) => f !== 'index.json')` keeps a Finder-written `.DS_Store` (gitignored, so CI stays green), so local `ci:dev` fails on a Mac while CI passes; a local `build:standalone` would also copy it into `out/workspaces/`. FD6 says "everything in `public/workspaces/` except `index.json` must be listed", so exempting anything changes the spec. Options: **(a)** keep strict as FD6 says, and add a comment saying a local `.DS_Store` fails on purpose (delete it); **(b)** exempt dotfiles (`!f.startsWith('.')`), which still catches `notes.txt` / `preset.JSON`; **(c)** compare the manifest against git-tracked files (`git ls-files apps/web/public/workspaces`) instead of `readdirSync`, so it checks what ships from CI, not what is on disk. [apps/web/lib/workspaces/presetWorkspaces.test.ts:39]
+- [ ] [Review][Decision] Manifest `file` isn't constrained to be URL-safe or tied to its `id` — the gate bans only `/`, `\` and `..`, but its own message says the file "is concatenated into a fetch URL"; `a#b.json`, `my preset?.json` and `%2e%2e.json` all pass, and `file` can drift from `id`. That is a contract change beyond Task 4.1's list. Options: **(a)** require `file === \`${id}.json\`` (one name per preset, slug-safe for free); **(b)** require `file` to match the slug pattern plus `.json` on its own, independent of `id`; **(c)** keep as spec'd and leave URL-encoding to the 7.4/7.5 fetch site. [apps/web/lib/workspaces/presetWorkspaces.test.ts:77-84]
+- [x] [Review][Patch] Test comment falsely says `lib/themeTokens.test.ts` uses `dirname(fileURLToPath(...))` (it uses `__dirname`; Task 4.3 "keep the comment truthful"), and it argues with the never-merged PoC instead of saying why the idiom was chosen [apps/web/lib/workspaces/presetWorkspaces.test.ts:17-20]
+- [x] [Review][Patch] Duplicate id/file assertion doesn't name the duplicate (Testing standards: messages must name the offending entry) [apps/web/lib/workspaces/presetWorkspaces.test.ts:52-57]
+- [x] [Review][Patch] Structural parse stops at the top level: a `null`/non-object entry throws a `TypeError`, and a non-string field fails `toMatch` with a type error instead of the named-field message (Task 4.2 intent) [apps/web/lib/workspaces/presetWorkspaces.test.ts:24-48]
+- [x] [Review][Patch] A missing or malformed `index.json` surfaces as a bare ENOENT/SyntaxError at collection instead of a readable message (the docstring promises a readable one) [apps/web/lib/workspaces/presetWorkspaces.test.ts:24-36]
+- [x] [Review][Patch] An invalid preset throws an `ImportError` that doesn't name the file, and the loop stops at the first bad preset [apps/web/lib/workspaces/presetWorkspaces.test.ts:99-105]
+- [x] [Review][Patch] Test header lists the gate as "parse → migrate → schema → referential closure" and leaves out the unsafe-id guard [apps/web/lib/workspaces/presetWorkspaces.test.ts:1-8]
+- [x] [Review][Patch] The documented authoring path leaves out the Prettier step (the raw export fails `format:check` on `public/**/*.json`; AC4 requires the path to be documented at the module), and the "Story 7.1's Task 2 route instead of a hand save" aside points at a story task instead of stating the rule [apps/web/lib/workspaces/presetManifest.ts:17-20]
+- [x] [Review][Patch] Head comment says `importWorkspace` brings "the atomic destructive replace with its warning". The warning is 5.9's UI, so 7.4/7.5/7.6 callers must supply or suppress it themselves [apps/web/lib/workspaces/presetManifest.ts:5-9]
+- [x] [Review][Patch] Runtime-parse ownership is softened to "whichever story first fetches it"; FD7 assigns it to Story 7.4 explicitly. The mutable interfaces also invite an `as PresetWorkspaceManifest` cast on fetched JSON, which the gate itself refuses [apps/web/lib/workspaces/presetManifest.ts:21-28,51-71]
+- [x] [Review][Patch] `PRESET_WORKSPACES_PATH = '/workspaces'` silently assumes no `basePath`; nothing records that [apps/web/lib/workspaces/presetManifest.ts:37]
 
 ## Dev Notes
 
@@ -169,6 +186,12 @@ claude-sonnet-5
   with FD2 (`defaultPresetId`), FD3 (`PRESET_ID_PATTERN`) and FD6 (any-extension lockstep) added;
   regenerated `starter-workspace.json` through the real serializer (FD4); authored `index.json`.
   `npm run ci:dev` green, no route bundle growth. Status → review.
+- 2026-09-28 — Code review (Opus): 10 patches applied to the lockstep test (readable failures for
+  malformed manifest/entries, named duplicates, per-preset import failures collected, truthful path
+  comment) and the contract module's comments (Prettier step in the authoring path, 5.9 warning
+  ownership, 7.4 parse ownership, no-cast note, basePath assumption). Negative-proved the new checks
+  (null entry, duplicate id, bad slug + unknown default, formatVersion 99, malformed index.json), all
+  reverted. 2 decisions left open under Review Findings. Status → in-progress.
 
 Dev Model: sonnet   # lands an existing PoC (4 files) with every open choice pinned in FD1–FD7 (default designation, id slug, regeneration route, no runtime parser); nothing left to architect
 Proposed lane gate: none
