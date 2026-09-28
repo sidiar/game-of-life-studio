@@ -455,7 +455,7 @@ still open (4.20–4.26): 4.20/4.21 consume `ruleReferenceIndex` but are not exp
 - `docs/planning-artifacts/architecture.md:234` (Decision E.5 (a)–(c)), `:263-274` (Decision H), `:353` (M7).
 - `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md` Decision 4 (`:185-215` — closure, rule-aware and transitive), Decision 5 (`:217-244` — import assertion, 5.8's), Decision 6 (settings never travel), Risks (`:297`).
 - `docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md` FR-6.1 (`:390-394`), A-2 (`:778-779`).
-- `docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` FD6, FD7 (the forward edge built for this story).
+- `docs/implementation-artifacts/epic-4/4-19-usage-rule-reference-derivations.md` FD6, FD7 (the forward edge built for this story).
 - `docs/implementation-artifacts/5-3-export-envelope-serializer.md` (review decision on refinements, `:366-389`; out-of-scope list, `:827-829`).
 - `docs/implementation-artifacts/deferred-work.md:2615-2647`; `docs/implementation-artifacts/lane-gates.yaml:45-49`.
 - `docs/project-context.md` — strict TS, no DOM in `packages/*`, Zod at boundaries, ≥90% per-file core gate, referential-integrity logic is core, no coverage padding, camelCase files, `spec:check`, `npm run ci:dev` never piped, commit gate.

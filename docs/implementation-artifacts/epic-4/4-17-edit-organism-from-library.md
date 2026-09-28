@@ -703,8 +703,8 @@ badge (the story's fixture prose was self-inconsistent; the rig is the right rea
 | `packages/test-utils/src/fakeRepositories.ts:77` | `createFakeRepositories({ organisms, battles })` — both fakes from one call. |
 | `apps/web/e2e/organisms.spec.ts:1-51, 2836-3060` | `openEditor`, the hoisted helpers, the 4.16 block (`fillValidDraft`, `countBadge`, `back`, the `localStorage` read idiom, the WebKit focus branch). `deleteBattle.spec.ts:10-42` — the seed helpers to copy; `battleRoute.spec.ts:62` — the layered init-script precedent; `gallery.spec.ts:218` — the dot locator. |
 | `docs/implementation-artifacts/deferred-work.md:199, 231, 753-757, 1443-1445, 1455-1465, 1566-1567, 1631-1634, 2035-2048, 2116-2122, 2314-2373` | The seed-helper extraction rule; every entry addressed to this story (listed in Task 11). |
-| `docs/implementation-artifacts/4-16-create-save-organism.md` (AC3, FD4, FD6, FD9, Tasks 11–13, Review Findings) | `saveStamp`, the close-lock, `reload()`, the review's test-strength lessons. |
-| `docs/implementation-artifacts/4-2-organism-card-grid.md` (FD1, FD5), `4-3-editor-modal-shell.md` (FD2, `:219-220`), `4-9-*.md` (FD2, `:451-453`), `4-11-*.md` (`:727-731, 864-870`), `4-13-*.md` (`:631-641`) | The promises this story keeps, in their original words. |
+| `docs/implementation-artifacts/epic-4/4-16-create-save-organism.md` (AC3, FD4, FD6, FD9, Tasks 11–13, Review Findings) | `saveStamp`, the close-lock, `reload()`, the review's test-strength lessons. |
+| `docs/implementation-artifacts/epic-4/4-2-organism-card-grid.md` (FD1, FD5), `4-3-editor-modal-shell.md` (FD2, `:219-220`), `4-9-*.md` (FD2, `:451-453`), `4-11-*.md` (`:727-731, 864-870`), `4-13-*.md` (`:631-641`) | The promises this story keeps, in their original words. |
 | `docs/planning-artifacts/epics.md:35, 39, 109, 174, 201, 230-231, 1189-1238` | FR-1.3, FR-1.7, FR-7.15, AR-15, AR-33, UX-DR5/6, Stories 4.17–4.20. |
 | `docs/planning-artifacts/architecture.md:222-236, 263-274, 276-287, 350-353` | Decisions E, H, I; M4, M5, M7. |
 | `docs/planning-artifacts/rfcs/RFC-005-application-state-modes-undo.md:159-172, 303-323` | The state tree (both repositories to the Library) and Decision 8 (`buildUsageIndex`). `RFC-004:395-402` — §2.1.1 self vs other. `RFC-001:66-74` — by-id references, `BattleSummary`. |
@@ -878,7 +878,7 @@ comment-only touches listed in Task 9, `e2e/organisms.spec.ts`, `deferred-work.m
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md:13-15,
   24-38, 105-120, 537-544`; `ux-design-complete.md:684-696`;
   `clinical-lab-theme/organism-library.html:309-349, 404-442, 637-644`.
-- `docs/implementation-artifacts/4-16-create-save-organism.md`; `4-2-organism-card-grid.md:423-430`;
+- `docs/implementation-artifacts/epic-4/4-16-create-save-organism.md`; `4-2-organism-card-grid.md:423-430`;
   `4-3-editor-modal-shell.md:199-220`; `4-9-color-reuse-warning-cvd-validation.md:451-453`;
   `4-11-condition-builder.md:727-731, 864-870`; `4-13-editor-validation-feedback.md:631-641`;
   `epic-1/1-13-*.md` (the delete dialog's forced decisions — the hook idiom's origin).
@@ -1024,7 +1024,7 @@ Modified:
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/4-17-edit-organism-from-library.md` (this file)
+- `docs/implementation-artifacts/epic-4/4-17-edit-organism-from-library.md` (this file)
 
 ## Change Log
 

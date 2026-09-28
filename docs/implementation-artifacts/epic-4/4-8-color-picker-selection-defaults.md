@@ -730,8 +730,8 @@ behaviour the task lists did not ask for; left as is.
 | `eslint.config.mjs:22-39, 74-102` | AR-46's selectors: `hsl(`/`rgb(`/hex literals are banned in `.tsx`; `var(--gol-*)` inside `box-shadow` is fine; inline `style` from a LUT string is fine. |
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/organism-editor.html:212-297, 919-952, 1263-1285` | `.color-selected` / `.color-selected-row` / `.color-toggle` / `.color-palette` / `.color-swatch` (+ `.selected`, `.in-use::after`) / `.color-reuse-warning` CSS; the markup (label, description, the two-sentence copy, `title` per swatch — all 20 hexes match the registry); the collapse + swatch-click script. |
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:163-206, 528, 549, 755-757, 796-798` | Label, description, the 8/8/4 layout sketch, "Large square (100px × 100px)", `3px solid [colour]`, the 0.3 glow, 40px swatches, "In use … still selectable", "Next unused palette color; if all 20 are in use, the least-used color (ties by palette order)", "Color: Must be selected", "in-use colors remain selectable … no filtering". ⚠️ Its colour list (`:184-187`, `#ff0055` …) predates RFC-007 — the registry is the authority; ignore those hexes. |
-| `docs/implementation-artifacts/4-7-aging-degradation-toggle.md` | FD1–FD7, the review patches (not-vacuous colour assertions, no literal cell index, strike-not-rewrite in deferred-work), the bundle figures (chunk 4744 B, routes unchanged). |
-| `docs/implementation-artifacts/4-6-dominance-control.md` / `4-5-organism-name-field.md` | FD3 (one draft object), FD5 (no transition), FD6 (`styled()` over MUI form components), the review habits (assert attributes exist; derive numbers; exact counts; controlled harness). |
+| `docs/implementation-artifacts/epic-4/4-7-aging-degradation-toggle.md` | FD1–FD7, the review patches (not-vacuous colour assertions, no literal cell index, strike-not-rewrite in deferred-work), the bundle figures (chunk 4744 B, routes unchanged). |
+| `docs/implementation-artifacts/epic-4/4-6-dominance-control.md` / `4-5-organism-name-field.md` | FD3 (one draft object), FD5 (no transition), FD6 (`styled()` over MUI form components), the review habits (assert attributes exist; derive numbers; exact counts; controlled harness). |
 | `docs/implementation-artifacts/deferred-work.md:87, 1058-1148` | The MUI derived-token trap; the 4.6 Color-order pointer and the 4.7 stopgap item — both struck here; the 4.6/4.7 sections' shape for the new section. |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15/4.24/4.25 gated on Epic 3; this story proposes no gate (see the last line of this file). |
 
@@ -934,7 +934,7 @@ keeps both hunks).
   528, 549, 755-757, 796-798`; `clinical-lab-theme/organism-editor.html:212-297, 919-952,
   1263-1285`.
 - `docs/implementation-artifacts/palette-cvd-validation.md:79-82` (G1–G4 thresholds and floors).
-- `docs/implementation-artifacts/4-7-aging-degradation-toggle.md` (FD1–FD7, review findings,
+- `docs/implementation-artifacts/epic-4/4-7-aging-degradation-toggle.md` (FD1–FD7, review findings,
   bundle figures); `4-6-dominance-control.md` (FD1–FD6, review findings);
   `4-5-organism-name-field.md` (FD3, FD5, FD6); `4-4-three-column-responsive-layout.md` (FD2 —
   each column scrolls; FD4 — tiers are CSS); `3-13-speed-control.md` (trap 5 — `aria-hidden`
@@ -1040,7 +1040,7 @@ Sonnet (claude-sonnet-5), via `bmad-dev-story`.
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/4-8-color-picker-selection-defaults.md` (this file)
+- `docs/implementation-artifacts/epic-4/4-8-color-picker-selection-defaults.md` (this file)
 
 ### Change Log
 

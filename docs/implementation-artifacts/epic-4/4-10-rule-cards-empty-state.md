@@ -728,7 +728,7 @@ gate is the PR's run, checked after this review.
       output recorded below" is followed by no exit code, no coverage line and no e2e summary (Task 9);
       AC10's "CI on the pushed branch checked with `gh run list`" is ticked although no run existed
       (the workflow triggers on `main` and `pull_request` only); the layout test additions are
-      counted as one (there are two). [`docs/implementation-artifacts/4-10-rule-cards-empty-state.md`]
+      counted as one (there are two). [`docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md`]
 - [x] [Review][Patch] `CardBody` deviates from the pinned `.rule-body` (`0 18px 18px`) with
       `paddingTop: 18px` and no recorded why — the mockup's zero top padding leans on `.field-label`'s
       20px top margin, which `fieldStyles.Label` deliberately dropped; the Task 4 followers line
@@ -747,7 +747,7 @@ gate is the PR's run, checked after this review.
       `organism-editor.html:683-695` as `--gol-text-secondary`, `padding: 6px 10px`, 1px
       `--gol-border-control`; the mockup's rule sits at `:672-680` with `--text-tertiary`, `padding:
       8px`, `border: var(--border)`. The code follows the story text.
-      [`docs/implementation-artifacts/4-10-rule-cards-empty-state.md:AC4`] — deferred, pre-existing
+      [`docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md:AC4`] — deferred, pre-existing
       (create-story authoring; a spec touch, not a code change)
 
 Dismissed as noise (17): the WebKit mouse-click focus assertion in e2e test 3 (evidence is CI's,
@@ -804,10 +804,10 @@ no first-pass patch regressed. What remains:
 - [x] [Review][Patch] The recorded owner decision says "header `+ Add Rule` when the list is
       empty"; code, AC5 and test (g) target the empty state's CTA (same name and callback, so the
       behaviour is identical — the record is wrong, not the code).
-      [`docs/implementation-artifacts/4-10-rule-cards-empty-state.md:682`]
+      [`docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md:682`]
 - [x] [Review][Patch] Task 8 test-5 text still starts "from `Rule 1`'s Summary"; the e2e has
       started on `Delete rule 1` since the first-pass patch, and `132501a` edited the end of that
-      paragraph without the start. [`docs/implementation-artifacts/4-10-rule-cards-empty-state.md:593-595`]
+      paragraph without the start. [`docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md:593-595`]
 
 Dismissed as noise (7): implicit form submission on the Summary's Enter (no `<form>` in the editor,
 `OrganismNameField.tsx:112`); the empty-list branch landing on the empty CTA, an Enter-activated
@@ -836,14 +836,14 @@ bookkeeping:
       The decision is the owner's; the gap is that the next reader finds two authoritative docs
       contradicting each other. Add a `→ Story 4.26` pointer at the three sites and say
       "supersedes" in 4.26's own AC. [`docs/planning-artifacts/epics.md:1113,1312`,
-      `docs/implementation-artifacts/4-10-rule-cards-empty-state.md:104-106`,
+      `docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md:104-106`,
       `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md:593`]
 - [x] [Review][Patch] The story file is one commit stale against `deferred-work.md` — the owner
       decision, its resolution note, the Completion Note and the Change Log all say "a later story"
       although `0575e72` created Story 4.26 in the same push; the File List omits
       `docs/planning-artifacts/epics.md`; and the owner-decision line says "mirroring UX-DR15's
       organism-level delete confirmation" where 4.26 pins the Story 1.13 `DeleteBattleDialog`
-      pattern. [`docs/implementation-artifacts/4-10-rule-cards-empty-state.md:781-784,1202-1208,1233,1257-1261`]
+      pattern. [`docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md:781-784,1202-1208,1233,1257-1261`]
 - [x] [Review][Patch] Deferred entry slips: "`<RuleCard>`'s decision 2" — `132501a` changed
       `RulesEditor.tsx`'s delete-focus effect, not `RuleCard`; "hit-" / "tests" split across a
       soft line break renders as "hit- tests"; "sprint board" for `sprint-status.yaml`.
@@ -991,8 +991,8 @@ cross-lane dependency).
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:302-374, 420-442, 526-531, 582-599` | Rules header, rule card (header components, summary input), empty state, opening state, rule management (default Born, focus to Summary, delete without confirmation). |
 | `docs/planning-artifacts/ux-designs/…/ORGANISM-EDITOR-UPDATES.md:52-84` | The accordion revision FD1 records and declines. |
 | `docs/implementation-artifacts/deferred-work.md:26, 29, 38-41, 725-729, 746-750, 954-957, 1017-1018, 1294-1297` | Duplicate ids (out of scope), UTF-16 counting, the hasher, the two 4.2 items to re-point, the 4.4 item to strike, the WebKit flake, the port-reuse trap. |
-| `docs/implementation-artifacts/4-4-three-column-responsive-layout.md` | FD1–FD6, the review patches, `:262-272` (the deferred note that assigns the slot to this story). |
-| `docs/implementation-artifacts/4-9-color-reuse-warning-cvd-validation.md` | The review findings as habits: assert the thing moved; derive names, never literals; a generated-content glyph joins an accessible name (why every glyph here is `aria-hidden` on a real node inside a button whose name is `aria-label`); an empty `styled('div')({})` is dead weight. |
+| `docs/implementation-artifacts/epic-4/4-4-three-column-responsive-layout.md` | FD1–FD6, the review patches, `:262-272` (the deferred note that assigns the slot to this story). |
+| `docs/implementation-artifacts/epic-4/4-9-color-reuse-warning-cvd-validation.md` | The review findings as habits: assert the thing moved; derive names, never literals; a generated-content glyph joins an accessible name (why every glyph here is `aria-hidden` on a real node inside a button whose name is `aria-label`); an empty `styled('div')({})` is dead weight. |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15/4.24/4.25 gated on Epic 3; this story proposes no gate. |
 
 ### Architecture compliance
@@ -1156,7 +1156,7 @@ to the same block and merge cleanly) and `apps/web/lib/themeTokens.test.ts` (one
   `biotech-terminal-theme/organism-editor.html:17-19`.
 - `docs/planning-artifacts/implementation-readiness-report-2026-07-16.md:318, 401` (issue #3 —
   delete without confirmation, resolved in the story's favour).
-- `docs/implementation-artifacts/4-4-three-column-responsive-layout.md` (FD1–FD6, `:262-272`);
+- `docs/implementation-artifacts/epic-4/4-4-three-column-responsive-layout.md` (FD1–FD6, `:262-272`);
   `4-3-editor-modal-shell.md` (FD1 — the AC-over-revision precedent); `4-8-…` / `4-9-…` (the
   draft pattern, the review habits); `2-13-save-battle.md` (the at-cap notice this story does not
   replicate); `1-12-gallery-empty-state` → `epic-1/` (the empty-state primitives).
@@ -1287,7 +1287,7 @@ claude-sonnet-5 (Claude Sonnet 5), via the `bmad-dev-story` skill.
 - `docs/implementation-artifacts/sprint-status.yaml`
 - `docs/planning-artifacts/epics.md` (Story 4.26 added; 4.10 AC3 pointer)
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md` (Deleting a Rule step 2 pointer)
-- `docs/implementation-artifacts/4-10-rule-cards-empty-state.md` (this file)
+- `docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md` (this file)
 
 ### Change Log
 

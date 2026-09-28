@@ -858,7 +858,7 @@ pushed; CI is running on `41de359`); the untracked `ci.log` (known, never staged
 | `apps/web/lib/themeTokens.test.ts:102-140, 203-256` | Danger pairs gated on `bg-primary`/`bg-secondary` only (never `bg-hover` text); the `var(--gol-…` source scan. |
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:545-565, 747-777` | The save flow (why the toast is 4.16's), the canonical messages, "focus first error". |
 | `docs/planning-artifacts/epics.md:1140-1151, 1177-1187, 1264-1275` | This story, 4.16 (where AC3/AC4's visible halves go), 4.23 (the dirty scope this story must not start). |
-| `docs/implementation-artifacts/4-5-organism-name-field.md` (FD2, FD4, Task 6 item 3), `4-11-condition-builder.md` (AC4, AC5, FD3, the review's option 1), `4-10-rule-cards-empty-state.md` (FD2, "What NOT to build"), `4-12-rule-reordering.md` (the habits) | The decisions this story inherits. |
+| `docs/implementation-artifacts/epic-4/4-5-organism-name-field.md` (FD2, FD4, Task 6 item 3), `4-11-condition-builder.md` (AC4, AC5, FD3, the review's option 1), `4-10-rule-cards-empty-state.md` (FD2, "What NOT to build"), `4-12-rule-reordering.md` (the habits) | The decisions this story inherits. |
 | `docs/implementation-artifacts/deferred-work.md:92, 358, 793-799, 1098-1102, 1137-1143, 1160-1167, 1217-1219, 1259-1262, 1356-1359, 1596-1599, 1606-1609` | The entries Task 6 closes or re-points; the Snackbar no-op; the polite/assertive line; the port trap. |
 | `.github/workflows/ci.yml:176-190`, `README.md` "Quality gate & deployment" | `main` is public — FD1's load-bearing fact. |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15/4.24/4.25 gated on Epic 3; this story proposes no gate. |
@@ -1032,7 +1032,7 @@ are `components/organisms/editor/**`, `lib/organisms/{organismDraft,ruleDraft}.*
 - `docs/planning-artifacts/rfcs/RFC-003-frontend-ui-architecture.md:58, 79-85, 229-236, 250-252`.
 - `packages/domain/src/organismSchema.ts:10-48`, `survivalRuleSchema.ts:78-85`
   (`conditions.min(1)` — the schema source of AC6).
-- `docs/implementation-artifacts/4-5-organism-name-field.md` (FD1, FD2, FD4, Task 6 item 3);
+- `docs/implementation-artifacts/epic-4/4-5-organism-name-field.md` (FD1, FD2, FD4, Task 6 item 3);
   `4-6-dominance-control.md` (FD3, FD4, review deferral `:441`); `4-8-…` (the colour note);
   `4-10-rule-cards-empty-state.md` (FD2, FD6, What NOT to build); `4-11-condition-builder.md`
   (AC4, AC5, AC6, FD3, FD6, FD8, the review's option 1); `4-12-rule-reordering.md` (Review
@@ -1187,7 +1187,7 @@ claude-sonnet-5 (Claude Code)
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/4-13-editor-validation-feedback.md` (this file)
+- `docs/implementation-artifacts/epic-4/4-13-editor-validation-feedback.md` (this file)
 
 ### Change Log
 

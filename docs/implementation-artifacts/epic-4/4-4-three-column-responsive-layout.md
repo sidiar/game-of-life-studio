@@ -424,7 +424,7 @@ FD5–FD7 to this file).
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/organism-editor.html:31-130, 137-149, 495-507, 895-1000, 1190-1200` | The column CSS (verbatim values above), section-title/description CSS, the markup with the three `<h3>`s, the `.rules-header` row 4.10 inherits. **No `@media` anywhere in it.** |
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:53-96, 634-656` | Column breakdown (320 / ~500–600 / 400) and the only source of the compressed (280 / flex / 350) and fold tiers — prose. |
 | `docs/planning-artifacts/ux-designs/…/ORGANISM-EDITOR-UPDATES.md:23-46` | "Rules (800px max)" and the header/footer revision 4.3's FD1 already deferred. |
-| `docs/implementation-artifacts/4-3-editor-modal-shell.md` | FD1–FD8 there (header form, `origin`, lazy boundary, `editor/` folder), the bundle figures, the review's e2e fixes (container opacity, focus-trap vacuity). |
+| `docs/implementation-artifacts/epic-4/4-3-editor-modal-shell.md` | FD1–FD8 there (header form, `origin`, lazy boundary, `editor/` folder), the bundle figures, the review's e2e fixes (container opacity, focus-trap vacuity). |
 | `docs/implementation-artifacts/deferred-work.md:747-793` | 4.3's open items — the header/footer divergence this story must not "fix" by building a footer; the `afterEach` sweep note (do not copy it into a new hook test — this story has none). |
 | `scripts/check-bundle-size.mjs:92-100` | The `/organisms` entry (305), the formula, "not a raise". |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.24/4.25 gated on `epic-3`; this story touches none of Epic 3's surfaces. |
@@ -566,7 +566,7 @@ and docs.
   634-656`; `ORGANISM-EDITOR-UPDATES.md:23-46`; `clinical-lab-theme/organism-editor.html:31-130,
   137-149, 495-507, 895-1000, 1190-1200`; `UX-PHASE-COMPLETION-REVIEW.md:342, 472` (responsive tiers
   acknowledged as not mocked up).
-- `docs/implementation-artifacts/4-3-editor-modal-shell.md` (FD1–FD8, bundle figures, review
+- `docs/implementation-artifacts/epic-4/4-3-editor-modal-shell.md` (FD1–FD8, bundle figures, review
   findings); `4-2-organism-card-grid.md` (review assertion-hygiene classes).
 - `docs/implementation-artifacts/deferred-work.md:747-793` (4.3's open items).
 - `docs/implementation-artifacts/lane-gates.yaml`.
@@ -669,7 +669,7 @@ Claude Opus 5 (`claude-opus-5`), via `bmad-dev-story` on branch
 - `docs/implementation-artifacts/deferred-work.md` (modified — new section)
 - `docs/project-context.md` (modified — one bullet under *Layout & fixtures*, `Last updated`)
 - `docs/implementation-artifacts/sprint-status.yaml` (modified — story status)
-- `docs/implementation-artifacts/4-4-three-column-responsive-layout.md` (this file)
+- `docs/implementation-artifacts/epic-4/4-4-three-column-responsive-layout.md` (this file)
 
 ### Change Log
 

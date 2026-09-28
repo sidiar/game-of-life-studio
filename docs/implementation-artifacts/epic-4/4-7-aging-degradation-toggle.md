@@ -423,7 +423,7 @@ commit.
 - [x] [Review][Patch] Off-state "flat strip" assertions were vacuous — eight empty `style.backgroundColor`s (jsdom) or eight `rgba(0, 0, 0, 0)`s (Playwright) are also "one distinct value"; both now assert the first cell is painted [apps/web/components/organisms/editor/AgingToggleField.test.tsx:206, apps/web/e2e/organisms.spec.ts:1107]
 - [x] [Review][Patch] Label-click test only proved Off → On; now clicks back and pins a single `onChange(false)` [apps/web/components/organisms/editor/AgingToggleField.test.tsx:128]
 - [x] [Review][Patch] Test (a) named the switch's `id` `htmlFor` and then compared it to the label's `for` — reads backwards; renamed `switchId` [apps/web/components/organisms/editor/AgingToggleField.test.tsx:89]
-- [x] [Review][Patch] Dev Agent Record said "six" deferred items; seven were written (the 4.13 Save-gate note was omitted) [docs/implementation-artifacts/4-7-aging-degradation-toggle.md Completion Notes]
+- [x] [Review][Patch] Dev Agent Record said "six" deferred items; seven were written (the 4.13 Save-gate note was omitted) [docs/implementation-artifacts/epic-4/4-7-aging-degradation-toggle.md Completion Notes]
 - [x] [Review][Patch] The 4.6 review's `Field`/`Label`/`Slider` item was rewritten wholesale instead of having its `Field`/`Label` half struck; original prose restored with the half struck and the `Slider` half left open, as Task 3 asked [docs/implementation-artifacts/deferred-work.md:1091]
 
 Noted, not patched: the strike of the 4.6 "before bundle measurement was partial" item was outside
@@ -551,8 +551,8 @@ seed as a 4.8 stopgap) are recorded in `deferred-work.md` and are not review dec
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/organism-editor.html:448-492, 968-976, 1248-1261` | `.toggle-container` / `.toggle-label` / `.toggle-switch` CSS, the markup (label, description, "Off", the div switch) and the click script (class flip + label text/colour flip). |
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/settings.html:221-255, 428, 477, 489, 544` | The same `.toggle-switch` rule set on the Settings page — Epic 6's rows; the page note calling the pill shape out. Read for parity; nothing built here. |
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:256-274, 530` | Label, description, "OFF (default): gray toggle", "ON: accent … pale (30%) … full at age 7 (FR-5.7)", the `░ ▒ ▓ █` example sketch, "Aging: OFF" for a new organism. |
-| `docs/implementation-artifacts/4-6-dominance-control.md` | FD1–FD6, the review patches (label-click double fire is the analogue of "slider supersedes buffer"; derive numbers; exact-count guards; assert attributes exist), the bundle figures (chunk 4216 B, `/organisms` 295.3 KB). |
-| `docs/implementation-artifacts/4-5-organism-name-field.md` | FD3 (one draft object), FD5 (no transition), FD6 (`styled()` over MUI form components). |
+| `docs/implementation-artifacts/epic-4/4-6-dominance-control.md` | FD1–FD6, the review patches (label-click double fire is the analogue of "slider supersedes buffer"; derive numbers; exact-count guards; assert attributes exist), the bundle figures (chunk 4216 B, `/organisms` 295.3 KB). |
+| `docs/implementation-artifacts/epic-4/4-5-organism-name-field.md` | FD3 (one draft object), FD5 (no transition), FD6 (`styled()` over MUI form components). |
 | `docs/implementation-artifacts/deferred-work.md:87, 1052-1100` | The MUI Switch derived-token trap (unchanged); the 4.6 sections (the `Field`/`Label` extraction pointer this story closes; the `type="number"` and colour-order notes). |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15/4.24/4.25 gated on Epic 3; this story proposes no gate (see the last line of this file). |
 
@@ -727,7 +727,7 @@ keeps both hunks).
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md:256-274,
   530`; `clinical-lab-theme/organism-editor.html:448-492, 968-976, 1248-1261`;
   `clinical-lab-theme/settings.html:221-255, 544`.
-- `docs/implementation-artifacts/4-6-dominance-control.md` (FD1–FD6, review findings, bundle
+- `docs/implementation-artifacts/epic-4/4-6-dominance-control.md` (FD1–FD6, review findings, bundle
   figures); `4-5-organism-name-field.md` (FD3, FD5, FD6); `4-4-three-column-responsive-layout.md`
   (FD6 — slots); `3-13-speed-control.md` (trap 5 — `aria-hidden` marks, trap 9 — controlled).
 - `docs/implementation-artifacts/deferred-work.md:87, 785-793, 1008-1016, 1052-1100`.

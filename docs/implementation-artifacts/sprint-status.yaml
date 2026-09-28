@@ -115,7 +115,7 @@ development_status:
   # files back up beside this file first (CLAUDE.md).
 
   # Epic 4: Custom Organisms & the Shared Library
-  epic-4: in-progress
+  epic-4: done
   4-1-organisms-route-top-navigation: done
   4-2-organism-card-grid: done
   4-3-editor-modal-shell: done
@@ -142,7 +142,10 @@ development_status:
   4-24-edit-organism-from-battle: done
   4-25-create-organism-from-battle: done
   4-26-rule-delete-confirmation-dialog: done
-  epic-4-retrospective: optional
+  # No epic-4-retrospective key: the retrospective was deliberately skipped (Sidiar, 2026-09-28),
+  # the same call as Epics 1–3. Epic 4's stories are archived into epic-4/, and the retrospective
+  # skill globs story files NON-recursively — it would find zero there. To run one, move the story
+  # files back up beside this file first (CLAUDE.md).
 
   # Epic 5: Sharing, Backup & Workspace Management
   epic-5: in-progress

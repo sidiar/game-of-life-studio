@@ -526,7 +526,7 @@ at the end.
 - `docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md:248-271` — Decision 6/7 (`gol:settings`, the FR-8.2 meter belongs to 5.2).
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/settings.html` — nav `:59-85,349-358`; header `:88-103,361-364`; card `:105-137`; stats `:282-314,377-390`.
 - `docs/planning-artifacts/implementation-readiness-report-2026-07-16.md:48,340` — clinical-lab is canonical; the seam pattern FD4 applies.
-- `docs/implementation-artifacts/4-1-organisms-route-top-navigation.md` — the precedent (ACs, FDs, review findings `:252-262`, measured bundle figures `:483-497`).
+- `docs/implementation-artifacts/epic-4/4-1-organisms-route-top-navigation.md` — the precedent (ACs, FDs, review findings `:252-262`, measured bundle figures `:483-497`).
 - `docs/implementation-artifacts/deferred-work.md:176` (route-count guard → this story), `:187` (`aria-busy` trap), `:196` (toolbar band), `:397` (bundle gate mechanism — do not pre-empt), `:722` (`error.tsx` — pre-existing, gains a third surface here; note it in the record, do not fix).
 - `docs/implementation-artifacts/lane-gates.yaml` — the 5-vs-4 analysis; this story has no row.
 - `docs/project-context.md` — Framework rules (K.5, route groups, `AppShell` route-unaware, AR-27), Testing rules, Code Quality (AR-46, `spec:check`), Development Workflow (`ci:dev`, commit gate).

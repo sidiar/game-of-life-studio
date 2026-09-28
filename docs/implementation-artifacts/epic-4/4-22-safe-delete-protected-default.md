@@ -1033,7 +1033,7 @@ touched `components/organisms/**`.
   - `organism-editor-design.md:284-300, :573-583` has the editor Delete and the delete flow;
   - `ux-design-complete.md:686-699` has the exit points;
   - `clinical-lab-theme/organism-library.html:334-349, :442, :648-675` has the card Delete.
-- `docs/implementation-artifacts/4-21-delete-integrity-blocks.md` has FD1–FD12 and both review
+- `docs/implementation-artifacts/epic-4/4-21-delete-integrity-blocks.md` has FD1–FD12 and both review
   decisions.
 - `docs/implementation-artifacts/deferred-work.md:3024-3079` has 4.21's section, and
   `:2006-2021, :2103-2116` has the toast idioms.
@@ -1215,7 +1215,7 @@ Claude Opus 5.5 (1M context) — `claude-opus-5-5[1m]`
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/4-22-safe-delete-protected-default.md`
+- `docs/implementation-artifacts/epic-4/4-22-safe-delete-protected-default.md`
 - `scripts/bundle-baselines.json` (tool-written)
 
 ### Change Log
