@@ -446,7 +446,15 @@ test.describe('import (Story 5.9)', () => {
     await expect(statValue(page, 'Saved Battles')).toHaveText('2');
 
     await pickImportFile(page, IMPORT_FILE_BUFFER);
-    await expect(page.getByRole('dialog', { name: 'Replace Your Workspace?' })).toBeVisible();
+    // Settle before scanning. `toBeVisible()` alone scanned mid-Fade on CI (tablet, webkit) and
+    // measured the title's blended colours — #262626 on #212121, a different pair every retry.
+    // The Fade's opacity is read off `.MuiDialog-container`, not the `role="dialog"` paper, whose
+    // own opacity is 1 from its first frame (`organisms.spec.ts`'s settle idiom records why); the
+    // 300ms then covers `Button`'s own mount transition (the Clear All test below).
+    const dialog = page.getByRole('dialog', { name: 'Replace Your Workspace?' });
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
+    await page.waitForTimeout(300);
 
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations).toEqual([]);
