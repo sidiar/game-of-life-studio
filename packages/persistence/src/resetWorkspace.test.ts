@@ -99,6 +99,7 @@ describe('resetWorkspace (AC3, AC4 — the AR-44 real-localStorage integration t
     // The clear itself uses removeItem, not setItem, so it already ran — the organisms write is
     // what failed, leaving the store cleared but without Conway's Classic re-seeded.
     expect(await repos.battles.list()).toEqual([]);
+    expect(await repos.organisms.list()).toEqual([]);
 
     spy.mockRestore();
 

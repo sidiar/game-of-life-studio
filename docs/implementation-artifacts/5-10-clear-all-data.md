@@ -4,7 +4,7 @@ baseline_commit: ef01179a56fe0f51b9064349b67021cd5f054094
 
 # Story 5.10: Clear All Data
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -262,6 +262,22 @@ The epic's four ACs are split here so a reviewer can check each one on its own.
     `npm run build:standalone && npm run bundle:baseline`. Never hand-edit
     `scripts/bundle-baselines.json`.
   - [x] 6.3 Fill in the Dev Agent Record, including any forced decision you deviated from.
+
+### Review Findings
+
+Code review 2026-09-28 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor over `ef01179..33daf28`).
+2 decision-needed, 7 patch (all applied), 1 defer, 9 dismissed.
+
+- [ ] [Review][Decision] The Clear Data button's accessible name does not contain its visible label (WCAG 2.5.3 Label in Name) — The visible text is "Clear Data" but Task 3.1 prescribes `aria-label="Clear all data"`, and "Clear Data" is not a contiguous substring of that. A voice-control user saying "click Clear Data" may not hit the button. The Export ("Export" / "Export workspace") and Import rows keep the visible text inside the name; this row breaks that pattern. axe does not catch it (`label-content-name-mismatch` is experimental). The dev followed the spec, so this is a spec-versus-a11y conflict. Options: (a) aria-label "Clear data (all battles and organisms)": the visible label becomes the name's prefix, the mockup's "Clear Data" text stays, and the name stays distinct from the dialog's "Clear All Data" confirm; (b) change the visible text to "Clear All Data" and keep the aria-label (departs from the mockup's `settings.html:432-442` button text, and the name then equals the dialog's confirm button, so tests must scope by dialog); (c) drop the aria-label so the name is "Clear Data" (loses the "all"); (d) accept as is. Every option except (d) changes the RTL/e2e `name: /clear all data/i` locators. [apps/web/components/settings/ClearAllDataRow.tsx:212-218]
+- [ ] [Review][Decision] Outcome messages from sibling rows go stale and contradict each other — Each row clears only its own `message` on a new flow (`ClearAllDataRow.tsx:144`, `ImportWorkspaceRow.tsx:188`). A successful Import ("Imported N battles…") followed by a confirmed Clear All shows both `role="status"` lines at once, and the Import line is now false for the current store. The reverse order does the same. It also makes any unscoped `getByRole('status')` ambiguous, so a Playwright flow that chained Import then Clear would hit a strict-mode violation. FD6 rules out cross-row locking but says nothing about cross-row messages, so the fix needs the owner's intent. Options: (a) `<DataManagement>` owns a single "last outcome" slot that every row writes to, and a new flow in any row replaces it; (b) `<DataManagement>` passes each row an `onFlowStart` that clears the other rows' messages, so each row keeps its own slot; (c) only a *successful Clear All* clears the siblings' messages, because it is the one outcome that falsifies them; (d) accept it and record it in `deferred-work.md` beside FD6. [apps/web/components/settings/ClearAllDataRow.tsx:144,221-222]
+- [x] [Review][Patch] Focus return after a confirmed Clear All was untested (AC6): added `toHaveFocus` assertions on the success and `clearAll`-failure confirm paths [apps/web/components/settings/ClearAllDataRow.test.tsx]
+- [x] [Review][Patch] The RTL settings-preservation check never seeded a non-default record (Task 5.1 / AC4): now saves a non-default `Settings` and deep-compares `settings.load()` before and after [apps/web/components/settings/ClearAllDataRow.test.tsx]
+- [x] [Review][Patch] The backdrop-click test never checked the store (Task 5.1): added before/after snapshots of battles and organisms [apps/web/components/settings/ClearAllDataRow.test.tsx]
+- [x] [Review][Patch] The "second click is a no-op (one dialog, one reset)" test was vacuous. `{dialogMounted && …}` gives one dialog with or without the guard. It now clicks again during the exit, then asserts one `clearAll` call, the status, and no dialog. Mutation-checked: with the `pendingRef` guard removed, it fails [apps/web/components/settings/ClearAllDataRow.test.tsx]
+- [x] [Review][Patch] The AC6 ordering test could pass vacuously: MUI `aria-hidden`s the row's container while the modal is open, so a default role query could not see an early status. It now queries `{ hidden: true }` and asserts `clearAll` has not run at confirm time. Mutation-checked: running the reset from `handleDialogConfirm` fails it [apps/web/components/settings/ClearAllDataRow.test.tsx]
+- [x] [Review][Patch] The keyboard path was untested (AC8): added a test for Tab reaching Clear Data, Enter opening the dialog, Cancel autofocused, Tab staying trapped in the dialog, and Escape cancelling with focus restored and the store untouched [apps/web/components/settings/ClearAllDataRow.test.tsx]
+- [x] [Review][Patch] The `resetWorkspace` partial-failure test described "cleared but without Conway's Classic" but asserted only battles: added `organisms.list()` → `[]` [packages/persistence/src/resetWorkspace.test.ts:102]
+- [x] [Review][Defer] The outcome live region mounts already filled, so some screen readers may not announce it [apps/web/components/settings/ClearAllDataRow.tsx:221-222] — deferred, pre-existing (Story 5.9's row shape; fix it for all three rows at once)
 
 ## Dev Notes
 

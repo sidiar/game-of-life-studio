@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { CONWAYS_CLASSIC } from '@gol/domain';
+import { CONWAYS_CLASSIC, DEFAULT_SETTINGS } from '@gol/domain';
 import type { AppRepositories, OrganismRepository } from '@gol/persistence';
 import { createFakeRepositories, createMockWorkspace } from '@gol/test-utils';
 import ClearAllDataRow from './ClearAllDataRow';
@@ -115,6 +115,10 @@ describe('ClearAllDataRow', () => {
 
   it('a backdrop click maps to Cancel: the store is untouched and focus returns to Clear Data', async () => {
     const repos = createFakeRepositories(createMockWorkspace());
+    const before = {
+      battles: await repos.battles.list(),
+      organisms: await repos.organisms.list(),
+    };
     renderRow({ workspace: repos, organisms: repos.organisms });
 
     const user = userEvent.setup();
@@ -126,6 +130,8 @@ describe('ClearAllDataRow', () => {
     await user.click(container);
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await repos.battles.list()).toEqual(before.battles);
+    expect(await repos.organisms.list()).toEqual(before.organisms);
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /clear all data/i })).toHaveFocus(),
     );
@@ -134,6 +140,14 @@ describe('ClearAllDataRow', () => {
   it('confirm on a populated fake resets to zero battles / Conway alone, shows status, calls onCleared once, and settings survive (AC3/AC4/AC5)', async () => {
     const mockWorkspace = createMockWorkspace();
     const repos = createFakeRepositories(mockWorkspace);
+    // A NON-default settings record, so "unchanged" is a real comparison, not default === default.
+    await repos.settings.save({
+      ...DEFAULT_SETTINGS,
+      theme: 'biotech-terminal',
+      gridLines: false,
+      defaultSpeed: 2,
+    });
+    const settingsBefore = await repos.settings.load();
     const settingsSaveSpy = vi.spyOn(repos.settings, 'save');
     const { onCleared } = renderRow({ workspace: repos, organisms: repos.organisms });
 
@@ -150,20 +164,33 @@ describe('ClearAllDataRow', () => {
     expect(await repos.organisms.list()).toEqual([CONWAYS_CLASSIC]);
     expect(onCleared).toHaveBeenCalledTimes(1);
     expect(settingsSaveSpy).not.toHaveBeenCalled();
+    expect(await repos.settings.load()).toEqual(settingsBefore);
+    // AC6: focus returns to Clear Data once the outcome is published (the `pendingRef` hold +
+    // `focusTick` bump path, distinct from the Cancel/Escape/backdrop restore).
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /clear all data/i })).toHaveFocus(),
+    );
   });
 
   it('the dialog is already gone at the first moment the status exists — the ordering assertion (AC6)', async () => {
     const repos = createFakeRepositories(createMockWorkspace());
-    renderRow({ workspace: repos, organisms: repos.organisms });
+    const workspace = { clearAll: vi.fn(() => repos.clearAll()) };
+    renderRow({ workspace, organisms: repos.organisms });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /clear all data/i }));
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
+    // The confirm only records the choice: the reset has not started while the dialog exits.
+    expect(workspace.clearAll).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(screen.queryByRole('status')).not.toBeNull());
+    // `hidden: true`: while the MUI modal is open it sets `aria-hidden` on its siblings (this
+    // row's container among them), so a default role query could not see a status published
+    // too early — the assertion below would pass vacuously.
+    await waitFor(() => expect(screen.queryByRole('status', { hidden: true })).not.toBeNull());
     // Same tick as the wait resolving: the dialog must already be gone.
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(workspace.clearAll).toHaveBeenCalledTimes(1);
   });
 
   it('failure: clearAll rejecting shows the alert without claiming the workspace is unchanged, and onCleared still runs (FD3)', async () => {
@@ -180,6 +207,9 @@ describe('ClearAllDataRow', () => {
     expect(alert.textContent).not.toMatch(/unchanged/i);
     expect(alert.textContent).not.toMatch(/not changed/i);
     expect(onCleared).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /clear all data/i })).toHaveFocus(),
+    );
   });
 
   it('failure after the clear (organisms.save rejects): a second confirm with the wrapper passing through completes the reset (idempotent retry)', async () => {
@@ -214,15 +244,50 @@ describe('ClearAllDataRow', () => {
 
   it('a second Clear Data click while a flow is pending is a no-op (one dialog, one reset)', async () => {
     const repos = createFakeRepositories(createMockWorkspace());
-    renderRow({ workspace: repos, organisms: repos.organisms });
+    const workspace = { clearAll: vi.fn(() => repos.clearAll()) };
+    renderRow({ workspace, organisms: repos.organisms });
 
     const user = userEvent.setup();
     const button = screen.getByRole('button', { name: /clear all data/i });
     await user.click(button);
-    await screen.findByRole('dialog');
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Clear All Data' }));
+    // The dialog is now exiting and the flow is still pending. jsdom ignores `inert`, so this
+    // click reaches the handler: without the `pendingRef` guard it would reset the recorded
+    // choice and reopen the dialog, and the reset would never run.
     await user.click(button);
 
-    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(workspace.clearAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('the flow works from the keyboard: Tab reaches Clear Data, Enter opens, focus stays trapped, Escape cancels (AC8)', async () => {
+    const repos = createFakeRepositories(createMockWorkspace());
+    const battlesBefore = await repos.battles.list();
+    renderRow({ workspace: repos, organisms: repos.organisms });
+
+    const user = userEvent.setup();
+    await user.tab();
+    const button = screen.getByRole('button', { name: /clear all data/i });
+    expect(button).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    const dialog = await screen.findByRole('dialog', { name: 'Clear All Data?' });
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus(),
+    );
+
+    // Tab cycles within the dialog (MUI's focus trap), never back out to the page.
+    await user.tab();
+    expect(within(dialog).getByRole('button', { name: 'Clear All Data' })).toHaveFocus();
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(button).toHaveFocus());
+    expect(await repos.battles.list()).toEqual(battlesBefore);
   });
 
   it('under StrictMode, a confirmed reset still publishes its status (the mounted-ref re-arm)', async () => {

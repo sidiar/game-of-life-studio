@@ -3831,3 +3831,15 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   page is the same codebase-wide single-writer stance Story 5.9's FD5 already accepts. Fix if ever
   needed: a single card-level `pendingRef` (or `useReducer`) shared by all three rows' click
   handlers, replacing each row's own ref.
+
+## Deferred from: code review of 5-10-clear-all-data (2026-09-28)
+
+- **The row's outcome live region mounts already filled, so some screen readers may not announce
+  it.** `ClearAllDataRow.tsx` renders `{message?.role === 'status' && <SuccessText role="status">…}`
+  (and the alert likewise): `setMessage(null)` removes the region, and the outcome inserts a new
+  element whose text is already present. NVDA/JAWS in particular announce reliably only changes
+  *inside* a live region that was already in the tree. This is pre-existing: it copies Story 5.9's
+  `ImportWorkspaceRow.tsx:337-338` shape, and the Export row's `ErrorText` has the same shape. Fix
+  it once for all three rows, not only this one: keep an always-mounted, empty `role="status"` /
+  `role="alert"` container per row and swap only its text. No test covers real announcement; axe
+  doesn't check it.
