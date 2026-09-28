@@ -3998,3 +3998,14 @@ Open owner flags from the story (not blockers — the story proceeded on its for
   `data-dirty`), an edit left unsaved is lost silently on navigation. Accepted as a lighter-weight
   Settings row: FR-8.1 permits "apply on confirm" and Save sits directly under the field. Revisit
   (leave guard or save-on-blur) if users report lost edits.
+- **`GridSettingsSection`'s hidden radio is still a 1px box — the pattern that broke Firefox in the
+  colour picker (Story 7.2 CI finding, `cc1fcd2`).** `HiddenRadio` in
+  `apps/web/components/battle/editor/GridSettingsSection.tsx` is `position: absolute`, 1px × 1px,
+  `opacity: 0` inside its option label. Firefox dispatches pointer events at whole-pixel
+  coordinates, so once a layout shift puts that 1px box at a sub-pixel offset, a click at its centre
+  lands on the `<label>`: Playwright's hit-target check reports "label intercepts pointer events"
+  and the test times out (the colour picker failed exactly this way after 7.2's description field
+  changed the Basic Information section's height by a fraction of a pixel). Not failing today. Fix
+  when that section is next touched, the same way `ColorPickerField`'s was: the radio covers the
+  whole option (`inset: 0`, `width`/`height: 100%`, `opacity: 0`, `cursor: pointer`) — still in
+  the accessibility tree and tab order, never `display: none`.

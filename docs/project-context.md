@@ -489,6 +489,13 @@ Following instinct here produces code that compiles, passes tests, and violates 
   deliberately override stale RFC snippets (`repositoryFactory.ts` naming, the factory's
   `APP_MODE` read, RFC-003 Decision 2's per-`[data-theme]` token structure and its illustrative
   theme snippet). New conflicts are signal, not noise.
+- **Not a conflict: an RFC code-snippet comment that doesn't list every field.** Comments inside
+  RFC snippets say what the snippet is *for*, not everything it carries — e.g. RFC-006's
+  `exportWorkspace()` "battles + organisms only — settings never travel" exists to state the
+  settings exclusion (Decision F), and stays correct although the envelope now also carries the
+  workspace description (Story 7.2). Don't raise these as stale spec, and don't "fix" them by
+  appending each new field; flag a snippet only when what it states is actually wrong (owner
+  ruling, 2026-09-28).
 - Spec authority order: **Architecture Cross-Cutting Decisions** (A–K, M1–M16) → owning **RFC**
   → companion specs. Within one area the RFC wins; for anything cross-cutting the Decision wins.
 
