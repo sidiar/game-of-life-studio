@@ -481,3 +481,70 @@ describe('createWorkspaceSerializer.importWorkspace (mode-agnostic)', () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe('the workspace description on export (Story 7.2)', () => {
+  it('exportWorkspace carries the stored workspace description', async () => {
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({
+        organisms: [CONWAYS_CLASSIC],
+        workspaceMeta: { description: 'Lab notes.' },
+      }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    const envelope = await serializer.exportWorkspace();
+
+    expect(envelope.description).toBe('Lab notes.');
+    expect(WorkspaceExportSchema.parse(envelope).description).toBe('Lab notes.');
+  });
+
+  it('exportWorkspace omits the key when there is no description', async () => {
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({ organisms: [CONWAYS_CLASSIC] }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    expect('description' in (await serializer.exportWorkspace())).toBe(false);
+  });
+
+  it('a corrupt gol:workspace degrades to no description rather than failing the export', async () => {
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({
+        organisms: [CONWAYS_CLASSIC],
+        raw: { workspaceMeta: { description: 42 } },
+      }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    const envelope = await serializer.exportWorkspace();
+
+    expect('description' in envelope).toBe(false);
+    expect(envelope.organisms).toHaveLength(1);
+  });
+
+  it('a non-corruption failure reading the meta still rejects the export', async () => {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC] });
+    vi.spyOn(repos.workspaceMeta, 'load').mockRejectedValue(new Error('storage blocked'));
+    const serializer = createWorkspaceSerializer({ repos, appVersion: '1.2.3', now: fixedNow });
+
+    await expect(serializer.exportWorkspace()).rejects.toThrow('storage blocked');
+  });
+
+  it('exportBattle carries NO workspace description — the file is one battle, not a workspace (FD3)', async () => {
+    const battle = seededBattle();
+    const serializer = createWorkspaceSerializer({
+      repos: createFakeRepositories({
+        battles: [battle],
+        organisms: [CONWAYS_CLASSIC],
+        workspaceMeta: { description: 'Lab notes.' },
+      }),
+      appVersion: '1.2.3',
+      now: fixedNow,
+    });
+
+    expect('description' in (await serializer.exportBattle(battle.id))).toBe(false);
+  });
+});

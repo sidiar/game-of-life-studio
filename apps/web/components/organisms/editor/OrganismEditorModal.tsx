@@ -22,6 +22,7 @@ import type { OrganismRepository } from '@gol/persistence';
 // first load (the bundle gate is the measurement).
 import OrganismEditorLayout from './OrganismEditorLayout';
 import OrganismNameField from './OrganismNameField';
+import OrganismDescriptionField from './OrganismDescriptionField';
 import ColorPickerField from './ColorPickerField';
 import DominanceField from './DominanceField';
 import AgingToggleField from './AgingToggleField';
@@ -397,6 +398,8 @@ export function errorTargetSelector(target: DraftErrorTarget): string {
   switch (target.kind) {
     case 'name':
       return '[data-organism-name]';
+    case 'description':
+      return '[data-organism-description]';
     case 'rule':
       return `[data-rule-id="${CSS.escape(target.ruleId)}"] [data-add-condition]`;
     case 'condition': {
@@ -616,6 +619,10 @@ export default function OrganismEditorModal({
   // A functional update, so `setDominance` below cannot clobber a name change that landed in the
   // same batch.
   const setName = useCallback((name: string) => setDraft((d) => ({ ...d, name })), []);
+  const setDescription = useCallback(
+    (description: string) => setDraft((d) => ({ ...d, description })),
+    [],
+  );
   const setColorToken = useCallback(
     (colorToken: string) => setDraft((d) => ({ ...d, colorToken })),
     [],
@@ -1098,6 +1105,11 @@ export default function OrganismEditorModal({
                   <OrganismNameField
                     value={draft.name}
                     onChange={setName}
+                    showAllErrors={saveAttempted}
+                  />
+                  <OrganismDescriptionField
+                    value={draft.description}
+                    onChange={setDescription}
                     showAllErrors={saveAttempted}
                   />
                   <ColorPickerField

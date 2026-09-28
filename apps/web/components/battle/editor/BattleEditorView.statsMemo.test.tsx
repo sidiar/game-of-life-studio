@@ -72,6 +72,8 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
@@ -102,6 +104,8 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
@@ -131,6 +135,8 @@ describe('BattleEditorView — the stats memo does not rerun on an unrelated re-
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}

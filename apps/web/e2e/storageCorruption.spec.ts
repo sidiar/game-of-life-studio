@@ -46,6 +46,9 @@ function workspaceRaw(): RawKeys {
     [STORAGE_KEYS.schema]: JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION }),
     [STORAGE_KEYS.battles]: JSON.stringify(Object.fromEntries(battles.map((b) => [b.id, b]))),
     [STORAGE_KEYS.organisms]: JSON.stringify(Object.fromEntries(organisms.map((o) => [o.id, o]))),
+    // Story 7.2: `gol:workspace` is a STORAGE_KEY, so `readRawKeys` reads it — seeded with a real
+    // description so every byte-identity check below covers it too.
+    [STORAGE_KEYS.workspace]: JSON.stringify({ description: 'Lab notes.' }),
   };
 }
 

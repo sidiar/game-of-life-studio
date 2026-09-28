@@ -53,6 +53,10 @@ function baseProps() {
     },
     onImported: vi.fn(),
     onCleared: vi.fn(),
+    workspaceMeta: {
+      load: vi.fn().mockResolvedValue({}),
+      save: vi.fn().mockResolvedValue(undefined),
+    },
   };
 }
 
@@ -68,7 +72,7 @@ describe('DataManagement', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'Export Workspace' })).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Download a JSON file containing all your battles and organisms for backup or transfer',
+        'Download a JSON file containing all your battles, organisms and the workspace description for backup or transfer',
       ),
     ).toBeInTheDocument();
     const button = screen.getByRole('button', { name: /export workspace/i });
@@ -99,7 +103,13 @@ describe('DataManagement', () => {
     });
     expect(clearButton).toBeInTheDocument();
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(headings).toEqual(['Export Workspace', 'Import', 'Clear All Data']);
+    // Story 7.2: the workspace description row is FIRST — it is what Export carries.
+    expect(headings).toEqual([
+      'Workspace description',
+      'Export Workspace',
+      'Import',
+      'Clear All Data',
+    ]);
   });
 
   it('clicking Export calls exportWorkspace exactly once and hands the download seam the AC3 filename and the envelope', async () => {
@@ -213,6 +223,9 @@ describe('DataManagement', () => {
     render(<DataManagement serializer={serializer} {...baseProps()} />);
 
     const button = screen.getByRole('button', { name: /export workspace/i });
+    // Story 7.2: the description row's textarea and its Save button come first in the card.
+    await user.tab();
+    await user.tab();
     await user.tab();
     expect(button).toHaveFocus();
 
@@ -294,6 +307,7 @@ describe('DataManagement', () => {
       <DataManagement
         serializer={serializer}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         battles={repos.battles}
         organisms={repos.organisms}
         onImported={vi.fn()}
@@ -372,6 +386,7 @@ describe('DataManagement', () => {
       <DataManagement
         serializer={serializer}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         battles={repos.battles}
         organisms={repos.organisms}
         onImported={vi.fn()}
@@ -395,6 +410,7 @@ describe('DataManagement', () => {
       <DataManagement
         serializer={serializer}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         battles={repos.battles}
         organisms={repos.organisms}
         onImported={vi.fn()}
@@ -426,6 +442,7 @@ describe('DataManagement', () => {
       <DataManagement
         serializer={{ exportWorkspace: serializer.exportWorkspace, importWorkspace }}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         battles={repos.battles}
         organisms={repos.organisms}
         onImported={vi.fn()}

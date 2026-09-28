@@ -1,6 +1,11 @@
-import { organismClosure, toEnvelope, type WorkspaceExportWire } from '@gol/domain';
+import {
+  organismClosure,
+  toEnvelope,
+  type WorkspaceExportWire,
+  type WorkspaceMeta,
+} from '@gol/domain';
 import type { AppRepositories } from './repositories';
-import { ExportError } from './errors';
+import { CorruptDataError, ExportError } from './errors';
 import { applyImport, validateImportFile, type ImportSummary } from './workspaceImport';
 
 /**
@@ -29,7 +34,8 @@ export interface WorkspaceSerializerDeps {
 
 export interface WorkspaceSerializer {
   /**
-   * The whole workspace on the wire — battles + organisms, never settings (AR-12 / Decision F.1).
+   * The whole workspace on the wire — battles + organisms + the workspace description (Story 7.2),
+   * never settings (AR-12 / Decision F.1).
    *
    * Returns the WIRE shape (ISO timestamps), ready for `JSON.stringify`. The download itself —
    * `Blob`, `URL.createObjectURL`, the filename — lives in `apps/web/lib/export/`
@@ -40,7 +46,9 @@ export interface WorkspaceSerializer {
 
   /**
    * A single-battle export, `kind: 'battle'`, carrying the battle plus its rule-aware organism
-   * closure (Story 5.4, Decision E.5(b) / RFC-006 Decision 4).
+   * closure (Story 5.4, Decision E.5(b) / RFC-006 Decision 4) — and NO workspace description
+   * (Story 7.2 FD3): the file is one battle, not a workspace. Importing it replaces the workspace
+   * (M8) and so clears the importer's description; that is M8 working as specified.
    *
    * Takes the battle's `id`, reads `repos.battles.load(id)`, and rejects with
    * `ExportError('not-found')` when no battle exists under it — RFC-006 Decision 4's shape
@@ -113,12 +121,17 @@ export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): Worksp
       // repository's existing contract, not this function's to change; telling the user belongs to
       // Story 5.11 (load-time corruption handling), and the gap is recorded in `deferred-work.md`
       // against it.
-      const [battles, organisms] = await Promise.all([
+      const [battles, organisms, meta] = await Promise.all([
         repos.battles.listFull(),
         repos.organisms.list(),
+        loadMetaOrEmpty(repos),
       ]);
 
-      return toEnvelope('workspace', battles, organisms, { appVersion, exportedAt: now() });
+      return toEnvelope('workspace', battles, organisms, {
+        appVersion,
+        exportedAt: now(),
+        ...(meta.description !== undefined && { description: meta.description }),
+      });
     },
 
     async exportBattle(id: string): Promise<WorkspaceExportWire> {
@@ -137,4 +150,19 @@ export function createWorkspaceSerializer(deps: WorkspaceSerializerDeps): Worksp
       return applyImport(repos, envelope);
     },
   };
+}
+
+/**
+ * The workspace meta for export, degrading a corrupt `gol:workspace` to no description (Story 7.2)
+ * — the same fault-isolation `listFull()` applies to a corrupt battle record: a cosmetic value must
+ * not make the user's whole workspace un-exportable. Only `CorruptDataError` is absorbed; a storage
+ * access failure is not the record's fault and still rejects the export.
+ */
+async function loadMetaOrEmpty(repos: AppRepositories): Promise<WorkspaceMeta> {
+  try {
+    return await repos.workspaceMeta.load();
+  } catch (error) {
+    if (error instanceof CorruptDataError) return {};
+    throw error;
+  }
 }

@@ -6,6 +6,7 @@ import type {
   AppRepositories,
   BattleRepository,
   OrganismRepository,
+  WorkspaceMetaRepository,
   WorkspaceSerializer,
 } from '@gol/persistence';
 import { exportWorkspaceToFile } from '@/lib/export/exportWorkspaceToFile';
@@ -20,6 +21,7 @@ import {
 } from './SettingsCard';
 import ImportWorkspaceRow from './ImportWorkspaceRow';
 import ClearAllDataRow from './ClearAllDataRow';
+import WorkspaceDescriptionRow from './WorkspaceDescriptionRow';
 
 export interface DataManagementProps {
   // A `Pick`, not the whole interface (FD7 of Story 5.2, AR-2/27) — this card's subtree needs
@@ -35,6 +37,9 @@ export interface DataManagementProps {
   // Story 5.9's pristine check needs `list`; Story 5.10's reset needs `exists`/`save` — widened to
   // the union both rows require (FD2, still never the whole `OrganismRepository`).
   organisms: Pick<OrganismRepository, 'list' | 'exists' | 'save'>;
+  /** Story 7.2: the workspace description row edits it, and the Import row's pristine check reads
+   * it (FD6) — the union both need, never the aggregate. */
+  workspaceMeta: Pick<WorkspaceMetaRepository, 'load' | 'save'>;
   /** Story 5.9 AC6: fired after a successful import so `<SettingsPage>` can refresh its counts. */
   onImported(): void;
   /** Story 5.10 AC5: fired after Clear All settles (success or failure, FD3) for the same reload. */
@@ -52,7 +57,7 @@ export interface DataManagementProps {
 type DataManagementMessage = RowOutcome | null;
 
 /** Which of the card's three flows an outcome belongs to — the slot's owner. */
-type OutcomeSource = 'export' | 'import' | 'clear';
+type OutcomeSource = 'description' | 'export' | 'import' | 'clear';
 
 const DATA_MANAGEMENT_HEADING_ID = 'data-management-heading';
 
@@ -119,8 +124,9 @@ const EXPORT_ERROR_MESSAGE =
 
 /**
  * The Data Management card (AC1, Story 5.5) — the first control this page renders, alongside
- * Workspace Statistics. Three rows: Export Workspace, Import (Story 5.9's `<ImportWorkspaceRow>`)
- * and Clear All Data (Story 5.10's `<ClearAllDataRow>`) — each its own component rather than
+ * Workspace Statistics. Four rows: the workspace description (Story 7.2's
+ * `<WorkspaceDescriptionRow>`), Export Workspace, Import (Story 5.9's `<ImportWorkspaceRow>`) and
+ * Clear All Data (Story 5.10's `<ClearAllDataRow>`) — each its own component rather than
  * folded in here, since a third row's worth of state does not belong in Export's.
  *
  * FD8: re-entrancy without self-disabling. A `useRef<boolean>` in-flight flag makes a second click
@@ -143,10 +149,14 @@ export default function DataManagement({
   workspace,
   battles,
   organisms,
+  workspaceMeta,
   onImported,
   onCleared,
 }: DataManagementProps) {
   const [message, setMessage] = useState<DataManagementMessage>(null);
+  // Story 7.2: bumped after an import or a Clear All — both replace the workspace description —
+  // so the description row remounts and re-reads the store instead of showing stale text.
+  const [descriptionKey, setDescriptionKey] = useState(0);
   // The row whose flow started most recently. Rows run concurrently (FD6: no cross-row locking),
   // so without an owner the slot is last-to-SETTLE wins: a pristine Import still awaiting the
   // serializer would land "Imported N battles…" over a Clear All the user confirmed after it —
@@ -202,11 +212,17 @@ export default function DataManagement({
   return (
     <Card aria-labelledby={DATA_MANAGEMENT_HEADING_ID}>
       <CardTitle id={DATA_MANAGEMENT_HEADING_ID}>Data Management</CardTitle>
+      <WorkspaceDescriptionRow
+        key={descriptionKey}
+        workspaceMeta={workspaceMeta}
+        onMessage={(next) => publish('description', next)}
+      />
       <Row>
         <RowInfo>
           <RowLabel>Export Workspace</RowLabel>
           <RowDescription>
-            Download a JSON file containing all your battles and organisms for backup or transfer
+            Download a JSON file containing all your battles, organisms and the workspace
+            description for backup or transfer
           </RowDescription>
         </RowInfo>
         <ExportButton type="button" aria-label="Export workspace" onClick={handleExportClick}>
@@ -217,13 +233,20 @@ export default function DataManagement({
         serializer={serializer}
         battles={battles}
         organisms={organisms}
-        onImported={onImported}
+        workspaceMeta={workspaceMeta}
+        onImported={() => {
+          setDescriptionKey((k) => k + 1);
+          onImported();
+        }}
         onMessage={(next) => publish('import', next)}
       />
       <ClearAllDataRow
         workspace={workspace}
         organisms={organisms}
-        onCleared={onCleared}
+        onCleared={() => {
+          setDescriptionKey((k) => k + 1);
+          onCleared();
+        }}
         onMessage={(next) => publish('clear', next)}
       />
       {/* D2: the ONE outcome slot for the whole card, wherever it was last written from. */}

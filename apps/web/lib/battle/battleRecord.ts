@@ -1,5 +1,6 @@
 import {
   EditableGridPresetSchema,
+  normalizeDescription,
   pruneAndRemapBattleGrid,
   type Battle,
   type EditableGridPreset,
@@ -18,6 +19,12 @@ export interface BattleRecordStamps {
   /** The RAW edited name, including `''` — `battleDisplayName` is a DISPLAY fallback and is never
    * stored (createNewBattleDraft's own comment records why). */
   name: string;
+  /**
+   * FR-9.5 (Story 7.2): the edited description as typed. Normalized on the way out and the key
+   * OMITTED when there is none — this builder is field-by-field, so a stamp it does not read is a
+   * field the save silently drops.
+   */
+  description?: string;
   /** Minted on first save and preserved on every save after (trap 3). */
   createdAt: Date;
   /** Bumped every save — this is what re-sorts the Gallery (`sortByLastModified`, FR-7.3). */
@@ -68,10 +75,13 @@ export function projectBattleForSave(
   );
 
   const { organismIds, gridState } = pruneAndRemapBattleGrid(dense, rosterIds);
+  const description =
+    stamps.description === undefined ? undefined : normalizeDescription(stamps.description);
 
   return {
     id: stamps.id,
     name: stamps.name,
+    ...(description !== undefined && { description }),
     gridSize,
     gridState,
     organismIds,

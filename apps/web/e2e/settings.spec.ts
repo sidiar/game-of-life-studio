@@ -554,3 +554,102 @@ test.describe('clear all data (Story 5.10)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+// Story 7.2 (FR-9.5): descriptions at all three levels, end to end — through the REAL import
+// pipeline into REAL localStorage, then read back on every display surface. Thin (RFC-008
+// Decision 2): the per-surface present/absent matrix lives in the unit tests.
+test.describe('descriptions at every level (Story 7.2)', () => {
+  const DESCRIBED_BATTLE_ID = '7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+  const ENVELOPE = {
+    formatVersion: CURRENT_FORMAT_VERSION,
+    appVersion: '9.9.9',
+    exportedAt: '2026-01-05T12:00:00.000Z',
+    kind: 'workspace',
+    description: 'A lab notebook for rival colonies.',
+    organisms: [
+      {
+        schemaVersion: 1,
+        id: 'e2e-described-organism',
+        name: 'Described Organism',
+        description: 'Spreads fast, dies young.',
+        colorToken: 'sky-blue',
+        dominance: 50,
+        agingEnabled: false,
+        survivalRules: [],
+      },
+      {
+        schemaVersion: 1,
+        id: 'e2e-plain-organism',
+        name: 'Plain Organism',
+        colorToken: 'coral-red',
+        dominance: 40,
+        agingEnabled: false,
+        survivalRules: [],
+      },
+    ],
+    battles: [
+      {
+        id: DESCRIBED_BATTLE_ID,
+        name: 'Described Battle',
+        description: 'Two colonies, one dish.',
+        gridDimensions: { cols: 50, rows: 30 },
+        cells: [
+          { x: 0, y: 0, organismId: 'e2e-described-organism' },
+          { x: 5, y: 5, organismId: 'e2e-plain-organism' },
+        ],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      },
+      {
+        id: '8b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e',
+        name: 'Plain Battle',
+        gridDimensions: { cols: 50, rows: 30 },
+        cells: [{ x: 1, y: 1, organismId: 'e2e-plain-organism' }],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ],
+  };
+  WorkspaceExportSchema.parse(ENVELOPE);
+
+  test('an imported file’s descriptions appear on the gallery, the organism cards and the battle header', async ({
+    page,
+  }) => {
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { level: 2, name: 'Data Management' })).toBeVisible();
+    await expect(statValue(page, 'Organisms')).toHaveText('1'); // hydrated, pristine
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'workspace.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(ENVELOPE)),
+    });
+    // Pristine (Conway's Classic alone) ⇒ no warning dialog; the import runs straight away.
+    await expect(page.getByRole('status')).toContainText('Import complete');
+    // The Settings row re-reads the store after an import.
+    await expect(page.getByRole('textbox', { name: 'Workspace description' })).toHaveValue(
+      'A lab notebook for rival colonies.',
+    );
+
+    await page.goto('/');
+    await expect(page.locator('[data-workspace-description]')).toHaveText(
+      'A lab notebook for rival colonies.',
+    );
+    await expect(page.getByRole('article')).toHaveCount(2);
+    // Only the described battle's tile carries a description element — no placeholder chrome.
+    await expect(page.locator('[data-tile-description]')).toHaveCount(1);
+    await expect(page.locator('[data-tile-description]')).toHaveText('Two colonies, one dish.');
+
+    await page.goto('/organisms');
+    await expect(page.getByRole('heading', { level: 2, name: 'Described Organism' })).toBeVisible();
+    await expect(page.locator('[data-card-description]')).toHaveCount(1);
+    await expect(page.locator('[data-card-description]')).toHaveText('Spreads fast, dies young.');
+
+    await page.goto(`/battle?id=${DESCRIBED_BATTLE_ID}&mode=run`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Described Battle/i);
+    await expect(page.getByRole('button', { name: 'Run' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-battle-description]')).toHaveText('Two colonies, one dish.');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations).toEqual([]);
+  });
+});

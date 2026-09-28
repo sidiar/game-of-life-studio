@@ -1,8 +1,9 @@
 {
   "formatVersion": 1,
   "appVersion": "0.0.0",
-  "exportedAt": "2026-09-28T13:33:36.232Z",
+  "exportedAt": "2026-09-28T16:46:52.247Z",
   "kind": "workspace",
+  "description": "Conway's Classic plus three battling organisms — Aggressive Colonizer, Patient Defender and Chaotic Spreader — with two ready-to-run battles.",
   "organisms": [
     {
       "schemaVersion": 1,

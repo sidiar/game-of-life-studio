@@ -118,3 +118,25 @@ describe('projectBattleForSave', () => {
     expect(rosterIds).toEqual(['alpha']);
   });
 });
+
+describe('projectBattleForSave — description (Story 7.2, FR-9.5)', () => {
+  const grid = () => gridAt(PRESETS[0], [[0, 0, 1]]);
+
+  it('writes a normalized description', () => {
+    const record = projectBattleForSave(grid(), ['alpha'], {
+      ...STAMPS,
+      description: '  Blinkers everywhere.  ',
+    });
+    expect(record.description).toBe('Blinkers everywhere.');
+    expect(BattleSchema.parse(JSON.parse(JSON.stringify(record))).description).toBe(
+      'Blinkers everywhere.',
+    );
+  });
+
+  it('omits the key when the description is absent, empty or whitespace-only', () => {
+    for (const description of [undefined, '', '   ']) {
+      const record = projectBattleForSave(grid(), ['alpha'], { ...STAMPS, description });
+      expect('description' in record).toBe(false);
+    }
+  });
+});

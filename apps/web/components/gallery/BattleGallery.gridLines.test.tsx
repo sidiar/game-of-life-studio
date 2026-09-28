@@ -37,6 +37,7 @@ describe('BattleGallery — settings.gridLines wiring (AC3, Task 4)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -59,6 +60,7 @@ describe('BattleGallery — settings.gridLines wiring (AC3, Task 4)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -82,6 +84,7 @@ describe('BattleGallery — settings.gridLines wiring (AC3, Task 4)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );

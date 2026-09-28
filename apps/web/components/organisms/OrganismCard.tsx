@@ -2,7 +2,8 @@
 
 import { useId } from 'react';
 import { styled } from '@mui/material/styles';
-import type { Organism } from '@gol/domain';
+import { normalizeDescription, type Organism } from '@gol/domain';
+import { descriptionTextRules, twoLineClampRules } from '@/components/descriptionStyles';
 import { toDisplayOrganism } from '@/lib/displayOrganisms';
 import { PROTECTED_DELETE_MESSAGE } from '@/lib/organisms/usageLabels';
 
@@ -72,7 +73,9 @@ const Card = styled('article')({
 const CardHeader = styled('div')({
   display: 'flex',
   gap: '14px',
-  alignItems: 'center',
+  // `flex-start`, not `center` (Story 7.2): with a description under the name, a centred chip
+  // would drift down beside the paragraph instead of sitting with the name it identifies.
+  alignItems: 'flex-start',
   marginBottom: '16px',
   paddingBottom: '12px',
   borderBottom: '1px solid var(--gol-border)',
@@ -101,6 +104,26 @@ const CardName = styled('h2')({
   color: 'var(--gol-text-primary)',
   minWidth: 0,
   overflowWrap: 'anywhere',
+});
+
+// The name + description column (Story 7.2). `minWidth: 0` for the same flex-item reason
+// `CardName` carries it — the column is now the flex item, so it needs the rule too. The column
+// is vertically centred against the 48px chip so a name-only card looks as it did before.
+const CardTitleColumn = styled('div')({
+  minWidth: 0,
+  flex: 1,
+  alignSelf: 'center',
+});
+
+// FR-9.5 (Story 7.2): the organism's description, read-only, 2-line clamped (FD10 — the full text
+// is in the editor behind the existing Edit action; no show-more toggle, so no new tab stop).
+const CardDescription = styled('p')({
+  ...descriptionTextRules,
+  ...twoLineClampRules,
+  margin: '6px 0 0',
+  fontSize: '13px',
+  lineHeight: 1.4,
+  color: 'var(--gol-text-secondary)',
 });
 
 const CardStats = styled('div')({
@@ -309,12 +332,20 @@ export default function OrganismCard({
   const nameId = useId();
   const protectedNoteId = useId();
   const deleteProtected = system && onRequestDelete !== undefined;
+  // Read off the record directly — `DisplayOrganism` stays name + colour. Absent, empty and
+  // whitespace-only all render nothing: no element, no placeholder (AC5).
+  const description = normalizeDescription(organism.description ?? '');
 
   return (
     <Card aria-labelledby={nameId} data-system={system ? '' : undefined}>
       <CardHeader>
         <ColorChip aria-hidden="true" style={{ background: display.color, color: display.color }} />
-        <CardName id={nameId}>{display.name}</CardName>
+        <CardTitleColumn>
+          <CardName id={nameId}>{display.name}</CardName>
+          {description !== undefined && (
+            <CardDescription data-card-description="">{description}</CardDescription>
+          )}
+        </CardTitleColumn>
       </CardHeader>
       <CardStats>
         <StatItem>

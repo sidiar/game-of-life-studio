@@ -3954,3 +3954,30 @@ Open owner flags from the story (not blockers — the story proceeded on its for
   key-to-message mapping could also arguably live beside the classifier in `storageFailure.ts`
   instead of the copy-only module. Cosmetic/organizational — no test depends on either placement,
   left for a future pass rather than an unattended rename/move.
+
+## Deferred from: Story 7-2 (Descriptions at Every Level)
+
+- **⚠️ Variance — `gol:workspace` extends RFC-006's closed key list and `AppRepositories`
+  (Story 7.2 FD4).** The workspace description (FR-9.5) needs a home that travels with export, is
+  replaced by import and is cleared by Clear All — the opposite of every property `gol:settings`
+  has (Decision F / AR-12). It therefore lives in a new data key, `gol:workspace`, behind a new port
+  `AppRepositories.workspaceMeta` (`WorkspaceMetaRepository`). This extends RFC-006 Decision 7's
+  closed four-key list (`gol:schema`, `gol:battles`, `gol:organisms`, `gol:settings`) and RFC-006
+  Decision 1's `AppRepositories` shape, and it widens Decision F.2 / FR-8.5's "clearAll clears
+  battles + organisms" to "battles + organisms + the workspace meta" — still never settings. The key
+  is written format-checked but **unstamped** (`writeMetaKey`), is captured/restored by the import
+  snapshot, and is counted by the storage meter. The RFC and `architecture.md` were deliberately
+  NOT edited (CLAUDE.md: surface, don't silently amend) — the owner decides whether to fold this
+  into RFC-006 / Decision F.2 or rule otherwise. Owner questions FD4/FD7 and FD6 in the story file
+  were implemented on their provisional answers.
+- **At-rest migration blind spot: `gol:workspace` is not carried by the format chain (Story 7.2
+  FD4 / Task 2.3).** `ensureCurrentAtRestFormat`'s migratable document holds `formatVersion`,
+  `battles` and `organisms` only, and `writeBackMigrated`'s candidates and rollback cover only
+  those keys. Harmless while `MIGRATIONS` is empty (nothing migrates anything). **The first
+  `formatVersion` bump whose step touches workspace meta must add `gol:workspace` to the document,
+  to the write-back candidates and to the rollback** — both sites carry a comment saying so.
+- **The Clear All dialog body still reads FR-8.5's sentence verbatim ("This will delete all
+  battles and organisms …")** — Story 7.2 updated the Clear All and Export row descriptions to
+  name the workspace description, but left `CLEAR_ALL_WARNING_TEXT` (documented as FR-8.5's text,
+  verbatim) and the Clear Data button's accessible name "(all battles and organisms)" unchanged.
+  If the owner folds the variance above into FR-8.5, update both in the same change.

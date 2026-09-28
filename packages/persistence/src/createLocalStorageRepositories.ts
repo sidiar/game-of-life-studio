@@ -1,6 +1,7 @@
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
+import { LocalStorageWorkspaceMetaRepository } from './localStorageWorkspaceMetaRepository';
 import type { AppRepositories, WorkspaceSnapshot } from './repositories';
 import {
   captureDataKeys,
@@ -22,9 +23,11 @@ export function createLocalStorageRepositories(): AppRepositories {
     battles: new LocalStorageBattleRepository(),
     organisms: new LocalStorageOrganismRepository(),
     settings: new LocalStorageSettingsRepository(),
+    workspaceMeta: new LocalStorageWorkspaceMetaRepository(),
 
     /**
-     * Data-only (FR-8.5 / Decision F.2 / AC5): battles + organisms, never `gol:settings`. The
+     * Data-only (FR-8.5 / Decision F.2 / AC5): battles + organisms + `gol:workspace` (Story 7.2),
+     * never `gol:settings`. The
      * import path (Story 5.8) reuses this, which is precisely what makes importing a friend's
      * battle unable to destroy the importer's theme — no snapshot-and-restore needed.
      *
@@ -52,7 +55,8 @@ export function createLocalStorageRepositories(): AppRepositories {
       return measureStorageUsage();
     },
 
-    // The opaque pair is the raw `gol:battles` / `gol:organisms` / `gol:schema` strings (Story 5.8
+    // The opaque capture is the raw `gol:battles` / `gol:organisms` / `gol:workspace` / `gol:schema`
+    // strings (Story 5.8
     // owner ruling). The casts are the brand's whole point: only this object builds or reads one.
     async snapshotWorkspace() {
       return captureDataKeys() as unknown as WorkspaceSnapshot;

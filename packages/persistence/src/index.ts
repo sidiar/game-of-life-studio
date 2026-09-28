@@ -8,6 +8,7 @@ export type {
   OrganismRepository,
   SettingsRepository,
   StorageUsage,
+  WorkspaceMetaRepository,
   WorkspaceSnapshot,
 } from './repositories';
 

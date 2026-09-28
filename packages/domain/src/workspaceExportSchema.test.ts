@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_BATTLE_NAME_LENGTH } from './battleSchema';
+import { MAX_BATTLE_DESCRIPTION_LENGTH, MAX_BATTLE_NAME_LENGTH } from './battleSchema';
 import { CONWAYS_CLASSIC } from './defaultWorkspace';
 import { CURRENT_FORMAT_VERSION } from './settingsSchema';
 import {
@@ -9,6 +9,7 @@ import {
   type BattleExportWire,
   type WorkspaceExportWire,
 } from './workspaceExportSchema';
+import { MAX_WORKSPACE_DESCRIPTION_LENGTH } from './workspaceMetaSchema';
 
 // Hand-built literals are the EXCEPTION in this repo's testing rules, allowed here for exactly the
 // reason the exception exists: these cases test what the schema REFUSES (and, for AC5, what it
@@ -352,5 +353,31 @@ describe('BattleExportSchema (AC2)', () => {
 
   it('accepts an empty battle — no cells is a legal export', () => {
     expect(BattleExportSchema.safeParse(battleExport({ cells: [] })).success).toBe(true);
+  });
+});
+
+describe('descriptions on the wire (Story 7.2, FR-9.5)', () => {
+  it('accepts an envelope-level workspace description up to 500 and rejects 501, formatVersion still 1', () => {
+    const atCap = 'x'.repeat(MAX_WORKSPACE_DESCRIPTION_LENGTH);
+    const parsed = WorkspaceExportSchema.parse(envelope({ description: atCap }));
+    expect(parsed.description).toBe(atCap);
+    expect(parsed.formatVersion).toBe(1);
+    expect(WorkspaceExportSchema.safeParse(envelope({ description: atCap + 'x' })).success).toBe(
+      false,
+    );
+  });
+
+  it('parses an envelope without a description with no description key', () => {
+    expect('description' in WorkspaceExportSchema.parse(envelope())).toBe(false);
+  });
+
+  it('accepts a battle description up to 280 and rejects 281', () => {
+    const atCap = 'x'.repeat(MAX_BATTLE_DESCRIPTION_LENGTH);
+    expect(BattleExportSchema.safeParse({ ...battleExport(), description: atCap }).success).toBe(
+      true,
+    );
+    expect(
+      BattleExportSchema.safeParse({ ...battleExport(), description: atCap + 'x' }).success,
+    ).toBe(false);
   });
 });

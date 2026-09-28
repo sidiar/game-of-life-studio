@@ -4,6 +4,7 @@ import { createLocalStorageRepositories } from './createLocalStorageRepositories
 import { LocalStorageBattleRepository } from './localStorageBattleRepository';
 import { LocalStorageOrganismRepository } from './localStorageOrganismRepository';
 import { LocalStorageSettingsRepository } from './localStorageSettingsRepository';
+import { LocalStorageWorkspaceMetaRepository } from './localStorageWorkspaceMetaRepository';
 import { STORAGE_KEYS } from './localStorageAccess';
 import type { WorkspaceSnapshot } from './repositories';
 
@@ -48,16 +49,31 @@ function organism() {
 }
 
 describe('createLocalStorageRepositories', () => {
-  it('assembles the three localStorage repositories', () => {
+  it('assembles the four localStorage repositories', () => {
     const repos = createLocalStorageRepositories();
 
     expect(repos.battles).toBeInstanceOf(LocalStorageBattleRepository);
     expect(repos.organisms).toBeInstanceOf(LocalStorageOrganismRepository);
     expect(repos.settings).toBeInstanceOf(LocalStorageSettingsRepository);
+    expect(repos.workspaceMeta).toBeInstanceOf(LocalStorageWorkspaceMetaRepository);
   });
 });
 
 describe('clearAll (AC5)', () => {
+  it('clears the workspace description too, keeping settings and the stamp (Story 7.2)', async () => {
+    const repos = createLocalStorageRepositories();
+    await repos.organisms.save(organism());
+    await repos.settings.save({ ...DEFAULT_SETTINGS, theme: 'biotech-terminal' });
+    await repos.workspaceMeta.save({ description: 'Lab notes.' });
+
+    await repos.clearAll();
+
+    expect(localStorage.getItem(STORAGE_KEYS.workspace)).toBeNull();
+    expect(await repos.workspaceMeta.load()).toEqual({});
+    expect(localStorage.getItem(STORAGE_KEYS.settings)).not.toBeNull();
+    expect(await repos.isFreshWorkspace()).toBe(false);
+  });
+
   it('removes battles and organisms', async () => {
     const repos = createLocalStorageRepositories();
     await repos.battles.save(battle());
@@ -154,7 +170,12 @@ describe('isFreshWorkspace (Story 1.5 AC1)', () => {
 });
 
 describe('snapshotWorkspace / restoreWorkspace (Story 5.8 owner ruling)', () => {
-  const DATA_KEYS = [STORAGE_KEYS.battles, STORAGE_KEYS.organisms, STORAGE_KEYS.schema] as const;
+  const DATA_KEYS = [
+    STORAGE_KEYS.battles,
+    STORAGE_KEYS.organisms,
+    STORAGE_KEYS.workspace,
+    STORAGE_KEYS.schema,
+  ] as const;
   const raw = () => DATA_KEYS.map((key) => localStorage.getItem(key));
 
   it('puts every data key back byte for byte — absent stays absent — and never touches settings', async () => {
@@ -181,7 +202,7 @@ describe('snapshotWorkspace / restoreWorkspace (Story 5.8 owner ruling)', () => 
 
     await repos.restoreWorkspace(snapshot);
 
-    expect(raw()).toEqual([null, null, null]);
+    expect(raw()).toEqual([null, null, null, null]);
     expect(await repos.isFreshWorkspace()).toBe(true);
   });
 
@@ -210,9 +231,30 @@ describe('snapshotWorkspace / restoreWorkspace (Story 5.8 owner ruling)', () => 
 
     expect(removeSpy.mock.calls.map(([key]) => key)).toEqual([
       STORAGE_KEYS.schema,
+      STORAGE_KEYS.workspace,
       STORAGE_KEYS.battles,
       STORAGE_KEYS.organisms,
     ]);
+  });
+
+  // Story 7.2: the workspace description is data, so a failed import's rollback restores it
+  // byte-identical — present or absent.
+  it('restores gol:workspace byte for byte, and an absent one as absent', async () => {
+    const repos = createLocalStorageRepositories();
+    await repos.organisms.save(organism());
+    await repos.workspaceMeta.save({ description: 'Before the import.' });
+    const withMeta = await repos.snapshotWorkspace();
+    const before = localStorage.getItem(STORAGE_KEYS.workspace);
+
+    await repos.workspaceMeta.save({ description: 'Imported.' });
+    await repos.restoreWorkspace(withMeta);
+    expect(localStorage.getItem(STORAGE_KEYS.workspace)).toBe(before);
+
+    localStorage.removeItem(STORAGE_KEYS.workspace);
+    const withoutMeta = await repos.snapshotWorkspace();
+    await repos.workspaceMeta.save({ description: 'Imported.' });
+    await repos.restoreWorkspace(withoutMeta);
+    expect(localStorage.getItem(STORAGE_KEYS.workspace)).toBeNull();
   });
 });
 

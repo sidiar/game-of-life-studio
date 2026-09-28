@@ -2,6 +2,8 @@
 
 import type { MouseEvent } from 'react';
 import { styled } from '@mui/material/styles';
+import { normalizeDescription } from '@gol/domain';
+import { descriptionTextRules } from '@/components/descriptionStyles';
 
 // Mockup: .header (clinical-lab-theme/petri-dish-lab-mode.html:33-45). `position: fixed` is
 // deliberately NOT reproduced: the mockup pins the bar and offsets the body under it, and this
@@ -36,6 +38,23 @@ const Title = styled('h1')({
   textTransform: 'uppercase',
   minWidth: 0,
   overflowWrap: 'anywhere',
+});
+
+// Story 7.2: the title + description column. `minWidth: 0` moves here from being only the h1's
+// concern — the column is now the flex item that must be allowed to shrink.
+const TitleColumn = styled('div')({
+  minWidth: 0,
+});
+
+// FR-9.5 (Story 7.2 FD9): the battle's description under the h1, in Lab and Run alike — the
+// mockup's "play-description". Full text, unclamped: the 280 cap bounds it to ~3 lines at 640px.
+const Description = styled('p')({
+  ...descriptionTextRules,
+  margin: '6px 0 0',
+  maxWidth: '640px',
+  fontSize: '13px',
+  lineHeight: 1.4,
+  color: 'var(--gol-text-secondary)',
 });
 
 // Mockup: .header-actions (petri-dish-play-mode.html:55-59 / lab-mode:55-59) — the right-hand
@@ -153,6 +172,9 @@ const FullscreenButton = styled('button')({
 export type BattleMode = 'lab' | 'run';
 
 export interface BattleHeaderProps {
+  /** FR-9.5 (Story 7.2): the SAVED description — `<BattlePage>` passes the last persisted text,
+   * never the live edit, so the header does not reflow per keystroke. Absent/blank ⇒ nothing. */
+  battleDescription?: string;
   battleTitle: string;
   /**
    * Spec §3.2: both OPTIONAL, and the toggle renders only when BOTH are supplied — a `mode` with
@@ -188,12 +210,15 @@ export interface BattleHeaderProps {
 // this component only reports the presses (AR-28).
 export default function BattleHeader({
   battleTitle,
+  battleDescription,
   mode,
   onModeToggle,
   disabled = false,
   disabledReason,
   onEnterFullscreen,
 }: BattleHeaderProps) {
+  // Absent, empty and whitespace-only all render nothing — no element, no placeholder (AC5).
+  const description = normalizeDescription(battleDescription ?? '');
   const showToggle = mode !== undefined && onModeToggle !== undefined;
   const showFullscreen = mode === 'run' && onEnterFullscreen !== undefined;
   // Story 3.18 review decision (b): the ACTIVE button is a no-op, never a re-set — `onModeToggle`
@@ -209,7 +234,12 @@ export default function BattleHeader({
   };
   return (
     <Header>
-      <Title>{battleTitle}</Title>
+      <TitleColumn>
+        <Title>{battleTitle}</Title>
+        {description !== undefined && (
+          <Description data-battle-description="">{description}</Description>
+        )}
+      </TitleColumn>
       {showToggle && (
         <Actions>
           {/* BEFORE the toggle — the mockup's DOM order (`:551-560`), so the tab order is

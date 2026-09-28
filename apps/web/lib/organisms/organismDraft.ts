@@ -12,6 +12,7 @@ import {
   type RuleDraft,
 } from './ruleDraft';
 import { validateOrganismName } from './organismName';
+import { validateOrganismDescription } from './organismDescription';
 
 /**
  * The editor's unsaved organism (RFC-005 Decision 1: ephemeral UI state, local to the modal —
@@ -31,6 +32,12 @@ import { validateOrganismName } from './organismName';
  * `lib/battle/newBattleDraft.ts`.
  */
 export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled' | 'colorToken'> & {
+  /**
+   * FR-9.5 (Story 7.2): ALWAYS a string in the draft — `''` means none — so the field is a plain
+   * controlled textarea and the dirty diff compares strings. The optional-key shape is the
+   * record's; `projectOrganismForSave` normalizes back to it.
+   */
+  readonly description: string;
   readonly survivalRules: readonly RuleDraft[];
 };
 
@@ -57,6 +64,7 @@ export type OrganismDraft = Pick<Organism, 'name' | 'dominance' | 'agingEnabled'
 export function createNewOrganismDraft(usedColorTokens: readonly string[]): OrganismDraft {
   return {
     name: '',
+    description: '',
     dominance: NEW_ORGANISM_DOMINANCE,
     agingEnabled: false,
     colorToken: defaultColorToken(usedColorTokens),
@@ -78,6 +86,7 @@ export function createNewOrganismDraft(usedColorTokens: readonly string[]): Orga
 export function organismDraftFrom(organism: Organism, nextId: () => string): OrganismDraft {
   return {
     name: organism.name,
+    description: organism.description ?? '',
     dominance: organism.dominance,
     agingEnabled: organism.agingEnabled,
     colorToken: organism.colorToken,
@@ -92,6 +101,7 @@ export function organismDraftFrom(organism: Organism, nextId: () => string): Org
  * (Story 4.12) while its id does not (RFC-004 §2.4). */
 export type DraftErrorTarget =
   | { readonly kind: 'name' }
+  | { readonly kind: 'description' }
   | { readonly kind: 'rule'; readonly ruleId: string }
   | {
       readonly kind: 'condition';
@@ -127,6 +137,11 @@ export function validateOrganismDraft(draft: OrganismDraft): readonly DraftError
   const errors: DraftError[] = [];
   const nameError = validateOrganismName(draft.name);
   if (nameError !== null) errors.push({ target: { kind: 'name' }, message: nameError });
+  // Directly after the name: the description field sits right under it (document order).
+  const descriptionError = validateOrganismDescription(draft.description);
+  if (descriptionError !== null) {
+    errors.push({ target: { kind: 'description' }, message: descriptionError });
+  }
   for (const rule of draft.survivalRules) {
     if (ruleNeedsCondition(rule)) {
       errors.push({ target: { kind: 'rule', ruleId: rule.id }, message: RULE_NEEDS_CONDITION });
@@ -191,6 +206,7 @@ function ruleDraftsEqual(a: RuleDraft, b: RuleDraft): boolean {
 export function isOrganismDraftDirty(baseline: OrganismDraft, draft: OrganismDraft): boolean {
   if (draft === baseline) return false;
   if (draft.name !== baseline.name) return true;
+  if (draft.description !== baseline.description) return true;
   if (draft.dominance !== baseline.dominance) return true;
   if (draft.agingEnabled !== baseline.agingEnabled) return true;
   if (draft.colorToken !== baseline.colorToken) return true;

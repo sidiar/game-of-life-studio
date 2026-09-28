@@ -58,6 +58,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="seeding"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -94,6 +95,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -125,6 +127,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -151,6 +154,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -175,6 +179,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -199,6 +204,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={workspace}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -218,6 +224,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="error"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -236,6 +243,7 @@ describe('SettingsPage', () => {
           seedStatus={seedError === undefined ? 'ready' : 'error'}
           seedError={seedError}
           workspace={repos}
+          workspaceMeta={repos.workspaceMeta}
           serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
         />,
       );
@@ -339,6 +347,7 @@ describe('SettingsPage', () => {
         organisms={organisms}
         seedStatus="seeding"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -350,6 +359,7 @@ describe('SettingsPage', () => {
         organisms={organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -371,6 +381,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -392,6 +403,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -415,6 +427,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -435,6 +448,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -461,6 +475,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );
@@ -485,6 +500,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{
           exportWorkspace: vi.fn().mockRejectedValue(new Error('unreadable')),
           importWorkspace: vi.fn(),
@@ -536,6 +552,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={serializer}
       />,
     );
@@ -573,6 +590,7 @@ describe('SettingsPage', () => {
         organisms={repos.organisms}
         seedStatus="ready"
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         serializer={{ exportWorkspace: vi.fn(), importWorkspace: vi.fn() }}
       />,
     );

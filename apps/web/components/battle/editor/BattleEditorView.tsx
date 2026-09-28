@@ -17,6 +17,7 @@ import { ERASER_TOOL, refForTool, type Tool } from '@/lib/battle/tool';
 import { useInertBackground } from '@/lib/useInertBackground';
 import PetriDishCanvas from '../../PetriDishCanvas';
 import BattleNameField from './BattleNameField';
+import BattleDescriptionField from './BattleDescriptionField';
 import EditorStatusBar, { type EditorStatusBarStats } from './EditorStatusBar';
 import EditorToolsSection from './EditorToolsSection';
 import GridSettingsSection, { presetKey } from './GridSettingsSection';
@@ -143,6 +144,11 @@ export interface BattleEditorViewProps {
   /** Story 2.11 (AC1, AC3): fires on every keystroke; `<BattlePage>` sets both the name and
    * `isDirty` in the same handler. */
   onNameChange(name: string): void;
+  /** Story 7.2 (FR-9.5): the LIVE edited description, owned by `<BattlePage>` like the name and
+   * threaded straight to `<BattleDescriptionField>`. */
+  battleDescription: string;
+  /** Story 7.2: fires on every edit; `<BattlePage>` sets the value and `isDirty` together. */
+  onDescriptionChange(description: string): void;
   /**
    * Story 2.13 (FR-7.8, spec §3.3 lists both as PROPS): forwarded to `<EditorStatusBar>`
    * untouched. ⚠️ Unlike `stats` these are INPUTS, not derivations — `<BattlePage>` owns the dirty
@@ -214,6 +220,8 @@ type EditorMainProps = Omit<
   | 'atCap'
   | 'battleName'
   | 'onNameChange'
+  | 'battleDescription'
+  | 'onDescriptionChange'
   // Story 2.16: the footer lives in the SIDEBAR, so `<EditorMain>` has no use for its callback —
   // the same treatment the roster props get two lines up.
   | 'onBack'
@@ -630,6 +638,8 @@ export default function BattleEditorView({
   atCap,
   battleName,
   onNameChange,
+  battleDescription,
+  onDescriptionChange,
   // Story 2.13 (Sidiar's call, 2026-08-28): pulled out of `...rest` for the SAME reason as `grid`
   // below — the name field needs it directly. Still forwarded to `<EditorMain>` explicitly, which
   // is what keeps `<EditorStatusBar>`'s two buttons receiving it.
@@ -915,6 +925,13 @@ export default function BattleEditorView({
               /* The visible half of `<BattlePage>`'s edit lock — see that component's `savingRef`.
                  The lock refuses the change either way; this stops the field from accepting
                  keystrokes it has already decided to discard. */
+              disabled={isSaving}
+            />
+            {/* Story 7.2 (FR-9.5): the description sits under the name in the same section — the
+                section stays "Battle Name" so the sidebar keeps its four headings. */}
+            <BattleDescriptionField
+              value={battleDescription}
+              onChange={onDescriptionChange}
               disabled={isSaving}
             />
           </SidebarSection>

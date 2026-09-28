@@ -96,4 +96,18 @@ describe('isPristineWorkspace', () => {
     edited.survivalRules = [...edited.survivalRules, { ...clone().survivalRules[0], id: 'extra' }];
     expect(isPristineWorkspace(0, [edited])).toBe(false);
   });
+
+  // Story 7.2 FD6: a workspace description is user content the destructive replace would destroy.
+  it('is not pristine when the workspace carries a description, even with the seed alone', () => {
+    expect(isPristineWorkspace(0, [CONWAYS_CLASSIC], 'My lab notes')).toBe(false);
+  });
+
+  it('stays pristine for an empty or whitespace-only workspace description (absent ≡ none)', () => {
+    expect(isPristineWorkspace(0, [CONWAYS_CLASSIC], '')).toBe(true);
+    expect(isPristineWorkspace(0, [CONWAYS_CLASSIC], '   ')).toBe(true);
+  });
+
+  it('is not pristine when the seed organism gained a description', () => {
+    expect(isPristineWorkspace(0, [{ ...clone(), description: 'edited' }])).toBe(false);
+  });
 });

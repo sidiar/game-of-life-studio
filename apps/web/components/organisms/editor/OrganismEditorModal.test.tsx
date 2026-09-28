@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import {
+  MAX_ORGANISM_DESCRIPTION_LENGTH,
   MAX_ORGANISM_NAME_LENGTH,
   NEW_ORGANISM_DOMINANCE,
   ORGANISM_SCHEMA_VERSION,
@@ -193,15 +194,16 @@ describe('OrganismEditorModal', () => {
     const dialog = screen.getByRole('dialog');
     const basic = within(dialog).getByRole('region', { name: 'Basic Information' });
     expect(within(basic).getByRole('textbox', { name: 'Organism Name' })).toBeInTheDocument();
+    expect(within(basic).getByRole('textbox', { name: 'Description' })).toBeInTheDocument();
     expect(within(basic).getByRole('group', { name: 'Organism Color' })).toBeInTheDocument();
     expect(within(basic).getByRole('button', { name: 'Change Color' })).toBeInTheDocument();
     expect(within(basic).getByRole('slider', { name: 'Dominance' })).toBeInTheDocument();
     expect(within(basic).getByRole('textbox', { name: 'Dominance value' })).toBeInTheDocument();
     expect(within(basic).getByRole('switch', { name: 'Aging Degradation' })).toBeInTheDocument();
     // "Nowhere else" means the whole dialog — header and footer included — not just the other two
-    // regions: exactly two textboxes, one slider, one switch and (once the palette is open)
-    // PALETTE.length radios exist, and all are the ones above.
-    expect(within(dialog).getAllByRole('textbox')).toHaveLength(2);
+    // regions: exactly three textboxes (Story 7.2 added the description), one slider, one switch
+    // and (once the palette is open) PALETTE.length radios exist, and all are the ones above.
+    expect(within(dialog).getAllByRole('textbox')).toHaveLength(3);
     // Two sliders in the whole dialog: Dominance (Basic Information) and the Preview & Test
     // column's "Generations per second" speed control (Story 4.15) — the whole-dialog count
     // stays deliberate, so it is pinned right alongside the scoped Basic-Information count below.
@@ -453,8 +455,8 @@ describe('OrganismEditorModal', () => {
     expect(screen.getByRole('slider', { name: 'Dominance' })).toHaveValue('17');
   });
 
-  // Story 4.6 / 4.7 / 4.8 AC6: the tab order inside Basic Information is name -> the "Change
-  // Color" button (the palette is collapsed, FD7) -> slider -> numeric input -> switch. The
+  // Story 4.6 / 4.7 / 4.8 AC6: the tab order inside Basic Information is name -> description
+  // (Story 7.2) -> the "Change Color" button (the palette is collapsed, FD7) -> slider -> numeric input -> switch. The
   // field's own test covers the open palette's extra stop; this is the real column.
   it('tabs from the name field to the Change Color button, the dominance slider, its textbox, then the aging switch (Story 4.6, Story 4.7, Story 4.8)', async () => {
     const user = userEvent.setup();
@@ -462,6 +464,8 @@ describe('OrganismEditorModal', () => {
 
     const dialog = screen.getByRole('dialog');
     screen.getByRole('textbox', { name: 'Organism Name' }).focus();
+    await user.tab();
+    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveFocus();
     await user.tab();
     expect(within(dialog).getByRole('button', { name: 'Change Color' })).toHaveFocus();
     await user.tab();
@@ -561,7 +565,7 @@ describe('OrganismEditorModal', () => {
     const group = within(rules).getByRole('group', { name: 'Rule 1' });
     expect(within(group).getByRole('textbox', { name: 'Summary' })).toHaveFocus();
     expect(within(rules).getAllByRole('textbox')).toHaveLength(1);
-    expect(within(basic).getAllByRole('textbox')).toHaveLength(2);
+    expect(within(basic).getAllByRole('textbox')).toHaveLength(3);
   });
 
   it('the draft round-trips: add, edit and delete stay in one draft object', async () => {
@@ -3409,5 +3413,78 @@ describe('OrganismEditorModal', () => {
 
       expect((await axe(document.body)).violations).toEqual([]);
     });
+  });
+});
+
+describe('OrganismEditorModal — description (Story 7.2, FR-9.5)', () => {
+  it('saves a typed description on the record, and omits the key when left empty', async () => {
+    const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+    const saveSpy = vi.spyOn(organisms, 'save');
+    const user = userEvent.setup();
+    mountModal({ organisms });
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+    await user.type(
+      within(dialog).getByRole('textbox', { name: 'Description' }),
+      '  Moves diagonally.  ',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    expect((saveSpy.mock.calls[0]?.[0] as Organism).description).toBe('Moves diagonally.');
+  });
+
+  it('a save with no description writes no description key', async () => {
+    const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+    const saveSpy = vi.spyOn(organisms, 'save');
+    const user = userEvent.setup();
+    mountModal({ organisms });
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    expect('description' in (saveSpy.mock.calls[0]?.[0] as Organism)).toBe(false);
+  });
+
+  it('an edit session seeds the stored description into the field', () => {
+    const organism: Organism = { ...CONWAYS_CLASSIC, description: 'The classic B3/S23.' };
+    mountModal({ organism, library: [organism] });
+
+    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('The classic B3/S23.');
+  });
+
+  it('an over-limit description refuses Save, shows its alert and focuses the field', async () => {
+    const organisms = createFakeRepositories({ organisms: LIBRARY }).organisms;
+    const saveSpy = vi.spyOn(organisms, 'save');
+    const user = userEvent.setup();
+    mountModal({ organisms });
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Organism Name' }), 'Glider');
+    const description = within(dialog).getByRole('textbox', { name: 'Description' });
+    // `fireEvent.change`, not `user.type`: 281 keystrokes is slow and proves nothing more.
+    fireEvent.change(description, {
+      target: { value: 'x'.repeat(MAX_ORGANISM_DESCRIPTION_LENGTH + 1) },
+    });
+    expect(description).toHaveAttribute('aria-invalid', 'true');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      `Description cannot exceed ${MAX_ORGANISM_DESCRIPTION_LENGTH} characters`,
+    );
+    expect(description).toHaveFocus();
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
+
+  it('has no axe violations with the description field over its cap', async () => {
+    mountModal();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Description' }), {
+      target: { value: 'x'.repeat(MAX_ORGANISM_DESCRIPTION_LENGTH + 1) },
+    });
+
+    expect((await axe(document.body)).violations).toEqual([]);
   });
 });

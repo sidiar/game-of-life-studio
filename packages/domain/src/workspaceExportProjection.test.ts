@@ -35,10 +35,12 @@ function battle(
   gridSize: EditableGridPreset,
   organismIds: readonly string[],
   gridState: readonly (readonly number[])[],
+  description?: string,
 ): Battle {
   return BattleSchema.parse({
     id: BATTLE_ID,
     name: 'Fixture',
+    ...(description !== undefined && { description }),
     organismIds,
     gridSize,
     gridState,
@@ -178,6 +180,12 @@ describe('round-trip identity (AC4, AR-41 / AR-44)', () => {
         // Testing standards want the bounds exercised at the size that matters. (The roster-order
         // hazard itself shows up at any size — with a handful of refs drawn uniformly it is
         // near-certain even at 12x12 — so size buys bounds coverage, not mismatch coverage.)
+        // Story 7.2: sometimes a (non-blank, already-normalized) description, sometimes none — the
+        // round trip must preserve both the text and the ABSENCE of the key.
+        description: fc.option(
+          fc.string({ minLength: 1, maxLength: 280 }).filter((d) => d.trim() === d && d !== ''),
+          { nil: undefined },
+        ),
         dense: fc.array(
           fc.array(fc.integer({ min: 0, max: rosterSize }), {
             minLength: preset.cols,
@@ -187,10 +195,10 @@ describe('round-trip identity (AC4, AR-41 / AR-44)', () => {
         ),
       }),
     )
-    .map(({ preset, rosterSize, dense }) => {
+    .map(({ preset, rosterSize, description, dense }) => {
       const rosterIds = Array.from({ length: rosterSize }, (_, i) => `organism-${i}`);
       const pruned = pruneAndRemapBattleGrid(dense, rosterIds);
-      return battle(preset, pruned.organismIds, pruned.gridState);
+      return battle(preset, pruned.organismIds, pruned.gridState, description);
     });
 
   // 30s, not Vitest's 5s default: 100 runs over real preset grids (up to 6,000 cells each, each one
@@ -200,7 +208,10 @@ describe('round-trip identity (AC4, AR-41 / AR-44)', () => {
   it('fromBattleExport(toBattleExport(b)) is the identity on every schema-valid battle', () => {
     fc.assert(
       fc.property(arbBattle, (b) => {
-        expect(fromBattleExport(parseWireBattle(toBattleExport(b)))).toEqual(b);
+        const back = fromBattleExport(parseWireBattle(toBattleExport(b)));
+        expect(back).toEqual(b);
+        // `toEqual` ignores an `undefined`-valued key, so absence is asserted on its own.
+        expect('description' in back).toBe('description' in b);
       }),
     );
   }, 30_000);
@@ -276,3 +287,52 @@ function parseWireBattle(wire: unknown) {
     battles: [wire],
   }).battles[0];
 }
+
+describe('descriptions at every level (Story 7.2, FR-9.5)', () => {
+  const META = { appVersion: 'test-app', exportedAt: new Date(CREATED_AT) };
+
+  function roundTrip(wire: ReturnType<typeof toEnvelope>) {
+    return fromEnvelope(WorkspaceExportSchema.parse(JSON.parse(JSON.stringify(wire)) as unknown));
+  }
+
+  it('round-trips all three levels through real JSON', () => {
+    const grid = denseGrid(50, 30);
+    grid[0][0] = 1;
+    const b = battle(PRESETS[0], [CONWAYS_CLASSIC.id], grid, 'A battle about blinkers.');
+    const o: Organism = { ...CONWAYS_CLASSIC, description: 'The classic B3/S23.' };
+
+    const wire = toEnvelope('workspace', [b], [o], { ...META, description: 'My lab.' });
+    expect(wire.description).toBe('My lab.');
+    expect(wire.battles[0].description).toBe('A battle about blinkers.');
+
+    const back = roundTrip(wire);
+    expect(back.meta).toEqual({ description: 'My lab.' });
+    expect(back.battles).toEqual([b]);
+    expect(back.organisms).toEqual([o]);
+  });
+
+  it('round-trips a workspace with no descriptions anywhere — every key stays absent', () => {
+    const grid = denseGrid(50, 30);
+    grid[0][0] = 1;
+    const b = battle(PRESETS[0], [CONWAYS_CLASSIC.id], grid);
+
+    const wire = toEnvelope('workspace', [b], [CONWAYS_CLASSIC], META);
+    expect('description' in wire).toBe(false);
+    expect('description' in wire.battles[0]).toBe(false);
+
+    const back = roundTrip(wire);
+    expect(Object.keys(back.meta)).toEqual([]);
+    expect('description' in back.battles[0]).toBe(false);
+    expect('description' in back.organisms[0]).toBe(false);
+  });
+
+  it('omits a blank workspace description rather than writing an empty one (FD2)', () => {
+    const wire = toEnvelope('workspace', [], [], { ...META, description: '   ' });
+    expect('description' in wire).toBe(false);
+  });
+
+  it('trims the workspace description it writes', () => {
+    const wire = toEnvelope('workspace', [], [], { ...META, description: '  Lab notes \n' });
+    expect(wire.description).toBe('Lab notes');
+  });
+});

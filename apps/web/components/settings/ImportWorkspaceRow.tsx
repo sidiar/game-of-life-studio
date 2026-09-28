@@ -9,6 +9,7 @@ import {
   type BattleRepository,
   type ImportSummary,
   type OrganismRepository,
+  type WorkspaceMetaRepository,
   type WorkspaceSerializer,
 } from '@gol/persistence';
 import { importFailureMessage } from '@/lib/import/importFailureMessage';
@@ -24,10 +25,13 @@ const ImportWarningDialog = dynamic(() => import('./ImportWarningDialog'), { ssr
 
 export interface ImportWorkspaceRowProps {
   // `Pick`s, never the aggregate (FD2, the Story 5.2 FD7 house rule) — this row calls exactly
-  // these four methods and imports no concrete repository or `createRepositories()` (AR-2/27).
+  // these five methods and imports no concrete repository or `createRepositories()` (AR-2/27).
   serializer: Pick<WorkspaceSerializer, 'exportWorkspace' | 'importWorkspace'>;
   battles: Pick<BattleRepository, 'list'>;
   organisms: Pick<OrganismRepository, 'list'>;
+  /** Story 7.2 FD6: a workspace description is user content, so it makes the workspace
+   * non-pristine — the replace would destroy it. */
+  workspaceMeta: Pick<WorkspaceMetaRepository, 'load'>;
   /** AC6: `<SettingsPage>` wires this to `statsResource.reload()`. Called on success only. */
   onImported(): void;
   /** Review Finding D2 (owner ruling a): reports this row's outcome to `<DataManagement>`'s single
@@ -100,6 +104,7 @@ export default function ImportWorkspaceRow({
   serializer,
   battles,
   organisms,
+  workspaceMeta,
   onImported,
   onMessage,
 }: ImportWorkspaceRowProps) {
@@ -197,8 +202,12 @@ export default function ImportWorkspaceRow({
 
     let pristine: boolean;
     try {
-      const [battleSummaries, organismList] = await Promise.all([battles.list(), organisms.list()]);
-      pristine = isPristineWorkspace(battleSummaries.length, organismList);
+      const [battleSummaries, organismList, meta] = await Promise.all([
+        battles.list(),
+        organisms.list(),
+        workspaceMeta.load(),
+      ]);
+      pristine = isPristineWorkspace(battleSummaries.length, organismList, meta.description);
     } catch {
       // AC4 / FD3: a rejected read counts as NOT pristine — the failure mode is an extra warning,
       // never a silently-skipped one.

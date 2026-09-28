@@ -1,4 +1,9 @@
-import { ORGANISM_SCHEMA_VERSION, OrganismSchema, type Organism } from '@gol/domain';
+import {
+  normalizeDescription,
+  ORGANISM_SCHEMA_VERSION,
+  OrganismSchema,
+  type Organism,
+} from '@gol/domain';
 import type { OrganismDraft } from './organismDraft';
 import { parseRuleDraft } from './ruleDraft';
 import { ruleContentHash } from './ruleContentHash';
@@ -43,10 +48,16 @@ export async function projectOrganismForSave(draft: OrganismDraft, id: string): 
     }),
   );
 
+  // Normalized, and the key OMITTED when there is none (Story 7.2 FD2): an explicit `undefined`
+  // would break the draft↔record identity `organismDraft.test.ts` pins, and a stored key on an
+  // unedited Conway's Classic would make `isPristineWorkspace` report an untouched workspace as
+  // modified.
+  const description = normalizeDescription(draft.description);
   const record = {
     schemaVersion: ORGANISM_SCHEMA_VERSION,
     id,
     name: draft.name,
+    ...(description !== undefined && { description }),
     colorToken: draft.colorToken,
     dominance: draft.dominance,
     agingEnabled: draft.agingEnabled,

@@ -199,7 +199,8 @@ export default function ClearAllDataRow({
         <RowInfo>
           <RowLabel>Clear All Data</RowLabel>
           <RowDescription>
-            Delete all battles and organisms from local storage (cannot be undone)
+            Delete all battles, organisms and the workspace description from local storage (cannot
+            be undone)
           </RowDescription>
         </RowInfo>
         <ClearButton

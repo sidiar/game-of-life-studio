@@ -418,3 +418,66 @@ describe('snapshotWorkspace / restoreWorkspace (mirrors the real pair)', () => {
     expect((await repos.organisms.load('raw-org'))?.name).toBe('Test Organism');
   });
 });
+
+describe('workspaceMeta (Story 7.2 — mirrors LocalStorageWorkspaceMetaRepository)', () => {
+  it('loads {} when absent, round-trips a normalized description, and writes {} for a blank one', async () => {
+    const repos = createFakeRepositories();
+    expect(await repos.workspaceMeta.load()).toEqual({});
+
+    await repos.workspaceMeta.save({ description: '  Lab notes.  ' });
+    expect(await repos.workspaceMeta.load()).toEqual({ description: 'Lab notes.' });
+
+    await repos.workspaceMeta.save({ description: ' ' });
+    expect(Object.keys(await repos.workspaceMeta.load())).toEqual([]);
+  });
+
+  it('never stamps — a description alone leaves the workspace fresh', async () => {
+    const repos = createFakeRepositories();
+    await repos.workspaceMeta.save({ description: 'Lab notes.' });
+    expect(await repos.isFreshWorkspace()).toBe(true);
+  });
+
+  it('validates a seeded record and throws CorruptDataError for a raw invalid one', async () => {
+    expect(() =>
+      createFakeRepositories({ workspaceMeta: { description: 'x'.repeat(501) } }),
+    ).toThrow(/not valid/);
+    const seeded = createFakeRepositories({ workspaceMeta: { description: 'Seeded.' } });
+    expect(await seeded.workspaceMeta.load()).toEqual({ description: 'Seeded.' });
+
+    const corrupt = createFakeRepositories({ raw: { workspaceMeta: { description: 42 } } });
+    await expect(corrupt.workspaceMeta.load()).rejects.toBeInstanceOf(CorruptDataError);
+  });
+
+  it('clearAll clears it and keeps settings', async () => {
+    const repos = createFakeRepositories({ workspaceMeta: { description: 'Lab notes.' } });
+    await repos.settings.save({ ...DEFAULT_SETTINGS, theme: 'biotech-terminal' });
+
+    await repos.clearAll();
+
+    expect(await repos.workspaceMeta.load()).toEqual({});
+    expect((await repos.settings.load()).theme).toBe('biotech-terminal');
+  });
+
+  it('is metered through the shared formula', async () => {
+    const repos = createFakeRepositories();
+    await repos.workspaceMeta.save({ description: 'Lab notes.' });
+
+    expect((await repos.storageUsage()).bytes).toBe(
+      storageBytesOf([[STORAGE_KEYS.workspace, JSON.stringify({ description: 'Lab notes.' })]]),
+    );
+  });
+
+  it('snapshot/restore puts it back, and restores an absent one as absent', async () => {
+    const repos = createFakeRepositories({ workspaceMeta: { description: 'Before.' } });
+    const withMeta = await repos.snapshotWorkspace();
+    await repos.workspaceMeta.save({ description: 'After.' });
+    await repos.restoreWorkspace(withMeta);
+    expect(await repos.workspaceMeta.load()).toEqual({ description: 'Before.' });
+
+    await repos.clearAll();
+    const withoutMeta = await repos.snapshotWorkspace();
+    await repos.workspaceMeta.save({ description: 'After.' });
+    await repos.restoreWorkspace(withoutMeta);
+    expect((await repos.storageUsage()).bytes).toBe(0);
+  });
+});
