@@ -65,7 +65,8 @@ RFC-005 already draws the boundary: it owns the *working copy* (`initialGrid`) a
 │    exportWorkspace() / exportBattle(id) / importWorkspace(file)                 │
 │                       reads & writes ONLY through the repository interfaces     │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│  AppRepositories (PERSISTENCE — RFC-001)   { battles, organisms, settings }     │
+│  AppRepositories (PERSISTENCE — RFC-001)   { battles, organisms, settings,      │
+│                                              workspaceMeta }  (arch M16)        │
 │    LocalStorage* (MVP)  |  Api* (post-MVP)   — CRUD only, format-agnostic       │
 └──────────────────────────────────────────────────────────────────────────────┘
         ▲                                            ▲
@@ -94,6 +95,7 @@ interface AppRepositories {
   battles:   BattleRepository
   organisms: OrganismRepository
   settings:  SettingsRepository   // ← was "WorkspaceRepository" in RFC-001
+  workspaceMeta: WorkspaceMetaRepository   // workspace description (FR-9.5) in gol:workspace — data, not settings (arch M16, Story 7.2)
 }
 ```
 
@@ -230,7 +232,7 @@ async importWorkspace(fileText: string): Promise<void> {
 
   const rollback = await this.snapshotCurrent()                // capture for failure recovery
   try {
-    await this.repos.clearAll()                                // DATA-ONLY: battles + organisms — never touches gol:settings (Decision 6)
+    await this.repos.clearAll()                                // DATA-ONLY: battles + organisms + workspace meta — never touches gol:settings (Decision 6 / arch M16)
     await this.repos.organisms.replaceAll(envelope.organisms)
     await this.repos.battles.replaceAll(envelope.battles.map(fromExportBattle))   // sparse cells → dense gridState (Decision 2) + rebuilds organismIds from the cells — lossless because the roster ≡ the placed set (arch Decision H.1); the envelope needs no roster field
     await this.ensureDefaultOrganism()                         // FR-1.5/M9: re-add Conway's Classic if the imported envelope lacks it
@@ -247,7 +249,7 @@ async importWorkspace(fileText: string): Promise<void> {
 
 ### Decision 6: Settings are device-local — they never travel in *any* export, and import can never touch them *(revised 2026-07-09 — arch Decision F)*
 
-**Decision:** The envelope carries **no settings field at all** — neither for battle nor for workspace exports. Settings live only in `gol:settings` on the device. Correspondingly, `clearAll()` is **data-only** (battles + organisms); the import path (Decision 5) therefore cannot affect settings *by construction*, and **Clear All Data** (FR-8.5) preserves them too (product-confirmed 2026-07-09).
+**Decision:** The envelope carries **no settings field at all** — neither for battle nor for workspace exports. Settings live only in `gol:settings` on the device. Correspondingly, `clearAll()` is **data-only** (battles + organisms + workspace meta — arch M16); the import path (Decision 5) therefore cannot affect settings *by construction*, and **Clear All Data** (FR-8.5) preserves them too (product-confirmed 2026-07-09).
 
 **Rationale:**
 - **The adversarial review (finding #2) caught this Decision contradicting Decision 5 as previously written:** a battle envelope omitted `settings`, but import ran a `clearAll()` that wiped `gol:settings` and then had nothing to restore — importing a friend's battle destroyed the importer's theme, grid-lines, and default-speed preferences, the exact outcome this Decision promised to prevent. Removing settings from the format *and* scoping `clearAll()` to data closes the hole structurally rather than with a snapshot-and-restore patch.
@@ -263,7 +265,10 @@ gol:schema       → { formatVersion }                  // drives at-rest migrat
 gol:battles      → Record<id, BattleRecord>           // one key, whole collection
 gol:organisms    → Record<id, OrganismRecord>         // the shared library
 gol:settings     → SettingsRecord                     // device-local; excluded from clearAll() and from every export (Decision 6)
+gol:workspace    → WorkspaceMeta { description? }     // workspace DATA (FR-9.5): exported, replaced by import, cleared by clearAll(); written unstamped (arch M16)
 ```
+
+> **Fifth key (arch M16, Story 7.2).** `gol:workspace` is data: it is in the data-key set, captured/restored by the import rollback snapshot and counted by the storage meter. ⚠️ It is **not yet carried by the at-rest format chain** (Decision 3) — **the first `formatVersion` bump must add it** to the migratable document, the write-back candidates and the rollback.
 
 - **Monitoring (FR-8.2):** report usage via `navigator.storage.estimate()` where available, falling back to summing serialized lengths. **The quota budget is governed by the DENSE at-rest shape** (Decision 2 / Cross-RFC Reconciliation #3 — sparse is wire-only, so export-file sizes are irrelevant here). The arithmetic *(corrected 2026-07-09 — adversarial finding #12)*: a dense 100×60 `gridState` serializes to ~12 KB of JSON when mostly empty ("0," per cell) and ~24 KB at the pathological all-3-digit worst; a 50×30 grid ≤ ~6 KB. NFR-7.2's soft target — **50 battles × ≤24 KB ≈ 1.2 MB worst case, plus ~200 organisms × ~2 KB of rules JSON ≈ 0.4 MB ≈ 1.6 MB total** — is about a third of even the most conservative 5 MB per-origin quota (browsers commonly meter localStorage in UTF-16 code units; our character counts approximate those units, so the headroom holds under the strictest reading). The meter is therefore informational — and since organism count is **not hard-capped** (colours reusable — RFC-007 Decision 3 / arch M6), the graceful **quota-exceeded** path below remains the real backstop.
 - **Quota-exceeded (NFR-7.3, OQ-2, RFC-001 Risk 4):** writes catch `QuotaExceededError` and surface a non-destructive message ("Storage full — export and remove a battle to free space"). A write is **never** allowed to truncate an existing good value: serialize to a candidate string first, then `setItem`; if it throws, the previous value is left intact and the operation reported as failed (it also fails the dirty-flag clear, so the user keeps their unsaved indicator).

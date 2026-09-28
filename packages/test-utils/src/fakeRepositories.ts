@@ -2,12 +2,15 @@ import {
   BattleSchema,
   BattleSummarySchema,
   CURRENT_FORMAT_VERSION,
+  normalizeDescription,
   OrganismSchema,
   SettingsSchema,
+  WorkspaceMetaSchema,
   type Battle,
   type BattleSummary,
   type Organism,
   type Settings,
+  type WorkspaceMeta,
 } from '@gol/domain';
 import {
   assertSafeCollectionId,
@@ -18,6 +21,7 @@ import {
   type BattleRepository,
   type OrganismRepository,
   type SettingsRepository,
+  type WorkspaceMetaRepository,
   type WorkspaceSnapshot,
 } from '@gol/persistence';
 
@@ -25,6 +29,8 @@ import {
 interface FakeWorkspaceData {
   battles: ReadonlyMap<string, unknown>;
   organisms: ReadonlyMap<string, unknown>;
+  /** The `gol:workspace` record (Story 7.2), `undefined` when absent — restored absent too. */
+  workspaceMeta: { present: boolean; value: unknown };
   stamped: boolean;
 }
 
@@ -38,10 +44,13 @@ export interface FakeSeed {
   battles?: readonly Battle[];
   organisms?: readonly Organism[];
   settings?: Settings;
+  /** The workspace description record (Story 7.2) — validated, and like settings it never stamps. */
+  workspaceMeta?: WorkspaceMeta;
   raw?: {
     battles?: Record<string, unknown>;
     organisms?: Record<string, unknown>;
     settings?: unknown;
+    workspaceMeta?: unknown;
   };
 }
 
@@ -86,6 +95,8 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
   const battleStore = new Map<string, unknown>();
   const organismStore = new Map<string, unknown>();
   let settingsStore: unknown;
+  // `gol:workspace` (Story 7.2). `undefined` ⇔ the key is absent.
+  let workspaceMetaStore: unknown;
 
   // Fresh ⇔ no data write has ever happened — modelled as an explicit flag stamped by the write
   // path, exactly like `gol:schema` (RFC-006 Decision 7). NEVER "the organism map is empty": an
@@ -121,6 +132,10 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
     stamped = true;
   }
   if (seed?.raw && 'settings' in seed.raw) settingsStore = seed.raw.settings;
+  if (seed?.workspaceMeta) {
+    workspaceMetaStore = parseSeed(WorkspaceMetaSchema, 'workspaceMeta', seed.workspaceMeta);
+  }
+  if (seed?.raw && 'workspaceMeta' in seed.raw) workspaceMetaStore = seed.raw.workspaceMeta;
 
   const battles: BattleRepository = {
     async save(battle) {
@@ -262,15 +277,40 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
     },
   };
 
+  const workspaceMeta: WorkspaceMetaRepository = {
+    async load() {
+      // Never null — absent ⇒ `{}`; present-but-invalid ⇒ CorruptDataError, as the real store.
+      if (workspaceMetaStore === undefined) return {};
+      const parsed = WorkspaceMetaSchema.safeParse(workspaceMetaStore);
+      if (!parsed.success) {
+        throw new CorruptDataError(STORAGE_KEYS.workspace, 'workspace meta record is not valid', {
+          cause: parsed.error,
+        });
+      }
+      return parsed.data;
+    },
+
+    async save(meta) {
+      // Normalized and written as `{}` when there is no description, like the real repository —
+      // and, like it, NEVER stamps: a description is not the workspace's initialization.
+      const description =
+        meta.description === undefined ? undefined : normalizeDescription(meta.description);
+      workspaceMetaStore = description === undefined ? {} : { description };
+    },
+  };
+
   return {
     battles,
     organisms,
     settings,
+    workspaceMeta,
 
     async clearAll() {
-      // Data-only: battles + organisms, never settings (Decision F / AR-12).
+      // Data-only: battles + organisms + workspace meta (Story 7.2), never settings (Decision F /
+      // AR-12).
       battleStore.clear();
       organismStore.clear();
+      workspaceMetaStore = undefined;
       // The stamp survives Clear All by design — Story 5.10's `resetWorkspace()` re-seeds
       // DEFAULT_WORKSPACE (via `ensureDefaultOrganism`) against an already-stamped store, never a
       // fresh one.
@@ -294,6 +334,10 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
       const data: FakeWorkspaceData = {
         battles: detach(battleStore),
         organisms: detach(organismStore),
+        workspaceMeta: {
+          present: workspaceMetaStore !== undefined,
+          value: workspaceMetaStore === undefined ? undefined : roundTrip(workspaceMetaStore),
+        },
         stamped,
       };
       return data as unknown as WorkspaceSnapshot;
@@ -308,6 +352,9 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
       if (
         !(data.battles instanceof Map) ||
         !(data.organisms instanceof Map) ||
+        typeof data.workspaceMeta !== 'object' ||
+        data.workspaceMeta === null ||
+        typeof data.workspaceMeta.present !== 'boolean' ||
         typeof data.stamped !== 'boolean'
       ) {
         throw new TypeError('restoreWorkspace: the snapshot was not captured by this fake');
@@ -316,6 +363,7 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
       for (const [id, record] of data.battles) battleStore.set(id, record);
       organismStore.clear();
       for (const [id, record] of data.organisms) organismStore.set(id, record);
+      workspaceMetaStore = data.workspaceMeta.present ? data.workspaceMeta.value : undefined;
       stamped = data.stamped;
     },
 
@@ -350,6 +398,9 @@ export function createFakeRepositories(seed?: FakeSeed): AppRepositories {
       }
       if (organismStore.size > 0) {
         entries.push([STORAGE_KEYS.organisms, JSON.stringify(Object.fromEntries(organismStore))]);
+      }
+      if (workspaceMetaStore !== undefined) {
+        entries.push([STORAGE_KEYS.workspace, JSON.stringify(workspaceMetaStore)]);
       }
       if (settingsStore !== undefined) {
         entries.push([STORAGE_KEYS.settings, JSON.stringify(settingsStore)]);

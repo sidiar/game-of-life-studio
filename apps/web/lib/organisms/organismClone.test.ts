@@ -220,3 +220,18 @@ describe('cloneOrganismRecord', () => {
     }
   });
 });
+
+describe('cloneOrganismRecord — description (Story 7.2)', () => {
+  it('carries the source description', () => {
+    const source: Organism = { ...CONWAYS_CLASSIC, description: 'The classic B3/S23.' };
+    expect(cloneOrganismRecord(source, 'clone-1', counter('rule-')).description).toBe(
+      'The classic B3/S23.',
+    );
+  });
+
+  it('leaves the key absent when the source has none', () => {
+    expect('description' in cloneOrganismRecord(CONWAYS_CLASSIC, 'clone-1', counter('rule-'))).toBe(
+      false,
+    );
+  });
+});

@@ -430,6 +430,29 @@ export default function BattlePage({
   }
   const battleName = nameState.value;
 
+  // FR-9.5 (Story 7.2): the description's twin of `nameState` — the same value-keyed in-render
+  // reseed, for the same reasons (see above). One more member, `saved`: the text the header shows.
+  // The header reads the SAVED description, never the live edit, so it does not reflow per
+  // keystroke while the user types in the sidebar (Story 7.2 FD9); a successful save moves it.
+  const seedDescription = draft?.description ?? null;
+  const [descriptionState, setDescriptionState] = useState<{
+    value: string;
+    seed: string | null;
+    saved: string;
+  }>(() => ({
+    value: seedDescription ?? '',
+    seed: seedDescription,
+    saved: seedDescription ?? '',
+  }));
+  if (descriptionState.seed !== seedDescription) {
+    setDescriptionState({
+      value: seedDescription ?? '',
+      seed: seedDescription,
+      saved: seedDescription ?? '',
+    });
+  }
+  const battleDescription = descriptionState.value;
+
   // Story 2.11 (AC3, AC5): starts false; a name edit or a grid commit sets it, and exactly one
   // thing clears it — a save that RESOLVED (Story 2.13, `handleSave` below). Also observed via
   // `data-dirty` on `Root`, which is how both the unit tests and the e2e watch a save land
@@ -474,6 +497,15 @@ export default function BattlePage({
     // the record `handleSave` already projected and is about to report saved.
     if (savingRef.current) return;
     setNameState((previous) => ({ value: name, seed: previous.seed }));
+    setIsDirty(true);
+  }, []);
+
+  // Story 7.2: `handleNameChange`'s copy, lock included — an edit landing mid-write would be
+  // reported saved and never written, exactly the loss the lock exists to prevent. Not part of the
+  // undo history (the name is not either).
+  const handleDescriptionChange = useCallback((description: string) => {
+    if (savingRef.current) return;
+    setDescriptionState((previous) => ({ ...previous, value: description }));
     setIsDirty(true);
   }, []);
 
@@ -962,11 +994,14 @@ export default function BattlePage({
       const record = projectBattleForSave(grid, rosterIds, {
         id,
         name: battleName,
+        description: battleDescription,
         createdAt,
         updatedAt: now,
       });
       await repositories.battles.save(record);
       setSaveStamp({ id, createdAt });
+      // The header's text moves only on a RESOLVED save (FD9), to what was actually written.
+      setDescriptionState((previous) => ({ ...previous, saved: record.description ?? '' }));
       // AC4: only after the promise RESOLVES. Clearing optimistically before the await would report
       // success for a write that then throws — and RFC-006 Decision 7 says a failed write "also
       // fails the dirty-flag clear, so the user keeps their unsaved indicator" in as many words.
@@ -981,7 +1016,8 @@ export default function BattlePage({
       savingRef.current = false;
       setIsSaving(false);
     }
-  }, [grid, rosterIds, battleName, repositories, saveStamp, loadedIdentity]);
+    // `battleDescription` is a dep for the reason `battleName` is: a stale closure saves old text.
+  }, [grid, rosterIds, battleName, battleDescription, repositories, saveStamp, loadedIdentity]);
 
   // Story 5.6 (Task 3): the thin wrapper `useLeaveGuard`'s `save(): Promise<boolean>` contract
   // needs — see `persistBattle`'s own comment for why the split exists at all.
@@ -1515,6 +1551,7 @@ export default function BattlePage({
       {!inFullscreen && (
         <BattleHeader
           battleTitle={battleDisplayName(battleName)}
+          battleDescription={descriptionState.saved}
           /* Story 3.11 (FR-3.10, spec §3.2): the toggle renders now that both are supplied. `disabled`
              is the visible half of the edit lock (AC2) OR the roster refusal (AC7) — it reaches RUN
              only; LAB is always the way back. */
@@ -1545,6 +1582,8 @@ export default function BattlePage({
           atCap={atCap}
           battleName={battleName}
           onNameChange={handleNameChange}
+          battleDescription={battleDescription}
+          onDescriptionChange={handleDescriptionChange}
           /* AC4: the WRAPPED seam — see handleCommitGrid's own comment above for why it, and not
              `commitGrid` directly, is what has to reach the canvas from here on. */
           onCommitGrid={handleCommitGrid}

@@ -20,7 +20,8 @@ import { assertSafeCollectionId, describeIssues, ImportError } from './errors';
  *   3. WorkspaceExportSchema.safeParse
  *   4. assertReferentialClosure
  *   5. snapshot the current workspace
- *   6. clearAll → organisms.replaceAll → battles.replaceAll → ensureDefaultOrganism
+ *   6. clearAll → organisms.replaceAll → battles.replaceAll → workspaceMeta.save (only when the
+ *      file carries a workspace description, Story 7.2) → ensureDefaultOrganism
  *   7. on any throw in 6, restore the snapshot
  *
  * Steps 1-4 are `validateImportFile`: pure, writing nothing and reading no storage, so a bad file
@@ -33,9 +34,11 @@ import { assertSafeCollectionId, describeIssues, ImportError } from './errors';
  *
  * `kind` is never branched on (M8 / FR-8.4): a battle-kind file replaces the whole workspace
  * exactly as a workspace-kind one does. Settings are untouched BY CONSTRUCTION (AR-12 / Decision
- * F): nothing here references `repos.settings`, the snapshot holds only workspace data (never
- * `gol:settings`), and `clearAll()` is data-only — there is no settings snapshot-and-restore to
- * get wrong.
+ * F): nothing here references `repos.settings`, the snapshot holds only workspace data (battles,
+ * organisms, the workspace meta and the stamp — never `gol:settings`), and `clearAll()` is
+ * data-only — there is no settings snapshot-and-restore to get wrong. The workspace description IS
+ * data (Story 7.2): `clearAll()` removes the old one, the file's replaces it, and a file without
+ * one leaves none (M8's whole-workspace replace).
  */
 
 /** What `applyImport` wrote — the figures Story 5.9's confirmation reports. */
@@ -157,6 +160,10 @@ export async function applyImport(
     await repos.clearAll();
     await repos.organisms.replaceAll(incoming.organisms);
     await repos.battles.replaceAll(incoming.battles);
+    // Inside the guarded region like every other write (Story 7.2 FD5), so a later failure rolls
+    // the description back through the snapshot too. Skipped when absent: `clearAll()` already
+    // removed the old record, and absent ≡ none.
+    if (incoming.meta.description !== undefined) await repos.workspaceMeta.save(incoming.meta);
     // Inside the guarded region: a failure here is a failed import too (M9 / AR-13). It never
     // overwrites an imported, possibly edited, `conways-classic`.
     await ensureDefaultOrganism(repos.organisms);

@@ -16,9 +16,14 @@
  */
 
 import { z } from 'zod';
-import { IsoTimestamp, MAX_BATTLE_NAME_LENGTH } from './battleSchema';
+import {
+  IsoTimestamp,
+  MAX_BATTLE_DESCRIPTION_LENGTH,
+  MAX_BATTLE_NAME_LENGTH,
+} from './battleSchema';
 import { EditableGridPresetSchema, OrganismSchema } from './organismSchema';
 import { CURRENT_FORMAT_VERSION } from './settingsSchema';
+import { MAX_WORKSPACE_DESCRIPTION_LENGTH } from './workspaceMetaSchema';
 
 /**
  * What an envelope claims to hold. `'battle'` exports still carry the same top-level shape — a
@@ -66,6 +71,8 @@ export const BattleExportSchema = z
   .object({
     id: z.uuid(),
     name: z.string().max(MAX_BATTLE_NAME_LENGTH),
+    // FR-9.5 (Story 7.2): optional and absent ≡ none, exactly as at rest (`BattleSchema`).
+    description: z.string().max(MAX_BATTLE_DESCRIPTION_LENGTH).optional(),
     gridDimensions: EditableGridPresetSchema,
     cells: z.array(PlacedCellSchema),
     createdAt: IsoTimestamp,
@@ -140,6 +147,12 @@ export const WorkspaceExportSchema = z
     appVersion: z.string(),
     exportedAt: IsoTimestamp,
     kind: z.enum(EXPORT_KINDS),
+    // FR-9.5 (Story 7.2): the workspace description, top-level (one field, not a `workspace: {}`
+    // sub-object). ⚠️ `formatVersion` deliberately stays 1 for this additive field (owner ruling
+    // 2026-09-28): an OLDER v1 build importing a file that carries it strips it silently — the same
+    // Zod-strip mechanism the `settings` note above relies on — and that loss is accepted, not a
+    // bug to fix with a version bump. A `kind: 'battle'` file never carries one (`exportBattle`).
+    description: z.string().max(MAX_WORKSPACE_DESCRIPTION_LENGTH).optional(),
     organisms: z.array(OrganismSchema),
     battles: z.array(BattleExportSchema),
   })
@@ -170,6 +183,18 @@ export const WorkspaceExportSchema = z
         code: 'custom',
         path: ['battles'],
         message: `kind: 'battle' must carry exactly one battle`,
+      });
+    }
+    // Review finding (Story 7.2): the comment on `description` above documents this as a writer
+    // invariant ("a `kind: 'battle'` file never carries one") but nothing enforced it on parse — a
+    // hand-edited or corrupted single-battle file could carry a top-level `description` and
+    // silently set the importer's WORKSPACE description (`fromEnvelope` branches on presence, not
+    // `kind`). Enforced here, at the same cardinality-checking site, rather than in the reader.
+    if (envelope.kind === 'battle' && envelope.description !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['description'],
+        message: `kind: 'battle' must not carry a workspace description`,
       });
     }
   });

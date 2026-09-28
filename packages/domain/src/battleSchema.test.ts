@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { BattleSchema, BattleSummarySchema, MAX_BATTLE_NAME_LENGTH } from './battleSchema';
+import {
+  BattleSchema,
+  BattleSummarySchema,
+  MAX_BATTLE_DESCRIPTION_LENGTH,
+  MAX_BATTLE_NAME_LENGTH,
+} from './battleSchema';
 
 const PRESET = { cols: 50, rows: 30 } as const;
 
@@ -157,6 +162,27 @@ describe('BattleSchema', () => {
     expect(BattleSummarySchema.safeParse({ ...validBattle(), name: overCap }).success).toBe(false);
   });
 
+  // Story 7.2 (FR-9.5): the description cap is the boundary both schemas enforce, and a stored
+  // record without one parses unchanged — with no key invented.
+  it('MAX_BATTLE_DESCRIPTION_LENGTH (280) is exactly the boundary both schemas enforce', () => {
+    expect(MAX_BATTLE_DESCRIPTION_LENGTH).toBe(280);
+    const atCap = 'x'.repeat(MAX_BATTLE_DESCRIPTION_LENGTH);
+    const overCap = 'x'.repeat(MAX_BATTLE_DESCRIPTION_LENGTH + 1);
+
+    expect(BattleSchema.safeParse({ ...validBattle(), description: atCap }).success).toBe(true);
+    expect(BattleSchema.safeParse({ ...validBattle(), description: overCap }).success).toBe(false);
+    expect(BattleSummarySchema.safeParse({ ...validBattle(), description: atCap }).success).toBe(
+      true,
+    );
+    expect(BattleSummarySchema.safeParse({ ...validBattle(), description: overCap }).success).toBe(
+      false,
+    );
+  });
+
+  it('parses a record without a description with no description key', () => {
+    expect('description' in BattleSchema.parse(validBattle())).toBe(false);
+  });
+
   it('rejects a non-uuid id', () => {
     const found = issues({ ...validBattle(), id: 'conways-classic' });
     expect(found).toHaveLength(1);
@@ -183,6 +209,11 @@ describe('BattleSchema', () => {
 });
 
 describe('BattleSummarySchema', () => {
+  it('keeps the description — the gallery tile renders it (Story 7.2)', () => {
+    const summary = BattleSummarySchema.parse({ ...validBattle(), description: 'Blinkers.' });
+    expect(summary.description).toBe('Blinkers.');
+  });
+
   it('projects a stored battle record down to exactly the Decision H.4 fields', () => {
     const summary = BattleSummarySchema.parse(validBattle());
 

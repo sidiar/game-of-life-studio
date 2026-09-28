@@ -42,6 +42,7 @@ const SETTINGS: Settings = {
 const RAW_KEYS = [
   STORAGE_KEYS.battles,
   STORAGE_KEYS.organisms,
+  STORAGE_KEYS.workspace,
   STORAGE_KEYS.schema,
   STORAGE_KEYS.settings,
 ] as const;
@@ -108,6 +109,7 @@ async function seedExistingWorkspace(): Promise<AppRepositories> {
     battle(EXISTING_BATTLE_ID, 'Existing battle', [CONWAYS_CLASSIC_ID, 'existing-custom']),
   );
   await repos.settings.save(SETTINGS);
+  await repos.workspaceMeta.save({ description: 'The existing workspace.' });
   return repos;
 }
 
@@ -520,5 +522,38 @@ describe('validateImportFile', () => {
     expect(envelope.battles[0].createdAt).toBeInstanceOf(Date);
     expect(getItem).not.toHaveBeenCalled();
     expect(setItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('importWorkspace — the workspace description (Story 7.2)', () => {
+  it('writes the file’s workspace description, replacing the existing one', async () => {
+    const repos = await seedExistingWorkspace();
+    const wire = { ...withTarget(validWire()), description: 'Imported lab notes.' };
+
+    await importOver(repos, JSON.stringify(wire));
+
+    expect(await repos.workspaceMeta.load()).toEqual({ description: 'Imported lab notes.' });
+  });
+
+  it('a file without one leaves none — the old description does not survive the replace (M8)', async () => {
+    const repos = await seedExistingWorkspace();
+
+    await importOver(repos, JSON.stringify(withTarget(validWire())));
+
+    expect(localStorage.getItem(STORAGE_KEYS.workspace)).toBeNull();
+    expect(await repos.workspaceMeta.load()).toEqual({});
+  });
+
+  it('a write failure after the description was written rolls it back byte-identical', async () => {
+    const repos = await seedExistingWorkspace();
+    const before = rawStore();
+    const wire = { ...withTarget(validWire()), description: 'Imported lab notes.' };
+    // `ensureDefaultOrganism` is the one write after the description's (the file carries no
+    // Conway's Classic, so it saves one) — failing it fails the import late.
+    vi.spyOn(repos.organisms, 'save').mockRejectedValue(new Error('late failure'));
+
+    await expectImportError(importOver(repos, JSON.stringify(wire)), 'write-failed');
+
+    expect(rawStore()).toEqual(before);
   });
 });

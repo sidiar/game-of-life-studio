@@ -1,5 +1,6 @@
 import { CONWAYS_CLASSIC } from './defaultWorkspace';
 import type { Organism } from './organismSchema';
+import { normalizeDescription } from './workspaceMetaSchema';
 
 /**
  * FR-8.4's "unmodified default workspace" predicate (Story 5.9 Task 1) — the gate that lets
@@ -51,12 +52,25 @@ function deepEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
- * True iff the workspace has nothing an import could destroy: zero battles, and the organism
- * library holds exactly one organism, deep-equal to `CONWAYS_CLASSIC`. Reads two fresh values —
- * never a cached count — because the whole point is to answer "right now, before this import
- * writes", not "as of the page's last render".
+ * True iff the workspace has nothing an import could destroy: zero battles, the organism library
+ * holds exactly one organism, deep-equal to `CONWAYS_CLASSIC`, and there is no workspace
+ * description (Story 7.2 FD6 — it is user content the destructive replace would destroy, so
+ * skipping the FR-8.4 warning over it would be silent data loss). Reads fresh values — never a
+ * cached count — because the whole point is to answer "right now, before this import writes", not
+ * "as of the page's last render". `workspaceDescription` defaults to none so callers that predate
+ * the field keep their meaning.
  */
-export function isPristineWorkspace(battleCount: number, organisms: readonly Organism[]): boolean {
+export function isPristineWorkspace(
+  battleCount: number,
+  organisms: readonly Organism[],
+  workspaceDescription?: string,
+): boolean {
+  if (
+    workspaceDescription !== undefined &&
+    normalizeDescription(workspaceDescription) !== undefined
+  ) {
+    return false;
+  }
   if (battleCount !== 0) return false;
   if (organisms.length !== 1) return false;
   return deepEqual(organisms[0], CONWAYS_CLASSIC);

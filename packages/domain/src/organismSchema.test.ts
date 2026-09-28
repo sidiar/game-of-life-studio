@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EditableGridPresetSchema,
   MAX_DOMINANCE,
+  MAX_ORGANISM_DESCRIPTION_LENGTH,
   MAX_ORGANISM_NAME_LENGTH,
   MIN_DOMINANCE,
   NEW_ORGANISM_DOMINANCE,
@@ -43,6 +44,22 @@ function rejects(data: unknown, path: string) {
 }
 
 describe('OrganismSchema', () => {
+  // Story 7.2 (FR-9.5): optional, capped, absent ≡ none.
+  it('parses a record without a description unchanged — no description key appears', () => {
+    const parsed = OrganismSchema.parse(validOrganism);
+    expect('description' in parsed).toBe(false);
+  });
+
+  it('accepts a description of exactly MAX_ORGANISM_DESCRIPTION_LENGTH and rejects one more', () => {
+    const atCap = 'x'.repeat(MAX_ORGANISM_DESCRIPTION_LENGTH);
+    expect(OrganismSchema.parse({ ...validOrganism, description: atCap }).description).toBe(atCap);
+    rejects({ ...validOrganism, description: atCap + 'x' }, 'description');
+  });
+
+  it('MAX_ORGANISM_DESCRIPTION_LENGTH is 280', () => {
+    expect(MAX_ORGANISM_DESCRIPTION_LENGTH).toBe(280);
+  });
+
   it('accepts a valid organism fixture', () => {
     const result = OrganismSchema.safeParse(validOrganism);
     expect(result.success).toBe(true);

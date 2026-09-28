@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { MAX_ORGANISM_NAME_LENGTH, NEW_ORGANISM_DOMINANCE, type Organism } from '@gol/domain';
+import {
+  MAX_ORGANISM_DESCRIPTION_LENGTH,
+  MAX_ORGANISM_NAME_LENGTH,
+  NEW_ORGANISM_DOMINANCE,
+  type Organism,
+} from '@gol/domain';
 import { CONWAYS_CLASSIC, createMockOrganisms } from '@gol/test-utils';
 import { defaultColorToken } from '@/lib/palette/defaultColorToken';
 import { PALETTE } from '@/lib/palette/paletteRegistry';
@@ -26,6 +31,7 @@ describe('createNewOrganismDraft', () => {
     const usedColorTokens = [PALETTE[1].id, PALETTE[2].id];
     expect(createNewOrganismDraft(usedColorTokens)).toEqual({
       name: '',
+      description: '',
       dominance: NEW_ORGANISM_DOMINANCE,
       agingEnabled: false,
       colorToken: defaultColorToken(usedColorTokens),
@@ -98,6 +104,37 @@ describe('organismDraftFrom (Story 4.17)', () => {
       const draft = organismDraftFrom(organism, () => crypto.randomUUID());
       await expect(projectOrganismForSave(draft, organism.id)).resolves.toEqual(organism);
     }
+  });
+
+  // Story 7.2 (FD2): a description round-trips, and an absent one stays ABSENT (not `''`, not an
+  // `undefined`-valued key — `toEqual` would not tell those apart, hence the `in` checks).
+  it('(b2) seed ∘ project keeps a description, and keeps the key absent when there is none', async () => {
+    const withDescription: Organism = { ...CONWAYS_CLASSIC, description: 'The classic B3/S23.' };
+    const draft = organismDraftFrom(withDescription, () => crypto.randomUUID());
+    expect(draft.description).toBe('The classic B3/S23.');
+    await expect(projectOrganismForSave(draft, withDescription.id)).resolves.toEqual(
+      withDescription,
+    );
+
+    const bare = await projectOrganismForSave(
+      organismDraftFrom(CONWAYS_CLASSIC, () => crypto.randomUUID()),
+      CONWAYS_CLASSIC.id,
+    );
+    expect('description' in bare).toBe(false);
+  });
+
+  it('(b3) projection normalizes: trims, and omits a whitespace-only description', async () => {
+    const draft = organismDraftFrom(CONWAYS_CLASSIC, () => crypto.randomUUID());
+    const trimmed = await projectOrganismForSave(
+      { ...draft, description: '  Spaced out.  ' },
+      CONWAYS_CLASSIC.id,
+    );
+    expect(trimmed.description).toBe('Spaced out.');
+    const blank = await projectOrganismForSave(
+      { ...draft, description: '   ' },
+      CONWAYS_CLASSIC.id,
+    );
+    expect('description' in blank).toBe(false);
   });
 
   it('(c) a numeric range condition round-trips through text', async () => {
@@ -282,7 +319,9 @@ describe('validateOrganismDraft', () => {
         expect(errors).toHaveLength((nameInvalid(name) ? 1 : 0) + ruleErrorCount);
 
         const ruleIdsInErrors = errors
-          .map((e) => (e.target.kind === 'name' ? null : e.target.ruleId))
+          .map((e) =>
+            e.target.kind === 'name' || e.target.kind === 'description' ? null : e.target.ruleId,
+          )
           .filter((id): id is string => id !== null);
         const expectedOrder = ruleRows.flatMap((rows, ruleIndex) =>
           rows.length === 0
@@ -466,5 +505,36 @@ describe('isOrganismDraftDirty (Story 4.23, FD1)', () => {
     expect(isOrganismDraftDirty(baseline, { ...baseline, survivalRules: reAddedWithFreshId })).toBe(
       true,
     );
+  });
+});
+
+describe('description (Story 7.2, FR-9.5)', () => {
+  it('an edit to the description dirties the draft, and reverting it reads clean', () => {
+    const baseline = createNewOrganismDraft([]);
+    const edited = { ...baseline, description: 'Grows fast.' };
+    expect(isOrganismDraftDirty(baseline, edited)).toBe(true);
+    expect(isOrganismDraftDirty(baseline, { ...edited, description: '' })).toBe(false);
+  });
+
+  it('an over-limit description is a gate error, right after the name’s', () => {
+    const draft = {
+      ...createNewOrganismDraft([]),
+      name: '',
+      description: 'x'.repeat(MAX_ORGANISM_DESCRIPTION_LENGTH + 1),
+    };
+    const errors = validateOrganismDraft(draft);
+    expect(errors.map((e) => e.target.kind)).toEqual(['name', 'description']);
+    expect(errors[1].message).toBe(
+      `Description cannot exceed ${MAX_ORGANISM_DESCRIPTION_LENGTH} characters`,
+    );
+  });
+
+  it('a description exactly at the cap is valid', () => {
+    const draft = {
+      ...createNewOrganismDraft([]),
+      name: 'Named',
+      description: 'x'.repeat(MAX_ORGANISM_DESCRIPTION_LENGTH),
+    };
+    expect(validateOrganismDraft(draft)).toEqual([]);
   });
 });

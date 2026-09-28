@@ -3858,6 +3858,14 @@ D1 (a) and D2 (a)), via three parallel adversarial layers.
   page is the same codebase-wide single-writer stance Story 5.9's FD5 already accepts. Fix if ever
   needed: a single card-level `pendingRef` (or `useReducer`) shared by all three rows' click
   handlers, replacing each row's own ref.
+  **↪ Extended (Story 7.2, owner ruling 2026-09-28):** the stance now also covers the Workspace
+  description row (`WorkspaceDescriptionRow.tsx`), a fourth row and a second *writer* of a key
+  Import/Clear All replace (`gol:workspace`). Its in-flight Save is not cancelled, awaited or
+  ordered against them, and that is accepted: in localStorage mode the race is unreachable —
+  `LocalStorageWorkspaceMetaRepository.save()` calls `writeMetaKey` synchronously before any
+  `await` (the write lands at click time; only the status message is pending), Import and Clear All
+  run behind modal dialogs, and `DataManagement` remounts the row (`descriptionKey`) after both, so
+  no stale text survives in the field. The connected-mode half is tracked in the Story 7-2 section.
 
 ## Deferred from: code review of 5-10-clear-all-data (2026-09-28)
 
@@ -3954,3 +3962,50 @@ Open owner flags from the story (not blockers — the story proceeded on its for
   key-to-message mapping could also arguably live beside the classifier in `storageFailure.ts`
   instead of the copy-only module. Cosmetic/organizational — no test depends on either placement,
   left for a future pass rather than an unattended rename/move.
+
+## Deferred from: Story 7-2 (Descriptions at Every Level)
+
+- ~~**⚠️ Variance — `gol:workspace` extends RFC-006's closed key list and `AppRepositories`
+  (Story 7.2 FD4).**~~ The workspace description (FR-9.5) lives in a new data key, `gol:workspace`,
+  behind a new port `AppRepositories.workspaceMeta`, extending RFC-006 Decision 7's key list and
+  Decision 1's `AppRepositories` shape and widening `clearAll()` to "battles + organisms + workspace
+  meta — never settings". **✅ Resolved → M16 (owner ruling, Sidiar, 2026-09-28):** folded into the
+  specs as Minor Spec Resolution M16 in `architecture.md`, propagated to RFC-006 Decisions 1, 5, 6
+  and 7, Decision F.2/F.4, Cross-RFC Reconciliation #1, M8 and the FR-8 traceability row. PRD
+  FR-8.5 is unchanged (see the Clear All entry below).
+- **At-rest migration blind spot: `gol:workspace` is not carried by the format chain (Story 7.2
+  FD4 / Task 2.3).** `ensureCurrentAtRestFormat`'s migratable document holds `formatVersion`,
+  `battles` and `organisms` only, and `writeBackMigrated`'s candidates and rollback cover only
+  those keys. Harmless while `MIGRATIONS` is empty (nothing migrates anything). **The first
+  `formatVersion` bump must add `gol:workspace` to the document, to the write-back candidates and
+  to the rollback** — both sites carry a comment saying so, and M16 (e) now records it in the spec.
+- **Clear All's warning text understates its scope — accepted wording, not drift (owner ruling,
+  Sidiar, 2026-09-28).** `CLEAR_ALL_WARNING_TEXT` (PRD FR-8.5's sentence, verbatim: "This will
+  delete all battles and organisms …") and the Clear Data button's accessible name "(all battles
+  and organisms)" do not mention the workspace description, which Clear All also deletes (M16).
+  The owner ruled to keep all three as they are: the understatement is accepted for short
+  explanatory text, and `ClearAllDataRow`'s row description already names the workspace
+  description. No code or PRD change; do not "fix" it without a new ruling.
+- **Connected mode must order a workspace-description save against Import / Clear All (Story 7.2
+  review, owner ruling 2026-09-28).** `WorkspaceDescriptionRow`'s Save is not coordinated with
+  Import or Clear All (FD6 "no cross-row locking", extended above). That is safe only because the
+  localStorage `WorkspaceMetaRepository.save()` writes synchronously before any `await`. An async
+  (connected-mode) implementation could land a save after a Clear All — resurrecting a stale
+  description — or after an Import, clobbering the imported one; it must await, cancel or order a
+  pending description save against both.
+- **The Workspace description row has no dirty-tracking or leave guard (Story 7.2 review, owner
+  ruling 2026-09-28 — accepted gap).** Unlike the Organism/Battle editors (`useLeaveGuard`,
+  `data-dirty`), an edit left unsaved is lost silently on navigation. Accepted as a lighter-weight
+  Settings row: FR-8.1 permits "apply on confirm" and Save sits directly under the field. Revisit
+  (leave guard or save-on-blur) if users report lost edits.
+- **`GridSettingsSection`'s hidden radio is still a 1px box — the pattern that broke Firefox in the
+  colour picker (Story 7.2 CI finding, `cc1fcd2`).** `HiddenRadio` in
+  `apps/web/components/battle/editor/GridSettingsSection.tsx` is `position: absolute`, 1px × 1px,
+  `opacity: 0` inside its option label. Firefox dispatches pointer events at whole-pixel
+  coordinates, so once a layout shift puts that 1px box at a sub-pixel offset, a click at its centre
+  lands on the `<label>`: Playwright's hit-target check reports "label intercepts pointer events"
+  and the test times out (the colour picker failed exactly this way after 7.2's description field
+  changed the Basic Information section's height by a fraction of a pixel). Not failing today. Fix
+  when that section is next touched, the same way `ColorPickerField`'s was: the radio covers the
+  whole option (`inset: 0`, `width`/`height: 100%`, `opacity: 0`, `cursor: pointer`) — still in
+  the accessibility tree and tab order, never `display: none`.

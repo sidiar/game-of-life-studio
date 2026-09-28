@@ -10,14 +10,23 @@ export const STORAGE_KEYS = Object.freeze({
   battles: 'gol:battles',
   organisms: 'gol:organisms',
   settings: 'gol:settings',
+  // Workspace-level metadata (FR-9.5, Story 7.2) — the workspace description. DATA, not a setting:
+  // it travels with export, is replaced by import and cleared by Clear All. Extends RFC-006
+  // Decision 7's key list — M16 (owner ruling, 2026-09-28).
+  workspace: 'gol:workspace',
 } as const);
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
 
 // The keys clearAll() is allowed to remove, enumerated explicitly. gol:settings is absent from
 // this list BY CONSTRUCTION (AC5 / Decision F.2): a prefix scan over localStorage would sweep it
-// into the deletion path and leave the guarantee one typo away from false.
-const DATA_KEYS = Object.freeze([STORAGE_KEYS.battles, STORAGE_KEYS.organisms] as const);
+// into the deletion path and leave the guarantee one typo away from false. `gol:workspace` is data
+// (Story 7.2): Clear All clearing it is Decision F.2 extended, not changed — still never settings.
+const DATA_KEYS = Object.freeze([
+  STORAGE_KEYS.battles,
+  STORAGE_KEYS.organisms,
+  STORAGE_KEYS.workspace,
+] as const);
 
 /** A write refused for lack of space. Non-destructive: the previous value is still stored. */
 export class QuotaExceededError extends Error {
@@ -171,6 +180,10 @@ export function ensureCurrentAtRestFormat(migrator: Migrator = migrate): void {
   const stamp = readStampRecord();
   if (stamp === undefined) return;
 
+  // ⚠️ `gol:workspace` (Story 7.2) is NOT carried in this document: the registry is empty, so
+  // nothing migrates it yet. The first `formatVersion` bump that touches workspace meta must add it
+  // here, to `writeBackMigrated`'s candidates and to its rollback (`deferred-work.md`).
+  //
   // Raw JSON, no Zod parse — migration runs BEFORE validation here too. The envelope's own
   // top-level names, so a step reads the same keys at either boundary. The collections are LAZY:
   // the identity path never touches them, so a current store pays for the stamp alone, and a
@@ -278,6 +291,7 @@ export function discardUnreadableStamp(): void {
  * an absent stamp, which is the wrong tool here. The original error (a `QuotaExceededError` stays
  * one) is rethrown after the rollback.
  */
+// `gol:workspace` is not a candidate here yet — see the note in `ensureCurrentAtRestFormat`.
 function writeBackMigrated(
   battles: Record<string, unknown>,
   organisms: Record<string, unknown>,
@@ -377,13 +391,27 @@ export function writeSettingsKey(key: StorageKey, value: unknown): void {
   writeKey(key, value);
 }
 
+/**
+ * The write path for workspace METADATA (`gol:workspace`, Story 7.2): the format check, then the
+ * write — and deliberately NO stamp. The check is kept because this build must not write into a
+ * newer-format store (AR-11). The stamp is skipped because a description is not the workspace's
+ * initialization: stamping here would let a user who set a description on an unstamped store
+ * reach the stamped-but-no-Conway seeding hole `stampSchemaVersion` describes.
+ */
+export function writeMetaKey(key: StorageKey, value: unknown): void {
+  ensureCurrentAtRestFormat();
+  writeKey(key, value);
+}
+
 /** Clears workspace data only. Settings and the format stamp are unreachable from here (AC5). */
 export function removeDataKeys(): void {
   for (const key of DATA_KEYS) localStorage.removeItem(key);
 }
 
 /** The raw strings of the workspace's data keys; `null` = the key was absent. Never settings. */
-export type RawDataKeys = Readonly<Record<'battles' | 'organisms' | 'schema', string | null>>;
+export type RawDataKeys = Readonly<
+  Record<'battles' | 'organisms' | 'workspace' | 'schema', string | null>
+>;
 
 /**
  * The lossless capture behind `AppRepositories.snapshotWorkspace()`. The format check runs FIRST,
@@ -399,6 +427,7 @@ export function captureDataKeys(): RawDataKeys {
   return Object.freeze({
     battles: localStorage.getItem(STORAGE_KEYS.battles),
     organisms: localStorage.getItem(STORAGE_KEYS.organisms),
+    workspace: localStorage.getItem(STORAGE_KEYS.workspace),
     schema: localStorage.getItem(STORAGE_KEYS.schema),
   });
 }
@@ -416,12 +445,13 @@ export function restoreDataKeys(snapshot: RawDataKeys): void {
   const ordered = [
     [STORAGE_KEYS.organisms, snapshot.organisms],
     [STORAGE_KEYS.battles, snapshot.battles],
+    [STORAGE_KEYS.workspace, snapshot.workspace],
     [STORAGE_KEYS.schema, snapshot.schema],
   ] as const;
   // The `WorkspaceSnapshot` brand is compile-time only and every `AppRepositories` shares it, so a
   // snapshot captured by ANOTHER implementation (`@gol/test-utils`' Maps-and-flag fake) typechecks
   // into this restore. Fail loudly BEFORE the remove phase: past it, a foreign value would not
-  // error but destroy — `setItem` coerces a Map to the string "[object Map]" over all three keys.
+  // error but destroy — `setItem` coerces a Map to the string "[object Map]" over every key.
   for (const [key, original] of ordered) {
     if (original !== null && typeof original !== 'string') {
       throw new TypeError(`restoreWorkspace: the snapshot's "${key}" is not this store's capture`);

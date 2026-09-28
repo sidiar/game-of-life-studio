@@ -416,3 +416,44 @@ describe('OrganismCard', () => {
     });
   });
 });
+
+describe('OrganismCard — description (Story 7.2, FR-9.5)', () => {
+  const noop = { onRequestEdit: vi.fn(), onRequestClone: vi.fn() };
+
+  it('renders the description under the name, read-only', () => {
+    const { container } = render(
+      <OrganismCard
+        organism={{ ...CONWAYS_CLASSIC, description: 'The classic B3/S23.' }}
+        {...noop}
+      />,
+    );
+
+    const paragraph = container.querySelector('[data-card-description]');
+    expect(paragraph).toHaveTextContent('The classic B3/S23.');
+    expect(paragraph?.tagName).toBe('P');
+    // No new tab stop: the card's stops are still exactly Edit and Clone.
+    expect(paragraph).not.toHaveAttribute('tabindex');
+  });
+
+  it('renders NO element when the organism has no description (no placeholder chrome)', () => {
+    const { container } = render(<OrganismCard organism={CONWAYS_CLASSIC} {...noop} />);
+    expect(container.querySelector('[data-card-description]')).toBeNull();
+  });
+
+  it('renders NO element for a whitespace-only description', () => {
+    const { container } = render(
+      <OrganismCard organism={{ ...CONWAYS_CLASSIC, description: '   ' }} {...noop} />,
+    );
+    expect(container.querySelector('[data-card-description]')).toBeNull();
+  });
+
+  it('has no axe violations with a description', async () => {
+    const { container } = render(
+      <OrganismCard
+        organism={{ ...CONWAYS_CLASSIC, description: 'The classic B3/S23.' }}
+        {...noop}
+      />,
+    );
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});

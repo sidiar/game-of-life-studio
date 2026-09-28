@@ -78,6 +78,8 @@ function renderEditor(
       atCap={false}
       battleName=""
       onNameChange={() => {}}
+      battleDescription=""
+      onDescriptionChange={() => {}}
       isDirty={false}
       onSave={() => {}}
       onBack={() => {}}

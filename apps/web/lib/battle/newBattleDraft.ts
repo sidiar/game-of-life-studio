@@ -10,6 +10,9 @@ import type { EditableGridPreset } from '@gol/domain';
  */
 export interface NewBattleDraft {
   name: string;
+  /** FR-9.5 (Story 7.2): always a string in the draft, `''` meaning none — the record's optional
+   * key is restored by `projectBattleForSave`'s normalization. */
+  description: string;
   gridSize: EditableGridPreset;
   // ⚠️ `readonly`, both levels, since Story 2.5 (deferred-work.md's toDraft-aliasing entry).
   // `<BattlePage>`'s `toDraft()` builds this shape from a LOADED battle by handing out that
@@ -37,6 +40,7 @@ export interface NewBattleDraft {
 export function createNewBattleDraft(gridSize: EditableGridPreset): NewBattleDraft {
   return {
     name: '',
+    description: '',
     // COPIED, not stored by reference. On the degrade path `<BattlePage>` passes
     // `DEFAULT_SETTINGS.defaultGridSize`, and `Object.freeze` is shallow — that nested object is a
     // mutable, process-wide singleton. Aliasing it into a draft the later editor stories resize

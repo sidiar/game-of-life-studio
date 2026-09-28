@@ -20,7 +20,9 @@
  * Settings → Export Workspace (Story 5.5), drop the downloaded file here named exactly
  * `<id>.json` for its preset id (owner ruling D2a), run `npx prettier --write apps/web/public/workspaces/` (the raw export is
  * `JSON.stringify(v, null, 2)`, which `format:check` rejects; formatting is the only edit
- * allowed), add a manifest entry naming it, and `git add` it — the lockstep compares the manifest
+ * allowed), add a manifest entry naming it (its `description` copied from the envelope's workspace
+ * description — set that in Settings → Data Management → Workspace description before exporting),
+ * and `git add` it — the lockstep compares the manifest
  * against git-tracked files, so an untracked new preset fails as missing. The same serializer composition may be run
  * headlessly instead of through the UI — that is how the first preset was produced — but the file
  * is always the serializer's output, never hand-edited.
@@ -29,9 +31,10 @@
  * auto-load), Story 7.5 reads the manifest for the Settings loader, and Story 7.6 addresses a
  * preset by `id` from a shareable link. This module is deliberately just the folder's location and
  * the manifest's shape — no fetch, no loader, no hook, no UI, and no `zod` dependency: the
- * manifest's runtime parse boundary belongs to Story 7.4, the first story that fetches it. Story
- * 7.2 later turns each entry's `description` into a projection of its envelope's own workspace
- * description; nothing here anticipates that.
+ * manifest's runtime parse boundary belongs to Story 7.4, the first story that fetches it. Since
+ * Story 7.2 each entry's `description` is a projection of its envelope's own workspace
+ * description (FR-9.5), pinned equal by the lockstep test — the manifest keeps its copy only so
+ * the Settings loader (7.5) can list presets without fetching every envelope.
  *
  * This module never imports anything from `public/` (FD5, Story 7.1) — importing preset JSON into
  * app code would pull every preset into the JS bundle (AR-3 growth gate) and defeat the "drop a
@@ -64,7 +67,11 @@ export interface PresetWorkspaceEntry {
   id: string;
   /** Display name for the Settings dropdown. */
   name: string;
-  /** One or two sentences for the dropdown / confirmation copy. */
+  /**
+   * One or two sentences for the dropdown / confirmation copy. MUST equal the envelope's own
+   * workspace `description` (Story 7.2, FR-9.5) — a projection, never a second source;
+   * `presetWorkspaces.test.ts` enforces it.
+   */
   description: string;
   /**
    * The envelope's filename inside {@link PRESET_WORKSPACES_PATH} — always exactly `${id}.json`

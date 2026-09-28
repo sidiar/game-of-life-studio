@@ -21,10 +21,18 @@ export const IsoTimestamp = z.iso.datetime().transform((s) => new Date(s));
 // names, which the mockup likely borrowed.
 export const MAX_BATTLE_NAME_LENGTH = 100;
 
+// FR-9.5 (Story 7.2): the battle description cap. The same 280 as organisms, but for a different
+// reason: the battle description renders UNCLAMPED under the Battle page's h1, and 280 is what
+// bounds that to ~3 lines at the header's 640px measure. Optional on both schemas below.
+export const MAX_BATTLE_DESCRIPTION_LENGTH = 280;
+
 export const BattleSchema = z
   .object({
     id: z.uuid(),
     name: z.string().max(MAX_BATTLE_NAME_LENGTH),
+    // Absent ≡ none (FR-9.5): every record stored before Story 7.2 parses unchanged. No `.min(1)` —
+    // writers omit an empty description rather than the schema rejecting a stored `''`.
+    description: z.string().max(MAX_BATTLE_DESCRIPTION_LENGTH).optional(),
     // References into the shared Organism Library (FR-7.15); <=255 = the dense-encoding /
     // Uint8Array occupant cap (Decision G.3) — the library itself stays uncapped (M6).
     // Entries are non-empty: an empty id is unresolvable against the library.
@@ -96,9 +104,14 @@ export type Battle = z.infer<typeof BattleSchema>;
 // is ONE value, not two — the creation date until a battle is first edited, then the edit date —
 // and `updatedAt` alone already is that, since it starts equal to `createdAt` and only diverges on
 // a later save. The Gallery mockup renders exactly one date per tile for the same reason.
+//
+// `description` IS in the field list (Story 7.2): the Gallery tile renders it, and because the
+// strip above is the projection, a summary schema without the field would silently drop it from
+// every tile — no error, just an empty gallery surface.
 export const BattleSummarySchema = z.object({
   id: z.uuid(),
   name: z.string().max(MAX_BATTLE_NAME_LENGTH),
+  description: z.string().max(MAX_BATTLE_DESCRIPTION_LENGTH).optional(),
   gridSize: EditableGridPresetSchema,
   organismIds: z.array(z.string().min(1)).max(255),
   updatedAt: IsoTimestamp,

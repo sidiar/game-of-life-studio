@@ -9,6 +9,12 @@ import { SurvivalRulesSchema } from './survivalRuleSchema';
 // what `z.string().max()` measures.
 export const MAX_ORGANISM_NAME_LENGTH = 50;
 
+// FR-9.5 (Story 7.2): the organism description cap, beside its name twin for the same reason —
+// `OrganismSchema.description` enforces it and `<OrganismDescriptionField>` imports it. 280 is the
+// preset-library mockup's "/ 280", and it is what keeps a 2-line-clamped card description from
+// hiding most of a long paragraph behind the Edit affordance. UTF-16 code units, as above.
+export const MAX_ORGANISM_DESCRIPTION_LENGTH = 280;
+
 // FR-2.2 (Story 4.6): the dominance range, single-sourced — `OrganismSchema.dominance`
 // enforces it and `apps/web`'s `<DominanceField>` imports it rather than re-typing 1 / 100.
 export const MIN_DOMINANCE = 1;
@@ -39,6 +45,11 @@ export const OrganismSchema = z.object({
   // library is keyed by id, and every empty id would collide with every other.
   id: z.string().min(1),
   name: z.string().max(MAX_ORGANISM_NAME_LENGTH),
+  // FR-9.5 (Story 7.2): optional, and absent ≡ none — every record written before this field
+  // existed parses unchanged, so `ORGANISM_SCHEMA_VERSION` does not move (an additive optional
+  // field needs no restamp, Decision I.4). No `.min(1)`: a stored `''` must not turn a record
+  // corrupt; writers normalize it away instead (`normalizeDescription`).
+  description: z.string().max(MAX_ORGANISM_DESCRIPTION_LENGTH).optional(),
   // Stable palette token (RFC-007); resolved to hex at render time — NOT a raw hex. The `#`
   // guard is the enforceable half of AR-46 outside apps/web, where the no-raw-hex lint rule
   // does not reach. Resolution against the real palette registry (apps/web/lib/paletteRegistry.ts,

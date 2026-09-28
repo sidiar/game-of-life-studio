@@ -1,4 +1,4 @@
-import type { Battle, BattleSummary, Organism, Settings } from '@gol/domain';
+import type { Battle, BattleSummary, Organism, Settings, WorkspaceMeta } from '@gol/domain';
 
 /*
  * Persistence ports (RFC-001 §1 / RFC-006 Decision 1).
@@ -52,6 +52,22 @@ export interface SettingsRepository {
   save(settings: Settings): Promise<void>;
 }
 
+/**
+ * Workspace-level metadata — the workspace description (FR-9.5, Story 7.2). The `SettingsRepository`
+ * shape (never null) but DATA semantics: it travels with export, is replaced by import and cleared
+ * by `clearAll()`. Extends RFC-006 Decision 1's `AppRepositories` — M16 (owner ruling, 2026-09-28).
+ */
+export interface WorkspaceMetaRepository {
+  /**
+   * Never null — an absent record resolves to `{}` (no description). A present-but-invalid record
+   * throws `CorruptDataError`; every UI reader catches that locally and shows no description, so a
+   * cosmetic value can never block a page.
+   */
+  load(): Promise<WorkspaceMeta>;
+  /** Normalizes the description (absent ≡ empty ≡ whitespace-only) before writing. Never stamps. */
+  save(meta: WorkspaceMeta): Promise<void>;
+}
+
 /** Bytes the workspace occupies in the backing store (AR-14). */
 export interface StorageUsage {
   /**
@@ -64,8 +80,8 @@ export interface StorageUsage {
 declare const workspaceSnapshotBrand: unique symbol;
 
 /**
- * An opaque, lossless capture of the workspace's DATA (battles, organisms and the format stamp —
- * never settings, Decision F / AR-12), taken by `snapshotWorkspace()` and only ever handed back to
+ * An opaque, lossless capture of the workspace's DATA (battles, organisms, the workspace meta and
+ * the format stamp — never settings, Decision F / AR-12), taken by `snapshotWorkspace()` and only ever handed back to
  * `restoreWorkspace()` on the SAME `AppRepositories`. Branded so no caller can build one or read
  * into it: what it holds is the implementation's business (raw `gol:*` strings for localStorage).
  */
@@ -77,9 +93,10 @@ export interface AppRepositories {
   battles: BattleRepository;
   organisms: OrganismRepository;
   settings: SettingsRepository;
+  workspaceMeta: WorkspaceMetaRepository;
   /**
-   * Data-only: battles + organisms, never settings (Decision F.2 / AR-12). It lives on the
-   * aggregate rather than on a repository because it spans two of them — RFC-006 Alternative 1
+   * Data-only: battles + organisms + workspace meta (Story 7.2), never settings (Decision F.2 /
+   * AR-12). It lives on the aggregate rather than on a repository because it spans several of them — RFC-006 Alternative 1
    * rejects per-repository bulk operations for exactly that reason.
    */
   clearAll(): Promise<void>;

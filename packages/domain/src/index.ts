@@ -33,6 +33,7 @@ export {
   OrganismSchema,
   EditableGridPresetSchema,
   MAX_ORGANISM_NAME_LENGTH,
+  MAX_ORGANISM_DESCRIPTION_LENGTH,
   MIN_DOMINANCE,
   MAX_DOMINANCE,
   NEW_ORGANISM_DOMINANCE,
@@ -40,7 +41,12 @@ export {
 } from './organismSchema';
 export type { Organism, EditableGridPreset } from './organismSchema';
 
-export { BattleSchema, BattleSummarySchema, MAX_BATTLE_NAME_LENGTH } from './battleSchema';
+export {
+  BattleSchema,
+  BattleSummarySchema,
+  MAX_BATTLE_DESCRIPTION_LENGTH,
+  MAX_BATTLE_NAME_LENGTH,
+} from './battleSchema';
 export type { Battle, BattleSummary } from './battleSchema';
 
 export { CURRENT_FORMAT_VERSION, DEFAULT_SETTINGS, SettingsSchema } from './settingsSchema';
@@ -137,3 +143,14 @@ export type { DanglingReference } from './referentialClosure';
 // destructive-replace warning only when there is nothing to lose. Appended as one contiguous
 // block at the end of the barrel (project-context's two-lane `[[sync.rules]]`).
 export { isPristineWorkspace } from './pristineWorkspace';
+
+// FR-9.5's workspace-level metadata and the one "absent ≡ empty ≡ whitespace-only" normalizer every
+// description writer and display surface shares (Story 7.2). Appended as one contiguous block at the
+// end of the barrel, like the block above (the two-lane `[[sync.rules]]`).
+export {
+  EMPTY_WORKSPACE_META,
+  MAX_WORKSPACE_DESCRIPTION_LENGTH,
+  normalizeDescription,
+  WorkspaceMetaSchema,
+} from './workspaceMetaSchema';
+export type { WorkspaceMeta } from './workspaceMetaSchema';

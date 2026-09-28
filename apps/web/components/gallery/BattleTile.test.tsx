@@ -551,3 +551,40 @@ describe('BattleTile — thumbnail (Story 1.11)', () => {
     expect(results.violations).toEqual([]);
   });
 });
+
+describe('BattleTile — description (Story 7.2, FR-9.5)', () => {
+  it('renders the description between the dish and the footer', () => {
+    const { container } = render(
+      <BattleTile {...BASE_PROPS} description="Two colonies, one dish." />,
+    );
+
+    const paragraph = container.querySelector('[data-tile-description]');
+    expect(paragraph).toHaveTextContent('Two colonies, one dish.');
+    expect(paragraph?.nextElementSibling?.tagName).toBe('FOOTER');
+  });
+
+  it('renders NO element without a description, or with a blank one', () => {
+    const { container, rerender } = render(<BattleTile {...BASE_PROPS} />);
+    expect(container.querySelector('[data-tile-description]')).toBeNull();
+
+    rerender(<BattleTile {...BASE_PROPS} description="   " />);
+    expect(container.querySelector('[data-tile-description]')).toBeNull();
+  });
+
+  it('adds no tab stop — Run is still the 5th stop and Delete the 6th', async () => {
+    const user = userEvent.setup();
+    render(<BattleTile {...BASE_PROPS} description="Two colonies, one dish." />);
+
+    for (let i = 0; i < 5; i += 1) await user.tab();
+    expect(screen.getByRole('link', { name: 'Run Three-Way Skirmish' })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Delete Three-Way Skirmish' })).toHaveFocus();
+  });
+
+  it('has no axe violations with a description', async () => {
+    const { container } = render(
+      <BattleTile {...BASE_PROPS} description="Two colonies, one dish." />,
+    );
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});

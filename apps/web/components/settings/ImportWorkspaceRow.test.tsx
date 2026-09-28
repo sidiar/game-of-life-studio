@@ -57,7 +57,7 @@ function MessageOutlet({ message }: { message: RowOutcome | null }) {
 }
 
 function renderRow(props: {
-  repos: Pick<AppRepositories, 'battles' | 'organisms'>;
+  repos: Pick<AppRepositories, 'battles' | 'organisms' | 'workspaceMeta'>;
   serializer: Pick<WorkspaceSerializer, 'exportWorkspace' | 'importWorkspace'>;
 }) {
   const onImported = vi.fn();
@@ -69,6 +69,7 @@ function renderRow(props: {
           serializer={props.serializer}
           battles={props.repos.battles}
           organisms={props.repos.organisms}
+          workspaceMeta={props.repos.workspaceMeta}
           onImported={onImported}
           onMessage={setMessage}
         />
@@ -465,6 +466,7 @@ describe('ImportWorkspaceRow', () => {
         serializer={{ exportWorkspace: serializer.exportWorkspace, importWorkspace: importSpy }}
         battles={{ list: vi.fn().mockRejectedValue(new Error('read boom')) }}
         organisms={repos.organisms}
+        workspaceMeta={repos.workspaceMeta}
         onImported={vi.fn()}
         onMessage={vi.fn()}
       />,
@@ -612,5 +614,48 @@ describe('ImportWorkspaceRow', () => {
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
+  });
+});
+
+describe('ImportWorkspaceRow — workspace description (Story 7.2 FD6)', () => {
+  it('a workspace holding only a description is NOT pristine — the warning dialog shows', async () => {
+    const repos = createFakeRepositories({
+      organisms: [CONWAYS_CLASSIC],
+      workspaceMeta: { description: 'My lab notes.' },
+    });
+    const serializer = buildSerializer(repos);
+    const importSpy = vi.fn(serializer.importWorkspace);
+    renderRow({
+      repos,
+      serializer: { exportWorkspace: serializer.exportWorkspace, importWorkspace: importSpy },
+    });
+
+    const envelope = await serializer.exportWorkspace();
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(importSpy).not.toHaveBeenCalled();
+  });
+
+  it('a rejected workspaceMeta.load() counts as NOT pristine ("when in doubt, warn")', async () => {
+    const repos = createFakeRepositories({ organisms: [CONWAYS_CLASSIC] });
+    const serializer = buildSerializer(repos);
+    render(
+      <ImportWorkspaceRow
+        serializer={serializer}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        workspaceMeta={{ load: vi.fn().mockRejectedValue(new Error('meta boom')) }}
+        onImported={vi.fn()}
+        onMessage={vi.fn()}
+      />,
+    );
+
+    const envelope = await serializer.exportWorkspace();
+    const user = userEvent.setup();
+    await user.upload(fileInput(), jsonFile(envelope));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 });

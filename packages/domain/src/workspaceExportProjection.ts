@@ -39,6 +39,8 @@ import type {
   WorkspaceExport,
   WorkspaceExportWire,
 } from './workspaceExportSchema';
+import type { WorkspaceMeta } from './workspaceMetaSchema';
+import { normalizeDescription } from './workspaceMetaSchema';
 
 /**
  * Everything the envelope stamps that is not data. Both values are INJECTED (Story 5.3 FD5): the
@@ -50,6 +52,12 @@ export interface ExportMeta {
   /** Provenance only, never branched on (Decision I.4). */
   appVersion: string;
   exportedAt: Date;
+  /**
+   * The workspace description (FR-9.5, Story 7.2) — emitted only when it normalizes to something.
+   * Optional so a `kind: 'battle'` caller simply never passes one (a single-battle file is not a
+   * workspace and carries no workspace description).
+   */
+  description?: string;
 }
 
 /**
@@ -85,6 +93,10 @@ export function toBattleExport(battle: Battle): BattleExportWire {
   return {
     id: battle.id,
     name: battle.name,
+    // Conditional spread, never `description: undefined`: the key's ABSENCE is the "none" value
+    // (Story 7.2 FD2), and an explicit `undefined` would leave a key the wire's exact-shape and
+    // round-trip tests would see.
+    ...(battle.description !== undefined && { description: battle.description }),
     // Spread, as `fromBattleExport` spreads `gridDimensions` the other way: the wire object may
     // outlive the call, and sharing the preset object would let an edit to one write through.
     gridDimensions: { ...battle.gridSize },
@@ -129,6 +141,7 @@ export function fromBattleExport(battleExport: BattleExport): Battle {
   return {
     id: battleExport.id,
     name: battleExport.name,
+    ...(battleExport.description !== undefined && { description: battleExport.description }),
     organismIds,
     // Spread rather than aliased: the caller holds a freshly parsed envelope it may keep, and a
     // `Battle` sharing its `gridDimensions` object would let a later in-place edit of one change
@@ -152,11 +165,14 @@ export function toEnvelope(
   organisms: readonly Organism[],
   meta: ExportMeta,
 ): WorkspaceExportWire {
+  const description =
+    meta.description === undefined ? undefined : normalizeDescription(meta.description);
   return {
     formatVersion: CURRENT_FORMAT_VERSION,
     appVersion: meta.appVersion,
     exportedAt: meta.exportedAt.toISOString(),
     kind,
+    ...(description !== undefined && { description }),
     // A fresh ARRAY, so the envelope cannot be grown or reordered through the caller's collection;
     // the `Organism` records themselves are shared, not deep-copied. That is safe where sharing
     // `gridDimensions` was not: an organism is a parsed, at-rest record nothing in this app edits
@@ -170,13 +186,16 @@ export function toEnvelope(
 /**
  * The inverse, over an envelope that has already been through `WorkspaceExportSchema.parse` — so
  * its timestamps are `Date`s and its structure is proven. Import's destructive whole-workspace
- * replace (M8) is Story 5.8's; this only hands back the two collections.
+ * replace (M8) is Story 5.8's; this only hands back the two collections and the workspace meta
+ * (Story 7.2) — `{}` when the file carries no description, never `{ description: undefined }`.
  */
 export function fromEnvelope(envelope: WorkspaceExport): {
   battles: Battle[];
   organisms: Organism[];
+  meta: WorkspaceMeta;
 } {
   return {
+    meta: envelope.description !== undefined ? { description: envelope.description } : {},
     battles: envelope.battles.map(fromBattleExport),
     // Same contract as `toEnvelope`: fresh array, shared elements — and here the elements are Zod's
     // own parse output, which no one else holds.

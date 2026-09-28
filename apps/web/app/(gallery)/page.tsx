@@ -28,6 +28,7 @@ export default function HomePage() {
       seedStatus={status}
       seedError={error}
       workspace={repositories}
+      workspaceMeta={repositories.workspaceMeta}
     />
   );
 }

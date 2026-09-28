@@ -51,7 +51,9 @@ describe('ClearAllDataRow', () => {
 
     expect(screen.getByRole('heading', { level: 3, name: 'Clear All Data' })).toBeInTheDocument();
     expect(
-      screen.getByText('Delete all battles and organisms from local storage (cannot be undone)'),
+      screen.getByText(
+        'Delete all battles, organisms and the workspace description from local storage (cannot be undone)',
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /clear data \(all battles and organisms\)/i }),

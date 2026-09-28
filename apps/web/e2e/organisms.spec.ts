@@ -1327,7 +1327,10 @@ test.describe('color picker & selection defaults (Story 4.8)', () => {
     // WebKit needs Alt+Tab to move focus off a text input (the Story 4.1 idiom in this file).
     const tabKey = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
     await page.keyboard.press(tabKey);
-    // Collapsed: the button is the column's second stop and the slider its third.
+    // Story 7.2: the description textarea is the column's second stop, right under the name.
+    await expect(dialog.getByRole('textbox', { name: 'Description' })).toBeFocused();
+    await page.keyboard.press(tabKey);
+    // Collapsed: the button is the column's third stop and the slider its fourth.
     await expect(toggle).toBeFocused();
     await page.keyboard.press(tabKey);
     await expect(dialog.getByRole('slider', { name: 'Dominance' })).toBeFocused();

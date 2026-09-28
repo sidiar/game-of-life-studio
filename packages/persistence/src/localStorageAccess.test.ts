@@ -14,6 +14,7 @@ import {
   STORAGE_KEYS,
   storageBytesOf,
   writeDataKey,
+  writeMetaKey,
   writeSettingsKey,
 } from './localStorageAccess';
 
@@ -204,9 +205,10 @@ describe('hasSchemaStamp (Story 1.5 AC1)', () => {
 });
 
 describe('removeDataKeys (AC5)', () => {
-  it('removes both data keys and cannot reach settings or the schema stamp', () => {
+  it('removes every data key (workspace meta included, Story 7.2) and cannot reach settings or the schema stamp', () => {
     writeDataKey(STORAGE_KEYS.battles, { 'battle-1': {} });
     writeDataKey(STORAGE_KEYS.organisms, { 'organism-1': {} });
+    writeMetaKey(STORAGE_KEYS.workspace, { description: 'Lab notes' });
     writeSettingsKey(STORAGE_KEYS.settings, { theme: 'biotech-terminal' });
     const settingsBefore = localStorage.getItem(STORAGE_KEYS.settings);
 
@@ -214,6 +216,7 @@ describe('removeDataKeys (AC5)', () => {
 
     expect(localStorage.getItem(STORAGE_KEYS.battles)).toBeNull();
     expect(localStorage.getItem(STORAGE_KEYS.organisms)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.workspace)).toBeNull();
     expect(localStorage.getItem(STORAGE_KEYS.settings)).toBe(settingsBefore);
     // The stamp describes the format of the store, which Clear All does not change.
     expect(localStorage.getItem(STORAGE_KEYS.schema)).not.toBeNull();
@@ -246,16 +249,18 @@ describe('storage usage (AR-14, Story 5.2)', () => {
     expect(measureStorageUsage()).toEqual({ bytes: 0 });
   });
 
-  it('counts all four STORAGE_KEYS, including gol:settings and gol:schema', () => {
+  it('counts every STORAGE_KEY, including gol:settings, gol:workspace and gol:schema', () => {
     writeDataKey(STORAGE_KEYS.battles, { 'battle-1': {} });
     writeDataKey(STORAGE_KEYS.organisms, { 'organism-1': {} });
     writeSettingsKey(STORAGE_KEYS.settings, { theme: 'clinical-lab' });
+    writeMetaKey(STORAGE_KEYS.workspace, { description: 'Lab notes' });
 
     const stored: Array<readonly [string, string]> = [
       STORAGE_KEYS.schema,
       STORAGE_KEYS.battles,
       STORAGE_KEYS.organisms,
       STORAGE_KEYS.settings,
+      STORAGE_KEYS.workspace,
     ].map((key) => [key, localStorage.getItem(key) as string]);
 
     expect(measureStorageUsage()).toEqual({ bytes: storageBytesOf(stored) });
@@ -591,5 +596,24 @@ describe('discardUnreadableStamp (Story 5.11)', () => {
     expect(() => discardUnreadableStamp()).toThrow('blocked');
     vi.restoreAllMocks();
     expect(localStorage.getItem(STORAGE_KEYS.schema)).toBe('{not json');
+  });
+});
+
+describe('writeMetaKey (Story 7.2)', () => {
+  it('writes without stamping — a description is not the workspace’s initialization', () => {
+    writeMetaKey(STORAGE_KEYS.workspace, { description: 'Lab notes' });
+
+    expect(localStorage.getItem(STORAGE_KEYS.workspace)).toBe('{"description":"Lab notes"}');
+    expect(hasSchemaStamp()).toBe(false);
+  });
+
+  it('refuses a newer-format store before writing (AR-11)', () => {
+    localStorage.setItem(
+      STORAGE_KEYS.schema,
+      JSON.stringify({ formatVersion: CURRENT_FORMAT_VERSION + 1 }),
+    );
+
+    expect(() => writeMetaKey(STORAGE_KEYS.workspace, {})).toThrow(NewerFormatVersionError);
+    expect(localStorage.getItem(STORAGE_KEYS.workspace)).toBeNull();
   });
 });

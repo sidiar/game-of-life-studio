@@ -129,6 +129,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -184,6 +185,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -209,6 +211,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="seeding"
       />,
     );
@@ -227,6 +230,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="error"
       />,
     );
@@ -244,6 +248,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -263,6 +268,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -297,6 +303,7 @@ describe('BattleGallery', () => {
         organisms={populated.organisms}
         settings={populated.settings}
         workspace={populated}
+        workspaceMeta={populated.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -320,6 +327,7 @@ describe('BattleGallery', () => {
         organisms={empty.organisms}
         settings={empty.settings}
         workspace={empty}
+        workspaceMeta={empty.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -341,6 +349,7 @@ describe('BattleGallery', () => {
         organisms={populated.organisms}
         settings={populated.settings}
         workspace={populated}
+        workspaceMeta={populated.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -356,6 +365,7 @@ describe('BattleGallery', () => {
         organisms={empty.organisms}
         settings={empty.settings}
         workspace={empty}
+        workspaceMeta={empty.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -369,6 +379,7 @@ describe('BattleGallery', () => {
         organisms={errored.organisms}
         settings={errored.settings}
         workspace={errored}
+        workspaceMeta={errored.workspaceMeta}
         seedStatus="error"
       />,
     );
@@ -388,6 +399,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -411,6 +423,7 @@ describe('BattleGallery', () => {
           organisms={repos.organisms}
           settings={repos.settings}
           workspace={repos}
+          workspaceMeta={repos.workspaceMeta}
           seedStatus={seedError === undefined ? 'ready' : 'error'}
           seedError={seedError}
         />,
@@ -527,6 +540,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -574,6 +588,7 @@ describe('BattleGallery', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -621,6 +636,7 @@ describe('BattleGallery', () => {
           organisms={repos.organisms}
           settings={repos.settings}
           workspace={repos}
+          workspaceMeta={repos.workspaceMeta}
           seedStatus="ready"
         />,
       );
@@ -667,6 +683,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -689,6 +706,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -714,6 +732,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         organisms={seeding.organisms}
         settings={seeding.settings}
         workspace={seeding}
+        workspaceMeta={seeding.workspaceMeta}
         seedStatus="seeding"
       />,
     );
@@ -727,6 +746,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         organisms={errored.organisms}
         settings={errored.settings}
         workspace={errored}
+        workspaceMeta={errored.workspaceMeta}
         seedStatus="error"
       />,
     );
@@ -741,6 +761,7 @@ describe('BattleGallery — Create Battle CTA (Story 2.2)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -769,6 +790,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -800,6 +822,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -830,6 +853,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -858,6 +882,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -884,6 +909,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -915,6 +941,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -954,6 +981,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -988,6 +1016,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -1038,6 +1067,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -1071,6 +1101,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
         organisms={repos.organisms}
         settings={repos.settings}
         workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
         seedStatus="ready"
       />,
     );
@@ -1117,6 +1148,7 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
           organisms={repos.organisms}
           settings={repos.settings}
           workspace={repos}
+          workspaceMeta={repos.workspaceMeta}
           seedStatus="ready"
         />,
       );
@@ -1145,4 +1177,74 @@ describe('BattleGallery — delete flow (Story 1.13)', () => {
       expect(screen.queryAllByRole('article')).toHaveLength(0);
     },
   );
+});
+
+describe('BattleGallery — descriptions (Story 7.2, FR-9.5)', () => {
+  function renderGallery(repos: ReturnType<typeof createFakeRepositories>) {
+    return render(
+      <BattleGallery
+        battles={repos.battles}
+        organisms={repos.organisms}
+        settings={repos.settings}
+        workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
+        seedStatus="ready"
+      />,
+    );
+  }
+
+  it('shows the workspace description in the header, and a battle’s description on its tile', async () => {
+    const [first, ...rest] = createMockBattles();
+    const repos = createFakeRepositories({
+      battles: [{ ...first, description: 'Two colonies, one dish.' }, ...rest],
+      organisms: createMockOrganisms(),
+      workspaceMeta: { description: 'My research lab.' },
+    });
+    const { container } = renderGallery(repos);
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-workspace-description]')).toHaveTextContent(
+        'My research lab.',
+      ),
+    );
+    expect(container.querySelectorAll('[data-tile-description]')).toHaveLength(1);
+    expect(container.querySelector('[data-tile-description]')).toHaveTextContent(
+      'Two colonies, one dish.',
+    );
+  });
+
+  it('renders NO workspace description element when there is none', async () => {
+    const repos = createFakeRepositories({ battles: createMockBattles() });
+    const { container } = renderGallery(repos);
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    expect(container.querySelector('[data-workspace-description]')).toBeNull();
+  });
+
+  it('a rejected workspaceMeta.load() still renders the gallery — no storage-failure notice', async () => {
+    const repos = createFakeRepositories({
+      battles: createMockBattles(),
+      raw: { workspaceMeta: { description: 42 } },
+    });
+    const { container } = renderGallery(repos);
+
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
+    expect(container.querySelector('[data-workspace-description]')).toBeNull();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('has no axe violations with every description present', async () => {
+    const [first, ...rest] = createMockBattles();
+    const repos = createFakeRepositories({
+      battles: [{ ...first, description: 'Two colonies, one dish.' }, ...rest],
+      organisms: createMockOrganisms(),
+      workspaceMeta: { description: 'My research lab.' },
+    });
+    const { container } = renderGallery(repos);
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-workspace-description]')).not.toBeNull(),
+    );
+    expect((await axe(container)).violations).toEqual([]);
+  });
 });

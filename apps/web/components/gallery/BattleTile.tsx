@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { styled } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
-import type { Organism } from '@gol/domain';
+import { normalizeDescription, type Organism } from '@gol/domain';
+import { descriptionTextRules, twoLineClampRules } from '@/components/descriptionStyles';
 import type { BattleRepository } from '@gol/persistence';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import { formatBattleDate } from '@/lib/gallery/formatBattleDate';
@@ -26,6 +27,8 @@ const MAX_VISIBLE_DOTS = 6;
 export interface BattleTileProps {
   battleId: string;
   name: string;
+  /** FR-9.5 (Story 7.2): the battle's description, from its summary. Absent/blank ⇒ nothing. */
+  description?: string;
   gridSize: { cols: number; rows: number };
   updatedAt: Date;
   organisms: readonly DisplayOrganism[];
@@ -247,6 +250,18 @@ const DishCanvas = styled(PetriDishCanvas)({
   display: 'block',
 });
 
+// FR-9.5 (Story 7.2, mockup §1 `.tile-description`): between the dish and the footer, 2-line
+// clamped (FD10). Plain text under the title link's stretched `::after` — a click on it opens the
+// battle like the rest of the tile, and it adds no tab stop, so the pinned tab order holds.
+const TileDescription = styled('p')({
+  ...descriptionTextRules,
+  ...twoLineClampRules,
+  margin: '0 0 12px',
+  fontSize: '13px',
+  lineHeight: 1.4,
+  color: 'var(--gol-text-secondary)',
+});
+
 const TileFooter = styled('footer')({
   display: 'flex',
   justifyContent: 'space-between',
@@ -366,6 +381,7 @@ type ThumbnailState =
 export default function BattleTile({
   battleId,
   name,
+  description,
   gridSize,
   updatedAt,
   organisms,
@@ -376,6 +392,7 @@ export default function BattleTile({
   onRequestDelete,
 }: BattleTileProps) {
   const displayName = battleDisplayName(name);
+  const shownDescription = normalizeDescription(description ?? '');
   const visibleDots = organisms.slice(0, MAX_VISIBLE_DOTS);
   const overflow = organisms.slice(MAX_VISIBLE_DOTS);
   const overflowNames = overflow.map((o) => o.name).join(', ');
@@ -465,6 +482,9 @@ export default function BattleTile({
           />
         )}
       </PetriDish>
+      {shownDescription !== undefined && (
+        <TileDescription data-tile-description="">{shownDescription}</TileDescription>
+      )}
       <TileFooter>
         <TileDate>{formatBattleDate(updatedAt)}</TileDate>
         <DotRow>

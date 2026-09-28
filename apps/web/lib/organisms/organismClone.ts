@@ -90,6 +90,8 @@ export function cloneOrganismRecord(
     schemaVersion: ORGANISM_SCHEMA_VERSION,
     id,
     name: cloneOrganismName(source.name),
+    // Carried over like every other field (Story 7.2), key omitted when the source has none.
+    ...(source.description !== undefined && { description: source.description }),
     colorToken: source.colorToken,
     dominance: source.dominance,
     agingEnabled: source.agingEnabled,

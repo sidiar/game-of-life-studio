@@ -2,13 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { styled } from '@mui/material/styles';
-import { DEFAULT_SETTINGS, type BattleSummary, type Organism, type Settings } from '@gol/domain';
+import {
+  DEFAULT_SETTINGS,
+  EMPTY_WORKSPACE_META,
+  normalizeDescription,
+  type BattleSummary,
+  type Organism,
+  type Settings,
+  type WorkspaceMeta,
+} from '@gol/domain';
 import type {
   AppRepositories,
   BattleRepository,
   OrganismRepository,
   SettingsRepository,
+  WorkspaceMetaRepository,
 } from '@gol/persistence';
+import { descriptionTextRules } from '@/components/descriptionStyles';
 import { battleDisplayName } from '@/lib/battleDisplayName';
 import type { WorkspaceSeedStatus } from '@/lib/gallery/useWorkspaceSeed';
 import { sortByLastModified } from '@/lib/gallery/gallerySort';
@@ -31,6 +41,9 @@ export interface BattleGalleryProps {
   /** Story 5.11: offered to the storage-failure notice's Reset Workspace, and nothing else. A
    * `Pick`, never the aggregate (the Story 5.2 FD7 house rule). */
   workspace: Pick<AppRepositories, 'discardUnreadableStamp' | 'clearAll'>;
+  /** Story 7.2 (FR-9.5): the workspace description's source, read-only here — a `Pick` of the
+   * port, never the repository (the Story 5.2 FD7 narrowing rule). */
+  workspaceMeta: Pick<WorkspaceMetaRepository, 'load'>;
 }
 
 // The load effect's OWN outcome — seedStatus === 'error' is folded in at render time (below)
@@ -39,7 +52,13 @@ export interface BattleGalleryProps {
 // and here it trivially can: the 'error' case needs no data from the effect at all.
 type LoadState =
   | { kind: 'idle' }
-  | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[]; settings: Settings }
+  | {
+      kind: 'ready';
+      summaries: BattleSummary[];
+      roster: Organism[];
+      settings: Settings;
+      meta: WorkspaceMeta;
+    }
   | { kind: 'error'; error: unknown };
 
 // requestId identifies one load ATTEMPT, not one load — a fresh object per attempt, not a counter.
@@ -58,6 +77,7 @@ type LoadAction =
       summaries: BattleSummary[];
       roster: Organism[];
       settings: Settings;
+      meta: WorkspaceMeta;
     }
   | { type: 'error'; requestId: object; error: unknown }
   // A delete failure discovered OUTSIDE the load flow (handleDeleteFailed) — see its call site.
@@ -89,6 +109,7 @@ function loadReducer(state: LoadReducerState, action: LoadAction): LoadReducerSt
             summaries: action.summaries,
             roster: action.roster,
             settings: action.settings,
+            meta: action.meta,
           }
         : { kind: 'error', error: action.error },
     requestId: state.requestId,
@@ -100,7 +121,13 @@ const initialLoadState: LoadReducerState = { status: { kind: 'idle' }, requestId
 type GalleryState =
   | { kind: 'loading' }
   | { kind: 'error'; error: unknown }
-  | { kind: 'ready'; summaries: BattleSummary[]; roster: Organism[]; settings: Settings };
+  | {
+      kind: 'ready';
+      summaries: BattleSummary[];
+      roster: Organism[];
+      settings: Settings;
+      meta: WorkspaceMeta;
+    };
 
 const HEADING_ID = 'battle-gallery-heading';
 
@@ -121,6 +148,20 @@ const SectionSubtitle = styled('p')({
   fontSize: '14px',
   color: 'var(--gol-text-secondary)',
   margin: 0,
+});
+
+// FR-9.5 (Story 7.2, mockup §1 `.workspace-description`): the workspace description's home, under
+// the subtitle. Quiet supporting text with a 2px rule in the decorative `--gol-border` — the rule is
+// ornament, not a control boundary, so SC 1.4.11 does not apply. Full text, unclamped (500 cap).
+const WorkspaceDescription = styled('p')({
+  ...descriptionTextRules,
+  margin: '16px 0 0',
+  maxWidth: '760px',
+  paddingLeft: '12px',
+  borderLeft: '2px solid var(--gol-border)',
+  fontSize: '14px',
+  lineHeight: 1.5,
+  color: 'var(--gol-text-secondary)',
 });
 
 // Mockup: .toolbar (battle-gallery.html:111-118), but shipping ONLY the create CTA — the mockup's
@@ -150,6 +191,7 @@ export default function BattleGallery({
   seedStatus,
   seedError,
   workspace,
+  workspaceMeta,
 }: BattleGalleryProps) {
   const [loadState, dispatchLoad] = useReducer(loadReducer, initialLoadState);
 
@@ -256,9 +298,21 @@ export default function BattleGallery({
         // blanking every battle over a theme value would be the worse outcome. Only /settings reads
         // settings strictly, and it is where Restore Default Settings lives (Story 5.11 FD5).
         settings.load().catch(() => DEFAULT_SETTINGS),
+        // Story 7.2 (FD4): cosmetic, so it degrades exactly like settings — a corrupt
+        // `gol:workspace` shows no description and never blocks the Gallery. Caught HERE so a
+        // `CorruptDataError('gol:workspace')` can never reach the storage-failure classifier,
+        // which would call it a corrupt workspace and offer a reset.
+        workspaceMeta.load().catch(() => EMPTY_WORKSPACE_META),
       ])
-        .then(([summaries, roster, loadedSettings]) => {
-          dispatchLoad({ type: 'success', requestId, summaries, roster, settings: loadedSettings });
+        .then(([summaries, roster, loadedSettings, meta]) => {
+          dispatchLoad({
+            type: 'success',
+            requestId,
+            summaries,
+            roster,
+            settings: loadedSettings,
+            meta,
+          });
         })
         .catch((error: unknown) => {
           dispatchLoad({ type: 'error', requestId, error });
@@ -273,7 +327,7 @@ export default function BattleGallery({
     // while the refetch is in flight, which is what makes a delete feel instant rather than
     // swapping the whole Gallery for "Loading battles…" (and re-rendering/re-observing every
     // surviving tile) on every delete.
-  }, [battles, organisms, settings, seedStatus, reloadToken]);
+  }, [battles, organisms, settings, workspaceMeta, seedStatus, reloadToken]);
 
   // Derived, not stored: seedStatus === 'error' and loadState.status === 'error' both mean the
   // same thing to the view, and folding them here (rather than writing seedStatus's error into
@@ -287,6 +341,10 @@ export default function BattleGallery({
       : loadState.status.kind === 'idle'
         ? { kind: 'loading' }
         : loadState.status;
+
+  // Only once loaded, and only when there is text: absent/blank renders nothing (AC5).
+  const workspaceDescription =
+    state.kind === 'ready' ? normalizeDescription(state.meta.description ?? '') : undefined;
 
   // Memoised because resolveDisplayOrganisms builds a Map over the whole roster per tile: done in the
   // render body it is O(tiles x roster) on every render, and it mints a fresh array identity per
@@ -322,6 +380,11 @@ export default function BattleGallery({
           Battle Gallery
         </SectionTitle>
         <SectionSubtitle>Your saved cellular competitions</SectionSubtitle>
+        {workspaceDescription !== undefined && (
+          <WorkspaceDescription data-workspace-description="">
+            {workspaceDescription}
+          </WorkspaceDescription>
+        )}
       </SectionHeader>
       {/* Forced decision 2: renders UNCONDITIONALLY across loading/error/empty/ready. It is the
           persistent affordance, not first-run guidance (that is GalleryEmptyState's own CTA) — an
@@ -351,6 +414,7 @@ export default function BattleGallery({
               key={summary.id}
               battleId={summary.id}
               name={summary.name}
+              description={summary.description}
               gridSize={summary.gridSize}
               updatedAt={summary.updatedAt}
               organisms={tileOrganisms}

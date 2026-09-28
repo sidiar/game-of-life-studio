@@ -287,7 +287,7 @@ are active on `apps/web`. ESLint is pinned to **v9** — v10 breaks `eslint-conf
   `(AR-2)`. That is how the next reader finds the authority.
   - **Enforced:** `npm run spec:check` (in `ci`, after `format:check`) fails the build when a
     cited ID resolves to nothing under `docs/`. It tokenises `ARn`, `RFC-00n`, `FRx.y`/`NFRx.y`,
-    `Mn` (M1–M15 only), `Decision A–Z` and `Story N.M` out of both code and docs and compares
+    `Mn` (M1–M16 only), `Decision A–Z` and `Story N.M` out of both code and docs and compares
     them as sets — a renumbered decision otherwise keeps compiling and keeps *looking*
     authoritative. Write IDs exactly as the specs spell them (`AR-2`, `M9`, `FR-8.7`); a
     hyphenated `M-9` matches nothing and is silently exempt forever. `ACn` and bare
@@ -381,7 +381,7 @@ projects under `NewJob/`), so it never shows up in this repo's `git status`.
 
 ### Critical Don't-Miss Rules
 
-The architecture's Decisions A–K and M1–M15 mostly encode **reversals of the intuitive default**.
+The architecture's Decisions A–K and M1–M16 mostly encode **reversals of the intuitive default**.
 Following instinct here produces code that compiles, passes tests, and violates the spec.
 
 **Anti-patterns — these compile and pass tests, and are still wrong**
@@ -395,7 +395,8 @@ Following instinct here produces code that compiles, passes tests, and violates 
 - ❌ **Never persist a numeric `OrganismRef`.** Refs are runtime-only and battle-relative; rules
   persist the target's **stable library id (string)**. A persisted ref means the same rule targets
   a different organism in every battle — silent cross-battle corruption (Decision E).
-- ❌ **`clearAll()` never touches `gol:settings`.** It clears battles and organisms only. Import
+- ❌ **`clearAll()` never touches `gol:settings`.** It clears battles, organisms and the workspace
+  description (`gol:workspace`, M16) only. Import
   reuses it, so import *cannot* affect settings by construction. No envelope carries settings; no
   snapshot-and-restore patch (Decision F).
 - ❌ **Never batch rendering by organism.** Batch by `(colorToken, min(age, 7))` — bounded at ≤160
@@ -488,7 +489,14 @@ Following instinct here produces code that compiles, passes tests, and violates 
   deliberately override stale RFC snippets (`repositoryFactory.ts` naming, the factory's
   `APP_MODE` read, RFC-003 Decision 2's per-`[data-theme]` token structure and its illustrative
   theme snippet). New conflicts are signal, not noise.
-- Spec authority order: **Architecture Cross-Cutting Decisions** (A–K, M1–M15) → owning **RFC**
+- **Not a conflict: an RFC code-snippet comment that doesn't list every field.** Comments inside
+  RFC snippets say what the snippet is *for*, not everything it carries — e.g. RFC-006's
+  `exportWorkspace()` "battles + organisms only — settings never travel" exists to state the
+  settings exclusion (Decision F), and stays correct although the envelope now also carries the
+  workspace description (Story 7.2). Don't raise these as stale spec, and don't "fix" them by
+  appending each new field; flag a snippet only when what it states is actually wrong (owner
+  ruling, 2026-09-28).
+- Spec authority order: **Architecture Cross-Cutting Decisions** (A–K, M1–M16) → owning **RFC**
   → companion specs. Within one area the RFC wins; for anything cross-cutting the Decision wins.
 
 **For humans:**

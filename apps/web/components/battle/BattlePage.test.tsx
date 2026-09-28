@@ -3461,3 +3461,96 @@ describe('BattlePage — Simulation hotkeys (Story 3.19)', () => {
     expect(view).toHaveAttribute('data-status', 'playing');
   });
 });
+
+describe('BattlePage — battle description (Story 7.2, FR-9.5)', () => {
+  function dirtyValue(container: HTMLElement): string | null {
+    return container.querySelector('[data-dirty]')?.getAttribute('data-dirty') ?? null;
+  }
+  const descriptionField = () => screen.getByRole('textbox', { name: 'Description' });
+  const saveButton = () => screen.getByRole('button', { name: 'Save' });
+  const headerDescription = (container: HTMLElement) =>
+    container.querySelector('[data-battle-description]');
+
+  it('an edit dirties the battle and saves the normalized description; the header moves only on the save', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    const saveSpy = vi.spyOn(repositories.battles, 'save');
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+    expect(headerDescription(container)).toBeNull();
+
+    await user.type(descriptionField(), ' Two colonies. ');
+    expect(dirtyValue(container)).toBe('true');
+    // The header shows the SAVED text, never the live edit (FD9).
+    expect(headerDescription(container)).toBeNull();
+
+    await user.click(saveButton());
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    const record = saveSpy.mock.calls[0]?.[0] as Battle;
+    expect(record.description).toBe('Two colonies.');
+    await waitFor(() => expect(dirtyValue(container)).toBe('false'));
+    expect(headerDescription(container)).toHaveTextContent('Two colonies.');
+    await expect(repositories.battles.load(SKIRMISH.id)).resolves.toMatchObject({
+      description: 'Two colonies.',
+    });
+  });
+
+  it('a loaded battle’s description seeds the field and the header; a save without edits keeps it', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded(
+      battles.map((b) => (b.id === SKIRMISH.id ? { ...b, description: 'Stored text.' } : b)),
+    );
+    const saveSpy = vi.spyOn(repositories.battles, 'save');
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    expect(descriptionField()).toHaveValue('Stored text.');
+    expect(headerDescription(container)).toHaveTextContent('Stored text.');
+
+    // Dirty the battle through the NAME, then save: the untouched description must survive.
+    await user.type(screen.getByRole('textbox', { name: /battle name/i }), '!');
+    await user.click(saveButton());
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    expect((saveSpy.mock.calls[0]?.[0] as Battle).description).toBe('Stored text.');
+  });
+
+  it('clearing the description saves a record with no description key', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded(
+      battles.map((b) => (b.id === SKIRMISH.id ? { ...b, description: 'Stored text.' } : b)),
+    );
+    const saveSpy = vi.spyOn(repositories.battles, 'save');
+    const { container } = render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.clear(descriptionField());
+    await user.click(saveButton());
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    expect('description' in (saveSpy.mock.calls[0]?.[0] as Battle)).toBe(false);
+    await waitFor(() => expect(headerDescription(container)).toBeNull());
+  });
+
+  it('is locked while a save is in flight', async () => {
+    const user = userEvent.setup();
+    const repositories = seeded();
+    let release: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const saveSpy = vi.spyOn(repositories.battles, 'save').mockReturnValue(pending);
+    render(<BattlePage repositories={repositories} battleId={SKIRMISH.id} />);
+    await screen.findByRole('heading', { level: 1, name: 'Three-Way Skirmish' });
+
+    await user.type(descriptionField(), 'Before');
+    await user.click(saveButton());
+    await waitFor(() => expect(saveButton()).toBeDisabled());
+    expect(descriptionField()).toBeDisabled();
+    // The ref half of the lock: a change event dispatched anyway is refused.
+    fireEvent.change(descriptionField(), { target: { value: 'During' } });
+    expect(descriptionField()).toHaveValue('Before');
+
+    release?.();
+    await waitFor(() => expect(descriptionField()).toBeEnabled());
+    expect((saveSpy.mock.calls[0]?.[0] as Battle).description).toBe('Before');
+  });
+});

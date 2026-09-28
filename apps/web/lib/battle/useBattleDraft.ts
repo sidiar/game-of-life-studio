@@ -72,6 +72,7 @@ export interface UseBattleDraftResult {
 function toDraft(battle: Battle): NewBattleDraft {
   return {
     name: battle.name,
+    description: battle.description ?? '',
     gridSize: battle.gridSize,
     gridState: battle.gridState,
     organismIds: battle.organismIds,

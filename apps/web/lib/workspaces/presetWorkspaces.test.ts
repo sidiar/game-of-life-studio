@@ -202,6 +202,15 @@ describe('preset workspace envelopes', () => {
             `${entry.file}: kind "${envelope.kind}", expected a whole-workspace envelope`,
           );
         }
+        // Story 7.2 (FR-9.1, FR-9.5): the manifest's description is a PROJECTION of the
+        // envelope's own workspace description, never a second source — collected with the file
+        // name like every other failure here.
+        if (envelope.description !== entry.description) {
+          failures.push(
+            `${entry.file}: manifest description ${JSON.stringify(entry.description)} ≠ ` +
+              `envelope description ${JSON.stringify(envelope.description)}`,
+          );
+        }
       } catch (error) {
         failures.push(`${entry.file}: ${error instanceof Error ? error.message : String(error)}`);
       }

@@ -6,6 +6,7 @@ import type {
   BattleRepository,
   OrganismRepository,
   SettingsRepository,
+  WorkspaceMetaRepository,
   WorkspaceSerializer,
 } from '@gol/persistence';
 import { useAsyncResource } from '@/lib/useAsyncResource';
@@ -38,6 +39,9 @@ export interface SettingsPageProps {
   // not something this page or its children call (AC7, Story 5.5; widened for `importWorkspace`,
   // Story 5.9 Task 5.2).
   serializer: Pick<WorkspaceSerializer, 'exportWorkspace' | 'importWorkspace'>;
+  /** Story 7.2: the workspace description's port, handed through to `<DataManagement>` — a
+   * `Pick`, like every prop here. */
+  workspaceMeta: Pick<WorkspaceMetaRepository, 'load' | 'save'>;
 }
 
 const HEADING_ID = 'settings-heading';
@@ -105,6 +109,7 @@ export default function SettingsPage({
   seedError,
   workspace,
   serializer,
+  workspaceMeta,
 }: SettingsPageProps) {
   // Two resources, not one Promise.all (FD3): the counts must re-run on the seed flip (the first
   // list() read hits a pre-seed store — the OrganismLibrary note) but settings has no business
@@ -180,6 +185,7 @@ export default function SettingsPage({
               workspace={workspace}
               battles={battles}
               organisms={organisms}
+              workspaceMeta={workspaceMeta}
               onImported={statsResource.reload}
               onCleared={statsResource.reload}
             />

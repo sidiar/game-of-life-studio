@@ -52,6 +52,7 @@ export default function SettingsRoute() {
       seedError={error}
       workspace={repositories}
       serializer={serializer}
+      workspaceMeta={repositories.workspaceMeta}
     />
   );
 }

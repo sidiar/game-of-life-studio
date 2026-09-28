@@ -249,3 +249,51 @@ describe('BattleHeader', () => {
     });
   });
 });
+
+describe('BattleHeader — description (Story 7.2, FR-9.5)', () => {
+  it('renders the description under the title, in Lab and Run alike', () => {
+    const { container, rerender } = render(
+      <BattleHeader
+        battleTitle="Skirmish"
+        battleDescription="Two colonies, one dish."
+        mode="lab"
+        onModeToggle={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('[data-battle-description]')).toHaveTextContent(
+      'Two colonies, one dish.',
+    );
+
+    rerender(
+      <BattleHeader
+        battleTitle="Skirmish"
+        battleDescription="Two colonies, one dish."
+        mode="run"
+        onModeToggle={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('[data-battle-description]')).toHaveTextContent(
+      'Two colonies, one dish.',
+    );
+  });
+
+  it('renders NO element without a description, or with a blank one', () => {
+    const { container, rerender } = render(<BattleHeader battleTitle="Skirmish" />);
+    expect(container.querySelector('[data-battle-description]')).toBeNull();
+
+    rerender(<BattleHeader battleTitle="Skirmish" battleDescription="  " />);
+    expect(container.querySelector('[data-battle-description]')).toBeNull();
+  });
+
+  it('has no axe violations with a description', async () => {
+    const { container } = render(
+      <BattleHeader
+        battleTitle="Skirmish"
+        battleDescription="Two colonies, one dish."
+        mode="run"
+        onModeToggle={vi.fn()}
+      />,
+    );
+    expect((await axe(container)).violations).toEqual([]);
+  });
+});

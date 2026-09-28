@@ -69,6 +69,8 @@ function renderEditor(overrides: Partial<ComponentProps<typeof BattleEditorView>
       atCap={false}
       battleName=""
       onNameChange={() => {}}
+      battleDescription=""
+      onDescriptionChange={() => {}}
       isDirty={false}
       onSave={() => {}}
       onBack={() => {}}
@@ -331,6 +333,8 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
@@ -370,6 +374,8 @@ describe('BattleEditorView — the commit seam (Story 2.5)', () => {
           atCap={false}
           battleName=""
           onNameChange={() => {}}
+          battleDescription=""
+          onDescriptionChange={() => {}}
           isDirty={false}
           onSave={() => {}}
           onBack={() => {}}
@@ -561,6 +567,8 @@ describe('BattleEditorView — roster selection reaches the painted ref (AC2)', 
       atCap: false,
       battleName: '',
       onNameChange: () => {},
+      battleDescription: '',
+      onDescriptionChange: () => {},
       onCommitGrid,
       onUndo: () => {},
       canUndo: false,
@@ -857,6 +865,8 @@ describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', (
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
@@ -911,6 +921,8 @@ describe('BattleEditorView — the add control (AC3, AC7, forced decision 1)', (
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
@@ -993,6 +1005,8 @@ describe('BattleEditorView — the create button wrapper (Story 4.25, FD1)', () 
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
@@ -1113,6 +1127,8 @@ describe('BattleEditorView — the stats derivation (Story 2.12, AC3, AC4)', () 
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
@@ -1260,6 +1276,8 @@ describe('BattleEditorView — edit-mode grid resize (Story 2.14)', () => {
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
@@ -1328,6 +1346,8 @@ describe('BattleEditorView — edit-mode grid resize (Story 2.14)', () => {
         atCap={false}
         battleName=""
         onNameChange={() => {}}
+        battleDescription=""
+        onDescriptionChange={() => {}}
         isDirty={false}
         onSave={() => {}}
         onBack={() => {}}
