@@ -1,11 +1,11 @@
 {
-  "defaultPresetId": "starter-workspace",
+  "defaultPresetId": "colony-clash",
   "workspaces": [
     {
-      "id": "starter-workspace",
-      "name": "Starter Workspace",
-      "description": "Conway's Classic plus three battling organisms — Aggressive Colonizer, Patient Defender and Chaotic Spreader — with two ready-to-run battles.",
-      "file": "starter-workspace.json"
+      "id": "colony-clash",
+      "name": "Colony Clash",
+      "description": "A small ecosystem to watch. Conway's Classic and three new organisms (Ember Raiders, Moss Weavers, Amber Tide) fight over one dish, each with its own dominance and invasion habits. Press play on Four Corners to see a chain of conquest unfold, or on Tug of War for a compact skirmish, then open an organism to read the rules behind what you saw.",
+      "file": "colony-clash.json"
     }
   ]
 }

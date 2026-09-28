@@ -1,0 +1,214 @@
+---
+baseline_commit: ad6cc635b36e919a8c2141a45d08906d73620115
+---
+
+# Story 7.3: Showcase Preset Content
+
+Status: review
+
+<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+
+## Story
+
+As a first-time visitor,
+I want the default preset to look alive the moment I press play,
+so that I taste the essence of the game in seconds and want to stay.
+
+## Acceptance Criteria
+
+1. **Given** the default preset's battles, **When** run, **Then** visible multi-organism competition (colonies colliding, spreading, trading territory) develops within the first ~5 seconds at default speed, on both bundled battles' grids (FR-9.2 rationale; this story gates 7.4's ship)
+2. **And** the preset carries Conway's Classic plus at least three distinct, well-named organisms whose colors are CVD-distinct (AR-26 palette), each battle satisfying Decision H.1
+3. **And** gallery thumbnails of the preset battles read as intriguing, not sparse (the tiles are the first thing a visitor sees before pressing anything)
+4. **And** the content passes the 7.1 lockstep gate and replaces (or demotes from default) the dev-fixture starter preset
+5. **And** the workspace, every battle, and every organism carry authored descriptions (FR-9.5): the preset explains what the visitor is watching
+
+## Tasks / Subtasks
+
+- [x] **Task 1: Design and tune the content headlessly** (AC: 1, 2, 3)
+  - [x] 1.1 Create a throwaway exploration harness (never committed): a Vitest file under `apps/web/scripts/`, run with `npx vitest run --config vitest.sweep.config.mts scripts/<file>.test.ts` from `apps/web` (the 7.1/7.2 route (b) location, which `vitest.config.mts` excludes from `npm test`). It builds candidate organisms + battles in memory and runs them through the real engine (FD4's composition). Per cycle, it prints population per organism, ownership transfers, and optionally an ASCII frame every ~10 cycles.
+  - [x] 1.2 Design the roster within FD3's constraints: Conway's Classic (stock) plus ≥3 new organisms with distinct CVD-core colors, distinct dominance values, and at least one organism that is born into `occupied` cells (the territory-trade mechanism).
+  - [x] 1.3 Design two battles (FD3): one 100×60 and one 50×30. Each places ≥3 organisms as dense seeded-random colonies whose fronts meet early. At least one battle places Conway's Classic.
+  - [x] 1.4 Iterate until, for both battles under several seeds, over the first `5 × DEFAULT_SETTINGS.defaultSpeed` cycles (= 50 today): every placed organism is still alive, territory changes hands continuously, and the grid is neither frozen nor overrun by one colour. Also check a longer horizon (~300 cycles, 30 s): a run that settles into one colour, or into still-life, in under ~15 s is a weak showcase. Aim for a battle that keeps evolving.
+- [x] **Task 2: Generate the preset through the serializer** (AC: 2, 4, 5)
+  - [x] 2.1 Generate the envelope with the FD2 composition (throwaway script, same folder as 1.1, may be the same file): `createFakeRepositories()` → `seedDefaultWorkspace(repos)` (stock Conway's Classic) → save the organisms → save the battles (via `projectBattleForSave`) → `repos.workspaceMeta.save({ description })` → `createWorkspaceSerializer({ repos, appVersion: APP_VERSION, now: () => new Date() }).exportWorkspace()` → `JSON.stringify(envelope, null, 2)` → write `apps/web/public/workspaces/<id>.json`. Delete the script afterwards.
+  - [x] 2.2 `npx prettier --write apps/web/public/workspaces/`. Formatting is the only allowed edit (7.1 FD4). Do not hand-touch ids, `exportedAt`, or hashes.
+  - [x] 2.3 Record the route, the seed(s) used for colony placement, and the final roster (name / colorToken / dominance / aging / rule list) in the Dev Agent Record, so the content can be reasoned about without re-deriving it from the JSON.
+- [x] **Task 3: Manifest: replace the starter** (AC: 4)
+  - [x] 3.1 `git rm apps/web/public/workspaces/starter-workspace.json`. Replace its `index.json` entry with the new preset's entry (`id`, `name`, `description` = the envelope's workspace description verbatim, `file` = `<id>.json`) and point `defaultPresetId` at it (FD1). `git add` the new file (the lockstep compares against git-tracked files, 7.1 owner ruling D1c).
+  - [x] 3.2 `presetManifest.ts` head comment: "that is how the first preset was produced" is still true in substance. Reword it only if it now reads false, and add one sentence to the authoring path: to improve an existing preset, import it in the app, edit, set the workspace description, and export again (FD2).
+- [x] **Task 4: Showcase gate test** (AC: 1, 2)
+  - [x] 4.1 New `apps/web/lib/workspaces/presetShowcase.test.ts` per FD4: loads the manifest's **default** preset off disk, `validateImportFile` → `fromEnvelope`, and for each battle runs the headless engine for `SHOWCASE_CYCLES = 5 × DEFAULT_SETTINGS.defaultSpeed` cycles under a small fixed seed set. Named floors with WHY comments; failure messages name the battle, the seed and the organism.
+  - [x] 4.2 Static content assertions in the same file: roster = Conway's Classic (deep-equal to `CONWAYS_CLASSIC`) + ≥3 others; all `colorToken`s distinct and inside the CVD-robust core (`PALETTE.slice(0, 8)`); all dominance values distinct; every organism, every battle and the workspace have a non-blank description; the preset has exactly two battles, one per editable grid preset (FD3).
+  - [x] 4.3 Negative proof (manual, reverted, not committed): weaken the content, for example by feeding the test a copy of the old starter envelope or by lowering a colony's density to a few cells. Confirm the gate goes red with a readable message. Record it in the Dev Agent Record.
+- [x] **Task 5: Visual check and verify** (AC: 1, 3)
+  - [x] 5.1 Visual check (FD5): `npm run dev` → Settings → Import the new preset file (dev builds start with the AR-45 fixtures, and the import replaces them) → gallery: both thumbnails read dense and multi-coloured → open each battle, press Play at default speed, watch ~5 s. Take screenshots (gallery + each battle at ~5 s) into the scratchpad or `/tmp`, not the repo, and describe what was seen in the Dev Agent Record. A throwaway Playwright script is fine for this. Do not commit it.
+  - [x] 5.2 `npm run ci:dev` green (never four-browser `npm run ci`). `bundle:check` must show no route growth: nothing in app code imports preset JSON (7.1 FD5).
+
+## Dev Notes
+
+### Forced decisions (made here so the dev agent does not have to)
+
+- **FD1: Replace the starter; do not demote it.** Delete `starter-workspace.json` and its manifest entry; the new preset becomes the manifest's only entry and its `defaultPresetId`. The starter is the AR-45 dev-fixture roster with `mock-*` ids and 2×2 blocks, which is not catalogue-quality content, and 7.7 owns the catalogue. Removing the id breaks nothing: no consumer of a preset id exists yet (7.4–7.6 are unshipped), so no link has ever named `starter-workspace`. **From this story on, the new id is stable forever** (7.1 FD3). Choose it deliberately: a lowercase kebab slug of the preset's display name. The display name and id are the dev's call and must be "well-named" (AC2); state the choice in the Completion Notes for the owner to veto at review.
+- **FD2: Authoring route = the headless serializer composition (7.1/7.2 route (b)), built from the editors' own save projections.** Do not hand-write envelope JSON (FR-9.1).
+  - **Organisms:** domain records with `schemaVersion: ORGANISM_SCHEMA_VERSION`, `id: crypto.randomUUID()` (what the Organism Editor mints; uuids, not `mock-*` style literals), rule `id`s from `crypto.randomUUID()`, and every rule's `contentHash` from `ruleContentHash` (`apps/web/lib/organisms/ruleContentHash.ts`, the editor's hasher). Parse each through `OrganismSchema.parse` before saving. `projectOrganismForSave` is acceptable too if building `OrganismDraft`s is convenient; either way no hash is typed by hand.
+  - **Battles:** go through `projectBattleForSave(grid, rosterIds, stamps)` (`apps/web/lib/battle/battleRecord.ts`). It is the Battle Editor's own save projection and performs the Decision H.1 prune + Decision E.2 remap, so H.1 holds by construction. `id: crypto.randomUUID()`, `name`, `description`, and `createdAt`/`updatedAt` from the script's clock. Give the two battles different `updatedAt` values so the gallery order is deliberate: the 100×60 flagship is newest, so it sorts first (FR-7.3 "sorted by last modified").
+  - **Conway's Classic:** `seedDefaultWorkspace(repos)` gives the stock record. Never modify it: M9 protects it, and a modified copy would ship a variant under the protected id.
+  - Future edits go through the app: import the preset in the dev server, edit it in the editors (and the workspace description in Settings → Data Management), Export Workspace, Prettier. The envelope is the source of truth, so no generator script is committed (7.1 "What NOT to build").
+- **FD3: Content constraints (the showcase recipe).**
+  - **Roster:** Conway's Classic (sky-blue, dominance 50) + **3–5** new organisms. Colours are **distinct tokens from the CVD-robust core, tokens 1–8** (`sky-blue` is Conway's; pick from `vermillion`, `bluish-green`, `amber`, `reddish-purple`, `yellow`, `azure`, `coral-red`). That core is what palette gate G4 verifies pairwise under protan/deutan/tritan at every shade (`docs/implementation-artifacts/palette-cvd-validation.md`), which is AC2's "CVD-distinct". Tokens 9–20 are not CVD-gated pairwise, so do not use them.
+  - **Dominance:** distinct values, none equal to 50. Equal dominance falls to the tie-break RNG, and production mints a fresh seed per run, so ties would make the showcase look different every visit. Distinct values keep it deterministic apart from seed-independent dynamics.
+  - **Engine semantics that decide whether content "looks alive":**
+    - `neighborCount` counts **same-organism** neighbours only; `occupantNeighborCount` counts **other** organisms (`cellSubject.ts`).
+    - `cellState` is relative to the evaluating organism.
+    - Rules are first-match in list order.
+    - Death runs before survival, and birth vs survival compete **by dominance alone**: incumbency gives no protection.
+    - A cell nobody claims clears (implicit death, M10).
+
+    Colonies only **trade territory** if some organism can claim a cell another organism holds. That means a `born` rule on `cellState eq occupied`, optionally narrowed by `organismType` (a library id) and gated on the attacker's own `neighborCount`, so invasion happens at a front rather than everywhere. Without one, colonies merely abut. Conway's Classic (B3/S23 on its own cells) decays from sparse seeds and sustains from ~35–50 % random soup, so seed it as soup.
+  - **Rule summaries** (`payload.summary`, ≤ `MAX_RULE_SUMMARY_LENGTH` = 100) must read as plain explanations. They are the rule-level layer the descriptions build on (FR-9.5 rationale).
+  - **Aging:** at least one aging-enabled organism is encouraged. The renderer's age ramp makes fronts visibly "fresh vs old". It is optional.
+  - **Battles: exactly two.** One **100×60** (the default grid for new battles; the flagship) and one **50×30** (bigger cells, so its thumbnail reads well at tile size). Each places **≥3 organisms**, and at least one places Conway's Classic. Every roster organism appears in at least one battle, so no library organism is dead weight.
+  - **Placement:** dense seeded-random colonies (~35–50 % fill) in territories whose fronts meet within the first ~10–20 cycles. Avoid tiny patterns: the thumbnail is the `initialGrid` (M4, rendered on demand) and must read as a busy, multi-coloured dish (AC3). Place with a seeded RNG (`createRng(seed)` from `@gol/simulation`) so the script reproduces; record the seed.
+  - **Descriptions (FR-9.5, caps from Story 7.2):** workspace ≤ 500, battle ≤ 280, organism ≤ 280. Plain text, no markdown (UX §5). Voice: tell the visitor what they are watching and what to look for ("the amber front eats…"), not how to use the app. The **workspace description is also the manifest description**, verbatim (7.2 projection gate).
+- **FD4: A committed showcase gate, not only an eyeball check.** AC1 is otherwise unverifiable in CI, and 7.3 gates 7.4's ship: a later edit that kills the showcase must go red. `apps/web/lib/workspaces/presetShowcase.test.ts`:
+  - **Input:** `index.json` → the `defaultPresetId` entry → its file off disk (same `dirname(fileURLToPath(import.meta.url))` path idiom as `presetWorkspaces.test.ts`; reuse its manifest-reading approach rather than re-deriving paths) → `validateImportFile(text)` → `fromEnvelope(envelope)` for dense `Battle`s + `Organism`s.
+  - **Engine composition** (same as `useSimulation.ts:274-305`): roster = `battle.organismIds.map(id => organismsById.get(id))` in roster order; `const compiled = compileSession(roster)`; `let buffers = createGridBuffers(gridFromDense(battle.gridState))`; `const deps = { ...compiled, organisms: roster, rng: createRng(seed) }`; loop `buffers = stepGridBuffers(buffers, deps)`; read `buffers.front.occupant` (a `Uint8Array`, value = roster index + 1, 0 = empty).
+  - **Horizon:** `SHOWCASE_CYCLES = 5 * DEFAULT_SETTINGS.defaultSpeed` (derived from `@gol/domain`'s `DEFAULT_SETTINGS`, never the literal 50: "~5 seconds at default speed" is the spec). Seeds: a fixed small set (e.g. 3 literals). The tie-break RNG only matters on equal dominance, which FD3 rules out, but the set proves it.
+  - **Assertions per battle × seed:**
+    - (a) the grid never empties within the horizon;
+    - (b) every roster organism still has ≥1 cell at `SHOWCASE_CYCLES`: all colours still on screen after 5 s;
+    - (c) **ownership transfers** summed over the horizon (a cell non-empty with organism A at cycle t and organism B ≠ A at t+1) reach a named floor `MIN_TERRITORY_TRANSFERS`: colonies trade territory rather than just abut;
+    - (d) no single organism holds more than a named share (e.g. 90 %) of live cells at the horizon: the visitor still sees a contest.
+
+    Calibrate the floors from measured values: set each at roughly half the minimum measured across seeds, and record the measurements in the Dev Agent Record and in a WHY comment. A floor at 1 proves nothing; a floor at the measured value is flaky to content tweaks.
+  - **Static content assertions:** see Task 4.2.
+  - **Scope and cost:** this reads only the *default* preset. 7.7's catalogue presets are not required to meet the default's bar. 100×60 × 50 cycles × 3 seeds is trivially cheap; keep it well under a second. No coverage gate applies (apps/web), so test behaviour, don't pad.
+- **FD5: Thumbnails and "looks alive" are also checked by eye, once, not by pixel tests.** Never pixel/snapshot-test the Canvas (project-context). Task 5.1's manual dev-server pass plus screenshots kept out of the repo is the evidence. The owner reviews the actual look at PR time.
+- **FD6: Dev fixtures (AR-45) are untouched.** `mockWorkspace.ts` / `seedDevFixtures.ts` keep seeding dev builds. Their coverage duty (all five condition properties, all six operands) is orthogonal to showcase content, e2e specs depend on them, and 7.4's AC keeps the dev branch unchanged. The preset does not need to cover the AR-45 matrix.
+- **FD7: No app-code change beyond the new test.** No loader, fetch, hook or UI: 7.4 (auto-load), 7.5 (Settings row) and 7.6 (link) own those. Nothing imports preset JSON (bundle gate). `presetManifest.ts` gets comment edits only if Task 3.2 finds text made false.
+
+### What exists: read these before writing a line
+
+- `apps/web/public/workspaces/index.json`, `starter-workspace.json`: current manifest (one entry, `defaultPresetId: "starter-workspace"`) and the envelope this story replaces.
+- `apps/web/lib/workspaces/presetManifest.ts`: contract + documented authoring path (head comment). `presetWorkspaces.test.ts`: the lockstep gate (manifest structural parse, slug ids, `file === ${id}.json`, git-tracked lockstep, `validateImportFile` per preset, manifest description ≡ envelope description). It must stay green untouched. The new test is a sibling file, not an edit to it.
+- `packages/test-utils/src/mockWorkspace.ts`: the current fixture roster. It is a reference for how rules/battles are shaped in code, and also a contrast: its 2×2 blocks are exactly the "sparse" look AC3 rejects.
+- `packages/domain/src/defaultWorkspace.ts`: `CONWAYS_CLASSIC` / `CONWAYS_CLASSIC_ID`. `seedDefaultWorkspace` is in `@gol/persistence`.
+- `packages/domain/src/workspaceExportProjection.ts`: `fromEnvelope(envelope) → { battles, organisms, meta }` (sparse wire → dense). `packages/persistence/src/workspaceImport.ts:57`: `validateImportFile(text): WorkspaceExport`.
+- `packages/persistence/src/workspaceSerializer.ts`: `createWorkspaceSerializer({ repos, appVersion, now }).exportWorkspace()`, which reads `repos.workspaceMeta` for the workspace description (Story 7.2).
+- `packages/simulation/src/index.ts`: `compileSession`, `createGridBuffers`, `gridFromDense`, `stepGridBuffers`, `createRng`, `isGridEmpty`, `Grid` (`occupant: Uint8Array`, `age: Uint16Array`, `width`, `height`). `apps/web/lib/battle/useSimulation.ts:255-305` is the reference composition.
+- `packages/simulation/src/gol/cellSubject.ts`: the five rule properties and their per-organism semantics (FD3).
+- `apps/web/lib/palette/paletteRegistry.ts`: `PALETTE` order (tokens 1–8 = CVD core; do not reorder). `apps/web/lib/battle/simulationSpeed.ts` + `packages/domain/src/settingsSchema.ts`: `defaultSpeed` 10 gen/s, `msPerCycle = 1000 / genPerSec`.
+- `apps/web/lib/organisms/ruleContentHash.ts`, `organismRecord.ts` (`projectOrganismForSave`), `apps/web/lib/battle/battleRecord.ts` (`projectBattleForSave`): the editors' save projections (FD2).
+- `packages/domain/src/organismSchema.ts`, `battleSchema.ts`, `survivalRuleSchema.ts`: caps, H.1 superRefine, condition/operand shapes (`range` is a `[min, max]` tuple; `organismType` pattern is a library id string).
+- `apps/web/vitest.sweep.config.mts`: the config for throwaway `scripts/**` tests.
+
+### Architecture compliance
+
+- **FR-9.1:** the preset is an FR-8.3 envelope produced by the serializer; no second format, no hand-written JSON; lockstep gate green.
+- **Decision H.1:** each battle's `organismIds` ≡ placed set, guaranteed by going through `projectBattleForSave` and re-checked by `validateImportFile` (schema superRefine).
+- **Decision E:** `organismType` conditions persist the target's **library id**, never a numeric ref.
+- **M9:** Conway's Classic ships unmodified under its protected id.
+- **Decision A / G.1:** battle grids are only 50×30 or 100×60 (`EditableGridPresetSchema`, enforced inside `projectBattleForSave`).
+- **AR-26 / NFR-8.3:** CVD-core tokens only (FD3).
+- **Engine purity / determinism:** the test injects fixed seeds and never asserts on unseeded randomness (project-context "Determinism is a precondition").
+- **Comments explain WHY; cite IDs exactly** (`FR-9.2`, `FR-9.5`, `AR-26`, `Decision H`, `M9`, `Story 7.3`); `npm run spec:check` fails on an unresolvable ID.
+- Naming: `presetShowcase.test.ts` (camelCase); preset file `<id>.json` (kebab slug).
+
+### Library / framework notes
+
+No new dependencies, and nothing version-sensitive, so no web research is needed. Vitest 4 (jsdom env in apps/web; the engine is pure and runs there fine). The throwaway generator runs under `vitest.sweep.config.mts`, which is `environment: 'node'`: Node 24's global `crypto.randomUUID()` / `crypto.subtle` (used by `ruleContentHash`) are available there. The committed showcase test needs no hashing and runs in apps/web's default jsdom env.
+
+### Testing standards
+
+- `presetShowcase.test.ts` reads the **real** shipped preset: no fixtures, no mocks. Its value is gating the shipped content.
+- Failure messages name the battle, seed, and organism (the 7.1 review standard).
+- Static loop over the default preset's battles, not `it.each` over the folder (the 7.1 comment's reason: a vacuous zero-case loop must not pass).
+- `presetWorkspaces.test.ts` stays untouched and green.
+- Local gate: `npm run ci:dev`; don't pipe it through `tail`.
+
+### Project Structure Notes
+
+- New: `apps/web/public/workspaces/<id>.json`, `apps/web/lib/workspaces/presetShowcase.test.ts`.
+- Modified: `apps/web/public/workspaces/index.json`; possibly `apps/web/lib/workspaces/presetManifest.ts` (comments only, Task 3.2).
+- Deleted: `apps/web/public/workspaces/starter-workspace.json`.
+- Throwaway, never committed: `apps/web/scripts/*.test.ts` harness/generator, Playwright screenshot script, screenshots.
+
+### What NOT to build
+
+- No loader / fetch / auto-load / Settings row / link (7.4–7.6). No catalogue presets beyond the one default (7.7).
+- No change to AR-45 fixtures, `useWorkspaceSeed`, schemas, or the lockstep test.
+- No committed generator script; no build step writing presets.
+- No pixel or snapshot tests of thumbnails or runs.
+- No badges or "sample" labelling on preset battles (UX §4: preset battles are ordinary battles).
+
+### Previous story intelligence
+
+- **7.1:** the lockstep compares against **git-tracked** files (owner ruling D1c), so `git add` the new preset and `git rm` the starter, or the gate names them as orphans. `file` must equal `${id}.json` (D2a); the slug pattern admits `index`, so don't choose it. Route (b) throwaway-script generation via `vitest.sweep.config.mts` from `apps/web` worked; delete the script after. The review hit stale comments hard: re-read `presetManifest.ts` after the swap.
+- **7.2:** workspace description lives behind `repos.workspaceMeta` (M16); the serializer exports it, and `createFakeRepositories()` has a `workspaceMeta` member. The manifest description must equal the envelope's `description` exactly (whitespace included; `normalizeDescription` trims on save, so copy the *saved* value). Caps: organism/battle 280, workspace 500 (constants `MAX_ORGANISM_DESCRIPTION_LENGTH`, `MAX_BATTLE_DESCRIPTION_LENGTH`, `MAX_WORKSPACE_DESCRIPTION_LENGTH` in `@gol/domain`). A workspace description makes the workspace non-pristine (FD6 of 7.2), which is irrelevant here but matters to 7.4/7.5.
+- **7.2 display surfaces** exist now: the gallery header shows the workspace description, tiles show a 2-line clamped battle description, the battle header shows the full battle description, and organism cards show a 2-line clamp. Write the first ~2 lines of each battle/organism description to stand alone, because that is what the tile/card shows.
+
+### Git intelligence
+
+`main` @ `ad6cc63` (#99, Story 7.2 merged). The last commits are 7.2's review/ruling passes and a Firefox swatch hit-target fix (`cc1fcd2`). Nothing touches the engine, serializer or preset folder since 7.2's starter regeneration.
+
+### References
+
+- [Source: docs/planning-artifacts/epics.md#Story 7.3: Showcase Preset Content] and #Epic 7 intro
+- [Source: docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md#FR-9.2 (rationale), #FR-9.1, #FR-9.5]
+- [Source: docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/CHANGELOG-preset-workspace-library.md]
+- [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/preset-workspace-library-design.md §4 (content presentation), §5 (descriptions)]
+- [Source: docs/planning-artifacts/architecture.md: Decision H (H.1), Decision E, Decision A, M9, M10, M16]
+- [Source: docs/implementation-artifacts/palette-cvd-validation.md: G4 CVD-robust core, tokens 1–8]
+- [Source: docs/project-context.md: determinism, no canvas pixel tests, bundle growth gate, spec:check]
+- [Source: docs/implementation-artifacts/7-1-preset-workspace-foundations.md, 7-2-descriptions-at-every-level.md]
+
+### Open questions for the owner (answered provisionally above)
+
+1. **FD1:** the preset's display name / id are the dev's pick (stable forever once merged); veto at review.
+2. **FD4:** a committed "showcase" test with calibrated floors (survival of all colours, territory transfers, no runaway single colour at 5 s). The floors are content-calibrated, so a future deliberate redesign of the default preset re-calibrates them in the same PR.
+
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Sonnet 5.5
+
+### Debug Log References
+
+- Throwaway harness/generator `apps/web/scripts/showcase.test.ts` (route (b), `vitest.sweep.config.mts`) and a Playwright screenshot script were deleted before the commit. Colony placement RNG seeds: `7301` (Four Corners) and `7302` (Tug of War), via `createRng(seed)`, fill 45 % per region.
+- Negative proof (4.3, reverted): pointing the default preset at the old starter envelope fails 7 showcase tests, e.g. `battle "Three-Way Skirmish", seed 1: "Patient Defender" has no cells left`, and `battle "Three-Way Skirmish" description: expected undefined to be truthy`. Raising `MIN_TERRITORY_TRANSFERS` to 5000 fails with `battle "Four Corners", seed 1: only 267 territory transfers (need 5000)`.
+- Visual check (5.1, dev server + Playwright, screenshots kept in the scratchpad, not the repo): gallery tiles are dense and four-/three-coloured, workspace description shown above them; both battles at cycle 50 (~5 s at 10 gen/s) show every colour alive (Four Corners 244/170/129/70 cells, Tug of War 62/48/28), fronts colliding. Honest note: Life-family soup burns off, so by 5 s the dish is sparser (about 15-20 % live) than the tile; at 300 cycles all four Four Corners organisms are still alive, Tug of War has settled to a few colonies.
+
+### Completion Notes List
+
+- Route: headless serializer composition (FD2): `createFakeRepositories` -> `seedDefaultWorkspace` -> organisms saved after `OrganismSchema.parse` (uuid ids, `ruleContentHash` hashes) -> battles via `projectBattleForSave` -> `workspaceMeta.save` -> `exportWorkspace` -> Prettier.
+- **Name/id choice for owner veto (FD1): "Colony Clash", id `colony-clash`** (stable forever). Starter deleted, manifest replaced, `defaultPresetId: colony-clash`.
+- Final roster (name / colorToken / dominance / aging / rules in order):
+  - Conway's Classic (stock) / sky-blue / 50 / no / B3, S2-3.
+  - Ember Raiders / vermillion / 70 / no / raid an Amber Tide cell (occupied + organismType Amber Tide + own neighborCount >= 2); born empty with 3; survive 2-3.
+  - Moss Weavers / bluish-green / 75 / no / overgrow an Ember Raiders cell (occupied + organismType + own neighborCount >= 2); born empty with 3; born empty with 6; survive 2-3.
+  - Amber Tide / amber / 60 / aging on / die at age >= 30; flood a Conway's Classic cell (occupied + organismType + >= 2); born empty with 3; survive 2-3.
+  - Invasion chain: Weavers -> Raiders -> Tide -> Conway (each invader outranks its prey, so it wins the birth-vs-survival contest).
+- Battles: Four Corners 100x60 (newest): Conway TL, Weavers TR, Raiders BR, Tide BL. Tug of War 50x30: Weavers | Tide | Conway (Raiders appear only in Four Corners).
+- Measured over 50 cycles (identical for all seeds, no dominance ties): Four Corners 267 transfers, Tug of War 109; max single-organism share 40 % / 45 %. Gate floors: `MIN_TERRITORY_TRANSFERS = 50`, `MAX_LIVE_SHARE = 0.9`. Tuning history: Amber Tide with B34/S234 and Weavers with S2-4 both overran the dish; first-match invasion at neighborCount >= 3 gave too few transfers, >= 2 gave 200-450.
+- **AC5 gap for owner: Conway's Classic carries no description.** FD2/M9 say ship the stock record unmodified, so the static test exempts it and the workspace and battle descriptions explain it. Adding a description to `CONWAYS_CLASSIC` itself would be a domain change (the test deep-equals it) and is left as an owner decision.
+- Tug of War is weak past ~15 s (small dish settles into a few colonies); it satisfies every 5 s gate. The 100x60 flagship keeps evolving to 300 cycles.
+- `presetManifest.ts`: added one sentence to the authoring path (improve an existing preset via import, edit, export). "How the first preset was produced" is still true.
+- `npm run ci:dev` green (typecheck, lint with one pre-existing `BattleGallery.tsx` warning, format, spec:check, boundary, coverage, build, bundle:check, bench, e2e chromium 314 passed / 1 skipped).
+
+### File List
+
+- apps/web/public/workspaces/colony-clash.json (new)
+- apps/web/public/workspaces/index.json (modified)
+- apps/web/public/workspaces/starter-workspace.json (deleted)
+- apps/web/lib/workspaces/presetShowcase.test.ts (new)
+- apps/web/lib/workspaces/presetManifest.ts (comment only)
+- docs/implementation-artifacts/7-3-showcase-preset-content.md
+- docs/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-09-28: Story 7.3 implemented: Colony Clash default preset replaces the dev-fixture starter; showcase gate test added.
+
+Dev Model: sonnet   # content authoring + one test following existing patterns (route (b) generation, lockstep-test idiom, useSimulation's engine composition); every structural choice is pinned in FD1–FD7, nothing for later stories to build on
+Proposed lane gate: none
