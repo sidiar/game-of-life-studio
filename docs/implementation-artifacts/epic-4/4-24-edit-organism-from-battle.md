@@ -407,7 +407,7 @@ Acceptance Auditor, full mode against the ruling commit `9efe708`).
 - [x] [Review][Patch] The Dev Agent Record's Gate bullet predates the ruling commit — `9efe708`
       added three tests and changed gate behaviour but recorded no post-ruling `ci:dev`; the
       recorded counts are stale — a fresh post-ruling `ci:dev` ran green and is recorded below
-      [docs/implementation-artifacts/4-24-edit-organism-from-battle.md]
+      [docs/implementation-artifacts/epic-4/4-24-edit-organism-from-battle.md]
 - [x] [Review][Defer] FR-1.3's battle-origin sole-open-battle exception now lives only in this
       story's ACs and Review Findings; the PRD's FR-1.3 text is unamended — deferred to the Epic 4
       UX reconciliation, recorded in deferred-work.md
@@ -728,7 +728,7 @@ Modified:
 - packages/domain/src/organismDeleteGuard.ts (comment only)
 - docs/implementation-artifacts/deferred-work.md
 - docs/implementation-artifacts/sprint-status.yaml
-- docs/implementation-artifacts/4-24-edit-organism-from-battle.md
+- docs/implementation-artifacts/epic-4/4-24-edit-organism-from-battle.md
 
 ## Change Log
 

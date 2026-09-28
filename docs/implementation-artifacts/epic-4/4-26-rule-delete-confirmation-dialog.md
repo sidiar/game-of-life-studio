@@ -328,7 +328,7 @@ React 19.2 (automatic batching, so `setConfirming(null)` and the parent's `setDr
 - `docs/planning-artifacts/epics.md`: Story 4.26 (`:1302-1313`), Story 4.10 AC3 (`:1113`).
 - `docs/implementation-artifacts/deferred-work.md` (~`:1652-1670`): the cascade entry, notes
   (1) and (2).
-- `docs/implementation-artifacts/4-10-rule-cards-empty-state.md` AC5 / FD6.
+- `docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md` AC5 / FD6.
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md:596-598`.
 - `docs/project-context.md`: the live-region trap, AR-35 per-component imports, `ci:dev`.
 

@@ -31,7 +31,7 @@ import { battleCountLabel, ruleTargetCountLabel } from '@/lib/organisms/usageLab
  * deliberate divergence for the next UX touch.
  *
  * `D1`–`D5` below are the owner's review decisions on this story, recorded in
- * `docs/implementation-artifacts/4-20-usage-visibility-ui.md` (Review Findings) — that file is
+ * `docs/implementation-artifacts/epic-4/4-20-usage-visibility-ui.md` (Review Findings) — that file is
  * where each label resolves; `spec:check` does not know them.
  */
 

@@ -564,7 +564,7 @@ via three parallel adversarial layers (Blind Hunter, Edge Case Hunter, Acceptanc
 - [x] [Review][Patch] FD4 header bullet deleted wholesale, taking the native action-`<select>` rationale with it [apps/web/components/organisms/editor/RuleCard.tsx header] — Task 3 said retire the *"disabled" clause*; project-context says drop the tag, keep the prose. The reason the Action control is a native `<select>` (the `<OrganismRoster>` `AddSelect` decision — zero bundle, free keyboard/AT) is no longer recorded anywhere in the file. Fix: restore that sentence. (auditor)
 - [x] [Review][Patch] `Card` comment omits two Task 3 points [apps/web/components/organisms/editor/RuleCard.tsx:~443] — the accessible-name point (an empty-content pseudo-element on a non-control joins no accessible name, contrast the 4.9 FD4 swatch case) is absent, and the `themeTokens.test.ts` `var(` scan point sits on `dropLine` rather than the Card. (auditor)
 - [x] [Review][Patch] Doc comment left mid-sentence [apps/web/components/organisms/editor/OrganismEditorModal.tsx:161] — "…and a fresh / draft per open is / the `mounted` gate's doing" — a dangling two-word line from an unre-read edit. Reflow. (blind)
-- [x] [Review][Patch] Dev Agent Record misstates which pointer tests scroll [docs/implementation-artifacts/4-12-rule-reordering.md Completion Notes / Change Log] — three pointer tests exist; only drag-below and Escape scroll handle 1 into view. "drag card 3 above card 1" measures `cardGroup(1)` without scrolling, so its `before` indicator is proven against a negative `clientY` — mechanically FD8 (an off-screen rect still resolves the slot), but the record must say so. (auditor)
+- [x] [Review][Patch] Dev Agent Record misstates which pointer tests scroll [docs/implementation-artifacts/epic-4/4-12-rule-reordering.md Completion Notes / Change Log] — three pointer tests exist; only drag-below and Escape scroll handle 1 into view. "drag card 3 above card 1" measures `cardGroup(1)` without scrolling, so its `before` indicator is proven against a negative `clientY` — mechanically FD8 (an off-screen rect still resolves the slot), but the record must say so. (auditor)
 - [x] [Review][Defer] `cursor: grabbing` does not persist once the pointer leaves the 16px handle [apps/web/components/organisms/editor/RuleCard.tsx `DragHandle`] — deferred, cosmetic: the cursor follows hit-testing, not pointer capture, so `&:active` shows `grabbing` only while over the handle; a body-level cursor during the drag belongs with the dragging-CSS item already deferred to the UX reconciliation touch. (blind)
 
 **Dismissed as noise (7):** the plain-click flash (deferred item 7, recorded); no auto-scroll (FD8, deferred item 1); Escape leaves the card holding capture until release (by design — FD6 cancels editor-side, the card self-heals on `pointerup` and every path through `endDrag`); the `ruleDraft.ts` import + re-export of `RULE_ACTIONS` (the import is used by `isRuleAction`/`ruleActionLabel`; the move is Task 1/FD9, not an unrelated refactor); `moveRule` tests not pinning element identity (the helper never touches rule objects); the first card's `-7px` `before` line being clipped (the scroller has ~100px of header above the list — measured); the "before" bundle figures not re-measured on `main` (the only commit between 4.11's measurement and this story's baseline is #57, `implement-next-story.toml` only — `git diff --stat 401970a..71bc1a0`).
@@ -672,8 +672,8 @@ via three parallel adversarial layers (Blind Hunter, Edge Case Hunter, Acceptanc
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/organism-editor.html:527-540, 555-563` | `.rule-card` (no `.dragging` exists), `.drag-handle` + its hover. |
 | `docs/planning-artifacts/rfcs/RFC-004-simulation-rules-engine.md:95-100, 289-291, 442-449, 486-500, 513, 894-896` | Order = priority; first match; phase-partitioned resolution (why the UI never groups by action); rule identity across reordering; Risk 8 (unreachable rules, out of scope). |
 | `docs/planning-artifacts/architecture.md:356` | M10 — the order is priority *within* a phase, strategy-owned. |
-| `docs/implementation-artifacts/4-10-rule-cards-empty-state.md` | FD4 (the disabled handle), FD6 (the focus effect and its `pendingFocus` rejection — read it to see why AC8's ref is a different case), AC5 (non-destructive targets). |
-| `docs/implementation-artifacts/4-11-condition-builder.md` | The habits (Previous story intelligence below); the review's "tests ticked but never written" finding. |
+| `docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md` | FD4 (the disabled handle), FD6 (the focus effect and its `pendingFocus` rejection — read it to see why AC8's ref is a different case), AC5 (non-destructive targets). |
+| `docs/implementation-artifacts/epic-4/4-11-condition-builder.md` | The habits (Previous story intelligence below); the review's "tests ticked but never written" finding. |
 | `docs/implementation-artifacts/deferred-work.md:1500-1501, 1533-1560, 1586-1589` | The entries Task 7 closes; the double-click cascade (same geometry hazard; a drop does not delete, so it does not apply here). |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15/4.24/4.25 gated on Epic 3; this story proposes no gate. |
 
@@ -859,7 +859,7 @@ work.md` is append-only plus strike-throughs.
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md:85-89,
   350-357, 376-379, 595-600, 725-738`; `clinical-lab-theme/organism-editor.html:527-540,
   555-563, 1006-1013, 1304-1320`.
-- `docs/implementation-artifacts/4-10-rule-cards-empty-state.md` (FD4, FD6, AC5, Review
+- `docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md` (FD4, FD6, AC5, Review
   Findings); `4-11-condition-builder.md` (Review Findings, the habits); `4-9-…` (FD3 status
   region); `2-6-…` → `epic-2/` (pointer capture, `touchAction`, the stroke idiom).
 - `docs/implementation-artifacts/deferred-work.md:1500-1501, 1533-1560, 1586-1589`.
@@ -974,7 +974,7 @@ the tasks, wrote this record, re-ran `ci:dev`.
 ### File List
 
 **New:**
-- `docs/implementation-artifacts/4-12-rule-reordering.md`
+- `docs/implementation-artifacts/epic-4/4-12-rule-reordering.md`
 
 **Modified:**
 - `apps/web/components/organisms/editor/RuleCard.tsx`

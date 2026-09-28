@@ -912,8 +912,8 @@ are otherwise unchanged.
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/organism-editor.html:627-710, 1032-1055` | `.condition-row`, `.select-input`, `.number-input`, `.btn-delete-condition`, `.btn-add-condition`, the row markup and the four-option selector FD1 declines. |
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:336-346, 365-374, 383-416, 602-611, 767-770` | The row ASCII, the components, the property/operator/value table, range UI, add/delete flows, the validation strings. |
 | `docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md:187-204` | FR-2.5 — the property descriptions and the cell-state parentheticals (FD2). |
-| `docs/implementation-artifacts/4-10-rule-cards-empty-state.md` | FD2 (UI ⊂ schema), FD6 (the focus diff), FD8 (updater-style setter), the review findings as habits (CSS.escape, the non-loose branch test, no escape hatches in test fixtures, derive names never literals). |
-| `docs/implementation-artifacts/4-6-dominance-control.md`, `4-5-organism-name-field.md` | The numeric-input and validated-input decisions this story reuses; read their FD lists. |
+| `docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md` | FD2 (UI ⊂ schema), FD6 (the focus diff), FD8 (updater-style setter), the review findings as habits (CSS.escape, the non-loose branch test, no escape hatches in test fixtures, derive names never literals). |
+| `docs/implementation-artifacts/epic-4/4-6-dominance-control.md`, `4-5-organism-name-field.md` | The numeric-input and validated-input decisions this story reuses; read their FD lists. |
 | `docs/implementation-artifacts/deferred-work.md:48, 732-737, 755-762, 1098-1106, 1486-1490, 1506-1507` | The seven entries Task 10 closes or re-points. |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15/4.24/4.25 gated on Epic 3; this story proposes no gate. |
 
@@ -1107,7 +1107,7 @@ are 4.10's (`components/organisms/editor/**`, `lib/organisms/ruleDraft.*`, `them
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/
   organism-editor.html:627-710, 1032-1055`; `organism-editor-design.md:336-346, 365-374, 383-416,
   602-611, 731, 767-770`.
-- `docs/implementation-artifacts/4-10-rule-cards-empty-state.md` (FD2, FD6, FD8, Review Findings);
+- `docs/implementation-artifacts/epic-4/4-10-rule-cards-empty-state.md` (FD2, FD6, FD8, Review Findings);
   `4-6-dominance-control.md` (FD2–FD4); `4-5-organism-name-field.md` (FD1–FD4);
   `4-7-aging-degradation-toggle.md` (FD7 — the lift threshold); `3-2-gol-rules-layer.md` (FD1 —
   the engine's test-only domain edge); `1-6-…` → `epic-1/` (the AR-45 matrix).

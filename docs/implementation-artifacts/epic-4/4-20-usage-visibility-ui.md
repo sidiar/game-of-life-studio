@@ -506,7 +506,7 @@ branch touched (verified against the run log and the import graph).
 - [x] [Review][Patch] **D2 made a click inside the panel land focus INSIDE the footer, so the two
       tests that pin FD4's out-of-footer path against MUI's real root handler no longer do — and
       three comments plus two story passages still describe the old shape**
-      [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown, apps/web/e2e/organisms.spec.ts:test 3, apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:test 54, apps/web/components/organisms/editor/UsageIndicator.test.tsx, docs/implementation-artifacts/4-20-usage-visibility-ui.md:FD3 + Task 3]
+      [apps/web/components/organisms/editor/UsageIndicator.tsx:handleKeyDown, apps/web/e2e/organisms.spec.ts:test 3, apps/web/components/organisms/editor/OrganismEditorModal.test.tsx:test 54, apps/web/components/organisms/editor/UsageIndicator.test.tsx, docs/implementation-artifacts/epic-4/4-20-usage-visibility-ui.md:FD3 + Task 3]
       — the `<li>` click now focuses the `tabIndex={0}` list, which is inside `rootRef`, so a
       regression to a footer-scoped `onKeyDown` would pass modal test 54 and e2e test 3 unchanged.
       Both now also move focus onto the Organism Name field (programmatically — a `pointerdown`
@@ -599,7 +599,7 @@ an event whose target is `document` reaches neither).
       without detectable auto-repeat, some remote-desktop bridges) is outside the guard entirely.
       The comment now says both rather than implying the hold is fully covered.
 - [x] [Review][Patch] **`deferred-work.md` citations drifted off their entries — and FD9 quotes a
-      sentence D3's rewrite deleted** [docs/implementation-artifacts/4-20-usage-visibility-ui.md:FD9,
+      sentence D3's rewrite deleted** [docs/implementation-artifacts/epic-4/4-20-usage-visibility-ui.md:FD9,
       References, AC1, Task 7; docs/implementation-artifacts/deferred-work.md:2894,2903] — FD9 and
       the References still cited `:2420-2422` (now the struck 4.17 Clone & Edit entry) and FD9
       quoted "an unread prop is a lie", which the re-pointed entry no longer contains; this story's
@@ -612,7 +612,7 @@ an event whose target is `document` reaches neither).
       the entry is open on its dialog half; the comment now claims the `battles`-on-the-modal half
       only and names Story 4.24 for the rest.
 - [x] [Review][Patch] **D5's shipped behaviour and the accent-on-caret deviation have no AC/Task
-      text** [docs/implementation-artifacts/4-20-usage-visibility-ui.md:AC4, Task 3] — D1 and D2
+      text** [docs/implementation-artifacts/epic-4/4-20-usage-visibility-ui.md:AC4, Task 3] — D1 and D2
       each got an amendment bullet; D5 (a held Escape closes one layer; the test's synthetic repeat
       is dispatched on the trigger) lived only in the decision paragraph, the Completion Notes and
       the Change Log, and Task 3's ticked styling bullet still said "the count in `--gol-accent`"
@@ -782,7 +782,7 @@ order is cosmetic); `buildUsageIndex` run once at the Library and once at the mo
 - [Source: packages/domain/src/usageIndex.ts] — `resolveOrganismUsage`, `OrganismUsageEntry`
 - [Source: packages/domain/src/ruleReferenceIndex.ts] — `buildRuleReferenceIndex`,
   `referencingOrganismIds`, and the rules-vs-organisms note
-- [Source: docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md#Acceptance Criteria]
+- [Source: docs/implementation-artifacts/epic-4/4-19-usage-rule-reference-derivations.md#Acceptance Criteria]
   — AC2/AC3/AC4 pin the shapes this story renders
 - [Source: docs/implementation-artifacts/deferred-work.md] (`:743-755`, `:775-788`, `:791-808`,
   `:2431-2452`, `:2493-2503` — current lines as of the 2026-09-24 third review; this story's own
@@ -1023,7 +1023,7 @@ Modified:
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/4-20-usage-visibility-ui.md` (this file)
+- `docs/implementation-artifacts/epic-4/4-20-usage-visibility-ui.md` (this file)
 
 ### Review Record (2026-09-23)
 

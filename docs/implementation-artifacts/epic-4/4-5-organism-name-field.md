@@ -451,7 +451,7 @@ Reviewed on **Fable** against an **Opus** implementation, via three parallel adv
 | `apps/web/e2e/organisms.spec.ts:5, 17-22, 31-34, 266-450, 451-784` | `CREATE`, `openEditor`, the console-capture idiom, the 4.3 block (settled-axe pattern, WebKit branch), the 4.4 block (region locators). |
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/organism-editor.html:153-208, 906-916` | `.form-field`/`.field-label`/`.text-input`/`.char-count` CSS (values above) and the field markup: label "Organism Name", placeholder, `maxlength="50"` (not reproduced — FD1). **No error-state CSS and no ARIA anywhere in the file.** |
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:129-159, 547-556, 723-744, 747-777` | Label/placeholder/max; "required, show error if empty on save attempt"; the two error messages (verbatim copy); "red text and warning icon, red border, focus first invalid on save". |
-| `docs/implementation-artifacts/4-4-three-column-responsive-layout.md` | FD2 (columns scroll — the field is the first content in the ~700px budget), FD6 (named slots), the review's `aria-labelledby` id-equality lesson, bundle figures. |
+| `docs/implementation-artifacts/epic-4/4-4-three-column-responsive-layout.md` | FD2 (columns scroll — the field is the first content in the ~700px budget), FD6 (named slots), the review's `aria-labelledby` id-equality lesson, bundle figures. |
 | `docs/implementation-artifacts/epic-2/2-11-battle-name-dirty-tracking.md:278-297, 613-623` | FD4 (aria scheme), FD5 (no form), FD6 and its reversal to clamp — the decision FD1 here consciously departs from. |
 | `docs/implementation-artifacts/deferred-work.md:29, 97, 305, 753-767, 768-775, 934-939` | Code-unit counting (settled here), no `.min(1)` (stays deferred), danger-on-hover contrast, the header/footer divergence (the name stays in the column), Save's cross-fade (4.16's), the content-height budget. |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.24/4.25 gated on `epic-3`; this story touches none of Epic 3's surfaces. |
@@ -586,7 +586,7 @@ while an input has focus" is battle-route-only and the organism editor is not mo
   547-556, 723-744, 747-777`; `clinical-lab-theme/organism-editor.html:49-55, 153-208, 900,
   906-916`; `ORGANISM-EDITOR-UPDATES.md:9-21` (the header-name revision, open);
   `UX-PHASE-COMPLETION-REVIEW.md:45` ("text input with character counter (50 char max)").
-- `docs/implementation-artifacts/4-4-three-column-responsive-layout.md` (FD2, FD6, review
+- `docs/implementation-artifacts/epic-4/4-4-three-column-responsive-layout.md` (FD2, FD6, review
   findings); `4-3-editor-modal-shell.md` (FD1, FD4, FD5); `epic-2/2-11-battle-name-dirty-tracking.md`
   (FD4–FD6 and the clamp reversal).
 - `docs/implementation-artifacts/deferred-work.md:29, 97, 305, 753-767, 768-775, 785-793, 934-939`.
@@ -721,7 +721,7 @@ Modified:
 - `packages/domain/src/index.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/4-5-organism-name-field.md`
+- `docs/implementation-artifacts/epic-4/4-5-organism-name-field.md`
 
 ### Change Log
 

@@ -592,7 +592,7 @@ CI on the pushed branch (PR #49, dev commit `2889375`): `quality` green (2m43s),
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/organism-editor.html:275-297, 922, 927-950` | `.in-use::after`, `.color-reuse-warning` (there is **no markup instance** of the warning — the CSS is the only spec of its shape), the two-sentence description, the `title` hints. |
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:168, 200, 757, 797` | "shows a warning", "still selectable", "[Organism Name] already uses this color", "no filtering". Its description text (`:168`) is superseded by the mockup's (the 4.8 precedent: the mockup wins). |
 | `docs/implementation-artifacts/deferred-work.md:56, 305, 343, 1155-1196, 1279-1289` | The three items this story strikes; the danger-as-text entry FD5 leans on; the 4-8 section (FD9's loading window, the 4.17/4.25 notes); the Playwright port-reuse trap for local e2e. |
-| `docs/implementation-artifacts/4-8-color-picker-selection-defaults.md` | FD1–FD9, the review patches (assert attributes exist; derive names; not-vacuous colour assertions; strike-not-rewrite), the bundle figures (`/organisms` 295.4 KB, editor chunk 5427 B before the mockup fix). |
+| `docs/implementation-artifacts/epic-4/4-8-color-picker-selection-defaults.md` | FD1–FD9, the review patches (assert attributes exist; derive names; not-vacuous colour assertions; strike-not-rewrite), the bundle figures (`/organisms` 295.4 KB, editor chunk 5427 B before the mockup fix). |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15/4.24/4.25 gated on Epic 3; this story proposes no gate. |
 
 ### Architecture compliance
@@ -756,7 +756,7 @@ Step S sync keeps both hunks).
   organism-editor.html:275-297, 922, 927-950`; `organism-editor-design.md:168, 200, 757, 797`.
 - `docs/implementation-artifacts/palette-cvd-validation.md` (the whole document — G1–G4, the
   clamp limitation, the "normal vision only" limitation G5 closes, the re-tune rule).
-- `docs/implementation-artifacts/4-8-color-picker-selection-defaults.md` (AC3, AC5, AC6, FD1,
+- `docs/implementation-artifacts/epic-4/4-8-color-picker-selection-defaults.md` (AC3, AC5, AC6, FD1,
   FD4–FD9, the review findings, the owner review); `4-5-organism-name-field.md` (FD4 — the alert
   idiom this story deliberately does not copy); `3-13-speed-control.md` (trap 5); `3-12-…` (FD2
   (a) — the tint measurement).

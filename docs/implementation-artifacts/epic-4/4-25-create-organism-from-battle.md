@@ -566,7 +566,7 @@ Playwright 1.62. No new dependencies.
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md` `:40-54`
   (exits, return context); `clinical-lab-theme/petri-dish-lab-mode.html` `:260-278`
   (`.create-organism-btn`), `:682-694`.
-- `docs/implementation-artifacts/4-24-edit-organism-from-battle.md` (FD5 overlay, FD6 no Delete,
+- `docs/implementation-artifacts/epic-4/4-24-edit-organism-from-battle.md` (FD5 overlay, FD6 no Delete,
   AC4 invariants).
 - `docs/implementation-artifacts/deferred-work.md`: the entries listed in Task 5, by title.
 - `docs/implementation-artifacts/lane-gates.yaml`: 4.25 requires epic-3, which is satisfied.

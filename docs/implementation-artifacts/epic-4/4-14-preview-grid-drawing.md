@@ -658,7 +658,7 @@ assertion — or items `deferred-work.md` already carries).
 | `docs/planning-artifacts/rfcs/RFC-005-application-state-modes-undo.md:137-177` | Decision 2's tree and the M3 callout ("its own subtree and refs"). |
 | `docs/planning-artifacts/component-tree-battle-page.md:255-269, 463-465` | §3.10's variants and the "preview reuse" line this story amends (Open flags). |
 | `docs/implementation-artifacts/deferred-work.md:228, 344, 514, 1360-1364, 1637, 1707-1711` | The pointer-only gap, the smoke-check note, the mint-site and `contentHash` notes for 4.15, the port trap, the 3.18 pointers Task 5 extends. |
-| `docs/implementation-artifacts/4-13-editor-validation-feedback.md` (FD1, "What NOT to build", Review Findings), `4-8-…md` AC4, `4-7-…md` FD4, `4-4-…md` FD2/FD3 | The decisions this story inherits. |
+| `docs/implementation-artifacts/epic-4/4-13-editor-validation-feedback.md` (FD1, "What NOT to build", Review Findings), `4-8-…md` AC4, `4-7-…md` FD4, `4-4-…md` FD2/FD3 | The decisions this story inherits. |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15 gated on 3.15; this story proposes no gate. |
 
 ### Architecture compliance
@@ -839,7 +839,7 @@ epic-4 lane; `components/PetriDishCanvas.tsx` is read, never written.
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/organism-editor.html:121-129,
   728-769, 1193-1206, 1296-1302`.
 - `docs/implementation-artifacts/clinical-lab-contrast-validation.md:41-64`.
-- `docs/implementation-artifacts/4-13-editor-validation-feedback.md` (FD1, What NOT to build,
+- `docs/implementation-artifacts/epic-4/4-13-editor-validation-feedback.md` (FD1, What NOT to build,
   Review Findings); `4-8-color-picker-selection-defaults.md` (AC4, `:903`);
   `4-7-aging-degradation-toggle.md` (FD4); `4-4-three-column-responsive-layout.md` (FD2, FD3,
   `:169-172`); `epic-2/2-5-*`, `2-6-*`, `2-7-*`, `2-12-*`, `2-15-*` (the edit canvas's decisions,
@@ -962,7 +962,7 @@ Claude Sonnet 5 (dev-story)
 - `apps/web/e2e/organisms.spec.ts` (modified — 6 new tests)
 - `docs/implementation-artifacts/deferred-work.md` (modified — 2 pointer appends + new section)
 - `docs/implementation-artifacts/sprint-status.yaml` (modified — status transitions)
-- `docs/implementation-artifacts/4-14-preview-grid-drawing.md` (this file — tasks checked,
+- `docs/implementation-artifacts/epic-4/4-14-preview-grid-drawing.md` (this file — tasks checked,
   status, Dev Agent Record)
 
 ### Change Log

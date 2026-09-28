@@ -345,14 +345,14 @@ Hunter + Acceptance Auditor, 32 raw findings, 12 dismissed as noise or spec-mand
       regex is `Story \d+\.\d+`), so three pointers were silently exempt
       [apps/web/components/organisms/editor/OrganismEditorModal.tsx:82]
 - [x] [Review][Patch] Dev Agent Record counts: 6 (not 7) new Library tests, 8 (not 9) new e2e
-      per project [docs/implementation-artifacts/4-3-editor-modal-shell.md:545,565,568]
+      per project [docs/implementation-artifacts/epic-4/4-3-editor-modal-shell.md:545,565,568]
 - [x] [Review][Patch] Completion Notes labelled Task 5's deferred-work items as if all three were
       delivered as listed; items (2) and (3) were folded into one bullet and the tab-order item
-      added [docs/implementation-artifacts/4-3-editor-modal-shell.md:604-606]
+      added [docs/implementation-artifacts/epic-4/4-3-editor-modal-shell.md:604-606]
 - [x] [Review][Patch] AC8 / Task 5's last sub-item is ticked while the record says the CI check
       is "pending, not done" — performed by this review once the PR exists: run `34839513811`
       on `0ea9392`, quality + e2e success; recorded in the Dev Agent Record
-      [docs/implementation-artifacts/4-3-editor-modal-shell.md:300-302,575-576]
+      [docs/implementation-artifacts/epic-4/4-3-editor-modal-shell.md:300-302,575-576]
 - [x] [Review][Defer] `useOrganismEditorModal.test.tsx`'s `afterEach` removes every
       `[aria-hidden="true"]` node in the document — including the still-mounted dialog's glyph
       spans and the RTL container — before RTL's own cleanup; copied verbatim from
@@ -584,7 +584,7 @@ key off the same `[role="dialog"]` presence this modal produces — nothing for 
   1222-1234, 1343-1357`; `organism-library.html:122-139, 405-406`.
 - `docs/planning-artifacts/implementation-readiness-report-2026-07-16.md:347, 370, 403` (inert
   Save accepted as a within-epic seam).
-- `docs/implementation-artifacts/4-2-organism-card-grid.md:195-217, 314-388, 391-452, 674-687`
+- `docs/implementation-artifacts/epic-4/4-2-organism-card-grid.md:195-217, 314-388, 391-452, 674-687`
   (the slot, review classes, forced decisions, bundle figures).
 - `docs/implementation-artifacts/deferred-work.md:187, 341, 418, 430, 699-716`.
 - `docs/implementation-artifacts/lane-gates.yaml` (4.24/4.25 gated on `epic-3`).
@@ -697,7 +697,7 @@ Claude Opus 5 (claude-opus-5), via `bmad-dev-story` on branch `story/4-3-editor-
 - `apps/web/components/organisms/OrganismLibrary.test.tsx` (modified)
 - `apps/web/e2e/organisms.spec.ts` (modified)
 - `docs/implementation-artifacts/deferred-work.md` (modified)
-- `docs/implementation-artifacts/4-3-editor-modal-shell.md` (this file)
+- `docs/implementation-artifacts/epic-4/4-3-editor-modal-shell.md` (this file)
 - `docs/implementation-artifacts/sprint-status.yaml` (modified)
 
 ## Change Log

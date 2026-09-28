@@ -360,7 +360,7 @@ suites were re-run independently before triage (green). 0 `decision-needed`, 13 
       zero-match message pushes the page into horizontal scroll. `overflowWrap: 'anywhere'`.
       [apps/web/components/organisms/OrganismLibrary.tsx:47]
 - [x] [Review][Patch] Dev Agent Record prose said `/` "unchanged" while its own table records
-      +0.2 KB. Prose corrected. [docs/implementation-artifacts/4-2-organism-card-grid.md]
+      +0.2 KB. Prose corrected. [docs/implementation-artifacts/epic-4/4-2-organism-card-grid.md]
 - [x] [Review][Defer] Dominance / Aging stat cells are label/value `<div>` stacks with no semantic
       association (a `<dl>`/`<dt>`/`<dd>` would pair them for screen readers)
       [apps/web/components/organisms/OrganismCard.tsx:182-196] — deferred: the mockup and Task 3
@@ -592,7 +592,7 @@ touched (FD9).
   `RFC-003-frontend-ui-architecture.md:210-222` (Framer sketch — illustrative, FD7);
   `RFC-005-application-state-modes-undo.md:71,126-133,168-171` (ephemeral filter state, the
   Library tree entry).
-- `docs/implementation-artifacts/4-1-organisms-route-top-navigation.md:143-189,316-319` (what 4.1
+- `docs/implementation-artifacts/epic-4/4-1-organisms-route-top-navigation.md:143-189,316-319` (what 4.1
   left for 4.2), `:244-277` (review findings and dismissals), `:483-497` (bundle figures).
 - `docs/implementation-artifacts/deferred-work.md:187,193,327,335,337,363,392,642-660`.
 - `docs/project-context.md` — Framework rules (three state categories, repositories injected),

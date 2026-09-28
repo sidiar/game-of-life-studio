@@ -538,7 +538,7 @@ The recent `main` history is the 4.20 merge (#75), the 5.5 merge (#78) and a Bat
   delete exit point and the warning copy. `organism-editor-design.md:284-300, :573-583` has the editor
   Delete surface (FD1). `clinical-lab-theme/organism-library.html:314-349, :436-444, :648-675` has the
   card Delete.
-- `docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` and
+- `docs/implementation-artifacts/epic-4/4-19-usage-rule-reference-derivations.md` and
   `4-20-usage-visibility-ui.md` (FD1–FD14 and the three review passes).
 - `docs/project-context.md` covers referential-integrity-is-core, the live-region trap, the repository
   seam, `ci:dev`, and the pipe-swallowed exit codes.
@@ -676,7 +676,7 @@ Modified:
 - `apps/web/e2e/organisms.spec.ts`
 - `docs/implementation-artifacts/deferred-work.md`
 - `docs/implementation-artifacts/sprint-status.yaml`
-- `docs/implementation-artifacts/4-21-delete-integrity-blocks.md` (this file)
+- `docs/implementation-artifacts/epic-4/4-21-delete-integrity-blocks.md` (this file)
 
 ### Change Log
 

@@ -533,7 +533,7 @@ adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). 0 `deci
 | `eslint.config.mjs:18-39` | AR-46: `rgb()/rgba()` literals are lint errors in `.ts/.tsx` — the glow MUST be a token. |
 | `docs/planning-artifacts/ux-designs/…/clinical-lab-theme/organism-editor.html:165-170, 390-448, 954-964, 1286-1294` | `.field-description`, the dominance CSS, markup (label, description, range `value="8"`, number input, "1"/"100" labels) and the input-event sync script. `value="8"` is the mockup's sample organism; the new-organism default is 5 (design doc `:529`). |
 | `docs/planning-artifacts/ux-designs/…/organism-editor-design.md:209-250, 520-535, 759-761` | Layout sketch, "Default Value: 5 (for new organisms)", "Range: Must be 1-100 / Auto-correct: snap to min/max". No non-integer message exists. |
-| `docs/implementation-artifacts/4-5-organism-name-field.md` | FD1–FD6 (refuse/clamp reasoning, draft seam, no transition, `styled('input')` over MUI), the review patches (assert `aria-describedby` exists; derive numbers; exactly-N guards), bundle figures. |
+| `docs/implementation-artifacts/epic-4/4-5-organism-name-field.md` | FD1–FD6 (refuse/clamp reasoning, draft seam, no transition, `styled('input')` over MUI), the review patches (assert `aria-describedby` exists; derive numbers; exactly-N guards), bundle figures. |
 | `docs/implementation-artifacts/epic-3/3-13-speed-control.md` (on the 3.13 branch) | Traps 2/5/7/9 (jsdom range, aria-hidden marks, `::-moz-range-track`, controlled), the native-range FD, the deferred `<LadderSlider>` item. |
 | `docs/implementation-artifacts/deferred-work.md:87, 745-750, 976-1016, 1018-1050` | MUI Slider trap (unchanged); `<OrganismCard>` dominance stat (unrelated, do not touch); the 3.13 sections (local WebKit `Tab` failure in the 3.12 block — pre-existing); the 4.5 sections. |
 | `docs/implementation-artifacts/lane-gates.yaml` | 4.15/4.24/4.25 gated on Epic 3; this story's proposed row is at the end of this file. |
@@ -680,7 +680,7 @@ changes the `Slider` block before this story's dev starts, copy the merged versi
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md:209-250,
   529, 759-761`; `clinical-lab-theme/organism-editor.html:165-170, 390-448, 954-964, 1286-1294`;
   `clinical-lab-theme/petri-dish-play-mode.html:272-297, 652` (the other native range).
-- `docs/implementation-artifacts/4-5-organism-name-field.md` (FD1–FD6, review findings);
+- `docs/implementation-artifacts/epic-4/4-5-organism-name-field.md` (FD1–FD6, review findings);
   `3-13-speed-control.md` (FD1, traps 2/5/7/9); `4-4-three-column-responsive-layout.md` (FD2 —
   the column scrolls; FD6 — slots).
 - `docs/implementation-artifacts/deferred-work.md:87, 745-750, 785-793, 976-1016, 1018-1050`.

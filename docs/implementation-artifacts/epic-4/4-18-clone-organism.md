@@ -783,7 +783,7 @@ spied object is in the same block).
 | `packages/test-utils/src/mockWorkspace.ts` / `fakeRepositories.ts:77` | `createMockOrganisms()` (deep clones per call), `createMockWorkspace()`, `MOCK_ORGANISM_IDS`, `createFakeRepositories({ organisms, battles })`. |
 | `apps/web/e2e/organisms.spec.ts:3090-3384` | The copied seed helpers, `seedExtraOrganisms`, and the whole 4.17 block whose helpers this story reuses — `settled`, `editorDialog`, `inUseDialog`, `back`, `countBadge`, `storage`, and the WebKit focus branch. The 4.16 block (`:2844`) carries the real-browser quota idiom. |
 | `docs/implementation-artifacts/deferred-work.md:1455-1465, 2405-2411` | The naming entry this story adds a consumer to, and the entry that IS this story's brief. |
-| `docs/implementation-artifacts/4-17-edit-organism-from-library.md` (FD3–FD9, Review Findings) | The gate's sequencing, the focus-restore idiom, the re-entrancy guard, and the owner decision (2026-09-22) that kept the clone sentence in the dialog copy on the promise that 4.18 makes it true. |
+| `docs/implementation-artifacts/epic-4/4-17-edit-organism-from-library.md` (FD3–FD9, Review Findings) | The gate's sequencing, the focus-restore idiom, the re-entrancy guard, and the owner decision (2026-09-22) that kept the clone sentence in the dialog copy on the promise that 4.18 makes it true. |
 | `docs/planning-artifacts/epics.md:1202-1212` | Story 4.18's ACs. `:1189-1200` (4.17), `:1214-1250` (4.19–4.21), `:38, :254` (FR-1.6 traceability). |
 | `docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md:125-127, 147-151, 177` | FR-1.3's two context variants, FR-1.6's three ACs verbatim, FR-2.3's "never run out of a color". |
 | `docs/planning-artifacts/architecture.md:351-353` | **M5** (Library clones are manually managed — no zero-reference GC; no Clone & Edit from the Battle Editor) and **M6** (uncapped, reusable colours, the three disambiguated "20"s). `:261` — G.3, the per-battle 255. |
@@ -965,7 +965,7 @@ Epic 5's next stories touch.**
 - `docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/organism-editor-design.md:24-38,
   537-544`; `ux-design-complete.md:684-696`;
   `clinical-lab-theme/organism-library.html:309-349, 404-442`.
-- `docs/implementation-artifacts/4-17-edit-organism-from-library.md` (FD3–FD9, the Review Findings'
+- `docs/implementation-artifacts/epic-4/4-17-edit-organism-from-library.md` (FD3–FD9, the Review Findings'
   owner decision); `4-16-create-save-organism.md` (the save path, the close-lock, `reload()`);
   `4-2-organism-card-grid.md` (FD1/FD5 — the action row and the tab-stop policy).
 - `docs/implementation-artifacts/deferred-work.md:1455-1465, 2405-2411`.

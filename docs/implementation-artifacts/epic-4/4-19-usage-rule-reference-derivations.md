@@ -247,10 +247,10 @@ and the three-site module-split rationale are each what the story's Task 2 / FD4
 - [x] [Review][Patch] Dev Agent Record attributes the per-file lcov counters to the wrong files —
   the `usageIndex.ts` and `ruleReferenceIndex.ts` rows are swapped (fresh run: `ruleReferenceIndex.ts`
   LF 24 / BRF 8 / FNF 5, `usageIndex.ts` LF 16 / BRF 10 / FNF 4). Both are 100% either way; the
-  evidence line is corrected. [`docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` Debug Log]
+  evidence line is corrected. [`docs/implementation-artifacts/epic-4/4-19-usage-rule-reference-derivations.md` Debug Log]
 - [x] [Review][Patch] File List says `sprint-status.yaml` moved `ready-for-dev → in-progress →
   review`; the committed diff is `backlog → review` (the story was created and implemented in one
-  commit, so no intermediate state reached git). Corrected. [`docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` File List]
+  commit, so no intermediate state reached git). Corrected. [`docs/implementation-artifacts/epic-4/4-19-usage-rule-reference-derivations.md` File List]
 
 ## Dev Notes
 
@@ -519,7 +519,7 @@ a block in dependency order rather than reordering or reflowing the file.
   closure and the import assertion — Story 5.4 / Story 5.8, not this story);
   `RFC-008-testing-and-tooling-strategy.md` Decision 3 (the ≥90% core scope).
 - `docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md` FR-1.3 / FR-1.4 / FR-1.7.
-- `docs/implementation-artifacts/4-18-clone-organism.md` (FD1–FD12 and the Review Findings that
+- `docs/implementation-artifacts/epic-4/4-18-clone-organism.md` (FD1–FD12 and the Review Findings that
   produced the two deferred entries above); `4-17-edit-organism-from-library.md` (why
   `buildUsageIndex` landed early).
 - `docs/implementation-artifacts/deferred-work.md:2437-2440, 2707-2712`;
@@ -629,7 +629,7 @@ reports **0 errors**, which is what the gate enforces.
   the implementation commit (the story was created and implemented in one commit, so no intermediate
   `ready-for-dev` / `in-progress` state reached git); `review → in-progress` in the review commit,
   which left one `[Review][Decision]` open for the owner.
-- `docs/implementation-artifacts/4-19-usage-rule-reference-derivations.md` — **modified.** Tasks
+- `docs/implementation-artifacts/epic-4/4-19-usage-rule-reference-derivations.md` — **modified.** Tasks
   checked, this record, Change Log, Status.
 
 ## Change Log

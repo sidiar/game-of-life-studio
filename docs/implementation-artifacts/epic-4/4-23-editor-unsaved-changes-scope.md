@@ -304,10 +304,10 @@ prompt's three buttons, not on Back/✕. The Enter suppression was checked again
 - [x] [Review][Patch] Completion Notes and Change Log describe D2 as a `document` CAPTURE listener
   calling `preventDefault`/`stopPropagation`. The shipped code instead puts an element-scoped
   `onKeyDown` on each of the three buttons and calls `preventDefault` only. The records also claim
-  the fix "mirrors" the `UsageIndicator` D5 technique without surfacing the deliberate deviation. [docs/implementation-artifacts/4-23-editor-unsaved-changes-scope.md]
+  the fix "mirrors" the `UsageIndicator` D5 technique without surfacing the deliberate deviation. [docs/implementation-artifacts/epic-4/4-23-editor-unsaved-changes-scope.md]
 - [x] [Review][Patch] "`npm run ci:dev` re-run green after the D2 fix (see Debug Log References)"
   points at nothing: Debug Log References has no 2026-09-26 entry. The failed first attempt the
-  code comment cites is not recorded either. [docs/implementation-artifacts/4-23-editor-unsaved-changes-scope.md]
+  code comment cites is not recorded either. [docs/implementation-artifacts/epic-4/4-23-editor-unsaved-changes-scope.md]
 - [x] [Review][Patch] The `ignoreRepeatEnter` comment states its invariant backwards ("a repeat
   cannot occur without an intervening keyup"). It also says D5's outlive-the-panel reason "does not
   apply here", which holds for the flicker the ruling targets but not once an outcome unmounts the
