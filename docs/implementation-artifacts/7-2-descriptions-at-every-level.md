@@ -380,6 +380,10 @@ Owner-ruling pass (2026-09-28):
   copy kept (`deferred-work.md` entry reworded to an accepted wording choice); description-save
   race accepted and documented (row comment, FD6 note extended, connected-mode entry added);
   leave-guard gap accepted (FD7 note + `deferred-work.md` entry). PRD untouched. Status → review.
+- 2026-09-28 — PR CI finding: `e2e (firefox)` timed out on every colour-swatch click (the
+  description field's height moved the 1px visually-hidden radio to a sub-pixel offset Firefox's
+  integer pointer coordinates miss, so the label took the hit); fixed in `ColorPickerField.tsx`
+  by making `HiddenRadio` an invisible layer over the whole swatch — no test changed.
 
 Dev Model: opus   # architecture-shaping (FD4: new gol:workspace key + AppRepositories.workspaceMeta that 7.4–7.6 build on); owner chose opus dev + sonnet review because Fable is unavailable (2026-09-28)
 Review Model: sonnet-5   # second pair of eyes per project convention; ran full review (Blind Hunter + Edge Case Hunter + Acceptance Auditor) against 0ab2e3b..e0faec9 (2026-09-28)

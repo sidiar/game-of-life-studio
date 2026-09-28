@@ -213,17 +213,24 @@ const Swatch = styled('label')({
   },
 });
 
-// The `GridSettingsSection.tsx` copy (never imported — the mode split). Clipped at a real 1px
-// rather than sized to 0x0, which some engines' focus heuristics skip. Never `display: none`,
-// never `hidden` — both remove the control from the accessibility tree and the tab order, which is
-// exactly the semantics this borrows the native radio for.
+// Adapted from the `GridSettingsSection.tsx` copy (never imported — the mode split). Never
+// `display: none`, never `hidden` — both remove the control from the accessibility tree and the tab
+// order, which is exactly the semantics this borrows the native radio for. Unlike that copy it is
+// NOT a 1px box: it is an invisible layer over the whole swatch (Story 7.2 CI finding). A 1px radio
+// sits at whatever sub-pixel offset the column's layout gives it, and Firefox delivers pointer
+// events at integer client coordinates — once the description field shifted the grid by a fraction
+// of a pixel, every pointer hit landed on the label instead of the radio, so Playwright's
+// hit-target check refused the click. Covering the swatch makes the radio the hit target at every
+// offset; the label still receives the click by bubbling (FD7's collapse reads it there).
 const HiddenRadio = styled('input')({
   position: 'absolute',
-  width: '1px',
-  height: '1px',
+  inset: 0,
+  width: '100%',
+  height: '100%',
   margin: 0,
   padding: 0,
   opacity: 0,
+  cursor: 'pointer',
 });
 
 // The `GridSettingsSection.tsx` copy. The radio's accessible name — the palette entry's `name`,
