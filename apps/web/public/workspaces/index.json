@@ -1,0 +1,11 @@
+{
+  "defaultPresetId": "starter-workspace",
+  "workspaces": [
+    {
+      "id": "starter-workspace",
+      "name": "Starter Workspace",
+      "description": "Conway's Classic plus three battling organisms — Aggressive Colonizer, Patient Defender and Chaotic Spreader — with two ready-to-run battles.",
+      "file": "starter-workspace.json"
+    }
+  ]
+}
