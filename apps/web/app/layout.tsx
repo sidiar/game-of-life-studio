@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import AppProviders from '@/components/layout/AppProviders';
+import GoatCounter from '@/components/analytics/GoatCounter';
 import './themes.css';
 
 const SITE_URL = 'https://game-of-life-studio.com';
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" data-theme="clinical-lab">
       <body>
         <AppProviders>{children}</AppProviders>
+        <GoatCounter />
       </body>
     </html>
   );
