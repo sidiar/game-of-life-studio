@@ -214,3 +214,18 @@ Claude Opus 5.5 (claude-opus-5-5), via bmad-dev-story under implement-next-story
 
 Dev Model: opus   # first runtime preset loader: sets the manifest-parse + fetch/timeout + silent-fallback pattern that 7.5 and 7.6 reuse
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 25s | 25s | 18 | 2,726 | 9,907 | 510,677 | 523,328 |
+| Step 1 — create | opus-5-5 | 1 | 5m 20s | 5m 20s | 110 | 3,331 | 248,278 | 5,203,135 | 5,454,854 |
+| Step 2 — implement | opus-5-5 | 1 | 17m 25s | 17m 25s | 204 | 4,293 | 266,407 | 11,133,020 | 11,403,924 |
+| Step 3 — review + PR | sonnet-5-5 | 4 | 16m 40s | 16m 40s | 186 | 19,253 | 360,484 | 5,519,276 | 5,899,199 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 74 | 20,730 | 40,501 | 2,434,085 | 2,495,390 |
+| **Total (create → PR ready)** | | 6 | **39m 49s** | 39m 49s | 518 | 29,603 | 885,076 | 22,366,108 | **23,281,305** |
+
+Run started 2026-09-29 08:38 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
