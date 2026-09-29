@@ -119,16 +119,14 @@ describe('isPristineWorkspace', () => {
       return stock;
     }
 
-    it('is pristine for the current constant', () => {
-      expect(isPristineWorkspace(0, [CONWAYS_CLASSIC])).toBe(true);
-    });
-
     it('is pristine for the stock organism minus its description', () => {
       expect(isPristineWorkspace(0, [withoutDescription()])).toBe(true);
     });
 
-    it('is not pristine when the description was edited', () => {
-      expect(isPristineWorkspace(0, [{ ...clone(), description: 'edited' }])).toBe(false);
+    it('is not pristine for a present-but-undefined description key (only the omitted key widens)', () => {
+      expect(isPristineWorkspace(0, [{ ...withoutDescription(), description: undefined }])).toBe(
+        false,
+      );
     });
 
     it('is not pristine when description-less but otherwise edited', () => {

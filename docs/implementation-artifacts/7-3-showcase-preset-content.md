@@ -4,7 +4,7 @@ baseline_commit: ad6cc635b36e919a8c2141a45d08906d73620115
 
 # Story 7.3: Showcase Preset Content
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -85,6 +85,14 @@ Second review 2026-09-29 of the ruling-pass commit `7585f7b` (Opus; Blind Hunter
 - [x] [Review][Patch] The test title "is not pristine when the seed organism gained a description" is stale: the seed already has one, so the case now tests an edited description [packages/domain/src/pristineWorkspace.test.ts:110]
 - [x] [Review][Patch] The Dev Agent Record points the legacy-store caveat at 7.4, but 7.4 gates on `isFreshWorkspace()` (stamp-based) and is unaffected. The stories actually affected are Settings Import, 7.5 and 7.6 [docs/implementation-artifacts/7-3-showcase-preset-content.md, Completion Notes]
 - [x] [Review][Patch] The File List omits the D1 changes to `presetShowcase.test.ts` (exemption dropped) and `colony-clash.json` (re-exported) [docs/implementation-artifacts/7-3-showcase-preset-content.md, File List]
+
+Third review 2026-09-29 of the D4–D5 ruling commit `1277013` (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor). 0 decision-needed, 5 patch, 0 defer, 8 dismissed.
+
+- [x] [Review][Patch] The Completion Notes are stale after D4/D5: the D1 bullet quotes the superseded 236-char description as current, and the D1-ripple caveat still says a pre-D1 store is not pristine ("Open as D4") [docs/implementation-artifacts/7-3-showcase-preset-content.md, Completion Notes]
+- [x] [Review][Patch] The File List lists `defaultWorkspace.ts` and `pristineWorkspace.test.ts` twice, is split by a blank line, and puts two files on one bullet [docs/implementation-artifacts/7-3-showcase-preset-content.md, File List]
+- [x] [Review][Patch] Two of the "four new tests" duplicate existing ones (edited description; the current constant is pristine), so the Change Log overstates coverage; the case that pins "nothing else loosens" (a present-but-`undefined` `description` key) is untested [packages/domain/src/pristineWorkspace.test.ts:122]
+- [x] [Review][Patch] The comment says a missing `description` key makes an unedited Conway's Classic fail `isPristineWorkspace`; after D4 the description-less stock shape is pristine [apps/web/lib/organisms/organismRecord.ts:51]
+- [x] [Review][Patch] The `CONWAYS_CLASSIC` description comment says "well under" the cap at 251/280, and does not warn that changing the text (or any field) strands every earlier-seeded store as non-pristine, since M9 never overwrites a stored Conway and `PRE_D1_CONWAYS_CLASSIC` derives from the live constant [packages/domain/src/defaultWorkspace.ts:71]
 
 ## Dev Notes
 
@@ -234,31 +242,31 @@ Claude Sonnet 5.5
 - Battles: Four Corners 100x60 (newest): Conway TL, Weavers TR, Raiders BR, Tide BL. Tug of War 50x30: Weavers | Tide | Conway (Raiders appear only in Four Corners).
 - Measured over 50 cycles (identical for all seeds, no dominance ties): Four Corners 267 transfers, Tug of War 109; max single-organism share 40 % / 45 %. Gate floors: `MIN_TERRITORY_TRANSFERS = 50`, `MAX_LIVE_SHARE = 0.9`. Tuning history: Amber Tide with B34/S234 and Weavers with S2-4 both overran the dish; first-match invasion at neighborCount >= 3 gave too few transfers, >= 2 gave 200-450.
 - AC5 gap (Conway's Classic without a description): resolved by owner ruling D1 (a), see below.
-- **D1 applied (owner ruling (a)):** `CONWAYS_CLASSIC` now carries an authored description (`packages/domain/src/defaultWorkspace.ts`, 236 chars, cap 280): "The original Game of Life rules: a cell is born with exactly 3 neighbors and survives with 2 or 3, otherwise it dies. Dense random soup keeps it alive; sparse seeds fade out. Dominance 50, no aging, and no way to invade other organisms." `colony-clash.json` re-exported via headless import -> edit -> export (only Conway's `description` and `exportedAt` changed; manifest unchanged, as the workspace description did not change). The showcase test's Conway exemption is dropped. D2 and D3: accepted as is, no change.
-- D1 ripple, adjusted: fixtures that used `CONWAYS_CLASSIC` as the description-less case now strip the key (`workspaceExportProjection.test.ts`, `OrganismCard.test.tsx`, `organismClone.test.ts`, `organismDraft.test.ts`), and the 7.2 import e2e (`settings.spec.ts`) expects two described cards, since every import re-seeds the stock organism. Pristine / seed / reset / ensureDefaultOrganism checks compare against the constant and stay green. Caveat (corrected in second review): a store seeded before this change holds Conway's WITHOUT a description, so `isPristineWorkspace` reads it as modified (only an extra destructive-replace warning, never data loss), on Settings Import today and on 7.5 / 7.6's preset loads; fresh workspaces are pristine. 7.4 is not affected: its gate is `isFreshWorkspace()`, which checks the `gol:schema` stamp, not content. Open as D4.
+- **D1 applied (owner ruling (a)):** `CONWAYS_CLASSIC` now carries an authored description (`packages/domain/src/defaultWorkspace.ts`; the D1 text was superseded by D5 below) `colony-clash.json` re-exported via headless import -> edit -> export (only Conway's `description` and `exportedAt` changed; manifest unchanged, as the workspace description did not change). The showcase test's Conway exemption is dropped. D2 and D3: accepted as is, no change.
+- D1 ripple, adjusted: fixtures that used `CONWAYS_CLASSIC` as the description-less case now strip the key (`workspaceExportProjection.test.ts`, `OrganismCard.test.tsx`, `organismClone.test.ts`, `organismDraft.test.ts`), and the 7.2 import e2e (`settings.spec.ts`) expects two described cards, since every import re-seeds the stock organism. Pristine / seed / reset / ensureDefaultOrganism checks compare against the constant and stay green. Caveat: a store seeded before this change holds Conway's WITHOUT a description (M9: never overwritten, no backfill), so its visitors never see Conway's description; resolved as D4 (b) below for the pristine check. 7.4 is not affected: its gate is `isFreshWorkspace()`, which checks the `gol:schema` stamp, not content.
+- **D4 applied (owner ruling (b)):** `isPristineWorkspace` also accepts `PRE_D1_CONWAYS_CLASSIC` (`CONWAYS_CLASSIC` with the `description` key omitted); nothing else loosens (a present-but-`undefined`, empty or edited description is still modified). No backfill, so legacy stores keep a description-less Conway by design.
+- **D5 applied (owner ruling (c)):** `CONWAYS_CLASSIC.description` (251/280): "The original Game of Life rules: a cell is born with exactly 3 neighbors of its own kind and survives with 2 or 3, otherwise it dies. It can only defend, never take a cell from another organism, so in a mixed dish watch invaders eat into its colonies." `colony-clash.json` re-exported (only Conway's `description` and `exportedAt` changed).
 - Tug of War is weak past ~15 s (small dish settles into a few colonies); it satisfies every 5 s gate. The 100x60 flagship keeps evolving to 300 cycles.
 - `presetManifest.ts`: added one sentence to the authoring path (improve an existing preset via import, edit, export). "How the first preset was produced" is still true.
 - `npm run ci:dev` green (typecheck, lint with one pre-existing `BattleGallery.tsx` warning, format, spec:check, boundary, coverage, build, bundle:check, bench, e2e chromium 314 passed / 1 skipped).
 
 ### File List
 
-- packages/domain/src/pristineWorkspace.ts, pristineWorkspace.test.ts (D4: pre-D1 stock shape accepted)
-- packages/domain/src/defaultWorkspace.ts (D5: description rewritten)
-
 - apps/web/public/workspaces/colony-clash.json (new; D1: re-exported with Conway's description; D5: description rewritten)
 - apps/web/public/workspaces/index.json (modified)
 - apps/web/public/workspaces/starter-workspace.json (deleted)
 - apps/web/lib/workspaces/presetShowcase.test.ts (new; D1: Conway exemption dropped)
 - apps/web/lib/workspaces/presetManifest.ts (comment only)
-- packages/domain/src/defaultWorkspace.ts (modified, D1: Conway's description)
+- packages/domain/src/defaultWorkspace.ts (modified; D1: Conway's description; D5: rewritten)
+- packages/domain/src/pristineWorkspace.ts (modified; D4: pre-D1 stock shape accepted)
 - packages/domain/src/defaultWorkspace.test.ts (modified)
 - packages/domain/src/workspaceExportProjection.test.ts (modified)
 - apps/web/components/organisms/OrganismCard.test.tsx (modified)
 - apps/web/lib/organisms/organismClone.test.ts (modified)
 - apps/web/lib/organisms/organismDraft.test.ts (modified)
 - apps/web/e2e/settings.spec.ts (modified)
-- apps/web/lib/organisms/organismRecord.ts (comment only, second review)
-- packages/domain/src/pristineWorkspace.test.ts (test title, second review)
+- apps/web/lib/organisms/organismRecord.ts (comment only, second and third review)
+- packages/domain/src/pristineWorkspace.test.ts (modified; test title, second review; D4 tests)
 - docs/implementation-artifacts/7-3-showcase-preset-content.md
 - docs/implementation-artifacts/sprint-status.yaml
 
@@ -268,7 +276,8 @@ Claude Sonnet 5.5
 - 2026-09-29: Code review (Opus): 6 patches applied. Organism and workspace descriptions were corrected by a headless import → edit → export (FD2 route; only `description` fields and `exportedAt` changed) and the manifest was synced. The showcase test gained seed-independence, flagship-order, Conway-placed and ≥3-organisms-per-battle assertions, and one `presetManifest.ts` comment was reworded. D1–D3 are left open for the owner.
 - 2026-09-29: Owner rulings on review decisions: D1 (a) applied (authored `CONWAYS_CLASSIC` description, preset re-exported, exemption dropped, ripple fixtures adjusted); D2 and D3 (a) accepted, no work.
 - 2026-09-29: Second review (Opus) of the ruling pass `7585f7b`: 4 patches applied (a stale `organismRecord.ts` comment, a stale pristine test title, the legacy-store caveat re-aimed from 7.4 to Settings Import / 7.5 / 7.6, File List completed). D4 (the pre-D1 store's Conway is not pristine and is never backfilled) and D5 (Conway's description wording) are left open for the owner.
-- 2026-09-29: Owner rulings D4 (b) and D5 (c) applied: `isPristineWorkspace` also accepts the pre-D1 stock Conway (constant minus `description`; four new tests); `CONWAYS_CLASSIC` description rewritten in FD3 voice (own-kind neighbours, no parameter list, what to watch for; 251/280) and `colony-clash.json` re-exported via the FD2 import → edit → export route (only Conway's `description` + `exportedAt` changed; manifest unchanged, it carries the workspace description).
+- 2026-09-29: Owner rulings D4 (b) and D5 (c) applied: `isPristineWorkspace` also accepts the pre-D1 stock Conway (constant minus `description`); `CONWAYS_CLASSIC` description rewritten in FD3 voice (own-kind neighbours, no parameter list, what to watch for; 251/280) and `colony-clash.json` re-exported via the FD2 import → edit → export route (only Conway's `description` + `exportedAt` changed; manifest unchanged, it carries the workspace description).
+- 2026-09-29: Third review (Opus) of the D4–D5 commit `1277013`: 5 patches applied (two duplicate pristine tests replaced by a present-but-`undefined` description case, stale `organismRecord.ts` and `defaultWorkspace.ts` comments, Completion Notes brought up to D4/D5, File List de-duplicated). No decisions left open. `npm run ci:dev` green.
 
 Dev Model: sonnet   # content authoring + one test following existing patterns (route (b) generation, lockstep-test idiom, useSimulation's engine composition); every structural choice is pinned in FD1–FD7, nothing for later stories to build on
 Proposed lane gate: none

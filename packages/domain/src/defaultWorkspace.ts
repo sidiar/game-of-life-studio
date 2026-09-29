@@ -71,7 +71,11 @@ export const CONWAYS_CLASSIC: Organism = deepFreeze({
   agingEnabled: false,
   // Authored (FR-9.5, Story 7.3 review ruling D1a) so every organism a visitor meets carries a
   // description, the showcase preset's stock record included. Describes what the organism does,
-  // not how to use the app; well under MAX_ORGANISM_DESCRIPTION_LENGTH (280).
+  // not how to use the app; 251 of MAX_ORGANISM_DESCRIPTION_LENGTH (280). Changing this text, or
+  // any other field here, costs every store seeded before the change its pristine status:
+  // `ensureDefaultOrganism` never overwrites a stored Conway (M9), and `isPristineWorkspace`
+  // accepts only this constant and its description-less pre-D1 shape (ruling D4), which is
+  // derived from the live constant. Widen that predicate in the same change.
   description:
     'The original Game of Life rules: a cell is born with exactly 3 neighbors of its own kind and survives with 2 or 3, otherwise it dies. It can only defend, never take a cell from another organism, so in a mixed dish watch invaders eat into its colonies.',
   survivalRules: [BORN_RULE, SURVIVE_RULE],
