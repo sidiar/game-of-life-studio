@@ -66,6 +66,17 @@ Settings → Pages:
   Pages → Verified domains, the TXT record above). This stops another GitHub user from binding
   the domain to their own Pages site if ours is ever unpublished.
 
+Settings → Environments → `github-pages` → Deployment branches and tags:
+
+- **Allowed:** branch `main` and tag `v*`. The deploy runs on tag refs, so **the `v*` tag rule
+  is load-bearing** — without it `deploy-pages` is rejected. (`main` is kept but no longer
+  deploys.) From the CLI:
+
+  ```bash
+  gh api repos/sidiar/game-of-life-studio/environments/github-pages/deployment-branch-policies \
+    --jq '.branch_policies[] | {name, type}'
+  ```
+
 Check the live configuration from the CLI:
 
 ```bash
@@ -78,15 +89,44 @@ Expected: `build_type: workflow`, `cname: game-of-life-studio.com`, `https_enfor
 
 ## How a deploy happens
 
-1. A push to `main` (normally a PR merge) triggers `.github/workflows/ci.yml`.
-2. `quality` runs the full gate and, on `main` pushes only, uploads `apps/web/out` as the Pages
+Merging to `main` runs CI but **does not deploy**. A release is an explicit tag:
+
+```bash
+git switch main && git pull --ff-only
+git tag -a v1.2.0 -m "v1.2.0"   # semver; annotated so the tag carries date + author
+git push origin v1.2.0
+```
+
+1. The `v*` tag push triggers `.github/workflows/ci.yml` on the tagged commit.
+2. `quality` runs the full gate and, on tag pushes only, uploads `apps/web/out` as the Pages
    artifact — the same bytes `bundle:check` measured.
 3. `e2e` runs.
-4. `deploy` (`needs: [quality, e2e]`, `main` only) publishes that artifact with
+4. `deploy` (`needs: [quality, e2e]`, `v*` tags only) publishes that artifact with
    `actions/deploy-pages`. Its environment is `github-pages`; the run summary links the URL.
 
-A red `quality` or `e2e` means **no deploy** — the previous deployment stays live. There is no
-staging environment; PR runs never deploy anything.
+A red `quality` or `e2e` means **no deploy** — the previous deployment stays live; fix it and
+push a new tag (don't move a published tag). There is no staging environment; PR and `main`
+runs never deploy anything. The live version is always the newest green tag:
+`git describe --tags --abbrev=0 origin/main` is only a hint — a hotfix tag may sit off `main`.
+
+## Hotfix (production is behind `main`)
+
+When `main` carries unreleased work (e.g. a half-built epic) and production needs a fix:
+
+```bash
+git fetch --tags
+git switch -c fix/<name> v1.2.0        # branch from the LIVE tag, not from main
+# ...commit the fix...
+git push -u origin fix/<name>
+gh pr create --base main --head fix/<name>   # CI gates the fix on top of current main
+git tag -a v1.2.1 -m "v1.2.1" fix/<name>     # tag the fix branch head, not main
+git push origin v1.2.1                       # CI gates it on top of v1.2.0, then deploys
+```
+
+Then merge the PR into `main` (merge commit — no cherry-pick, so the same commits live in
+both), and the fix rides the next release from `main` automatically. CI runs twice on purpose:
+the fix has to be green on both bases. A conflict on the PR is resolved there; production is
+unaffected.
 
 Propagation after a green `deploy` is usually under a minute. Browsers may cache the previous
 `index.html` briefly; a hard reload settles it.
@@ -95,10 +135,10 @@ Propagation after a green `deploy` is usually under a minute. Browsers may cache
 
 There is no "previous version" button in Pages. To roll back:
 
-- **Preferred:** revert the offending commit on `main` (`git revert`, PR, merge). The revert
-  deploys like any other push.
-- **Emergency:** Actions → the last green `CI` run on `main` → **Re-run all jobs**. It rebuilds
-  and redeploys that commit. Then fix forward.
+- **Emergency:** Actions → the `CI` run of the **previous release tag** → **Re-run all jobs**.
+  It rebuilds and redeploys that tag. Then fix forward.
+- **Preferred:** fix or revert on a branch from the live tag and release a patch tag — the
+  hotfix procedure above. (A revert merged to `main` alone no longer deploys.)
 
 ## Troubleshooting
 
@@ -116,3 +156,4 @@ There is no "previous version" button in Pages. To roll back:
 | ---------- | ------ |
 | 2026-09-14 | Domain registered on Cloudflare Registrar. DNS records added (proxy off). Account-level domain verification TXT added. |
 | 2026-09-14 | Pages enabled (source: GitHub Actions), custom domain bound, Enforce HTTPS on. PR #30 merged: `deploy` job + `CNAME`. First deploy live. |
+| 2026-09-29 | Deploy moved from `main` pushes to `v*` release tags, so `main` can carry Epic 6 in progress. `github-pages` environment: `v*` tag policy added. |

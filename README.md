@@ -108,8 +108,8 @@ npm run dev:standalone   # http://localhost:3000
 
 ## Quality gate & deployment
 
-The GitHub Actions workflow in `.github/workflows/ci.yml` runs on every PR and on every push
-to `main`:
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs on every PR, on every push
+to `main`, and on every `v*` release tag:
 
 - **`npm run ci`** is the local mirror of that pipeline — same stages, same order (the stage
   list lives in the header comment of `ci.yml`; keep the two in lockstep). Run it before opening
@@ -118,11 +118,13 @@ to `main`:
 - **The husky pre-commit hook is the fast subset only** (`lint-staged`: ESLint + Prettier on
   changed files, then a project-wide `npm run typecheck`). It deliberately skips tests, e2e, and
   the bundle check so commits stay quick.
-- **Deploy.** On `main`, once `quality` and `e2e` are both green, the `deploy` job publishes the
-  static export to GitHub Pages at **<https://game-of-life-studio.com>**. A red run leaves the
-  previous deployment live. The custom domain is bound by `apps/web/public/CNAME`, which the
-  export copies into `out/` verbatim. Domain, DNS, Pages settings, rollback and troubleshooting
-  live in [`docs/ops.md`](./docs/ops.md).
+- **Deploy.** Merging to `main` does **not** deploy — pushing a `v*` release tag does. Once
+  `quality` and `e2e` are both green on the tagged commit, the `deploy` job publishes the static
+  export to GitHub Pages at **<https://game-of-life-studio.com>**, so `main` can carry a
+  half-built epic while the site stays on the last release. A red run leaves the previous
+  deployment live. The custom domain is bound by `apps/web/public/CNAME`, which the export
+  copies into `out/` verbatim. Releasing, hotfixing production, domain, DNS, Pages settings,
+  rollback and troubleshooting live in [`docs/ops.md`](./docs/ops.md).
 - **Clean-room dry run (do this at epic boundaries).** A warm local tree hides "works on my
   machine" bugs — stale `node_modules`, uncommitted files, env drift — that the CI checkout
   catches. Reproduce a clean checkout and run the gate:
