@@ -4009,3 +4009,9 @@ Open owner flags from the story (not blockers — the story proceeded on its for
   when that section is next touched, the same way `ColorPickerField`'s was: the radio covers the
   whole option (`inset: 0`, `width`/`height: 100%`, `opacity: 0`, `cursor: pointer`) — still in
   the accessibility tree and tab order, never `display: none`.
+
+## Deferred from: code review of story-7.4 (2026-09-29)
+
+- **Unmount-mid-load then remount can start a second first-visit preset load.** `hasRun` in `useWorkspaceSeed` is per-component and `mounted` only gates `setState`; a client-side navigation between seeding pages before the first import stamps `gol:schema` reads fresh again. Fix with a module-level in-flight promise or abort-on-unmount when 7.5/7.6 reuse the loader.
+- **Preset fetch timeout is one shared budget and relies on the injected `fetch` honouring the abort signal on body reads.** `importWorkspace` is deliberately unbounded. Revisit if 7.5 injects a fetch wrapper.
+- **No test for "import throws and its rollback also throws".** The fallback seed then no-ops on a stamped store and the hook reports `ready` with a partial workspace.

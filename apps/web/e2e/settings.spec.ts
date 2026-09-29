@@ -10,7 +10,7 @@ import { createMockWorkspace } from '@gol/test-utils';
 // FR-1.5 fallback: a 200 whose body is not a manifest fails the loader's parse. Never
 // `route.abort()` or a 404 — Chromium logs "Failed to load resource" as a console error, which
 // trips the zero-console-error assertions. A file-local copy, per the house convention for e2e
-// helpers (see settings.spec.ts's `seedWorkspace`). Stamped (seeded) contexts never fetch, so the
+// helpers (as with this file's `seedWorkspace`). Stamped (seeded) contexts never fetch, so the
 // route is inert for them.
 async function forcePresetFallback(page: Page) {
   await page.route('**/workspaces/index.json', (route) =>
