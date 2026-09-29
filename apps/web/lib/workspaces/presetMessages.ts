@@ -53,12 +53,24 @@ function displayPresetId(raw: string): string {
   return raw.length > PRESET_ID_DISPLAY_MAX ? `${raw.slice(0, PRESET_ID_DISPLAY_MAX)}…` : raw;
 }
 
+/**
+ * Same source as `PRESET_ID_PATTERN` (a test pins the parity). Duplicated on purpose: importing
+ * `presetManifest` here would pull its zod schema into `/`'s first load (FD3).
+ */
+export const WELL_FORMED_PRESET_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** D2: an id that is not a slug is never echoed, so a crafted link cannot put text in app chrome. */
+export const PRESET_LINK_INVALID_MESSAGE =
+  "This preset link isn't valid. It doesn't point to any preset in this version of the studio.";
+
 /** `workspaceUntouched` is false when a first visitor got the default preset instead (FD5). */
 export function presetLinkUnknownMessage(id: string, workspaceUntouched: boolean): string {
+  const untouched = workspaceUntouched ? ' Your workspace is untouched.' : '';
+  if (!WELL_FORMED_PRESET_ID.test(id)) return PRESET_LINK_INVALID_MESSAGE + untouched;
   return (
     `This preset link doesn't exist (anymore). The link pointed to a preset called ` +
     `“${displayPresetId(id)}”, which isn't in this version of the studio.` +
-    (workspaceUntouched ? ' Your workspace is untouched.' : '')
+    untouched
   );
 }
 

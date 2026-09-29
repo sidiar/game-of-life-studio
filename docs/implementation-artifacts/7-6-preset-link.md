@@ -4,7 +4,7 @@ baseline_commit: 6d3380ccb647fe27b3051c24d9eadb04af8f6995
 
 # Story 7.6: Preset Link
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -29,7 +29,7 @@ so that someone can hand me a ready-made experience in one click.
 - [x] **Task 2: Link copy** (AC: 1, 2), per FD7
   - [x] 2.1 Add to `apps/web/lib/workspaces/presetMessages.ts`:
     - `PRESET_LINK_WARNING_BODY`, from the mockup's arrival modal (`preset-workspace-library.html:453-466`) as one plain string: "This link opens a preset workspace. Loading it replaces your entire workspace — all current battles and organisms will be lost. You can export your current workspace first to keep a backup. Cancelling takes you to your own workspace, untouched."
-    - `presetLinkUnknownMessage(id: string, workspaceUntouched: boolean)`: "This preset link doesn't exist (anymore). The link pointed to a preset called “<id>”, which isn't in this version of the studio." Append " Your workspace is untouched." only when `workspaceUntouched` is true (FD5: a first visitor gets the default preset instead, so "untouched" would be false). Pass the id through `displayPresetId(raw)`: at most 40 characters, then `…`. React escapes the text, so this is a layout guard, not a security one.
+    - `presetLinkUnknownMessage(id: string, workspaceUntouched: boolean)`: "This preset link doesn't exist (anymore). The link pointed to a preset called “<id>”, which isn't in this version of the studio." Append " Your workspace is untouched." only when `workspaceUntouched` is true (FD5: a first visitor gets the default preset instead, so "untouched" would be false). **Amended by D2:** an id failing the slug pattern gets "This preset link isn't valid. It doesn't point to any preset in this version of the studio." (plus the untouched sentence when true) with no echo. For well-formed slugs: pass the id through `displayPresetId(raw)`: at most 40 characters, then `…`. React escapes the text, so this is a layout guard, not a security one.
     - `PRESET_LINK_FETCH_FAILURE_MESSAGE`: "The preset this link points to could not be downloaded. Reload the page to try again. Your workspace was not changed."
   - [x] 2.2 Reuse, never fork: `presetWarningTitle(name)`, `PRESET_CONFIRM_LABEL`, `PRESET_EXPORT_FAILED_TEXT`, `presetLoadSuccessMessage(name, summary)`, and `importFailureMessage(error)` for pipeline failures.
   - [x] 2.3 Unit tests: truncation at 40, the "untouched" suffix on and off, typographic quotes.
@@ -174,15 +174,15 @@ so that someone can hand me a ready-made experience in one click.
 
 Code review 2026-09-29 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor). No AC violation found; the URL form, the seed deferral, the lazy flow module and the injected-repositories boundary hold against architecture.md (K.3/K.5, AR-2/27, AR-3, AR-35).
 
-- [ ] [Review][Decision] A failed link on a first visit permanently forfeits the default preset — The deferred seed has already written a stamped Conway-only store, so `isFreshWorkspace()` is false from then on. Only the `unknown` branch falls back to `loadDefaultPreset`. `download-failed` keeps the link so a reload retries, as FD5 decided. But a visitor who drops the link, whose link stays broken, or who hits `invalid-file` or a pristine `load()` failure never gets the 7.4 default: they are left on an empty gallery for good (`useWorkspaceSeed.ts:140-144`, `presetLinkFlow.ts` download-failed/invalid-file branches, `PresetLinkArrival.tsx` pristine `load()` failure). Options:
+- [x] [Review][Decision] A failed link on a first visit permanently forfeits the default preset — The deferred seed has already written a stamped Conway-only store, so `isFreshWorkspace()` is false from then on. Only the `unknown` branch falls back to `loadDefaultPreset`. `download-failed` keeps the link so a reload retries, as FD5 decided. But a visitor who drops the link, whose link stays broken, or who hits `invalid-file` or a pristine `load()` failure never gets the 7.4 default: they are left on an empty gallery for good (`useWorkspaceSeed.ts:140-144`, `presetLinkFlow.ts` download-failed/invalid-file branches, `PresetLinkArrival.tsx` pristine `load()` failure). Options: **Owner ruling (Sidiar, 2026-09-29): (c)** — keep as built; FD5's Conway-only state stands as 7.4's own fallback, no behaviour change.
   - (a) On `firstVisit`, fall back to `loadDefaultPreset` in every failure branch (download-failed, invalid-file, pristine load failure). The link's retry-by-reload is then lost, because the store is no longer pristine.
   - (b) (a) for `invalid-file` and load failure only, and keep FD5's Conway-only plus retry-by-reload for `download-failed`.
   - (c) Keep as built. FD5 accepted the Conway-only state as 7.4's own fallback.
-- [ ] [Review][Decision] Pattern-failing ids are echoed verbatim into an app-authored `role="alert"` — `?preset=Data%20lost%20-%20recover%20at%20evil.example` renders "…a preset called “Data lost - recover at evil.example”…". That is up to 40 characters of attacker-chosen text inside app chrome. React escaping prevents XSS but not content injection. Task 2.1 pins this copy and the story calls the 40-character cap "a layout guard, not a security one" (`presetMessages.ts` `presetLinkUnknownMessage`/`displayPresetId`, `presetLinkFlow.ts:1` pattern check). Options:
+- [x] [Review][Decision] Pattern-failing ids are echoed verbatim into an app-authored `role="alert"` — `?preset=Data%20lost%20-%20recover%20at%20evil.example` renders "…a preset called “Data lost - recover at evil.example”…". That is up to 40 characters of attacker-chosen text inside app chrome. React escaping prevents XSS but not content injection. Task 2.1 pins this copy and the story calls the 40-character cap "a layout guard, not a security one" (`presetMessages.ts` `presetLinkUnknownMessage`/`displayPresetId`, `presetLinkFlow.ts:1` pattern check). Options: **Owner ruling (Sidiar, 2026-09-29): (a)** — ids failing `PRESET_ID_PATTERN` now show a generic "This preset link isn't valid" message with no echo, while well-formed unknown slugs keep the quoted echo.
   - (a) For ids failing `PRESET_ID_PATTERN`, show a generic "This preset link isn't valid" with no echo, and keep the echo for well-formed unknown slugs.
   - (b) Never echo the id.
   - (c) Keep as built.
-- [ ] [Review][Decision] The post-dialog notice is published from a `useEffect` keyed on `[dialogMounted, focusTick]` via `onSettledRef` — project-context's live-region rule names "a `useEffect` keyed on the mount flags" as a `react-hooks/set-state-in-effect` lint error and says to publish from the call site. Here the parent's `setNotice`/`setArrivalBusy` cascade runs from inside the effect, and going through a ref hides it from the lint. The ORDERING is correct: the dialog is gone before the notice exists, e2e (d) asserts it, and 5.6 requires focus to move before the settle unmounts the arrival. `LoadPresetRow`'s equivalent effect only moves focus (`PresetLinkArrival.tsx` focus effect + `settleAfterDialog`). Options:
+- [x] [Review][Decision] The post-dialog notice is published from a `useEffect` keyed on `[dialogMounted, focusTick]` via `onSettledRef` — project-context's live-region rule names "a `useEffect` keyed on the mount flags" as a `react-hooks/set-state-in-effect` lint error and says to publish from the call site. Here the parent's `setNotice`/`setArrivalBusy` cascade runs from inside the effect, and going through a ref hides it from the lint. The ORDERING is correct: the dialog is gone before the notice exists, e2e (d) asserts it, and 5.6 requires focus to move before the settle unmounts the arrival. `LoadPresetRow`'s equivalent effect only moves focus (`PresetLinkArrival.tsx` focus effect + `settleAfterDialog`). Options: **Owner ruling (Sidiar, 2026-09-29): (c)** — accepted as built, with no code change and no project-context edit.
   - (a) Accept it and record the exception in project-context (focus-before-unmount forces the effect).
   - (b) Restructure: move focus and publish from `onExited` after an awaited tick, with no effect.
   - (c) Accept it without documenting.
@@ -335,6 +335,7 @@ Sonnet 5.5 (claude-sonnet-5-5)
 
 - 2026-09-29: Story 7.6 implemented (preset link `/?preset=<id>`), status review.
 - 2026-09-29: Code review (Opus): 6 patches applied, 4 deferred, 3 decisions left for the owner; status in-progress.
+- 2026-09-29: Owner rulings applied: D1 (c) and D3 (c) keep as built; D2 (a) generic no-echo message for pattern-failing ids (`presetMessages.ts`, unit tests); status review.
 
 Dev Model: sonnet   # architecture-shaping (URL form, seed-hook deferral, gallery page boundary split); escalation to opus withheld because its Fable review pairing is unavailable, so FD1–FD8 pin every pattern for a Sonnet dev
 Proposed lane gate: none

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ImportSummary } from '@gol/persistence';
+import { PRESET_ID_PATTERN } from './presetManifest';
 import {
   presetLinkUnknownMessage,
+  WELL_FORMED_PRESET_ID,
   presetLoadSuccessMessage,
   presetWarningTitle,
 } from './presetMessages';
@@ -37,6 +39,21 @@ describe('presetLinkUnknownMessage', () => {
 
   it('omits the untouched sentence when the workspace was not left untouched', () => {
     expect(presetLinkUnknownMessage('nope', false)).not.toContain('untouched');
+  });
+
+  it('never echoes an id that is not a well-formed slug (D2)', () => {
+    const crafted = 'Data lost - recover at evil.example';
+    for (const untouched of [true, false]) {
+      const text = presetLinkUnknownMessage(crafted, untouched);
+      expect(text).not.toContain('Data lost');
+      expect(text).not.toContain('evil.example');
+      expect(text).toContain("isn't valid");
+      expect(text.includes('untouched')).toBe(untouched);
+    }
+  });
+
+  it('keeps the local slug pattern identical to PRESET_ID_PATTERN', () => {
+    expect(WELL_FORMED_PRESET_ID.source).toBe(PRESET_ID_PATTERN.source);
   });
 
   it('truncates the id at 40 characters with an ellipsis', () => {
