@@ -4,6 +4,23 @@ import { CURRENT_FORMAT_VERSION } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 import { createMockWorkspace } from '@gol/test-utils';
 
+// Story 7.4 (FD6): a fresh context now loads the default preset on its first seeding page. This
+// spec overwrites the store right after a fresh first load; letting the preset import race that
+// write would make it flaky, so this forces the silent FR-1.5 fallback: a 200 whose body is not a
+// manifest fails the loader's parse. Never `route.abort()` or a 404 — Chromium logs "Failed to load
+// resource" as a console error, which trips the zero-console-error assertions. A file-local copy,
+// per the house convention for e2e helpers (see settings.spec.ts's `seedWorkspace`). Stamped
+// (seeded) contexts never fetch, so the route is inert for them.
+async function forcePresetFallback(page: Page) {
+  await page.route('**/workspaces/index.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+}
+
+test.beforeEach(async ({ page }) => {
+  await forcePresetFallback(page);
+});
+
 // Story 5.11's e2e level, kept thin (RFC-008 Decision 2): real served static export, real
 // localStorage, one scenario per namespace. The branch matrix (ordering, retry, StrictMode) lives
 // in `StorageFailureNotice.test.tsx`.

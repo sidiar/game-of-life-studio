@@ -32,6 +32,30 @@ export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
  * makes this whole branch — including the import — dead-code-eliminated from the production
  * bundle (AC3's "mock data is unreachable in production").
  *
+ * Story 7.4 adds the third branch: a FRESH workspace in a PRODUCTION build loads the manifest's
+ * default preset (`loadDefaultPreset`, FR-9.2) through the FR-8.4 import pipeline, with no dialog —
+ * a fresh store is pristine, the FR-8.4 suppression case. So there are three branches, all decided
+ * by the one freshness read taken before any write: fresh + production → the preset (falling back
+ * to `seedDefaultWorkspace`); fresh + development → `seedDefaultWorkspace` then the AR-45
+ * fixtures, unchanged; anything else (a returning visitor, a Clear All'd store — `resetWorkspace()`
+ * keeps the `gol:schema` stamp, so it is never fresh again, M9 — or Vitest's `'test'`) →
+ * `seedDefaultWorkspace`, which no-ops on a stamped store. Freshness now matters twice over: the
+ * preset's own import stamps the store too, so reading it after either write would misroute both
+ * branches. The comparison is `=== 'production'`, never `!== 'development'`, for the same reason
+ * as the dev branch: Vitest's `'test'` would otherwise fetch in every apps/web unit test.
+ *
+ * The preset path is `import()`-ed dynamically (Story 7.4 FD4): it drags the serializer, the
+ * migration chain and the envelope schema along, and only a first visit ever runs it — every
+ * returning load would otherwise pay for it in the first-load bundle (AR-3). The loader builds the
+ * serializer itself from `repos` for that reason; this hook must never import it statically.
+ *
+ * A PRESET failure is silent (FD5): network, HTTP status, manifest parse, timeout, or an
+ * `ImportError` of any code all fall back to `seedDefaultWorkspace(repos)`, never into `error`,
+ * never logged. The fallback is safe after every one of them — a fetch/parse failure wrote nothing,
+ * and `applyImport`'s rollback restores the still-unstamped snapshot, so the seed's own
+ * `isFreshWorkspace()` gate passes. The FALLBACK's own rejection is not silent: it reaches
+ * `status: 'error'` exactly as the plain seed's always has.
+ *
  * `error` is the seed's rejection, kept (not discarded) so the page can classify it (Story 5.11):
  * a first-run write refused for lack of space is not "your data is damaged", and a newer-format
  * store must never be offered a reset. `undefined` unless `status === 'error'`. Never logged — the
@@ -65,7 +89,21 @@ export function useWorkspaceSeed(repos: AppRepositories): {
       // above; this is the exact silent-failure trap Story 1.6 Task 4 calls out).
       repos
         .isFreshWorkspace()
-        .then((fresh) => seedDefaultWorkspace(repos).then(() => fresh))
+        .then((fresh) => {
+          if (fresh && process.env.NODE_ENV === 'production') {
+            // Story 7.4: the first-visit default preset. Dynamic import only (FD4) — see the doc
+            // comment above. ANY preset failure falls back to the FR-1.5 seed, silently (FD5).
+            return import('@/lib/workspaces/loadDefaultPreset')
+              .then(({ loadDefaultPreset }) =>
+                loadDefaultPreset({ fetch: globalThis.fetch.bind(globalThis), repos }),
+              )
+              .then(
+                () => fresh,
+                () => seedDefaultWorkspace(repos).then(() => fresh),
+              );
+          }
+          return seedDefaultWorkspace(repos).then(() => fresh);
+        })
         .then((fresh) => {
           if (fresh && process.env.NODE_ENV === 'development') {
             // Dynamic import only — see the doc comment above for why a static import is banned

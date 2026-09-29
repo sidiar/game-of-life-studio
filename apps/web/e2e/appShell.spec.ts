@@ -1,5 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+
+// Story 7.4 (FD6): a fresh context now loads the default preset on its first seeding page. This
+// spec reads the empty Gallery as its hydration signal, so this forces the silent FR-1.5 fallback:
+// a 200 whose body is not a manifest fails the loader's parse. Never `route.abort()` or a 404 —
+// Chromium logs "Failed to load resource" as a console error, which trips the zero-console-error
+// assertions. A file-local copy, per the house convention for e2e helpers (see settings.spec.ts's
+// `seedWorkspace`). Stamped (seeded) contexts never fetch, so the route is inert for them.
+async function forcePresetFallback(page: Page) {
+  await page.route('**/workspaces/index.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+}
+
+test.beforeEach(async ({ page }) => {
+  await forcePresetFallback(page);
+});
 
 // jsdom (used by the Vitest/RTL component tests) does not compute CSS custom properties, so this
 // is the only place the --gol-* token layer is proven to actually APPLY end-to-end: shipped,

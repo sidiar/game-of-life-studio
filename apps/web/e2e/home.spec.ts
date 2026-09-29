@@ -1,26 +1,130 @@
-import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 
-// Thin e2e (RFC-008 Decision 2): only the home route exists this story. Editor, Play, Settings
-// arrive later and get their own specs; the POPULATED Gallery gets its own spec (gallery.spec.ts,
-// Story 1.10) — this file stays the production-empty-workspace proof.
-test.describe('home route', () => {
-  test('renders the real Battle Gallery, empty, with zero console errors', async ({ page }) => {
-    const errors: string[] = [];
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') errors.push(msg.text());
+// Thin e2e (RFC-008 Decision 2) for what a production first visit gets. Since Story 7.4 that is
+// the manifest's DEFAULT PRESET (FR-9.2), loaded silently on whichever seeding page is entered —
+// the first describe below proves it against the shipped static export. The designed empty
+// workspace is no longer what a first visit sees; it is what the silent FR-1.5 fallback and Clear
+// All (FR-8.5) leave, and the second describe keeps that proof, reached through the fallback. The
+// POPULATED Gallery's own behaviour has its own spec (gallery.spec.ts, Story 1.10).
+
+// The shipped preset, read off disk — never hard-coded names, so the proof follows the content.
+// `__dirname`, not `import.meta.url`: Playwright loads specs as CommonJS (apps/web has no
+// `"type": "module"`), where `import.meta` is a SyntaxError.
+const PRESETS_DIR = join(__dirname, '..', 'public', 'workspaces');
+const manifest = JSON.parse(readFileSync(join(PRESETS_DIR, 'index.json'), 'utf8')) as {
+  defaultPresetId: string;
+  workspaces: { id: string; file: string }[];
+};
+const defaultFile = manifest.workspaces.find((w) => w.id === manifest.defaultPresetId)?.file;
+if (defaultFile === undefined) throw new Error('index.json: defaultPresetId names no entry');
+const preset = JSON.parse(readFileSync(join(PRESETS_DIR, defaultFile), 'utf8')) as {
+  description: string;
+  battles: { name: string }[];
+  organisms: { name: string }[];
+};
+
+// Story 7.4 (FD6): forces the silent FR-1.5 fallback — a 200 whose body is not a manifest fails
+// the loader's parse. Never `route.abort()` or a 404: Chromium logs "Failed to load resource" as a
+// console error, which trips the zero-console-error assertions. A file-local copy, per the house
+// convention for e2e helpers.
+async function forcePresetFallback(page: Page) {
+  await page.route('**/workspaces/index.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+}
+
+function collectConsoleErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+  page.on('pageerror', (err) => errors.push(err.message));
+  return errors;
+}
+
+test.describe('first visit loads the default preset (Story 7.4)', () => {
+  test('at /: the preset gallery with its description, no dialog, zero console errors', async ({
+    page,
+  }) => {
+    const errors = collectConsoleErrors(page);
+    await page.goto('/');
+
+    await expect(page.getByRole('article')).toHaveCount(preset.battles.length);
+    for (const battle of preset.battles) {
+      await expect(page.getByRole('heading', { level: 2, name: battle.name })).toBeVisible();
+    }
+    await expect(page.locator('[data-workspace-description]')).toHaveText(preset.description);
+    // FR-9.2: the pristine first-visit store is FR-8.4's suppression case — no replace warning.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('at /organisms: the entry page loads the preset too (FR-9.2, "whichever page")', async ({
+    page,
+  }) => {
+    const errors = collectConsoleErrors(page);
+    await page.goto('/organisms');
+
+    const grid = page.getByRole('list', { name: 'Organisms' });
+    await expect(grid.getByRole('listitem')).toHaveCount(preset.organisms.length);
+    for (const organism of preset.organisms) {
+      await expect(grid).toContainText(organism.name);
+    }
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('Clear All returns to the FR-8.5 default and a reload does NOT re-load the preset', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.getByRole('article')).toHaveCount(preset.battles.length);
+
+    await page.goto('/settings');
+    await page.getByRole('button', { name: 'Clear data (all battles and organisms)' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Clear All Data?' });
+    await dialog.getByRole('button', { name: 'Clear All Data' }).click();
+    await expect(page.getByRole('status')).toContainText('All data cleared');
+
+    let manifestRequests = 0;
+    page.on('request', (request) => {
+      if (request.url().endsWith('/workspaces/index.json')) manifestRequests += 1;
     });
-    page.on('pageerror', (err) => errors.push(err.message));
+    await page.goto('/');
+    await page.reload();
+
+    await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
+    await expect(page.getByRole('article')).toHaveCount(0);
+    const organisms = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>,
+      STORAGE_KEYS.organisms,
+    );
+    expect(Object.keys(organisms)).toEqual([CONWAYS_CLASSIC_ID]);
+    // The stamp survives Clear All, so the store is never fresh again (M9) — nothing is fetched.
+    expect(manifestRequests).toBe(0);
+  });
+});
+
+test.describe('empty workspace via the FR-1.5 fallback', () => {
+  test.beforeEach(async ({ page }) => {
+    await forcePresetFallback(page);
+  });
+
+  test('renders the real Battle Gallery, empty, with zero console errors', async ({ page }) => {
+    const errors = collectConsoleErrors(page);
 
     await page.goto('/');
 
     // Story 1.9: the h1 moved to the page's own "Battle Gallery" heading — "Game of Life
     // Studio" is now the shell's wordmark (AppShell), not a document heading.
     await expect(page.getByRole('heading', { level: 1, name: 'Battle Gallery' })).toBeVisible();
-    // Story 1.12: a production load seeds no battles, so the designed empty state renders — its
-    // own <h2> heading, "what is this app" explanation, and the FR-7.4 prompt.
+    // Story 1.12: the fallback seeds no battles, so the designed empty state renders — its own
+    // <h2> heading, "what is this app" explanation, and the FR-7.4 prompt.
     await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
     await expect(page.getByText(/cellular battles/i)).toBeVisible();
     await expect(page.getByText(/create your first battle/i)).toBeVisible();
@@ -64,8 +168,8 @@ test.describe('home route', () => {
     expect(violations).toEqual([]);
   });
 
-  // Story 1.5 AC1: the only place "when the app loads" is verified end-to-end through a real
-  // static export — a fresh Playwright context has no localStorage, mirroring a first run.
+  // Story 1.5 AC1: the FR-1.5 seed verified end-to-end through a real static export — a fresh
+  // Playwright context has no localStorage, mirroring a first run whose preset fetch failed.
   //
   // Story 1.6 AC3, production half: this runs against the PRODUCTION static export
   // (build:standalone, served from out/), so it proves the AR-45 dev fixtures are never SEEDED by
