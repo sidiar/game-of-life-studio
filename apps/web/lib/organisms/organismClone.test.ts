@@ -230,8 +230,9 @@ describe('cloneOrganismRecord — description (Story 7.2)', () => {
   });
 
   it('leaves the key absent when the source has none', () => {
-    expect('description' in cloneOrganismRecord(CONWAYS_CLASSIC, 'clone-1', counter('rule-'))).toBe(
-      false,
-    );
+    // CONWAYS_CLASSIC carries a description now (Story 7.3 D1a), so strip it for the bare case.
+    const bare: Organism = { ...CONWAYS_CLASSIC };
+    delete bare.description;
+    expect('description' in cloneOrganismRecord(bare, 'clone-1', counter('rule-'))).toBe(false);
   });
 });

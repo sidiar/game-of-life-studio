@@ -160,9 +160,9 @@ describe('default preset showcase (FR-9.2, Story 7.3)', () => {
       for (const battle of preset.battles) {
         expect(battle.description?.trim(), `battle "${battle.name}" description`).toBeTruthy();
       }
-      // Conway's Classic is the stock record: M9 protects it unmodified and it carries no
-      // description, so the battle and workspace descriptions explain it instead.
-      for (const organism of others) {
+      // Conway's Classic included: the stock `CONWAYS_CLASSIC` carries an authored description
+      // (owner ruling D1a), so the preset's deep-equal copy of it does too.
+      for (const organism of preset.organisms) {
         expect(
           organism.description?.trim(),
           `organism "${organism.name}" description`,

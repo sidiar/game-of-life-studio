@@ -4,7 +4,7 @@ baseline_commit: ad6cc635b36e919a8c2141a45d08906d73620115
 
 # Story 7.3: Showcase Preset Content
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -48,17 +48,20 @@ so that I taste the essence of the game in seconds and want to stay.
 
 Code review 2026-09-29 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor). 3 decision-needed, 6 patch, 0 defer, 10 dismissed.
 
-- [ ] [Review][Decision] D1: Conway's Classic ships without a description (AC5 vs FD2/M9) — AC5 says "every organism" carries an authored description, and the envelope's `conways-classic` record has none. `presetShowcase.test.ts` exempts it (`for (const organism of others)`). The spec contradicts itself: FD2 says "never modify it" and Task 4.2 deep-equals `CONWAYS_CLASSIC`, while M9 only protects Conway's Classic from deletion and FR-9.5 makes descriptions editable wherever an entity is edited. Options:
+- [x] [Review][Decision] D1: Conway's Classic ships without a description (AC5 vs FD2/M9) — AC5 says "every organism" carries an authored description, and the envelope's `conways-classic` record has none. `presetShowcase.test.ts` exempts it (`for (const organism of others)`). The spec contradicts itself: FD2 says "never modify it" and Task 4.2 deep-equals `CONWAYS_CLASSIC`, while M9 only protects Conway's Classic from deletion and FR-9.5 makes descriptions editable wherever an entity is edited. Options:
   - (a) Add a description to `CONWAYS_CLASSIC` in `@gol/domain`. This changes the seed for every workspace, and per 7.2 FD6/M16 it may affect the pristine check, so re-verify 7.4's first-visit detection.
   - (b) Ship a description-only edit of Conway's Classic inside the preset. This amends FD2, and the test deep-equals everything except `description`.
   - (c) Rule the stock Conway's Classic exempt from AC5 and record the exemption. The workspace and battle descriptions explain it. This is the status quo.
-- [ ] [Review][Decision] D2: Tug of War (50×30) is a thin showcase. It passes every 5 s gate: 109 transfers, 45 % max share, all three organisms alive. But Moss Weavers' only invasion rule targets Ember Raiders, who are not placed in it, so only one front trades territory (Amber Tide taking Conway's cells). Nobody invades the Weavers. The dish settles to a few static colonies by ~15 s, which Task 1.4 calls "a weak showcase". This is not an AC violation, since AC1's bar is ~5 s. Options:
+  - **Owner ruling (Sidiar, 2026-09-29): (a).** Add an authored description to `CONWAYS_CLASSIC` in `@gol/domain`, so the preset's `conways-classic` record carries it too (still deep-equal to `CONWAYS_CLASSIC`), and drop the showcase test's exemption. Re-verify every pristine/seed check this touches (7.2 FD6/M16; the fresh-workspace gate 7.4 will rely on).
+- [x] [Review][Decision] D2: Tug of War (50×30) is a thin showcase. It passes every 5 s gate: 109 transfers, 45 % max share, all three organisms alive. But Moss Weavers' only invasion rule targets Ember Raiders, who are not placed in it, so only one front trades territory (Amber Tide taking Conway's cells). Nobody invades the Weavers. The dish settles to a few static colonies by ~15 s, which Task 1.4 calls "a weak showcase". This is not an AC violation, since AC1's bar is ~5 s. Options:
   - (a) Accept as is. The 100×60 flagship sorts first and keeps evolving to 300 cycles, and the battle description says openly that "the first seconds are the show".
   - (b) Re-tune. For example, place Ember Raiders in Tug of War too, or give the Weavers an invasion rule that works there, so both fronts trade territory. Then re-export through the app and re-measure the FD4 floors in the same PR.
   - (c) Additionally raise the gate's horizon or add a longer-horizon check (e.g. all organisms alive at 150 cycles) so that post-5 s liveliness is protected by CI.
-- [ ] [Review][Decision] D3: Confirm the preset's display name and id, "Colony Clash" / `colony-clash` (FD1 owner veto). The id is stable forever once merged (7.1 FD3). Options:
+  - **Owner ruling (Sidiar, 2026-09-29): (a).** Accept as is; no change.
+- [x] [Review][Decision] D3: Confirm the preset's display name and id, "Colony Clash" / `colony-clash` (FD1 owner veto). The id is stable forever once merged (7.1 FD3). Options:
   - (a) Keep it.
   - (b) Rename before merge. This means a new `<id>.json` plus the `index.json` entry and `defaultPresetId`, and the showcase and lockstep tests follow automatically.
+  - **Owner ruling (Sidiar, 2026-09-29): (a).** Keep "Colony Clash" / `colony-clash`; no change.
 - [x] [Review][Patch] Organism descriptions say "touches on two sides", but the invasion rules are own `neighborCount gte 2` over all 8 neighbours, diagonals included [apps/web/public/workspaces/colony-clash.json]
 - [x] [Review][Patch] The workspace description tells the visitor how to use the app ("Press play on…", "open an organism…"), against FD3's voice rule [apps/web/public/workspaces/colony-clash.json, index.json]
 - [x] [Review][Patch] The `SEEDS` comment claims the seed set proves determinism, but nothing compares results across seeds [apps/web/lib/workspaces/presetShowcase.test.ts:39]
@@ -213,7 +216,9 @@ Claude Sonnet 5.5
   - Invasion chain: Weavers -> Raiders -> Tide -> Conway (each invader outranks its prey, so it wins the birth-vs-survival contest).
 - Battles: Four Corners 100x60 (newest): Conway TL, Weavers TR, Raiders BR, Tide BL. Tug of War 50x30: Weavers | Tide | Conway (Raiders appear only in Four Corners).
 - Measured over 50 cycles (identical for all seeds, no dominance ties): Four Corners 267 transfers, Tug of War 109; max single-organism share 40 % / 45 %. Gate floors: `MIN_TERRITORY_TRANSFERS = 50`, `MAX_LIVE_SHARE = 0.9`. Tuning history: Amber Tide with B34/S234 and Weavers with S2-4 both overran the dish; first-match invasion at neighborCount >= 3 gave too few transfers, >= 2 gave 200-450.
-- **AC5 gap for owner: Conway's Classic carries no description.** FD2/M9 say ship the stock record unmodified, so the static test exempts it and the workspace and battle descriptions explain it. Adding a description to `CONWAYS_CLASSIC` itself would be a domain change (the test deep-equals it) and is left as an owner decision.
+- AC5 gap (Conway's Classic without a description): resolved by owner ruling D1 (a), see below.
+- **D1 applied (owner ruling (a)):** `CONWAYS_CLASSIC` now carries an authored description (`packages/domain/src/defaultWorkspace.ts`, 236 chars, cap 280): "The original Game of Life rules: a cell is born with exactly 3 neighbors and survives with 2 or 3, otherwise it dies. Dense random soup keeps it alive; sparse seeds fade out. Dominance 50, no aging, and no way to invade other organisms." `colony-clash.json` re-exported via headless import -> edit -> export (only Conway's `description` and `exportedAt` changed; manifest unchanged, as the workspace description did not change). The showcase test's Conway exemption is dropped. D2 and D3: accepted as is, no change.
+- D1 ripple, adjusted: fixtures that used `CONWAYS_CLASSIC` as the description-less case now strip the key (`workspaceExportProjection.test.ts`, `OrganismCard.test.tsx`, `organismClone.test.ts`, `organismDraft.test.ts`), and the 7.2 import e2e (`settings.spec.ts`) expects two described cards, since every import re-seeds the stock organism. Pristine / seed / reset / ensureDefaultOrganism checks compare against the constant and stay green. Caveat for 7.4: a store seeded before this change holds Conway's WITHOUT a description, so `isPristineWorkspace` reads it as modified (only an extra import warning, never data loss); fresh workspaces are pristine.
 - Tug of War is weak past ~15 s (small dish settles into a few colonies); it satisfies every 5 s gate. The 100x60 flagship keeps evolving to 300 cycles.
 - `presetManifest.ts`: added one sentence to the authoring path (improve an existing preset via import, edit, export). "How the first preset was produced" is still true.
 - `npm run ci:dev` green (typecheck, lint with one pre-existing `BattleGallery.tsx` warning, format, spec:check, boundary, coverage, build, bundle:check, bench, e2e chromium 314 passed / 1 skipped).
@@ -225,6 +230,13 @@ Claude Sonnet 5.5
 - apps/web/public/workspaces/starter-workspace.json (deleted)
 - apps/web/lib/workspaces/presetShowcase.test.ts (new)
 - apps/web/lib/workspaces/presetManifest.ts (comment only)
+- packages/domain/src/defaultWorkspace.ts (modified, D1: Conway's description)
+- packages/domain/src/defaultWorkspace.test.ts (modified)
+- packages/domain/src/workspaceExportProjection.test.ts (modified)
+- apps/web/components/organisms/OrganismCard.test.tsx (modified)
+- apps/web/lib/organisms/organismClone.test.ts (modified)
+- apps/web/lib/organisms/organismDraft.test.ts (modified)
+- apps/web/e2e/settings.spec.ts (modified)
 - docs/implementation-artifacts/7-3-showcase-preset-content.md
 - docs/implementation-artifacts/sprint-status.yaml
 
@@ -232,6 +244,7 @@ Claude Sonnet 5.5
 
 - 2026-09-28: Story 7.3 implemented: Colony Clash default preset replaces the dev-fixture starter; showcase gate test added.
 - 2026-09-29: Code review (Opus): 6 patches applied. Organism and workspace descriptions were corrected by a headless import → edit → export (FD2 route; only `description` fields and `exportedAt` changed) and the manifest was synced. The showcase test gained seed-independence, flagship-order, Conway-placed and ≥3-organisms-per-battle assertions, and one `presetManifest.ts` comment was reworded. D1–D3 are left open for the owner.
+- 2026-09-29: Owner rulings on review decisions: D1 (a) applied (authored `CONWAYS_CLASSIC` description, preset re-exported, exemption dropped, ripple fixtures adjusted); D2 and D3 (a) accepted, no work.
 
 Dev Model: sonnet   # content authoring + one test following existing patterns (route (b) generation, lockstep-test idiom, useSimulation's engine composition); every structural choice is pinned in FD1–FD7, nothing for later stories to build on
 Proposed lane gate: none

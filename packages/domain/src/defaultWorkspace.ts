@@ -69,6 +69,11 @@ export const CONWAYS_CLASSIC: Organism = deepFreeze({
   colorToken: 'sky-blue', // RFC-007 token #1, head of the distinguishability order
   dominance: 50, // FR-2.2 mid-range, stated verbatim in FR-1.5
   agingEnabled: false,
+  // Authored (FR-9.5, Story 7.3 review ruling D1a) so every organism a visitor meets carries a
+  // description, the showcase preset's stock record included. Describes what the organism does,
+  // not how to use the app; well under MAX_ORGANISM_DESCRIPTION_LENGTH (280).
+  description:
+    'The original Game of Life rules: a cell is born with exactly 3 neighbors and survives with 2 or 3, otherwise it dies. Dense random soup keeps it alive; sparse seeds fade out. Dominance 50, no aging, and no way to invade other organisms.',
   survivalRules: [BORN_RULE, SURVIVE_RULE],
 });
 
