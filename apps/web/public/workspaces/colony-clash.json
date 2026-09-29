@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "appVersion": "0.0.0",
-  "exportedAt": "2026-09-29T05:29:26.831Z",
+  "exportedAt": "2026-09-29T06:21:31.521Z",
   "kind": "workspace",
   "description": "A small ecosystem to watch. Conway's Classic and three new organisms (Ember Raiders, Moss Weavers, Amber Tide) fight over one dish, each with its own dominance and invasion habits. Four Corners plays out a chain of conquest across a wide dish; Tug of War is a compact, fast skirmish.",
   "organisms": [
@@ -9,7 +9,7 @@
       "schemaVersion": 1,
       "id": "conways-classic",
       "name": "Conway's Classic",
-      "description": "The original Game of Life rules: a cell is born with exactly 3 neighbors and survives with 2 or 3, otherwise it dies. Dense random soup keeps it alive; sparse seeds fade out. Dominance 50, no aging, and no way to invade other organisms.",
+      "description": "The original Game of Life rules: a cell is born with exactly 3 neighbors of its own kind and survives with 2 or 3, otherwise it dies. It can only defend, never take a cell from another organism, so in a mixed dish watch invaders eat into its colonies.",
       "colorToken": "sky-blue",
       "dominance": 50,
       "agingEnabled": false,

@@ -14,6 +14,17 @@ import { normalizeDescription } from './workspaceMetaSchema';
  * integrity indexes already follow (project-context.md).
  */
 
+/**
+ * The stock seed as stores seeded before Story 7.3 (review ruling D1) hold it: `CONWAYS_CLASSIC`
+ * without its `description` key. `ensureDefaultOrganism` never overwrites a stored Conway (M9), so
+ * those stores keep this shape forever; it is untouched content, nothing an import could destroy,
+ * so it stays pristine. Nothing else loosens: any other difference, an edited description
+ * included, is still a modification. No backfill (ruling D4).
+ */
+const PRE_D1_CONWAYS_CLASSIC: Record<string, unknown> = Object.fromEntries(
+  Object.entries(CONWAYS_CLASSIC).filter(([key]) => key !== 'description'),
+);
+
 /** Key-order-insensitive deep equality over plain JSON values — objects, arrays, primitives. */
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -73,5 +84,7 @@ export function isPristineWorkspace(
   }
   if (battleCount !== 0) return false;
   if (organisms.length !== 1) return false;
-  return deepEqual(organisms[0], CONWAYS_CLASSIC);
+  return (
+    deepEqual(organisms[0], CONWAYS_CLASSIC) || deepEqual(organisms[0], PRE_D1_CONWAYS_CLASSIC)
+  );
 }
