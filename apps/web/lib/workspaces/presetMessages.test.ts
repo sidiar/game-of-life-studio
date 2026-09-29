@@ -43,17 +43,19 @@ describe('presetLinkUnknownMessage', () => {
 
   it('never echoes an id that is not a well-formed slug (D2)', () => {
     const crafted = 'Data lost - recover at evil.example';
-    for (const untouched of [true, false]) {
-      const text = presetLinkUnknownMessage(crafted, untouched);
-      expect(text).not.toContain('Data lost');
-      expect(text).not.toContain('evil.example');
-      expect(text).toContain("isn't valid");
-      expect(text.includes('untouched')).toBe(untouched);
+    const generic =
+      "This preset link isn't valid. It doesn't point to any preset in this version of the studio.";
+    expect(presetLinkUnknownMessage(crafted, true)).toBe(`${generic} Your workspace is untouched.`);
+    expect(presetLinkUnknownMessage(crafted, false)).toBe(generic);
+    // Near-slugs fail too: uppercase, a trailing slash, stray whitespace.
+    for (const id of ['Spiral-Wars', 'spiral-wars/', ' spiral-wars']) {
+      expect(presetLinkUnknownMessage(id, false)).toBe(generic);
     }
   });
 
-  it('keeps the local slug pattern identical to PRESET_ID_PATTERN', () => {
+  it('keeps the local slug pattern identical to PRESET_ID_PATTERN, flags included', () => {
     expect(WELL_FORMED_PRESET_ID.source).toBe(PRESET_ID_PATTERN.source);
+    expect(WELL_FORMED_PRESET_ID.flags).toBe(PRESET_ID_PATTERN.flags);
   });
 
   it('truncates the id at 40 characters with an ellipsis', () => {

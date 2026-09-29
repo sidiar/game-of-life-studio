@@ -222,6 +222,34 @@ describe('HomePage', () => {
       expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
     });
 
+    it('a malformed ?preset= is never echoed: generic alert, nothing fetched (D2)', async () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      const seeded = render(<HomePage />);
+      await waitFor(() => {
+        expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+      });
+      seeded.unmount();
+      vi.unstubAllEnvs();
+
+      const fetchSpy = vi.fn<typeof fetch>(async () => new Response(manifestText));
+      vi.stubGlobal('fetch', fetchSpy);
+      const search = 'preset=Data%20lost%20-%20recover%20at%20evil.example';
+      currentParams = new URLSearchParams(search);
+      window.history.replaceState(null, '', `/?${search}`);
+
+      render(<HomePage />);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(
+        "This preset link isn't valid. It doesn't point to any preset in this version of the studio. Your workspace is untouched.",
+      );
+      expect(alert).not.toHaveTextContent('Data lost');
+      expect(alert).not.toHaveTextContent('evil.example');
+      // Not a first visit and not a slug: the flow never fetches (step 1).
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(window.location.search).toBe('');
+    });
+
     it('an empty ?preset= is no link: nothing fetched, no alert (Review 2026-09-29)', async () => {
       const fetchSpy = vi.fn<typeof fetch>(async () => new Response('', { status: 500 }));
       vi.stubGlobal('fetch', fetchSpy);

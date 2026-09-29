@@ -4,7 +4,7 @@ baseline_commit: 6d3380ccb647fe27b3051c24d9eadb04af8f6995
 
 # Story 7.6: Preset Link
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -29,10 +29,10 @@ so that someone can hand me a ready-made experience in one click.
 - [x] **Task 2: Link copy** (AC: 1, 2), per FD7
   - [x] 2.1 Add to `apps/web/lib/workspaces/presetMessages.ts`:
     - `PRESET_LINK_WARNING_BODY`, from the mockup's arrival modal (`preset-workspace-library.html:453-466`) as one plain string: "This link opens a preset workspace. Loading it replaces your entire workspace — all current battles and organisms will be lost. You can export your current workspace first to keep a backup. Cancelling takes you to your own workspace, untouched."
-    - `presetLinkUnknownMessage(id: string, workspaceUntouched: boolean)`: "This preset link doesn't exist (anymore). The link pointed to a preset called “<id>”, which isn't in this version of the studio." Append " Your workspace is untouched." only when `workspaceUntouched` is true (FD5: a first visitor gets the default preset instead, so "untouched" would be false). **Amended by D2:** an id failing the slug pattern gets "This preset link isn't valid. It doesn't point to any preset in this version of the studio." (plus the untouched sentence when true) with no echo. For well-formed slugs: pass the id through `displayPresetId(raw)`: at most 40 characters, then `…`. React escapes the text, so this is a layout guard, not a security one.
+    - `presetLinkUnknownMessage(id: string, workspaceUntouched: boolean)`: "This preset link doesn't exist (anymore). The link pointed to a preset called “<id>”, which isn't in this version of the studio." Append " Your workspace is untouched." only when `workspaceUntouched` is true (FD5: a first visitor gets the default preset instead, so "untouched" would be false). **Amended by D2:** an id failing the slug pattern gets "This preset link isn't valid. It doesn't point to any preset in this version of the studio." (plus the untouched sentence when true) with no echo. For well-formed slugs: pass the id through `displayPresetId(raw)`: at most 40 characters, then `…`. React escapes the text, so the 40-character cap is a layout guard, not a security one; the D2 slug check is the content-injection guard.
     - `PRESET_LINK_FETCH_FAILURE_MESSAGE`: "The preset this link points to could not be downloaded. Reload the page to try again. Your workspace was not changed."
   - [x] 2.2 Reuse, never fork: `presetWarningTitle(name)`, `PRESET_CONFIRM_LABEL`, `PRESET_EXPORT_FAILED_TEXT`, `presetLoadSuccessMessage(name, summary)`, and `importFailureMessage(error)` for pipeline failures.
-  - [x] 2.3 Unit tests: truncation at 40, the "untouched" suffix on and off, typographic quotes.
+  - [x] 2.3 Unit tests: truncation at 40, the "untouched" suffix on and off, typographic quotes. **Amended by D2:** the exact no-echo copy for pattern-failing ids, and parity (source and flags) between `WELL_FORMED_PRESET_ID` and `PRESET_ID_PATTERN`.
 - [x] **Task 3: The lazy flow module** (AC: 1, 2), per FD3 and FD5
   - [x] 3.1 New `apps/web/lib/workspaces/presetLinkFlow.ts`. It may statically import `@gol/persistence` (`createWorkspaceSerializer`, `validateImportFile`), `presetFetch`, `presetManifest`, `loadDefaultPreset`, `exportWorkspaceToFile`, `importFailureMessage` and `APP_VERSION`, because only a dynamic `import()` ever loads it (FD3). Export:
     ```ts
@@ -197,6 +197,13 @@ Code review 2026-09-29 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
 - [x] [Review][Defer] A failed `next/dynamic` dialog chunk leaves `useInertBackground` on and the page inert, and this now happens on `/` for any non-pristine link visitor [apps/web/components/gallery/PresetLinkArrival.tsx] — deferred, pre-existing (the 7.5 dialog-chunk item)
 - [x] [Review][Defer] The notice's live region is inserted with its text already inside, so a polite `status` may go unannounced in some screen readers [apps/web/components/gallery/PresetLinkNotice.tsx] — deferred, pre-existing (house pattern; the portalled live-region host in deferred-work.md is the class fix)
 
+Second review 2026-09-29 of the owner-rulings pass `60851dd..a769142` (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor). D2 (a) is implemented as ruled, and D1/D3 changed no code. The raw id reaches the UI only through `presetLinkUnknownMessage`. The dialog title and success line use the manifest's `entry.name`, the other failures use fixed or `importFailureMessage` copy, and the gallery sets no `document.title`. Reverting the guard fails the no-echo test.
+
+- [x] [Review][Patch] The regex parity test compares `.source` only, so a flag drift (`m` lets `"ok\nData lost…"` pass, `i` admits uppercase, `g` makes `test()` stateful) goes unnoticed [apps/web/lib/workspaces/presetMessages.test.ts:55]
+- [x] [Review][Patch] The invalid-id copy is only substring-checked (`"isn't valid"`), so pin the exact string with and without the untouched suffix, as 7.5 requires [apps/web/lib/workspaces/presetMessages.test.ts:44]
+- [x] [Review][Patch] No rendered-path test sends a malformed id, so add a page-level case asserting the generic alert, no echo and no fetch [apps/web/app/(gallery)/page.test.tsx:224]
+- [x] [Review][Patch] Story bookkeeping for D2 is incomplete: Task 2.1's "layout guard, not a security one" now reads as covering the pattern check, Task 2.3 omits the D2 tests, and the Completion Notes have no D2 entry [docs/implementation-artifacts/7-6-preset-link.md:32-35]
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -310,6 +317,7 @@ Sonnet 5.5 (claude-sonnet-5-5)
 - Bundle: `/` first-load gzip 341.0 KB vs baseline 339.2 KB (+1.8 KB), within the 8 KB growth allowance, so `scripts/bundle-baselines.json` was not refreshed.
 - Manual smoke (10.2): not run as a separate manual pass. The equivalent was covered by e2e against the static export served from `out/` (fresh visit + link with no dialog and a clean URL, non-pristine + Cancel with byte-identical storage, unknown id + Dismiss). Rename-then-Cancel was not exercised by name; e2e (b) proves the seeded store is byte-identical after Cancel.
 - Nothing in `presetLinkFlow.ts` writes before the unknown+firstVisit default load or `load()`.
+- D2 (owner ruling (a)): `presetLinkUnknownMessage` returns `PRESET_LINK_INVALID_MESSAGE`, with no echo, for ids failing the slug pattern. It checks a local copy, `WELL_FORMED_PRESET_ID`, because importing `presetManifest` would pull its zod schema into `/`'s first load (FD3). A unit test pins parity of source and flags with `PRESET_ID_PATTERN`.
 
 ### File List
 
@@ -336,6 +344,7 @@ Sonnet 5.5 (claude-sonnet-5-5)
 - 2026-09-29: Story 7.6 implemented (preset link `/?preset=<id>`), status review.
 - 2026-09-29: Code review (Opus): 6 patches applied, 4 deferred, 3 decisions left for the owner; status in-progress.
 - 2026-09-29: Owner rulings applied: D1 (c) and D3 (c) keep as built; D2 (a) generic no-echo message for pattern-failing ids (`presetMessages.ts`, unit tests); status review.
+- 2026-09-29: Second review (Opus) of the rulings pass `60851dd..a769142`: 4 patches applied (flag parity, exact no-echo copy, page-level malformed-id test, D2 story bookkeeping), 0 deferred, 0 decisions; status done.
 
 Dev Model: sonnet   # architecture-shaping (URL form, seed-hook deferral, gallery page boundary split); escalation to opus withheld because its Fable review pairing is unavailable, so FD1–FD8 pin every pattern for a Sonnet dev
 Proposed lane gate: none
