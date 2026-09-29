@@ -83,13 +83,13 @@ Second review 2026-09-29 of the ruling-pass commit `7585f7b` (Opus; Blind Hunter
   - **Owner ruling (Sidiar, 2026-09-29): (c).** Rewrite in FD3's voice: own-kind neighbours, no parameter list (it goes stale on edit and is copied into clones), say what to watch for. Re-export `colony-clash.json` so it stays deep-equal.
 - [x] [Review][Patch] The comment defending key omission gives a reason that is now backwards: an unedited Conway's Classic does carry a stored `description` key [apps/web/lib/organisms/organismRecord.ts:52]
 - [x] [Review][Patch] The test title "is not pristine when the seed organism gained a description" is stale: the seed already has one, so the case now tests an edited description [packages/domain/src/pristineWorkspace.test.ts:110]
-- [x] [Review][Patch] The Dev Agent Record points the legacy-store caveat at 7.4, but 7.4 gates on `isFreshWorkspace()` (stamp-based) and is unaffected. The stories actually affected are Settings Import, 7.5 and 7.6 [docs/implementation-artifacts/7-3-showcase-preset-content.md, Completion Notes]
-- [x] [Review][Patch] The File List omits the D1 changes to `presetShowcase.test.ts` (exemption dropped) and `colony-clash.json` (re-exported) [docs/implementation-artifacts/7-3-showcase-preset-content.md, File List]
+- [x] [Review][Patch] The Dev Agent Record points the legacy-store caveat at 7.4, but 7.4 gates on `isFreshWorkspace()` (stamp-based) and is unaffected. The stories actually affected are Settings Import, 7.5 and 7.6 [docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md, Completion Notes]
+- [x] [Review][Patch] The File List omits the D1 changes to `presetShowcase.test.ts` (exemption dropped) and `colony-clash.json` (re-exported) [docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md, File List]
 
 Third review 2026-09-29 of the D4–D5 ruling commit `1277013` (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor). 0 decision-needed, 5 patch, 0 defer, 8 dismissed.
 
-- [x] [Review][Patch] The Completion Notes are stale after D4/D5: the D1 bullet quotes the superseded 236-char description as current, and the D1-ripple caveat still says a pre-D1 store is not pristine ("Open as D4") [docs/implementation-artifacts/7-3-showcase-preset-content.md, Completion Notes]
-- [x] [Review][Patch] The File List lists `defaultWorkspace.ts` and `pristineWorkspace.test.ts` twice, is split by a blank line, and puts two files on one bullet [docs/implementation-artifacts/7-3-showcase-preset-content.md, File List]
+- [x] [Review][Patch] The Completion Notes are stale after D4/D5: the D1 bullet quotes the superseded 236-char description as current, and the D1-ripple caveat still says a pre-D1 store is not pristine ("Open as D4") [docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md, Completion Notes]
+- [x] [Review][Patch] The File List lists `defaultWorkspace.ts` and `pristineWorkspace.test.ts` twice, is split by a blank line, and puts two files on one bullet [docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md, File List]
 - [x] [Review][Patch] Two of the "four new tests" duplicate existing ones (edited description; the current constant is pristine), so the Change Log overstates coverage; the case that pins "nothing else loosens" (a present-but-`undefined` `description` key) is untested [packages/domain/src/pristineWorkspace.test.ts:122]
 - [x] [Review][Patch] The comment says a missing `description` key makes an unedited Conway's Classic fail `isPristineWorkspace`; after D4 the description-less stock shape is pristine [apps/web/lib/organisms/organismRecord.ts:51]
 - [x] [Review][Patch] The `CONWAYS_CLASSIC` description comment says "well under" the cap at 251/280, and does not warn that changing the text (or any field) strands every earlier-seeded store as non-pristine, since M9 never overwrites a stored Conway and `PRE_D1_CONWAYS_CLASSIC` derives from the live constant [packages/domain/src/defaultWorkspace.ts:71]
@@ -210,7 +210,7 @@ No new dependencies, and nothing version-sensitive, so no web research is needed
 - [Source: docs/planning-artifacts/architecture.md: Decision H (H.1), Decision E, Decision A, M9, M10, M16]
 - [Source: docs/implementation-artifacts/palette-cvd-validation.md: G4 CVD-robust core, tokens 1–8]
 - [Source: docs/project-context.md: determinism, no canvas pixel tests, bundle growth gate, spec:check]
-- [Source: docs/implementation-artifacts/7-1-preset-workspace-foundations.md, 7-2-descriptions-at-every-level.md]
+- [Source: docs/implementation-artifacts/epic-7/7-1-preset-workspace-foundations.md, 7-2-descriptions-at-every-level.md]
 
 ### Open questions for the owner (answered provisionally above)
 
@@ -267,7 +267,7 @@ Claude Sonnet 5.5
 - apps/web/e2e/settings.spec.ts (modified)
 - apps/web/lib/organisms/organismRecord.ts (comment only, second and third review)
 - packages/domain/src/pristineWorkspace.test.ts (modified; test title, second review; D4 tests)
-- docs/implementation-artifacts/7-3-showcase-preset-content.md
+- docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md
 - docs/implementation-artifacts/sprint-status.yaml
 
 ### Change Log

@@ -199,7 +199,7 @@ No new dependencies. Zod v4 spellings (`z.iso.datetime()`, `ctx.addIssue({ code:
 - [Source: docs/planning-artifacts/architecture.md — Decision F (F.2), Decision I, M8, M9]
 - [Source: docs/planning-artifacts/rfcs/RFC-006-persistence-workspace-schema.md — Decision 1, Decision 7 (the four-key list this story extends)]
 - [Source: docs/project-context.md — repositories injected, spec:check, bundle growth gate, live-region trap]
-- [Source: docs/implementation-artifacts/7-1-preset-workspace-foundations.md]
+- [Source: docs/implementation-artifacts/epic-7/7-1-preset-workspace-foundations.md]
 
 ### Open questions for the owner (answered provisionally by the FDs above)
 
@@ -342,7 +342,7 @@ Modified:
 - scripts/bundle-baselines.json
 - docs/implementation-artifacts/deferred-work.md
 - docs/implementation-artifacts/sprint-status.yaml
-- docs/implementation-artifacts/7-2-descriptions-at-every-level.md
+- docs/implementation-artifacts/epic-7/7-2-descriptions-at-every-level.md
 
 Owner-ruling pass (2026-09-28):
 - docs/planning-artifacts/architecture.md

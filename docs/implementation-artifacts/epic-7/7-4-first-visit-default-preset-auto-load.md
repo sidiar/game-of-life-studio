@@ -141,8 +141,8 @@ Recent main: `4999674` (merge of #100, story 7.3: content + `CONWAYS_CLASSIC` de
 - [Source: docs/planning-artifacts/prds/prd-GameOfLife-2026-05-26/prd.md#FR-9.2]
 - [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/preset-workspace-library-design.md §1]
 - [Source: docs/planning-artifacts/architecture.md#M16, M8, M9, Decision F]
-- [Source: docs/implementation-artifacts/7-1-preset-workspace-foundations.md FD5, FD7]
-- [Source: docs/implementation-artifacts/7-3-showcase-preset-content.md D1, D4]
+- [Source: docs/implementation-artifacts/epic-7/7-1-preset-workspace-foundations.md FD5, FD7]
+- [Source: docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md D1, D4]
 - [Source: docs/project-context.md: repositories injected; Zod at boundaries; bundle growth gate; ci:dev]
 
 ### Open questions for the owner (answered provisionally above)
@@ -215,7 +215,7 @@ Claude Opus 5.5 (claude-opus-5-5), via bmad-dev-story under implement-next-story
 - apps/web/e2e/organisms.spec.ts (modified)
 - apps/web/e2e/settings.spec.ts (modified)
 - apps/web/e2e/storageCorruption.spec.ts (modified)
-- docs/implementation-artifacts/7-4-first-visit-default-preset-auto-load.md (this story)
+- docs/implementation-artifacts/epic-7/7-4-first-visit-default-preset-auto-load.md (this story)
 - docs/implementation-artifacts/sprint-status.yaml (modified)
 - docs/implementation-artifacts/deferred-work.md (modified: D2 deep-link gap)
 

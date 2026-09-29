@@ -77,7 +77,7 @@ Code review 2026-09-29 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
 
   Grouping: **one candidate = one preset workspace** (each a separate manifest entry), 1–3 battles each. Do not merge candidates into one workspace; the Settings list and links address workspaces, so each should have one clear identity.
 
-- **FD2: Authoring route = the 7.3 FD2 route, unchanged.** Headless serializer composition built from the editors' own save projections; no hand-written envelope JSON (FR-9.1); no committed generator (7.1 "What NOT to build"). Read 7.3's FD2 bullets (Organisms / Battles / Conway's Classic) in `docs/implementation-artifacts/7-3-showcase-preset-content.md` and follow them exactly. In particular: Conway's Classic is always the **stock** record from `seedDefaultWorkspace` and is never modified (M9; 7.3 D4/D5: its description text is load-bearing for `isPristineWorkspace`); give battles distinct `updatedAt` values so the intended flagship sorts first in the gallery (FR-7.3).
+- **FD2: Authoring route = the 7.3 FD2 route, unchanged.** Headless serializer composition built from the editors' own save projections; no hand-written envelope JSON (FR-9.1); no committed generator (7.1 "What NOT to build"). Read 7.3's FD2 bullets (Organisms / Battles / Conway's Classic) in `docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md` and follow them exactly. In particular: Conway's Classic is always the **stock** record from `seedDefaultWorkspace` and is never modified (M9; 7.3 D4/D5: its description text is load-bearing for `isPristineWorkspace`); give battles distinct `updatedAt` values so the intended flagship sorts first in the gallery (FR-7.3).
 
 - **FD3: Content constraints.**
   - **Colours**: distinct tokens within each preset, taken from the CVD-robust core (tokens 1–8: `sky-blue` is Conway's; `vermillion`, `bluish-green`, `amber`, `reddish-purple`, `yellow`, `azure`, `coral-red`) whenever the preset has ≤ 8 organisms. Tokens 9–20 are not pairwise CVD-gated; use them only if a preset needs more than 8 colours, and say so in the Dev Agent Record.
@@ -112,7 +112,7 @@ Code review 2026-09-29 (opus; Blind Hunter + Edge Case Hunter + Acceptance Audit
 
 ### What exists: read these before writing a line
 
-- `docs/implementation-artifacts/7-3-showcase-preset-content.md`: **the recipe this story repeats N times**. FD2 (authoring route), FD3 (content constraints and engine semantics), the Dev Agent Record (tuning history: B34/S234 and S2-4 overran the dish; invasion at own `neighborCount gte 3` gave too few transfers, `gte 2` gave 200–450), and all three review rounds (description voice, precision of "neighbours of its own kind", Conway's description).
+- `docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md`: **the recipe this story repeats N times**. FD2 (authoring route), FD3 (content constraints and engine semantics), the Dev Agent Record (tuning history: B34/S234 and S2-4 overran the dish; invasion at own `neighborCount gte 3` gave too few transfers, `gte 2` gave 200–450), and all three review rounds (description voice, precision of "neighbours of its own kind", Conway's description).
 - `apps/web/public/workspaces/index.json`, `colony-clash.json`: the manifest (one entry, `defaultPresetId: "colony-clash"`) and a real envelope to compare shapes against.
 - `apps/web/lib/workspaces/presetManifest.ts`: contract and authoring path (head comment). `presetWorkspaces.test.ts`: the lockstep gate (structural manifest parse, slug ids, `file === ${id}.json`, git-tracked lockstep, `validateImportFile` per preset, manifest description ≡ envelope description). Stays **untouched** and green; it already loops over every entry.
 - `apps/web/lib/workspaces/presetShowcase.test.ts`: the model for FD7's loading, engine loop and failure-message style. Untouched.
@@ -189,7 +189,7 @@ No new dependencies and nothing version-sensitive, so no web research is needed.
 - [Source: docs/planning-artifacts/architecture.md: Decision A, Decision E, Decision H (H.1), M9, M10]
 - [Source: docs/project-context.md: Testing Rules (bench budget, Phase 2 cost, determinism, no canvas pixel tests), bundle growth gate]
 - [Source: docs/implementation-artifacts/performance-baseline-validation.md]
-- [Source: docs/implementation-artifacts/7-3-showcase-preset-content.md, 7-5-load-preset-from-settings.md, 7-6-preset-link.md]
+- [Source: docs/implementation-artifacts/epic-7/7-3-showcase-preset-content.md, 7-5-load-preset-from-settings.md, 7-6-preset-link.md]
 - [Source: docs/implementation-artifacts/palette-cvd-validation.md: G4 CVD-robust core, tokens 1–8]
 
 ### Open questions for the owner (answered provisionally above)
@@ -235,7 +235,7 @@ Claude Sonnet 5.5
 - apps/web/lib/workspaces/presetCatalog.test.ts (new)
 - apps/web/e2e/presetLink.spec.ts (test (g), comment reworded)
 - apps/web/e2e/loadPreset.spec.ts (options assertion)
-- docs/implementation-artifacts/7-7-preset-catalog.md
+- docs/implementation-artifacts/epic-7/7-7-preset-catalog.md
 - docs/implementation-artifacts/sprint-status.yaml
 
 ### Change Log
