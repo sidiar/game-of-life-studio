@@ -209,6 +209,9 @@ export default function LoadPresetRow({
     }
   }
 
+  // Known limitation (Story 7.5 review, owner ruling D1 (a)): `pendingRef` guards this row only.
+  // The up-to-5 s fetch below is unguarded against Import and Clear All, so a sibling flow started
+  // in that window can overlap or be overwritten. See deferred-work.md (story 7.5 entries).
   async function handleLoadClick() {
     if (pendingRef.current || selected === undefined) return;
     const entry = selected;

@@ -4,7 +4,7 @@ baseline_commit: ae8a32b212047bab6c7e243f86f0eefdb300960b
 
 # Story 7.5: Load Preset from Settings
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -94,7 +94,7 @@ so that I can start over from curated content whenever I choose.
 
 ### Review Findings
 
-- [ ] [Review][Decision] Cross-row concurrency during the preset fetch window — The per-row `pendingRef` (FD7, open question 1) leaves the up-to-5 s envelope fetch unguarded against sibling rows, and that window is new: Import's file read is near-instant. Three consequences. (1) Click Load, then open Import's (or Clear All's) dialog while the fetch runs. When the fetch resolves on a non-pristine store, a second `ImportWarningDialog` mounts on top. Both dialogs share `id="import-warning-dialog-title"`/`-body`, so `aria-labelledby` is ambiguous, and `focusLoadButtonIfLoose` treats focus inside Import's dialog as "loose". Confirming both runs two whole-workspace replaces back-to-back. (2) Click Load, then confirm Clear All during the fetch. The pristine check now sees the cleared store as pristine, so the preset is imported with no warning. The D2 owner slot correctly drops its "Loaded" line, but the store ends up holding the preset while the only visible outcome says "All data cleared." (`onImported` still refreshes the stats.) The `DataManagement.test.tsx` stale-outcome case only asserts the message, so it locks this mismatch in. (3) The same stale snapshot applies to any other row's write landing between the pristine read and `runLoad`. [apps/web/components/settings/LoadPresetRow.tsx:212-271]. Options: (a) accept FD7 as is (per-row guard + owner slot), recording the mismatch as known; (b) add a card-level "whole-workspace flow in flight" guard in `<DataManagement>` shared by Import, Load Preset and Clear All, so a new flow is a no-op while another runs (the UX note's literal "no-op while another data flow is in flight"; reverses 5.10 FD6 for these three rows); (c) a narrow guard: after the fetch settles, `LoadPresetRow` aborts (publishing the fetch-failure-style "not changed" alert, or silently) if another row claimed the outcome slot since this flow started, so a slower preset never lands over a later Import or Clear All.
+- [x] [Review][Decision] Cross-row concurrency during the preset fetch window — The per-row `pendingRef` (FD7, open question 1) leaves the up-to-5 s envelope fetch unguarded against sibling rows, and that window is new: Import's file read is near-instant. Three consequences. (1) Click Load, then open Import's (or Clear All's) dialog while the fetch runs. When the fetch resolves on a non-pristine store, a second `ImportWarningDialog` mounts on top. Both dialogs share `id="import-warning-dialog-title"`/`-body`, so `aria-labelledby` is ambiguous, and `focusLoadButtonIfLoose` treats focus inside Import's dialog as "loose". Confirming both runs two whole-workspace replaces back-to-back. (2) Click Load, then confirm Clear All during the fetch. The pristine check now sees the cleared store as pristine, so the preset is imported with no warning. The D2 owner slot correctly drops its "Loaded" line, but the store ends up holding the preset while the only visible outcome says "All data cleared." (`onImported` still refreshes the stats.) The `DataManagement.test.tsx` stale-outcome case only asserts the message, so it locks this mismatch in. (3) The same stale snapshot applies to any other row's write landing between the pristine read and `runLoad`. [apps/web/components/settings/LoadPresetRow.tsx:212-271]. Options: (a) accept FD7 as is (per-row guard + owner slot), recording the mismatch as known; (b) add a card-level "whole-workspace flow in flight" guard in `<DataManagement>` shared by Import, Load Preset and Clear All, so a new flow is a no-op while another runs (the UX note's literal "no-op while another data flow is in flight"; reverses 5.10 FD6 for these three rows); (c) a narrow guard: after the fetch settles, `LoadPresetRow` aborts (publishing the fetch-failure-style "not changed" alert, or silently) if another row claimed the outcome slot since this flow started, so a slower preset never lands over a later Import or Clear All. **Owner ruling (Sidiar, 2026-09-29): (a)** — accept FD7 as is (per-row `pendingRef` guard + the D2 owner slot); record the cross-row mismatch as known: a `deferred-work.md` entry naming the three consequences, a short known-limitation note at the fetch window in `LoadPresetRow.tsx`, and the `DataManagement.test.tsx` stale-outcome case's comment says it pins current (accepted) behaviour, not the ideal. No behaviour change.
 - [x] [Review][Patch] Test (d) asserts the empty battle list, not the seeded organisms that are at risk [apps/web/components/settings/LoadPresetRow.test.tsx:209]
 - [x] [Review][Patch] Tests (k)/(l) accept any alert; pin the exact `importFailureMessage` copy (Task 3.2 / 6.1) [apps/web/components/settings/LoadPresetRow.test.tsx:348,362]
 - [x] [Review][Patch] Test (i) proves one fetch but not one import / one `onImported` [apps/web/components/settings/LoadPresetRow.test.tsx:305]
@@ -230,12 +230,14 @@ Claude Sonnet 5.5
 - apps/web/components/settings/ImportWarningDialog.tsx, ImportWorkspaceRow.tsx, SettingsCard.tsx
 - apps/web/components/settings/DataManagement.tsx, DataManagement.test.tsx
 - apps/web/e2e/loadPreset.spec.ts (new)
+- docs/implementation-artifacts/deferred-work.md (D1 entry)
 - docs/implementation-artifacts/sprint-status.yaml, 7-5-load-preset-from-settings.md
 
 ### Change Log
 
 - 2026-09-29: Story 7.5 implemented: Load Preset row in Settings Data Management.
 - 2026-09-29: Code review (Opus): 10 patches applied (test hardening, the stub path, doc comments, the 8.2 smoke), 3 deferred, and 1 decision left open (cross-row concurrency). Status → in-progress.
+- 2026-09-29: Owner ruling D1 (a) applied: cross-row concurrency accepted as is. Recorded in `deferred-work.md`, a known-limitation comment in `LoadPresetRow.tsx`, and the `DataManagement.test.tsx` stale-outcome comment; no behaviour change. Status → review.
 
 Dev Model: sonnet   # follows the established 5.9 Import-row flow and 7.4's fetch helpers; the surfaces 7.6 reuses (fetch module, dialog copy props) are pinned by FD1/FD2
 Proposed lane gate: none
