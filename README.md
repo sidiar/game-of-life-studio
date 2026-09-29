@@ -12,9 +12,6 @@ install, nothing stored anywhere but your own browser.
 centre while an Aggressive Colonizer holds the corner and a Chaotic Spreader scavenges its
 edge](docs/media/battle.gif)
 
-**Status (2026-09):** battle gallery, grid editor and Play mode are live; the custom-organism
-editor (Epic 4 of 6) is in progress, sharing and theming are next.
-
 ## Why it's interesting
 
 - **It's a multi-organism cellular automaton, not another Life clone.** Every organism carries
