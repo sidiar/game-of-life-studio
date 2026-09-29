@@ -19,9 +19,16 @@ const NAV_ITEMS = [
   { href: '/about', label: 'About', match: 'prefix' },
 ] as const;
 
+/** The shell's phone-width breakpoint, shared with AppShell. */
+export const NARROW = '@media (max-width: 700px)';
+
 const Nav = styled('nav')({
   display: 'flex',
   gap: '40px',
+  [NARROW]: {
+    gap: '2px',
+    flexWrap: 'wrap',
+  },
 });
 
 // Mockup: .nav-item / .nav-item.active (clinical-lab-theme/battle-gallery.html:68-88). Static
@@ -40,6 +47,12 @@ const NavItem = styled(Link, {
   border: `1px solid ${active ? 'var(--gol-border)' : 'transparent'}`,
   backgroundColor: active ? 'var(--gol-bg-secondary)' : 'transparent',
   transition: 'color 0.2s',
+  // Sized so all four entries share one row down to ~360px; narrower, the row wraps.
+  [NARROW]: {
+    fontSize: '12px',
+    letterSpacing: '0.3px',
+    padding: '8px',
+  },
   '&:hover': {
     color: active ? 'var(--gol-accent)' : 'var(--gol-text-primary)',
   },

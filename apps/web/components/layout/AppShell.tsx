@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { styled } from '@mui/material/styles';
-import AppNav from './AppNav';
+import AppNav, { NARROW } from './AppNav';
 
 // Mockup: .header (clinical-lab-theme/battle-gallery.html:38-45) — plain flex row with a 2px
 // bottom rule, no elevation or fixed positioning. Semantic <header> + styled(), not
@@ -15,6 +15,13 @@ const Header = styled('header')({
   alignItems: 'center',
   padding: '24px 32px',
   borderBottom: '2px solid var(--gol-border)',
+  // Phone widths: the wordmark and the four nav entries cannot share one row at 375px, so the
+  // nav wraps under the wordmark instead of pushing the page into horizontal scroll.
+  flexWrap: 'wrap',
+  rowGap: '12px',
+  [NARROW]: {
+    padding: '16px',
+  },
 });
 
 // Wordmark, not a document heading — the page's own <h1> ("Battle Gallery") is the sole h1
@@ -41,6 +48,9 @@ const LogoAccent = styled('span')({
 
 const Main = styled('main')({
   padding: '32px',
+  [NARROW]: {
+    padding: '16px',
+  },
 });
 
 export default function AppShell({ children }: { children: ReactNode }) {
