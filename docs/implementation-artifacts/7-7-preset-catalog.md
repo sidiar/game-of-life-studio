@@ -4,7 +4,7 @@ baseline_commit: 9504be0672977f6d61e5b51f4c59570b47b313d4
 
 # Story 7.7: Preset Catalog
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -46,6 +46,21 @@ Epic context (epics.md, Story 7.7): deliberately last; content curation is open-
 - [x] **Task 7: Visual check and verify** (AC: 1, 2)
   - [x] 7.1 `npm run dev` → Settings → Load Preset (or Import the file) for each new preset → gallery thumbnails read well → open each battle, press Play at default speed, watch ~10 s. Screenshots into the scratchpad or `/tmp`, never the repo. Describe what was seen per battle in the Dev Agent Record.
   - [x] 7.2 `npm run ci:dev` green (never the four-browser `npm run ci`). `bundle:check` must show no route growth: nothing in app code imports preset JSON (7.1 FD5).
+
+### Review Findings
+
+Code review 2026-09-29 (opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor). 0 decision-needed, 9 patch, 1 defer, 20 dismissed. Two independent re-implementations of the engine semantics (scratchpad, not committed) reproduced the Dev Agent Record's Four Ranks numbers exactly, and were used to check the content claims below.
+
+- [x] [Review][Patch] Glider Gun and Eater: the R-pentomino meets other organisms, which breaks FD1 ("placed far enough apart that it never meets another organism"; "textbook self for at least 100 cycles"). Its debris touches the eater from about cycle 95, destroys one glider on cycles 224–237, and touches the pulsar from cycle 155. The pulsar is reduced to still debris by about cycle 2500. The battle's "Far off" and the workspace's "every pattern behaves as it would in the original game" are false. Fix: move the R-pentomino into its own battle. [apps/web/public/workspaces/conways-menagerie.json]
+- [x] [Review][Patch] Four Ranks description: "reddish-purple … ends up holding most of the dish" is false. Sovereign holds 504 of 6000 cells at cycle 100 and 267 at cycle 300 (4–8 % of the dish, about 72 % of the live cells). [apps/web/public/workspaces/dominance-ladder.json]
+- [x] [Review][Patch] Sandwich description: "reddish-purple meets vermilion and outranks it too" does not happen. The run is deterministic (no dominance ties) and freezes by about cycle 100–200 at Knight 30 / Sovereign 32 cells, and vermilion is never absorbed. [apps/web/public/workspaces/dominance-ladder.json]
+- [x] [Review][Patch] Mirror Match battle description: "the blue side keeps its ground" is false. Conway's side falls 1208 → 342 → 192 by cycle 300; it only thins far less than the amber side (52). [apps/web/public/workspaces/mirror-match.json]
+- [x] [Review][Patch] Violet Sovereign description: "needs 2 neighbors of its own kind" should read "at least 2" (the rule is `gte 2`; FD3 precision). [apps/web/public/workspaces/dominance-ladder.json]
+- [x] [Review][Patch] Pulsar description: "a ring of cells" is imprecise. A pulsar is four symmetric groups of 3-cell bars. [apps/web/public/workspaces/conways-menagerie.json]
+- [x] [Review][Patch] Battle `createdAt`/`updatedAt` is later than the envelope's `exportedAt` in all three presets (the generator stamps `t0 + n s`). A real export through the app cannot produce that. Stamp battles before the export instead. [apps/web/public/workspaces/*.json]
+- [x] [Review][Patch] e2e (g) needs three changes. The heading match is a substring match, so add `exact: true`. It never proves that only the linked preset loaded, so assert that the default's battle headings are absent. It grows by one cold page load per preset under the default 30 s timeout on the per-browser matrix, so mark it `test.slow()`. [apps/web/e2e/presetLink.spec.ts]
+- [x] [Review][Patch] presetCatalog.test.ts: a preset with zero battles passes every per-battle gate, and the liveness comment's "a zero-case loop cannot pass" holds only for presets, not battles. Assert that every preset ships at least one battle. [apps/web/lib/workspaces/presetCatalog.test.ts]
+- [x] [Review][Defer] Stock Conway's Classic description ("watch invaders eat into its colonies") reads oddly in presets with no invaders (Conway's Menagerie, Mirror Match) or where it is unplaced (Dominance Ladder) [packages/domain CONWAYS_CLASSIC] — deferred, pre-existing: M9 and 7.3 D4/D5 forbid editing it per preset
 
 ## Dev Notes
 
@@ -205,7 +220,7 @@ Claude Sonnet 5.5
 - **Names and ids for owner veto (FD4, stable forever once merged):** "Dominance Ladder" / `dominance-ladder`, "Conway's Menagerie" / `conways-menagerie`, "Mirror Match" / `mirror-match`. `defaultPresetId` stays `colony-clash` (FD6); the new entries follow it in the manifest.
 - Per preset (route = FD2; colours all from the CVD-robust core, tokens 1-8; grids 100x60 and 50x30 only; the 100x60 battle is the newest so it sorts first):
   - **Dominance Ladder**: Conway's Classic (stock, unused in battles) + Lowly Moss / bluish-green / 20, Amber Squire / amber / 40, Ember Knight / vermillion / 60, Violet Sovereign / reddish-purple / 80; none age; rules in order: take over a rival cell (occupied + own `neighborCount` gte 2), born empty with 3, survive 2-3. Battles: Four Ranks 100x60 (four quarters, 45 % soup, seeds 1-4; 1296 territory transfers in 50 cycles, all four alive at 300) and Sandwich 50x30 (Knight | Moss | Sovereign thirds, 45 % soup, seeds 21-23; Moss extinct by ~cycle 50, 389 transfers in 50 cycles, Knight and Sovereign both alive at 300).
-  - **Conway's Menagerie**: Conway's Classic (stock) + six recoloured clones with identical B3/S23 and distinct dominance: Pulsar / amber / 10, R-Pentomino / vermillion / 20, Pentadecathlon / reddish-purple / 30, Toad / bluish-green / 40, Beacon / azure / 60, Blinker / yellow / 70. Patterns decoded from RLE, never hand-typed. Battles: Glider Gun and Eater 100x60 (Conway's gun at (3,3) + eater at (50,36); pulsar at (78,8); R-pentomino at (84,44)) and Oscillator Garden 50x30 (pulsar, pentadecathlon, toad, beacon, blinker, plus a Conway's beehive and block). The Garden is periodic with period 30 across 300 cycles; the gun/eater battle is periodic from ~237 to 600.
+  - **Conway's Menagerie**: Conway's Classic (stock) + six recoloured clones with identical B3/S23 and distinct dominance: Pulsar / amber / 10, R-Pentomino / vermillion / 20, Pentadecathlon / reddish-purple / 30, Toad / bluish-green / 40, Beacon / azure / 60, Blinker / yellow / 70. Patterns decoded from RLE, never hand-typed. Battles: Glider Gun and Eater 100x60 (Conway's gun at (3,3) + eater at (50,36); pulsar at (78,8)), R-Pentomino 100x60 (alone at (48,28); moved out of the gun battle at review) and Oscillator Garden 50x30 (pulsar, pentadecathlon, toad, beacon, blinker, plus a Conway's beehive and block). The Garden is periodic with period 30 across 300 cycles; the gun/eater battle is periodic from ~237 to 600.
   - **Mirror Match**: Conway's Classic (stock, dominance 50) + Mortal Mirror / amber / 50 / aging on; rules in order: die at age >= 10, born empty with 3, survive 2-3. Equal dominance on purpose (FD1 option one): the description says so and the tie-break RNG decides contested empty cells. Battles: Mirror Match 100x60 (exact mirror soup, 40 %, seed 5; populations at cycles 0/50/100/200/300: 1208/1208, 342/232, 305/102, 255/78, 192/52) and Short Lives 50x30 (mirror soup 40 %, seed 7; the mortal side thins to 4 cells by cycle 100 but the dish never empties).
 - Gate `presetCatalog.test.ts` (FD7 a-g) added; `presetShowcase.test.ts` and `presetWorkspaces.test.ts` untouched and green. Two e2e additions (link reachability for every non-default entry on fresh contexts; Load Preset options equal the manifest, default first). The stale "manifest ships one entry" comment reworded.
 - `npm run ci:dev` green (328 chromium e2e passed, bundle growth within allowance, bench checks passed).
@@ -225,6 +240,7 @@ Claude Sonnet 5.5
 
 ### Change Log
 
+- 2026-09-29: Code review (opus): 9 patches applied. All three presets were regenerated through the same serializer route (so every uuid and `exportedAt` changed; nothing was merged yet). The R-pentomino moved into its own battle, so no Menagerie pattern meets another organism (FD1): the gun and eater settle into period 30 and the pulsar stays 48/56/72 through 1200 cycles. The R-pentomino settles by about cycle 900. The Four Ranks, Sandwich and Mirror Match descriptions were corrected to match the headless runs (numbers in Review Findings; populations through 1200 cycles unchanged by regeneration because placement seeds are fixed). Sovereign now reads "at least 2", and the Pulsar wording was fixed. Battles are stamped before `exportedAt`. e2e (g) now uses `exact: true`, checks the default's battles are absent and runs under `test.slow()`. The catalogue gate asserts at least one battle per preset.
 - 2026-09-29: Story 7.7 implemented: three catalogue presets (Dominance Ladder, Conway's Menagerie, Mirror Match) exported through the serializer, manifest entries, `presetCatalog.test.ts` gate, two e2e additions. Rock-Paper-Scissors dropped at its timebox.
 
 Dev Model: sonnet   # content authoring + one gate test + two e2e additions, all following 7.3's established route and presetShowcase.test.ts's idioms; not architecture-shaping (no new pattern later stories build on); feasibility traps pinned in FD1/FD3

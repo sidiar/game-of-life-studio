@@ -84,6 +84,10 @@ describe('preset catalogue (Story 7.7)', () => {
 
   for (const preset of presets) {
     describe(`preset "${preset.id}"`, () => {
+      it('ships at least one battle (every per-battle gate below would pass vacuously on none)', () => {
+        expect(preset.battles.length, `${preset.id}: ships no battles`).toBeGreaterThan(0);
+      });
+
       it('describes the workspace, every battle and every organism (FR-9.5)', () => {
         expect(
           preset.workspaceDescription?.trim(),
@@ -142,7 +146,8 @@ describe('preset catalogue (Story 7.7)', () => {
   }
 
   // Liveness for the catalogue (every non-default preset): dead content fails. A static loop, not
-  // it.each over a folder, so a zero-case loop cannot pass (the assertion above needs >= 4 entries).
+  // it.each over a folder: the manifest assertion above needs >= 4 entries and the per-preset one
+  // needs >= 1 battle each, so neither loop can run zero cases and pass.
   for (const preset of presets) {
     if (preset.id === manifest.defaultPresetId) continue;
     for (const battle of preset.battles) {

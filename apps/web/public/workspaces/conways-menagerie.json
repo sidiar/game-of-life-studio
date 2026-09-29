@@ -1,9 +1,9 @@
 {
   "formatVersion": 1,
   "appVersion": "0.0.0",
-  "exportedAt": "2026-09-29T14:02:05.619Z",
+  "exportedAt": "2026-09-29T14:15:17.273Z",
   "kind": "workspace",
-  "description": "A zoo of classic Life patterns, each doing its textbook trick. Conway's Classic and six recoloured copies of it share the same rules, so every pattern behaves as it would in the original game while its colour tells you which is which. Glider Gun and Eater feeds a stream of gliders to an eater; Oscillator Garden is a quiet showcase of oscillators and still lifes.",
+  "description": "A zoo of classic Life patterns, each doing its textbook trick. Conway's Classic and six recoloured copies of it share the same rules, so every pattern behaves as it would in the original game while its colour tells you which is which. Glider Gun and Eater feeds a stream of gliders to an eater; R-Pentomino lets five cells churn into chaos on a dish of their own; Oscillator Garden is a quiet showcase of oscillators and still lifes.",
   "organisms": [
     {
       "schemaVersion": 1,
@@ -58,15 +58,15 @@
     },
     {
       "schemaVersion": 1,
-      "id": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb",
+      "id": "8c132860-9b53-4b97-b935-00fc56713f04",
       "name": "Pulsar",
-      "description": "A period-3 oscillator: a ring of cells that swells and shrinks every 3 cycles. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
+      "description": "A period-3 oscillator: four symmetric groups of bars that swell and shrink every 3 cycles. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
       "colorToken": "amber",
       "dominance": 10,
       "agingEnabled": false,
       "survivalRules": [
         {
-          "id": "1a255470-6eb7-47f8-bf67-9b992a5a5a45",
+          "id": "1b9b4c86-1e7f-4bb6-8436-ac13154ca3f0",
           "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
           "conditions": [
             {
@@ -86,7 +86,7 @@
           }
         },
         {
-          "id": "4defd9fb-a212-48ab-9356-4541b686adbf",
+          "id": "9c1798fc-26ce-4a12-a969-b651eb70993c",
           "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
           "conditions": [
             {
@@ -109,7 +109,7 @@
     },
     {
       "schemaVersion": 1,
-      "id": "b9031281-c400-4972-8588-6059c5257b7e",
+      "id": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da",
       "name": "R-Pentomino",
       "description": "Five cells that churn chaotically for a long time before settling into debris. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
       "colorToken": "vermillion",
@@ -117,7 +117,7 @@
       "agingEnabled": false,
       "survivalRules": [
         {
-          "id": "9834c5e0-21e2-4b1f-bbb5-84e0b0b4624e",
+          "id": "f85d1190-3f61-4382-ae5d-74e4938dff83",
           "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
           "conditions": [
             {
@@ -137,7 +137,7 @@
           }
         },
         {
-          "id": "58b00d63-5490-485a-aee0-36440fcb4649",
+          "id": "5ff6f971-0ac4-4c04-8f8e-edf1af530662",
           "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
           "conditions": [
             {
@@ -160,7 +160,7 @@
     },
     {
       "schemaVersion": 1,
-      "id": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5",
+      "id": "7771de12-e37c-4134-a3bb-a93dc7ba4475",
       "name": "Pentadecathlon",
       "description": "A period-15 oscillator: a bar that grows arms, flips, and returns every 15 cycles. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
       "colorToken": "reddish-purple",
@@ -168,7 +168,7 @@
       "agingEnabled": false,
       "survivalRules": [
         {
-          "id": "c356b05a-a7fe-404b-992f-80282ec09f75",
+          "id": "2a453377-ed79-46d2-a03b-0e2f9483e10b",
           "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
           "conditions": [
             {
@@ -188,7 +188,7 @@
           }
         },
         {
-          "id": "5db3c76e-89e2-4127-9b44-370eaa449268",
+          "id": "0a22bc45-f8a2-4dd5-ba10-06dd66ea6afb",
           "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
           "conditions": [
             {
@@ -211,7 +211,7 @@
     },
     {
       "schemaVersion": 1,
-      "id": "b90f22c8-19dd-4ade-a7cd-f096f1787855",
+      "id": "0614582b-ff84-4635-9f18-4a5fbe02f988",
       "name": "Toad",
       "description": "A period-2 oscillator: six cells that flip between two shapes every cycle. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
       "colorToken": "bluish-green",
@@ -219,7 +219,7 @@
       "agingEnabled": false,
       "survivalRules": [
         {
-          "id": "d4baf969-3de3-498e-b363-2cebd131af2a",
+          "id": "d9062352-968d-46e8-bbd3-39c96e975751",
           "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
           "conditions": [
             {
@@ -239,7 +239,7 @@
           }
         },
         {
-          "id": "0a45e261-ad45-44c9-a770-a91f04679747",
+          "id": "16771668-f3e9-4637-98c9-bf9991e6c402",
           "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
           "conditions": [
             {
@@ -262,7 +262,7 @@
     },
     {
       "schemaVersion": 1,
-      "id": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511",
+      "id": "34d87f56-8fd4-468f-ae2d-6f6d10706440",
       "name": "Beacon",
       "description": "A period-2 oscillator: two blocks whose touching corners blink on and off. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
       "colorToken": "azure",
@@ -270,7 +270,7 @@
       "agingEnabled": false,
       "survivalRules": [
         {
-          "id": "cbd71b69-ebfc-496f-b931-22436430c834",
+          "id": "0e586f8f-a670-42e6-ab84-d63a6127ee02",
           "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
           "conditions": [
             {
@@ -290,7 +290,7 @@
           }
         },
         {
-          "id": "a6ac7e18-dbb1-4d28-8c43-1416b2fe256a",
+          "id": "6ef5d4c0-633e-43be-80c3-3b3b39b6beb5",
           "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
           "conditions": [
             {
@@ -313,7 +313,7 @@
     },
     {
       "schemaVersion": 1,
-      "id": "af35298d-a08b-4d38-92c6-dde190227ee2",
+      "id": "3b34d11e-7a8e-4a7f-8409-6fc1ca67cbb3",
       "name": "Blinker",
       "description": "The smallest oscillator: three cells that swing between a row and a column. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
       "colorToken": "yellow",
@@ -321,7 +321,7 @@
       "agingEnabled": false,
       "survivalRules": [
         {
-          "id": "ab0e3a05-e0b3-48a2-a5ba-915eb29815f5",
+          "id": "357d6896-83a9-42db-816c-27f14a3937d1",
           "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
           "conditions": [
             {
@@ -341,7 +341,7 @@
           }
         },
         {
-          "id": "cd9afe61-cae9-4c3a-8ae9-6677cc9b0ada",
+          "id": "6428ffbd-7eef-4d5c-84a4-7aec9994ac18",
           "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
           "conditions": [
             {
@@ -365,7 +365,7 @@
   ],
   "battles": [
     {
-      "id": "37e136ba-d9a3-41aa-b677-4ef251c89c23",
+      "id": "f0512c9d-e592-4668-99ef-94cf17f8f77e",
       "name": "Oscillator Garden",
       "description": "Oscillators and still lifes, each colour keeping its own rhythm: a pulsar, a pentadecathlon, a toad, a beacon and a blinker, beside a beehive and a block that never change.",
       "gridDimensions": {
@@ -426,396 +426,434 @@
         {
           "x": 5,
           "y": 3,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 6,
           "y": 3,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 7,
           "y": 3,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 11,
           "y": 3,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 12,
           "y": 3,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 13,
           "y": 3,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 3,
           "y": 5,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 8,
           "y": 5,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 10,
           "y": 5,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 15,
           "y": 5,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 3,
           "y": 6,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 8,
           "y": 6,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 10,
           "y": 6,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 15,
           "y": 6,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 3,
           "y": 7,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 8,
           "y": 7,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 10,
           "y": 7,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 15,
           "y": 7,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 5,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 6,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 7,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 11,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 12,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 13,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 5,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 6,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 7,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 11,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 12,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 13,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 3,
           "y": 11,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 8,
           "y": 11,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 10,
           "y": 11,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 15,
           "y": 11,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 3,
           "y": 12,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 8,
           "y": 12,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 10,
           "y": 12,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 15,
           "y": 12,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 3,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 8,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 10,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 15,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 5,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 6,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 7,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 11,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 12,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 13,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 27,
           "y": 4,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 32,
           "y": 4,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 25,
           "y": 5,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 26,
           "y": 5,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 28,
           "y": 5,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 29,
           "y": 5,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 30,
           "y": 5,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 31,
           "y": 5,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 33,
           "y": 5,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 34,
           "y": 5,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 27,
           "y": 6,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 32,
           "y": 6,
-          "organismId": "dd9e9e74-b2a7-47e7-8eb4-20cc33881ab5"
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
         },
         {
           "x": 26,
           "y": 20,
-          "organismId": "b90f22c8-19dd-4ade-a7cd-f096f1787855"
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
         },
         {
           "x": 27,
           "y": 20,
-          "organismId": "b90f22c8-19dd-4ade-a7cd-f096f1787855"
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
         },
         {
           "x": 28,
           "y": 20,
-          "organismId": "b90f22c8-19dd-4ade-a7cd-f096f1787855"
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
         },
         {
           "x": 25,
           "y": 21,
-          "organismId": "b90f22c8-19dd-4ade-a7cd-f096f1787855"
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
         },
         {
           "x": 26,
           "y": 21,
-          "organismId": "b90f22c8-19dd-4ade-a7cd-f096f1787855"
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
         },
         {
           "x": 27,
           "y": 21,
-          "organismId": "b90f22c8-19dd-4ade-a7cd-f096f1787855"
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
         },
         {
           "x": 4,
           "y": 22,
-          "organismId": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511"
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
         },
         {
           "x": 5,
           "y": 22,
-          "organismId": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511"
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
         },
         {
           "x": 4,
           "y": 23,
-          "organismId": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511"
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
         },
         {
           "x": 5,
           "y": 23,
-          "organismId": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511"
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
         },
         {
           "x": 6,
           "y": 24,
-          "organismId": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511"
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
         },
         {
           "x": 7,
           "y": 24,
-          "organismId": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511"
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
         },
         {
           "x": 6,
           "y": 25,
-          "organismId": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511"
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
         },
         {
           "x": 7,
           "y": 25,
-          "organismId": "02dda3d2-0c6f-4d51-937f-5eb2cea8b511"
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
         },
         {
           "x": 40,
           "y": 8,
-          "organismId": "af35298d-a08b-4d38-92c6-dde190227ee2"
+          "organismId": "3b34d11e-7a8e-4a7f-8409-6fc1ca67cbb3"
         },
         {
           "x": 41,
           "y": 8,
-          "organismId": "af35298d-a08b-4d38-92c6-dde190227ee2"
+          "organismId": "3b34d11e-7a8e-4a7f-8409-6fc1ca67cbb3"
         },
         {
           "x": 42,
           "y": 8,
-          "organismId": "af35298d-a08b-4d38-92c6-dde190227ee2"
+          "organismId": "3b34d11e-7a8e-4a7f-8409-6fc1ca67cbb3"
         }
       ],
-      "createdAt": "2026-09-29T14:02:05.283Z",
-      "updatedAt": "2026-09-29T14:02:05.283Z"
+      "createdAt": "2026-09-29T14:14:13.029Z",
+      "updatedAt": "2026-09-29T14:14:13.029Z"
     },
     {
-      "id": "7137107b-fbf1-4923-9031-55ca86ce04b8",
+      "id": "a6384d98-13ec-4615-a503-136239d21a07",
+      "name": "R-Pentomino",
+      "description": "Five cells alone on a wide dish that churn chaotically for hundreds of cycles, throwing off gliders and scattering debris before the dish settles.",
+      "gridDimensions": {
+        "cols": 100,
+        "rows": 60
+      },
+      "cells": [
+        {
+          "x": 49,
+          "y": 28,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        },
+        {
+          "x": 50,
+          "y": 28,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        },
+        {
+          "x": 48,
+          "y": 29,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        },
+        {
+          "x": 49,
+          "y": 29,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        },
+        {
+          "x": 49,
+          "y": 30,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        }
+      ],
+      "createdAt": "2026-09-29T14:14:14.029Z",
+      "updatedAt": "2026-09-29T14:14:14.029Z"
+    },
+    {
+      "id": "31a1665e-026f-4b0c-81ba-49866e8a92f0",
       "name": "Glider Gun and Eater",
-      "description": "A Gosper glider gun fires a glider every 30 cycles down the diagonal into an eater, which swallows each one and repairs itself. Far off, a pulsar beats and an R-pentomino churns into debris.",
+      "description": "A Gosper glider gun fires a glider every 30 cycles down the diagonal into an eater, which swallows each one and repairs itself. Far off, a pulsar beats.",
       "gridDimensions": {
         "cols": 100,
         "rows": 60
@@ -1039,271 +1077,246 @@
         {
           "x": 80,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 81,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 82,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 86,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 87,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 88,
           "y": 8,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 78,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 83,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 85,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 90,
           "y": 10,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 78,
           "y": 11,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 83,
           "y": 11,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 85,
           "y": 11,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 90,
           "y": 11,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 78,
           "y": 12,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 83,
           "y": 12,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 85,
           "y": 12,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 90,
           "y": 12,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 80,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 81,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 82,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 86,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 87,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 88,
           "y": 13,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 80,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 81,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 82,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 86,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 87,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 88,
           "y": 15,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 78,
           "y": 16,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 83,
           "y": 16,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 85,
           "y": 16,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 90,
           "y": 16,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 78,
           "y": 17,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 83,
           "y": 17,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 85,
           "y": 17,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 90,
           "y": 17,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 78,
           "y": 18,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 83,
           "y": 18,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 85,
           "y": 18,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 90,
           "y": 18,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 80,
           "y": 20,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 81,
           "y": 20,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 82,
           "y": 20,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 86,
           "y": 20,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 87,
           "y": 20,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         },
         {
           "x": 88,
           "y": 20,
-          "organismId": "13a76f4d-d452-447a-b6a7-a4f00a7b5abb"
-        },
-        {
-          "x": 85,
-          "y": 44,
-          "organismId": "b9031281-c400-4972-8588-6059c5257b7e"
-        },
-        {
-          "x": 86,
-          "y": 44,
-          "organismId": "b9031281-c400-4972-8588-6059c5257b7e"
-        },
-        {
-          "x": 84,
-          "y": 45,
-          "organismId": "b9031281-c400-4972-8588-6059c5257b7e"
-        },
-        {
-          "x": 85,
-          "y": 45,
-          "organismId": "b9031281-c400-4972-8588-6059c5257b7e"
-        },
-        {
-          "x": 85,
-          "y": 46,
-          "organismId": "b9031281-c400-4972-8588-6059c5257b7e"
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
         }
       ],
-      "createdAt": "2026-09-29T14:02:06.283Z",
-      "updatedAt": "2026-09-29T14:02:06.283Z"
+      "createdAt": "2026-09-29T14:14:15.029Z",
+      "updatedAt": "2026-09-29T14:14:15.029Z"
     }
   ]
 }

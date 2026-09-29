@@ -16,7 +16,7 @@
     {
       "id": "conways-menagerie",
       "name": "Conway's Menagerie",
-      "description": "A zoo of classic Life patterns, each doing its textbook trick. Conway's Classic and six recoloured copies of it share the same rules, so every pattern behaves as it would in the original game while its colour tells you which is which. Glider Gun and Eater feeds a stream of gliders to an eater; Oscillator Garden is a quiet showcase of oscillators and still lifes.",
+      "description": "A zoo of classic Life patterns, each doing its textbook trick. Conway's Classic and six recoloured copies of it share the same rules, so every pattern behaves as it would in the original game while its colour tells you which is which. Glider Gun and Eater feeds a stream of gliders to an eater; R-Pentomino lets five cells churn into chaos on a dish of their own; Oscillator Garden is a quiet showcase of oscillators and still lifes.",
       "file": "conways-menagerie.json"
     },
     {
