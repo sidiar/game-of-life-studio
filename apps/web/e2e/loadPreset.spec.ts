@@ -97,6 +97,12 @@ test.describe('load preset from settings (Story 7.5)', () => {
     const select = page.getByRole('combobox', { name: 'Load Preset Workspace' });
     await expect(select).toBeVisible();
     await expect(select.locator('option:checked')).toHaveText(`${preset.name} (default)`);
+    // Story 7.7: the list is the manifest, default first and suffixed, the rest in manifest order.
+    const expectedOptions = [
+      `${preset.name} (default)`,
+      ...manifest.workspaces.filter((w) => w.id !== preset.id).map((w) => w.name),
+    ];
+    await expect(select.locator('option')).toHaveText(expectedOptions);
     await expect(page.getByText(preset.description, { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Load preset workspace' }).click();
