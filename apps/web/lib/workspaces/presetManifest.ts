@@ -28,11 +28,12 @@
  * is always the serializer's output, never hand-edited. To improve an existing preset, import it in
  * the app, edit it in the editors (and the workspace description in Settings), and export again.
  *
- * No runtime consumer exists yet: Story 7.4 is the first reader of `defaultPresetId` (first-visit
- * auto-load), Story 7.5 reads the manifest for the Settings loader, and Story 7.6 addresses a
- * preset by `id` from a shareable link. This module is deliberately just the folder's location and
- * the manifest's shape — no fetch, no loader, no hook, no UI, and no `zod` dependency: the
- * manifest's runtime parse boundary belongs to Story 7.4, the first story that fetches it. Since
+ * Story 7.4 is the first runtime reader (first-visit auto-load of `defaultPresetId`, through
+ * `loadDefaultPreset.ts`); Story 7.5 reads the manifest for the Settings loader, and Story 7.6
+ * addresses a preset by `id` from a shareable link. This module is deliberately just the folder's
+ * location, the manifest's shape and its parse boundary ({@link PresetWorkspaceManifestSchema}) —
+ * no fetch, no loader, no hook, no UI: a fetched manifest is untrusted network data, and every
+ * caller parses it through the one schema here rather than casting it. Since
  * Story 7.2 each entry's `description` is a projection of its envelope's own workspace
  * description (FR-9.5), pinned equal by the lockstep test — the manifest keeps its copy only so
  * the Settings loader (7.5) can list presets without fetching every envelope.
@@ -42,6 +43,8 @@
  * file to author" model. Only `presetWorkspaces.test.ts` reads the folder: the presets off disk
  * with `node:fs`, the tracked file list through `git ls-files`.
  */
+
+import { z } from 'zod';
 
 /**
  * Where the presets are served from, relative to the site root (statically, from `public/`).
@@ -86,8 +89,9 @@ export interface PresetWorkspaceEntry {
 
 /**
  * The manifest's shape. These types describe data that arrives over the network: never
- * `as PresetWorkspaceManifest` a fetched body. Parse it at the fetch boundary (Story 7.4), as
- * `presetWorkspaces.test.ts` does with its structural checks.
+ * `as PresetWorkspaceManifest` a fetched body — parse it through
+ * {@link PresetWorkspaceManifestSchema}, which `loadDefaultPreset.ts` (Story 7.4) and the lockstep
+ * test both do.
  */
 export interface PresetWorkspaceManifest {
   /**
@@ -99,3 +103,65 @@ export interface PresetWorkspaceManifest {
   defaultPresetId: string;
   workspaces: PresetWorkspaceEntry[];
 }
+
+const nonEmpty = z.string().regex(/\S/, 'must contain a non-whitespace character');
+
+/**
+ * The manifest's runtime parse boundary. Enforces every rule the interfaces above can only
+ * document: an id matching {@link PRESET_ID_PATTERN}, `file === \`${id}.json\`` (owner ruling
+ * D2a — which is also what keeps `file` URL-safe), unique ids, and a `defaultPresetId` naming
+ * exactly one listed entry. The `superRefine` is what makes a manifest whose default names nothing
+ * a PARSE failure rather than a `find()` returning `undefined` in every caller.
+ */
+export const PresetWorkspaceEntrySchema = z
+  .object({
+    id: z.string().regex(PRESET_ID_PATTERN, 'must be a lowercase kebab slug'),
+    name: nonEmpty,
+    description: nonEmpty,
+    file: z.string(),
+  })
+  .superRefine((entry, ctx) => {
+    // PRESET_ID_PATTERN admits `index`, whose `${id}.json` would be the manifest itself.
+    if (entry.file === PRESET_MANIFEST_FILE) {
+      ctx.addIssue({ code: 'custom', path: ['file'], message: 'must not be the manifest itself' });
+    } else if (entry.file !== `${entry.id}.json`) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['file'],
+        message: `must be "${entry.id}.json"`,
+      });
+    }
+  });
+
+export const PresetWorkspaceManifestSchema = z
+  .object({
+    defaultPresetId: z.string(),
+    workspaces: z.array(PresetWorkspaceEntrySchema).min(1),
+  })
+  .superRefine((manifest, ctx) => {
+    const ids = manifest.workspaces.map((entry) => entry.id);
+    const repeated = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+    if (repeated.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['workspaces'],
+        message: `duplicate preset ids: ${repeated.join(', ')}`,
+      });
+    }
+    if (!ids.includes(manifest.defaultPresetId)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['defaultPresetId'],
+        message: `"${manifest.defaultPresetId}" names no listed entry`,
+      });
+    }
+  });
+
+// Compile-time lockstep between the schema and the hand-written interfaces above (which carry the
+// field docs 7.5/7.6 read): if either side gains, loses or retypes a field, one of these two lines
+// stops compiling, so the parse boundary and the exported types can never drift apart.
+type Parsed = z.infer<typeof PresetWorkspaceManifestSchema>;
+const schemaMatchesInterface = (value: Parsed): PresetWorkspaceManifest => value;
+const interfaceMatchesSchema = (value: PresetWorkspaceManifest): Parsed => value;
+void schemaMatchesInterface;
+void interfaceMatchesSchema;

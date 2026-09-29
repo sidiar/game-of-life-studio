@@ -5,6 +5,23 @@ import { CURRENT_FORMAT_VERSION, WorkspaceExportSchema } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 import { createMockWorkspace } from '@gol/test-utils';
 
+// Story 7.4 (FD6): a fresh context now loads the default preset on its first seeding page. This
+// spec's fresh-profile tests assert the Conway-only production seed, so this forces the silent
+// FR-1.5 fallback: a 200 whose body is not a manifest fails the loader's parse. Never
+// `route.abort()` or a 404 — Chromium logs "Failed to load resource" as a console error, which
+// trips the zero-console-error assertions. A file-local copy, per the house convention for e2e
+// helpers (as with this file's `seedWorkspace`). Stamped (seeded) contexts never fetch, so the
+// route is inert for them.
+async function forcePresetFallback(page: Page) {
+  await page.route('**/workspaces/index.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+}
+
+test.beforeEach(async ({ page }) => {
+  await forcePresetFallback(page);
+});
+
 // A stat tile's value, scoped to the tile whose term matches — never `definition.nth(i)`: terms are
 // matched by text, so reading the value by POSITION silently reads a different tile's number the
 // day Story 5.2 inserts Storage Used or reorders the grid (review 2026-09-21). `<dd>`'s

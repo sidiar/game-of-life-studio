@@ -3,6 +3,19 @@ import { CURRENT_FORMAT_VERSION } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 import { createMockWorkspace } from '@gol/test-utils';
 
+// Story 7.4 (FD6): a fresh context now loads the default preset on its first seeding page. The
+// empty-state CTA test needs a genuinely empty workspace, so this forces the silent FR-1.5
+// fallback: a 200 whose body is not a manifest fails the loader's parse. Never `route.abort()` or a
+// 404 — Chromium logs "Failed to load resource" as a console error, which trips the zero-console-
+// error assertions. A file-local copy, per the house convention for e2e helpers (see
+// settings.spec.ts's `seedWorkspace`). Stamped (seeded) contexts never fetch, so the route is inert
+// for them.
+async function forcePresetFallback(page: Page) {
+  await page.route('**/workspaces/index.json', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+}
+
 // Copied from e2e/battleRoute.spec.ts / e2e/deleteBattle.spec.ts rather than shared through a new
 // module — the story's file list scopes this story to one new spec file. Keep the three in sync
 // if any changes; e2e/ is exempt from the @gol/test-utils import boundary (eslint.config.mjs).
@@ -81,11 +94,12 @@ test.describe('create new battle (Story 2.2)', () => {
   });
 
   // AC2's end-to-end half: the EMPTY-STATE CTA, not the toolbar CTA, reached from a genuinely
-  // empty workspace — no seedWorkspace() call, mirroring e2e/home.spec.ts: a fresh Playwright
-  // context has no localStorage, and a production build seeds no mock fixtures.
+  // empty workspace — no seedWorkspace() call: a fresh Playwright context has no localStorage, a
+  // production build seeds no mock fixtures, and forcePresetFallback keeps the Story 7.4 preset out.
   test('the empty-state CTA opens /battle/new from a genuinely empty workspace (AC2)', async ({
     page,
   }) => {
+    await forcePresetFallback(page);
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeVisible();
 

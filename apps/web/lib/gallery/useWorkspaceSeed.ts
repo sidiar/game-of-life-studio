@@ -1,9 +1,23 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { seedDefaultWorkspace, type AppRepositories } from '@gol/persistence';
 
 export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
+
+/**
+ * Story 7.4 review ruling D1: an unstamped store is not necessarily an empty one. `writeDataKey`
+ * writes the data and THEN stamps `gol:schema`, so a stamp write that fails leaves records behind
+ * with no stamp, and the next load reads fresh. The plain seed over such a store is additive
+ * (`ensureDefaultOrganism`); the preset import is a whole-workspace replace (M8) whose `clearAll()`
+ * would destroy them. So the preset runs only over a store holding no battles and no organism
+ * other than Conway's Classic — the one record the FR-1.5 seed itself writes.
+ */
+async function holdsNoUserData(repos: AppRepositories): Promise<boolean> {
+  const [battles, organisms] = await Promise.all([repos.battles.list(), repos.organisms.list()]);
+  return battles.length === 0 && organisms.every((o) => o.id === CONWAYS_CLASSIC_ID);
+}
 
 /**
  * Runs Story 1.5's first-run seed exactly once at the page boundary. `repos` is typed against the
@@ -31,6 +45,35 @@ export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
  * import of it from non-test app code, and because Next's build-time NODE_ENV inlining is what
  * makes this whole branch — including the import — dead-code-eliminated from the production
  * bundle (AC3's "mock data is unreachable in production").
+ *
+ * Story 7.4 adds the third branch: a FRESH workspace in a PRODUCTION build loads the manifest's
+ * default preset (`loadDefaultPreset`, FR-9.2) through the FR-8.4 import pipeline, with no dialog —
+ * a fresh store is pristine, the FR-8.4 suppression case. So there are three branches, all decided
+ * by the one freshness read taken before any write: fresh + production → the preset (falling back
+ * to `seedDefaultWorkspace`); fresh + development → `seedDefaultWorkspace` then the AR-45
+ * fixtures, unchanged; anything else (a returning visitor, a Clear All'd store — `resetWorkspace()`
+ * keeps the `gol:schema` stamp, so it is never fresh again, M9 — or Vitest's `'test'`) →
+ * `seedDefaultWorkspace`, which no-ops on a stamped store. Freshness now matters twice over: the
+ * preset's own import stamps the store too, so reading it after either write would misroute both
+ * branches. The comparison is `=== 'production'`, never `!== 'development'`, for the same reason
+ * as the dev branch: Vitest's `'test'` would otherwise fetch in every apps/web unit test.
+ *
+ * "Fresh" alone does not open the preset branch: the store must also hold no user data (no
+ * battles, no organism but Conway's Classic — `holdsNoUserData`, review ruling D1). An unstamped
+ * store that still carries records (a failed stamp write after a successful data write) takes the
+ * plain additive seed instead, so the import's `clearAll()` never runs over it.
+ *
+ * The preset path is `import()`-ed dynamically (Story 7.4 FD4): it drags the serializer, the
+ * migration chain and the envelope schema along, and only a first visit ever runs it — every
+ * returning load would otherwise pay for it in the first-load bundle (AR-3). The loader builds the
+ * serializer itself from `repos` for that reason; this hook must never import it statically.
+ *
+ * A PRESET failure is silent (FD5): network, HTTP status, manifest parse, timeout, or an
+ * `ImportError` of any code all fall back to `seedDefaultWorkspace(repos)`, never into `error`,
+ * never logged. The fallback is safe after every one of them — a fetch/parse failure wrote nothing,
+ * and `applyImport`'s rollback restores the still-unstamped snapshot, so the seed's own
+ * `isFreshWorkspace()` gate passes. The FALLBACK's own rejection is not silent: it reaches
+ * `status: 'error'` exactly as the plain seed's always has.
  *
  * `error` is the seed's rejection, kept (not discarded) so the page can classify it (Story 5.11):
  * a first-run write refused for lack of space is not "your data is damaged", and a newer-format
@@ -65,7 +108,26 @@ export function useWorkspaceSeed(repos: AppRepositories): {
       // above; this is the exact silent-failure trap Story 1.6 Task 4 calls out).
       repos
         .isFreshWorkspace()
-        .then((fresh) => seedDefaultWorkspace(repos).then(() => fresh))
+        .then((fresh) => {
+          if (fresh && process.env.NODE_ENV === 'production') {
+            // Story 7.4: the first-visit default preset, only over a store that holds no user
+            // data (review ruling D1) — the import's clearAll() must never destroy an unstamped
+            // store's records. Dynamic import only (FD4) — see the doc comment above. ANY preset
+            // failure, including the emptiness read, falls back to the FR-1.5 seed, silently (FD5).
+            return holdsNoUserData(repos)
+              .then((empty): Promise<unknown> => {
+                if (!empty) return seedDefaultWorkspace(repos);
+                return import('@/lib/workspaces/loadDefaultPreset').then(({ loadDefaultPreset }) =>
+                  loadDefaultPreset({ fetch: globalThis.fetch.bind(globalThis), repos }),
+                );
+              })
+              .then(
+                () => fresh,
+                () => seedDefaultWorkspace(repos).then(() => fresh),
+              );
+          }
+          return seedDefaultWorkspace(repos).then(() => fresh);
+        })
         .then((fresh) => {
           if (fresh && process.env.NODE_ENV === 'development') {
             // Dynamic import only — see the doc comment above for why a static import is banned
