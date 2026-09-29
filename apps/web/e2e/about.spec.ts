@@ -45,23 +45,6 @@ test.describe('about route', () => {
     expect(violations).toEqual([]);
   });
 
-  // Scoped to the About content, not the document: the shared AppShell nav already overflows at
-  // phone width on every gallery route (a pre-existing layout gap, not this page's to fix here).
-  test('its content has no horizontal overflow at phone width', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 800 });
-    await page.goto('/about');
-    const section = page.getByRole('region', { name: 'About' });
-    await expect(section).toBeVisible();
-
-    const overflowing = await section.evaluate((root) => {
-      const width = document.documentElement.clientWidth;
-      return [root, ...root.querySelectorAll('*')].filter(
-        (el) => el.getBoundingClientRect().right > width,
-      ).length;
-    });
-    expect(overflowing).toBe(0);
-  });
-
   // Link previews (LinkedIn, dev.to, Slack, X) read the served HTML only, never the hydrated DOM,
   // and need ABSOLUTE image URLs — both are properties of the static export, so the raw response
   // is what is asserted.

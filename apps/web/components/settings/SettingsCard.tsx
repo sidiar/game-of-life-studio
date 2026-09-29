@@ -53,10 +53,13 @@ export const Row = styled('div')({
   alignItems: 'center',
   gap: '20px',
   padding: '15px 0',
+  // Phone widths: the controls drop under the text instead of forcing horizontal scroll. No media
+  // query — the wrap happens exactly when RowInfo's 240px basis and the controls no longer fit.
+  flexWrap: 'wrap',
 });
 
 export const RowInfo = styled('div')({
-  flex: 1,
+  flex: '1 1 240px',
 });
 
 // Mockup: .settings-item-label (:162-167).

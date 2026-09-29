@@ -88,3 +88,29 @@ test.describe('app shell (Story 1.9)', () => {
     expect(violations).toEqual([]);
   });
 });
+
+// Phone width: the shell's nav wraps and tightens instead of pushing every gallery route into
+// horizontal scroll (it overflowed by ~290px at 375px before). 375 is the common small phone;
+// 320 (first-generation iPhone SE) still overflows slightly on some routes and is not gated.
+test.describe('app shell at phone width', () => {
+  for (const path of ['/', '/organisms', '/settings', '/about']) {
+    test(`${path} has no horizontal overflow at 375px, and the nav fits one row`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 375, height: 800 });
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBe(0);
+
+      const tops = await page
+        .getByRole('navigation', { name: 'Main' })
+        .getByRole('link')
+        .evaluateAll((links) => links.map((a) => Math.round(a.getBoundingClientRect().top)));
+      expect(new Set(tops).size).toBe(1);
+    });
+  }
+});
