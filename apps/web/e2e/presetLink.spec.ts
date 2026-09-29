@@ -61,12 +61,23 @@ async function routeLinkTestPreset(page: Page) {
   });
 }
 
+// WebKit raises every fetch a navigation cuts short as a page error, "Fetch API cannot load <url>
+// due to access control checks." — here the App Router's link prefetches (`…__next.….txt?_rsc=…`,
+// `/battle`) still in flight when (a) calls `page.reload()`. Which ones are in flight is timing
+// (red on all three attempts of one `main` run, green on the same commit minutes earlier). The
+// app only fetches same-origin, so this can never be a real CORS failure, and a preset fetch that
+// genuinely fails still fails the test on the headings it never renders. Playwright splits the
+// text at the URL's colon (name "Fetch API cannot load http"), hence the rejoin.
+const ABORTED_FETCH = /^Fetch API cannot load .* due to access control checks\.$/;
+
 function trackErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
-  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('pageerror', (err) => {
+    if (!ABORTED_FETCH.test(`${err.name}:${err.message}`)) errors.push(err.message);
+  });
   return errors;
 }
 
