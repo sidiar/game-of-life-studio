@@ -14,6 +14,7 @@ import {
 } from '@gol/persistence';
 import { createFakeRepositories } from '@gol/test-utils';
 import { downloadJsonFile } from '@/lib/export/downloadJsonFile';
+import { importFailureMessage } from '@/lib/import/importFailureMessage';
 import { PRESET_FETCH_TIMEOUT_MS } from '@/lib/workspaces/presetFetch';
 import { PRESET_MANIFEST_FILE, PRESET_WORKSPACES_PATH } from '@/lib/workspaces/presetManifest';
 import {
@@ -183,12 +184,14 @@ describe('LoadPresetRow', () => {
       envelope.battles.map((b) => b.name).sort(),
     );
     expect(onMessage.mock.calls[0]).toEqual([null]);
+    expect(onMessage.mock.calls[1]).toEqual([{ role: 'status', text: status.textContent }]);
     expect(onImported).toHaveBeenCalledTimes(1);
   });
 
   it('(d) a non-pristine store opens the named dialog; Cancel changes nothing and returns focus', async () => {
     stubFetch();
     const repos = dirtyRepos();
+    const organismsBefore = await repos.organisms.list();
     const { onMessage, onImported } = renderRow({ repos });
     const user = userEvent.setup();
     await user.click(await loadButton());
@@ -203,6 +206,7 @@ describe('LoadPresetRow', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(await repos.battles.list()).toEqual([]);
+    expect(await repos.organisms.list()).toEqual(organismsBefore);
     expect(onMessage.mock.calls).toEqual([[null]]);
     expect(onImported).not.toHaveBeenCalled();
     await waitFor(() =>
@@ -253,6 +257,14 @@ describe('LoadPresetRow', () => {
       ),
     );
     expect(importSpy).not.toHaveBeenCalled();
+
+    // Once the export has settled, the confirm is live again.
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Load Preset' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByRole('status')).toHaveTextContent(`Loaded “${entry.name}”`);
+    expect(importSpy).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -263,21 +275,21 @@ describe('LoadPresetRow', () => {
     async (_l, route) => {
       stubFetch({ [ENVELOPE_URL]: route });
       const repos = dirtyRepos();
+      const organismsBefore = await repos.organisms.list();
       const { onImported } = renderRow({ repos });
       await userEvent.setup().click(await loadButton());
       expect(await screen.findByRole('alert')).toHaveTextContent(PRESET_FETCH_FAILURE_MESSAGE);
       expect(screen.queryByRole('dialog')).toBeNull();
-      expect((await repos.organisms.list()).length).toBe(2);
+      expect(await repos.battles.list()).toEqual([]);
+      expect(await repos.organisms.list()).toEqual(organismsBefore);
       expect(onImported).not.toHaveBeenCalled();
     },
   );
 
   it('(h) a hung envelope fetch times out with the same alert, and a new Load is then accepted', async () => {
     let hang = true;
-    const fetchFn = stubFetch({
-      [ENVELOPE_URL]: () => (hang ? new Promise<Response>(() => {}) : new Response(envelopeText)),
-    });
-    // Hung fetches ignore the signal in this stub; make it abortable like the real one.
+    // An abortable hang, like the real `fetch`: rejects only when the timeout aborts the signal.
+    const fetchFn = stubFetch();
     fetchFn.mockImplementation((input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (url === ENVELOPE_URL && hang) {
@@ -305,13 +317,22 @@ describe('LoadPresetRow', () => {
 
   it('(i) a double click while the first load is in flight fetches the envelope once', async () => {
     const fetchFn = stubFetch();
-    renderRow({ repos: pristineRepos() });
+    const repos = pristineRepos();
+    const real = buildSerializer(repos);
+    const importSpy = vi.fn(real.importWorkspace);
+    const { onImported, onMessage } = renderRow({
+      repos,
+      serializer: { exportWorkspace: real.exportWorkspace, importWorkspace: importSpy },
+    });
     const button = await loadButton();
     fireEvent.click(button);
     fireEvent.click(button);
     await screen.findByRole('status');
     const envelopeFetches = fetchFn.mock.calls.filter(([u]) => u === ENVELOPE_URL);
     expect(envelopeFetches).toHaveLength(1);
+    expect(importSpy).toHaveBeenCalledTimes(1);
+    expect(onImported).toHaveBeenCalledTimes(1);
+    expect(onMessage.mock.calls).toHaveLength(2); // one null, one status
   });
 
   it('(j) unmounting while the fetch is pending runs no import and reports nothing', async () => {
@@ -344,7 +365,9 @@ describe('LoadPresetRow', () => {
     const repos = pristineRepos();
     const { onImported } = renderRow({ repos });
     await userEvent.setup().click(await loadButton());
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      importFailureMessage(new ImportError('not-json')),
+    );
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(await repos.battles.list()).toEqual([]);
     expect(onImported).not.toHaveBeenCalled();
@@ -361,7 +384,9 @@ describe('LoadPresetRow', () => {
       },
     });
     await userEvent.setup().click(await loadButton());
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      importFailureMessage(new ImportError('corrupt')),
+    );
     expect(onImported).not.toHaveBeenCalled();
   });
 });

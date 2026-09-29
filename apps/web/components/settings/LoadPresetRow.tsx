@@ -133,7 +133,7 @@ function orderEntries(
 }
 
 /**
- * The Load Preset row (Story 7.5, FR-9.3) — `<DataManagement>`'s fourth row. A whole-workspace
+ * The Load Preset row (Story 7.5, FR-9.3) — `<DataManagement>`'s fifth row. A whole-workspace
  * replace through the FR-8.4 pipeline (`serializer.importWorkspace`, M8): fetch → validate →
  * pristine check → warn (unless pristine) → import once the dialog has fully exited (FD4),
  * mirroring `<ImportWorkspaceRow>` step for step. The concurrent-action guard is `pendingRef`, per

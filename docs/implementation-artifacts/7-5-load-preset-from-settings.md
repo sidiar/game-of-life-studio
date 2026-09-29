@@ -4,7 +4,7 @@ baseline_commit: ae8a32b212047bab6c7e243f86f0eefdb300960b
 
 # Story 7.5: Load Preset from Settings
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -91,6 +91,23 @@ so that I can start over from curated content whenever I choose.
 - [x] **Task 8: Gates** (AC: all)
   - [x] 8.1 `npm run ci:dev` green. `/settings` gains the row, `presetFetch`, the copy and a dynamic dialog chunk it already had. If `bundle:check` flags growth past the allowance, refresh the baseline in this PR (`npm run build:standalone` then `npm run bundle:baseline`) and state the delta in the Dev Agent Record.
   - [x] 8.2 Manual smoke on the static export (`npm run build:standalone && npx serve out`), in headless Chromium if easier: first visit → `/settings` → Load (pristine → no dialog) → back to the gallery. Then edit or add something → Load → dialog → Load Preset. Take screenshots into the scratchpad, not the repo. Record the results in the Dev Agent Record.
+
+### Review Findings
+
+- [ ] [Review][Decision] Cross-row concurrency during the preset fetch window — The per-row `pendingRef` (FD7, open question 1) leaves the up-to-5 s envelope fetch unguarded against sibling rows, and that window is new: Import's file read is near-instant. Three consequences. (1) Click Load, then open Import's (or Clear All's) dialog while the fetch runs. When the fetch resolves on a non-pristine store, a second `ImportWarningDialog` mounts on top. Both dialogs share `id="import-warning-dialog-title"`/`-body`, so `aria-labelledby` is ambiguous, and `focusLoadButtonIfLoose` treats focus inside Import's dialog as "loose". Confirming both runs two whole-workspace replaces back-to-back. (2) Click Load, then confirm Clear All during the fetch. The pristine check now sees the cleared store as pristine, so the preset is imported with no warning. The D2 owner slot correctly drops its "Loaded" line, but the store ends up holding the preset while the only visible outcome says "All data cleared." (`onImported` still refreshes the stats.) The `DataManagement.test.tsx` stale-outcome case only asserts the message, so it locks this mismatch in. (3) The same stale snapshot applies to any other row's write landing between the pristine read and `runLoad`. [apps/web/components/settings/LoadPresetRow.tsx:212-271]. Options: (a) accept FD7 as is (per-row guard + owner slot), recording the mismatch as known; (b) add a card-level "whole-workspace flow in flight" guard in `<DataManagement>` shared by Import, Load Preset and Clear All, so a new flow is a no-op while another runs (the UX note's literal "no-op while another data flow is in flight"; reverses 5.10 FD6 for these three rows); (c) a narrow guard: after the fetch settles, `LoadPresetRow` aborts (publishing the fetch-failure-style "not changed" alert, or silently) if another row claimed the outcome slot since this flow started, so a slower preset never lands over a later Import or Clear All.
+- [x] [Review][Patch] Test (d) asserts the empty battle list, not the seeded organisms that are at risk [apps/web/components/settings/LoadPresetRow.test.tsx:209]
+- [x] [Review][Patch] Tests (k)/(l) accept any alert; pin the exact `importFailureMessage` copy (Task 3.2 / 6.1) [apps/web/components/settings/LoadPresetRow.test.tsx:348,362]
+- [x] [Review][Patch] Test (i) proves one fetch but not one import / one `onImported` [apps/web/components/settings/LoadPresetRow.test.tsx:305]
+- [x] [Review][Patch] Test (f) never proves Load Preset works once the export settles (a stuck `exportInFlightRef` would pass) [apps/web/components/settings/LoadPresetRow.test.tsx:230]
+- [x] [Review][Patch] Test (h) has a dead `stubFetch` override fully replaced by `mockImplementation` [apps/web/components/settings/LoadPresetRow.test.tsx:278]
+- [x] [Review][Patch] Test (g) checks the store by organism count only; compare the lists [apps/web/components/settings/LoadPresetRow.test.tsx:264]
+- [x] [Review][Patch] Test (c) never checks that `onMessage`'s second call is the status [apps/web/components/settings/LoadPresetRow.test.tsx:184]
+- [x] [Review][Patch] `DataManagement.test.tsx`'s preset stub resolves files off `process.cwd()` and throws on an unknown URL (unlike `LoadPresetRow.test.tsx`'s `import.meta.url` + 404) [apps/web/components/settings/DataManagement.test.tsx:35]
+- [x] [Review][Patch] Stale doc comments: `LoadPresetRow` calls itself the "fourth row" (it is the fifth); `OutcomeSource` still says "three flows" [apps/web/components/settings/LoadPresetRow.tsx:136, DataManagement.tsx:60]
+- [x] [Review][Patch] Task 8.2 is ticked but the manual smoke was never run (the Dev Agent Record says so) — run it on the static export and record the result [docs/implementation-artifacts/7-5-load-preset-from-settings.md]
+- [x] [Review][Defer] If the `next/dynamic` dialog chunk fails to load, `onExited` never fires and `pendingRef` stays true, so Load becomes a silent no-op until reload [apps/web/components/settings/LoadPresetRow.tsx:45,303] — deferred, pre-existing (copied from Import's flow)
+- [x] [Review][Defer] Unmounting doesn't abort the in-flight manifest or envelope fetch; `withPresetTimeout`'s controller is tied only to the timer [apps/web/components/settings/LoadPresetRow.tsx:151,220] — deferred, pre-existing (7.4's helper shape)
+- [x] [Review][Defer] Cancel/Escape mid-Export-First leaves `exportInFlightRef` set, so the next dialog's Export First and confirm are no-ops, and the old export's outcome lands in it [apps/web/components/settings/LoadPresetRow.tsx:273-299] — deferred, pre-existing (copied from Import's flow)
 
 ## Dev Notes
 
@@ -202,7 +219,7 @@ Claude Sonnet 5.5
 - FD2: `ImportWarningDialog` takes `title`/`body`/`confirmLabel`/`exportFailedText`; Import's rendered DOM is unchanged and its tests pass without edits.
 - FD3/FD4: `presetMessages.ts` plus `LoadPresetRow` (fetch, validate, pristine check, warn, load after exit). `SecondaryButton` lifted into `SettingsCard.tsx`. Row wired between Import and Clear All with a `'preset'` outcome owner.
 - Tests: `presetFetch`, `presetMessages`, `LoadPresetRow` (cases a to l), two new D2 cases in `DataManagement.test.tsx` (its heading-order assertion gained the new row), and `e2e/loadPreset.spec.ts` (non-pristine, Cancel, pristine, axe with dialog). The existing `settings.spec.ts` axe and console tests pass with the row in list-failure state.
-- 8.2 manual smoke: covered by the e2e run against the static export (`build:standalone` output); no separate manual screenshots taken.
+- 8.2 manual smoke (run at review, Opus, headless Chromium on `serve out`; screenshots in the review session's scratchpad): first visit → `/settings` → Load opens the dialog, NOT the no-dialog path Task 8.2 expected — 7.4's first-visit auto-load already put Colony Clash (2 battles, a description) in the store, so it is not pristine; the pristine path is covered by `loadPreset.spec.ts`'s first-visit-fallback test instead. Load Preset → "Loaded “Colony Clash” — your workspace now has 2 battles and 4 organisms." → Battles nav → the gallery lists Four Corners and Tug of War. Rename a battle → Load → dialog `Load “Colony Clash”?` → Load Preset → the rename is gone. Zero console errors. The settled dialog's three buttons fit inside the paper.
 
 ### File List
 
@@ -218,6 +235,7 @@ Claude Sonnet 5.5
 ### Change Log
 
 - 2026-09-29: Story 7.5 implemented: Load Preset row in Settings Data Management.
+- 2026-09-29: Code review (Opus): 10 patches applied (test hardening, the stub path, doc comments, the 8.2 smoke), 3 deferred, and 1 decision left open (cross-row concurrency). Status → in-progress.
 
 Dev Model: sonnet   # follows the established 5.9 Import-row flow and 7.4's fetch helpers; the surfaces 7.6 reuses (fetch module, dialog copy props) are pinned by FD1/FD2
 Proposed lane gate: none

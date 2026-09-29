@@ -57,7 +57,7 @@ export interface DataManagementProps {
  */
 type DataManagementMessage = RowOutcome | null;
 
-/** Which of the card's three flows an outcome belongs to — the slot's owner. */
+/** Which of the card's flows an outcome belongs to — the slot's owner. */
 type OutcomeSource = 'description' | 'export' | 'import' | 'preset' | 'clear';
 
 const DATA_MANAGEMENT_HEADING_ID = 'data-management-heading';

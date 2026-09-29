@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -32,13 +33,24 @@ afterEach(() => {
 });
 
 // Story 7.5: serves the REAL shipped preset files, so the Load Preset row is fully live here.
+// Resolved off this file (not `process.cwd()`), like `LoadPresetRow.test.tsx`; an unknown URL is a
+// 404, never a thrown `readFileSync`.
+const PRESETS_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'public',
+  'workspaces',
+);
 function stubPresetFetch() {
-  const dir = join(process.cwd(), 'public', 'workspaces');
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      return new Response(readFileSync(join(dir, url.replace('/workspaces/', '')), 'utf8'));
+      const file = join(PRESETS_DIR, url.replace('/workspaces/', ''));
+      return url.startsWith('/workspaces/') && existsSync(file)
+        ? new Response(readFileSync(file, 'utf8'))
+        : new Response('not found', { status: 404 });
     }),
   );
 }
