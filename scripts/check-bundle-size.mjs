@@ -67,6 +67,7 @@ const ROUTES = [
   { key: '/battle/new', name: 'battle/new (/battle/new)', html: join('battle', 'new.html') },
   { key: '/organisms', name: 'organisms (/organisms)', html: 'organisms.html' },
   { key: '/settings', name: 'settings (/settings)', html: 'settings.html' },
+  { key: '/about', name: 'about (/about)', html: 'about.html' },
 ];
 
 const kb = (bytes) => (bytes / 1024).toFixed(1);

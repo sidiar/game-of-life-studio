@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 describe('AppNav', () => {
-  it('renders exactly three links, Battles then Organisms then Settings, in DOM order (Story 5.1 AC1)', () => {
+  it('renders exactly four links, Battles, Organisms, Settings, then About, in DOM order (Story 5.1 AC1)', () => {
     mockPathname.value = '/';
     render(<AppNav />);
 
@@ -21,7 +21,7 @@ describe('AppNav', () => {
     // that only checks the three names exist still passes after someone adds a dead fourth link,
     // which is exactly the failure the rule exists to prevent.
     const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
 
     expect(links[0]).toHaveAttribute('href', '/');
     // Exact, not toHaveTextContent (code review 2026-08-07): the substring form passes for
@@ -31,6 +31,8 @@ describe('AppNav', () => {
     expect(links[1]).toHaveTextContent(/^Organisms$/);
     expect(links[2]).toHaveAttribute('href', '/settings');
     expect(links[2]).toHaveTextContent(/^Settings$/);
+    expect(links[3]).toHaveAttribute('href', '/about');
+    expect(links[3]).toHaveTextContent(/^About$/);
   });
 
   it('on / — Battles carries aria-current="page", Organisms and Settings do not (Story 4.1 AC2 / Story 5.1 AC2)', () => {
@@ -83,6 +85,16 @@ describe('AppNav', () => {
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
   });
 
+  it('on /about — only About carries aria-current="page"', () => {
+    mockPathname.value = '/about';
+    render(<AppNav />);
+
+    expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('aria-current', 'page');
+    for (const name of ['Battles', 'Organisms', 'Settings']) {
+      expect(screen.getByRole('link', { name })).not.toHaveAttribute('aria-current');
+    }
+  });
+
   // The inactive branch never executed in CI before this test (code review 2026-08-07): the
   // pathname mock was hardcoded to '/', NAV_ITEMS had one entry whose href is '/', and the e2e
   // only ever visited '/'. So `active` was true in 100% of runs and every `active ? … : …`
@@ -96,7 +108,7 @@ describe('AppNav', () => {
     render(<AppNav />);
 
     const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
     for (const link of links) {
       expect(link).not.toHaveAttribute('aria-current');
     }
@@ -110,7 +122,7 @@ describe('AppNav', () => {
     expect(results.violations).toEqual([]);
   });
 
-  it('is keyboard-operable: Tab reaches Battles, Organisms, then Settings in order (Story 5.1 AC6)', async () => {
+  it('is keyboard-operable: Tab reaches Battles, Organisms, Settings, then About in order (Story 5.1 AC6)', async () => {
     mockPathname.value = '/';
     const user = userEvent.setup();
     render(<AppNav />);
@@ -123,5 +135,8 @@ describe('AppNav', () => {
 
     await user.tab();
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByRole('link', { name: 'About' })).toHaveFocus();
   });
 });
