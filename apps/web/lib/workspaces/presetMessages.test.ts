@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ImportSummary } from '@gol/persistence';
-import { presetLoadSuccessMessage, presetWarningTitle } from './presetMessages';
+import {
+  presetLinkUnknownMessage,
+  presetLoadSuccessMessage,
+  presetWarningTitle,
+} from './presetMessages';
 
 const summary = (battleCount: number, organismCount: number) =>
   ({ battleCount, organismCount }) as ImportSummary;
@@ -21,5 +25,23 @@ describe('presetLoadSuccessMessage', () => {
     expect(presetLoadSuccessMessage('X', summary(1, 1))).toBe(
       'Loaded “X” — your workspace now has 1 battle and 1 organism.',
     );
+  });
+});
+
+describe('presetLinkUnknownMessage', () => {
+  it('quotes the id in typographic quotes and adds the untouched sentence on request', () => {
+    expect(presetLinkUnknownMessage('nope', true)).toBe(
+      "This preset link doesn't exist (anymore). The link pointed to a preset called “nope”, which isn't in this version of the studio. Your workspace is untouched.",
+    );
+  });
+
+  it('omits the untouched sentence when the workspace was not left untouched', () => {
+    expect(presetLinkUnknownMessage('nope', false)).not.toContain('untouched');
+  });
+
+  it('truncates the id at 40 characters with an ellipsis', () => {
+    const forty = 'a'.repeat(40);
+    expect(presetLinkUnknownMessage(forty, true)).toContain(`“${forty}”`);
+    expect(presetLinkUnknownMessage(`${forty}b`, true)).toContain(`“${forty}…”`);
   });
 });

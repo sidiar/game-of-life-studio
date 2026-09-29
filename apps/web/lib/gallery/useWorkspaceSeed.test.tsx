@@ -77,7 +77,11 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
 
     const { result } = await renderReady(repos);
 
-    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(result.current).toEqual({
+      status: 'ready',
+      error: undefined,
+      firstVisitPresetDeferred: false,
+    });
     expect(sortedIds(await repos.battles.listFull())).toEqual(sortedIds(envelope.battles));
     expect(sortedIds(await repos.organisms.list())).toEqual(sortedIds(envelope.organisms));
     expect((await repos.workspaceMeta.load()).description).toBe(envelope.description);
@@ -92,7 +96,11 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
 
     const { result } = await renderReady(repos);
 
-    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(result.current).toEqual({
+      status: 'ready',
+      error: undefined,
+      firstVisitPresetDeferred: false,
+    });
     await expectConwayOnly(repos);
   });
 
@@ -112,7 +120,11 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
     const { result } = await renderReady(repos);
 
     expect(failed).toBe(true);
-    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(result.current).toEqual({
+      status: 'ready',
+      error: undefined,
+      firstVisitPresetDeferred: false,
+    });
     await expectConwayOnly(repos);
   });
 
@@ -190,7 +202,11 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
 
     const { result } = await renderReady(repos);
 
-    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(result.current).toEqual({
+      status: 'ready',
+      error: undefined,
+      firstVisitPresetDeferred: false,
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(clearAll).not.toHaveBeenCalled();
     expect(sortedIds(await repos.battles.listFull())).toEqual(sortedIds(battles));
@@ -209,7 +225,11 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
 
     const { result } = await renderReady(repos);
 
-    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(result.current).toEqual({
+      status: 'ready',
+      error: undefined,
+      firstVisitPresetDeferred: false,
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(clearAll).not.toHaveBeenCalled();
     expect(await repos.battles.listFull()).toEqual([]);
@@ -225,7 +245,11 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
 
     const { result } = await renderReady(repos);
 
-    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(result.current).toEqual({
+      status: 'ready',
+      error: undefined,
+      firstVisitPresetDeferred: false,
+    });
     expect(fetchSpy).toHaveBeenCalled();
     expect(sortedIds(await repos.battles.listFull())).toEqual(sortedIds(envelope.battles));
   });
@@ -239,7 +263,11 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
 
     const { result } = await renderReady(repos);
 
-    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(result.current).toEqual({
+      status: 'ready',
+      error: undefined,
+      firstVisitPresetDeferred: false,
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(clearAll).not.toHaveBeenCalled();
     expect(sortedIds(await repos.organisms.list())).toEqual([CONWAYS_CLASSIC_ID]);
@@ -257,6 +285,100 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
 
     const { result } = await renderReady(repos);
 
-    expect(result.current).toEqual({ status: 'error', error: quota });
+    expect(result.current).toEqual({
+      status: 'error',
+      error: quota,
+      firstVisitPresetDeferred: false,
+    });
+  });
+
+  // Story 7.6 FD5: a preset link defers the first-visit preset to the link's own arrival.
+  describe('deferFirstVisitPreset (Story 7.6)', () => {
+    async function renderDeferred(
+      repos: AppRepositories,
+      wrapper?: (p: { children: ReactNode }) => ReactNode,
+    ) {
+      const hook = renderHook(() => useWorkspaceSeed(repos, { deferFirstVisitPreset: true }), {
+        wrapper,
+      });
+      await waitFor(() => expect(hook.result.current.status).not.toBe('seeding'));
+      return hook;
+    }
+
+    it('fresh + production + defer: no fetch, Conway only and stamped, flag true', async () => {
+      const fetchSpy = servePresets();
+      vi.stubGlobal('fetch', fetchSpy);
+      const repos = createFakeRepositories();
+
+      const { result } = await renderDeferred(repos);
+
+      expect(result.current).toEqual({
+        status: 'ready',
+        error: undefined,
+        firstVisitPresetDeferred: true,
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+      await expectConwayOnly(repos);
+      expect(await repos.isFreshWorkspace()).toBe(false);
+    });
+
+    it('fresh + production + no option: unchanged, flag false', async () => {
+      vi.stubGlobal('fetch', servePresets());
+      const repos = createFakeRepositories();
+
+      const { result } = await renderReady(repos);
+
+      expect(result.current.firstVisitPresetDeferred).toBe(false);
+      expect(sortedIds(await repos.battles.listFull())).toEqual(sortedIds(envelope.battles));
+    });
+
+    it('not fresh + defer: flag false', async () => {
+      const fetchSpy = servePresets();
+      vi.stubGlobal('fetch', fetchSpy);
+      const { organisms, battles } = createMockWorkspace();
+      const repos = createFakeRepositories({ organisms, battles });
+
+      const { result } = await renderDeferred(repos);
+
+      expect(result.current.firstVisitPresetDeferred).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('unstamped store holding battles + defer (D1 guard): plain seed, flag false', async () => {
+      const fetchSpy = servePresets();
+      vi.stubGlobal('fetch', fetchSpy);
+      const { organisms, battles } = createMockWorkspace();
+      const repos = unstampedStoreWith({ organisms, battles });
+
+      const { result } = await renderDeferred(repos);
+
+      expect(result.current.firstVisitPresetDeferred).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(sortedIds(await repos.battles.listFull())).toEqual(sortedIds(battles));
+    });
+
+    it('fresh + development + defer: fixtures still seed, flag false', async () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      const fetchSpy = servePresets();
+      vi.stubGlobal('fetch', fetchSpy);
+      const repos = createFakeRepositories();
+
+      const { result } = await renderDeferred(repos);
+
+      expect(result.current.firstVisitPresetDeferred).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect((await repos.battles.listFull()).length).toBeGreaterThan(0);
+    });
+
+    it('StrictMode + defer: one seed', async () => {
+      vi.stubGlobal('fetch', servePresets());
+      const repos = createFakeRepositories();
+      const seed = vi.spyOn(repos.organisms, 'save');
+
+      const { result } = await renderDeferred(repos, StrictMode);
+
+      expect(result.current.firstVisitPresetDeferred).toBe(true);
+      expect(seed.mock.calls.length).toBeLessThanOrEqual(1);
+    });
   });
 });
