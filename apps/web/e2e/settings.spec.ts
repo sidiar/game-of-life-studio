@@ -641,8 +641,13 @@ test.describe('descriptions at every level (Story 7.2)', () => {
 
     await page.goto('/organisms');
     await expect(page.getByRole('heading', { level: 2, name: 'Described Organism' })).toBeVisible();
-    await expect(page.locator('[data-card-description]')).toHaveCount(1);
-    await expect(page.locator('[data-card-description]')).toHaveText('Spreads fast, dies young.');
+    // Two described cards: the imported one, and the stock Conway's Classic that every import
+    // re-seeds (M9), which carries an authored description since Story 7.3 D1a. The plain
+    // organism's card has no description element.
+    await expect(page.locator('[data-card-description]')).toHaveCount(2);
+    await expect(
+      page.locator('[data-card-description]').filter({ hasText: 'Spreads fast, dies young.' }),
+    ).toHaveCount(1);
 
     await page.goto(`/battle?id=${DESCRIBED_BATTLE_ID}&mode=run`);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Described Battle/i);

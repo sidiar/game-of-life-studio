@@ -116,8 +116,11 @@ describe('organismDraftFrom (Story 4.17)', () => {
       withDescription,
     );
 
+    // CONWAYS_CLASSIC carries a description now (Story 7.3 D1a), so strip it for the bare case.
+    const noDescription: Organism = { ...CONWAYS_CLASSIC };
+    delete noDescription.description;
     const bare = await projectOrganismForSave(
-      organismDraftFrom(CONWAYS_CLASSIC, () => crypto.randomUUID()),
+      organismDraftFrom(noDescription, () => crypto.randomUUID()),
       CONWAYS_CLASSIC.id,
     );
     expect('description' in bare).toBe(false);

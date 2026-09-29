@@ -49,9 +49,9 @@ export async function projectOrganismForSave(draft: OrganismDraft, id: string): 
   );
 
   // Normalized, and the key OMITTED when there is none (Story 7.2 FD2): an explicit `undefined`
-  // would break the draft↔record identity `organismDraft.test.ts` pins, and a stored key on an
-  // unedited Conway's Classic would make `isPristineWorkspace` report an untouched workspace as
-  // modified.
+  // would break the draft↔record identity `organismDraft.test.ts` pins, and would make an unedited
+  // Conway's Classic fail `isPristineWorkspace`, which accepts only `CONWAYS_CLASSIC` or that
+  // constant with the `description` key omitted (Story 7.3 ruling D4), never a present-undefined key.
   const description = normalizeDescription(draft.description);
   const record = {
     schemaVersion: ORGANISM_SCHEMA_VERSION,

@@ -436,7 +436,9 @@ describe('OrganismCard — description (Story 7.2, FR-9.5)', () => {
   });
 
   it('renders NO element when the organism has no description (no placeholder chrome)', () => {
-    const { container } = render(<OrganismCard organism={CONWAYS_CLASSIC} {...noop} />);
+    const { container } = render(
+      <OrganismCard organism={{ ...CONWAYS_CLASSIC, description: undefined }} {...noop} />,
+    );
     expect(container.querySelector('[data-card-description]')).toBeNull();
   });
 

@@ -107,7 +107,32 @@ describe('isPristineWorkspace', () => {
     expect(isPristineWorkspace(0, [CONWAYS_CLASSIC], '   ')).toBe(true);
   });
 
-  it('is not pristine when the seed organism gained a description', () => {
+  it("is not pristine when the seed organism's description was edited", () => {
     expect(isPristineWorkspace(0, [{ ...clone(), description: 'edited' }])).toBe(false);
+  });
+
+  // Story 7.3 ruling D4: stores seeded before D1 hold the stock Conway without a description.
+  describe('pre-D1 stock shape (no description key)', () => {
+    function withoutDescription(): Organism {
+      const stock = clone();
+      delete stock.description;
+      return stock;
+    }
+
+    it('is pristine for the stock organism minus its description', () => {
+      expect(isPristineWorkspace(0, [withoutDescription()])).toBe(true);
+    });
+
+    it('is not pristine for a present-but-undefined description key (only the omitted key widens)', () => {
+      expect(isPristineWorkspace(0, [{ ...withoutDescription(), description: undefined }])).toBe(
+        false,
+      );
+    });
+
+    it('is not pristine when description-less but otherwise edited', () => {
+      const edited = withoutDescription();
+      edited.dominance = 51;
+      expect(isPristineWorkspace(0, [edited])).toBe(false);
+    });
   });
 });

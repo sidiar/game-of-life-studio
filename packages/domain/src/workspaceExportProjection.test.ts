@@ -316,7 +316,10 @@ describe('descriptions at every level (Story 7.2, FR-9.5)', () => {
     grid[0][0] = 1;
     const b = battle(PRESETS[0], [CONWAYS_CLASSIC.id], grid);
 
-    const wire = toEnvelope('workspace', [b], [CONWAYS_CLASSIC], META);
+    // CONWAYS_CLASSIC carries an authored description now (Story 7.3 D1a); strip it for this case.
+    const bare: Organism = { ...CONWAYS_CLASSIC };
+    delete bare.description;
+    const wire = toEnvelope('workspace', [b], [bare], META);
     expect('description' in wire).toBe(false);
     expect('description' in wire.battles[0]).toBe(false);
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID, DEFAULT_WORKSPACE } from './defaultWorkspace';
-import { OrganismSchema } from './organismSchema';
+import { MAX_ORGANISM_DESCRIPTION_LENGTH, OrganismSchema } from './organismSchema';
 
 describe('CONWAYS_CLASSIC', () => {
   it('parses as a valid Organism (FR-1.5)', () => {
@@ -16,6 +16,13 @@ describe('CONWAYS_CLASSIC', () => {
     expect(CONWAYS_CLASSIC.dominance).toBe(50);
     expect(CONWAYS_CLASSIC.agingEnabled).toBe(false);
     expect(CONWAYS_CLASSIC.schemaVersion).toBe(1);
+  });
+
+  it('carries an authored description within the cap (FR-9.5, Story 7.3 D1a)', () => {
+    expect(CONWAYS_CLASSIC.description?.trim()).toBeTruthy();
+    expect(CONWAYS_CLASSIC.description!.length).toBeLessThanOrEqual(
+      MAX_ORGANISM_DESCRIPTION_LENGTH,
+    );
   });
 
   it('encodes born-on-empty-with-3-neighbors and survive-alive-with-[2,3] (RFC-004 §2.4)', () => {
