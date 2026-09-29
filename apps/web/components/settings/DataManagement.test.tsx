@@ -1,5 +1,7 @@
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
@@ -24,6 +26,22 @@ vi.mock('@/lib/export/downloadJsonFile', () => ({
 beforeEach(() => {
   vi.mocked(downloadJsonFile).mockClear();
 });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+// Story 7.5: serves the REAL shipped preset files, so the Load Preset row is fully live here.
+function stubPresetFetch() {
+  const dir = join(process.cwd(), 'public', 'workspaces');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return new Response(readFileSync(join(dir, url.replace('/workspaces/', '')), 'utf8'));
+    }),
+  );
+}
 
 const ENVELOPE = {
   formatVersion: 1,
@@ -108,6 +126,7 @@ describe('DataManagement', () => {
       'Workspace description',
       'Export Workspace',
       'Import',
+      'Load Preset Workspace',
       'Clear All Data',
     ]);
   });
@@ -470,5 +489,72 @@ describe('DataManagement', () => {
     expect(statuses).toHaveLength(1);
     expect(statuses[0]).toHaveTextContent(/all data cleared/i);
     expect(screen.queryByText(/import complete/i)).toBeNull();
+  });
+
+  // Story 7.5: the new 'preset' owner applies the same D2 rules as Import and Clear All.
+  it('an Export click clears a Load Preset outcome from the shared slot (D2, Story 7.5)', async () => {
+    stubPresetFetch();
+    const { repos, serializer } = await pristineSetup();
+    render(
+      <DataManagement
+        serializer={serializer}
+        workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        onImported={vi.fn()}
+        onCleared={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Load preset workspace' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/^Loaded /);
+
+    await user.click(screen.getByRole('button', { name: /export workspace/i }));
+    await waitFor(() => expect(downloadJsonFile).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('status', { hidden: true })).toBeNull();
+  });
+
+  it('a stale Load Preset outcome that lands after a later Clear All is dropped (D2, Story 7.5)', async () => {
+    stubPresetFetch();
+    const { repos, serializer } = await pristineSetup();
+    let releaseImport: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseImport = resolve;
+    });
+    const importWorkspace = vi.fn(async (text: string) => {
+      await gate;
+      return serializer.importWorkspace(text);
+    });
+    render(
+      <DataManagement
+        serializer={{ exportWorkspace: serializer.exportWorkspace, importWorkspace }}
+        workspace={repos}
+        workspaceMeta={repos.workspaceMeta}
+        battles={repos.battles}
+        organisms={repos.organisms}
+        onImported={vi.fn()}
+        onCleared={vi.fn()}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Load preset workspace' }));
+    await waitFor(() => expect(importWorkspace).toHaveBeenCalledTimes(1));
+
+    await confirmClearAll(user);
+    expect(await screen.findByRole('status')).toHaveTextContent(/all data cleared/i);
+
+    await act(async () => {
+      releaseImport();
+      await importWorkspace.mock.results[0]?.value;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const statuses = screen.getAllByRole('status', { hidden: true });
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toHaveTextContent(/all data cleared/i);
+    expect(screen.queryByText(/^Loaded /)).toBeNull();
   });
 });

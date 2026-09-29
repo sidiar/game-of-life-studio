@@ -75,6 +75,39 @@ export const RowDescription = styled('p')({
   lineHeight: 1.5,
 });
 
+// LIFTED from `ImportWorkspaceRow.tsx` (Story 7.5 FD6) — `LoadPresetRow` is the second consumer.
+// Mockup: `.btn-secondary` (`settings.html:200-210`), `--gol-*` tokens only (AR-46). Copies
+// `<SidebarFooter>`'s `BackButton` idiom for a bordered secondary control: `--gol-border-control`
+// (not the decorative `--gol-border`) because this border is the button's OWN boundary, so SC
+// 1.4.11's 3:1 applies — not `<DataManagement>`'s borderless `ExportButton`, which needs no such
+// split. No `disabled` (FD8/AC8: this button never self-disables) and no `transition: all` (the
+// mid-fade axe trap every hover-button component in this codebase avoids).
+export const SecondaryButton = styled('button')({
+  background: 'transparent',
+  border: '1px solid var(--gol-border-control)',
+  color: 'var(--gol-text-primary)',
+  padding: '12px 24px',
+  fontSize: '13px',
+  fontWeight: 600,
+  fontFamily: 'inherit',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  cursor: 'pointer',
+  flexShrink: 0,
+  transition: 'background-color 0.2s, border-color 0.2s',
+  '&:hover': {
+    background: 'var(--gol-bg-hover)',
+    borderColor: 'var(--gol-accent)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
+  },
+});
+
 /**
  * Review Finding D2 (owner ruling a, Story 5.10): `<DataManagement>` owns ONE "last outcome"
  * message slot for the whole card, written to by Export, Import and Clear All alike. A row never

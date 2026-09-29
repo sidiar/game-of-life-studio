@@ -20,6 +20,7 @@ import {
   type RowOutcome,
 } from './SettingsCard';
 import ImportWorkspaceRow from './ImportWorkspaceRow';
+import LoadPresetRow from './LoadPresetRow';
 import ClearAllDataRow from './ClearAllDataRow';
 import WorkspaceDescriptionRow from './WorkspaceDescriptionRow';
 
@@ -57,7 +58,7 @@ export interface DataManagementProps {
 type DataManagementMessage = RowOutcome | null;
 
 /** Which of the card's three flows an outcome belongs to — the slot's owner. */
-type OutcomeSource = 'description' | 'export' | 'import' | 'clear';
+type OutcomeSource = 'description' | 'export' | 'import' | 'preset' | 'clear';
 
 const DATA_MANAGEMENT_HEADING_ID = 'data-management-heading';
 
@@ -124,10 +125,11 @@ const EXPORT_ERROR_MESSAGE =
 
 /**
  * The Data Management card (AC1, Story 5.5) — the first control this page renders, alongside
- * Workspace Statistics. Four rows: the workspace description (Story 7.2's
- * `<WorkspaceDescriptionRow>`), Export Workspace, Import (Story 5.9's `<ImportWorkspaceRow>`) and
- * Clear All Data (Story 5.10's `<ClearAllDataRow>`) — each its own component rather than
- * folded in here, since a third row's worth of state does not belong in Export's.
+ * Workspace Statistics. Five rows: the workspace description (Story 7.2's
+ * `<WorkspaceDescriptionRow>`), Export Workspace, Import (Story 5.9's `<ImportWorkspaceRow>`),
+ * Load Preset (Story 7.5's `<LoadPresetRow>`) and Clear All Data (Story 5.10's `<ClearAllDataRow>`)
+ * — each its own component rather than folded in here, since a third row's worth of state does
+ * not belong in Export's.
  *
  * FD8: re-entrancy without self-disabling. A `useRef<boolean>` in-flight flag makes a second click
  * while an export is running a no-op, WITHOUT `disabled` on the focused button — `deferred-work.md`
@@ -239,6 +241,17 @@ export default function DataManagement({
           onImported();
         }}
         onMessage={(next) => publish('import', next)}
+      />
+      <LoadPresetRow
+        serializer={serializer}
+        battles={battles}
+        organisms={organisms}
+        workspaceMeta={workspaceMeta}
+        onImported={() => {
+          setDescriptionKey((k) => k + 1);
+          onImported();
+        }}
+        onMessage={(next) => publish('preset', next)}
       />
       <ClearAllDataRow
         workspace={workspace}

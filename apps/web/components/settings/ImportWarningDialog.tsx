@@ -6,8 +6,6 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import type { ExportKind } from '@gol/domain';
-import { importWarningText } from '@/lib/import/importMessages';
 
 // Per-component imports only (AR-35), copying `<ExportBattleDialog>`'s idiom — copy the SHAPE,
 // never import it (a value import would pull MUI back into whatever route statically imports
@@ -23,8 +21,12 @@ const BUTTON_SX = { fontSize: '13px', padding: '12px 24px' } as const;
 
 export interface ImportWarningDialogProps {
   open: boolean;
-  /** Which kind of file was picked — only ever reaches the warning SENTENCE (FD7); no branch. */
-  kind: ExportKind;
+  /** The copy (Story 7.5 FD2): strings only, no branch on which flow opened the dialog. */
+  title: string;
+  body: string;
+  confirmLabel: string;
+  /** Shown in the in-dialog `role="alert"` when Export First fails. */
+  exportFailedText: string;
   /** The Export First feedback, rendered inside `DialogContent` (Task 3.3). `'idle'` shows nothing. */
   exportState: 'idle' | 'exported' | 'failed';
   /** Escape and a backdrop click both route here (MUI's `onClose`). Changes nothing. */
@@ -38,8 +40,9 @@ export interface ImportWarningDialogProps {
 }
 
 /**
- * FR-8.4's mandatory warning (Story 5.9, AC3/AC5/AC8) — a non-pristine workspace opens this before
- * any write. Presentational and stateless, matching `<ExportBattleDialog>`'s FD2 shape: a button
+ * FR-8.4's mandatory warning (Story 5.9, AC3/AC5/AC8) for every whole-workspace replace — a file
+ * import, a Settings preset (Story 7.5) and, in Story 7.6, a preset link. A non-pristine workspace
+ * opens this before any write. Presentational and stateless, matching `<ExportBattleDialog>`'s FD2 shape: a button
  * only records a choice (or, for Export First, starts a call the dialog stays open for) and this
  * component never runs `importWorkspace` itself.
  *
@@ -53,7 +56,10 @@ export interface ImportWarningDialogProps {
  */
 export default function ImportWarningDialog({
   open,
-  kind,
+  title,
+  body,
+  confirmLabel,
+  exportFailedText,
   exportState,
   onCancel,
   onExportFirst,
@@ -73,9 +79,9 @@ export default function ImportWarningDialog({
       aria-labelledby={TITLE_ID}
       aria-describedby={BODY_ID}
     >
-      <DialogTitle id={TITLE_ID}>Replace Your Workspace?</DialogTitle>
+      <DialogTitle id={TITLE_ID}>{title}</DialogTitle>
       <DialogContent>
-        <DialogContentText id={BODY_ID}>{importWarningText(kind)}</DialogContentText>
+        <DialogContentText id={BODY_ID}>{body}</DialogContentText>
         {/* Task 3.3: NOT the dialog's aria-describedby target — the dialog's own subtree is the
             one part of the page `useInertBackground` does not mark inert, so it is safe to insert
             a live region here (unlike everywhere else in `apps/web`, project-context's rule). */}
@@ -86,7 +92,7 @@ export default function ImportWarningDialog({
         )}
         {exportState === 'failed' && (
           <DialogContentText component="p" role="alert" sx={{ marginTop: '10px' }}>
-            Your current workspace could not be exported. Nothing was imported.
+            {exportFailedText}
           </DialogContentText>
         )}
       </DialogContent>
@@ -111,7 +117,7 @@ export default function ImportWarningDialog({
           color="error"
           sx={BUTTON_SX}
         >
-          Import Anyway
+          {confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>

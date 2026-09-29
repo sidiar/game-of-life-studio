@@ -5,20 +5,11 @@ import {
 } from '@gol/persistence';
 import { APP_VERSION } from '@/lib/appVersion';
 import {
-  PRESET_MANIFEST_FILE,
-  PRESET_WORKSPACES_PATH,
-  PresetWorkspaceManifestSchema,
-  type PresetWorkspaceEntry,
-  type PresetWorkspaceManifest,
-} from './presetManifest';
-
-/**
- * The fetch-phase budget for the first-visit preset (Story 7.4 FD3). The UX call is that a
- * Conway-only studio beats a spinner, so a slow or hung request must give up and let the FR-1.5
- * fallback seed run. 5 s is generous for the ~396 KB envelope (far smaller gzipped from the static
- * host) on broadband while still bounding a request that never answers.
- */
-export const PRESET_FETCH_TIMEOUT_MS = 5000;
+  fetchPresetManifest,
+  fetchPresetText,
+  PRESET_FETCH_TIMEOUT_MS,
+  withPresetTimeout,
+} from './presetFetch';
 
 type Fetch = typeof fetch;
 
@@ -27,41 +18,6 @@ export interface LoadDefaultPresetDeps {
   fetch: Fetch;
   repos: AppRepositories;
   timeoutMs?: number;
-}
-
-async function fetchOk(fetchFn: Fetch, path: string, signal: AbortSignal): Promise<Response> {
-  const response = await fetchFn(path, { signal });
-  if (!response.ok) throw new Error(`GET ${path} failed: HTTP ${response.status}`);
-  return response;
-}
-
-/**
- * Fetches and PARSES the manifest — never casts it (see `presetManifest.ts`). Exported for the
- * Settings loader (Story 7.5) and the preset link (Story 7.6), which need the same boundary.
- */
-export async function fetchPresetManifest(
-  fetchFn: Fetch,
-  signal: AbortSignal,
-): Promise<PresetWorkspaceManifest> {
-  const response = await fetchOk(
-    fetchFn,
-    `${PRESET_WORKSPACES_PATH}/${PRESET_MANIFEST_FILE}`,
-    signal,
-  );
-  return PresetWorkspaceManifestSchema.parse(await response.json());
-}
-
-/**
- * The envelope as TEXT: the import pipeline (`importWorkspace`) owns the JSON parse, migration and
- * validation, so parsing here would be a second, preset-specific parser (FR-9.1).
- */
-export async function fetchPresetText(
-  fetchFn: Fetch,
-  entry: PresetWorkspaceEntry,
-  signal: AbortSignal,
-): Promise<string> {
-  const response = await fetchOk(fetchFn, `${PRESET_WORKSPACES_PATH}/${entry.file}`, signal);
-  return response.text();
 }
 
 /**
@@ -83,18 +39,13 @@ export async function loadDefaultPreset({
   repos,
   timeoutMs = PRESET_FETCH_TIMEOUT_MS,
 }: LoadDefaultPresetDeps): Promise<ImportSummary> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let text: string;
-  try {
-    const manifest = await fetchPresetManifest(fetchFn, controller.signal);
+  const text = await withPresetTimeout(async (signal) => {
+    const manifest = await fetchPresetManifest(fetchFn, signal);
     // The schema guarantees defaultPresetId names a listed entry; the guard keeps the type honest.
     const entry = manifest.workspaces.find((w) => w.id === manifest.defaultPresetId);
     if (entry === undefined) throw new Error('defaultPresetId names no listed entry');
-    text = await fetchPresetText(fetchFn, entry, controller.signal);
-  } finally {
-    clearTimeout(timer);
-  }
+    return fetchPresetText(fetchFn, entry, signal);
+  }, timeoutMs);
 
   const serializer = createWorkspaceSerializer({
     repos,
