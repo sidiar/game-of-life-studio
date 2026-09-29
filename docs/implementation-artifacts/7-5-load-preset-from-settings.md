@@ -239,3 +239,18 @@ Claude Sonnet 5.5
 
 Dev Model: sonnet   # follows the established 5.9 Import-row flow and 7.4's fetch helpers; the surfaces 7.6 reuses (fetch module, dialog copy props) are pinned by FD1/FD2
 Proposed lane gate: none
+
+---
+
+This story was implemented with the 'Implement next story' skill with the following stats:
+
+| Phase | Agent model | Agents | Active | Wall clock | Input | Output | Cache write | Cache read | Total tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Step 0 — re-entry guard | — | 0 | 12s | 12s | 10 | 2,028 | 6,423 | 310,232 | 318,693 |
+| Step 1 — create | opus-5-5 | 1 | 4m 57s | 4m 57s | 84 | 2,784 | 264,188 | 3,647,934 | 3,914,990 |
+| Step 2 — implement | sonnet-5-5 | 1 | 10m 05s | 10m 05s | 130 | 3,686 | 221,961 | 5,954,574 | 6,180,351 |
+| Step 3 — review + PR | opus-5-5 | 4 | 11m 15s | 11m 15s | 250 | 13,035 | 510,051 | 9,634,061 | 10,157,397 |
+| _of which the orchestrator_ | opus-5-5 | — | — | — | 40 | 12,919 | 26,498 | 1,393,513 | 1,432,970 |
+| **Total (create → PR ready)** | | 6 | **26m 29s** | 26m 29s | 474 | 21,533 | 1,002,623 | 19,546,801 | **20,571,431** |
+
+Run started 2026-09-29 09:56 CEST; wall clock runs to the point the run stopped for the owner's review. No idle gaps were excluded; Active and Wall clock agree. (A gap counts as idle above 15 min.) Each phase row covers the phase agent, any agents it spawned, and the orchestrator's own turns in that window — the orchestrator row breaks its share out again, it is not additional. Cache reads dominate the token totals and are billed at a fraction of input rate, so read the Input and Output columns for effort and the total only as a ceiling. The orchestrator's final turn is still being written when these numbers are taken.
