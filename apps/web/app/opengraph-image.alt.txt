@@ -1,0 +1,1 @@
+Game of Life Studio: four colonies with their own rules colliding in a petri dish, with live population counts per organism

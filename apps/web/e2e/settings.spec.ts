@@ -121,7 +121,7 @@ test.describe('settings route (Story 5.1)', () => {
     await expect(statValue(page, 'Organisms')).toHaveText('1');
 
     const nav = page.getByRole('navigation', { name: 'Main' });
-    await expect(nav.getByRole('link')).toHaveCount(3);
+    await expect(nav.getByRole('link')).toHaveCount(4);
     await expect(nav.getByRole('link', { name: 'Settings' })).toHaveAttribute(
       'aria-current',
       'page',

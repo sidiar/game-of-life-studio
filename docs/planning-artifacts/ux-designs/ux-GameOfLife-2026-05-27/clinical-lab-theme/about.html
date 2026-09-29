@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>About - Clinical Lab Style</title>
+<style>
+/* Clinical Lab Design System */
+
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a1a1a;
+  --bg-hover: #222222;
+  --border: #333333;
+  --accent: #00d4ff;
+  --text-primary: #ffffff;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --warning: #ff3366;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 30px;
+  overflow-x: hidden;
+}
+
+.mockup-frame {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+/* Header — identical to the other gallery-branch mocks, plus the ABOUT nav item */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30px 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 40px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-accent {
+  color: var(--accent);
+  font-weight: 300;
+}
+
+.nav {
+  display: flex;
+  gap: 40px;
+  flex-wrap: wrap;
+}
+
+.nav-item {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: color 0.2s;
+  text-decoration: none;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+}
+
+.nav-item.active {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--bg-secondary);
+}
+
+.nav-item:not(.active):hover {
+  color: var(--text-primary);
+}
+
+/* Section Header */
+.section-header {
+  margin-bottom: 35px;
+}
+
+.section-title {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+}
+
+.section-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* About layout: reading column + side specimen */
+.about {
+  display: grid;
+  grid-template-columns: minmax(0, 680px) minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.about-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 28px;
+}
+
+.panel-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+
+.panel p {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.panel p + p {
+  margin-top: 12px;
+}
+
+.panel strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.inline-link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.35);
+  transition: border-color 0.2s;
+}
+
+.inline-link:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* Author row */
+.author {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.author-mark {
+  width: 56px;
+  height: 56px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.author-name {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.author-role {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* Link buttons — secondary style, same geometry as the primary create-button */
+.link-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.link-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.link-button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-primary);
+}
+
+.link-button.primary:hover {
+  background: #00e5ff;
+  color: var(--bg-primary);
+  transform: translateY(-1px);
+}
+
+.link-button .arrow {
+  font-weight: 300;
+}
+
+/* Side specimen: a glider on a small dish, purely decorative */
+.specimen {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 24px;
+  position: sticky;
+  top: 30px;
+}
+
+.specimen-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 2px;
+  aspect-ratio: 1;
+  margin-bottom: 16px;
+}
+
+.cell {
+  background: #111;
+  border-radius: 1px;
+}
+
+.cell.on {
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.6);
+}
+
+.specimen-caption {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Mock annotations — not part of the page */
+.annotation {
+  margin-top: 60px;
+  border: 1px dashed var(--text-tertiary);
+  padding: 20px 24px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-tertiary);
+}
+
+.annotation h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.annotation ul {
+  padding-left: 18px;
+}
+
+@media (max-width: 900px) {
+  body { padding: 16px; }
+  .about { grid-template-columns: 1fr; }
+  .specimen { position: static; max-width: 320px; }
+  .nav { gap: 8px; }
+}
+</style>
+</head>
+<body>
+<div class="mockup-frame">
+
+  <header class="header">
+    <div class="logo"><span class="logo-accent" aria-hidden="true">◉</span> Game of Life Studio</div>
+    <nav class="nav" aria-label="Main">
+      <a class="nav-item" href="#">Battles</a>
+      <a class="nav-item" href="#">Organisms</a>
+      <a class="nav-item" href="#">Settings</a>
+      <a class="nav-item active" href="#" aria-current="page">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="section-header">
+      <h1 class="section-title">About</h1>
+      <p class="section-subtitle">Who made this, how it was built, and how to get in touch</p>
+    </div>
+
+    <div class="about">
+      <div class="about-body">
+
+        <section class="panel">
+          <div class="panel-label">The studio</div>
+          <p>
+            <strong>Game of Life Studio</strong> takes Conway's Game of Life and turns it into a battle:
+            several organisms, each with its own rules, share one petri dish and compete for space.
+            Design an organism, drop it into a battle, press play, and see who survives.
+          </p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-label">Made by</div>
+          <div class="author">
+            <div class="author-mark" aria-hidden="true">AS</div>
+            <div>
+              <div class="author-name">Ariel Sidi</div>
+              <div class="author-role">Senior software engineer · Barcelona</div>
+            </div>
+          </div>
+          <div class="link-row">
+            <a class="link-button" href="https://www.linkedin.com/in/arielsidi/" target="_blank" rel="noopener">
+              LinkedIn <span class="arrow">↗</span>
+            </a>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-label">How it was built</div>
+          <p>
+            Curious how this site was built? It's all open on GitHub: the code, the planning
+            documents behind it, and the AI-assisted, spec-driven workflow that delivered it story by story.
+          </p>
+          <div class="link-row">
+            <a class="link-button" href="https://github.com/sidiar/game-of-life-studio" target="_blank" rel="noopener">
+              View on GitHub <span class="arrow">↗</span>
+            </a>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-label">Say hello</div>
+          <p>
+            I hope you enjoy this site as much as I enjoyed building it. I'd be happy to hear from you:
+            feedback, ideas, suggestions, or a bug you found. Please get in touch.
+          </p>
+          <div class="link-row">
+            <a class="link-button primary" href="mailto:hello@game-of-life-studio.com?subject=Game%20of%20Life%20Studio">
+              hello@game-of-life-studio.com
+            </a>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="specimen" aria-hidden="true">
+        <div class="specimen-grid" id="glider"></div>
+        <div class="specimen-caption"><span>Specimen: glider</span><span>Gen 0</span></div>
+      </aside>
+    </div>
+
+    <div class="annotation">
+      <h3>Mock notes</h3>
+      <ul>
+        <li>Route: <code>/about</code> in the <code>(gallery)</code> group, so it gets AppShell. Nav gains a fourth item, "About".</li>
+        <li>Static content only; no form, since GitHub Pages has no backend. Email is a plain <code>mailto:</code> with a prefilled subject.</li>
+        <li>Article link intentionally omitted. Add a "Read the story" panel once the dev.to post is live.</li>
+        <li>Specimen dish is decorative (<code>aria-hidden</code>) and static. The live version could reuse the engine to animate it.</li>
+      </ul>
+    </div>
+  </main>
+
+</div>
+
+<script>
+  // Static glider on a 12×12 grid (decorative)
+  const on = new Set(['2,4', '3,5', '4,3', '4,4', '4,5']);
+  const grid = document.getElementById('glider');
+  for (let r = 0; r < 12; r++) {
+    for (let c = 0; c < 12; c++) {
+      const d = document.createElement('div');
+      d.className = on.has(r + ',' + c) ? 'cell on' : 'cell';
+      grid.appendChild(d);
+    }
+  }
+</script>
+</body></html>

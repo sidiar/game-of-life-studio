@@ -27,11 +27,11 @@ describe('NotFound', () => {
   // nav links — and with no matched route, NONE may claim aria-current. This is the third "no
   // entry is active" surface after /battle (AppNav.test.tsx), and the only one that goes through
   // the real not-found tree.
-  it('renders all three nav links with none of them current', () => {
+  it('renders all four nav links with none of them current', () => {
     render(<NotFound />);
 
     const links = screen.getByRole('navigation').querySelectorAll('a');
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
     for (const link of links) {
       expect(link).not.toHaveAttribute('aria-current');
     }

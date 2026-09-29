@@ -18,7 +18,7 @@ const APP_DIR = dirname(fileURLToPath(import.meta.url));
  * `path.sep`-joined segments and this repo's CI runs on Linux while local dev may not.
  */
 describe('app/ route set (Story 5.1 AC8)', () => {
-  it('pins the exact set of page.tsx files — five after this story', () => {
+  it('pins the exact set of page.tsx files — six since /about', () => {
     const entries = readdirSync(APP_DIR, { recursive: true }) as string[];
     // Basename EQUALITY, not endsWith: a colocated `homepage.tsx` component ends in the same eight
     // characters and is not a route.
@@ -30,6 +30,7 @@ describe('app/ route set (Story 5.1 AC8)', () => {
     expect(pages).toEqual([
       '(battle)/battle/new/page.tsx',
       '(battle)/battle/page.tsx',
+      '(gallery)/about/page.tsx',
       '(gallery)/organisms/page.tsx',
       '(gallery)/page.tsx',
       '(gallery)/settings/page.tsx',
