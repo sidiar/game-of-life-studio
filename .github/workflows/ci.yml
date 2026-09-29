@@ -2,16 +2,22 @@
 #
 # Keep the stage order here in LOCKSTEP with the root `ci` script (package.json):
 # if they drift, a local-green tree can still fail on the first real push. The
-# triggers below are `main` + pull_request only, so a topic branch gets its first
-# real run when its PR opens — `npm run ci` locally is the only gate before that.
+# triggers below are `main`, `v*` release tags and pull_request only, so a topic
+# branch gets its first real run when its PR opens — `npm run ci` locally is the
+# only gate before that.
 #
 # Stage order (both here and in `npm run ci`):
 #   typecheck -> lint -> format:check -> spec:check -> boundary:check -> test:coverage
 #     -> build:standalone -> bundle:check -> bench -> bench:check -> e2e (+axe)
 #
 # Deployment: the `deploy` job publishes `apps/web/out` to GitHub Pages
-# (https://game-of-life-studio.com) on `main` pushes only, and only after BOTH
+# (https://game-of-life-studio.com) on `v*` tag pushes only, and only after BOTH
 # `quality` and `e2e` are green — the live site never runs ahead of the gate.
+# Merging to `main` does NOT deploy: `main` may carry a half-built epic, and a
+# release is a deliberate `git tag vX.Y.Z && git push origin vX.Y.Z`. A tag may sit
+# on a commit off `main` (a hotfix branched from the live tag) — see docs/ops.md.
+# The Pages environment `github-pages` must allow `v*` tags in its deployment
+# policy, or `deploy-pages` is rejected.
 # `apps/web/public/CNAME` is what binds the Pages site to the custom domain; the
 # export copies it verbatim into `out/`, so it must stay in `public/`.
 
@@ -20,6 +26,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -100,11 +107,11 @@ jobs:
       - name: Frame budget (AR-43 / NFR-1.1)
         run: npm run bench:check
 
-      # Hand the exact bytes the gates above measured to `deploy`. Skipped on PRs:
-      # nothing consumes it there. Kept in THIS job (not rebuilt in `deploy`) so
+      # Hand the exact bytes the gates above measured to `deploy`. Release tags
+      # only: nothing consumes it on PRs or `main` pushes. Kept in THIS job (not rebuilt in `deploy`) so
       # what goes live is byte-identical to what `bundle:check` measured.
       - name: Upload static export for Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-pages-artifact@v3
         with:
           path: apps/web/out
@@ -194,11 +201,11 @@ jobs:
           retention-days: 7
 
   # $0 static deploy to GitHub Pages (custom domain via apps/web/public/CNAME).
-  # `main` only, and gated on the full pipeline — a red e2e keeps the previous
-  # deployment live. Pages source must be set to "GitHub Actions" in the repo
+  # `v*` release tags only, and gated on the full pipeline — a red e2e keeps the
+  # previous deployment live. Pages source must be set to "GitHub Actions" in the repo
   # settings for `deploy-pages` to be accepted.
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [quality, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
