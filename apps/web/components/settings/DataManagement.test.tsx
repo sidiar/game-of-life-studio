@@ -528,9 +528,11 @@ describe('DataManagement', () => {
     expect(screen.queryByRole('status', { hidden: true })).toBeNull();
   });
 
-  // Pins CURRENT, accepted behaviour (Story 7.5 review, owner ruling D1 (a)), not the ideal: only
-  // the outcome MESSAGE is dropped. The store still ends up holding the preset while the visible
-  // outcome says "All data cleared" (the cross-row mismatch recorded in deferred-work.md).
+  // Pins CURRENT, accepted behaviour (Story 7.5 review, owner ruling D1 (a)), not the ideal. Clear
+  // All lands while the pristine-path preset import is in flight (after the fetch and the pristine
+  // check), and only the outcome MESSAGE is dropped and asserted. The store (not asserted here)
+  // still ends up holding the preset while the visible outcome says "All data cleared" — the
+  // cross-row mismatch recorded in deferred-work.md.
   it('a stale Load Preset outcome that lands after a later Clear All is dropped (D2, Story 7.5)', async () => {
     stubPresetFetch();
     const { repos, serializer } = await pristineSetup();
