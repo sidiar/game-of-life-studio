@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { seedDefaultWorkspace, type AppRepositories } from '@gol/persistence';
 
 export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
@@ -44,6 +45,11 @@ export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
  * branches. The comparison is `=== 'production'`, never `!== 'development'`, for the same reason
  * as the dev branch: Vitest's `'test'` would otherwise fetch in every apps/web unit test.
  *
+ * "Fresh" alone does not open the preset branch: the store must also hold no user data (no
+ * battles, no organism but Conway's Classic — `holdsNoUserData`, review ruling D1). An unstamped
+ * store that still carries records (a failed stamp write after a successful data write) takes the
+ * plain additive seed instead, so the import's `clearAll()` never runs over it.
+ *
  * The preset path is `import()`-ed dynamically (Story 7.4 FD4): it drags the serializer, the
  * migration chain and the envelope schema along, and only a first visit ever runs it — every
  * returning load would otherwise pay for it in the first-load bundle (AR-3). The loader builds the
@@ -61,6 +67,19 @@ export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
  * store must never be offered a reset. `undefined` unless `status === 'error'`. Never logged — the
  * e2e specs assert a clean console on the happy path.
  */
+/**
+ * Story 7.4 review ruling D1: an unstamped store is not necessarily an empty one. `writeDataKey`
+ * writes the data and THEN stamps `gol:schema`, so a stamp write that fails leaves records behind
+ * with no stamp, and the next load reads fresh. The plain seed over such a store is additive
+ * (`ensureDefaultOrganism`); the preset import is a whole-workspace replace (M8) whose `clearAll()`
+ * would destroy them. So the preset runs only over a store holding no battles and no organism
+ * other than Conway's Classic — the one record the FR-1.5 seed itself writes.
+ */
+async function holdsNoUserData(repos: AppRepositories): Promise<boolean> {
+  const [battles, organisms] = await Promise.all([repos.battles.list(), repos.organisms.list()]);
+  return battles.length === 0 && organisms.every((o) => o.id === CONWAYS_CLASSIC_ID);
+}
+
 export function useWorkspaceSeed(repos: AppRepositories): {
   status: WorkspaceSeedStatus;
   error: unknown;
@@ -91,12 +110,17 @@ export function useWorkspaceSeed(repos: AppRepositories): {
         .isFreshWorkspace()
         .then((fresh) => {
           if (fresh && process.env.NODE_ENV === 'production') {
-            // Story 7.4: the first-visit default preset. Dynamic import only (FD4) — see the doc
-            // comment above. ANY preset failure falls back to the FR-1.5 seed, silently (FD5).
-            return import('@/lib/workspaces/loadDefaultPreset')
-              .then(({ loadDefaultPreset }) =>
-                loadDefaultPreset({ fetch: globalThis.fetch.bind(globalThis), repos }),
-              )
+            // Story 7.4: the first-visit default preset, only over a store that holds no user
+            // data (review ruling D1) — the import's clearAll() must never destroy an unstamped
+            // store's records. Dynamic import only (FD4) — see the doc comment above. ANY preset
+            // failure, including the emptiness read, falls back to the FR-1.5 seed, silently (FD5).
+            return holdsNoUserData(repos)
+              .then((empty): Promise<unknown> => {
+                if (!empty) return seedDefaultWorkspace(repos);
+                return import('@/lib/workspaces/loadDefaultPreset').then(({ loadDefaultPreset }) =>
+                  loadDefaultPreset({ fetch: globalThis.fetch.bind(globalThis), repos }),
+                );
+              })
               .then(
                 () => fresh,
                 () => seedDefaultWorkspace(repos).then(() => fresh),

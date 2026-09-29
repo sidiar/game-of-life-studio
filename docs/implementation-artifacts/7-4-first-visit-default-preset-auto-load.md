@@ -4,7 +4,7 @@ baseline_commit: 4999674c7688c9c9ee146fe7e35ab29faa7171d0
 
 # Story 7.4: First-Visit Default Preset Auto-Load
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -153,8 +153,10 @@ Recent main: `4999674` (merge of #100, story 7.3: content + `CONWAYS_CLASSIC` de
 
 ### Review Findings
 
-- [ ] [Review][Decision] Unstamped store that still holds data is treated as fresh and the preset's `clearAll()` destroys it — the provisional answer to open question 2 rests on a false premise: today's re-seed (`seedDefaultWorkspace` -> `ensureDefaultOrganism`) is ADDITIVE, the preset import is DESTRUCTIVE (M8 whole-workspace replace), so "the same store would already be re-seeded today" is not equivalent. The state is reachable without hand-editing: `writeDataKey` writes data then stamps, and a failed stamp leaves data with no `gol:schema` (documented in `localStorageAccess.ts` as "fully recoverable"), so the next load reads fresh and wipes it. Options: (a) accept as provisional (rare: needs a stamp write to fail after a data write succeeded); (b) in the hook's preset branch also require empty battles and organisms (only Conway or none) before importing, else plain seed; (c) (b) plus re-check `isFreshWorkspace()` immediately before the import to narrow the two-tab first-visit race (the slower tab's import replaces the faster tab's store; localStorage has no compare-and-set so this only narrows it). Review recommends (b) or (c).
-- [ ] [Review][Decision] Deep-link first visit to `/battle` or `/battle/new` gets no preset (open question 1) — FR-9.2 says "whichever page they enter"; the epic AC scopes the story to `useWorkspaceSeed` boundaries. Options: (a) keep out of scope, matching the accepted empty-library window; (b) add a follow-up story to seed/preset those two boundaries; (c) do it here. Review has no objection to (a) provided FR-9.2's wording is amended or the gap is tracked.
+- [x] [Review][Decision] Unstamped store that still holds data is treated as fresh and the preset's `clearAll()` destroys it — the provisional answer to open question 2 rests on a false premise: today's re-seed (`seedDefaultWorkspace` -> `ensureDefaultOrganism`) is ADDITIVE, the preset import is DESTRUCTIVE (M8 whole-workspace replace), so "the same store would already be re-seeded today" is not equivalent. The state is reachable without hand-editing: `writeDataKey` writes data then stamps, and a failed stamp leaves data with no `gol:schema` (documented in `localStorageAccess.ts` as "fully recoverable"), so the next load reads fresh and wipes it. Options: (a) accept as provisional (rare: needs a stamp write to fail after a data write succeeded); (b) in the hook's preset branch also require empty battles and organisms (only Conway or none) before importing, else plain seed; (c) (b) plus re-check `isFreshWorkspace()` immediately before the import to narrow the two-tab first-visit race (the slower tab's import replaces the faster tab's store; localStorage has no compare-and-set so this only narrows it). Review recommends (b) or (c).
+  - **Owner ruling (Sidiar, 2026-09-29): (b).** In `useWorkspaceSeed`'s preset branch, import the preset only when the workspace is fresh AND holds no user data (no battles; no organisms other than Conway's Classic). Otherwise take the plain additive seed. Add unit tests for the unstamped-store-with-data case (battles present; a non-Conway organism present) proving no `clearAll()`/import happens and the data survives. The pre-import `isFreshWorkspace()` re-check from (c) is not asked for.
+- [x] [Review][Decision] Deep-link first visit to `/battle` or `/battle/new` gets no preset (open question 1) — FR-9.2 says "whichever page they enter"; the epic AC scopes the story to `useWorkspaceSeed` boundaries. Options: (a) keep out of scope, matching the accepted empty-library window; (b) add a follow-up story to seed/preset those two boundaries; (c) do it here. Review has no objection to (a) provided FR-9.2's wording is amended or the gap is tracked.
+  - **Owner ruling (Sidiar, 2026-09-29): (a).** Keep out of scope; no code change. Track the gap (a first visit that deep-links to `/battle` or `/battle/new` gets no preset, against FR-9.2's "whichever page they enter") as an entry in `deferred-work.md`.
 - [x] [Review][Patch] Self-referential comment in `settings.spec.ts` ("see settings.spec.ts's `seedWorkspace`" inside settings.spec.ts) [apps/web/e2e/settings.spec.ts:13]
 - [x] [Review][Defer] Real unmount mid-load followed by a remount (client-side nav between seeding pages) reads fresh before the first import stamps and starts a second load; `hasRun` is per-component [apps/web/lib/gallery/useWorkspaceSeed.ts] — deferred, narrow window; fix with a module-level in-flight promise or abort-on-unmount when the pattern is reused by 7.5/7.6
 - [x] [Review][Defer] Timeout budget is shared by manifest and envelope fetches and does not bound `importWorkspace` or an injected `fetch` that ignores the abort signal on body reads [apps/web/lib/workspaces/loadDefaultPreset.ts] — deferred, real `fetch` honours the signal; revisit if 7.5 injects a wrapper
@@ -188,6 +190,9 @@ Claude Opus 5.5 (claude-opus-5-5), via bmad-dev-story under implement-next-story
   - A fresh context with `index.json` blocked showed "No Battles Yet", with `gol:organisms` = `[conways-classic]`.
   - Screenshots are in the session scratchpad (`first-visit-gallery.png`, `first-visit-battle-running.png`, `blocked-manifest-empty-state.png`) and are not committed.
 - Open questions 1–3 were left at their provisional answers: `/battle` does not seed, the unstamped-with-data store is accepted, and the timeout stays at 5 s (the smoke loaded well inside it).
+- ✅ Resolved review decision D1, owner ruling (b): `useWorkspaceSeed`'s preset branch now also requires the store to hold no user data (`holdsNoUserData`: no battles, no organism other than Conway's Classic). An unstamped store that still carries records takes the plain additive seed, so the import's `clearAll()` never runs over it. A failed emptiness read falls back to the plain seed too, silently (FD5). Three new hook tests (unstamped store modelled by pinning `isFreshWorkspace()` to true): battles present, and a lone non-Conway organism present, each assert no fetch, no `clearAll()` and the data surviving (both confirmed failing against the pre-ruling hook); a Conway-only unstamped store still gets the preset. The (c) pre-import freshness re-check was not added (not asked for).
+- ✅ Resolved review decision D2, owner ruling (a): out of scope, no code change. The deep-link gap (`/battle`, `/battle/new` never seed, against FR-9.2's "whichever page they enter") is tracked in `deferred-work.md`.
+- Rulings gate: `npm run ci:dev` passed (exit 0). apps/web unit tests 2763 passed; Chromium e2e 317 passed; bundle `/` +0.3 KB, within the allowance.
 
 ### File List
 
@@ -207,10 +212,12 @@ Claude Opus 5.5 (claude-opus-5-5), via bmad-dev-story under implement-next-story
 - apps/web/e2e/storageCorruption.spec.ts (modified)
 - docs/implementation-artifacts/7-4-first-visit-default-preset-auto-load.md (this story)
 - docs/implementation-artifacts/sprint-status.yaml (modified)
+- docs/implementation-artifacts/deferred-work.md (modified: D2 deep-link gap)
 
 ### Change Log
 
 - 2026-09-29: Implemented Story 7.4. The manifest has a Zod parse boundary, and an injectable `loadDefaultPreset` loader has a 5 s fetch timeout. `useWorkspaceSeed` loads the default preset on a fresh production first visit and silently falls back to FR-1.5. The e2e suite opts out of the preset where the specs need an empty baseline, and there is a new first-visit/Clear All e2e. Status → review.
+- 2026-09-29: Addressed code review findings - 2 items resolved (owner rulings D1 (b), D2 (a)). The preset imports only over a fresh store with no user data; the deep-link gap is tracked in deferred-work.md. Status → review.
 
 Dev Model: opus   # first runtime preset loader: sets the manifest-parse + fetch/timeout + silent-fallback pattern that 7.5 and 7.6 reuse
 Proposed lane gate: none

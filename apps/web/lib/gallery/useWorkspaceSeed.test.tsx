@@ -4,9 +4,9 @@ import { dirname, join } from 'node:path';
 import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { CONWAYS_CLASSIC_ID } from '@gol/domain';
+import { CONWAYS_CLASSIC, CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { resetWorkspace, type AppRepositories } from '@gol/persistence';
-import { createFakeRepositories } from '@gol/test-utils';
+import { createFakeRepositories, createMockWorkspace, type FakeSeed } from '@gol/test-utils';
 import { PRESET_MANIFEST_FILE, PRESET_WORKSPACES_PATH } from '@/lib/workspaces/presetManifest';
 import { useWorkspaceSeed } from './useWorkspaceSeed';
 
@@ -170,6 +170,64 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
 
     expect(result.current.status).toBe('ready');
     expect(fetchSpy.mock.calls.filter(([url]) => url === MANIFEST_URL)).toHaveLength(1);
+  });
+
+  // Review ruling D1: `writeDataKey` writes data THEN stamps, so a failed stamp write leaves an
+  // unstamped store that still holds records. The fake stamps on every seeded write, so the
+  // failed stamp is modelled by pinning `isFreshWorkspace()` to true.
+  function unstampedStoreWith(seed: FakeSeed): AppRepositories {
+    const repos = createFakeRepositories(seed);
+    repos.isFreshWorkspace = () => Promise.resolve(true);
+    return repos;
+  }
+
+  it('D1: an unstamped store holding battles is never replaced — no fetch, no clearAll, data survives', async () => {
+    const fetchSpy = servePresets();
+    vi.stubGlobal('fetch', fetchSpy);
+    const { organisms, battles } = createMockWorkspace();
+    const repos = unstampedStoreWith({ organisms, battles });
+    const clearAll = vi.spyOn(repos, 'clearAll');
+
+    const { result } = await renderReady(repos);
+
+    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(clearAll).not.toHaveBeenCalled();
+    expect(sortedIds(await repos.battles.listFull())).toEqual(sortedIds(battles));
+    expect(sortedIds(await repos.organisms.list())).toEqual(
+      [...new Set([...sortedIds(organisms), CONWAYS_CLASSIC_ID])].sort(),
+    );
+  });
+
+  it('D1: an unstamped store holding a non-Conway organism is never replaced — the seed only adds Conway', async () => {
+    const fetchSpy = servePresets();
+    vi.stubGlobal('fetch', fetchSpy);
+    const userOrganism = createMockWorkspace().organisms.find((o) => o.id !== CONWAYS_CLASSIC_ID);
+    if (userOrganism === undefined) throw new Error('mock workspace: no non-Conway organism');
+    const repos = unstampedStoreWith({ organisms: [userOrganism] });
+    const clearAll = vi.spyOn(repos, 'clearAll');
+
+    const { result } = await renderReady(repos);
+
+    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(clearAll).not.toHaveBeenCalled();
+    expect(await repos.battles.listFull()).toEqual([]);
+    expect(sortedIds(await repos.organisms.list())).toEqual(
+      [CONWAYS_CLASSIC_ID, userOrganism.id].sort(),
+    );
+  });
+
+  it("D1: an unstamped store holding only Conway's Classic still gets the preset", async () => {
+    const fetchSpy = servePresets();
+    vi.stubGlobal('fetch', fetchSpy);
+    const repos = unstampedStoreWith({ organisms: [CONWAYS_CLASSIC] });
+
+    const { result } = await renderReady(repos);
+
+    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(sortedIds(await repos.battles.listFull())).toEqual(sortedIds(envelope.battles));
   });
 
   it('a rejection of the FALLBACK seed still reaches error with its cause (Story 5.11)', async () => {
