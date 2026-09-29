@@ -1,11 +1,19 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { StrictMode } from 'react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { CONWAYS_CLASSIC_ID } from '@gol/domain';
 import { STORAGE_KEYS } from '@gol/persistence';
 import { MOCK_BATTLE_IDS, MOCK_ORGANISM_IDS } from '@gol/test-utils';
 import HomePage from './page';
+
+// Outside the App Router `useSearchParams()` returns null in jsdom, so it is mocked (Story 7.6).
+let currentParams = new URLSearchParams();
+vi.mock('next/navigation', () => ({ useSearchParams: () => currentParams }));
 
 // Story 1.10 replaced the placeholder body with the real Battle Gallery. What these tests
 // exercise did not change: HomePage still owns createRepositories()/useWorkspaceSeed at the page
@@ -13,6 +21,7 @@ import HomePage from './page';
 // @vitejs/plugin-react + the @gol/domain workspace-source import path all at once.
 describe('HomePage', () => {
   afterEach(() => {
+    currentParams = new URLSearchParams();
     localStorage.clear();
     vi.unstubAllEnvs();
   });
@@ -159,5 +168,153 @@ describe('HomePage', () => {
       unknown
     >;
     expect(Object.keys(organisms)).toEqual([CONWAYS_CLASSIC_ID]);
+  });
+
+  // Story 7.6 (FR-9.4). The full arrival flow is covered by PresetLinkArrival.test.tsx and e2e.
+  describe('preset link', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      window.history.replaceState(null, '', '/');
+    });
+
+    const manifestText = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        'public',
+        'workspaces',
+        'index.json',
+      ),
+      'utf8',
+    );
+
+    it('an unknown ?preset= shows a dismissible alert over the untouched gallery, then Dismiss focuses the h1', async () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      const seeded = render(<HomePage />);
+      await waitFor(() => {
+        expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+      });
+      seeded.unmount();
+      vi.unstubAllEnvs();
+
+      const fetchSpy = vi.fn<typeof fetch>(async () => new Response(manifestText));
+      vi.stubGlobal('fetch', fetchSpy);
+      currentParams = new URLSearchParams('preset=nope');
+      window.history.replaceState(null, '', '/?preset=nope');
+
+      render(<HomePage />);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('“nope”');
+      expect(alert).toHaveTextContent('Your workspace is untouched.');
+      await waitFor(() =>
+        expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+          'Grand Colony War',
+          'Three-Way Skirmish',
+        ]),
+      );
+      // The strip ran (FD6): a reload would not re-prompt.
+      expect(window.location.search).toBe('');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Dismiss message' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
+    });
+
+    it('a malformed ?preset= is never echoed: generic alert, nothing fetched (D2)', async () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      const seeded = render(<HomePage />);
+      await waitFor(() => {
+        expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
+      });
+      seeded.unmount();
+      vi.unstubAllEnvs();
+
+      const fetchSpy = vi.fn<typeof fetch>(async () => new Response(manifestText));
+      vi.stubGlobal('fetch', fetchSpy);
+      const search = 'preset=Data%20lost%20-%20recover%20at%20evil.example';
+      currentParams = new URLSearchParams(search);
+      window.history.replaceState(null, '', `/?${search}`);
+
+      render(<HomePage />);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(
+        "This preset link isn't valid. It doesn't point to any preset in this version of the studio. Your workspace is untouched.",
+      );
+      expect(alert).not.toHaveTextContent('Data lost');
+      expect(alert).not.toHaveTextContent('evil.example');
+      // Not a first visit and not a slug: the flow never fetches (step 1).
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(window.location.search).toBe('');
+    });
+
+    it('an empty ?preset= is no link: nothing fetched, no alert (Review 2026-09-29)', async () => {
+      const fetchSpy = vi.fn<typeof fetch>(async () => new Response('', { status: 500 }));
+      vi.stubGlobal('fetch', fetchSpy);
+      currentParams = new URLSearchParams('preset=');
+
+      render(<HomePage />);
+      await waitFor(() => screen.getByRole('heading', { level: 2, name: 'No Battles Yet' }));
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('a second link on the same mounted page is never a first visit (Review 2026-09-29)', async () => {
+      // Production + fresh store + a link: the seed defers (FD5), and the first arrival's unknown id
+      // loads the default preset (a first visit). The shipped files are served off disk.
+      vi.stubEnv('NODE_ENV', 'production');
+      const workspacesDir = join(
+        dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        'public',
+        'workspaces',
+      );
+      const fetchSpy = vi.fn<typeof fetch>(async (input) => {
+        const file = String(input).split('/').pop()!;
+        try {
+          return new Response(readFileSync(join(workspacesDir, file), 'utf8'));
+        } catch {
+          return new Response('', { status: 404 });
+        }
+      });
+      vi.stubGlobal('fetch', fetchSpy);
+      currentParams = new URLSearchParams('preset=nope');
+      window.history.replaceState(null, '', '/?preset=nope');
+
+      const { rerender } = render(<HomePage />);
+      const first = await screen.findByRole('alert');
+      expect(first).toHaveTextContent('“nope”');
+      expect(first).not.toHaveTextContent('untouched');
+      await waitFor(() =>
+        expect(screen.queryByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeNull(),
+      );
+      const callsAfterFirst = fetchSpy.mock.calls.length;
+
+      // A client-side navigation to another link, with the page still mounted.
+      currentParams = new URLSearchParams('preset=nope-again');
+      rerender(<HomePage />);
+
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('“nope-again”'));
+      // Not a first visit any more: no default-preset attempt, and the copy says so.
+      expect(screen.getByRole('alert')).toHaveTextContent('Your workspace is untouched.');
+      expect(fetchSpy.mock.calls.slice(callsAfterFirst).map(([u]) => String(u))).toEqual([
+        expect.stringMatching(/index\.json$/),
+      ]);
+    });
+
+    it('without the param nothing is fetched', async () => {
+      const fetchSpy = vi.fn<typeof fetch>(async () => new Response('', { status: 500 }));
+      vi.stubGlobal('fetch', fetchSpy);
+
+      render(<HomePage />);
+      await waitFor(() => screen.getByRole('heading', { level: 2, name: 'No Battles Yet' }));
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
   });
 });

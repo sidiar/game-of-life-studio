@@ -75,20 +75,40 @@ async function holdsNoUserData(repos: AppRepositories): Promise<boolean> {
  * `isFreshWorkspace()` gate passes. The FALLBACK's own rejection is not silent: it reaches
  * `status: 'error'` exactly as the plain seed's always has.
  *
+ * Story 7.6 (FD5): `options.deferFirstVisitPreset` is set by the Gallery when the URL carries a
+ * preset link. In the production + empty branch the seed then writes Conway only (stamped, still
+ * pristine) INSTEAD of the default preset, and `firstVisitPresetDeferred` reports that it did, so
+ * the link's own arrival loads its preset silently. Deferring beats "load the default, then warn
+ * about replacing it": that would show a destructive dialog on the visitor's very first page,
+ * against FR-9.4's "lands directly in the loaded workspace", and waste the default's fetch. The
+ * flag is "this seed deferred", never "the store is pristine" — a Clear All'd store is pristine
+ * too, and Clear All must not re-trigger a preset (FR-9.2). It is false on every other path.
+ *
  * `error` is the seed's rejection, kept (not discarded) so the page can classify it (Story 5.11):
  * a first-run write refused for lack of space is not "your data is damaged", and a newer-format
  * store must never be offered a reset. `undefined` unless `status === 'error'`. Never logged — the
  * e2e specs assert a clean console on the happy path.
  */
-export function useWorkspaceSeed(repos: AppRepositories): {
+export function useWorkspaceSeed(
+  repos: AppRepositories,
+  options?: { deferFirstVisitPreset?: boolean },
+): {
   status: WorkspaceSeedStatus;
   error: unknown;
+  firstVisitPresetDeferred: boolean;
 } {
-  const [state, setState] = useState<{ status: WorkspaceSeedStatus; error: unknown }>({
+  const [state, setState] = useState<{
+    status: WorkspaceSeedStatus;
+    error: unknown;
+    firstVisitPresetDeferred: boolean;
+  }>({
     status: 'seeding',
     error: undefined,
+    firstVisitPresetDeferred: false,
   });
   const hasRun = useRef(false);
+  // Set only by the deferral branch below; read when the chain reaches 'ready'.
+  const deferredRef = useRef(false);
   // Liveness must be a REF, not a per-invocation `let cancelled` (Review 2026-08-05). The two
   // guards have different lifetimes: hasRun deliberately survives StrictMode's setup -> cleanup ->
   // setup so the seed runs once, which means the SECOND setup skips and the FIRST setup owns the
@@ -117,6 +137,11 @@ export function useWorkspaceSeed(repos: AppRepositories): {
             return holdsNoUserData(repos)
               .then((empty): Promise<unknown> => {
                 if (!empty) return seedDefaultWorkspace(repos);
+                if (options?.deferFirstVisitPreset) {
+                  // Story 7.6 FD5: the preset link's arrival loads its own preset over this.
+                  deferredRef.current = true;
+                  return seedDefaultWorkspace(repos);
+                }
                 return import('@/lib/workspaces/loadDefaultPreset').then(({ loadDefaultPreset }) =>
                   loadDefaultPreset({ fetch: globalThis.fetch.bind(globalThis), repos }),
                 );
@@ -137,10 +162,18 @@ export function useWorkspaceSeed(repos: AppRepositories): {
           return undefined;
         })
         .then(() => {
-          if (mounted.current) setState({ status: 'ready', error: undefined });
+          if (mounted.current) {
+            setState({
+              status: 'ready',
+              error: undefined,
+              firstVisitPresetDeferred: deferredRef.current,
+            });
+          }
         })
         .catch((error: unknown) => {
-          if (mounted.current) setState({ status: 'error', error });
+          if (mounted.current) {
+            setState({ status: 'error', error, firstVisitPresetDeferred: false });
+          }
         });
     }
 
