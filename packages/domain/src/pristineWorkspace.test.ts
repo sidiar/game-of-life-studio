@@ -107,7 +107,7 @@ describe('isPristineWorkspace', () => {
     expect(isPristineWorkspace(0, [CONWAYS_CLASSIC], '   ')).toBe(true);
   });
 
-  it('is not pristine when the seed organism gained a description', () => {
+  it("is not pristine when the seed organism's description was edited", () => {
     expect(isPristineWorkspace(0, [{ ...clone(), description: 'edited' }])).toBe(false);
   });
 });
