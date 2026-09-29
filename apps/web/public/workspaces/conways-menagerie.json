@@ -1,0 +1,1322 @@
+{
+  "formatVersion": 1,
+  "appVersion": "0.0.0",
+  "exportedAt": "2026-09-29T14:15:17.273Z",
+  "kind": "workspace",
+  "description": "A zoo of classic Life patterns, each doing its textbook trick. Conway's Classic and six recoloured copies of it share the same rules, so every pattern behaves as it would in the original game while its colour tells you which is which. Glider Gun and Eater feeds a stream of gliders to an eater; R-Pentomino lets five cells churn into chaos on a dish of their own; Oscillator Garden is a quiet showcase of oscillators and still lifes.",
+  "organisms": [
+    {
+      "schemaVersion": 1,
+      "id": "conways-classic",
+      "name": "Conway's Classic",
+      "description": "The original Game of Life rules: a cell is born with exactly 3 neighbors of its own kind and survives with 2 or 3, otherwise it dies. It can only defend, never take a cell from another organism, so in a mixed dish watch invaders eat into its colonies.",
+      "colorToken": "sky-blue",
+      "dominance": 50,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "1fcc1002-5f8a-4cf0-9fab-2c0c20492d51",
+          "contentHash": "d9b3d443a42e63c10526023503302a87b0676110bf7e5c146625a5237026d93d",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Born on an empty cell with exactly 3 neighbors",
+            "action": "born"
+          }
+        },
+        {
+          "id": "27855506-28f8-46c2-a85b-1464557a121d",
+          "contentHash": "1a7f0de8227e3031c7000336705781a2df139b445be381f351a4df1cb67c0918",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [2, 3]
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2-3 neighbors",
+            "action": "survive"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "8c132860-9b53-4b97-b935-00fc56713f04",
+      "name": "Pulsar",
+      "description": "A period-3 oscillator: four symmetric groups of bars that swell and shrink every 3 cycles. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
+      "colorToken": "amber",
+      "dominance": 10,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "1b9b4c86-1e7f-4bb6-8436-ac13154ca3f0",
+          "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Born on an empty cell with exactly 3 neighbors of its own kind",
+            "action": "born"
+          }
+        },
+        {
+          "id": "9c1798fc-26ce-4a12-a969-b651eb70993c",
+          "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [2, 3]
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2 or 3 neighbors of its own kind",
+            "action": "survive"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da",
+      "name": "R-Pentomino",
+      "description": "Five cells that churn chaotically for a long time before settling into debris. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
+      "colorToken": "vermillion",
+      "dominance": 20,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "f85d1190-3f61-4382-ae5d-74e4938dff83",
+          "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Born on an empty cell with exactly 3 neighbors of its own kind",
+            "action": "born"
+          }
+        },
+        {
+          "id": "5ff6f971-0ac4-4c04-8f8e-edf1af530662",
+          "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [2, 3]
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2 or 3 neighbors of its own kind",
+            "action": "survive"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "7771de12-e37c-4134-a3bb-a93dc7ba4475",
+      "name": "Pentadecathlon",
+      "description": "A period-15 oscillator: a bar that grows arms, flips, and returns every 15 cycles. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
+      "colorToken": "reddish-purple",
+      "dominance": 30,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "2a453377-ed79-46d2-a03b-0e2f9483e10b",
+          "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Born on an empty cell with exactly 3 neighbors of its own kind",
+            "action": "born"
+          }
+        },
+        {
+          "id": "0a22bc45-f8a2-4dd5-ba10-06dd66ea6afb",
+          "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [2, 3]
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2 or 3 neighbors of its own kind",
+            "action": "survive"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "0614582b-ff84-4635-9f18-4a5fbe02f988",
+      "name": "Toad",
+      "description": "A period-2 oscillator: six cells that flip between two shapes every cycle. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
+      "colorToken": "bluish-green",
+      "dominance": 40,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "d9062352-968d-46e8-bbd3-39c96e975751",
+          "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Born on an empty cell with exactly 3 neighbors of its own kind",
+            "action": "born"
+          }
+        },
+        {
+          "id": "16771668-f3e9-4637-98c9-bf9991e6c402",
+          "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [2, 3]
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2 or 3 neighbors of its own kind",
+            "action": "survive"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "34d87f56-8fd4-468f-ae2d-6f6d10706440",
+      "name": "Beacon",
+      "description": "A period-2 oscillator: two blocks whose touching corners blink on and off. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
+      "colorToken": "azure",
+      "dominance": 60,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "0e586f8f-a670-42e6-ab84-d63a6127ee02",
+          "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Born on an empty cell with exactly 3 neighbors of its own kind",
+            "action": "born"
+          }
+        },
+        {
+          "id": "6ef5d4c0-633e-43be-80c3-3b3b39b6beb5",
+          "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [2, 3]
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2 or 3 neighbors of its own kind",
+            "action": "survive"
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "3b34d11e-7a8e-4a7f-8409-6fc1ca67cbb3",
+      "name": "Blinker",
+      "description": "The smallest oscillator: three cells that swing between a row and a column. It is a recoloured copy of Conway's Classic with identical rules, and only neighbors of its own kind count toward its births and survival.",
+      "colorToken": "yellow",
+      "dominance": 70,
+      "agingEnabled": false,
+      "survivalRules": [
+        {
+          "id": "357d6896-83a9-42db-816c-27f14a3937d1",
+          "contentHash": "a2bfcd41e8aa31ec8a1c883fc95b7ce3f064bd129f313461d0114cc83fdf950b",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "empty"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "eq",
+              "pattern": 3
+            }
+          ],
+          "payload": {
+            "summary": "Born on an empty cell with exactly 3 neighbors of its own kind",
+            "action": "born"
+          }
+        },
+        {
+          "id": "6428ffbd-7eef-4d5c-84a4-7aec9994ac18",
+          "contentHash": "d3ee67b4aee410c6132bdc6b5c9fd217fa1a870270dcb107542b0898e8cee0ad",
+          "conditions": [
+            {
+              "property": "cellState",
+              "operator": "eq",
+              "pattern": "alive"
+            },
+            {
+              "property": "neighborCount",
+              "operator": "range",
+              "pattern": [2, 3]
+            }
+          ],
+          "payload": {
+            "summary": "Survives with 2 or 3 neighbors of its own kind",
+            "action": "survive"
+          }
+        }
+      ]
+    }
+  ],
+  "battles": [
+    {
+      "id": "f0512c9d-e592-4668-99ef-94cf17f8f77e",
+      "name": "Oscillator Garden",
+      "description": "Oscillators and still lifes, each colour keeping its own rhythm: a pulsar, a pentadecathlon, a toad, a beacon and a blinker, beside a beehive and a block that never change.",
+      "gridDimensions": {
+        "cols": 50,
+        "rows": 30
+      },
+      "cells": [
+        {
+          "x": 16,
+          "y": 22,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 17,
+          "y": 22,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 42,
+          "y": 22,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 43,
+          "y": 22,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 15,
+          "y": 23,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 18,
+          "y": 23,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 42,
+          "y": 23,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 43,
+          "y": 23,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 16,
+          "y": 24,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 17,
+          "y": 24,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 5,
+          "y": 3,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 6,
+          "y": 3,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 7,
+          "y": 3,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 11,
+          "y": 3,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 12,
+          "y": 3,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 13,
+          "y": 3,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 3,
+          "y": 5,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 8,
+          "y": 5,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 10,
+          "y": 5,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 15,
+          "y": 5,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 3,
+          "y": 6,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 8,
+          "y": 6,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 10,
+          "y": 6,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 15,
+          "y": 6,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 8,
+          "y": 7,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 10,
+          "y": 7,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 15,
+          "y": 7,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 5,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 6,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 7,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 11,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 12,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 13,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 5,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 6,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 7,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 11,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 12,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 13,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 3,
+          "y": 11,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 8,
+          "y": 11,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 10,
+          "y": 11,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 15,
+          "y": 11,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 3,
+          "y": 12,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 8,
+          "y": 12,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 10,
+          "y": 12,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 15,
+          "y": 12,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 3,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 8,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 10,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 15,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 5,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 6,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 7,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 11,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 12,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 13,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 27,
+          "y": 4,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 32,
+          "y": 4,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 25,
+          "y": 5,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 26,
+          "y": 5,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 28,
+          "y": 5,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 29,
+          "y": 5,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 30,
+          "y": 5,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 31,
+          "y": 5,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 33,
+          "y": 5,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 34,
+          "y": 5,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 27,
+          "y": 6,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 32,
+          "y": 6,
+          "organismId": "7771de12-e37c-4134-a3bb-a93dc7ba4475"
+        },
+        {
+          "x": 26,
+          "y": 20,
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
+        },
+        {
+          "x": 27,
+          "y": 20,
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
+        },
+        {
+          "x": 28,
+          "y": 20,
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
+        },
+        {
+          "x": 25,
+          "y": 21,
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
+        },
+        {
+          "x": 26,
+          "y": 21,
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
+        },
+        {
+          "x": 27,
+          "y": 21,
+          "organismId": "0614582b-ff84-4635-9f18-4a5fbe02f988"
+        },
+        {
+          "x": 4,
+          "y": 22,
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
+        },
+        {
+          "x": 5,
+          "y": 22,
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
+        },
+        {
+          "x": 4,
+          "y": 23,
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
+        },
+        {
+          "x": 5,
+          "y": 23,
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
+        },
+        {
+          "x": 6,
+          "y": 24,
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
+        },
+        {
+          "x": 7,
+          "y": 24,
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
+        },
+        {
+          "x": 6,
+          "y": 25,
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
+        },
+        {
+          "x": 7,
+          "y": 25,
+          "organismId": "34d87f56-8fd4-468f-ae2d-6f6d10706440"
+        },
+        {
+          "x": 40,
+          "y": 8,
+          "organismId": "3b34d11e-7a8e-4a7f-8409-6fc1ca67cbb3"
+        },
+        {
+          "x": 41,
+          "y": 8,
+          "organismId": "3b34d11e-7a8e-4a7f-8409-6fc1ca67cbb3"
+        },
+        {
+          "x": 42,
+          "y": 8,
+          "organismId": "3b34d11e-7a8e-4a7f-8409-6fc1ca67cbb3"
+        }
+      ],
+      "createdAt": "2026-09-29T14:14:13.029Z",
+      "updatedAt": "2026-09-29T14:14:13.029Z"
+    },
+    {
+      "id": "a6384d98-13ec-4615-a503-136239d21a07",
+      "name": "R-Pentomino",
+      "description": "Five cells alone on a wide dish that churn chaotically for hundreds of cycles, throwing off gliders and scattering debris before the dish settles.",
+      "gridDimensions": {
+        "cols": 100,
+        "rows": 60
+      },
+      "cells": [
+        {
+          "x": 49,
+          "y": 28,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        },
+        {
+          "x": 50,
+          "y": 28,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        },
+        {
+          "x": 48,
+          "y": 29,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        },
+        {
+          "x": 49,
+          "y": 29,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        },
+        {
+          "x": 49,
+          "y": 30,
+          "organismId": "edc2a8a9-436b-4ce9-8c86-25f66a33b3da"
+        }
+      ],
+      "createdAt": "2026-09-29T14:14:14.029Z",
+      "updatedAt": "2026-09-29T14:14:14.029Z"
+    },
+    {
+      "id": "31a1665e-026f-4b0c-81ba-49866e8a92f0",
+      "name": "Glider Gun and Eater",
+      "description": "A Gosper glider gun fires a glider every 30 cycles down the diagonal into an eater, which swallows each one and repairs itself. Far off, a pulsar beats.",
+      "gridDimensions": {
+        "cols": 100,
+        "rows": 60
+      },
+      "cells": [
+        {
+          "x": 27,
+          "y": 3,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 25,
+          "y": 4,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 27,
+          "y": 4,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 15,
+          "y": 5,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 16,
+          "y": 5,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 23,
+          "y": 5,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 24,
+          "y": 5,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 37,
+          "y": 5,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 38,
+          "y": 5,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 14,
+          "y": 6,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 18,
+          "y": 6,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 23,
+          "y": 6,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 24,
+          "y": 6,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 37,
+          "y": 6,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 38,
+          "y": 6,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 4,
+          "y": 7,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 13,
+          "y": 7,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 19,
+          "y": 7,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 23,
+          "y": 7,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 24,
+          "y": 7,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 3,
+          "y": 8,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 4,
+          "y": 8,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 13,
+          "y": 8,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 17,
+          "y": 8,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 19,
+          "y": 8,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 20,
+          "y": 8,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 25,
+          "y": 8,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 27,
+          "y": 8,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 13,
+          "y": 9,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 19,
+          "y": 9,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 27,
+          "y": 9,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 14,
+          "y": 10,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 18,
+          "y": 10,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 15,
+          "y": 11,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 16,
+          "y": 11,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 50,
+          "y": 36,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 51,
+          "y": 36,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 50,
+          "y": 37,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 52,
+          "y": 37,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 52,
+          "y": 38,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 52,
+          "y": 39,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 53,
+          "y": 39,
+          "organismId": "conways-classic"
+        },
+        {
+          "x": 80,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 81,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 82,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 86,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 87,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 88,
+          "y": 8,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 78,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 83,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 85,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 90,
+          "y": 10,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 78,
+          "y": 11,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 83,
+          "y": 11,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 85,
+          "y": 11,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 90,
+          "y": 11,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 78,
+          "y": 12,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 83,
+          "y": 12,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 85,
+          "y": 12,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 90,
+          "y": 12,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 80,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 81,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 82,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 86,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 87,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 88,
+          "y": 13,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 80,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 81,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 82,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 86,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 87,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 88,
+          "y": 15,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 78,
+          "y": 16,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 83,
+          "y": 16,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 85,
+          "y": 16,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 90,
+          "y": 16,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 78,
+          "y": 17,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 83,
+          "y": 17,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 85,
+          "y": 17,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 90,
+          "y": 17,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 78,
+          "y": 18,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 83,
+          "y": 18,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 85,
+          "y": 18,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 90,
+          "y": 18,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 80,
+          "y": 20,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 81,
+          "y": 20,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 82,
+          "y": 20,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 86,
+          "y": 20,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 87,
+          "y": 20,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        },
+        {
+          "x": 88,
+          "y": 20,
+          "organismId": "8c132860-9b53-4b97-b935-00fc56713f04"
+        }
+      ],
+      "createdAt": "2026-09-29T14:14:15.029Z",
+      "updatedAt": "2026-09-29T14:14:15.029Z"
+    }
+  ]
+}

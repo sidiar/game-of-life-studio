@@ -6,6 +6,24 @@
       "name": "Colony Clash",
       "description": "A small ecosystem to watch. Conway's Classic and three new organisms (Ember Raiders, Moss Weavers, Amber Tide) fight over one dish, each with its own dominance and invasion habits. Four Corners plays out a chain of conquest across a wide dish; Tug of War is a compact, fast skirmish.",
       "file": "colony-clash.json"
+    },
+    {
+      "id": "dominance-ladder",
+      "name": "Dominance Ladder",
+      "description": "Four colonies with identical rules and one difference: rank. Every colony grows like Conway's Life and takes over rival cells, so wherever two colonies touch, the higher-ranked one wins the cell. Read the ladder by colour: green is lowest, then amber, then vermilion, and reddish-purple outranks everything. Four Ranks starts all four at once; Sandwich squeezes one colony between two stronger ones.",
+      "file": "dominance-ladder.json"
+    },
+    {
+      "id": "conways-menagerie",
+      "name": "Conway's Menagerie",
+      "description": "A zoo of classic Life patterns, each doing its textbook trick. Conway's Classic and six recoloured copies of it share the same rules, so every pattern behaves as it would in the original game while its colour tells you which is which. Glider Gun and Eater feeds a stream of gliders to an eater; R-Pentomino lets five cells churn into chaos on a dish of their own; Oscillator Garden is a quiet showcase of oscillators and still lifes.",
+      "file": "conways-menagerie.json"
+    },
+    {
+      "id": "mirror-match",
+      "name": "Mirror Match",
+      "description": "Two colonies with identical rules and identical rank, and one difference: Mortal Mirror's cells die of old age, while Conway's Classic never ages. The dish starts as an exact mirror image, so what pulls the two sides apart is mortality (plus a coin flip wherever both claim the same empty cell).",
+      "file": "mirror-match.json"
     }
   ]
 }

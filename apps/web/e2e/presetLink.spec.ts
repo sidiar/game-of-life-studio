@@ -22,8 +22,9 @@ const presetBattleNames = (JSON.parse(envelopeText) as { battles: { name: string
 );
 const TITLE = `Load “${preset.name}”?`;
 
-// Test-side second preset (the manifest ships one entry): the only way to tell "the link's preset"
-// from "the default". Test data, never a shipped preset.
+// Test-side extra preset: the only way to tell "the link's preset" from a shipped one by battle
+// names alone (the shipped catalogue's names are real content, never suffixed). Test data, never a
+// shipped preset.
 const LINK_DESCRIPTION = 'A test-only preset.';
 const LINK_SUFFIX = ' (link)';
 async function routeLinkTestPreset(page: Page) {
@@ -247,5 +248,42 @@ test.describe('preset link (Story 7.6)', () => {
     await expect(page.getByRole('alert').filter({ hasText: 'spiral-wars' })).toBeVisible();
     await expect(galleryTitles(page).first()).toBeVisible();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  });
+  // Story 7.7 (FD8): reachability by construction, proven once on the REAL manifest. Each visit is
+  // a fresh context (pristine, so no dialog per 7.6 AC1); a second `?preset` visit in one context
+  // would meet the first preset's workspace and prompt.
+  test('(g) every non-default catalogue preset loads by link on a first visit', async ({
+    browser,
+  }) => {
+    // One cold page load per catalogue preset, on every browser of the matrix: triple the budget.
+    test.slow();
+    const catalogue = manifest.workspaces.filter((w) => w.id !== manifest.defaultPresetId);
+    expect(catalogue.length).toBeGreaterThanOrEqual(3);
+    for (const entry of catalogue) {
+      const names = (
+        JSON.parse(readFileSync(join(PRESETS_DIR, entry.file), 'utf8')) as {
+          battles: { name: string }[];
+        }
+      ).battles.map((b) => b.name);
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto(`/?preset=${entry.id}`);
+      // `exact: true`: the name match is otherwise a case-insensitive substring match.
+      for (const name of names) {
+        await expect(
+          page.getByRole('heading', { level: 2, name, exact: true }),
+          `preset "${entry.id}" battle "${name}"`,
+        ).toBeVisible();
+      }
+      // Only the linked preset loaded: none of the default's battles came along with it.
+      for (const name of presetBattleNames) {
+        await expect(
+          page.getByRole('heading', { level: 2, name, exact: true }),
+          `preset "${entry.id}" also shows default battle "${name}"`,
+        ).toHaveCount(0);
+      }
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await context.close();
+    }
   });
 });
