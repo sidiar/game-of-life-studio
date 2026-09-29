@@ -5,18 +5,22 @@ import type { RowOutcome } from '@/components/settings/SettingsCard';
 
 // The dismissible arrival banner (Story 7.6 FD7), mockup `.arrival-banner`
 // (`preset-workspace-library.html:157-166`). The 3px left border is decorative, not a control
-// boundary; the mockup's `--warning` maps to `--gol-danger`.
-const Banner = styled('div')({
+// boundary; the mockup's `--warning` maps to `--gol-danger`. The mockup only draws the warning; a
+// `status` (a confirmed load) takes `--gol-accent`, so a success never reads as an error (Review
+// 2026-09-29).
+const Banner = styled('div', {
+  shouldForwardProp: (prop) => prop !== 'tone',
+})<{ tone: RowOutcome['role'] }>(({ tone }) => ({
   display: 'flex',
   alignItems: 'flex-start',
   gap: '12px',
   background: 'var(--gol-bg-secondary)',
   border: '1px solid var(--gol-border)',
-  borderLeft: '3px solid var(--gol-danger)',
+  borderLeft: `3px solid ${tone === 'status' ? 'var(--gol-accent)' : 'var(--gol-danger)'}`,
   padding: '14px 18px',
   marginBottom: '24px',
   maxWidth: '900px',
-});
+}));
 
 const Text = styled('p')({
   flex: 1,
@@ -52,7 +56,7 @@ export interface PresetLinkNoticeProps {
 
 export default function PresetLinkNotice({ notice, onDismiss }: PresetLinkNoticeProps) {
   return (
-    <Banner>
+    <Banner tone={notice.role}>
       <Text role={notice.role}>{notice.text}</Text>
       <DismissButton
         type="button"

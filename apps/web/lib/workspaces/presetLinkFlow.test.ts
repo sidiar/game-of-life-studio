@@ -112,6 +112,26 @@ describe('preparePresetLink', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  // FD5 over Task 3.2 step 1's "no fetch": a malformed id on a FIRST visit is still an unknown link,
+  // so the visitor gets the normal app — the default preset (Review 2026-09-29).
+  it('(c) invalid id on a first visit loads the default preset, never fetching the id', async () => {
+    const repos = createFakeRepositories();
+    const fetchSpy = fakeFetch(shippedRoutes());
+
+    const plan = await preparePresetLink({
+      presetId: '../x',
+      fetch: fetchSpy,
+      repos,
+      firstVisit: true,
+    });
+
+    expect(plan).toEqual({ kind: 'unknown', defaultLoaded: true });
+    expect(fetchSpy.mock.calls.map(([u]) => String(u)).some((u) => u.includes('../x'))).toBe(false);
+    expect(sortedIds(await repos.battles.listFull())).toEqual(
+      sortedIds(envelope(defaultEntry.file).battles),
+    );
+  });
+
   it('(d) unknown id, not a first visit: no envelope fetch, store unchanged', async () => {
     const { organisms, battles } = createMockWorkspace();
     const repos = createFakeRepositories({ organisms, battles });

@@ -222,6 +222,62 @@ describe('HomePage', () => {
       expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
     });
 
+    it('an empty ?preset= is no link: nothing fetched, no alert (Review 2026-09-29)', async () => {
+      const fetchSpy = vi.fn<typeof fetch>(async () => new Response('', { status: 500 }));
+      vi.stubGlobal('fetch', fetchSpy);
+      currentParams = new URLSearchParams('preset=');
+
+      render(<HomePage />);
+      await waitFor(() => screen.getByRole('heading', { level: 2, name: 'No Battles Yet' }));
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('a second link on the same mounted page is never a first visit (Review 2026-09-29)', async () => {
+      // Production + fresh store + a link: the seed defers (FD5), and the first arrival's unknown id
+      // loads the default preset (a first visit). The shipped files are served off disk.
+      vi.stubEnv('NODE_ENV', 'production');
+      const workspacesDir = join(
+        dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        'public',
+        'workspaces',
+      );
+      const fetchSpy = vi.fn<typeof fetch>(async (input) => {
+        const file = String(input).split('/').pop()!;
+        try {
+          return new Response(readFileSync(join(workspacesDir, file), 'utf8'));
+        } catch {
+          return new Response('', { status: 404 });
+        }
+      });
+      vi.stubGlobal('fetch', fetchSpy);
+      currentParams = new URLSearchParams('preset=nope');
+      window.history.replaceState(null, '', '/?preset=nope');
+
+      const { rerender } = render(<HomePage />);
+      const first = await screen.findByRole('alert');
+      expect(first).toHaveTextContent('“nope”');
+      expect(first).not.toHaveTextContent('untouched');
+      await waitFor(() =>
+        expect(screen.queryByRole('heading', { level: 2, name: 'No Battles Yet' })).toBeNull(),
+      );
+      const callsAfterFirst = fetchSpy.mock.calls.length;
+
+      // A client-side navigation to another link, with the page still mounted.
+      currentParams = new URLSearchParams('preset=nope-again');
+      rerender(<HomePage />);
+
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('“nope-again”'));
+      // Not a first visit any more: no default-preset attempt, and the copy says so.
+      expect(screen.getByRole('alert')).toHaveTextContent('Your workspace is untouched.');
+      expect(fetchSpy.mock.calls.slice(callsAfterFirst).map(([u]) => String(u))).toEqual([
+        expect.stringMatching(/index\.json$/),
+      ]);
+    });
+
     it('without the param nothing is fetched', async () => {
       const fetchSpy = vi.fn<typeof fetch>(async () => new Response('', { status: 500 }));
       vi.stubGlobal('fetch', fetchSpy);

@@ -192,7 +192,12 @@ test.describe('preset link (Story 7.6)', () => {
   test('(d) unknown id on a non-pristine store: alert, store untouched, Dismiss removes it, URL clean', async ({
     page,
   }) => {
-    await seedWorkspace(page);
+    const { battles } = await seedWorkspace(page);
+    // The baseline is taken on a link-free visit, BEFORE the arrival runs (Review 2026-09-29), so
+    // the comparison proves the unknown-id flow wrote nothing — not merely that Dismiss did not.
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 2, name: battles[0]!.name })).toBeVisible();
+    const before = await storage(page);
     await page.goto('/?preset=spiral-wars');
 
     const alert = page.getByRole('alert').filter({ hasText: 'spiral-wars' });
@@ -201,7 +206,7 @@ test.describe('preset link (Story 7.6)', () => {
     await expect.poll(() => new URL(page.url()).searchParams.has('preset')).toBe(false);
     // The notice survives the URL strip: the page was not remounted (replaceState, not a navigation).
     await expect(alert).toBeVisible();
-    const before = await storage(page);
+    expect(await storage(page)).toEqual(before);
 
     await page.getByRole('button', { name: 'Dismiss message' }).click();
     await expect(alert).toHaveCount(0);

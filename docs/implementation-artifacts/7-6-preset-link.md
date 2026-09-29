@@ -4,7 +4,7 @@ baseline_commit: 6d3380ccb647fe27b3051c24d9eadb04af8f6995
 
 # Story 7.6: Preset Link
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -170,6 +170,33 @@ so that someone can hand me a ready-made experience in one click.
   - [x] 10.1 `npm run ci:dev` green. `/` gains `PresetLinkArrival`, `PresetLinkNotice`, `presetLink`, `presetMessages` and a dynamic dialog chunk. The flow module is a separate lazy chunk. If `bundle:check` reports growth past the allowance, first confirm that nothing heavy leaked statically (grep the `/` first-load chunks for `createWorkspaceSerializer` / `PresetWorkspaceManifestSchema`), then refresh the baseline (`npm run build:standalone && npm run bundle:baseline`) and state the delta in the Dev Agent Record.
   - [x] 10.2 Manual smoke on the static export (`npm run build:standalone && npx serve out`, headless Chromium is fine): a fresh profile at `/?preset=colony-clash` shows no dialog and a clean URL. Then rename a battle → `/?preset=colony-clash` → dialog → Cancel → rename intact. Then `/?preset=nope` → notice → Dismiss. Screenshots go to the scratchpad, not the repo. Record the results in the Dev Agent Record, or say plainly that the smoke did not run.
 
+### Review Findings
+
+Code review 2026-09-29 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Auditor). No AC violation found; the URL form, the seed deferral, the lazy flow module and the injected-repositories boundary hold against architecture.md (K.3/K.5, AR-2/27, AR-3, AR-35).
+
+- [ ] [Review][Decision] A failed link on a first visit permanently forfeits the default preset — The deferred seed has already written a stamped Conway-only store, so `isFreshWorkspace()` is false from then on. Only the `unknown` branch falls back to `loadDefaultPreset`. `download-failed` keeps the link so a reload retries, as FD5 decided. But a visitor who drops the link, whose link stays broken, or who hits `invalid-file` or a pristine `load()` failure never gets the 7.4 default: they are left on an empty gallery for good (`useWorkspaceSeed.ts:140-144`, `presetLinkFlow.ts` download-failed/invalid-file branches, `PresetLinkArrival.tsx` pristine `load()` failure). Options:
+  - (a) On `firstVisit`, fall back to `loadDefaultPreset` in every failure branch (download-failed, invalid-file, pristine load failure). The link's retry-by-reload is then lost, because the store is no longer pristine.
+  - (b) (a) for `invalid-file` and load failure only, and keep FD5's Conway-only plus retry-by-reload for `download-failed`.
+  - (c) Keep as built. FD5 accepted the Conway-only state as 7.4's own fallback.
+- [ ] [Review][Decision] Pattern-failing ids are echoed verbatim into an app-authored `role="alert"` — `?preset=Data%20lost%20-%20recover%20at%20evil.example` renders "…a preset called “Data lost - recover at evil.example”…". That is up to 40 characters of attacker-chosen text inside app chrome. React escaping prevents XSS but not content injection. Task 2.1 pins this copy and the story calls the 40-character cap "a layout guard, not a security one" (`presetMessages.ts` `presetLinkUnknownMessage`/`displayPresetId`, `presetLinkFlow.ts:1` pattern check). Options:
+  - (a) For ids failing `PRESET_ID_PATTERN`, show a generic "This preset link isn't valid" with no echo, and keep the echo for well-formed unknown slugs.
+  - (b) Never echo the id.
+  - (c) Keep as built.
+- [ ] [Review][Decision] The post-dialog notice is published from a `useEffect` keyed on `[dialogMounted, focusTick]` via `onSettledRef` — project-context's live-region rule names "a `useEffect` keyed on the mount flags" as a `react-hooks/set-state-in-effect` lint error and says to publish from the call site. Here the parent's `setNotice`/`setArrivalBusy` cascade runs from inside the effect, and going through a ref hides it from the lint. The ORDERING is correct: the dialog is gone before the notice exists, e2e (d) asserts it, and 5.6 requires focus to move before the settle unmounts the arrival. `LoadPresetRow`'s equivalent effect only moves focus (`PresetLinkArrival.tsx` focus effect + `settleAfterDialog`). Options:
+  - (a) Accept it and record the exception in project-context (focus-before-unmount forces the effect).
+  - (b) Restructure: move focus and publish from `onExited` after an awaited tick, with no effect.
+  - (c) Accept it without documenting.
+- [x] [Review][Patch] An empty `?preset=` is treated as a link: the seed defers, the gallery is held, and the alert quotes “” [apps/web/app/(gallery)/page.tsx:26]
+- [x] [Review][Patch] Re-entrant link on a mounted page: the arrival is not keyed on `presetId`, `firstVisitPresetDeferred` is never consumed (a later unknown id would load the default preset over user data with no warning), and the hold is set only at mount [apps/web/app/(gallery)/page.tsx:26-45]
+- [x] [Review][Patch] The notice banner always has a `--gol-danger` border, so a success `status` notice is styled as an error [apps/web/components/gallery/PresetLinkNotice.tsx:15]
+- [x] [Review][Patch] The "StrictMode + defer: one seed" test is vacuous: `toBeLessThanOrEqual(1)` on the guarded `organisms.save` passes for 0, 1 or 2 seed runs [apps/web/lib/gallery/useWorkspaceSeed.test.tsx:381]
+- [x] [Review][Patch] E2E (d) takes its "store untouched" baseline after the unknown-id flow has run, so it proves only that Dismiss writes nothing [apps/web/e2e/presetLink.spec.ts:204]
+- [x] [Review][Patch] No test for an invalid id on a first visit, which falls to `unknown()` and loads the default preset (FD5), unlike step 1's literal "no fetch" [apps/web/lib/workspaces/presetLinkFlow.test.ts:103]
+- [x] [Review][Defer] Export First keeps running after Cancel and still downloads the file [apps/web/components/gallery/PresetLinkArrival.tsx handleExportFirst] — deferred, pre-existing (copied from the `LoadPresetRow`/Import flow)
+- [x] [Review][Defer] The pristine path has no dialog between the pristine read and `load()`, so another tab's write in that window is cleared unwarned [apps/web/lib/workspaces/presetLinkFlow.ts pristine read] — deferred, pre-existing (7.5's flow shape; cross-tab is out of MVP scope)
+- [x] [Review][Defer] A failed `next/dynamic` dialog chunk leaves `useInertBackground` on and the page inert, and this now happens on `/` for any non-pristine link visitor [apps/web/components/gallery/PresetLinkArrival.tsx] — deferred, pre-existing (the 7.5 dialog-chunk item)
+- [x] [Review][Defer] The notice's live region is inserted with its text already inside, so a polite `status` may go unannounced in some screen readers [apps/web/components/gallery/PresetLinkNotice.tsx] — deferred, pre-existing (house pattern; the portalled live-region host in deferred-work.md is the class fix)
+
 ## Dev Notes
 
 ### Forced decisions (made here so the dev agent does not have to)
@@ -307,6 +334,7 @@ Sonnet 5.5 (claude-sonnet-5-5)
 ### Change Log
 
 - 2026-09-29: Story 7.6 implemented (preset link `/?preset=<id>`), status review.
+- 2026-09-29: Code review (Opus): 6 patches applied, 4 deferred, 3 decisions left for the owner; status in-progress.
 
 Dev Model: sonnet   # architecture-shaping (URL form, seed-hook deferral, gallery page boundary split); escalation to opus withheld because its Fable review pairing is unavailable, so FD1–FD8 pin every pattern for a Sonnet dev
 Proposed lane gate: none

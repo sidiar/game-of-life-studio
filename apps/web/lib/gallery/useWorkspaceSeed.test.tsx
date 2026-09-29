@@ -373,12 +373,16 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
     it('StrictMode + defer: one seed', async () => {
       vi.stubGlobal('fetch', servePresets());
       const repos = createFakeRepositories();
-      const seed = vi.spyOn(repos.organisms, 'save');
+      // `isFreshWorkspace()` is unguarded, unlike `organisms.save` (ensureDefaultOrganism checks
+      // first): ONE run reads it twice — the hook's gate, then `seedDefaultWorkspace`'s own — and a
+      // second run would read it at least twice more.
+      const freshRead = vi.spyOn(repos, 'isFreshWorkspace');
 
       const { result } = await renderDeferred(repos, StrictMode);
 
       expect(result.current.firstVisitPresetDeferred).toBe(true);
-      expect(seed.mock.calls.length).toBeLessThanOrEqual(1);
+      expect(freshRead).toHaveBeenCalledTimes(2);
+      await expectConwayOnly(repos);
     });
   });
 });

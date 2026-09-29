@@ -22,13 +22,28 @@ function GalleryRoute() {
   // here is safe for a statically exported route.
   const repositories = useMemo(() => createRepositories(), []);
 
-  // Story 7.6 (FR-9.4, FD1): `/?preset=<id>` addresses a preset. `null` means no link.
-  const presetId = useSearchParams().get(PRESET_LINK_PARAM);
+  // Story 7.6 (FR-9.4, FD1): `/?preset=<id>` addresses a preset. `null` means no link — and so does
+  // an empty `?preset=` (Review 2026-09-29): it names nothing, so it must not defer the seed, hold
+  // the gallery, or quote “” back in an alert.
+  const presetId = useSearchParams().get(PRESET_LINK_PARAM) || null;
   const { status, error, firstVisitPresetDeferred } = useWorkspaceSeed(repositories, {
     deferFirstVisitPreset: presetId !== null,
   });
   const [arrivalBusy, setArrivalBusy] = useState(presetId !== null);
   const [notice, setNotice] = useState<RowOutcome | null>(null);
+  // The seed defers ONCE, for the link the page mounted with (FD5), and its flag never resets. So
+  // the first settle consumes it: a later arrival on this same mounted page (a client-side
+  // navigation to another `?preset=`) is never a first visit, and must never load the default preset
+  // over what the user has built since (Review 2026-09-29).
+  const [deferralConsumed, setDeferralConsumed] = useState(false);
+  // A link that appears (or changes) on the mounted page re-arms the hold, which `useState`'s
+  // initialiser only sets at mount. Adjusting state during render, React's documented pattern for
+  // "reset state when a prop changes"; the arrival itself is keyed on the id below.
+  const [heldForPresetId, setHeldForPresetId] = useState(presetId);
+  if (presetId !== heldForPresetId) {
+    setHeldForPresetId(presetId);
+    if (presetId !== null) setArrivalBusy(true);
+  }
 
   // The arrival holds the gallery (FD2): `BattleGallery` reads nothing until 'ready', and its load
   // effect re-runs on the 'seeding' -> 'ready' edge while keeping the previous summaries on screen
@@ -39,6 +54,7 @@ function GalleryRoute() {
   const handleSettled = useCallback((result: { notice: RowOutcome | null; keepLink: boolean }) => {
     setNotice(result.notice);
     setArrivalBusy(false);
+    setDeferralConsumed(true);
     // Stripping unmounts <PresetLinkArrival> (no more param), which is why the notice lives here.
     if (!result.keepLink) stripPresetLinkParam();
   }, []);
@@ -59,9 +75,10 @@ function GalleryRoute() {
       />
       {presetId !== null && (
         <PresetLinkArrival
+          key={presetId}
           presetId={presetId}
           seedStatus={status}
-          firstVisit={firstVisitPresetDeferred}
+          firstVisit={firstVisitPresetDeferred && !deferralConsumed}
           repos={repositories}
           onBusyChange={setArrivalBusy}
           onSettled={handleSettled}
