@@ -104,7 +104,7 @@ so that I can start over from curated content whenever I choose.
 - [x] [Review][Patch] Test (c) never checks that `onMessage`'s second call is the status [apps/web/components/settings/LoadPresetRow.test.tsx:184]
 - [x] [Review][Patch] `DataManagement.test.tsx`'s preset stub resolves files off `process.cwd()` and throws on an unknown URL (unlike `LoadPresetRow.test.tsx`'s `import.meta.url` + 404) [apps/web/components/settings/DataManagement.test.tsx:35]
 - [x] [Review][Patch] Stale doc comments: `LoadPresetRow` calls itself the "fourth row" (it is the fifth); `OutcomeSource` still says "three flows" [apps/web/components/settings/LoadPresetRow.tsx:136, DataManagement.tsx:60]
-- [x] [Review][Patch] Task 8.2 is ticked but the manual smoke was never run (the Dev Agent Record says so) — run it on the static export and record the result [docs/implementation-artifacts/7-5-load-preset-from-settings.md]
+- [x] [Review][Patch] Task 8.2 is ticked but the manual smoke was never run (the Dev Agent Record says so) — run it on the static export and record the result [docs/implementation-artifacts/epic-7/7-5-load-preset-from-settings.md]
 - [x] [Review][Defer] If the `next/dynamic` dialog chunk fails to load, `onExited` never fires and `pendingRef` stays true, so Load becomes a silent no-op until reload [apps/web/components/settings/LoadPresetRow.tsx:45,303] — deferred, pre-existing (copied from Import's flow)
 - [x] [Review][Defer] Unmounting doesn't abort the in-flight manifest or envelope fetch; `withPresetTimeout`'s controller is tied only to the timer [apps/web/components/settings/LoadPresetRow.tsx:151,220] — deferred, pre-existing (7.4's helper shape)
 - [x] [Review][Defer] Cancel/Escape mid-Export-First leaves `exportInFlightRef` set, so the next dialog's Export First and confirm are no-ops, and the old export's outcome lands in it [apps/web/components/settings/LoadPresetRow.tsx:273-299] — deferred, pre-existing (copied from Import's flow)
@@ -203,7 +203,7 @@ Recent main: `ae8a32b` (merge of #101, story 7.4: `loadDefaultPreset.ts`, `prese
 - [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/preset-workspace-library-design.md §2]
 - [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/preset-workspace-library.html:302-344, 436-466]
 - [Source: docs/planning-artifacts/architecture.md#M8, M16, Decision F]
-- [Source: docs/implementation-artifacts/7-4-first-visit-default-preset-auto-load.md FD1–FD6, Review Findings]
+- [Source: docs/implementation-artifacts/epic-7/7-4-first-visit-default-preset-auto-load.md FD1–FD6, Review Findings]
 - [Source: docs/implementation-artifacts/epic-5/ (5.9 import row, 5.10 D2 slot ruling)]
 - [Source: docs/project-context.md: live region while a dialog is open; repositories injected; Zod at boundaries; bundle growth gate; ci:dev]
 

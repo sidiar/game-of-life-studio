@@ -202,7 +202,7 @@ Second review 2026-09-29 of the owner-rulings pass `60851dd..a769142` (Opus; Bli
 - [x] [Review][Patch] The regex parity test compares `.source` only, so a flag drift (`m` lets `"ok\nData lost…"` pass, `i` admits uppercase, `g` makes `test()` stateful) goes unnoticed [apps/web/lib/workspaces/presetMessages.test.ts:55]
 - [x] [Review][Patch] The invalid-id copy is only substring-checked (`"isn't valid"`), so pin the exact string with and without the untouched suffix, as 7.5 requires [apps/web/lib/workspaces/presetMessages.test.ts:44]
 - [x] [Review][Patch] No rendered-path test sends a malformed id, so add a page-level case asserting the generic alert, no echo and no fetch [apps/web/app/(gallery)/page.test.tsx:224]
-- [x] [Review][Patch] Story bookkeeping for D2 is incomplete: Task 2.1's "layout guard, not a security one" now reads as covering the pattern check, Task 2.3 omits the D2 tests, and the Completion Notes have no D2 entry [docs/implementation-artifacts/7-6-preset-link.md:32-35]
+- [x] [Review][Patch] Story bookkeeping for D2 is incomplete: Task 2.1's "layout guard, not a security one" now reads as covering the pattern check, Task 2.3 omits the D2 tests, and the Completion Notes have no D2 entry [docs/implementation-artifacts/epic-7/7-6-preset-link.md:32-35]
 
 ## Dev Notes
 
@@ -293,8 +293,8 @@ Second review 2026-09-29 of the owner-rulings pass `60851dd..a769142` (Opus; Bli
 - [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/preset-workspace-library-design.md §3]
 - [Source: docs/planning-artifacts/ux-designs/ux-GameOfLife-2026-05-27/clinical-lab-theme/preset-workspace-library.html:157-166, 345-357, 453-466]
 - [Source: docs/planning-artifacts/architecture.md#Decision K (K.3, K.5), M8, M9, M16, Decision F]
-- [Source: docs/implementation-artifacts/7-5-load-preset-from-settings.md FD1–FD8, Review Findings]
-- [Source: docs/implementation-artifacts/7-4-first-visit-default-preset-auto-load.md FD4, FD5, review D1]
+- [Source: docs/implementation-artifacts/epic-7/7-5-load-preset-from-settings.md FD1–FD8, Review Findings]
+- [Source: docs/implementation-artifacts/epic-7/7-4-first-visit-default-preset-auto-load.md FD4, FD5, review D1]
 - [Source: docs/implementation-artifacts/deferred-work.md: two-phase useSearchParams (Story 2.1/3.17), 7.4 and 7.5 entries]
 - [Source: docs/project-context.md: K.5, AR-2/27, live region while a dialog is open, bundle growth gate, ci:dev]
 
@@ -336,7 +336,7 @@ Sonnet 5.5 (claude-sonnet-5-5)
 - apps/web/app/(gallery)/page.tsx
 - apps/web/app/(gallery)/page.test.tsx
 - apps/web/e2e/presetLink.spec.ts (new)
-- docs/implementation-artifacts/7-6-preset-link.md
+- docs/implementation-artifacts/epic-7/7-6-preset-link.md
 - docs/implementation-artifacts/sprint-status.yaml
 
 ### Change Log

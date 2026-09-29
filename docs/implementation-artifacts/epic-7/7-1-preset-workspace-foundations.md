@@ -79,7 +79,7 @@ _Second review 2026-09-28 (Opus; Blind Hunter + Edge Case Hunter + Acceptance Au
 - [x] [Review][Patch] A missing presets folder surfaced as the same spawn ENOENT as "git not installed" and got the git message; git's stderr leaked to test output — check the folder first, pipe stderr into the error [apps/web/lib/workspaces/presetWorkspaces.test.ts:trackedFolderEntries]
 - [x] [Review][Patch] Lockstep comment still claimed a stray `notes.txt` "must fail" (untracked, it is now invisible), and the failure message gave no hint that a new preset needs `git add` / a stray tracked file needs `git rm` [apps/web/lib/workspaces/presetWorkspaces.test.ts:lockstep test]
 - [x] [Review][Patch] Stale code comments after D1c/D2a: test header says it reads the folder off disk for the mismatch check; `presetManifest.ts` head comment says "every file in that folder", and its authoring steps omit `<id>.json` naming and `git add` [apps/web/lib/workspaces/presetWorkspaces.test.ts:1-8, apps/web/lib/workspaces/presetManifest.ts:1-37]
-- [x] [Review][Patch] Story text the rulings made untrue: Task 4.1 `file` + lockstep bullets, FD6, Library notes (`node:child_process` + git), Testing standards, Completion Notes — annotated with D1c/D2a [docs/implementation-artifacts/7-1-preset-workspace-foundations.md]
+- [x] [Review][Patch] Story text the rulings made untrue: Task 4.1 `file` + lockstep bullets, FD6, Library notes (`node:child_process` + git), Testing standards, Completion Notes — annotated with D1c/D2a [docs/implementation-artifacts/epic-7/7-1-preset-workspace-foundations.md]
 
 ## Dev Notes
 

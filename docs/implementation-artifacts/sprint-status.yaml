@@ -186,7 +186,7 @@ development_status:
   # CHANGELOG-preset-workspace-library.md). ⚠️ Executes BEFORE epic-6 — open this lane once
   # epic-5 closes. Story 7.1's proof-of-concept lives on branch poc/preset-workspace-library
   # (reference material for create-story; the story lands it properly).
-  epic-7: in-progress
+  epic-7: done
   7-1-preset-workspace-foundations: done
   7-2-descriptions-at-every-level: done
   7-3-showcase-preset-content: done
@@ -194,4 +194,7 @@ development_status:
   7-5-load-preset-from-settings: done
   7-6-preset-link: done
   7-7-preset-catalog: done
-  epic-7-retrospective: optional
+  # No epic-7-retrospective key: the retrospective was deliberately skipped (Sidiar, 2026-09-29),
+  # the same call as Epics 1–5. Epic 7's stories are archived into epic-7/, and the retrospective
+  # skill globs story files NON-recursively — it would find zero there. To run one, move the story
+  # files back up beside this file first (CLAUDE.md).
