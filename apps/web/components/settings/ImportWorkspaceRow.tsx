@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import dynamic from 'next/dynamic';
-import { styled } from '@mui/material/styles';
 import { isPristineWorkspace, type ExportKind } from '@gol/domain';
 import {
   validateImportFile,
@@ -13,10 +12,21 @@ import {
   type WorkspaceSerializer,
 } from '@gol/persistence';
 import { importFailureMessage } from '@/lib/import/importFailureMessage';
-import { FILE_READ_FAILURE_MESSAGE, importSuccessMessage } from '@/lib/import/importMessages';
+import {
+  FILE_READ_FAILURE_MESSAGE,
+  importSuccessMessage,
+  importWarningText,
+} from '@/lib/import/importMessages';
 import { exportWorkspaceToFile } from '@/lib/export/exportWorkspaceToFile';
 import { useInertBackground } from '@/lib/useInertBackground';
-import { Row, RowDescription, RowInfo, RowLabel, type RowOutcome } from './SettingsCard';
+import {
+  Row,
+  RowDescription,
+  RowInfo,
+  RowLabel,
+  SecondaryButton,
+  type RowOutcome,
+} from './SettingsCard';
 
 // Task 3.4 / AR-35: `/settings` carries no MUI `Dialog` in its first load today (Story 5.5/5.6's
 // precedent — `<BattlePage>`'s `<ExportBattleDialog>`), and this dialog is rarely shown. The chunk
@@ -40,38 +50,6 @@ export interface ImportWorkspaceRowProps {
    * once the import settles. */
   onMessage(message: RowOutcome | null): void;
 }
-
-// Mockup: `.btn-secondary` (`settings.html:200-210`), `--gol-*` tokens only (AR-46). Copies
-// `<SidebarFooter>`'s `BackButton` idiom for a bordered secondary control: `--gol-border-control`
-// (not the decorative `--gol-border`) because this border is the button's OWN boundary, so SC
-// 1.4.11's 3:1 applies — not `<DataManagement>`'s borderless `ExportButton`, which needs no such
-// split. No `disabled` (FD8/AC8: this button never self-disables) and no `transition: all` (the
-// mid-fade axe trap every hover-button component in this codebase avoids).
-const ImportButton = styled('button')({
-  background: 'transparent',
-  border: '1px solid var(--gol-border-control)',
-  color: 'var(--gol-text-primary)',
-  padding: '12px 24px',
-  fontSize: '13px',
-  fontWeight: 600,
-  fontFamily: 'inherit',
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-  cursor: 'pointer',
-  flexShrink: 0,
-  transition: 'background-color 0.2s, border-color 0.2s',
-  '&:hover': {
-    background: 'var(--gol-bg-hover)',
-    borderColor: 'var(--gol-accent)',
-  },
-  '&:focus-visible': {
-    outline: '2px solid var(--gol-accent)',
-    outlineOffset: '2px',
-  },
-  '@media (prefers-reduced-motion: reduce)': {
-    transition: 'none',
-  },
-});
 
 /**
  * FD8's DOM-lookup restore, mirroring `<BattlePage>`'s `focusExportButtonIfLoose` for the
@@ -309,16 +287,16 @@ export default function ImportWorkspaceRow({
             replaced.
           </RowDescription>
         </RowInfo>
-        <ImportButton
+        <SecondaryButton
           type="button"
           aria-label="Import workspace"
           onClick={handleImportButtonClick}
           data-import-workspace=""
         >
           Import
-        </ImportButton>
+        </SecondaryButton>
         {/* Mockup: `.file-input-wrapper input[type="file"]` (`:317-326`) — `hidden`, not merely
-            visually hidden, and no label of its own: the visible `<ImportButton>` is the only
+            visually hidden, and no label of its own: the visible `<SecondaryButton>` is the only
             focusable trigger (`inputRef.current.click()`), never reached by Tab itself. */}
         <input
           ref={inputRef}
@@ -334,7 +312,10 @@ export default function ImportWorkspaceRow({
       {dialogMounted && (
         <ImportWarningDialog
           open={dialogOpen}
-          kind={dialogKind}
+          title="Replace Your Workspace?"
+          body={importWarningText(dialogKind)}
+          confirmLabel="Import Anyway"
+          exportFailedText="Your current workspace could not be exported. Nothing was imported."
           exportState={exportState}
           onCancel={handleDialogCancel}
           onExportFirst={() => {

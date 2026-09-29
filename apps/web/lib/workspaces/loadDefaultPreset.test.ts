@@ -4,7 +4,8 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ImportError, type AppRepositories } from '@gol/persistence';
 import { createFakeRepositories } from '@gol/test-utils';
-import { loadDefaultPreset, PRESET_FETCH_TIMEOUT_MS } from './loadDefaultPreset';
+import { loadDefaultPreset } from './loadDefaultPreset';
+import { PRESET_FETCH_TIMEOUT_MS } from './presetFetch';
 import { PRESET_MANIFEST_FILE, PRESET_WORKSPACES_PATH } from './presetManifest';
 
 // The REAL shipped files, served off disk — a happy path over a fixture would prove the loader,
