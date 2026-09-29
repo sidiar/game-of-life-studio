@@ -7,6 +7,19 @@ import { seedDefaultWorkspace, type AppRepositories } from '@gol/persistence';
 export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
 
 /**
+ * Story 7.4 review ruling D1: an unstamped store is not necessarily an empty one. `writeDataKey`
+ * writes the data and THEN stamps `gol:schema`, so a stamp write that fails leaves records behind
+ * with no stamp, and the next load reads fresh. The plain seed over such a store is additive
+ * (`ensureDefaultOrganism`); the preset import is a whole-workspace replace (M8) whose `clearAll()`
+ * would destroy them. So the preset runs only over a store holding no battles and no organism
+ * other than Conway's Classic — the one record the FR-1.5 seed itself writes.
+ */
+async function holdsNoUserData(repos: AppRepositories): Promise<boolean> {
+  const [battles, organisms] = await Promise.all([repos.battles.list(), repos.organisms.list()]);
+  return battles.length === 0 && organisms.every((o) => o.id === CONWAYS_CLASSIC_ID);
+}
+
+/**
  * Runs Story 1.5's first-run seed exactly once at the page boundary. `repos` is typed against the
  * AppRepositories INTERFACE (AR-2/27) — this hook never imports a concrete repository or calls
  * createRepositories() itself.
@@ -67,19 +80,6 @@ export type WorkspaceSeedStatus = 'seeding' | 'ready' | 'error';
  * store must never be offered a reset. `undefined` unless `status === 'error'`. Never logged — the
  * e2e specs assert a clean console on the happy path.
  */
-/**
- * Story 7.4 review ruling D1: an unstamped store is not necessarily an empty one. `writeDataKey`
- * writes the data and THEN stamps `gol:schema`, so a stamp write that fails leaves records behind
- * with no stamp, and the next load reads fresh. The plain seed over such a store is additive
- * (`ensureDefaultOrganism`); the preset import is a whole-workspace replace (M8) whose `clearAll()`
- * would destroy them. So the preset runs only over a store holding no battles and no organism
- * other than Conway's Classic — the one record the FR-1.5 seed itself writes.
- */
-async function holdsNoUserData(repos: AppRepositories): Promise<boolean> {
-  const [battles, organisms] = await Promise.all([repos.battles.list(), repos.organisms.list()]);
-  return battles.length === 0 && organisms.every((o) => o.id === CONWAYS_CLASSIC_ID);
-}
-
 export function useWorkspaceSeed(repos: AppRepositories): {
   status: WorkspaceSeedStatus;
   error: unknown;

@@ -230,6 +230,21 @@ describe('useWorkspaceSeed — first-visit default preset (Story 7.4)', () => {
     expect(sortedIds(await repos.battles.listFull())).toEqual(sortedIds(envelope.battles));
   });
 
+  it('D1: a failed emptiness read falls back to the plain seed silently — ready, no fetch, no clearAll', async () => {
+    const fetchSpy = servePresets();
+    vi.stubGlobal('fetch', fetchSpy);
+    const repos = unstampedStoreWith({ organisms: [CONWAYS_CLASSIC] });
+    repos.battles.list = () => Promise.reject(new Error('read refused'));
+    const clearAll = vi.spyOn(repos, 'clearAll');
+
+    const { result } = await renderReady(repos);
+
+    expect(result.current).toEqual({ status: 'ready', error: undefined });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(clearAll).not.toHaveBeenCalled();
+    expect(sortedIds(await repos.organisms.list())).toEqual([CONWAYS_CLASSIC_ID]);
+  });
+
   it('a rejection of the FALLBACK seed still reaches error with its cause (Story 5.11)', async () => {
     vi.stubGlobal(
       'fetch',

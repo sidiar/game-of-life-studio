@@ -4,7 +4,7 @@ baseline_commit: 4999674c7688c9c9ee146fe7e35ab29faa7171d0
 
 # Story 7.4: First-Visit Default Preset Auto-Load
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -157,6 +157,10 @@ Recent main: `4999674` (merge of #100, story 7.3: content + `CONWAYS_CLASSIC` de
   - **Owner ruling (Sidiar, 2026-09-29): (b).** In `useWorkspaceSeed`'s preset branch, import the preset only when the workspace is fresh AND holds no user data (no battles; no organisms other than Conway's Classic). Otherwise take the plain additive seed. Add unit tests for the unstamped-store-with-data case (battles present; a non-Conway organism present) proving no `clearAll()`/import happens and the data survives. The pre-import `isFreshWorkspace()` re-check from (c) is not asked for.
 - [x] [Review][Decision] Deep-link first visit to `/battle` or `/battle/new` gets no preset (open question 1) — FR-9.2 says "whichever page they enter"; the epic AC scopes the story to `useWorkspaceSeed` boundaries. Options: (a) keep out of scope, matching the accepted empty-library window; (b) add a follow-up story to seed/preset those two boundaries; (c) do it here. Review has no objection to (a) provided FR-9.2's wording is amended or the gap is tracked.
   - **Owner ruling (Sidiar, 2026-09-29): (a).** Keep out of scope; no code change. Track the gap (a first visit that deep-links to `/battle` or `/battle/new` gets no preset, against FR-9.2's "whichever page they enter") as an entry in `deferred-work.md`.
+- [ ] [Review][Decision] `holdsNoUserData` matches Conway's Classic by id only, so an unstamped store holding an EDITED Conway's Classic (Conway is protected from deletion, not from editing, M9) still reads as "no user data" and the preset's `clearAll()` destroys the edit — a residual hole in the D1 (b) ruling as worded ("no organisms other than Conway's Classic") [apps/web/lib/gallery/useWorkspaceSeed.ts]. Options: (a) accept: the state needs a failed stamp write AND an edited Conway, narrower than D1 itself; (b) compare the stored Conway to `CONWAYS_CLASSIC` (deep equality) and treat any difference as user data; (c) treat a present Conway with any non-pristine field (name, rule, seed) as user data via a dedicated domain predicate.
+- [x] [Review][Patch] The `holdsNoUserData` JSDoc sat between the hook's doc block and the hook, orphaning the hook's documentation; helper moved above the hook's doc block [apps/web/lib/gallery/useWorkspaceSeed.ts]
+- [x] [Review][Patch] No test for the D1 emptiness read failing (comment claims silent fallback to the plain seed); added [apps/web/lib/gallery/useWorkspaceSeed.test.tsx]
+- [x] [Review][Defer] The D1 battles test also seeds non-Conway organisms, so it cannot tell which half of the guard held the import back; battles-only isolation needs a battle whose organisms are all Conway — deferred, low value
 - [x] [Review][Patch] Self-referential comment in `settings.spec.ts` ("see settings.spec.ts's `seedWorkspace`" inside settings.spec.ts) [apps/web/e2e/settings.spec.ts:13]
 - [x] [Review][Defer] Real unmount mid-load followed by a remount (client-side nav between seeding pages) reads fresh before the first import stamps and starts a second load; `hasRun` is per-component [apps/web/lib/gallery/useWorkspaceSeed.ts] — deferred, narrow window; fix with a module-level in-flight promise or abort-on-unmount when the pattern is reused by 7.5/7.6
 - [x] [Review][Defer] Timeout budget is shared by manifest and envelope fetches and does not bound `importWorkspace` or an injected `fetch` that ignores the abort signal on body reads [apps/web/lib/workspaces/loadDefaultPreset.ts] — deferred, real `fetch` honours the signal; revisit if 7.5 injects a wrapper
