@@ -8,6 +8,7 @@ import { styled } from '@mui/material/styles';
 
 export const LINKEDIN_URL = 'https://www.linkedin.com/in/arielsidi/';
 export const GITHUB_URL = 'https://github.com/sidiar/game-of-life-studio';
+export const ARTICLE_URL = 'https://dev.to/sidiar/logbook-of-a-spec-driven-developer-pcm';
 export const CONTACT_EMAIL = 'hello@game-of-life-studio.com';
 export const CONWAY_WIKI_URL = 'https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life';
 
@@ -279,6 +280,7 @@ export default function AboutPage() {
               by story.
             </Paragraph>
             <LinkRow>
+              <ExternalLink href={ARTICLE_URL}>Read the article</ExternalLink>
               <ExternalLink href={GITHUB_URL}>View on GitHub</ExternalLink>
             </LinkRow>
           </Panel>

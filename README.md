@@ -33,6 +33,8 @@ edge](docs/media/battle.gif)
 ## How it was built
 
 One person, Claude Code, and a spec-first process on [BMad Method](https://github.com/bmad-code-org/BMAD-METHOD) v6.
+The story of the build — what worked, and what broke — is written up in
+[Logbook of a Spec-Driven Developer](https://dev.to/sidiar/logbook-of-a-spec-driven-developer-pcm).
 Everything the agents worked from is in the repo, in the order it was written:
 
 1. **Plan** (May–July 2026) — [brief](./docs/planning-artifacts/briefs) → [PRD](./docs/planning-artifacts/prds)
