@@ -60,6 +60,11 @@ const WAY_OUT_STYLE = {
 
 export const BackLink = styled(Link)(WAY_OUT_STYLE);
 
+// A FULL-PAGE navigation, for a way out that must not bypass `beforeunload`: `<SmallScreenGate>`
+// can cover a dirty battle (a desktop window narrowed mid-edit), and a client-side `BackLink` would
+// leave it without the dirty guard's prompt (FR-7.9) — `beforeunload` fires only on a real unload.
+export const NoticeAnchor = styled('a')(WAY_OUT_STYLE);
+
 // The same way out as a BUTTON, for an action that is not a navigation — Story 5.11's Reload on
 // `/battle` for a newer-format store. The resets are what a <button>'s UA stylesheet brings that a
 // link does not, and each one changes the box next to a `BackLink`: `font-family` (buttons do not

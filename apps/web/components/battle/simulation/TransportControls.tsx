@@ -58,10 +58,13 @@ const Transport = styled('div')({
   display: 'flex',
   gap: '10px',
   alignItems: 'center',
-  flexShrink: 0,
-  // Story 4.15: the preview column's 290px cannot fit three full labels one-up (FD8) — wrap
-  // instead of shrinking text or hiding overflow, so both hosts keep the same accessible names.
-  '&[data-compact="true"]': { flexWrap: 'wrap' },
+  // Wrap instead of shrinking text or hiding overflow, so every host keeps the same accessible
+  // names: Story 4.15's preview column (290px) always needs it, and the Run bar needs it on its
+  // own line at NFR-3.1's 700px floor, where the ≈390px cluster is wider than the bar beside the
+  // 320px sidebar. `minWidth: 0` lets it shrink to the host so the wrap can happen; a host with
+  // room never shrinks it, so the one-row cluster everywhere else is unchanged.
+  flexWrap: 'wrap',
+  minWidth: 0,
 });
 
 /**
@@ -98,7 +101,7 @@ const barButtonBase = {
     cursor: 'not-allowed',
   },
   // Story 4.15: every button shares this on the base object, so none is special-cased when the
-  // cluster wraps (`compact`).
+  // `compact` cluster stretches its buttons across the column.
   '[data-compact="true"] > &': { flex: '1 1 auto', justifyContent: 'center' },
 } as const;
 

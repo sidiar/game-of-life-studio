@@ -16,7 +16,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   // Cross-browser matrix (NFR-2.1): Chromium→Chrome/Edge, Firefox, WebKit→Safari.
-  // Plus a tablet viewport (>=1024px, NFR-3.1) exercised on WebKit.
+  // Plus a tablet viewport (above NFR-3.1's 700x480 floor) exercised on WebKit.
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
