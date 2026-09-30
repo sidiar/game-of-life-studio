@@ -31,6 +31,9 @@ import RulesEditor from './RulesEditor';
 import PreviewPanel from './PreviewPanel';
 import UsageIndicator, { type UsageIndicatorHandle } from './UsageIndicator';
 import EditorUnsavedChangesDialog from './EditorUnsavedChangesDialog';
+import SmallScreenGate from '@/components/layout/SmallScreenGate';
+import { NoticeButton } from '@/components/layout/Notice';
+import { useSmallScreenGated } from '@/lib/layout/smallScreen';
 import {
   createNewOrganismDraft,
   isOrganismDraftDirty,
@@ -974,11 +977,18 @@ export default function OrganismEditorModal({
     shellRef.current?.querySelector<HTMLElement>(errorTargetSelector(focusRequest.target))?.focus();
   }, [focusRequest]);
 
+  const smallScreenGated = useSmallScreenGated();
+
   return (
     <>
       <Dialog
         fullScreen
         open={open}
+        // While `<SmallScreenGate>` covers the editor, the trap's tabbable list still starts at the
+        // header's Back — inert, so every focus() it tries is refused and Tab never reaches the
+        // panel's buttons (measured on all three engines). Released only then: the page behind the
+        // dialog is already inert (`useInertBackground`), so native Tab order stays in the panel.
+        disableEnforceFocus={smallScreenGated}
         // Fires for Escape — and for a backdrop click, which a fullScreen dialog cannot receive
         // (the paper covers the backdrop). Routed through `handleDialogClose` (Story 4.23, FD10),
         // which ignores a repeat-carrying Escape and otherwise calls `handleRequestClose` with the
@@ -1001,31 +1011,45 @@ export default function OrganismEditorModal({
         slotProps={{ paper: { sx: { border: 'none', borderRadius: 0 } } }}
         aria-labelledby={TITLE_ID}
       >
-        <Shell ref={shellRef}>
-          <EditorHeader>
-            <BackButton
+        {/* Inside the paper, so the gate covers the editor and not the page behind it; its way
+          out is the header's own Back, through the same unsaved-changes guard (Story 4.23) — a
+          desktop window narrowed mid-edit can reach it with a dirty draft. */}
+        <SmallScreenGate
+          exit={
+            <NoticeButton
               type="button"
               onClick={() => handleRequestClose({ kind: 'back' })}
               disabled={isSaving}
-              // Task 12: locked while a write is in flight, the `BattlePage.tsx:1010`
-              // `backDisabled={isSaving}` idiom, wearing `<SidebarFooter>`'s disabled trio. This
-              // styled button carries no `transition` of its own (only the `:hover`/`:focus-visible`
-              // pseudo-classes do), so — unlike Save's MUI `Button` — there is no mid-fade axe trap
-              // to override here.
-              // Story 4.22: the focus-restore key after the record-gone alert, which disables the
-              // editor's Delete (`useOrganismDelete`'s `editor-back` restore intent). Back, not Save:
-              // a held Enter auto-repeats into the focused control after the confirmation's fade.
-              data-editor-back=""
             >
-              {/* Decorative glyph; the accessible name must be exactly the label — "left arrow back
+              {backLabelFor(origin)}
+            </NoticeButton>
+          }
+        >
+          <Shell ref={shellRef}>
+            <EditorHeader>
+              <BackButton
+                type="button"
+                onClick={() => handleRequestClose({ kind: 'back' })}
+                disabled={isSaving}
+                // Task 12: locked while a write is in flight, the `BattlePage.tsx:1010`
+                // `backDisabled={isSaving}` idiom, wearing `<SidebarFooter>`'s disabled trio. This
+                // styled button carries no `transition` of its own (only the `:hover`/`:focus-visible`
+                // pseudo-classes do), so — unlike Save's MUI `Button` — there is no mid-fade axe trap
+                // to override here.
+                // Story 4.22: the focus-restore key after the record-gone alert, which disables the
+                // editor's Delete (`useOrganismDelete`'s `editor-back` restore intent). Back, not Save:
+                // a held Enter auto-repeats into the focused control after the confirmation's fade.
+                data-editor-back=""
+              >
+                {/* Decorative glyph; the accessible name must be exactly the label — "left arrow back
                 to library" is noise. The house `←`, not the AC's `◄` ASCII stand-in (FD3). */}
-              <span aria-hidden="true">←</span> {backLabelFor(origin)}
-            </BackButton>
-            {/* A module constant, not `useId()`: one editor can exist at a time (it is a modal), so
+                <span aria-hidden="true">←</span> {backLabelFor(origin)}
+              </BackButton>
+              {/* A module constant, not `useId()`: one editor can exist at a time (it is a modal), so
               a second instance's id collision is not a reachable state. */}
-            <Title id={TITLE_ID}>Organism Editor</Title>
-            <Actions>
-              {/* Story 4.13's gate, Story 4.16's write, Task 11's stay-open amendment: `handleSave`
+              <Title id={TITLE_ID}>Organism Editor</Title>
+              <Actions>
+                {/* Story 4.13's gate, Story 4.16's write, Task 11's stay-open amendment: `handleSave`
                 runs `validateOrganismDraft` on click. An invalid draft is refused (errors shown,
                 focus moved, nothing closed, nothing written); a valid draft writes through
                 `organisms.save()` — success publishes the in-flow `SaveOutcomeLine` status and
@@ -1033,17 +1057,17 @@ export default function OrganismEditorModal({
                 surfaces as the `SaveErrorLine` alert below. Either way the dialog stays open and
                 focus returns to this button once the write settles. `disabled` from the click
                 until the write settles, success or failure (AC2, AC3, FD8) — never at rest. */}
-              <Button
-                type="button"
-                variant="contained"
-                onClick={handleSave}
-                disabled={isSaving}
-                sx={SAVE_SX}
-                ref={saveButtonRef}
-              >
-                Save
-              </Button>
-              {/* Story 4.16, Task 13 (second review decision, owner's option (b), 2026-09-22):
+                <Button
+                  type="button"
+                  variant="contained"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  sx={SAVE_SX}
+                  ref={saveButtonRef}
+                >
+                  Save
+                </Button>
+                {/* Story 4.16, Task 13 (second review decision, owner's option (b), 2026-09-22):
                 locked like Back while a write is in flight — the review found the ✕ exactly as
                 visible as Back, so a guard-only no-op (Task 12) left a live-looking button that
                 silently ignores the click. `disabled={isSaving}` here, plus the FD8
@@ -1059,72 +1083,72 @@ export default function OrganismEditorModal({
                 own for that trio to touch. `handleRequestClose`'s guard stays for Escape and the
                 backdrop, which `disabled` cannot reach. `data-editor-close` is the Story 4.23 FD7
                 focus-restore key, the `data-editor-back` idiom above. */}
-              <IconButton
-                type="button"
-                aria-label="Close"
-                onClick={() => handleRequestClose({ kind: 'close' })}
-                disabled={isSaving}
-                data-editor-close=""
-                sx={{ color: 'var(--gol-text-primary)', transition: 'none' }}
-              >
-                <span aria-hidden="true">✕</span>
-              </IconButton>
-            </Actions>
-          </EditorHeader>
-          {/* Story 4.16, AC3, FD5, Task 11: the in-flow outcome region — always mounted, between the
+                <IconButton
+                  type="button"
+                  aria-label="Close"
+                  onClick={() => handleRequestClose({ kind: 'close' })}
+                  disabled={isSaving}
+                  data-editor-close=""
+                  sx={{ color: 'var(--gol-text-primary)', transition: 'none' }}
+                >
+                  <span aria-hidden="true">✕</span>
+                </IconButton>
+              </Actions>
+            </EditorHeader>
+            {/* Story 4.16, AC3, FD5, Task 11: the in-flow outcome region — always mounted, between the
             header and the body, beside `SaveErrorLine`. The child mounts with the sentence (the
             `ColorPickerField.tsx:380-390` idiom); cleared at the START of every attempt so a
             repeat success re-announces. Never both this and the alert line at once. */}
-          <div role="status" data-save-status>
-            {saveOutcome !== null && (
-              <SaveOutcomeLine data-save-outcome>{saveOutcome}</SaveOutcomeLine>
-            )}
-          </div>
-          {/* Story 4.16, AC5, FD7: a refused write, reported inside the editor beside the untouched
+            <div role="status" data-save-status>
+              {saveOutcome !== null && (
+                <SaveOutcomeLine data-save-outcome>{saveOutcome}</SaveOutcomeLine>
+              )}
+            </div>
+            {/* Story 4.16, AC5, FD7: a refused write, reported inside the editor beside the untouched
             draft. `role="alert"` (assertive, not `status`): a failed save IS an error, unlike the
             honest-but-not-yet-persisted notice this block replaces. Conditionally mounted and
             cleared at the START of every attempt (`saveOrganism`'s `setSaveError(null)`), so a
             repeat failure re-announces. */}
-          {saveError !== null && (
-            <SaveErrorLine role="alert" data-save-error>
-              {saveError}
-            </SaveErrorLine>
-          )}
-          {/* Story 4.22, FD12: a refused delete (or, review decision (b), a record found already
+            {saveError !== null && (
+              <SaveErrorLine role="alert" data-save-error>
+                {saveError}
+              </SaveErrorLine>
+            )}
+            {/* Story 4.22, FD12: a refused delete (or, review decision (b), a record found already
             deleted elsewhere), in the same idiom — conditionally mounted, so the Library's publish
             (after the stacked dialog's exit) inserts it into a LIVE editor. */}
-          {deleteError !== null && (
-            <SaveErrorLine role="alert" id={deleteErrorId} data-editor-delete-error="">
-              {deleteError}
-            </SaveErrorLine>
-          )}
-          <EditorBody>
-            <OrganismEditorLayout
-              basicInfo={
-                <>
-                  <OrganismNameField
-                    value={draft.name}
-                    onChange={setName}
-                    showAllErrors={saveAttempted}
-                  />
-                  <OrganismDescriptionField
-                    value={draft.description}
-                    onChange={setDescription}
-                    showAllErrors={saveAttempted}
-                  />
-                  <ColorPickerField
-                    value={draft.colorToken}
-                    onChange={setColorToken}
-                    usersByToken={usersByToken}
-                    seedValue={seed.colorToken}
-                  />
-                  <DominanceField value={draft.dominance} onChange={setDominance} />
-                  <AgingToggleField
-                    value={draft.agingEnabled}
-                    onChange={setAgingEnabled}
-                    colorToken={draft.colorToken}
-                  />
-                  {/* Story 4.22 (FD1 (a), FD10, FD11): the bottom of Column 1, edit sessions only.
+            {deleteError !== null && (
+              <SaveErrorLine role="alert" id={deleteErrorId} data-editor-delete-error="">
+                {deleteError}
+              </SaveErrorLine>
+            )}
+            <EditorBody>
+              <OrganismEditorLayout
+                basicInfo={
+                  <>
+                    <OrganismNameField
+                      value={draft.name}
+                      onChange={setName}
+                      showAllErrors={saveAttempted}
+                    />
+                    <OrganismDescriptionField
+                      value={draft.description}
+                      onChange={setDescription}
+                      showAllErrors={saveAttempted}
+                    />
+                    <ColorPickerField
+                      value={draft.colorToken}
+                      onChange={setColorToken}
+                      usersByToken={usersByToken}
+                      seedValue={seed.colorToken}
+                    />
+                    <DominanceField value={draft.dominance} onChange={setDominance} />
+                    <AgingToggleField
+                      value={draft.agingEnabled}
+                      onChange={setAgingEnabled}
+                      colorToken={draft.colorToken}
+                    />
+                    {/* Story 4.22 (FD1 (a), FD10, FD11): the bottom of Column 1, edit sessions only.
                     `data-editor-delete-organism` is the focus-restore key after a stacked dialog
                     closes (FD8). Disabled while a save is in flight — a delete must not race the
                     write — for the protected default, whose reason renders beneath it, and while
@@ -1133,81 +1157,82 @@ export default function OrganismEditorModal({
                     dismissed it. Disabled for the protected default or the gone record, the
                     button is described by its reason (FD6). A refusal (`ORGANISM_DELETE_FAILED`)
                     leaves it enabled — a retry is that alert's point. */}
-                  {organism !== null && onRequestDelete !== undefined && (
-                    <>
-                      <DeleteOrganismButton
-                        type="button"
-                        data-editor-delete-organism=""
-                        disabled={
-                          isSaving || deleteProtected || deleteError === ORGANISM_DELETE_GONE
-                        }
-                        aria-describedby={
-                          deleteProtected
-                            ? protectedNoteId
-                            : deleteError === ORGANISM_DELETE_GONE
-                              ? deleteErrorId
-                              : undefined
-                        }
-                        onClick={() => onRequestDelete()}
-                      >
-                        Delete Organism
-                      </DeleteOrganismButton>
-                      {deleteProtected && (
-                        <ProtectedDeleteNote id={protectedNoteId}>
-                          {PROTECTED_DELETE_MESSAGE}
-                        </ProtectedDeleteNote>
-                      )}
-                    </>
-                  )}
-                </>
-              }
-              rulesAction={
-                <AddRuleButton type="button" onClick={addRule} data-add-rule="header">
-                  + Add Rule
-                </AddRuleButton>
-              }
-              rules={
-                <RulesEditor
-                  rules={draft.survivalRules}
-                  organisms={others}
-                  onRulesChange={setSurvivalRules}
-                  onAddRule={addRule}
-                  showAllErrors={saveAttempted}
-                  // Story 4.26, FD6: a usage panel left open by Tab (D1) arms a document-capture
-                  // Escape listener that would otherwise take the rule confirmation's Escape and
-                  // focus a trigger behind the inert layer — the same FD11 reason this modal
-                  // already closes the panel before its OWN unsaved-changes confirmation opens.
-                  onBeforeDeleteConfirm={() => usageIndicatorRef.current?.closePanel()}
-                  // Story 4.26, second review decision (a), 2026-09-27: refuse a rule delete
-                  // request while THIS write is in flight — the same `isSaving` lock the Save
-                  // button, Back, ✕ and Delete Organism already gate on above.
-                  isSaving={isSaving}
-                />
-              }
-              preview={
-                <PreviewPanel
-                  colorToken={draft.colorToken}
-                  agingEnabled={draft.agingEnabled}
-                  colors={colors}
-                  survivalRules={draft.survivalRules}
-                />
-              }
-            />
-          </EditorBody>
-          {/* Story 4.20, AC1: the editor's first footer, on every open, in both create and edit
+                    {organism !== null && onRequestDelete !== undefined && (
+                      <>
+                        <DeleteOrganismButton
+                          type="button"
+                          data-editor-delete-organism=""
+                          disabled={
+                            isSaving || deleteProtected || deleteError === ORGANISM_DELETE_GONE
+                          }
+                          aria-describedby={
+                            deleteProtected
+                              ? protectedNoteId
+                              : deleteError === ORGANISM_DELETE_GONE
+                                ? deleteErrorId
+                                : undefined
+                          }
+                          onClick={() => onRequestDelete()}
+                        >
+                          Delete Organism
+                        </DeleteOrganismButton>
+                        {deleteProtected && (
+                          <ProtectedDeleteNote id={protectedNoteId}>
+                            {PROTECTED_DELETE_MESSAGE}
+                          </ProtectedDeleteNote>
+                        )}
+                      </>
+                    )}
+                  </>
+                }
+                rulesAction={
+                  <AddRuleButton type="button" onClick={addRule} data-add-rule="header">
+                    + Add Rule
+                  </AddRuleButton>
+                }
+                rules={
+                  <RulesEditor
+                    rules={draft.survivalRules}
+                    organisms={others}
+                    onRulesChange={setSurvivalRules}
+                    onAddRule={addRule}
+                    showAllErrors={saveAttempted}
+                    // Story 4.26, FD6: a usage panel left open by Tab (D1) arms a document-capture
+                    // Escape listener that would otherwise take the rule confirmation's Escape and
+                    // focus a trigger behind the inert layer — the same FD11 reason this modal
+                    // already closes the panel before its OWN unsaved-changes confirmation opens.
+                    onBeforeDeleteConfirm={() => usageIndicatorRef.current?.closePanel()}
+                    // Story 4.26, second review decision (a), 2026-09-27: refuse a rule delete
+                    // request while THIS write is in flight — the same `isSaving` lock the Save
+                    // button, Back, ✕ and Delete Organism already gate on above.
+                    isSaving={isSaving}
+                  />
+                }
+                preview={
+                  <PreviewPanel
+                    colorToken={draft.colorToken}
+                    agingEnabled={draft.agingEnabled}
+                    colors={colors}
+                    survivalRules={draft.survivalRules}
+                  />
+                }
+              />
+            </EditorBody>
+            {/* Story 4.20, AC1: the editor's first footer, on every open, in both create and edit
             sessions (UX-DR6 — "persistent"). It holds the usage indicator and nothing else: Save
             stays in the header and the name stays out of it (FD1). The names are resolved through
             the display helpers (`usageBattleNames` / `referencingOrganismNames`), never raw — an
             `''` name parses for both schemas and would render as an empty `<li>` (FD10). */}
-          <EditorFooter>
-            <UsageIndicator
-              ref={usageIndicatorRef}
-              battleNames={usageBattleNames(usageEntries, battleSummaries, openBattle)}
-              ruleCount={ruleCount}
-              referencingNames={referencingNames}
-            />
-          </EditorFooter>
-        </Shell>
+            <EditorFooter>
+              <UsageIndicator
+                ref={usageIndicatorRef}
+                battleNames={usageBattleNames(usageEntries, battleSummaries, openBattle)}
+                ruleCount={ruleCount}
+                referencingNames={referencingNames}
+              />
+            </EditorFooter>
+          </Shell>
+        </SmallScreenGate>
       </Dialog>
       {/* Story 4.23: the unsaved-changes confirmation, STACKED over this still-mounted editor
         (`confirming` outlives its own fade, the `useLeaveGuard` three-phase shape). Imported

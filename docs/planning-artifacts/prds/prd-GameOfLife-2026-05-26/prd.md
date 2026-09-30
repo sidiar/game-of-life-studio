@@ -659,7 +659,7 @@ The system requires:
 ### NFR-3: Device & Screen Support
 
 **NFR-3.1: Screen Size**
-The system shall support screens with minimum width of 1024px (desktop and tablet).
+The system shall support screens of at least 700 × 480px (desktop and tablet). Below either bound, the battle route and the Organism Editor show a notice with a way back and a "Continue anyway" option instead of their broken layout; the gallery routes stay usable at any size. *(Revised 2026-09-30 from "minimum width 1024px": measured across real device viewports, every tablet — iPad mini portrait at 744px included — is usable, and every phone in either orientation falls below 700px wide or 480px tall.)*
 
 **NFR-3.2: Device Types**
 The system shall support desktop and tablet devices.
@@ -766,7 +766,7 @@ The MVP is a standalone, offline, single-user studio. The following are delibera
 
 **Excluded platforms** (consolidated from NFR-2.1 and NFR-3.2):
 - **Internet Explorer 11** — lacks the required modern browser APIs (NFR-2.2).
-- **Mobile phones** — screens are too small for meaningful grid interaction; minimum supported width is 1024px (desktop and tablet, NFR-3.1).
+- **Mobile phones** — screens are too small for meaningful grid interaction; minimum supported screen is 700 × 480px (desktop and tablet, NFR-3.1).
 
 ## Open Questions
 

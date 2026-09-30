@@ -136,7 +136,7 @@ Coverage is a **floor on the core**, not a vanity number everywhere.
 ### Decision 8: Cross-browser & accessibility
 
 **Decision:**
-- **Cross-browser (NFR-2.1):** Playwright projects for **Chromium, Firefox, WebKit**, run in CI; mapping — Chrome/Edge → Chromium, Firefox → Firefox, Safari → WebKit. Tablet viewport (≥1024 px, NFR-3.1) included.
+- **Cross-browser (NFR-2.1):** Playwright projects for **Chromium, Firefox, WebKit**, run in CI; mapping — Chrome/Edge → Chromium, Firefox → Firefox, Safari → WebKit. Tablet viewport (iPad Pro 11 landscape, above NFR-3.1's 700 × 480 px floor) included.
 - **Accessibility (NFR-8.3):** automated **axe-core** checks on key screens in the **Clinical Lab** theme (the AA-guaranteed default per the NFR-8.3 reconciliation); keyboard-navigation smoke tests (MUI provides most of this); a **documented CVD validation** of the RFC-007 palette (Color Oracle / programmatic) — a manual+scripted check, since "distinguishable colours" isn't a pass/fail axe rule.
 
 ### Decision 9: CI pipeline, gates & monorepo test layout

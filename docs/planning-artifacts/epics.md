@@ -138,7 +138,7 @@ Requirement IDs below preserve the PRD's canonical numbering (FR-1.1 … FR-8.12
 - NFR-1.4: localStorage read/write < 10ms (p95)
 - NFR-2.1: Support last 2 versions of Chrome, Firefox, Safari, Edge (IE11 excluded)
 - NFR-2.2: Requires HTML5 Canvas, localStorage, ES6+
-- NFR-3.1: Minimum screen width 1024px (desktop + tablet)
+- NFR-3.1: Minimum screen 700 × 480px (desktop + tablet); below it the battle route and Organism Editor show a notice (revised 2026-09-30 from 1024px wide)
 - NFR-3.2: Desktop and tablet only (mobile phones excluded)
 - NFR-4.1: No tutorial required — self-explanatory interface
 - NFR-4.2: Immediate visual feedback on interactions (< 100ms)
