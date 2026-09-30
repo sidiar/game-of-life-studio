@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { axe } from 'vitest-axe';
-import AboutPage, { CONTACT_EMAIL, GITHUB_URL, LINKEDIN_URL } from './AboutPage';
+import AboutPage, { CONTACT_EMAIL, CONWAY_WIKI_URL, GITHUB_URL, LINKEDIN_URL } from './AboutPage';
 
 describe('AboutPage', () => {
   it('renders the About heading and one h2 per panel', () => {
@@ -16,12 +16,13 @@ describe('AboutPage', () => {
     ]);
   });
 
-  it('links to LinkedIn and GitHub in a new tab, without an opener', () => {
+  it('links to LinkedIn, GitHub and the Wikipedia article in a new tab, without an opener', () => {
     render(<AboutPage />);
 
     for (const [name, href] of [
       [/linkedin/i, LINKEDIN_URL],
       [/view on github/i, GITHUB_URL],
+      [/conway's game of life/i, CONWAY_WIKI_URL],
     ] as const) {
       const link = screen.getByRole('link', { name });
       expect(link).toHaveAttribute('href', href);
@@ -41,10 +42,18 @@ describe('AboutPage', () => {
     expect(mail).not.toHaveAttribute('target');
   });
 
-  it('exposes exactly three links — the decorative specimen adds none', () => {
+  it('separates the studio name from the sentence it opens', () => {
     render(<AboutPage />);
 
-    expect(screen.getAllByRole('link')).toHaveLength(3);
+    expect(
+      screen.getByText('Game of Life Studio', { selector: 'strong' }).parentElement,
+    ).toHaveTextContent(/^Game of Life Studio takes Conway's Game of Life ↗ and turns it/);
+  });
+
+  it('exposes exactly four links — the decorative specimen adds none', () => {
+    render(<AboutPage />);
+
+    expect(screen.getAllByRole('link')).toHaveLength(4);
     expect(screen.getByTestId('about-specimen')).toHaveAttribute('aria-hidden', 'true');
   });
 
