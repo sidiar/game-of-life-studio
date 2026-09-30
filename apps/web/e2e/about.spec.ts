@@ -14,6 +14,10 @@ test.describe('about route', () => {
     expect(html).toContain('href="https://www.linkedin.com/in/arielsidi/"');
     expect(html).toContain('href="https://github.com/sidiar/game-of-life-studio"');
     expect(html).toContain('href="mailto:hello@game-of-life-studio.com');
+    expect(html).toContain('href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life"');
+    // Only the BUILT HTML can catch this: Next's SWC dropped the space after `</strong>` (see the
+    // comment in AboutPage.tsx), while Vitest's transform keeps it and the unit test stays green.
+    expect(html).toContain('Game of Life Studio</strong> takes');
   });
 
   test('is reachable from the nav, marks About current, and renders with zero console errors', async ({

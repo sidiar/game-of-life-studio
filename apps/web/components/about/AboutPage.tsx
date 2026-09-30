@@ -9,6 +9,7 @@ import { styled } from '@mui/material/styles';
 export const LINKEDIN_URL = 'https://www.linkedin.com/in/arielsidi/';
 export const GITHUB_URL = 'https://github.com/sidiar/game-of-life-studio';
 export const CONTACT_EMAIL = 'hello@game-of-life-studio.com';
+export const CONWAY_WIKI_URL = 'https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life';
 
 const HEADING_ID = 'about-heading';
 
@@ -145,6 +146,21 @@ const LinkButton = styled('a', {
   },
 }));
 
+// A link inside running text, not a `LinkButton`: accent colour plus an underline, so it stays
+// identifiable without relying on colour alone (SC 1.4.1), and the same new-tab ↗ the buttons carry.
+const InlineLink = styled('a')({
+  color: 'var(--gol-accent)',
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+  '&:hover': {
+    color: 'var(--gol-accent-hover)',
+  },
+  '&:focus-visible': {
+    outline: '2px solid var(--gol-accent)',
+    outlineOffset: '2px',
+  },
+});
+
 function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <LinkButton href={href} target="_blank" rel="noopener noreferrer">
@@ -227,10 +243,17 @@ export default function AboutPage() {
           <Panel aria-labelledby="about-studio">
             <PanelLabel id="about-studio">The studio</PanelLabel>
             <Paragraph>
-              <strong>Game of Life Studio</strong> takes Conway&apos;s Game of Life and turns it
-              into a battle: several organisms, each with its own rules, share one petri dish and
-              compete for space. Design an organism, drop it into a battle, press play, and see who
-              survives.
+              {/* ⚠️ Keep an HTML entity (`&apos;`) out of any MULTI-LINE text that opens with a
+                space after a tag: Next 16.2's SWC drops that leading space (the page shipped
+                "Studiotakes" that way — Vitest's transform keeps it, so only the built HTML shows
+                it). The apostrophe now sits inside the link's own one-line text. */}
+              <strong>Game of Life Studio</strong> takes{' '}
+              <InlineLink href={CONWAY_WIKI_URL} target="_blank" rel="noopener noreferrer">
+                Conway&apos;s Game of Life <span aria-hidden="true">↗</span>
+              </InlineLink>{' '}
+              and turns it into a battle: several organisms, each with its own rules, share one
+              petri dish and compete for space. Design an organism, drop it into a battle, press
+              play, and see who survives.
             </Paragraph>
           </Panel>
 

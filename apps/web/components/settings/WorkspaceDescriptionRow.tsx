@@ -43,11 +43,20 @@ const TextArea = styled('textarea')({
   },
 });
 
-const Meta = styled('div')({
+// The field and its Save side by side — every other Data Management row keeps its action in the
+// card's right column (`LoadPresetRow`'s select + Load is the nearest match), so Save sits there
+// too instead of hugging the textarea's bottom edge. Wraps below the field when the card is too
+// narrow for both (the gallery routes are ungated at phone width).
+const Field = styled('div')({
   display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: '12px',
+  flexWrap: 'wrap',
+  alignItems: 'flex-start',
+  columnGap: '20px',
+});
+
+const FieldBody = styled('div')({
+  flex: '1 1 320px',
+  minWidth: 0,
 });
 
 const Counter = styled('div')({
@@ -75,6 +84,8 @@ const SaveButton = styled('button')({
   letterSpacing: '0.5px',
   cursor: 'pointer',
   flexShrink: 0,
+  // The textarea's own top margin, so the button's top edge lines up with the field's.
+  marginTop: '10px',
   transition: 'background-color 0.2s',
   '&:hover': {
     background: 'var(--gol-accent-hover)',
@@ -174,18 +185,18 @@ export default function WorkspaceDescriptionRow({
       <RowDescription id={helperId}>
         Shown at the top of the gallery and carried by Export Workspace.
       </RowDescription>
-      <TextArea
-        value={value}
-        onChange={(event) => {
-          editedRef.current = true;
-          setValue(event.target.value.slice(0, MAX_WORKSPACE_DESCRIPTION_LENGTH));
-        }}
-        maxLength={MAX_WORKSPACE_DESCRIPTION_LENGTH}
-        aria-labelledby={labelId}
-        aria-describedby={`${helperId} ${counterId}`}
-      />
-      <Meta>
-        <div>
+      <Field>
+        <FieldBody>
+          <TextArea
+            value={value}
+            onChange={(event) => {
+              editedRef.current = true;
+              setValue(event.target.value.slice(0, MAX_WORKSPACE_DESCRIPTION_LENGTH));
+            }}
+            maxLength={MAX_WORKSPACE_DESCRIPTION_LENGTH}
+            aria-labelledby={labelId}
+            aria-describedby={`${helperId} ${counterId}`}
+          />
           <Counter id={counterId}>
             {value.length} / {MAX_WORKSPACE_DESCRIPTION_LENGTH}
           </Counter>
@@ -194,11 +205,11 @@ export default function WorkspaceDescriptionRow({
               Description limit reached — {MAX_WORKSPACE_DESCRIPTION_LENGTH} characters.
             </CapNotice>
           )}
-        </div>
+        </FieldBody>
         <SaveButton type="button" aria-label="Save workspace description" onClick={handleSave}>
           Save
         </SaveButton>
-      </Meta>
+      </Field>
     </Column>
   );
 }
