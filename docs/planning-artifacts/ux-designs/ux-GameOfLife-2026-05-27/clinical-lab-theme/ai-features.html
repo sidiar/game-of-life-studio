@@ -509,7 +509,7 @@ function doExplain() {
     const tuned = $('nameInput').value === 'Tuned Conway';
     $(id).innerHTML = tuned ? `<div class="who">✨ AI · explanation</div>
       It starts like Conway's Game of Life but <b>keeps growing</b>: on all three test dishes the population tripled by cycle 100 <span class="cite">trend: grows</span>.
-      It never settles into a repeating pattern <span class="cite">oscillation: none</span>, and its oldest cell lived 184 cycles <span class="cite">maxAge: 184</span>.
+      It never settles into a repeating pattern <span class="cite">oscillation: none</span>, and some cells outlive the whole run <span class="cite">maxAge: ≥ 7</span>.
       <div class="warn"><span class="wid">shadowedByDie · neverFired</span>“Big crowds keep it alive” never applies: “Crowded cells die” removes those cells first, because Die rules run before Survive rules. <a data-hl="r3">Show rule</a></div>
       <div class="turn-actions"><button class="btn-mini" data-use="It grows steadily and never repeats. Its crowd-survival rule never fires, because the crowd Die rule wins first.">Use as description</button><button class="btn-mini plain" data-go="preview">▶ Try it in Preview</button></div>`
       : `<div class="who">✨ AI · explanation</div>

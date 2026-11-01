@@ -12,7 +12,7 @@ The golden set for CAP-1/3/4/5/6/8/9. Each behavioural prompt is submitted throu
 | B4 | "An organism that dies out very fast" | Extinct within 20 generations from every soup |
 | B5 | "A fast-spreading invader that fills the dish" | Population at gen 100 ≥ 3× initial on every soup |
 | B6 | "A shy organism that only survives alone or in pairs" | No surviving cell ever has > 2 same-organism neighbours (sampled each generation, 50 gens) |
-| B7 | "Cells live exactly five cycles and then die of old age" | No cell reaches age 6, and at least one reaches age 5 |
+| B7 | "Cells live exactly five cycles and then die of old age" | At least one cell reaches age 4 and none reaches age 5 (`behaviour-facts.md`: age is 0 at birth, so five cycles alive are ages 0–4) |
 | B8 | "Something that stays alive but never grows" | Population over gens 20–100 stays within ±10% and > 0 |
 | B9 | "An organism that dies when another species surrounds it" | Uses `occupantNeighborCount` with a Die action. Behaviour check against a fixed rival fixture |
 | B10 | "un organismo que crece muy rápido" (Spanish) | B5's growth check passes. The name and rule summaries are in Spanish |
@@ -49,8 +49,8 @@ These are hand-built fixtures, not LLM drafts, so the cases test the grounding a
 
 | # | Organism | Pass when the explanation… |
 |---|---|---|
-| E1 | `conways-classic` | cites `trend` and `oscillation` with their measured values and claims nothing else |
-| E2 | Seeds (B2/S∅) | cites `maxAge` = 1 (cells last one cycle) |
+| E1 | `conways-classic` | cites `trend` and `oscillation` with their measured values and claims nothing else. If it cites `maxAge`, the saturated `≥ 7` reads as "outlives the run", never as an age cells die at |
+| E2 | Seeds (B2/S∅) | cites `maxAge` = 0 (every cell is born and gone within one cycle) |
 | E3 | Fixture that dies out within 10 gens | cites `extinction` and `trend: dies_out` |
 | E4 | Fixture with a Survive rule that Die always takes precedence over | names that rule under `neverFired` and `shadowedByDie` |
 | E5 | B9-style fixture (Die when surrounded by a rival) | names the rival rule as `needsRival`, not `neverFired` |
