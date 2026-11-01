@@ -58,6 +58,7 @@ These are hand-built fixtures, not LLM drafts, so the cases test the grounding a
 | E7 | Any fixture, user chooses "Use as description" | the new description is ≤280 characters and the rules are unchanged |
 | E8 | Fixture with a Born rule requiring `cellState: alive` and a rule with `neighborCount > 8` | names `bornOnLiving` and `unsatisfiable` with the right rule ids |
 | E9 | E4's fixture with the endpoint unreachable | the rule checks still show `shadowedByDie`, the explanation fails as `unavailable` |
+| E10 | Hand-built fixture with a Die rule on `organismType` = a library id other than `conways-classic` | names that rule as `needsTarget`, not `neverFired`, and says it applies only when that organism is in the battle |
 
 ## Decline (CAP-6, threshold 100%)
 
