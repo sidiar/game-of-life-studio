@@ -31,6 +31,7 @@ The golden set for CAP-1/3/4/5/6/8/9. Each behavioural prompt is submitted throu
 |---|---|---|---|
 | R1 | B5's draft | "make it spread slower" | Gen-100 population lower than the original's on the same seeds. Name unchanged |
 | R2 | B6's draft | "and give it a funnier name" | Rules are identical. Name differs |
+| R3 | B5's draft, with one rule's summary and the dominance changed by hand | "make it spread slower" | The hand-changed summary and dominance survive. Gen-100 population lower than before on the same seeds |
 
 ## Naming (CAP-8, threshold 100%)
 

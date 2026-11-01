@@ -40,7 +40,7 @@ sources: []
 
 - id: CAP-5
   intent: The user can refine the current draft with a follow-up instruction (e.g. "make it spread slower"), typed into the ✨ AI tab of a session opened from ✨ Describe, instead of starting over.
-  success: A follow-up on an open draft returns a revised draft that keeps the parts the instruction did not mention. The "refine" cases in `eval-cases.md` pass.
+  success: A follow-up works on the draft as it stands in the Editor, hand edits included, and returns a revised draft that keeps the parts the instruction did not mention. The "refine" cases in `eval-cases.md` pass, R3 among them.
 
 - id: CAP-6
   intent: Off-topic, unsafe or unanswerable requests, and an unavailable service, end in a clear, friendly outcome, and the rest of the studio keeps working.
@@ -102,7 +102,7 @@ sources: []
 - The model may pick `colorToken` from the palette's token list. Otherwise the existing next-unused default (FR-2.3) applies.
 - The hosting and runtime of the server-side endpoint is an architecture decision for RFC-009, not something this spec fixes.
 - Asking for names again (CAP-8) returns a fresh set that excludes the names already shown for that organism in this Editor session.
-- For CAP-8 and CAP-9, the model's only input is the open organism (its rules, description and current name). CAP-8 also gets the library's names, used only to avoid duplicates, and CAP-9 gets the measured facts.
+- For CAP-5, CAP-8 and CAP-9, the model's only input is the open organism as it stands in the Editor (its rules, description and current name), plus, for CAP-5, the session's ✨ AI history. CAP-8 also gets the library's names, used only to avoid duplicates, and CAP-9 gets the measured facts.
 - The engine can report how often each rule fired, using counting that runs only for CAP-3 and CAP-9 (`ruleFired` in `behaviour-facts.md`). It stays pure, and Play mode's 60 FPS path doesn't pay for it.
 - The simulation run (3 seeds × 200 generations, plus an optional rival run) completes in the browser well inside the 15 s budget. CAP-3 may need it twice because of the repair attempt.
 - A 15 s p95 is acceptable for a non-streaming structured response. Progress is shown, not streamed tokens.
