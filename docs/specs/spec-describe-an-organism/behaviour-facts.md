@@ -7,7 +7,7 @@ These are the measured facts about an organism's behaviour. They are produced by
 | Fact id | Value | Definition |
 |---|---|---|
 | `extinction` | generation number or `none` | First generation with population 0. One value per seed. |
-| `trend` | `dies_out` · `shrinks` · `stable` · `grows` | `dies_out`: extinct by gen 200. `grows`: gen-100 population ≥ 3× initial. `stable`: gens 20–100 stay within ±10% of their mean and above 0. `shrinks`: anything else that survives. Majority across seeds. |
+| `trend` | `dies_out` · `stable` · `grows` · `shrinks` · `wanders` | First match wins: `dies_out`: extinct by gen 200. `stable`: gens 20–100 stay within ±10% of their mean and above 0. `grows`: gen-100 population ≥ 1.5× initial. `shrinks`: gen-100 population ≤ 0.5× initial. `wanders`: alive, and none of the above. Majority across seeds. |
 | `oscillation` | period or `none` | Smallest period from 2 to 10 that repeats the whole grid state over gens 150–200. |
 | `maxAge` | integer, or `≥ N` when saturated | Highest cell age reached on any seed, in the engine's own age: 0 at birth, +1 per survived cycle, saturating at `max(7, highest age literal in the rules + 1)` (RFC-004 §3.3, `maxRelevantAge.ts`). A cell that reaches the saturation value is reported as `≥ N`: it outlived the counter, it did not die at N. So Seeds measures 0, and Conway measures `≥ 7` on every soup. |
 | `ruleFired` | per rule id: count | How many times each rule's action applied, summed across seeds. |

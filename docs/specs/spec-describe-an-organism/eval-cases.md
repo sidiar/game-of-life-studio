@@ -14,7 +14,7 @@ The golden set for CAP-1/3/4/5/6/8/9. Each behavioural prompt is submitted throu
 | B6 | "A shy organism that only survives alone or in pairs" | No surviving cell ever has > 2 same-organism neighbours (sampled each generation, 50 gens) |
 | B7 | "Cells live exactly five cycles and then die of old age" | At least one cell reaches age 4 and none reaches age 5 (`behaviour-facts.md`: age is 0 at birth, so five cycles alive are ages 0–4) |
 | B8 | "Something that stays alive but never grows" | Population over gens 20–100 stays within ±10% and > 0 |
-| B9 | "An organism that dies when another species surrounds it" | Uses `occupantNeighborCount` with a Die action. Behaviour check against a fixed rival fixture |
+| B9 | "An organism that dies when another species surrounds it" | Has a Die rule on `occupantNeighborCount` with a lower bound ≥ 3. In the rival run against `conways-classic` (`behaviour-facts.md`) that rule fires (`ruleFired` > 0) and every cell with ≥ 5 rival neighbours is gone the next generation, over 50 gens. Solo, population > 0 at gen 50 |
 | B10 | "un organismo que crece muy rápido" (Spanish) | B5's growth check passes. The name and rule summaries are in Spanish |
 | B11 | "A crowd lover: it's born in busy places and dies when lonely" | Has a Born rule with neighbour lower bound ≥ 3 and a Die rule for ≤ 1 neighbours. Population > 0 at gen 50 |
 | B12 | "Blinks on and off forever" | `oscillation` = 2 on every soup, measured as `behaviour-facts.md` defines it (whole grid, gens 150–200), and population > 0 at gen 200 |
