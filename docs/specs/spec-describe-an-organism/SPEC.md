@@ -36,7 +36,7 @@ sources: []
 
 - id: CAP-4
   intent: The user can understand what each generated rule does without reading its conditions.
-  success: Every generated rule has a non-empty `summary` (FR-2.5, ≤120 characters) in the language of the description.
+  success: Every generated rule has a non-empty `summary` (FR-2.5, ≤120 characters) in the language of the description. Presence and length are checked in code; language is reviewed by a person (`eval-cases.md`).
 
 - id: CAP-5
   intent: The user can refine the current draft with a follow-up instruction (e.g. "make it spread slower"), typed into the ✨ AI tab of a session opened from ✨ Describe, instead of starting over.
@@ -52,11 +52,11 @@ sources: []
 
 - id: CAP-8
   intent: For any organism open in the Organism Editor, hand-built or generated, the user can ask for name suggestions that fit its behaviour and pick one from the ✨ AI tab.
-  success: Each request returns 5 distinct, child-safe names of 1–50 characters (`MAX_ORGANISM_NAME_LENGTH`), in the language of the organism's description, none matching a name already in the library. Picking one changes only the unsaved name field. The naming cases in `eval-cases.md` pass.
+  success: Each request returns 5 distinct, child-safe names of 1–50 characters (`MAX_ORGANISM_NAME_LENGTH`), in the language of the organism's description (or of its name when the description is empty; language is reviewed by a person), none matching a name already in the library. Picking one changes only the unsaved name field. The naming cases in `eval-cases.md` pass.
 
 - id: CAP-9
   intent: For any organism open in the Organism Editor that has rules, the user can get a plain-language explanation of how it will actually behave, grounded in a simulation run and in checks on the rules themselves, so they can check that hand-made or tuned rules do what they meant. The explanation appears in the ✨ AI tab.
-  success: For every organism in the Explain cases of `eval-cases.md`, every behavioural claim in the explanation cites a fact from `behaviour-facts.md` and agrees with its measured value. Rules that never fired and every warning from the rule checks are named. The organism is unchanged unless the user confirms replacing the unsaved `description` (FR-9.5, ≤280 characters) with the explanation.
+  success: For every organism in the Explain cases of `eval-cases.md`, every sentence of the explanation carries a tag (see the structured-explanation constraint): every fact-tagged sentence cites a fact the model was given and agrees with its measured value, and no sentence is untagged. Rules that never fired and every warning from the rule checks are named. The organism is unchanged unless the user confirms replacing the unsaved `description` (FR-9.5, ≤280 characters) with the explanation.
 
 ## Constraints
 
@@ -71,6 +71,7 @@ sources: []
 - **The API key never reaches the browser.** This rules out bring-your-own-key and calling the provider directly from the client.
 - **Monthly spend has a hard cap of ~€5, enforced server-side, plus a per-visitor rate limit.** Reaching either degrades the feature (CAP-6). It never fails the page.
 - **The static, offline studio is unchanged.** NFR-6.1 is amended for this feature alone, and with it `project-context.md`'s rule that the MVP has no backend and never adds an API route or server action. That is a deliberate override, to be recorded as Cross-Cutting Decision L and in `project-context.md` itself before Epic 8 starts, so the two stop disagreeing. The endpoint lives outside `apps/web`, since a static export cannot host one; where it runs is RFC-009's call. Gallery, editor, simulation, persistence and the CAP-9 rule checks work with the LLM endpoint unreachable or not configured at all: a fork or a local build with no endpoint shows the feature as unavailable and nothing else changes. The ✨ AI tab, the prompt dialog and the fact-measuring run load on demand (`next/dynamic`, AR-35), so what the bundle gate measures, each route's first-load JS, grows by no more than its 8 KB allowance per PR, with the baseline refreshed in the same PR as `project-context.md` requires.
+- **CAP-9's explanation is structured, not prose.** The model returns a list of sentences, each tagged with one of: a fact id from `behaviour-facts.md` plus the value it asserts, a rule id (a sentence about what that rule says), or a warning id. The app renders the chips (mock R3) from the tags. An untagged sentence, a fact value that disagrees with the measurement, or a fact id the model was not given makes the response `invalid_output`. This is what lets code check "claims nothing else" (E1); free prose would leave an unverifiable claim indistinguishable from a description of a rule.
 - **Behaviour claims are measured, not inferred.** CAP-3's trait check and CAP-9's explanation both rest on facts the engine computes (`behaviour-facts.md`). A claim the facts don't support counts as a failure, not a stylistic issue. This rules out judging or explaining an organism from its rules alone.
 - **LLM access is injected, never imported**, on the same seam as the repositories (`project-context.md`). Unit and e2e tests run against a fake model. The paid eval suite runs on demand, never on every PR.
 - **Latency:** visible progress within 1 s of a ✨ click, and a result or failure outcome within 15 s (p95), including CAP-3's repair attempt.

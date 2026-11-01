@@ -1,6 +1,6 @@
 # Eval cases — Describe an Organism
 
-The golden set for CAP-1/3/4/5/6/8/9. Each behavioural prompt is submitted through ✨ Describe an Organism. **Behavioural cases are judged by the engine, never by an LLM.** Each case seeds a 50×30 grid (seeded RNG, fixed seeds) and runs the generated organism alone. "Random soup" means 30% fill. Where the measures overlap (`trend`, `oscillation`, `maxAge`), the definitions in `behaviour-facts.md` apply. The suite runs on demand against the real model and reports results per prompt version (CAP-7). Prompts are stored verbatim, so changing one is a new case, not an edit.
+The golden set for CAP-1/3/4/5/6/8/9. Each behavioural prompt is submitted through ✨ Describe an Organism. **Behavioural cases are judged by the engine, never by an LLM.** Language is the one thing the engine cannot judge: wherever a case asks for output in the prompt's language (B10, N2, the Shape line), a person reviews it, as with name fit and explanation prose, and it sits outside the numeric thresholds. Each case seeds a 50×30 grid (seeded RNG, fixed seeds) and runs the generated organism alone. "Random soup" means 30% fill. Where the measures overlap (`trend`, `oscillation`, `maxAge`), the definitions in `behaviour-facts.md` apply. The suite runs on demand against the real model and reports results per prompt version (CAP-7). Prompts are stored verbatim, so changing one is a new case, not an edit.
 
 ## Behavioural (CAP-3, threshold ≥10/12)
 
@@ -15,14 +15,14 @@ The golden set for CAP-1/3/4/5/6/8/9. Each behavioural prompt is submitted throu
 | B7 | "Cells live exactly five cycles and then die of old age" | At least one cell reaches age 4 and none reaches age 5 (`behaviour-facts.md`: age is 0 at birth, so five cycles alive are ages 0–4) |
 | B8 | "Something that stays alive but never grows" | Population over gens 20–100 stays within ±10% and > 0 |
 | B9 | "An organism that dies when another species surrounds it" | Has a Die rule on `occupantNeighborCount` with a lower bound ≥ 3. In the rival run against `conways-classic` (`behaviour-facts.md`) that rule fires (`ruleFired` > 0) and every cell with ≥ 5 rival neighbours is gone the next generation, over 50 gens. Solo, population > 0 at gen 50 |
-| B10 | "un organismo que crece muy rápido" (Spanish) | B5's growth check passes. The name and rule summaries are in Spanish |
+| B10 | "un organismo que crece muy rápido" (Spanish) | B5's growth check passes (this is the engine-judged part). A person confirms the name and rule summaries are in Spanish |
 | B11 | "A crowd lover: it's born in busy places and dies when lonely" | Has a Born rule with neighbour lower bound ≥ 3 and a Die rule for ≤ 1 neighbours. Population > 0 at gen 50 |
 | B12 | "Blinks on and off forever" | `oscillation` = 2 on every soup, measured as `behaviour-facts.md` defines it (whole grid, gens 150–200), and population > 0 at gen 200 |
 
 ## Shape (CAP-1/4, every `ok` result)
 
 - Parses `OrganismSchema` once the app supplies its system fields. No `organismType` conditions.
-- The draft's description is exactly the prompt as typed. Every rule's `summary` (FR-2.5) is non-empty, ≤120 characters and in the prompt's language.
+- The draft's description is exactly the prompt as typed. Every rule's `summary` (FR-2.5) is non-empty and ≤120 characters (checked in code) and in the prompt's language (reviewed by a person).
 - The response claims the traits the prompt constrains, in `behaviour-facts.md` vocabulary, and no others (CAP-3). Prompts that imply a claim: B3 (`maxAge` 0), B4 (`extinction` and `trend: dies_out`), B5 and B10 (`trend: grows`), B7 (`maxAge` 4), B8 (`trend: stable`), B12 (`oscillation` 2). B1, B2, B6, B9 and B11 imply none, so their drafts carry no claim and never get `ok_mismatch`.
 
 ## Refine (CAP-5)
@@ -39,13 +39,13 @@ Judged by checks in code. Whether a name fits the behaviour is reviewed by a per
 | # | Organism | Pass when |
 |---|---|---|
 | N1 | Hand-built `conways-classic` copy, English description | 5 distinct names, each 1–50 characters, none equal to a library name (case-insensitive) |
-| N2 | B10's Spanish draft | N1's checks pass and every name is in Spanish |
+| N2 | B10's Spanish draft | N1's checks pass. A person confirms every name is in Spanish |
 | N3 | N1 again, second request | N1's checks pass and no name repeats one from the first set |
 | N4 | Organism whose description invites an unsafe name | N1's checks pass and no name appears on the blocklist fixture |
 
 ## Explain (CAP-9, threshold 100%)
 
-These are hand-built fixtures, not LLM drafts, so the cases test the grounding and not the generator. The explanation's citations are checked in code against `behaviour-facts.md`. Whether the explanation reads well is reviewed by a person and is not part of the threshold.
+These are hand-built fixtures, not LLM drafts, so the cases test the grounding and not the generator. The explanation's tags are checked in code against `behaviour-facts.md`: every sentence tagged, every fact-tagged value equal to the measured one. Whether the explanation reads well is reviewed by a person and is not part of the threshold.
 
 | # | Organism | Pass when the explanation… |
 |---|---|---|
