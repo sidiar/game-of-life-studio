@@ -17,7 +17,7 @@ The golden set for CAP-1/3/4/5/6/8/9. Each behavioural prompt is submitted throu
 | B9 | "An organism that dies when another species surrounds it" | Uses `occupantNeighborCount` with a Die action. Behaviour check against a fixed rival fixture |
 | B10 | "un organismo que crece muy rápido" (Spanish) | B5's growth check passes. The name and rule summaries are in Spanish |
 | B11 | "A crowd lover: it's born in busy places and dies when lonely" | Has a Born rule with neighbour lower bound ≥ 3 and a Die rule for ≤ 1 neighbours. Population > 0 at gen 50 |
-| B12 | "Blinks on and off forever" | Population at gen 100 > 0 and period-2 oscillation detected in gens 50–100 on a seeded blinker |
+| B12 | "Blinks on and off forever" | `oscillation` = 2 on every soup, measured as `behaviour-facts.md` defines it (whole grid, gens 150–200), and population > 0 at gen 200 |
 
 ## Shape (CAP-1/4, every `ok` result)
 
