@@ -31,8 +31,8 @@ sources: []
   success: A test that feeds malformed, partial and schema-violating model output shows that none of it reaches the Editor. Each case ends in either a valid draft or the "invalid output" outcome in `failure-modes.md`.
 
 - id: CAP-3
-  intent: The draft's simulated behaviour matches the behaviour the user described, and the user is told when it may not.
-  success: With each draft, the model states the traits it intends, in the vocabulary of `behaviour-facts.md`. The app measures them before showing the draft. A test with a fake model shows that a mismatch triggers exactly one repair attempt, and that a remaining mismatch shows the draft with the `ok_mismatch` note from `failure-modes.md`. Against the real model, the eval suite passes at least 10 of the 12 behavioural cases at the pinned prompt version, judged by the engine, not by an LLM.
+  intent: Where the prompt says how the organism's population should go (die out, shrink, hold steady, grow, blink) or how long its cells live, the draft's simulated behaviour matches it, and the user is told when it may not.
+  success: With each draft, the model claims only the traits the prompt constrains, as a subset of the `behaviour-facts.md` vocabulary (`trend`, `oscillation`, `maxAge`, `extinction`), and may claim none. The app measures the claimed traits before showing the draft and never compares an unclaimed one. A test with a fake model shows that a claimed-trait mismatch triggers exactly one repair attempt, that a remaining mismatch shows the draft with the `ok_mismatch` note from `failure-modes.md`, and that a draft with no claims never gets the note. Against the real model, the eval suite passes at least 10 of the 12 behavioural cases at the pinned prompt version, judged by the engine through each case's own check, not by an LLM. The trait check does not cover neighbour-count behaviour (B6, B9, B11); only their eval checks do.
 
 - id: CAP-4
   intent: The user can understand what each generated rule does without reading its conditions.

@@ -23,7 +23,7 @@ The golden set for CAP-1/3/4/5/6/8/9. Each behavioural prompt is submitted throu
 
 - Parses `OrganismSchema` once the app supplies its system fields. No `organismType` conditions.
 - The draft's description is exactly the prompt as typed. Every rule's `summary` (FR-2.5) is non-empty, ≤120 characters and in the prompt's language.
-- The response states its intended traits in `behaviour-facts.md` vocabulary (CAP-3).
+- The response claims the traits the prompt constrains, in `behaviour-facts.md` vocabulary, and no others (CAP-3). Prompts that imply a claim: B3 (`maxAge` 0), B4 (`extinction` and `trend: dies_out`), B5 and B10 (`trend: grows`), B7 (`maxAge` 4), B8 (`trend: stable`), B12 (`oscillation` 2). B1, B2, B6, B9 and B11 imply none, so their drafts carry no claim and never get `ok_mismatch`.
 
 ## Refine (CAP-5)
 

@@ -5,7 +5,7 @@ Every LLM request ends in exactly one **outcome**: generation (CAP-1), refine (C
 | Outcome | Trigger | User sees | Retry |
 |---|---|---|---|
 | `ok` | Valid result produced | The result lands as in `entry-points.md` | — |
-| `ok_mismatch` | CAP-1 only: the draft is valid, but after the one repair attempt its measured traits still differ from those it said it intended (CAP-3) | The draft opens, with a note: "This one may not behave quite as described: it [measured trait]." The user can keep, tweak or discard it | Manual, or tweak by hand |
+| `ok_mismatch` | CAP-1 only: the draft is valid, but after the one repair attempt a trait the model claimed still differs from its measured value (CAP-3). A draft with no claimed traits never gets this outcome | The draft opens, with a note: "This one may not behave quite as described: it [measured trait]." The user can keep, tweak or discard it | Manual, or tweak by hand |
 | `invalid_output` | Model output fails `OrganismSchema` or rule compilation after the automatic repair attempt(s) | "I couldn't build that one. Try describing it another way." | Automatic repair before this outcome (count is an RFC-009 call), then manual |
 | `off_topic` | Request isn't about an organism's behaviour (homework, chat, code) | "I can only help design organisms. Try describing how yours lives, grows or dies." | Manual |
 | `unsafe` | Request or the name it implies isn't suitable for children | Same tone as `off_topic`, no lecture | Manual |
