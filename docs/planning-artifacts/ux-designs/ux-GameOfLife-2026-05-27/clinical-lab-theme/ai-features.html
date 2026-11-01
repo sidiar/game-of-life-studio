@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Features - Clinical Lab Style</title>
+<!--
+  UI mock for SPEC-describe-an-organism (docs/specs/spec-describe-an-organism/), delivery-order step 0.
+  Covers: the three ✨ triggers, the right column's Preview & Test / ✨ AI tabs, and the AI tab's
+  turns, empty and unavailable states. The scenario bar at the top is mock chrome, not product UI.
+  Column 1 follows the shipped app (Description sits in Column 1 since Story 7.2), not the July
+  organism-editor.html mockup.
+-->
+<style>
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a1a1a;
+  --bg-hover: #222222;
+  --border: #333333;
+  --accent: #00d4ff;
+  --text-primary: #ffffff;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --warning: #ff3366;
+  --action-born: #00ff41;
+  --action-survive: #00d4ff;
+  --action-die: #ff3366;
+  /* Proposed: one AI accent, used only on ✨ triggers and inside the ✨ AI tab, so AI is always
+     recognisable (review point R1). */
+  --ai: #c792ff;
+  --ai-soft: rgba(199, 146, 255, 0.08);
+  --ai-border: rgba(199, 146, 255, 0.45);
+  --ok: #00ff41;
+  --mock: #ffcc00;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary); color: var(--text-primary);
+  min-width: 1180px;
+  height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+}
+button { font-family: inherit; }
+
+/* ---------- Mock chrome (not product UI) ---------- */
+.mock-bar {
+  z-index: 100;
+  background: #111; border-bottom: 2px solid var(--mock);
+  padding: 10px 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+}
+.mock-bar .mock-title { color: var(--mock); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-right: 10px; }
+.mock-bar button {
+  background: transparent; border: 1px solid #555; color: #ccc; padding: 6px 10px; font-size: 12px; cursor: pointer;
+}
+.mock-bar button.on { border-color: var(--mock); color: var(--mock); }
+.mock-notes {
+  background: #141200; border-bottom: 1px solid #3a3300; padding: 10px 20px; font-size: 12px; color: #d9cf8a; line-height: 1.6;
+}
+.mock-notes b { color: var(--mock); }
+.mock-notes .variants { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+.mock-notes .variants button { background: transparent; border: 1px dashed #776a00; color: #d9cf8a; padding: 3px 8px; font-size: 11px; cursor: pointer; }
+.mock-notes .variants button.on { border-style: solid; border-color: var(--mock); color: var(--mock); }
+.frame { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+
+/* ---------- Library ---------- */
+.library { padding: 40px 50px; height: 100%; overflow-y: auto; }
+.section-title-lg { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
+.section-sub { font-size: 13px; color: var(--text-secondary); margin: 6px 0 24px; }
+.toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 24px; }
+.btn-create { background: var(--accent); color: var(--bg-primary); border: none; padding: 11px 18px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
+.btn-ai {
+  background: var(--ai-soft); color: var(--ai); border: 1px solid var(--ai-border);
+  padding: 10px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+}
+.btn-ai:hover:not(:disabled) { background: rgba(199,146,255,0.16); }
+.btn-ai:disabled, .icon-ai:disabled { opacity: 0.4; cursor: not-allowed; }
+.search { background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-secondary); padding: 10px 14px; font-size: 13px; width: 260px; }
+.count { margin-left: auto; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.card { background: var(--bg-secondary); border: 1px solid var(--border); padding: 18px; }
+.card .swatch { width: 28px; height: 28px; margin-bottom: 12px; }
+.card .nm { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.card .ds { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+/* Describe dialog */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; }
+.dialog { width: 520px; background: var(--bg-secondary); border: 1px solid var(--ai-border); padding: 26px; }
+.dialog h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.dialog h2 .spark { color: var(--ai); }
+.dialog p.sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.6; }
+.prompt-area { width: 100%; min-height: 96px; resize: none; background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-primary); padding: 12px; font-size: 14px; font-family: inherit; line-height: 1.5; }
+.prompt-area:focus { outline: none; border-color: var(--ai); }
+.char-count { font-size: 11px; color: var(--text-tertiary); text-align: right; margin-top: 4px; }
+.examples { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 18px; }
+.chip { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); padding: 5px 10px; font-size: 11px; cursor: pointer; }
+.chip:hover { border-color: var(--ai); color: var(--ai); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); padding: 10px 16px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
+.btn-ai-solid { background: var(--ai); color: #12001f; border: none; padding: 10px 18px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
+.progress { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ai); margin-top: 6px; }
+.dots::after { content: '…'; animation: dots 1s steps(4) infinite; }
+@keyframes dots { 0% { content: ''; } 33% { content: '.'; } 66% { content: '..'; } 100% { content: '...'; } }
+.inline-fail { margin-top: 12px; padding: 10px 12px; border-left: 2px solid var(--warning); background: rgba(255,51,102,0.08); font-size: 12px; color: #ffb3c4; }
+
+/* ---------- Editor ---------- */
+.editor { display: flex; flex-direction: column; height: 100%; }
+.editor-header { border-bottom: 1px solid var(--border); padding: 18px 30px; display: flex; align-items: center; gap: 16px; }
+.editor-header .ttl { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: -0.5px; }
+.editor-header .unsaved { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.editor-header .x { margin-left: auto; background: transparent; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; }
+.editor-body { flex: 1; display: flex; overflow: hidden; }
+.col1 { width: 320px; flex-shrink: 0; background: var(--bg-secondary); border-right: 1px solid var(--border); padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.col-title { font-size: 16px; font-weight: 600; letter-spacing: -0.5px; }
+.col-desc { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+.lbl { font-size: 13px; font-weight: 500; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+.text-input { width: 100%; background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-primary); padding: 11px 13px; font-size: 14px; font-family: inherit; }
+.text-input.flash { border-color: var(--ai); box-shadow: 0 0 0 3px var(--ai-soft); transition: box-shadow .3s; }
+.name-row { display: flex; gap: 8px; }
+.name-row .text-input { flex: 1; }
+.icon-ai { width: 44px; flex-shrink: 0; background: var(--ai-soft); border: 1px solid var(--ai-border); color: var(--ai); font-size: 16px; cursor: pointer; }
+.icon-ai:hover:not(:disabled) { background: rgba(199,146,255,0.16); }
+textarea.text-input { min-height: 78px; resize: none; font-size: 13px; line-height: 1.5; }
+.swatches { display: flex; gap: 8px; align-items: center; }
+.swatches .sel { width: 36px; height: 36px; border: 3px solid var(--accent); }
+.swatches .more { font-size: 11px; color: var(--text-secondary); border: 1px solid var(--border); padding: 7px 10px; text-transform: uppercase; }
+.dom { display: flex; align-items: center; gap: 12px; }
+.dom .track { flex: 1; height: 6px; background: var(--bg-hover); border: 1px solid var(--border); position: relative; }
+.dom .thumb { position: absolute; top: -8px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); }
+.dom .val { background: var(--bg-hover); border: 1px solid var(--border); padding: 7px 10px; font-weight: 600; width: 54px; text-align: center; }
+.toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-secondary); }
+.tgl { width: 46px; height: 24px; border-radius: 12px; background: var(--bg-hover); border: 1px solid var(--border); position: relative; }
+.tgl::before { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--text-tertiary); }
+.col1-actions { margin-top: auto; padding-top: 18px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.btn-explain { width: 100%; text-align: center; }
+.btn-delete-org { width: 100%; background: transparent; border: 1px solid var(--warning); color: var(--warning); padding: 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
+.hint { font-size: 11px; color: var(--text-tertiary); line-height: 1.4; }
+
+.rules { flex: 1; overflow-y: auto; padding: 28px; }
+.rules-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+.btn-add-rule { background: var(--accent); color: var(--bg-primary); border: none; padding: 10px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; cursor: pointer; }
+.rule { background: var(--bg-secondary); border: 1px solid var(--border); margin-bottom: 10px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; }
+.rule.hl { border-color: var(--warning); box-shadow: 0 0 0 3px rgba(255,51,102,0.12); }
+.rule.new { border-color: var(--ai-border); }
+.rule .drag { color: var(--text-tertiary); }
+.rule .rn { flex: 1; font-size: 14px; font-weight: 500; }
+.rule .cond { font-size: 11px; color: var(--text-tertiary); font-family: ui-monospace, Menlo, monospace; margin-top: 3px; font-weight: 400; }
+.badge { border: 1px solid; padding: 3px 9px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge.born { border-color: var(--action-born); color: var(--action-born); }
+.badge.survive { border-color: var(--action-survive); color: var(--action-survive); }
+.badge.die { border-color: var(--action-die); color: var(--action-die); }
+.empty-rules { border: 1px dashed var(--border); padding: 30px; text-align: center; color: var(--text-tertiary); font-size: 13px; }
+
+/* Right column: tabs */
+.col3 { width: 350px; flex-shrink: 0; background: var(--bg-secondary); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); }
+.tab { flex: 1; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); padding: 15px 10px 13px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; position: relative; }
+.tab.on { color: var(--text-primary); border-bottom-color: var(--accent); }
+.tab.ai.on { color: var(--ai); border-bottom-color: var(--ai); }
+.tab .badge-dot { position: absolute; top: 10px; right: 26%; width: 8px; height: 8px; border-radius: 50%; background: var(--ai); box-shadow: 0 0 8px var(--ai); }
+.pane { flex: 1; overflow-y: auto; padding: 20px; display: none; flex-direction: column; }
+.pane.on { display: flex; }
+
+/* Preview pane */
+.canvas-wrap { border: 1px solid var(--border); background: #050505; }
+canvas { display: block; width: 100%; image-rendering: pixelated; }
+.sim-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.btn-sim { background: transparent; border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; font-size: 12px; cursor: pointer; }
+.cycle { margin-left: auto; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; }
+.cycle b { color: var(--text-primary); font-size: 14px; margin-left: 4px; }
+.paused-note { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; }
+
+/* AI pane */
+.ai-head { font-size: 11px; color: var(--text-tertiary); line-height: 1.5; margin-bottom: 14px; }
+.ai-head b { color: var(--ai); font-weight: 600; }
+.turns { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+.turn-user { align-self: flex-end; max-width: 88%; background: var(--bg-hover); border: 1px solid var(--border); padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+.turn-user .who, .turn-ai .who { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); margin-bottom: 4px; }
+.turn-ai { border-left: 2px solid var(--ai); background: var(--ai-soft); padding: 12px 14px; font-size: 13px; line-height: 1.55; }
+.turn-ai .who { color: var(--ai); }
+.facts { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
+.fact { font-size: 10px; font-family: ui-monospace, Menlo, monospace; border: 1px solid var(--border); padding: 3px 6px; color: var(--text-secondary); }
+.fact.ok { border-color: rgba(0,255,65,0.45); color: var(--ok); }
+.fact.bad { border-color: rgba(255,51,102,0.55); color: var(--warning); }
+.cite { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--ai); border-bottom: 1px dotted var(--ai); }
+.warn { margin-top: 10px; padding: 9px 10px; border-left: 2px solid var(--warning); background: rgba(255,51,102,0.08); font-size: 12px; line-height: 1.5; }
+.warn .wid { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--warning); display: block; margin-bottom: 2px; }
+.warn a { color: var(--warning); cursor: pointer; text-decoration: underline; }
+.mismatch { margin-top: 10px; padding: 9px 10px; border-left: 2px solid var(--mock); background: rgba(255,204,0,0.07); font-size: 12px; line-height: 1.5; color: #f3e6a6; }
+.turn-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.btn-mini { background: transparent; border: 1px solid var(--ai-border); color: var(--ai); padding: 6px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; cursor: pointer; }
+.btn-mini.plain { border-color: var(--border); color: var(--text-secondary); }
+.name-picks { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.name-pick { text-align: left; background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 10px; font-size: 13px; cursor: pointer; }
+.name-pick:hover { border-color: var(--ai); }
+.name-pick.picked { border-color: var(--ai); color: var(--ai); }
+.name-pick.picked::after { content: '  ✓ in Name'; font-size: 10px; color: var(--ai); }
+.ai-input { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.ai-input textarea { width: 100%; min-height: 64px; resize: none; background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-primary); padding: 10px; font-size: 13px; font-family: inherit; line-height: 1.5; }
+.ai-input textarea:focus { outline: none; border-color: var(--ai); }
+.ai-input .row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.ai-input .later { font-size: 10px; color: var(--text-tertiary); }
+.empty-ai { margin: auto 0; text-align: center; color: var(--text-secondary); font-size: 13px; line-height: 1.6; padding: 10px; }
+.empty-ai .big { font-size: 28px; color: var(--ai); margin-bottom: 10px; }
+.empty-ai .opts { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.unavail { border: 1px solid var(--border); background: var(--bg-hover); padding: 12px 14px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 12px; }
+.unavail b { color: var(--text-primary); }
+
+.editor-footer { border-top: 1px solid var(--border); padding: 14px 30px; display: flex; justify-content: flex-end; gap: 10px; }
+.btn-back { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); padding: 10px 18px; font-size: 12px; text-transform: uppercase; cursor: pointer; }
+.btn-save { background: var(--accent); color: var(--bg-primary); border: none; padding: 10px 22px; font-size: 12px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
+
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+  background: #000; border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 9px; font-size: 11px;
+  white-space: nowrap; z-index: 50; text-transform: none; letter-spacing: 0; font-weight: 400;
+}
+.hidden { display: none !important; }
+</style></head>
+<body>
+
+<div class="mock-bar" role="toolbar" aria-label="Mock scenarios">
+  <span class="mock-title">Mock · AI features</span>
+  <button data-scn="library">1 · Library + ✨ Describe</button>
+  <button data-scn="draft">2 · Draft from Describe</button>
+  <button data-scn="names">3 · Name suggestions</button>
+  <button data-scn="explain">4 · Explain (hand-tuned)</button>
+  <button data-scn="empty">5 · AI tab empty</button>
+  <button data-scn="unavail">6 · Unavailable</button>
+</div>
+<div class="mock-notes" id="notes"></div>
+
+<div class="frame" id="frame">
+
+  <!-- ===== Library ===== -->
+  <section class="library hidden" id="library">
+    <h1 class="section-title-lg">Organism Library</h1>
+    <p class="section-sub">Create and manage your life forms</p>
+    <div class="toolbar">
+      <button class="btn-create">+ Create New Organism</button>
+      <button class="btn-ai" id="btnDescribe">✨ Describe an Organism</button>
+      <div class="search">Search organisms... ⌕</div>
+      <span class="count">4 organisms</span>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="swatch" style="background:#00d4ff"></div><div class="nm">Conway's Classic</div><div class="ds">The original: born with 3 neighbours, survives with 2 or 3.</div></div>
+      <div class="card"><div class="swatch" style="background:#ff7a00"></div><div class="nm">Tuned Conway</div><div class="ds">Conway, but I widened survival to 4 and added a crowd rule.</div></div>
+      <div class="card"><div class="swatch" style="background:#00ff41"></div><div class="nm">Seeds</div><div class="ds">Every cell lives a single cycle.</div></div>
+      <div class="card"><div class="swatch" style="background:#ff3366"></div><div class="nm">Invader</div><div class="ds">Spreads fast and pushes others out.</div></div>
+    </div>
+
+    <div class="scrim hidden" id="describeDialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+      <div class="dialog">
+        <h2 id="dlgTitle"><span class="spark">✨</span> Describe an Organism</h2>
+        <p class="sub">Say how it lives, grows or dies. AI builds a draft you can preview, tweak and save. Nothing is saved until you click Save.</p>
+        <textarea class="prompt-area" id="promptArea" maxlength="280">a shy organism that only survives in small groups</textarea>
+        <div class="char-count"><span id="promptCount">48</span> / 280</div>
+        <div class="examples">
+          <button class="chip" data-ex="a fast-spreading invader that fills the dish">fast invader</button>
+          <button class="chip" data-ex="cells live exactly five cycles and then die of old age">dies of old age</button>
+          <button class="chip" data-ex="blinks on and off forever">blinker</button>
+        </div>
+        <div class="progress hidden" id="dlgProgress">✨ Building your organism<span class="dots"></span></div>
+        <div class="inline-fail hidden" id="dlgFail">I can only help design organisms. Try describing how yours lives, grows or dies. <span style="color:#777">(outcome <code>off_topic</code>: you stay here, the prompt is kept)</span></div>
+        <div class="dialog-actions">
+          <button class="btn-ghost" id="dlgCancel">Cancel</button>
+          <button class="btn-ai-solid" id="dlgGo">✨ Build draft</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Editor ===== -->
+  <section class="editor hidden" id="editor" aria-label="Organism Editor">
+    <div class="editor-header">
+      <span class="ttl" id="hdrName">New Organism</span>
+      <span class="unsaved" id="hdrState">· Unsaved draft</span>
+      <button class="x" aria-label="Close">✕</button>
+    </div>
+    <div class="editor-body">
+      <!-- Column 1 -->
+      <aside class="col1">
+        <div><div class="col-title">Basic Information</div><div class="col-desc">Name, look and strength of this organism.</div></div>
+        <div>
+          <div class="lbl">Name</div>
+          <div class="name-row">
+            <input class="text-input" id="nameInput" value="">
+            <button class="icon-ai" id="btnNames" aria-label="Suggest names" data-tip="✨ Suggest names">✨</button>
+          </div>
+        </div>
+        <div>
+          <div class="lbl">Description <span class="hint" id="descCount"></span></div>
+          <textarea class="text-input" id="descInput" maxlength="280"></textarea>
+        </div>
+        <div><div class="lbl">Colour</div><div class="swatches"><div class="sel" id="colorSel" style="background:#ffb000"></div><span class="more">Change</span></div></div>
+        <div><div class="lbl">Dominance</div><div class="dom"><div class="track"><div class="thumb" id="domThumb" style="left:20%"></div></div><div class="val" id="domVal">20</div></div></div>
+        <div class="toggle-row"><span>Aging degradation</span><span class="tgl"></span></div>
+        <div class="col1-actions">
+          <button class="btn-ai btn-explain" id="btnExplain">✨ Explain this organism</button>
+          <div class="hint hidden" id="explainHint">Add a rule first: there's nothing to explain yet.</div>
+          <button class="btn-delete-org hidden" id="btnDelete">Delete Organism</button>
+        </div>
+      </aside>
+
+      <!-- Column 2 -->
+      <main class="rules">
+        <div class="rules-head">
+          <div><div class="col-title">Survival Rules</div><div class="col-desc">Rules are checked in order within each phase. Die rules run first.</div></div>
+          <button class="btn-add-rule">+ Add Rule</button>
+        </div>
+        <div id="rulesList"></div>
+      </main>
+
+      <!-- Column 3: tabs -->
+      <aside class="col3">
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" id="tabPreview" aria-controls="panePreview">Preview &amp; Test</button>
+          <button class="tab ai" role="tab" id="tabAI" aria-controls="paneAI">✨ AI<span class="badge-dot hidden" id="aiBadge"></span></button>
+        </div>
+        <div class="pane" id="panePreview" role="tabpanel">
+          <div class="canvas-wrap"><canvas id="cv" width="70" height="56"></canvas></div>
+          <div class="sim-row">
+            <button class="btn-sim" id="simPlay">▶ Play</button>
+            <button class="btn-sim" id="simStep">Step</button>
+            <button class="btn-sim" id="simReset">Reset</button>
+            <span class="cycle">Cycle<b id="cyc">0</b></span>
+          </div>
+          <div class="paused-note" id="pausedNote"></div>
+        </div>
+        <div class="pane" id="paneAI" role="tabpanel">
+          <div class="unavail hidden" id="unavailBox"><b>✨ AI is resting this month.</b><br>The monthly limit has been reached, so the ✨ buttons are off until next month. You can still build and edit organisms by hand. Rule checks still work: they don't need AI. <span style="color:#777">(outcome <code>budget_exhausted</code>)</span></div>
+          <div class="ai-head">Results from <b>✨</b> actions on this organism. This history is cleared when you close the editor.</div>
+          <div class="turns" id="turns"></div>
+          <div class="ai-input hidden" id="aiInput">
+            <textarea id="aiPrompt" maxlength="280"></textarea>
+            <div class="row">
+              <span class="later">Follow-ups such as "make it slower" come with CAP-5</span>
+              <button class="btn-ai-solid" id="tryAgain">✨ Try again</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <div class="editor-footer">
+      <button class="btn-back">Back</button>
+      <button class="btn-save">Save</button>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const NOTES = {
+  library: `<b>Trigger 1: ✨ Describe an Organism</b> sits in the Library toolbar, beside + Create New Organism (CAP-1). Click it, then <b>✨ Build draft</b>. That opens scenario 2 after a short progress state (visible within 1 s).
+    It's the only free-text entry point, and it's capped at 280 characters, the description cap. A failed request keeps you here with your prompt (failure-modes.md).`,
+  draft: `<b>Editor opened from ✨ Describe:</b> create mode, ✨ AI tab active, the prompt as the first turn, and the description equal to the prompt as typed. The draft's turn lists the traits the model intended and what the app measured (CAP-3).
+    <b>Try it in Preview</b> switches tabs. Switch back and forth: the preview keeps its cycle and pauses while hidden. Only this kind of session has the input at the bottom (Try again now, follow-ups in CAP-5). No Delete button in create mode, so ✨ Explain is last in Column 1.`,
+  names: `<b>Trigger 2: ✨ next to Name</b> (CAP-8). Click it: the editor switches to the ✨ AI tab and adds a turn with 5 names. Picking one fills the unsaved Name field, and clicking ✨ again adds a fresh set.
+    It works on any organism, here a hand-built one opened from the Library, so it has Delete and no input box.`,
+  explain: `<b>Trigger 3: ✨ Explain this organism</b>, labelled, directly above Delete Organism (CAP-9). It explains a hand-tuned Conway: every claim cites a measured fact (<span style="font-family:monospace">trend</span>, <span style="font-family:monospace">maxAge</span>…), and the rule check <span style="font-family:monospace">shadowedByDie</span> points at the dead rule, highlighted in Column 2.
+    <b>Use as description</b> asks before replacing. Decided: a dot shows on the ✨ AI tab when a result arrives while Preview is showing (see the variant).`,
+  empty: `<b>✨ AI tab, before any action</b>, on a hand-built organism. Decided: B, the empty state offers the Column 1 actions as buttons too (same behaviour, so not ambiguous). A is kept for comparison.`,
+  unavail: `<b>Unavailable</b> (<span style="font-family:monospace">budget_exhausted</span>, also offline): every ✨ trigger stays visible but disabled, with the reason as a tooltip, and the ✨ AI tab explains why. Manual authoring is unaffected. Hover the disabled ✨ buttons.`,
+};
+const VARIANTS = {
+  draft: [['ok', 'Traits match'], ['mismatch', 'Variant: ok_mismatch'], ['fail', 'Variant: off_topic (back in Library)']],
+  explain: [['plain', 'Result while on ✨ AI'], ['badge', 'Variant: result arrives while on Preview (dot, chosen)']],
+  empty: [['buttons', 'B · text + action buttons (chosen)'], ['text', 'A · text only (rejected)']],
+};
+
+const SHY_RULES = [
+  { n: 'Born next to exactly two friends', a: 'born', c: 'cellState = empty · neighborCount = 2', gen: true },
+  { n: 'Stays with one or two friends', a: 'survive', c: 'neighborCount in 1–2', gen: true },
+  { n: 'Leaves when it gets crowded', a: 'die', c: 'neighborCount ≥ 3', gen: true },
+];
+const TUNED_RULES = [
+  { n: 'Born with three neighbours', a: 'born', c: 'cellState = empty · neighborCount = 3' },
+  { n: 'Stays with 2–4 neighbours', a: 'survive', c: 'neighborCount in 2–4' },
+  { n: 'Big crowds keep it alive', a: 'survive', c: 'neighborCount ≥ 5', id: 'r3' },
+  { n: 'Crowded cells die', a: 'die', c: 'neighborCount ≥ 5' },
+];
+
+let scenario = 'library', variant = null, activeTab = 'preview';
+
+function renderRules(rules) {
+  const el = $('rulesList');
+  if (!rules.length) { el.innerHTML = '<div class="empty-rules">No rules yet. Add one with + Add Rule.</div>'; return; }
+  el.innerHTML = rules.map(r => `<div class="rule${r.gen ? ' new' : ''}" ${r.id ? `id="${r.id}"` : ''}>
+    <span class="drag">⋮⋮</span>
+    <span class="rn">${r.n}<div class="cond">${r.c}</div></span>
+    <span class="badge ${r.a}">${r.a}</span></div>`).join('');
+}
+function setTab(t) {
+  activeTab = t;
+  $('tabPreview').classList.toggle('on', t === 'preview');
+  $('tabAI').classList.toggle('on', t === 'ai');
+  $('panePreview').classList.toggle('on', t === 'preview');
+  $('paneAI').classList.toggle('on', t === 'ai');
+  if (t === 'ai') $('aiBadge').classList.add('hidden');
+  if (t !== 'preview' && running) { pause(); $('pausedNote').textContent = 'Paused while hidden: pattern and cycle kept.'; }
+}
+function addTurn(html) { $('turns').insertAdjacentHTML('beforeend', html); $('paneAI').scrollTop = 1e6; }
+function progressTurn(text) {
+  const id = 'p' + Math.random().toString(36).slice(2);
+  addTurn(`<div class="turn-ai" id="${id}"><div class="who">✨ AI</div><span class="progress" style="margin:0">${text}<span class="dots"></span></span></div>`);
+  return id;
+}
+function editorBase({ name, desc, rules, createMode, color, dom }) {
+  $('nameInput').value = name; $('hdrName').textContent = name || 'New Organism';
+  $('descInput').value = desc; $('descCount').textContent = desc.length + ' / 280';
+  $('colorSel').style.background = color; $('domVal').textContent = dom; $('domThumb').style.left = dom + '%';
+  $('hdrState').textContent = createMode ? '· Unsaved draft' : '';
+  $('btnDelete').classList.toggle('hidden', createMode);
+  const noRules = !rules.length;
+  $('btnExplain').disabled = noRules; $('explainHint').classList.toggle('hidden', !noRules);
+  $('btnExplain').removeAttribute('data-tip'); $('btnNames').setAttribute('data-tip', '✨ Suggest names'); $('btnNames').disabled = false;
+  $('turns').innerHTML = ''; $('aiInput').classList.add('hidden'); $('unavailBox').classList.add('hidden'); $('aiBadge').classList.add('hidden');
+  renderRules(rules);
+  resetSim(rules === SHY_RULES ? 'shy' : 'conway');
+}
+
+function show(scn, v) {
+  scenario = scn; variant = v ?? (VARIANTS[scn] ? VARIANTS[scn][0][0] : null);
+  document.querySelectorAll('.mock-bar button').forEach(b => b.classList.toggle('on', b.dataset.scn === scn));
+  const vs = VARIANTS[scn] ? `<div class="variants">${VARIANTS[scn].map(([k, l]) => `<button data-var="${k}" class="${k === variant ? 'on' : ''}">${l}</button>`).join('')}</div>` : '';
+  $('notes').innerHTML = NOTES[scn] + vs;
+  $('notes').querySelectorAll('[data-var]').forEach(b => b.onclick = () => show(scn, b.dataset.var));
+  $('library').classList.toggle('hidden', scn !== 'library');
+  $('editor').classList.toggle('hidden', scn === 'library');
+  $('describeDialog').classList.add('hidden'); $('dlgProgress').classList.add('hidden'); $('dlgFail').classList.add('hidden');
+  if (scn === 'library') return;
+
+  if (scn === 'draft') {
+    if (variant === 'fail') {
+      $('library').classList.remove('hidden'); $('editor').classList.add('hidden');
+      $('describeDialog').classList.remove('hidden'); $('promptArea').value = 'write my history homework about Rome'; updateCount();
+      $('dlgFail').classList.remove('hidden'); return;
+    }
+    const prompt = 'a shy organism that only survives in small groups';
+    editorBase({ name: 'Quiet Pair', desc: prompt, rules: SHY_RULES, createMode: true, color: '#ffb000', dom: 20 });
+    addTurn(`<div class="turn-user"><div class="who">You · ✨ Describe</div>${prompt}</div>`);
+    const mismatch = variant === 'mismatch';
+    addTurn(`<div class="turn-ai"><div class="who">✨ AI · draft</div>
+      I built <b>Quiet Pair</b> with 3 rules: it's born next to exactly two friends, stays with one or two, and leaves when it gets crowded.
+      <div class="facts">
+        <span class="fact ${mismatch ? 'bad' : 'ok'}">trend: ${mismatch ? 'intended stable · measured dies_out' : 'stable ✓'}</span>
+        <span class="fact ok">neverFired: none ✓</span>
+      </div>
+      ${mismatch ? `<div class="mismatch">This one may not behave quite as described: on the test dishes it <b>dies out by cycle 40</b> instead of staying stable. You can keep it, tweak it, or try again. <span style="color:#998a3d">(outcome <code>ok_mismatch</code>, after 1 repair attempt)</span></div>` : ''}
+      <div class="turn-actions"><button class="btn-mini" data-go="preview">▶ Try it in Preview</button></div></div>`);
+    $('aiInput').classList.remove('hidden'); $('aiPrompt').value = prompt;
+    setTab('ai');
+  }
+  if (scn === 'names') {
+    editorBase({ name: 'Organism 7', desc: 'Lives in pairs, hates crowds.', rules: SHY_RULES.map(r => ({ ...r, gen: false })), createMode: false, color: '#00ff41', dom: 35 });
+    setTab('preview');
+  }
+  if (scn === 'explain') {
+    editorBase({ name: 'Tuned Conway', desc: 'Conway, but I widened survival to 4 and added a crowd rule.', rules: TUNED_RULES, createMode: false, color: '#ff7a00', dom: 50 });
+    setTab('preview');
+    if (variant === 'badge') {
+      $('notes').insertAdjacentHTML('beforeend', '<div style="margin-top:6px">Click <b>✨ Explain this organism</b>, then stay on Preview & Test: the result arrives in the background and the ✨ AI tab shows a dot.</div>');
+    }
+  }
+  if (scn === 'empty') {
+    editorBase({ name: 'Conway\'s Classic', desc: 'The original: born with 3 neighbours, survives with 2 or 3.', rules: TUNED_RULES.slice(0, 2), createMode: false, color: '#00d4ff', dom: 50 });
+    const buttons = variant === 'buttons';
+    $('turns').innerHTML = `<div class="empty-ai"><div class="big">✨</div>
+      AI can <b>explain how this organism behaves</b> or <b>suggest names</b> for it.<br>
+      ${buttons ? '' : 'Use the ✨ buttons in Basic Information.'}
+      ${buttons ? `<div class="opts"><button class="btn-ai" onclick="doExplain()">✨ Explain this organism</button><button class="btn-ai" onclick="doNames()">✨ Suggest names</button></div>` : ''}</div>`;
+    setTab('ai');
+  }
+  if (scn === 'unavail') {
+    editorBase({ name: 'Tuned Conway', desc: 'Conway, but I widened survival to 4 and added a crowd rule.', rules: TUNED_RULES, createMode: false, color: '#ff7a00', dom: 50 });
+    $('btnNames').disabled = true; $('btnExplain').disabled = true;
+    $('btnNames').setAttribute('data-tip', '✨ AI is resting until next month');
+    $('btnExplain').setAttribute('data-tip', '✨ AI is resting until next month');
+    $('unavailBox').classList.remove('hidden');
+    $('turns').innerHTML = `<div class="turn-ai"><div class="who">Rule checks · no AI needed</div>
+      <div class="warn"><span class="wid">shadowedByDie</span>“Big crowds keep it alive” never applies: “Crowded cells die” removes those cells first, because Die rules run before Survive rules. <a data-hl="r3">Show rule</a></div></div>`;
+    setTab('ai');
+  }
+}
+
+/* ---- Triggers ---- */
+let nameRound = 0;
+const NAME_SETS = [['Quiet Duo', 'Pair Keeper', 'Hermit Moss', 'Tiny Twins', 'Shy Lichen'], ['Two-Step', 'Lonely Spores', 'Buddy Cells', 'Whisper Moss', 'Pocket Pair']];
+function doNames() {
+  if (scenario === 'empty') $('turns').innerHTML = '';
+  setTab('ai');
+  addTurn(`<div class="turn-user"><div class="who">You · ✨ Suggest names</div>Names for “${$('nameInput').value || 'New Organism'}”</div>`);
+  const id = progressTurn('Thinking of names');
+  setTimeout(() => {
+    const set = NAME_SETS[nameRound++ % NAME_SETS.length];
+    $(id).innerHTML = `<div class="who">✨ AI · names</div>Pick one to use it. It fills the Name field and isn't saved until you click Save.
+      <div class="name-picks">${set.map(n => `<button class="name-pick">${n}</button>`).join('')}</div>`;
+    $(id).querySelectorAll('.name-pick').forEach(b => b.onclick = () => {
+      $(id).querySelectorAll('.name-pick').forEach(x => x.classList.remove('picked'));
+      b.classList.add('picked'); $('nameInput').value = b.textContent; $('hdrName').textContent = b.textContent;
+      $('hdrState').textContent = '· Unsaved changes'; flash('nameInput');
+    });
+  }, 900);
+}
+function doExplain() {
+  if (scenario === 'empty') $('turns').innerHTML = '';
+  const bg = scenario === 'explain' && variant === 'badge';
+  if (!bg) setTab('ai');
+  addTurn(`<div class="turn-user"><div class="who">You · ✨ Explain this organism</div>What will “${$('nameInput').value}” actually do?</div>`);
+  const id = progressTurn('Running 3 test dishes, then explaining');
+  setTimeout(() => {
+    const tuned = $('nameInput').value === 'Tuned Conway';
+    $(id).innerHTML = tuned ? `<div class="who">✨ AI · explanation</div>
+      It starts like Conway's Game of Life but <b>keeps growing</b>: on all three test dishes the population tripled by cycle 100 <span class="cite">trend: grows</span>.
+      It never settles into a repeating pattern <span class="cite">oscillation: none</span>, and its oldest cell lived 184 cycles <span class="cite">maxAge: 184</span>.
+      <div class="warn"><span class="wid">shadowedByDie · neverFired</span>“Big crowds keep it alive” never applies: “Crowded cells die” removes those cells first, because Die rules run before Survive rules. <a data-hl="r3">Show rule</a></div>
+      <div class="turn-actions"><button class="btn-mini" data-use="It grows steadily and never repeats. Its crowd-survival rule never fires, because the crowd Die rule wins first.">Use as description</button><button class="btn-mini plain" data-go="preview">▶ Try it in Preview</button></div>`
+      : `<div class="who">✨ AI · explanation</div>
+      The classic: busy patterns that <b>settle into still shapes and blinkers</b> <span class="cite">trend: stable</span> <span class="cite">oscillation: 2</span>.
+      <div class="turn-actions"><button class="btn-mini" data-use="Settles into still shapes and blinkers.">Use as description</button><button class="btn-mini plain" data-go="preview">▶ Try it in Preview</button></div>`;
+    if (activeTab !== 'ai') $('aiBadge').classList.remove('hidden');
+  }, 1300);
+}
+function flash(id) { $(id).classList.add('flash'); setTimeout(() => $(id).classList.remove('flash'), 900); }
+
+document.addEventListener('click', (e) => {
+  const go = e.target.closest('[data-go]'); if (go) setTab(go.dataset.go);
+  const hl = e.target.closest('[data-hl]');
+  if (hl) { const r = $(hl.dataset.hl); if (r) { r.classList.add('hl'); r.scrollIntoView({ block: 'center' }); setTimeout(() => r.classList.remove('hl'), 1800); } }
+  const use = e.target.closest('[data-use]');
+  if (use) {
+    const cur = $('descInput').value.trim();
+    if (!cur || confirm('Replace the current description?\n\n“' + cur + '”')) {
+      $('descInput').value = use.dataset.use; $('descCount').textContent = use.dataset.use.length + ' / 280';
+      $('hdrState').textContent = '· Unsaved changes'; flash('descInput');
+    }
+  }
+});
+document.querySelectorAll('.mock-bar [data-scn]').forEach(b => b.onclick = () => show(b.dataset.scn));
+$('tabPreview').onclick = () => setTab('preview');
+$('tabAI').onclick = () => setTab('ai');
+$('btnNames').onclick = doNames;
+$('btnExplain').onclick = doExplain;
+$('btnDescribe').onclick = () => { $('describeDialog').classList.remove('hidden'); $('promptArea').value = 'a shy organism that only survives in small groups'; updateCount(); $('promptArea').focus(); };
+$('dlgCancel').onclick = () => $('describeDialog').classList.add('hidden');
+$('dlgGo').onclick = () => { $('dlgFail').classList.add('hidden'); $('dlgProgress').classList.remove('hidden'); setTimeout(() => show('draft', 'ok'), 1400); };
+document.querySelectorAll('[data-ex]').forEach(c => c.onclick = () => { $('promptArea').value = c.dataset.ex; updateCount(); });
+function updateCount() { $('promptCount').textContent = $('promptArea').value.length; }
+$('promptArea').oninput = updateCount;
+$('tryAgain').onclick = () => {
+  addTurn(`<div class="turn-user"><div class="who">You · ✨ Try again</div>${$('aiPrompt').value}</div>`);
+  const id = progressTurn('Rebuilding the draft');
+  setTimeout(() => { $(id).innerHTML = `<div class="who">✨ AI · draft</div>New draft ready: the rules in Survival Rules were replaced. <div class="facts"><span class="fact ok">trend: stable ✓</span></div><div class="turn-actions"><button class="btn-mini" data-go="preview">▶ Try it in Preview</button></div>`; }, 1200);
+};
+$('descInput').oninput = () => { $('descCount').textContent = $('descInput').value.length + ' / 280'; };
+
+/* ---- Tiny preview simulation (Conway-ish, for feel only) ---- */
+const W = 70, H = 56, ctx = $('cv').getContext('2d');
+let grid, timer = null, running = false, cycle = 0, mode = 'conway';
+function seed() { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+function resetSim(m) {
+  mode = m; pause(); cycle = 0; const r = seed();
+  grid = Array.from({ length: H }, () => Array.from({ length: W }, () => r() < 0.3 ? 1 : 0));
+  $('pausedNote').textContent = ''; draw();
+}
+function step() {
+  const n = grid.map((row, y) => row.map((v, x) => {
+    let c = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) c += grid[(y + dy + H) % H][(x + dx + W) % W];
+    if (mode === 'shy') return v ? (c >= 1 && c <= 2 ? 1 : 0) : (c === 2 ? 1 : 0);
+    return v ? (c >= 2 && c <= 4 ? 1 : 0) : (c === 3 ? 1 : 0);
+  }));
+  grid = n; cycle++; draw();
+}
+function draw() {
+  ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = $('colorSel') ? $('colorSel').style.background || '#00d4ff' : '#00d4ff';
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (grid[y][x]) ctx.fillRect(x, y, 1, 1);
+  $('cyc').textContent = cycle;
+}
+function pause() { clearInterval(timer); timer = null; running = false; $('simPlay').textContent = '▶ Play'; }
+$('simPlay').onclick = () => { if (running) return pause(); running = true; $('pausedNote').textContent = ''; $('simPlay').textContent = '❚❚ Pause'; timer = setInterval(step, 120); };
+$('simStep').onclick = () => { pause(); step(); };
+$('simReset').onclick = () => resetSim(mode);
+
+show('library');
+</script>
+</body></html>
