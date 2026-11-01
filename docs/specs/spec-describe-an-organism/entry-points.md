@@ -1,6 +1,6 @@
 # Entry points — Describe an Organism
 
-The LLM has exactly three triggers, all marked ✨, and **each does one thing in every state** (SPEC constraint). Inside the Editor, **every AI result appears in one place: the ✨ AI tab**. Labels, placement details and wording are indicative. The UI mock (`delivery-order.md`, step 0) settles them.
+The LLM has exactly three actions, each with one ✨ trigger where it acts and, for the two Editor actions, a shortcut in the empty ✨ AI tab, and **each action does one thing in every state** (SPEC constraint). Inside the Editor, **every AI result appears in one place: the ✨ AI tab**. Labels, placement details and wording are indicative. The UI mock (`delivery-order.md`, step 0) settles them.
 
 ## Triggers
 
@@ -18,12 +18,12 @@ The Editor's right column (`OrganismEditorLayout.tsx`, fixed 350px) becomes two 
 - **A free-text input only in sessions opened from ✨ Describe.** In CAP-1 it holds the prompt, and editing it plus "Try again" regenerates the draft from the prompt alone and replaces the whole draft; when the draft differs from the last generated one (hand edits), it asks first, as "Use as description" does. CAP-5 turns it into the follow-up input, which works on the draft as it stands, hand edits included. Other sessions have no free-text input, so the LLM can't rewrite an existing organism's rules (SPEC non-goal).
 - **Default tab:** ✨ AI when the session was opened from ✨ Describe, otherwise Preview & Test. A ✨ trigger in the Editor switches to ✨ AI. The user can switch freely.
 - **"Try it in Preview"** on a draft or an explanation switches to Preview & Test.
-- **Empty state** (no turns yet) names what the tab does and offers **Suggest names** and **Explain this organism** as buttons. They are shortcuts to the Column 1 triggers, with the same behaviour and the same disabled states, so there is no ambiguity. Explain is disabled while the organism has no rules.
+- **Empty state** (no turns yet) names what the tab does and offers **Suggest names** and **Explain this organism** as buttons. They are shortcuts to the Column 1 triggers, with the same behaviour and the same disabled states, so there is no ambiguity, and a shortcut click counts as a use of the action it repeats (CAP-7). Explain is disabled while the organism has no rules.
 - **Result dot.** When a result or failure outcome arrives while Preview & Test is showing, a dot appears on the ✨ AI tab label until the user opens the tab. It has an accessible label (e.g. "✨ AI, new result").
 - **Switching tabs loses nothing.** Preview & Test stays mounted while hidden: the drawn pattern, generation and run state survive, and a running preview pauses while hidden (no off-screen simulation cost). The AI history and the input's draft survive too.
 
 ## Every trigger
 
-- Shows progress within 1 s, in the ✨ AI tab, and is disabled while its request runs.
+- Shows progress within 1 s and is disabled while its request runs. The Editor actions show it in the ✨ AI tab; ✨ Describe shows it in its prompt dialog, since the Editor is not open yet.
 - When the feature is unavailable (`budget_exhausted`, offline), triggers stay visible but disabled, with the reason as a tooltip, and the ✨ AI tab says why. Manual authoring is unaffected. For ✨ Explain, the rule checks still run offline and show in the tab.
 - The Editor is shared, so the Name ✨, ✨ Explain and the ✨ AI tab also appear when the Editor opens from a Battle's roster (`+ Create New Organism` there). ✨ Describe is only in the Library.

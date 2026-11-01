@@ -48,7 +48,7 @@ sources: []
 
 - id: CAP-7
   intent: The operator can tell which prompt version and model produced each result, what it cost, and how often people keep what the feature produced, and can change the prompt version without a code change elsewhere.
-  success: Every LLM request emits one structured record (prompt version, model, input/output tokens, latency, outcome from `failure-modes.md`). The eval report is keyed by prompt version. GoatCounter counts one event per use of each entry point (`entry-points.md`) and one per kept result (a generated organism saved, a suggested name picked, an explanation copied into the description). No event carries user text.
+  success: Every LLM request emits one structured record (prompt version, model, input/output tokens, latency, outcome from `failure-modes.md`). The eval report is keyed by prompt version. GoatCounter counts one event per use of each action (`entry-points.md`), a shortcut counting under the action it repeats, and one per kept result (a generated organism saved, a suggested name picked, an explanation copied into the description). No event carries user text.
 
 - id: CAP-8
   intent: For any organism open in the Organism Editor, hand-built or generated, the user can ask for name suggestions that fit its behaviour and pick one from the ✨ AI tab.
@@ -61,7 +61,7 @@ sources: []
 ## Constraints
 
 - **Nothing persists without an explicit Save.** Every result lands in the open Organism Editor and goes through its save path (FR-1.2, FR-2). There is no second write path into the repositories.
-- **The LLM is reached only from three entry points, each with one behaviour in every state** (`entry-points.md`): ✨ Describe an Organism in the Library (CAP-1), the ✨ next to Name in the Editor (CAP-8), and the labelled ✨ Explain this organism above Delete Organism (CAP-9). No control changes what it does based on the organism's state, and no other route or screen calls the LLM.
+- **The LLM is reached through three actions only, each with one behaviour in every state** (`entry-points.md`): ✨ Describe an Organism in the Library (CAP-1), the ✨ next to Name in the Editor (CAP-8), and the labelled ✨ Explain this organism above Delete Organism (CAP-9). An action may have a second control that repeats it exactly (the empty ✨ AI tab's shortcuts), never one that behaves differently. No control changes what it does based on the organism's state, and no other route or screen calls the LLM.
 - **Inside the Editor, every AI result appears in the ✨ AI tab**, which shares the right column with Preview & Test (`entry-points.md`). The feature adds no column, panel or window, so the Editor's width and breakpoints (`OrganismEditorLayout.tsx`) are unchanged.
 - **Switching tabs loses nothing.** Preview & Test stays mounted while hidden: its drawn pattern, generation and run state survive, and a running preview pauses while hidden. The ✨ AI history and the input's text survive too.
 - **The app generates the system-owned fields** (`id`, `contentHash`, `schemaVersion`), never the model. The model's output must satisfy `OrganismSchema` for the fields it supplies.
