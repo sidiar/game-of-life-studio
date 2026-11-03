@@ -13,7 +13,7 @@ The guiding decisions:
 1. **One small endpoint, off the static site.** A Cloudflare Worker with one Durable Object holds the provider key, the monthly spend ledger and the per-visitor rate-limit windows. The static export (`output: 'export'`, Decision K) is unchanged and is still deployed to GitHub Pages.
 2. **One port, three implementations.** `OrganismDesigner` is an interface in a new pure package, `@gol/designer`. The browser gets an HTTP client, injected at the page boundary like the repositories (AR-2/27). The endpoint and the eval suite share one provider-backed implementation. Tests get a fake from `@gol/test-utils`.
 3. **The engine judges, in the browser.** Facts are measured by a new `facts/` layer in `@gol/simulation`, using a counting variant of the session compile that Play mode never builds, so the 60 FPS path pays nothing. The rule checks are pure code in the same package and work offline.
-4. **The cost cap is a ledger, not a hope.** Every model call reserves its worst-case cost before it starts and settles the actual cost after, inside a single-writer Durable Object. The cap can therefore not be overshot by concurrent requests.
+4. **The cost cap is enforced, not assumed.** Every model call reserves its worst-case cost before it starts and settles the actual cost after, inside a single-writer Durable Object. The cap can therefore not be overshot by concurrent requests.
 5. **Prompts are versioned server-side.** A prompt version pins its system text, output schema, model and parameters. It is released immutably, and switching versions is an endpoint deploy, never a site release.
 
 ## Links
@@ -64,7 +64,7 @@ The engine was built to be reused on independent grids (M3, Story 4.15's draft p
 
 ### Decision 1: Endpoint runtime and hosting — a Cloudflare Worker with one Durable Object class
 
-**Decision.** The endpoint is a new workspace, `apps/designer-endpoint`, deployed as a **Cloudflare Worker** on the free plan, with one **SQLite-backed Durable Object** class (`DesignerLedger`) for every piece of state it keeps. It is deployed by its own manually started CI job (`workflow_dispatch`, a Cloudflare API token secret), never by the site's `v*` tag deploy, so the two release independently.
+**Decision.** The endpoint is a new workspace, `apps/designer-endpoint`, deployed as a **Cloudflare Worker** on the free plan, with one **SQLite-backed Durable Object** class (`DesignerLedger`) for every piece of state it keeps. It is written in strict TypeScript, like every other workspace, because it imports `@gol/designer` and `@gol/simulation` directly. That is what lets the browser, the Worker and the eval suite share one set of schemas and validators. It is deployed by its own manually started CI job (`workflow_dispatch`, a Cloudflare API token secret), never by the site's `v*` tag deploy, so the two release independently.
 
 `apps/web` cannot host it: under `output: 'export'` the prerendered set is the whole reachable set (Decision K), so there is nothing to run a request handler. `apps/api/` stays reserved for Connected mode (RFC-001 §4), which is a different, post-MVP server.
 
