@@ -86,6 +86,15 @@ build, not latest. Do not bump versions opportunistically.
 - `output: 'export'` in standalone. There is **no backend in the MVP**. Never add an API
   route, a server action, `next/headers`, `cookies()`, or any dynamic SSR. If a feature
   seems to need a server, it belongs to Connected mode (post-MVP).
+- **One carve-out, and only one: the LLM designer endpoint (Decision L, RFC-009).** It exists
+  because the provider key and the spend cap cannot live in a browser, and it lives in its own
+  workspace (`apps/designer-endpoint`), **never in `apps/web`**: the rule above still holds there
+  word for word. The failure it guards against is the studio quietly coming to need the endpoint.
+  A page that waits on it, an import that pulls the provider client into the bundle, or a
+  feature that "just needs one more route" all compile and pass tests. So: gallery, editor,
+  simulation, persistence and the rule checks must work with the endpoint unreachable **or not
+  configured at all** (a fork shows the ✨ features as unavailable and nothing else changes), and
+  the carve-out does not stretch to any other feature, which still belongs to Connected mode.
 - ⚠️ **Every route must be statically prerenderable; entity ids ride as query params**
   (Decision K.5). A dynamic segment does not merely misbehave under `output: 'export'` — it
   **fails the build**: Next throws when a dynamic route has no `generateStaticParams()`, and one
@@ -100,6 +109,12 @@ build, not latest. Do not bump versions opportunistically.
   is string-inlined at build time and **only direct property access is replaced** —
   `process.env[name]` or destructuring yields `undefined` in the browser bundle.
   Import `APP_MODE` instead.
+- **Every `NEXT_PUBLIC_*` variable has exactly one read-point file in `apps/web/lib`**, for the
+  same reason. `NEXT_PUBLIC_DESIGNER_ENDPOINT` is read only by `lib/designerEndpoint.ts`, which
+  exports `DESIGNER_ENDPOINT: string | null`. `null` means "not configured" and must degrade
+  the ✨ features only (Decision L.1, RFC-009 Decision 3). A second read elsewhere drifts: one
+  spelling parses, another doesn't, and the build claims the feature is on while a component
+  sees it off.
 - `next.config.mjs` and `lib/mode.ts` must default identically (`'standalone'`).
   Divergence produces a build that claims one mode and emits another.
 
@@ -120,6 +135,9 @@ build, not latest. Do not bump versions opportunistically.
   is illustrative and stale; `lib/mode.ts` is the single read-point (Story 1.1).
 - **Test:** if swapping to an API-backed repo would require editing a component, the
   seam is already broken.
+- **The LLM is on the same seam (Decision L.3).** `createDesigner()` is called once at the page
+  boundary beside `createRepositories()`, and the `OrganismDesigner` port travels down as a prop.
+  No component imports the HTTP client, and tests use the fake from `@gol/test-utils`.
 
 **React — three state categories, no global store**
 
@@ -381,7 +399,7 @@ projects under `NewJob/`), so it never shows up in this repo's `git status`.
 
 ### Critical Don't-Miss Rules
 
-The architecture's Decisions A–K and M1–M16 mostly encode **reversals of the intuitive default**.
+The architecture's Decisions A–L and M1–M16 mostly encode **reversals of the intuitive default**.
 Following instinct here produces code that compiles, passes tests, and violates the spec.
 
 **Anti-patterns — these compile and pass tests, and are still wrong**
@@ -496,7 +514,7 @@ Following instinct here produces code that compiles, passes tests, and violates 
   workspace description (Story 7.2). Don't raise these as stale spec, and don't "fix" them by
   appending each new field; flag a snippet only when what it states is actually wrong (owner
   ruling, 2026-09-28).
-- Spec authority order: **Architecture Cross-Cutting Decisions** (A–K, M1–M16) → owning **RFC**
+- Spec authority order: **Architecture Cross-Cutting Decisions** (A–L, M1–M16) → owning **RFC**
   → companion specs. Within one area the RFC wins; for anything cross-cutting the Decision wins.
 
 **For humans:**
@@ -507,4 +525,4 @@ Following instinct here produces code that compiles, passes tests, and violates 
   toolchain stops being news; the `npm test` "vacuously green" warning was retired 2026-08-07,
   when the remote went live and CI started running for real.
 
-Last updated: 2026-09-14
+Last updated: 2026-11-01

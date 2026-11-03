@@ -22,7 +22,7 @@ This is the **umbrella architecture document** for Game of Life Studio. It gives
 
 ## System Overview
 
-Game of Life Studio is a **client-only, statically-hosted** web app (NFR-6: $0 hosting, fully offline-capable) in which users design competing multi-organism cellular automata ("Battles") and run them in real time. There is **no backend in the MVP**.
+Game of Life Studio is a **client-only, statically-hosted** web app (NFR-6: $0 hosting, fully offline-capable) in which users design competing multi-organism cellular automata ("Battles") and run them in real time. There is **no backend in the MVP**, with one scoped exception: the LLM designer endpoint for "Describe an Organism", which lives outside the static site and which the studio works without ([Decision L](#decision-l--one-llm-endpoint-outside-the-static-studio-reached-only-through-an-injected-port), RFC-009).
 
 **Shape at a glance:**
 - A **Next.js (App Router) + TypeScript (strict)** app, **statically exported** (`output: 'export'`), on free static hosting (Vercel / GitHub Pages).
@@ -69,6 +69,7 @@ Game of Life Studio is a **client-only, statically-hosted** web app (NFR-6: $0 h
 | Testing | Vitest · React Testing Library · Playwright · fast-check · axe-core | RFC-008 |
 | Lint/format/CI | ESLint + Prettier · `tsc` strict · Turborepo · GitHub Actions | RFC-001, RFC-008 |
 | Hosting | Static (Vercel / GitHub Pages), $0/month | RFC-001 (NFR-6) |
+| LLM designer endpoint | Cloudflare Worker + one Durable Object (free plan), Anthropic API; outside the static site | RFC-009 (Decision L) |
 | Connected mode *(post-MVP)* | FastAPI + PostgreSQL/SQLite | RFC-001, RFC-006 |
 
 ## RFC Index & Dependency Map
@@ -83,6 +84,7 @@ Game of Life Studio is a **client-only, statically-hosted** web app (NFR-6: $0 h
 | [RFC-006](rfcs/RFC-006-persistence-workspace-schema.md) | Persistence & Workspace Schema | Export envelope, migration, quota, auto-save |
 | [RFC-007](rfcs/RFC-007-organism-colour-palette.md) | Organism Colour Palette | Token registry, CVD palette, aging transform |
 | [RFC-008](rfcs/RFC-008-testing-and-tooling-strategy.md) | Testing & Tooling Strategy | Toolchain, test layers, coverage, CI |
+| [RFC-009](rfcs/RFC-009-llm-designer-endpoint.md) | The LLM Designer — Endpoint, Port and Measured Facts | The designer endpoint, the `OrganismDesigner` port, request/response schemas and prompt versions, the spend ledger and rate limit, the fact runner and rule checks, the eval suite |
 
 **Companion specs** (elaborations of RFC decisions — where a companion spec and an RFC differ, the RFC wins):
 
@@ -101,6 +103,10 @@ RFC-007 (palette) ──► RFC-002 (displayColor LUT) · RFC-004 (aging) · RFC
 
 RFC-003 (UI)  ─ surrounds all UI surfaces
 RFC-008 (testing) ─ spans every package
+
+RFC-001 (injected seam) ──► RFC-009 (designer port, injected the same way)
+RFC-004 (engine) ─────────► RFC-009 (fact runner, rule checks)
+RFC-009 ──► RFC-003 / RFC-005 (✨ AI tab, create-mode draft, preview kept mounted)
 ```
 
 ## Repository / Package Structure
@@ -111,11 +117,13 @@ A Turborepo monorepo (RFC-001), one source of truth across deployment modes:
 apps/
   web/                 Next.js app — UI, App Router pages, e2e tests
   api/                 FastAPI service — Connected mode (POST-MVP only)
+  designer-endpoint/   LLM designer endpoint (Cloudflare Worker), prompts, eval suite (RFC-009, Decision L)
 packages/
   domain/              entities, Zod schemas, generic rules-engine + GoL rules (RFC-004)
   simulation/          Simulation Engine — 3-phase step, grid buffers (RFC-004 Part 3)
   persistence/         Repository implementations + WorkspaceSerializer (RFC-001/006)
   test-utils/          shared fixtures, fake repos, fixed seeds, canonical organisms (RFC-008)
+  designer/            the OrganismDesigner port, request/response schemas, validators (RFC-009)
 ```
 
 ## Runtime Architecture (end-to-end)
@@ -329,6 +337,21 @@ Battle ids are `z.uuid()` values minted **in the browser** (`packages/domain/src
 - **K.4 — Why not drop static export.** Keeping `/battle/[id]` literally means reversing NFR-6 and the $0-hosting constraint, ruling out GitHub Pages and requiring a Node host plus a deploy pipeline — a far larger architectural change than the URL spelling it would buy back.
 - **K.5 — Standing rule for later routes.** **Every route this app adds must be statically prerenderable.** Entity-scoped pages take the id as a query parameter (`/battle?id=`), never as a dynamic segment. This binds Epic 4's `/organisms` and Epic 5's `/settings` too — both are static paths and already comply.
 
+### Decision L — One LLM endpoint outside the static studio, reached only through an injected port
+
+- **Status:** Proposed — 2026-11-01
+- **Resolves:** the conflict the Describe-an-Organism spec surfaced on purpose (`docs/specs/spec-describe-an-organism/`, decision log 2026-11-01). The spec needs a server-side endpoint, because the provider key and the spend cap cannot live in a browser. NFR-6.1 says the system functions "with zero backend dependencies", and `docs/project-context.md` says the MVP has no backend, never adds an API route or server action, and that a feature needing a server belongs to Connected mode. Both cannot hold for this feature.
+- **Affects:** RFC-009 (new, owns the endpoint and everything inside it); `docs/project-context.md` (the "static export, no server" rules amended with a carve-out for this decision, a per-variable `NEXT_PUBLIC_*` read-point rule, and the A–K → A–L enumerations); `CLAUDE.md` (the A–K → A–L enumeration); this document (System Overview, package structure, RFC index and map, NFR-6 traceability row). RFC-001 and RFC-006 are unchanged: Connected mode stays post-MVP and is a different server. `epics.md`'s "Extracted from … Decisions A–K" line is a historical statement about where the AR list came from, not an enumeration of the current set, so it is unchanged. **PRD:** NFR-6.1 is amended for this feature by L.1. The PRD text itself is product-owned and is not edited by this decision.
+
+**Decision.** The studio gains **one** server-side component: the LLM designer endpoint, owned by RFC-009. It is an exception scoped to this feature, not a reversal of NFR-6. Everything that is static today stays static, and the rules below bind the client and the endpoint together.
+
+- **L.1 — NFR-6.1 and the no-backend rule are amended for this feature only.** The static export (`output: 'export'`, Decision K) is unchanged and still has no backend of its own. The gallery, editor, simulation, persistence and the CAP-9 rule checks work with the endpoint unreachable or not configured at all. A build with no endpoint configured shows the feature as unavailable and nothing else changes. Any other feature that seems to need a server still belongs to Connected mode. This carve-out does not extend to it.
+- **L.2 — The endpoint lives outside `apps/web`.** A static export cannot run a request handler, so `apps/web` gains no API route, server action, `next/headers`, `cookies()` or dynamic SSR. The endpoint is its own workspace (`apps/designer-endpoint`), deployed independently of the site, and its runtime, hosting, state and prompts are RFC-009's call. Its hosting must stay at $0/month (NFR-6.2). The provider's spend is an operating cost, bounded by L.5, not hosting.
+- **L.3 — LLM access is injected, never imported**, on the repository seam (AR-2/27). Components and hooks receive an `OrganismDesigner` port as a prop, typed as the interface, from a factory called once at the page boundary beside `createRepositories()`. No component imports the HTTP client, calls the provider, or reads the endpoint URL. Tests run against a fake. If replacing the endpoint with another implementation would require editing a component, the seam is already broken.
+- **L.4 — Privacy, bound on both sides.** No user text and no IP address is stored or logged beyond the life of a request, by the client or the endpoint. The rate-limit visitor is an anonymous random token minted by the browser and kept in localStorage (`gol:visitor`). It is **device-local exactly as settings are (Decision F)**: no export carries it, Import and Clear All leave it alone. It is sent only to the endpoint. The per-request records (CAP-7) and the GoatCounter events carry metadata only, and neither carries the visitor token.
+- **L.5 — Cost and abuse limits degrade the feature, never the page.** The monthly spend cap (~€5) is enforced by the endpoint before each model call, never by the client, and a per-visitor rate limit sits in front of it. Reaching either, or losing the endpoint, ends the request in a `failure-modes.md` outcome. The triggers turn disabled with the reason, and manual authoring and every other surface are unaffected.
+- **L.6 — The engine judges, in the client.** Behaviour claims (CAP-3) and explanations (CAP-9) are checked against facts the browser measures with `@gol/simulation` (RFC-009 Decision 6). The endpoint never simulates and is never trusted for a fact. Measurement never runs on Play mode's path: Play compiles and steps exactly as before (NFR-1.1).
+
 ### Cross-RFC Reconciliations
 
 These resolve spec-vs-spec drift surfaced in review — mostly RFC-001 (the oldest doc) going stale against the newer authorities (RFC-004 for rules, RFC-006 for persistence). They are alignments, not new product decisions, except #5/#6 which the product owner decided.
@@ -397,9 +420,15 @@ Every PRD requirement maps to an owning spec (Success Metric 5). "Decision X" / 
 | **NFR-3** Device & Screen Support | RFC-003 (responsive), RFC-002 (auto-fit, Decision A.5) |
 | **NFR-4** Usability | RFC-003 (a11y/feedback), RFC-005 (responsive interactions) |
 | **NFR-5** Maintainability & Code Quality | RFC-004 (SOLID/patterns), RFC-008 (90% coverage, NFR-5.1); all RFCs satisfy NFR-5.3 (decisions documented) |
-| **NFR-6** Deployment | RFC-001 (static export, $0 hosting) |
+| **NFR-6** Deployment | RFC-001 (static export, $0 hosting); NFR-6.1 amended for the Describe-an-Organism feature only — Decision L; the designer endpoint, its $0 hosting (NFR-6.2) and spend cap — RFC-009 |
 | **NFR-7** Data Persistence | RFC-006 (localStorage, quota, corruption), RFC-001 (repositories); ~200-organism soft cap NFR-7.2 — M6 |
 | **NFR-8** Theming | RFC-003 (theme system, contrast; one immutable theme + `--gol-*` token layer — Decision J), RFC-007 (organism colours, colour-blind — reconciliation #5) |
+
+### Feature specs
+
+| Spec | Owning spec(s) |
+|---|---|
+| [Describe an Organism](../specs/spec-describe-an-organism/SPEC.md) (CAP-1–9) | RFC-009 (endpoint, port, schemas, call budget, facts, rule checks, evals, observability); Decision L (the NFR-6.1 carve-out and the client/endpoint privacy and cost rules); RFC-003 / RFC-005 (the ✨ AI tab and the create-mode draft, RFC-009 Decision 10) |
 
 ## MVP vs. Post-MVP Scope
 
